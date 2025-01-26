@@ -52,7 +52,6 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.thrift.TTransactionStatus;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.Assert;
@@ -129,7 +128,7 @@ public class DatabaseTransactionMgrTest {
                 Lists.newArrayList(), null);
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
-        assertEquals(TTransactionStatus.COMMITTED, masterDbTransMgr.getTxnStatus(transactionId1));
+        assertEquals(TransactionStatus.COMMITTED, masterDbTransMgr.getTxnState(transactionId1).getStatus());
         lableToTxnId.put(GlobalStateMgrTestUtil.testTxnLable10, transactionId1);
 
     }
@@ -166,7 +165,7 @@ public class DatabaseTransactionMgrTest {
                 Lists.newArrayList(), null);
         DatabaseTransactionMgr masterDbTransMgr =
                 masterTransMgr.getDatabaseTransactionMgr(GlobalStateMgrTestUtil.testDbId1);
-        assertEquals(TTransactionStatus.COMMITTED, masterDbTransMgr.getTxnStatus(transactionId1));
+        assertEquals(TransactionStatus.COMMITTED, masterDbTransMgr.getTxnState(transactionId1).getStatus());
 
         Assert.assertEquals(transactionId1, masterTransMgr.getMinActiveTxnId());
         Assert.assertEquals(idGenerator.peekNextTransactionId(), masterTransMgr.getMinActiveCompactionTxnId());
@@ -232,13 +231,13 @@ public class DatabaseTransactionMgrTest {
 
         masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId6, transTablets,
                 Lists.newArrayList(), null);
-        assertEquals(TTransactionStatus.COMMITTED, masterDbTransMgr.getTxnStatus(transactionId6));
+        assertEquals(TransactionStatus.COMMITTED, masterDbTransMgr.getTxnState(transactionId6).getStatus());
         masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId7, transTablets,
                 Lists.newArrayList(), null);
-        assertEquals(TTransactionStatus.COMMITTED, masterDbTransMgr.getTxnStatus(transactionId7));
+        assertEquals(TransactionStatus.COMMITTED, masterDbTransMgr.getTxnState(transactionId7).getStatus());
         masterTransMgr.commitTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId8, transTablets,
                 Lists.newArrayList(), null);
-        assertEquals(TTransactionStatus.COMMITTED, masterDbTransMgr.getTxnStatus(transactionId8));
+        assertEquals(TransactionStatus.COMMITTED, masterDbTransMgr.getTxnState(transactionId8).getStatus());
 
         lableToTxnId.put(GlobalStateMgrTestUtil.testTxnLable2, transactionId2);
         lableToTxnId.put(GlobalStateMgrTestUtil.testTxnLable3, transactionId3);
@@ -290,7 +289,7 @@ public class DatabaseTransactionMgrTest {
                 masterDbTransMgr.getTransactionState(lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable1));
         assertEquals(txnId1.longValue(), transactionState1.getTransactionId());
         assertEquals(TransactionStatus.VISIBLE, transactionState1.getTransactionStatus());
-        assertEquals(TTransactionStatus.VISIBLE, masterDbTransMgr.getTxnStatus(txnId1.longValue()));
+        assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTxnState(txnId1.longValue()).getStatus());
 
         Long txnId2 =
                 masterDbTransMgr.unprotectedGetTxnIdsByLabel(GlobalStateMgrTestUtil.testTxnLable2).iterator().next();
@@ -298,9 +297,9 @@ public class DatabaseTransactionMgrTest {
         TransactionState transactionState2 = masterDbTransMgr.getTransactionState(txnId2);
         assertEquals(txnId2.longValue(), transactionState2.getTransactionId());
         assertEquals(TransactionStatus.PREPARE, transactionState2.getTransactionStatus());
-        assertEquals(TTransactionStatus.PREPARE, masterDbTransMgr.getTxnStatus(txnId2.longValue()));
+        assertEquals(TransactionStatus.PREPARE, masterDbTransMgr.getTxnState(txnId2.longValue()).getStatus());
 
-        assertEquals(TTransactionStatus.UNKNOWN, masterDbTransMgr.getTxnStatus(12134));
+        assertEquals(TransactionStatus.UNKNOWN, masterDbTransMgr.getTxnState(12134).getStatus());
     }
 
     @Test
@@ -325,7 +324,7 @@ public class DatabaseTransactionMgrTest {
         assertEquals(0, masterDbTransMgr.getRunningRoutineLoadTxnNums());
         assertEquals(2, masterDbTransMgr.getFinishedTxnNums());
         assertEquals(8, masterDbTransMgr.getTransactionNum());
-        assertEquals(TTransactionStatus.ABORTED, masterDbTransMgr.getTxnStatus(txnId2));
+        assertEquals(TransactionStatus.ABORTED, masterDbTransMgr.getTxnState(txnId2).getStatus());
 
         long txnId3 = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable3);
         masterDbTransMgr.abortTransaction(txnId3, "test abort transaction", null);
@@ -333,7 +332,7 @@ public class DatabaseTransactionMgrTest {
         assertEquals(0, masterDbTransMgr.getRunningRoutineLoadTxnNums());
         assertEquals(3, masterDbTransMgr.getFinishedTxnNums());
         assertEquals(8, masterDbTransMgr.getTransactionNum());
-        assertEquals(TTransactionStatus.ABORTED, masterDbTransMgr.getTxnStatus(txnId3));
+        assertEquals(TransactionStatus.ABORTED, masterDbTransMgr.getTxnState(txnId3).getStatus());
     }
 
     @Test
@@ -351,7 +350,7 @@ public class DatabaseTransactionMgrTest {
 
         long txnId = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable10);
         masterDbTransMgr.finishTransaction(txnId, null);
-        assertEquals(TTransactionStatus.VISIBLE, masterDbTransMgr.getTxnStatus(txnId));
+        assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTxnState(txnId).getStatus());
     }
 
 
@@ -370,7 +369,7 @@ public class DatabaseTransactionMgrTest {
 
         long txnId = lableToTxnId.get(GlobalStateMgrTestUtil.testTxnLable10);
         masterDbTransMgr.finishTransaction(txnId, null);
-        assertEquals(TTransactionStatus.VISIBLE, masterDbTransMgr.getTxnStatus(txnId));
+        assertEquals(TransactionStatus.VISIBLE, masterDbTransMgr.getTxnState(txnId).getStatus());
     }
     @Test
     public void testAbortTransactionWithNotFoundException() throws UserException {

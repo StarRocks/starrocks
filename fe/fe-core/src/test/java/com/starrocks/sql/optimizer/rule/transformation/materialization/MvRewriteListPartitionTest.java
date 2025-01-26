@@ -19,7 +19,7 @@ import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-public class MvRewriteListPartitionTest extends MvRewriteTestBase {
+public class MvRewriteListPartitionTest extends MVTestBase {
     private static String T1;
     private static String T2;
     private static String T3;
@@ -89,7 +89,7 @@ public class MvRewriteListPartitionTest extends MvRewriteTestBase {
                 "DUPLICATE KEY(id)\n" +
                 "PARTITION BY (province, dt) \n" +
                 "DISTRIBUTED BY RANDOM\n";
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
     }
 
     @Test

@@ -151,6 +151,10 @@
                         "id": "loading/objectstorage"
                     },
                     "items": [
+                        "loading/alibaba",
+                        "loading/huawei",
+                        "loading/tencent",
+                        "loading/s3_compatible",
                         "loading/s3",
                         "loading/azure",
                         "loading/gcs",
@@ -159,7 +163,6 @@
                 },
                 "loading/StreamLoad",
                 "loading/hdfs_load",
-                "loading/cloud_storage_load",
                 {
                     "type": "category",
                     "label": "Load data from Apache Kafka",
@@ -228,7 +231,17 @@
                         "data_source/catalog/catalog_overview",
                         "data_source/catalog/default_catalog",
                         "data_source/catalog/hive_catalog",
-                        "data_source/catalog/iceberg_catalog",
+                        {
+                            "type": "category",
+                            "label": "Iceberg",
+                            "link": {
+                                "type": "doc",
+                                "id": "data_source/catalog/iceberg/iceberg_catalog"
+                            },
+                            "items": [
+                                "data_source/catalog/iceberg/iceberg_timetravel"
+                            ]
+                        },
                         "data_source/catalog/hudi_catalog",
                         "data_source/catalog/deltalake_catalog",
                         "data_source/catalog/jdbc_catalog",

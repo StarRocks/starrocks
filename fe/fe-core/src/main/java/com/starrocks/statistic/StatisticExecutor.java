@@ -286,7 +286,7 @@ public class StatisticExecutor {
         StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
 
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
-        StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+        StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
         if (!sqlResult.second.ok()) {
             return Pair.create(Collections.emptyList(), sqlResult.second);
@@ -413,6 +413,7 @@ public class StatisticExecutor {
                     basicStatsMeta.setUpdateTime(analyzeStatus.getEndTime());
                     basicStatsMeta.setProperties(statsJob.getProperties());
                     basicStatsMeta.setAnalyzeType(statsJob.getType());
+                    basicStatsMeta.resetDeltaRows();
                 }
 
                 for (String column : ListUtils.emptyIfNull(statsJob.getColumnNames())) {
@@ -513,7 +514,7 @@ public class StatisticExecutor {
         }
         StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
-        StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+        StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
         context.setExecutor(executor);
         context.getSessionVariable().setEnableMaterializedViewRewrite(false);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
@@ -531,7 +532,7 @@ public class StatisticExecutor {
         StatementBase parsedStmt;
         try {
             parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
-            StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
             executor.execute();

@@ -89,6 +89,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
@@ -207,7 +208,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
         }
     }
 
-    private void addLoadJob(LoadJob loadJob) {
+    protected void addLoadJob(LoadJob loadJob) {
         idToLoadJob.put(loadJob.getId(), loadJob);
         long dbId = loadJob.getDbId();
         if (!dbIdToLabelToLoadJobs.containsKey(dbId)) {
@@ -242,6 +243,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
     public InsertLoadJob registerInsertLoadJob(String label, String dbName, long tableId, long txnId, String loadId, String user,
                                                EtlJobType jobType, long createTimestamp, long estimateScanRows,
                                                int estimateFileNum, long estimateFileSize, TLoadJobType type, long timeout,
+                                               long warehouseId,
                                                Coordinator coordinator) throws UserException {
         // get db id
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
@@ -252,7 +254,7 @@ public class LoadMgr implements Writable, MemoryTrackable {
         InsertLoadJob loadJob;
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
             loadJob = new InsertLoadJob(label, db.getId(), tableId, txnId, loadId, user,
-                    createTimestamp, type, timeout, coordinator);
+                    createTimestamp, type, timeout, warehouseId, coordinator);
             loadJob.setLoadFileInfo(estimateFileNum, estimateFileSize);
             loadJob.setEstimateScanRow(estimateScanRows);
             loadJob.setTransactionId(txnId);
@@ -866,5 +868,20 @@ public class LoadMgr implements Writable, MemoryTrackable {
                 .limit(MEMORY_JOB_SAMPLES)
                 .collect(Collectors.toList());
         return Lists.newArrayList(Pair.create(samples, (long) idToLoadJob.size()));
+    }
+
+    public Map<Long, Long> getRunningLoadCount() {
+        Map<Long, Long> result = new HashMap<>();
+        readLock();
+        try {
+            for (LoadJob loadJob : idToLoadJob.values()) {
+                if (!loadJob.isFinal() && loadJob.getJobType() != EtlJobType.INSERT) {
+                    result.compute(loadJob.getCurrentWarehouseId(), (key, value) -> value == null ? 1L : value + 1);
+                }
+            }
+        } finally {
+            readUnlock();
+        }
+        return result;
     }
 }

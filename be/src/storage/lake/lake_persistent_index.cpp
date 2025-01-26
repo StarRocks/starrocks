@@ -172,13 +172,16 @@ void LakePersistentIndex::set_difference(KeyIndexSet* key_indexes, const KeyInde
 
 bool LakePersistentIndex::is_memtable_full() const {
     const auto memtable_mem_size = _memtable->memory_usage();
-    // We have two memtable in index, so memtable memory limit means half of `l0_max_mem_usage`.
-    const bool mem_size_exceed = memtable_mem_size >= config::l0_max_mem_usage / 2;
+    const bool mem_size_exceed = memtable_mem_size >= config::l0_max_mem_usage;
     // When update memory is urgent, using a lower limit (`l0_min_mem_usage`).
     const bool mem_tracker_exceed =
             _tablet_mgr->update_mgr()->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
             memtable_mem_size >= config::l0_min_mem_usage;
     return mem_size_exceed || mem_tracker_exceed;
+}
+
+bool LakePersistentIndex::too_many_rebuild_files() const {
+    return _need_rebuild_file_cnt >= config::cloud_native_pk_index_rebuild_files_threshold;
 }
 
 Status LakePersistentIndex::minor_compact() {
@@ -194,7 +197,7 @@ Status LakePersistentIndex::minor_compact() {
     }
     ASSIGN_OR_RETURN(auto wf, fs::new_writable_file(wopts, location));
     uint64_t filesize = 0;
-    RETURN_IF_ERROR(_immutable_memtable->flush(wf.get(), &filesize));
+    RETURN_IF_ERROR(_memtable->flush(wf.get(), &filesize));
     RETURN_IF_ERROR(wf->close());
 
     auto sstable = std::make_unique<PersistentIndexSstable>();
@@ -206,7 +209,7 @@ Status LakePersistentIndex::minor_compact() {
     PersistentIndexSstablePB sstable_pb;
     sstable_pb.set_filename(filename);
     sstable_pb.set_filesize(filesize);
-    sstable_pb.set_max_rss_rowid(_immutable_memtable->max_rss_rowid());
+    sstable_pb.set_max_rss_rowid(_memtable->max_rss_rowid());
     sstable_pb.set_encryption_meta(encryption_meta);
     auto* block_cache = _tablet_mgr->update_mgr()->block_cache();
     if (block_cache == nullptr) {
@@ -219,11 +222,12 @@ Status LakePersistentIndex::minor_compact() {
 }
 
 Status LakePersistentIndex::flush_memtable() {
-    if (_immutable_memtable != nullptr) {
-        RETURN_IF_ERROR(minor_compact());
-    }
-    _immutable_memtable = std::make_unique<PersistentIndexMemtable>(_memtable->max_rss_rowid());
-    _memtable.swap(_immutable_memtable);
+    RETURN_IF_ERROR(minor_compact());
+    auto max_rss_rowid = _memtable->max_rss_rowid();
+    _memtable.reset();
+    _memtable = std::make_unique<PersistentIndexMemtable>(max_rss_rowid);
+    // Reset rebuild file count, avoid useless flush.
+    _need_rebuild_file_cnt = 0;
     return Status::OK();
 }
 
@@ -243,24 +247,11 @@ Status LakePersistentIndex::get_from_sstables(size_t n, const Slice* keys, Index
     return Status::OK();
 }
 
-Status LakePersistentIndex::get_from_immutable_memtable(const Slice* keys, IndexValue* values,
-                                                        const KeyIndexSet& key_indexes, KeyIndexSet* found_key_indexes,
-                                                        int64_t version) const {
-    if (_immutable_memtable == nullptr || key_indexes.empty()) {
-        return Status::OK();
-    }
-    RETURN_IF_ERROR(_immutable_memtable->get(keys, values, key_indexes, found_key_indexes, version));
-    return Status::OK();
-}
-
 Status LakePersistentIndex::get(size_t n, const Slice* keys, IndexValue* values) {
     KeyIndexSet not_founds;
     // Assuming we always want the latest value now
     RETURN_IF_ERROR(_memtable->get(n, keys, values, &not_founds, -1));
     KeyIndexSet& key_indexes = not_founds;
-    KeyIndexSet found_key_indexes;
-    RETURN_IF_ERROR(get_from_immutable_memtable(keys, values, key_indexes, &found_key_indexes, -1));
-    set_difference(&key_indexes, found_key_indexes);
     RETURN_IF_ERROR(get_from_sstables(n, keys, values, &key_indexes, -1));
     return Status::OK();
 }
@@ -271,9 +262,6 @@ Status LakePersistentIndex::upsert(size_t n, const Slice* keys, const IndexValue
     size_t num_found;
     RETURN_IF_ERROR(_memtable->upsert(n, keys, values, old_values, &not_founds, &num_found, _version.major_number()));
     KeyIndexSet& key_indexes = not_founds;
-    KeyIndexSet found_key_indexes;
-    RETURN_IF_ERROR(get_from_immutable_memtable(keys, old_values, key_indexes, &found_key_indexes, -1));
-    set_difference(&key_indexes, found_key_indexes);
     RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &key_indexes, -1));
     if (is_memtable_full()) {
         return flush_memtable();
@@ -307,9 +295,6 @@ Status LakePersistentIndex::erase(size_t n, const Slice* keys, IndexValue* old_v
     size_t num_found;
     RETURN_IF_ERROR(_memtable->erase(n, keys, old_values, &not_founds, &num_found, _version.major_number(), rowset_id));
     KeyIndexSet& key_indexes = not_founds;
-    KeyIndexSet found_key_indexes;
-    RETURN_IF_ERROR(get_from_immutable_memtable(keys, old_values, key_indexes, &found_key_indexes, -1));
-    set_difference(&key_indexes, found_key_indexes);
     RETURN_IF_ERROR(get_from_sstables(n, keys, old_values, &key_indexes, -1));
     if (is_memtable_full()) {
         return flush_memtable();
@@ -546,6 +531,11 @@ Status LakePersistentIndex::apply_opcompaction(const TxnLogPB_OpCompaction& op_c
 }
 
 Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
+    if (too_many_rebuild_files() && !_memtable->empty()) {
+        // If we have too many files need to be rebuilt,
+        // we need to do flush to reduce index rebuild cost later.
+        RETURN_IF_ERROR(flush_memtable());
+    }
     PersistentIndexSstableMetaPB sstable_meta;
     int64_t last_max_rss_rowid = 0;
     for (auto& sstable : _sstables) {
@@ -560,18 +550,20 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
         sstable_pb->CopyFrom(sstable->sstable_pb());
     }
     builder->finalize_sstable_meta(sstable_meta);
+    _need_rebuild_file_cnt = need_rebuild_file_cnt(*builder->tablet_meta(), sstable_meta);
     return Status::OK();
 }
 
 // Rebuild index's memtable via del files, it will read from del file and write to index.
 // If it fail, SR will retry publish txn, and this index's memtable will be release and rebuild again.
 Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version) {
-    TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
+    TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_del_cost_us");
     // Build pk column struct from schema
     std::unique_ptr<Column> pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
     // Iterate all del files and insert into index.
     for (int del_idx = 0; del_idx < rowset->metadata().del_files_size(); ++del_idx) {
+        TRACE_COUNTER_INCREMENT("rebuild_index_del_cnt", 1);
         const auto& del = rowset->metadata().del_files(del_idx);
         RandomAccessFileOptions ropts;
         if (!del.encryption_meta().empty()) {
@@ -659,6 +651,24 @@ bool LakePersistentIndex::needs_rowset_rebuild(const RowsetMetadataPB& rowset, u
     return true;
 }
 
+// Return the files cnt that need to rebuild.
+size_t LakePersistentIndex::need_rebuild_file_cnt(const TabletMetadataPB& metadata,
+                                                  const PersistentIndexSstableMetaPB& sstable_meta) {
+    size_t cnt = 0;
+    const auto& sstables = sstable_meta.sstables();
+    const uint32_t rebuild_rss_id = sstables.empty() ? 0 : sstables.rbegin()->max_rss_rowid() >> 32;
+    for (const auto& rowset : metadata.rowsets()) {
+        if (!needs_rowset_rebuild(rowset, rebuild_rss_id)) {
+            continue; // skip rowset
+        }
+        cnt += rowset.del_files_size();
+        // rowset id + segment id < rebuild_rss_id can be skip.
+        // so only some segments in this rowset need to rebuild
+        cnt += std::min(rowset.id() + rowset.segments_size() - rebuild_rss_id + 1, (uint32_t)rowset.segments_size());
+    }
+    return cnt;
+}
+
 Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, const TabletMetadataPtr& metadata,
                                                   int64_t base_version, const MetaFileBuilder* builder) {
     // 1. create and set key column schema
@@ -668,6 +678,8 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         pk_columns[i] = (ColumnId)i;
     }
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
+
+    _need_rebuild_file_cnt = need_rebuild_file_cnt(*metadata, metadata->sstable_meta());
 
     // Init PersistentIndex
     _key_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
@@ -704,6 +716,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
         auto& itrs = res.value();
         CHECK(itrs.size() == rowset->num_segments()) << "itrs.size != num_segments";
         for (size_t i = 0; i < itrs.size(); i++) {
+            TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_segment_cost_us");
             auto itr = itrs[i].get();
             if (itr == nullptr) {
                 continue;
@@ -775,9 +788,6 @@ size_t LakePersistentIndex::memory_usage() const {
     size_t mem_usage = 0;
     if (_memtable != nullptr) {
         mem_usage += _memtable->memory_usage();
-    }
-    if (_immutable_memtable != nullptr) {
-        mem_usage += _immutable_memtable->memory_usage();
     }
     for (const auto& sst_ptr : _sstables) {
         if (sst_ptr != nullptr) {

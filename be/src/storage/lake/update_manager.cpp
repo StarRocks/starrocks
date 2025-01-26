@@ -189,6 +189,14 @@ void UpdateManager::unload_and_remove_primary_index(int64_t tablet_id) {
     }
 }
 
+StatusOr<IndexEntry*> UpdateManager::rebuild_primary_index(
+        const TabletMetadataPtr& metadata, MetaFileBuilder* builder, int64_t base_version, int64_t new_version,
+        std::unique_ptr<std::lock_guard<std::shared_timed_mutex>>& guard) {
+    LOG(INFO) << "rebuild tablet: " << metadata->id() << " primary index, version: " << base_version;
+    unload_and_remove_primary_index(metadata->id());
+    return prepare_primary_index(metadata, builder, base_version, new_version, guard);
+}
+
 DEFINE_FAIL_POINT(hook_publish_primary_key_tablet);
 // |metadata| contain last tablet meta info with new version
 Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_write, int64_t txn_id,
@@ -237,7 +245,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
                                            false /*no need lock*/));
         _update_state_cache.update_object_size(state_entry, state.memory_usage());
         // 2.1 rewrite segment file if it is partial update
-        RETURN_IF_ERROR(state.rewrite_segment(segment_id, params, &replace_segments, &orphan_files));
+        RETURN_IF_ERROR(state.rewrite_segment(segment_id, txn_id, params, &replace_segments, &orphan_files));
         rssid_fileinfo_container.add_rssid_to_file(op_write.rowset(), metadata->next_rowset_id(), segment_id,
                                                    replace_segments);
         // handle merge condition, skip update row which's merge condition column value is smaller than current row
@@ -570,6 +578,11 @@ Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, s
             ASSIGN_OR_RETURN(auto col_iter, (*segment)->new_column_iterator_or_default(col, nullptr));
             RETURN_IF_ERROR(col_iter->init(iter_opts));
             RETURN_IF_ERROR(col_iter->fetch_values_by_rowid(rowids.data(), rowids.size(), (*columns)[i].get()));
+            // padding char columns
+            const auto& field = tablet_schema->schema()->field(read_column_ids[i]);
+            if (field->type()->type() == TYPE_CHAR) {
+                ChunkHelper::padding_char_column(tablet_schema, *field, (*columns)[i].get());
+            }
         }
         return Status::OK();
     };
@@ -631,10 +644,9 @@ Status UpdateManager::get_del_vec(const TabletSegmentId& tsid, int64_t version, 
 // get delvec in meta file
 Status UpdateManager::get_del_vec_in_meta(const TabletSegmentId& tsid, int64_t meta_ver, bool fill_cache,
                                           DelVector* delvec) {
-    std::string filepath = _tablet_mgr->tablet_metadata_location(tsid.tablet_id, meta_ver);
     LakeIOOptions lake_io_opts;
     lake_io_opts.fill_data_cache = fill_cache;
-    ASSIGN_OR_RETURN(auto metadata, _tablet_mgr->get_tablet_metadata(filepath, fill_cache));
+    ASSIGN_OR_RETURN(auto metadata, _tablet_mgr->get_tablet_metadata(tsid.tablet_id, meta_ver, fill_cache));
     RETURN_IF_ERROR(lake::get_del_vec(_tablet_mgr, *metadata, tsid.segment_id, fill_cache, lake_io_opts, delvec));
     return Status::OK();
 }

@@ -19,6 +19,7 @@ Currently, the FILES() function supports the following data sources and file for
   - Google Cloud Storage
   - Other S3-compatible storage system
   - Microsoft Azure Blob Storage
+  - NFS(NAS)
 - **File formats:**
   - Parquet
   - ORC
@@ -33,7 +34,7 @@ From v3.1.0 onwards, StarRocks supports defining read-only files in remote stora
 ### Syntax
 
 ```SQL
-FILES( data_location , data_format [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] )
+FILES( data_location , [data_format] [, schema_detect ] [, StorageCredentialParams ] [, columns_from_path ] [, list_files_only ])
 ```
 
 ### Parameters
@@ -42,7 +43,17 @@ All parameters are in the `"key" = "value"` pairs.
 
 #### data_location
 
-The URI used to access the files. You can specify a path or a file.
+The URI used to access the files.
+
+You can specify a path or a file. For example, you can specify this parameter as `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/20210411"` to load a data file named `20210411` from the path `/user/data/tablename` on the HDFS server.
+
+You can also specify this parameter as the save path of multiple data files by using wildcards `?`, `*`, `[]`, `{}`, or `^`. For example, you can specify this parameter as `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/*/*"` or `"hdfs://<hdfs_host>:<hdfs_port>/user/data/tablename/dt=202104*/*"` to load the data files from all partitions or only `202104` partitions in the path `/user/data/tablename` on the HDFS server.
+
+:::note
+
+Wildcards can also be used to specify intermediate paths.
+
+:::
 
 - To access HDFS, you need to specify this parameter as:
 
@@ -90,11 +101,26 @@ The URI used to access the files. You can specify a path or a file.
     -- Example: "path" = "wasbs://testcontainer@testaccount.blob.core.windows.net/path/file.parquet"
     ```
 
+- To access NFS(NAS):
+
+  ```SQL
+  "path" = "file:///<absolute_path>"
+  -- Example: "path" = "file:///home/ubuntu/parquetfile/file.parquet"
+  ```
+
+  :::note
+
+  To access the files in NFS via the `file://` protocol, you need to mount a NAS device as NFS under the same directory of each BE or CN node.
+
+  :::
+
 #### data_format
 
 The format of the data file. Valid values: `parquet`, `orc`, and `csv`.
 
 You must set detailed options for specific data file formats.
+
+When `list_files_only` is set to `true`, you do not need to specify `data_format`.
 
 ##### CSV
 
@@ -172,6 +198,30 @@ If StarRocks fails to unionize all the columns, it generates a schema error repo
 >
 > All data files in a single batch must be of the same file format.
 
+##### Push down target table schema check
+
+From v3.4.0 onwards, the system supports pushing down the target table schema check to the Scan stage of FILES().
+
+Schema detection of FILES() is not fully strict. For example, any integer column in CSV files is inferred and checked as the BIGINT type when the function is reading the files. In this case, if the corresponding column in the target table is the TINYINT type, the CSV data records that exceed the BIGINT type will not be filtered. Instead, they will be filled with NULL implicitly.
+
+To address this issue, the system introduces the dynamic FE configuration item `files_enable_insert_push_down_schema` to control whether to push down the target table schema check to the Scan stage of FILES(). By setting `files_enable_insert_push_down_schema` to `true`, the system will filter the data records which fail the target table schema check at the file reading.
+
+##### Union files with different schema
+
+From v3.4.0 onwards, the system supports unionizing files with different schema, and by default, an error will be returned if there are non-existent columns. By setting the property `fill_mismatch_column_with` to `null`, you can allow the system to assign NULL values to the non-existent columns instead of returning an error.
+
+`fill_mismatch_column_with`: The behavior of the system after a non-existent column is detected when unionizing files with different schema. Valid values:
+- `none`: An error will be returned if a non-existent column is detected.
+- `null`: NULL values will be assigned to the non-existent column.
+
+For example, the files to read are from different partitions of a Hive table, and Schema Change has been performed on the newer partitions. When reading both new and old partitions, you can set `fill_mismatch_column_with` to `null`, and the system will unionize the schema of the new and old partition files, and assign NULL values to the non-existent columns.
+
+The system unionizes the schema of Parquet and ORC files based on the column names, and that of CSV files based on the position (order) of the columns.
+
+##### Infer STRUCT type from Parquet
+
+From v3.4.0 onwards, FILES() supports inferring the STRUCT type data from Parquet files.
+
 #### StorageCredentialParams
 
 The authentication information used by StarRocks to access your storage system.
@@ -241,6 +291,18 @@ From v3.2 onwards, StarRocks can extract the value of a key/value pair from the 
 ```
 
 Suppose the data file **file1** is stored under a path in the format of `/geo/country=US/city=LA/`. You can specify the `columns_from_path` parameter as `"columns_from_path" = "country, city"` to extract the geographic information in the file path as the value of columns that are returned. For further instructions, see Example 4.
+
+#### list_files_only
+
+From v3.4.0 onwards, FILES() supports only list the files when reading them.
+
+```SQL
+"list_files_only" = "true"
+```
+
+Please note that you do not need to specify `data_format` when `list_files_only` is set to `true`.
+
+For more information, see [Return](#return).
 
 ### Return
 
@@ -345,6 +407,26 @@ When used with SELECT, FILES() returns the data in the file as a table.
   10 rows in set (0.55 sec)
   ```
 
+- When you query files with `list_files_only` set to `true`, the system will return `PATH`, `SIZE`, `IS_DIR` (whether the given path is a directory), and `MODIFICATION_TIME`.
+
+  ```SQL
+  SELECT * FROM FILES(
+      "path" = "s3://bucket/*.parquet",
+      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "list_files_only" = "true"
+  );
+  +-----------------------+------+--------+---------------------+
+  | PATH                  | SIZE | IS_DIR | MODIFICATION_TIME   |
+  +-----------------------+------+--------+---------------------+
+  | s3://bucket/1.parquet | 5221 |      0 | 2024-08-15 20:47:02 |
+  | s3://bucket/2.parquet | 5222 |      0 | 2024-08-15 20:54:57 |
+  | s3://bucket/3.parquet | 5223 |      0 | 2024-08-20 15:21:00 |
+  | s3://bucket/4.parquet | 5224 |      0 | 2024-08-15 11:32:14 |
+  +-----------------------+------+--------+---------------------+
+  4 rows in set (0.03 sec)
+  ```
+
 #### DESC FILES()
 
 When used with DESC, FILES() returns the schema of the file.
@@ -380,6 +462,26 @@ DESC FILES(
 | lo_shipmode      | varchar(1048576) | YES  |
 +------------------+------------------+------+
 17 rows in set (0.05 sec)
+```
+
+When you viewing files with `list_files_only` set to `true`, the system will return the `Type` and `Null` properties of `PATH`, `SIZE`, `IS_DIR` (whether the given path is a directory), and `MODIFICATION_TIME`.
+
+```Plain
+DESC FILES(
+    "path" = "s3://bucket/*.parquet",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "list_files_only" = "true"
+);
++-------------------+------------------+------+
+| Field             | Type             | Null |
++-------------------+------------------+------+
+| PATH              | varchar(1048576) | YES  |
+| SIZE              | bigint           | YES  |
+| IS_DIR            | boolean          | YES  |
+| MODIFICATION_TIME | datetime         | YES  |
++-------------------+------------------+------+
+4 rows in set (0.00 sec)
 ```
 
 ## FILES() for unloading
@@ -448,6 +550,15 @@ SELECT * FROM FILES(
 2 rows in set (22.335 sec)
 ```
 
+Query the data from the Parquet files in NFS(NAS):
+
+```SQL
+SELECT * FROM FILES(
+  'path' = 'file:///home/ubuntu/parquetfile/*.parquet', 
+  'format' = 'parquet'
+);
+```
+
 #### Example 2: Insert the data rows from a file
 
 Insert the data rows from the Parquet file **parquet/insert_wiki_edit_append.parquet** within the AWS S3 bucket `inserttest` into the table `insert_wiki_edit`:
@@ -463,6 +574,18 @@ INSERT INTO insert_wiki_edit
 );
 Query OK, 2 rows affected (23.03 sec)
 {'label':'insert_d8d4b2ee-ac5c-11ed-a2cf-4e1110a8f63b', 'status':'VISIBLE', 'txnId':'2440'}
+```
+
+Insert the data rows from the CSV files in NFS(NAS) into the table `insert_wiki_edit`:
+
+```SQL
+INSERT INTO insert_wiki_edit
+  SELECT * FROM FILES(
+    'path' = 'file:///home/ubuntu/csvfile/*.csv', 
+    'format' = 'csv', 
+    'csv.column_separator' = ',', 
+    'csv.row_delimiter' = '\n'
+  );
 ```
 
 #### Example 3: CTAS with data rows from a file
@@ -615,6 +738,27 @@ PROPERTIES (
 1 row in set (0.27 sec)
 ```
 
+- Unionize the schema of Parquet files and allow the system to assign NULL values to non-existent columns by setting `fill_mismatch_column_with` to `null`:
+
+```SQL
+SELECT * FROM FILES(
+  "path" = "s3://inserttest/basic_type.parquet,s3://inserttest/basic_type_k2k5k7.parquet",
+  "format" = "parquet",
+  "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+  "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+  "aws.s3.region" = "us-west-2",
+  "fill_mismatch_column_with" = "null"
+);
++------+------+------+-------+------------+---------------------+------+------+
+| k1   | k2   | k3   | k4    | k5         | k6                  | k7   | k8   |
++------+------+------+-------+------------+---------------------+------+------+
+| NULL |   21 | NULL |  NULL | 2024-10-03 | NULL                | c    | NULL |
+|    0 |    1 |    2 |  3.20 | 2024-10-01 | 2024-10-01 12:12:12 | a    |  4.3 |
+|    1 |   11 |   12 | 13.20 | 2024-10-02 | 2024-10-02 13:13:13 | b    | 14.3 |
++------+------+------+-------+------------+---------------------+------+------+
+3 rows in set (0.03 sec)
+```
+
 #### Example 6: View the schema of a file
 
 View the schema of the Parquet file `lineorder` stored in AWS S3 using DESC.
@@ -657,8 +801,7 @@ DESC FILES(
 Unload all data rows in `sales_records` as multiple Parquet files under the path **/unload/partitioned/** in the HDFS cluster. These files are stored in different subpaths distinguished by the values in the column `sales_time`.
 
 ```SQL
-INSERT INTO 
-FILES(
+INSERT INTO FILES(
     "path" = "hdfs://xxx.xx.xxx.xx:9000/unload/partitioned/",
     "format" = "parquet",
     "hadoop.security.authentication" = "simple",
@@ -666,6 +809,26 @@ FILES(
     "password" = "xxxxx",
     "compression" = "lz4",
     "partition_by" = "sales_time"
+)
+SELECT * FROM sales_records;
+```
+
+Unload the query results into CSV and Parquet files in NFS(NAS):
+
+```SQL
+-- CSV
+INSERT INTO FILES(
+    'path' = 'file:///home/ubuntu/csvfile/', 
+    'format' = 'csv', 
+    'csv.column_separator' = ',', 
+    'csv.row_delimitor' = '\n'
+)
+SELECT * FROM sales_records;
+
+-- Parquet
+INSERT INTO FILES(
+    'path' = 'file:///home/ubuntu/parquetfile/',
+    'format' = 'parquet'
 )
 SELECT * FROM sales_records;
 ```

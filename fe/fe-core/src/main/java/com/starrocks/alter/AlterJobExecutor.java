@@ -54,7 +54,6 @@ import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -75,6 +74,7 @@ import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.DropPartitionClause;
+import com.starrocks.sql.ast.DropPersistentIndexClause;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
@@ -265,6 +265,17 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
     }
 
     @Override
+    public Void visitDropPersistentIndexClause(DropPersistentIndexClause clause, ConnectContext context) {
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        try {
+            schemaChangeHandler.processLakeTableDropPersistentIndex(clause, db, (OlapTable) table);
+        } catch (UserException e) {
+            throw new AlterJobException(e.getMessage(), e);
+        }
+        return null;
+    }
+
+    @Override
     public Void visitTableRenameClause(TableRenameClause clause, ConnectContext context) {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
@@ -317,10 +328,10 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                 }
 
                 // inactive the related MVs
-                LocalMetastore.inactiveRelatedMaterializedView(db, origTable,
-                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName));
-                LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl,
-                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(newTblName));
+                AlterMVJobExecutor.inactiveRelatedMaterializedView(db, origTable,
+                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName), false);
+                AlterMVJobExecutor.inactiveRelatedMaterializedView(db, olapNewTbl,
+                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(newTblName), false);
 
                 SwapTableOperationLog log = new SwapTableOperationLog(db.getId(), origTable.getId(), olapNewTbl.getId());
                 GlobalStateMgr.getCurrentState().getAlterJobMgr().swapTableInternal(log);
@@ -608,7 +619,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         // ALTER TABLE test TRUNCATE PARTITION p1;
         TableRef tableRef = new TableRef(tableName, null, clause.getPartitionNames());
         TruncateTableStmt tStmt = new TruncateTableStmt(tableRef);
-        ConnectContext ctx = new ConnectContext();
+        ConnectContext ctx = ConnectContext.buildInner();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
 
         ErrorReport.wrapWithRuntimeException(() ->
@@ -797,7 +808,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                 alterViewClause.getColumns(),
                 ctx.getSessionVariable().getSqlMode(), alterViewClause.getComment());
 
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().alterView(alterViewInfo);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().alterView(alterViewInfo, false);
         GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
         return null;
     }

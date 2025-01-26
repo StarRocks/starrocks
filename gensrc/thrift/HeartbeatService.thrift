@@ -48,7 +48,8 @@ struct TBackendInfo {
     9: optional bool is_set_storage_path
 
     10: optional i64 mem_limit_bytes
-    11: optional Types.TPort be_arrow_port
+
+    11: optional Types.TPort arrow_flight_port
 }
 
 struct THeartbeatResult {

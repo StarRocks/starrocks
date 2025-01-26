@@ -45,6 +45,7 @@ import java.util.Map;
 import java.util.UUID;
 
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_ACCESS_KEY;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_CATALOG_ID;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_ENDPOINT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_EXTERNAL_ID;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_GLUE_IAM_ROLE_ARN;
@@ -129,6 +130,10 @@ public class IcebergAwsClientFactory implements AwsClientFactory {
         glueExternalId = properties.getOrDefault(AWS_GLUE_EXTERNAL_ID, "");
         glueRegion = properties.getOrDefault(AWS_GLUE_REGION, "");
         glueEndpoint = properties.getOrDefault(AWS_GLUE_ENDPOINT, "");
+        String glueCatalogId = properties.get(AWS_GLUE_CATALOG_ID);
+        if (glueCatalogId != null) {
+            this.awsProperties.setGlueCatalogId(glueCatalogId);
+        }
     }
 
     private StsAssumeRoleCredentialsProvider getAssumeRoleCredentialsProvider(AwsCredentialsProvider baseCredentials,

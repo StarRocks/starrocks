@@ -114,7 +114,6 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.CountingLatch;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -1776,18 +1775,23 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             numReplicas += partition.storageReplicaCount();
         }
 
+        TabletTaskExecutor.CreateTabletOption option = new TabletTaskExecutor.CreateTabletOption();
+        option.setEnableTabletCreationOptimization(table.isCloudNativeTableOrMaterializedView()
+                && Config.lake_enable_tablet_creation_optimization);
+        option.setGtid(GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid());
+
         try {
             GlobalStateMgr.getCurrentState().getConsistencyChecker().addCreatingTableId(table.getId());
             if (numReplicas > Config.create_table_max_serial_replicas) {
                 LOG.info("start to build {} partitions concurrently for table {}.{} with {} replicas",
                         partitions.size(), db.getFullName(), table.getName(), numReplicas);
                 TabletTaskExecutor.buildPartitionsConcurrently(
-                        db.getId(), table, partitions, numReplicas, numAliveNodes, warehouseId);
+                        db.getId(), table, partitions, numReplicas, numAliveNodes, warehouseId, option);
             } else {
                 LOG.info("start to build {} partitions sequentially for table {}.{} with {} replicas",
                         partitions.size(), db.getFullName(), table.getName(), numReplicas);
                 TabletTaskExecutor.buildPartitionsSequentially(
-                        db.getId(), table, partitions, numReplicas, numAliveNodes, warehouseId);
+                        db.getId(), table, partitions, numReplicas, numAliveNodes, warehouseId, option);
             }
         } finally {
             GlobalStateMgr.getCurrentState().getConsistencyChecker().deleteCreatingTableId(table.getId());
@@ -3275,8 +3279,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
 
         db.dropTable(oldTableName);
         db.registerTableUnlocked(olapTable);
-        inactiveRelatedMaterializedView(db, olapTable,
-                MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(oldTableName));
+        AlterMVJobExecutor.inactiveRelatedMaterializedView(db, olapTable,
+                MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(oldTableName), false);
 
         TableInfo tableInfo = TableInfo.createForTableRename(db.getId(), olapTable.getId(), newTableName);
         GlobalStateMgr.getCurrentState().getEditLog().logTableRename(tableInfo);
@@ -3290,23 +3294,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(log);
 
         table.setComment(clause.getNewComment());
-    }
-
-    public static void inactiveRelatedMaterializedView(Database db, Table olapTable, String reason) {
-        for (MvId mvId : olapTable.getRelatedMaterializedViews()) {
-            MaterializedView mv = (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getId(), mvId.getId());
-            if (mv != null) {
-                LOG.warn("Inactive MV {}/{} because {}", mv.getName(), mv.getId(), reason);
-                mv.setInactiveAndReason(reason);
-
-                // recursive inactive
-                inactiveRelatedMaterializedView(db, mv,
-                        MaterializedViewExceptions.inactiveReasonForBaseTableActive(mv.getName()));
-            } else {
-                LOG.info("Ignore materialized view {} does not exists", mvId);
-            }
-        }
     }
 
     public void replayRenameTable(TableInfo tableInfo) {
@@ -3323,9 +3310,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             db.dropTable(tableName);
             table.setName(newTableName);
             db.registerTableUnlocked(table);
-            inactiveRelatedMaterializedView(db, table,
-                    MaterializedViewExceptions.inactiveReasonForBaseTableRenamed(tableName));
-
             LOG.info("replay rename table[{}] to {}, tableId: {}", tableName, newTableName, table.getId());
         } finally {
             locker.unLockDatabase(db.getId(), LockType.WRITE);
@@ -4055,6 +4039,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                         IDictManager.getInstance().enableGlobalDict(olapTable.getId());
                     }
                 }
+            } else if (opCode == OperationType.OP_SET_HAS_DELETE) {
+                olapTable.setHasDelete();
             } else {
                 TableProperty tableProperty = olapTable.getTableProperty();
                 if (tableProperty == null) {
@@ -4992,17 +4978,6 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             idToDb.put(db.getId(), db);
             fullNameToDb.put(db.getFullName(), db);
             stateMgr.getGlobalTransactionMgr().addDatabaseTransactionMgr(db.getId());
-            db.getTables().stream().filter(tbl -> !tbl.isMaterializedView()).forEach(tbl -> {
-                try {
-                    tbl.onReload();
-                    if (tbl.isTemporaryTable()) {
-                        TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
-                        temporaryTableMgr.addTemporaryTable(UUIDUtil.genUUID(), db.getId(), tbl.getName(), tbl.getId());
-                    }
-                } catch (Throwable e) {
-                    LOG.error("reload table failed: {}", tbl, e);
-                }
-            });
         });
 
         AutoIncrementInfo autoIncrementInfo = reader.readJson(AutoIncrementInfo.class);

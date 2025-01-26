@@ -103,6 +103,7 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.warehouse.LoadJobWithWarehouse;
 import com.starrocks.warehouse.Warehouse;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.commons.text.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -893,7 +894,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             planParams.query_options.setLoad_job_type(TLoadJobType.ROUTINE_LOAD);
             StreamLoadMgr streamLoadManager = GlobalStateMgr.getCurrentState().getStreamLoadMgr();
 
-            StreamLoadTask streamLoadTask = streamLoadManager.createLoadTaskWithoutLock(db, table.getName(), label, "", "",
+            StreamLoadTask streamLoadTask = streamLoadManager.createLoadTaskWithoutLock(db, table, label, "", "",
                     taskTimeoutSecond * 1000, true, warehouseId);
             streamLoadTask.setTxnId(txnId);
             streamLoadTask.setLabel(label);
@@ -1416,6 +1417,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         state = JobState.STOPPED;
         clearTasks();
         endTimestamp = System.currentTimeMillis();
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
     }
 
     private void executeCancel(ErrorReason reason) {
@@ -1423,6 +1425,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         state = JobState.CANCELLED;
         clearTasks();
         endTimestamp = System.currentTimeMillis();
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
     }
 
     private void clearTasks() {

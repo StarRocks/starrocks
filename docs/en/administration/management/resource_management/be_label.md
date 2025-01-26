@@ -34,7 +34,7 @@ After labels are added, all the replicas of the same tablet in the table are dis
 
 :::note
 
-- The total number of BE nodes associated with the labels must be greater than the number of replicas. Otherwise, an error `Table replication num should be less than or equal to the number of available BE nodes` will occur.
+- If the total number of BE nodes associated with the labels is fewer than the number of replicas, the system will preferentially ensure there are enough replicas. In this case, replicas may not be distributed as the label specified.
 - The label to be associated with a table must already exist. Otherwise, an error `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx` will occur.
 
 :::
@@ -86,7 +86,7 @@ After labels are added, all the replicas of the same tablet in the materialized 
 
 :::note
 
-- The total number of BE nodes associated with the labels must be greater than the number of replicas. Otherwise, an error `Table replication num should be less than or equal to the number of available BE nodes` will occur.
+- If the total number of BE nodes associated with the labels is fewer than the number of replicas, the system will preferentially ensure there are enough replicas. In this case, replicas may not be distributed as the label specified.
 - The labels to be associated with the materialized view must already exist. Otherwise, an error `Getting analyzing error. Detail message: Cannot find any backend with location: rack:xxx` will occur.
 
 :::

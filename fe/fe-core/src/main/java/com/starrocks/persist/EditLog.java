@@ -344,7 +344,7 @@ public class EditLog {
                 }
                 case OperationType.OP_MODIFY_VIEW_DEF: {
                     AlterViewInfo info = (AlterViewInfo) journal.getData();
-                    globalStateMgr.getAlterJobMgr().alterView(info);
+                    globalStateMgr.getAlterJobMgr().alterView(info, true);
                     break;
                 }
                 case OperationType.OP_RENAME_PARTITION_V2: {
@@ -717,6 +717,7 @@ public class EditLog {
                 case OperationType.OP_DYNAMIC_PARTITION:
                 case OperationType.OP_MODIFY_IN_MEMORY:
                 case OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT:
+                case OperationType.OP_SET_HAS_DELETE:
                 case OperationType.OP_MODIFY_REPLICATION_NUM:
                 case OperationType.OP_MODIFY_WRITE_QUORUM:
                 case OperationType.OP_MODIFY_REPLICATED_STORAGE:
@@ -1107,6 +1108,11 @@ public class EditLog {
                     Warehouse wh = (Warehouse) journal.getData();
                     WarehouseManager warehouseMgr = globalStateMgr.getWarehouseMgr();
                     warehouseMgr.replayAlterWarehouse(wh);
+                    break;
+                }
+                case OperationType.OP_CLUSTER_SNAPSHOT_LOG: {
+                    ClusterSnapshotLog log = (ClusterSnapshotLog) journal.getData();
+                    globalStateMgr.getClusterSnapshotMgr().replayLog(log);
                     break;
                 }
                 default: {
@@ -1539,6 +1545,10 @@ public class EditLog {
         logEdit(OperationType.OP_SET_FORBIDDEN_GLOBAL_DICT, info);
     }
 
+    public void logSetHasDelete(ModifyTablePropertyOperationLog info) {
+        logEdit(OperationType.OP_SET_HAS_DELETE, info);
+    }
+
     public void logBackendTabletsInfo(BackendTabletsInfo backendTabletsInfo) {
         logJsonObject(OperationType.OP_BACKEND_TABLETS_INFO_V2, backendTabletsInfo);
     }
@@ -1951,5 +1961,9 @@ public class EditLog {
 
     public void logRecoverPartitionVersion(PartitionVersionRecoveryInfo info) {
         logEdit(OperationType.OP_RECOVER_PARTITION_VERSION, info);
+    }
+
+    public void logClusterSnapshotLog(ClusterSnapshotLog info) {
+        logEdit(OperationType.OP_CLUSTER_SNAPSHOT_LOG, info);
     }
 }

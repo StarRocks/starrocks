@@ -36,6 +36,8 @@ under the License.
 
     <properties>
         <starrocks.home>${basedir}/../../</starrocks.home>
+        <!-- There is no unit tests for this project, ignore the error if no case found -->
+        <failIfNoSpecifiedTests>false</failIfNoSpecifiedTests>
     </properties>
 
     <build>
@@ -69,6 +71,13 @@ under the License.
                         </goals>
                     </execution>
                 </executions>
+            </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <failIfNoSpecifiedTests>${failIfNoSpecifiedTests}</failIfNoSpecifiedTests>
+                </configuration>
             </plugin>
         </plugins>
     </build>

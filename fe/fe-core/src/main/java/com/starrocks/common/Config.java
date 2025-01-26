@@ -798,12 +798,6 @@ public class Config extends ConfigBase {
     public static int rpc_port = 9020;
 
     /**
-     * Arrow Flight SQL server port
-     */
-    @ConfField
-    public static int arrow_flight_port = 9408;
-
-    /**
      * The connection timeout and socket timeout config for thrift server
      * The value for thrift_client_timeout_ms is set to be larger than zero to prevent
      * some hang up problems in java.net.SocketInputStream.socketRead0
@@ -1017,6 +1011,7 @@ public class Config extends ConfigBase {
     /**
      * Default insert load timeout
      */
+    @Deprecated
     @ConfField(mutable = true)
     public static int insert_load_default_timeout_second = 3600; // 1 hour
 
@@ -1168,7 +1163,7 @@ public class Config extends ConfigBase {
      * Online optimize table allows to optimize a table without blocking write operations.
      */
     @ConfField(mutable = true)
-    public static boolean enable_online_optimize_table = true;
+    public static boolean enable_online_optimize_table = false;
 
     /**
      * If set to true, FE will check backend available capacity by storage medium when create table
@@ -2045,6 +2040,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static long statistic_dict_columns = 100000;
 
+    @ConfField
+    public static int dict_collect_thread_pool_size = 16;
+
     /**
      * The column statistic cache update interval
      */
@@ -2076,6 +2074,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "Tolerate some percent of failure for a large table, it will not affect " +
             "the job status but improve the robustness")
     public static double statistic_full_statistics_failure_tolerance_ratio = 0.05;
+
+    @ConfField(mutable = true, comment = "Enable V2 health calculation based on changed rows")
+    public static boolean statistic_partition_healthy_v2 = true;
+
+    @ConfField(mutable = true, comment = "Health threshold for partitions")
+    public static double statistic_partition_health__v2_threshold = 0.95;
 
     @ConfField(mutable = true)
     public static long statistic_auto_collect_small_table_size = 5L * 1024 * 1024 * 1024; // 5G
@@ -2561,7 +2565,8 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_load_volume_from_conf = true;
     // remote storage related configuration
-    @ConfField(comment = "storage type for cloud native table. Available options: \"S3\", \"HDFS\", \"AZBLOB\". case-insensitive")
+    @ConfField(comment = "storage type for cloud native table. Available options: " +
+            "\"S3\", \"HDFS\", \"AZBLOB\", \"ADLS2\". case-insensitive")
     public static String cloud_native_storage_type = "S3";
 
     // HDFS storage configuration
@@ -2604,13 +2609,32 @@ public class Config extends ConfigBase {
     public static String azure_blob_endpoint = "";
     @ConfField
     public static String azure_blob_path = "";
-
     @ConfField
     public static String azure_blob_shared_key = "";
     @ConfField
     public static String azure_blob_sas_token = "";
+
+    // azure adls2
+    @ConfField
+    public static String azure_adls2_endpoint = "";
+    @ConfField
+    public static String azure_adls2_path = "";
+    @ConfField
+    public static String azure_adls2_shared_key = "";
+    @ConfField
+    public static String azure_adls2_sas_token = "";
+
     @ConfField(mutable = true)
     public static int starmgr_grpc_timeout_seconds = 5;
+
+    @ConfField(mutable = true)
+    public static int star_client_read_timeout_seconds = 15;
+
+    @ConfField(mutable = true)
+    public static int star_client_list_timeout_seconds = 30;
+
+    @ConfField(mutable = true)
+    public static int star_client_write_timeout_seconds = 30;
 
     // ***********************************************************
     // * END: of Cloud native meta server related configurations
@@ -2744,6 +2768,12 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static String lake_background_warehouse = "default_warehouse";
+
+    @ConfField(mutable = true, comment = "time interval to check whether warehouse is idle")
+    public static long warehouse_idle_check_interval_seconds = 60;
+
+    @ConfField(mutable = true, comment = "True to start warehouse idle checker")
+    public static boolean warehouse_idle_check_enable = false;
 
     // e.g. "tableId1;tableId2"
     @ConfField(mutable = true)
@@ -3070,6 +3100,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_mv_automatic_active_check = true;
+    @ConfField(mutable = true, comment = "Whether to enable the automatic related materialized views since of base table's " +
+            "schema changes")
+    public static boolean enable_mv_automatic_inactive_by_base_table_changes = true;
 
     @ConfField(mutable = true, comment = "The max retry times for base table change when refreshing materialized view")
     public static int max_mv_check_base_table_change_retry_times = 10;
@@ -3090,6 +3123,10 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "The max length for mv task run extra message's values(set/map) to avoid " +
             "occupying too much meta memory")
     public static int max_mv_task_run_meta_message_values_length = 16;
+
+    @ConfField(mutable = true, comment = "Whether enable to use list partition rather than range partition for " +
+            "all external table partition types")
+    public static boolean enable_mv_list_partition_for_external_table = false;
 
     /**
      * The refresh partition number when refreshing materialized view at once by default.
@@ -3257,6 +3294,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long black_host_connect_failures_within_time = 5;
 
+    @ConfField(mutable = true, comment = "The minimal time in milliseconds for the node to stay in the blocklist")
+    public static long black_host_penalty_min_ms = 500; // 500ms
+
     @ConfField(mutable = false)
     public static int jdbc_connection_pool_size = 8;
 
@@ -3325,12 +3365,32 @@ public class Config extends ConfigBase {
     public static int lake_remove_table_thread_num = 4;
 
     @ConfField(mutable = true)
-    public static int batch_write_gc_check_interval_ms = 60000;
+    public static int merge_commit_gc_check_interval_ms = 60000;
 
     @ConfField(mutable = true)
-    public static int batch_write_idle_ms = 3600000;
+    public static int merge_commit_idle_ms = 3600000;
 
-    public static int batch_write_executor_threads_num = 4096;
+    @ConfField(mutable = false)
+    public static int merge_commit_executor_threads_num = 4096;
+
+    @ConfField(mutable = true)
+    public static int merge_commit_txn_state_dispatch_retry_times = 3;
+
+    @ConfField(mutable = true)
+    public static int merge_commit_txn_state_dispatch_retry_interval_ms = 200;
+
+    @ConfField(mutable = true)
+    public static int merge_commit_be_assigner_schedule_interval_ms = 5000;
+
+    @ConfField(mutable = true, comment = "Defines the maximum balance factor allowed " +
+            "between any two nodes before triggering a balance")
+    public static double merge_commit_be_assigner_balance_factor_threshold = 0.1;
+
+    /**
+     * Enable Arrow Flight SQL server only when the port is set to positive value.
+     */
+    @ConfField
+    public static int arrow_flight_port = -1;
 
     @ConfField(mutable = true)
     public static int arrow_token_cache_size = 1024;
@@ -3338,12 +3398,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int arrow_token_cache_expire = 3600;
 
-    public static int batch_write_be_assigner_schedule_interval_ms = 5000;
-
-    @ConfField(mutable = true, comment = "Defines the maximum balance factor allowed " +
-            "between any two nodes before triggering a balance")
-    public static double batch_write_be_assigner_balance_factor_threshold = 0.1;
-
     @ConfField(mutable = false)
     public static int query_deploy_threadpool_size = max(50, getRuntime().availableProcessors() * 10);
+
+    @ConfField(mutable = true)
+    public static long automated_cluster_snapshot_interval_seconds = 1800;
+
+    @ConfField(mutable = false)
+    public static int max_historical_automated_cluster_snapshot_jobs = 100;
 }

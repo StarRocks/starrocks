@@ -30,6 +30,8 @@
 #include "exec/schema_scanner/schema_be_threads_scanner.h"
 #include "exec/schema_scanner/schema_be_txns_scanner.h"
 #include "exec/schema_scanner/schema_charsets_scanner.h"
+#include "exec/schema_scanner/schema_cluster_snapshot_jobs_scanner.h"
+#include "exec/schema_scanner/schema_cluster_snapshots_scanner.h"
 #include "exec/schema_scanner/schema_collations_scanner.h"
 #include "exec/schema_scanner/schema_columns_scanner.h"
 #include "exec/schema_scanner/schema_dummy_scanner.h"
@@ -213,6 +215,10 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SysFeMemoryUsage>();
     case TSchemaTableType::SCH_TEMP_TABLES:
         return std::make_unique<SchemaTempTablesScanner>();
+    case TSchemaTableType::SCH_CLUSTER_SNAPSHOTS:
+        return std::make_unique<SchemaClusterSnapshotsScanner>();
+    case TSchemaTableType::SCH_CLUSTER_SNAPSHOT_JOBS:
+        return std::make_unique<SchemaClusterSnapshotJobsScanner>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }

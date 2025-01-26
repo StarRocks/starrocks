@@ -104,6 +104,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static com.starrocks.load.streamload.StreamLoadHttpHeader.HTTP_BATCH_WRITE_ASYNC;
@@ -1100,16 +1101,25 @@ public class FrontendServiceImplTest {
         request.setTxnId(100);
         TGetLoadTxnStatusResult result1 = impl.getLoadTxnStatus(request);
         Assert.assertEquals(TTransactionStatus.UNKNOWN, result1.getStatus());
+        Assert.assertNull(result1.getReason());
         request.setDb("test");
         TGetLoadTxnStatusResult result2 = impl.getLoadTxnStatus(request);
         Assert.assertEquals(TTransactionStatus.UNKNOWN, result2.getStatus());
+        Assert.assertNull(result2.getReason());
         request.setTxnId(transactionId);
         GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.FOLLOWER);
         TGetLoadTxnStatusResult result3 = impl.getLoadTxnStatus(request);
         Assert.assertEquals(TTransactionStatus.UNKNOWN, result3.getStatus());
+        Assert.assertNull(result3.getReason());
         GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
         TGetLoadTxnStatusResult result4 = impl.getLoadTxnStatus(request);
         Assert.assertEquals(TTransactionStatus.PREPARE, result4.getStatus());
+        Assert.assertEquals("", result4.getReason());
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().abortTransaction(
+                db.getId(), transactionId, "artificial failure");
+        TGetLoadTxnStatusResult result5 = impl.getLoadTxnStatus(request);
+        Assert.assertEquals(TTransactionStatus.ABORTED, result5.getStatus());
+        Assert.assertEquals("artificial failure", result5.getReason());
     }
 
     @Test
@@ -1208,7 +1218,36 @@ public class FrontendServiceImplTest {
     }
 
     @Test
-    public void testRequestBatchWrite() throws Exception {
+    public void testRequestMergeCommit() throws Exception {
+        // test success request
+        testRequestMergeCommitBase(request -> {}, result -> {
+            assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
+            assertEquals("test_label", result.getLabel());
+        });
+
+        // test authentication failure
+        testRequestMergeCommitBase(request -> request.setUser("fake_user"),
+                result -> assertEquals(TStatusCode.NOT_AUTHORIZED, result.getStatus().getStatus_code()));
+
+        // test database not exist
+        testRequestMergeCommitBase(request -> request.setDb("mc_db_not_exist"),
+                result -> {
+                    assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code());
+                    assertEquals(1, result.getStatus().getError_msgs().size());
+                    assertEquals("unknown database [mc_db_not_exist]", result.getStatus().getError_msgs().get(0));
+                });
+
+        // test table not exist
+        testRequestMergeCommitBase(request -> request.setTbl("mc_tbl_not_exist"),
+                result -> {
+                    assertEquals(TStatusCode.INTERNAL_ERROR, result.getStatus().getStatus_code());
+                    assertEquals(1, result.getStatus().getError_msgs().size());
+                    assertEquals("unknown table [test.mc_tbl_not_exist]", result.getStatus().getError_msgs().get(0));
+                });
+    }
+
+    private void testRequestMergeCommitBase(
+            Consumer<TMergeCommitRequest> setupRequest, Consumer<TMergeCommitResult> verifyResult) throws Exception {
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TMergeCommitRequest request = new TMergeCommitRequest();
         request.setDb("test");
@@ -1230,20 +1269,9 @@ public class FrontendServiceImplTest {
                 return new RequestLoadResult(new TStatus(TStatusCode.OK), "test_label");
             }
         };
-
-        // test success request
-        {
-            TMergeCommitResult result = impl.requestMergeCommit(request);
-            assertEquals(TStatusCode.OK, result.getStatus().getStatus_code());
-            assertEquals("test_label", result.getLabel());
-        }
-
-        // test authentication failure
-        {
-            request.setUser("fake_user");
-            TMergeCommitResult result = impl.requestMergeCommit(request);
-            assertEquals(TStatusCode.NOT_AUTHORIZED, result.getStatus().getStatus_code());
-        }
+        setupRequest.accept(request);
+        TMergeCommitResult result = impl.requestMergeCommit(request);
+        verifyResult.accept(result);
     }
 
     @Test

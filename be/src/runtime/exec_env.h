@@ -151,7 +151,6 @@ public:
     MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
     MemTracker* poco_connection_pool_mem_tracker() { return _poco_connection_pool_mem_tracker.get(); }
     MemTracker* jemalloc_metadata_traker() { return _jemalloc_metadata_tracker.get(); }
-    MemTracker* jemalloc_fragmentation_traker() { return _jemalloc_fragmentation_tracker.get(); }
     std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
 
     int64_t get_storage_page_cache_size();
@@ -174,7 +173,6 @@ private:
 
     // Track usage of jemalloc
     std::shared_ptr<MemTracker> _jemalloc_metadata_tracker;
-    std::shared_ptr<MemTracker> _jemalloc_fragmentation_tracker;
 
     // Limit the memory used by the query. At present, it can use 90% of the be memory limit
     std::shared_ptr<MemTracker> _query_pool_mem_tracker;
@@ -277,6 +275,7 @@ public:
     ThreadPool* streaming_load_thread_pool() { return _streaming_load_thread_pool; }
     ThreadPool* load_rowset_thread_pool() { return _load_rowset_thread_pool; }
     ThreadPool* load_segment_thread_pool() { return _load_segment_thread_pool; }
+    ThreadPool* put_combined_txn_log_thread_pool() { return _put_combined_txn_log_thread_pool; }
 
     pipeline::DriverExecutor* wg_driver_executor();
     workgroup::ScanExecutor* scan_executor();
@@ -367,6 +366,7 @@ private:
 
     ThreadPool* _load_segment_thread_pool = nullptr;
     ThreadPool* _load_rowset_thread_pool = nullptr;
+    ThreadPool* _put_combined_txn_log_thread_pool = nullptr;
 
     PriorityThreadPool* _udf_call_pool = nullptr;
     PriorityThreadPool* _pipeline_prepare_pool = nullptr;

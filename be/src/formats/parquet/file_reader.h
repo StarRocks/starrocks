@@ -57,10 +57,12 @@ namespace starrocks::parquet {
 
 struct SplitContext : public HdfsSplitContext {
     FileMetaDataPtr file_metadata;
+    SkipRowsContextPtr skip_rows_ctx;
 
     HdfsSplitContextPtr clone() override {
         auto ctx = std::make_unique<SplitContext>();
         ctx->file_metadata = file_metadata;
+        ctx->skip_rows_ctx = skip_rows_ctx;
         return ctx;
     }
 };
@@ -69,8 +71,7 @@ class FileReader {
 public:
     FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
                const DataCacheOptions& datacache_options = DataCacheOptions(),
-               io::SharedBufferedInputStream* sb_stream = nullptr,
-               const std::set<int64_t>* _need_skip_rowids = nullptr);
+               io::SharedBufferedInputStream* sb_stream = nullptr, SkipRowsContextPtr skipRowsContext = nullptr);
     ~FileReader();
 
     Status init(HdfsScannerContext* scanner_ctx);
@@ -81,12 +82,14 @@ public:
 
     Status collect_scan_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* io_ranges);
 
+    size_t row_group_size() const { return _row_group_size; }
+
+    const std::vector<std::shared_ptr<GroupReader>>& group_readers() const { return _row_group_readers; }
+
 private:
     int _chunk_size;
 
     std::shared_ptr<MetaHelper> _build_meta_helper();
-
-    Status _parse_footer(FileMetaDataPtr* file_metadata, int64_t* file_metadata_size);
 
     void _prepare_read_columns(std::unordered_set<std::string>& existed_column_names);
 
@@ -110,18 +113,14 @@ private:
     // exist=true: group meta contain statistics info
     Status _read_min_max_chunk(const GroupReaderPtr& group_reader, const std::vector<SlotDescriptor*>& slots,
                                ChunkPtr* min_chunk, ChunkPtr* max_chunk) const;
+    Status _read_has_nulls(const GroupReaderPtr& group_reader, const std::vector<SlotDescriptor*>& slots,
+                           std::vector<bool>* has_nulls);
 
     // only scan partition column + not exist column
     Status _exec_no_materialized_column_scan(ChunkPtr* chunk);
 
     // get partition column idx in param.partition_columns
     int32_t _get_partition_column_idx(const std::string& col_name) const;
-
-    // Get parquet footer size
-    StatusOr<uint32_t> _get_footer_read_size() const;
-
-    // Validate the magic bytes and get the length of metadata
-    StatusOr<uint32_t> _parse_metadata_length(const std::vector<char>& footer_buff) const;
 
     Status _build_split_tasks();
 
@@ -146,7 +145,7 @@ private:
     io::SharedBufferedInputStream* _sb_stream = nullptr;
     GroupReaderParam _group_reader_param;
     std::shared_ptr<MetaHelper> _meta_helper = nullptr;
-    const std::set<int64_t>* _need_skip_rowids;
+    SkipRowsContextPtr _skip_rows_ctx = nullptr;
 };
 
 } // namespace starrocks::parquet

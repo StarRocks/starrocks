@@ -1093,7 +1093,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         // analyze expression, because it converts to sql for serialize
-        ConnectContext connectContext = new ConnectContext();
+        ConnectContext connectContext = ConnectContext.buildInner();
         connectContext.setDatabase(db.getFullName());
         // set privilege
         connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
@@ -1767,7 +1767,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             analyzeRefBaseTablePartitionExprs();
             // analyze partition exprs
             Map<Table, List<Expr>> refBaseTablePartitionExprs = getRefBaseTablePartitionExprs();
-            ConnectContext connectContext = new ConnectContext();
+            ConnectContext connectContext = ConnectContext.buildInner();
             if (refBaseTablePartitionExprs != null) {
                 for (BaseTableInfo baseTableInfo : baseTableInfos) {
                     Optional<Table> refBaseTableOpt = MvUtils.getTable(baseTableInfo);
@@ -2090,7 +2090,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             if (db == null) {
                 return null;
             }
-            ConnectContext connectContext = new ConnectContext();
+            ConnectContext connectContext = ConnectContext.buildInner();
             connectContext.setDatabase(db.getOriginName());
             if (!Strings.isNullOrEmpty(originalViewDefineSql)) {
                 this.defineQueryParseNode = MvUtils.getQueryAst(originalViewDefineSql, connectContext);
@@ -2099,5 +2099,22 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
         }
         return this.defineQueryParseNode;
+    }
+
+    /**
+     * Get mv's ordered columns if the mv has defined its output columns order.
+     * @return: mv's defined output columns in the defined order
+     */
+    public List<Column> getOrderedOutputColumns() {
+        if (CollectionUtils.isEmpty(this.queryOutputIndices)) {
+            return this.getBaseSchemaWithoutGeneratedColumn();
+        } else {
+            List<Column> schema = this.getBaseSchemaWithoutGeneratedColumn();
+            List<Column> outputColumns = Lists.newArrayList();
+            for (Integer index : this.queryOutputIndices) {
+                outputColumns.add(schema.get(index));
+            }
+            return outputColumns;
+        }
     }
 }

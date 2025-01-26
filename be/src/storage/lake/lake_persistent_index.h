@@ -36,8 +36,6 @@ class PersistentIndexMemtable;
 class PersistentIndexSstable;
 class TabletManager;
 
-using IndexValueWithVer = std::pair<int64_t, IndexValue>;
-
 class KeyValueMerger {
 public:
     explicit KeyValueMerger(const std::string& key, uint64_t max_rss_rowid, sstable::TableBuilder* builder,
@@ -154,19 +152,16 @@ public:
     // Check if this rowset need to rebuild, return `True` means need to rebuild this rowset.
     static bool needs_rowset_rebuild(const RowsetMetadataPB& rowset, uint32_t rebuild_rss_id);
 
+    // Return the files cnt that need to rebuild.
+    static size_t need_rebuild_file_cnt(const TabletMetadataPB& metadata,
+                                        const PersistentIndexSstableMetaPB& sstable_meta);
+
 private:
     Status flush_memtable();
 
     bool is_memtable_full() const;
 
-    // batch get
-    // |keys|: key array as raw buffer
-    // |values|: value array
-    // |key_indexes|: the indexes of keys.
-    // |found_key_indexes|: founded indexes of keys
-    // |version|: version of values
-    Status get_from_immutable_memtable(const Slice* keys, IndexValue* values, const KeyIndexSet& key_indexes,
-                                       KeyIndexSet* found_key_indexes, int64_t version) const;
+    bool too_many_rebuild_files() const;
 
     // batch get
     // |n|: size of key/value array
@@ -193,9 +188,9 @@ private:
 
 private:
     std::unique_ptr<PersistentIndexMemtable> _memtable;
-    std::unique_ptr<PersistentIndexMemtable> _immutable_memtable{nullptr};
     TabletManager* _tablet_mgr{nullptr};
     int64_t _tablet_id{0};
+    size_t _need_rebuild_file_cnt{0};
     // The size of sstables is not expected to be too large.
     // In major compaction, some sstables will be picked to be merged into one.
     // sstables are ordered with the smaller version on the left.

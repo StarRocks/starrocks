@@ -34,6 +34,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -49,6 +50,9 @@ import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+
+import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
 
 public class FullStatisticsCollectJob extends StatisticsCollectJob {
     private static final Logger LOG = LogManager.getLogger(FullStatisticsCollectJob.class);
@@ -78,7 +82,8 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
             ", $minFunction " + // VARCHAR
             " FROM (select $quoteColumnName as column_key from `$dbName`.`$tableName` partition `$partitionName`) tt";
     private static final String OVERWRITE_PARTITION_TEMPLATE =
-            "INSERT INTO " + TABLE_NAME + "\n" +
+            "INSERT INTO " + TABLE_NAME + "(" + StatisticUtils.buildStatsColumnDef(TABLE_NAME).stream().map(ColumnDef::getName)
+                    .collect(Collectors.joining(", ")) + ") " + "\n" +
                     "SELECT " +
                     "   table_id, $targetPartitionId, column_name, db_id, table_name, \n" +
                     "   partition_name, row_count, data_size, ndv, null_count, max, min, update_time \n" +
@@ -246,7 +251,7 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         StatementBase insertStmt = createInsertStmt();
         do {
             LOG.debug("statistics insert sql size:" + rowsBuffer.size());
-            StmtExecutor executor = new StmtExecutor(context, insertStmt);
+            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, insertStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
             context.setStartTime();
@@ -272,12 +277,15 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     private StatementBase createInsertStmt() {
-        String sql = "INSERT INTO column_statistics values " + String.join(", ", sqlBuffer) + ";";
-        List<String> names = Lists.newArrayList("column_0", "column_1", "column_2", "column_3",
-                "column_4", "column_5", "column_6", "column_7", "column_8", "column_9",
-                "column_10", "column_11", "column_12");
-        QueryStatement qs = new QueryStatement(new ValuesRelation(rowsBuffer, names));
+        List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(FULL_STATISTICS_TABLE_NAME).stream()
+                .map(ColumnDef::getName)
+                .collect(Collectors.toList());
+
+        String sql = "INSERT INTO _statistics_.column_statistics(" + String.join(", ", targetColumnNames) +
+                ") values " + String.join(", ", sqlBuffer) + ";";
+        QueryStatement qs = new QueryStatement(new ValuesRelation(rowsBuffer, targetColumnNames));
         InsertStmt insert = new InsertStmt(new TableName("_statistics_", "column_statistics"), qs);
+        insert.setTargetColumnNames(targetColumnNames);
         insert.setOrigStmt(new OriginStatement(sql, 0));
         return insert;
     }

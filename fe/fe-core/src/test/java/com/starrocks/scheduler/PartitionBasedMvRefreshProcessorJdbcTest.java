@@ -25,18 +25,15 @@ import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.jdbc.MockedJDBCMetadata;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import org.jetbrains.annotations.NotNull;
-import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
-import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
@@ -44,14 +41,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
-
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase {
+public class PartitionBasedMvRefreshProcessorJdbcTest extends MVTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MVRefreshTestBase.beforeClass();
+        MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockCatalog(connectContext, MockedJDBCMetadata.MOCKED_JDBC_CATALOG_NAME);
         starRocksAssert
                 .withMaterializedView("CREATE MATERIALIZED VIEW `test`.`jdbc_parttbl_mv0`\n" +
@@ -105,21 +100,6 @@ public class PartitionBasedMvRefreshProcessorJdbcTest extends MVRefreshTestBase 
                         "\"partition_refresh_number\" = \"1\"" +
                         ") " +
                         "as select str2date(d,'%Y%m%d') ss, a, b, c from jdbc0.partitioned_db0.tbl1;");
-    }
-
-    @AfterClass
-    public static void afterClass() throws Exception {
-        cleanupEphemeralMVs(starRocksAssert, startSuiteTime);
-    }
-
-    @Before
-    public void before() {
-        startCaseTime = Instant.now().getEpochSecond();
-    }
-
-    @After
-    public void after() throws Exception {
-        cleanupEphemeralMVs(starRocksAssert, startCaseTime);
     }
 
     @Test

@@ -89,7 +89,7 @@ public class InsertLoadJob extends LoadJob {
     }
 
     public InsertLoadJob(String label, long dbId, long tableId, long txnId, String loadId, String user, long createTimestamp,
-            TLoadJobType type, long timeout, Coordinator coordinator) throws MetaNotFoundException {
+            TLoadJobType type, long timeout, long warehouseId, Coordinator coordinator) throws MetaNotFoundException {
         super(dbId, label);
         this.tableId = tableId;
         this.createTimestamp = createTimestamp;
@@ -98,6 +98,7 @@ public class InsertLoadJob extends LoadJob {
         this.jobType = EtlJobType.INSERT;
         this.loadType = type;
         this.timeoutSecond = timeout;
+        this.warehouseId = warehouseId;
         this.coordinator = coordinator;
         this.loadIds.add(loadId);
         this.transactionId = txnId;

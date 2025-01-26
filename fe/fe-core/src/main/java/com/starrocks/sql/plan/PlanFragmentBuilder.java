@@ -201,6 +201,7 @@ import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldExpressionCol
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.thrift.TBrokerFileStatus;
+import com.starrocks.thrift.TFileScanType;
 import com.starrocks.thrift.TPartitionType;
 import com.starrocks.thrift.TResultSinkType;
 import org.apache.commons.collections4.CollectionUtils;
@@ -1296,6 +1297,7 @@ public class PlanFragmentBuilder {
             PaimonScanNode paimonScanNode =
                     new PaimonScanNode(context.getNextNodeId(), tupleDescriptor, "PaimonScanNode");
             paimonScanNode.setScanOptimzeOption(node.getScanOptimzeOption());
+            paimonScanNode.computeStatistics(optExpression.getStatistics());
             currentExecGroup.add(paimonScanNode, true);
             try {
                 // set predicate
@@ -1308,8 +1310,8 @@ public class PlanFragmentBuilder {
                 }
                 paimonScanNode.setupScanRangeLocations(tupleDescriptor, node.getPredicate());
                 HDFSScanNodePredicates scanNodePredicates = paimonScanNode.getScanNodePredicates();
-                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
                 prepareCommonExpr(scanNodePredicates, node.getScanOperatorPredicates(), context);
+                prepareMinMaxExpr(scanNodePredicates, node.getScanOperatorPredicates(), context, referenceTable);
             } catch (Exception e) {
                 LOG.warn("Paimon scan node get scan range locations failed : ", e);
                 throw new StarRocksPlannerException(e.getMessage(), INTERNAL_ERROR);
@@ -3286,6 +3288,26 @@ public class PlanFragmentBuilder {
             PlanFragment inputFragment = visit(optExpr.inputAt(0), context);
             PhysicalFilterOperator filter = (PhysicalFilterOperator) optExpr.getOp();
 
+            TupleDescriptor tupleDescriptor = context.getDescTbl().createTupleDescriptor();
+
+            Map<SlotId, Expr> commonSubOperatorMap = Maps.newHashMap();
+            if (filter.getPredicateCommonOperators() != null) {
+                for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : filter.getPredicateCommonOperators().entrySet()) {
+                    Expr expr = ScalarOperatorToExpr.buildExecExpression(entry.getValue(),
+                            new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr(),
+                                    filter.getPredicateCommonOperators()));
+
+                    commonSubOperatorMap.put(new SlotId(entry.getKey().getId()), expr);
+
+                    SlotDescriptor slotDescriptor =
+                            context.getDescTbl().addSlotDescriptor(tupleDescriptor, new SlotId(entry.getKey().getId()));
+                    slotDescriptor.setIsNullable(expr.isNullable());
+                    slotDescriptor.setIsMaterialized(false);
+                    slotDescriptor.setType(expr.getType());
+                    context.getColRefToExpr().put(entry.getKey(), new SlotRef(entry.getKey().toString(), slotDescriptor));
+                }
+            }
+
             List<Expr> predicates = Utils.extractConjuncts(filter.getPredicate()).stream()
                     .map(d -> ScalarOperatorToExpr.buildExecExpression(d,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
@@ -3295,6 +3317,7 @@ public class PlanFragmentBuilder {
                     new SelectNode(context.getNextNodeId(), inputFragment.getPlanRoot(), predicates);
             selectNode.setLimit(filter.getLimit());
             selectNode.computeStatistics(optExpr.getStatistics());
+            selectNode.setCommonSlotMap(commonSubOperatorMap);
             currentExecGroup.add(selectNode);
             inputFragment.setPlanRoot(selectNode);
             return inputFragment;
@@ -3345,10 +3368,13 @@ public class PlanFragmentBuilder {
             // now sr only support offset on merge-exchange node
             // 1. if child is exchange node, meanings child was enforced gather property
             //   a. only limit and no offset, only need set limit on child
-            //   b. has offset, should trans Exchange to Merge-Exchange node
+            //   b. has offset
+            //      b.1 not merge exchange should trans Exchange to Merge-Exchange node
+            //      b.2 is merge exchange update offset
             // 2. if child isn't exchange node, meanings child satisfy gather property
             //   a. only limit and no offset, no need add exchange node, only need set limit on child
             //   b. has offset, need add exchange node, sr doesn't support a special node to handle offset
+
             if (limit.hasOffset()) {
                 if (!(child.getPlanRoot() instanceof ExchangeNode)) {
                     // use merge-exchange
@@ -3367,11 +3393,17 @@ public class PlanFragmentBuilder {
                     context.getFragments().add(fragment);
                     child = fragment;
                 }
-
                 ExchangeNode exchangeNode = (ExchangeNode) child.getPlanRoot();
-                SortInfo sortInfo = new SortInfo(Lists.newArrayList(), Operator.DEFAULT_LIMIT,
-                        Lists.newArrayList(new IntLiteral(1)), Lists.newArrayList(true), Lists.newArrayList(false));
-                exchangeNode.setMergeInfo(sortInfo, limit.getOffset());
+                if (!exchangeNode.isMerge()) {
+                    SortInfo sortInfo = new SortInfo(Lists.newArrayList(), Operator.DEFAULT_LIMIT,
+                            Lists.newArrayList(new IntLiteral(1)), Lists.newArrayList(true), Lists.newArrayList(false));
+                    exchangeNode.setMergeInfo(sortInfo, limit.getOffset());
+                } else if (exchangeNode.getOffset() <= 0) {
+                    exchangeNode.setOffset(limit.getOffset());
+                } else if (exchangeNode.getOffset() > 0) {
+                    exchangeNode.setOffset(limit.getOffset() + exchangeNode.getOffset());
+                }
+
                 exchangeNode.computeStatistics(optExpression.getStatistics());
             }
 
@@ -3842,8 +3874,8 @@ public class PlanFragmentBuilder {
             int dop = ConnectContext.get().getSessionVariable().getSinkDegreeOfParallelism();
             scanNode.setLoadInfo(-1, -1, table, new BrokerDesc(table.getProperties()), fileGroups, table.isStrictMode(), dop);
             scanNode.setUseVectorizedLoad(true);
-            // table function enable flexible column mapping by default.
-            scanNode.setFlexibleColumnMapping(true);
+            scanNode.setFlexibleColumnMapping(table.isFlexibleColumnMapping());
+            scanNode.setFileScanType(table.isLoadType() ? TFileScanType.FILES_INSERT : TFileScanType.FILES_QUERY);
 
             Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), context.getConnectContext());
             analyzer.setDescTbl(context.getDescTbl());

@@ -92,6 +92,7 @@ set(EXEC_FILES
         ./exec/repeat_node_test.cpp
         ./exec/sorting_test.cpp
         ./exec/table_function_node_test.cpp
+        ./exec/olap_scan_prepare_test.cpp
         ./exprs/agg/json_each_test.cpp
         ./exprs/agg/aggregate_test.cpp
         ./exprs/arithmetic_expr_test.cpp
@@ -155,6 +156,8 @@ set(EXEC_FILES
         ./exprs/runtime_filter_test.cpp
         ./exprs/subfield_expr_test.cpp
         ./exprs/vectorized_literal_test.cpp
+        ./exprs/min_max_predicate_test.cpp
+        ./exprs/in_const_predicate_test.cpp
         ./formats/csv/array_converter_test.cpp
         ./formats/csv/boolean_converter_test.cpp
         ./formats/csv/csv_file_writer_test.cpp
@@ -356,6 +359,9 @@ set(EXEC_FILES
         ./storage/persistent_index_consistency_test.cpp
         ./storage/meta_reader_test.cpp
         ./storage/dictionary_cache_manager_test.cpp
+        ./storage/column_or_predicate_test.cpp
+        ./storage/column_and_predicate_test.cpp
+        ./storage/olap_runtime_range_pruner_test.cpp
         ./runtime/agg_state_desc_test.cpp
         ./runtime/buffer_control_block_test.cpp
         ./runtime/data_stream_mgr_test.cpp
@@ -364,6 +370,7 @@ set(EXEC_FILES
         ./runtime/decimalv3_test.cpp
         ./runtime/external_scan_context_mgr_test.cpp
         ./runtime/fragment_mgr_test.cpp
+        ./runtime/http_result_writer_test.cpp
         ./runtime/int128_arithmetic_ops_test.cpp
         ./runtime/kafka_consumer_pipe_test.cpp
         ./runtime/local_tablets_channel_test.cpp
@@ -380,6 +387,7 @@ set(EXEC_FILES
         ./runtime/batch_write/batch_write_mgr_test.cpp
         ./runtime/batch_write/batch_write_util_test.cpp
         ./runtime/batch_write/isomorphic_batch_write_test.cpp
+        ./runtime/batch_write/txn_state_cache_test.cpp
         #./runtime/routine_load_task_executor_test.cpp
         ./runtime/routine_load/data_consumer_test.cpp
         ./runtime/small_file_mgr_test.cpp
@@ -485,6 +493,7 @@ set(EXEC_FILES
         ./storage/lake/lake_persistent_index_test.cpp
         ./storage/lake/replication_txn_manager_test.cpp
         ./storage/lake/persistent_index_sstable_test.cpp
+        ./storage/lake/write_combined_txn_log_test.cpp
         ./block_cache/datacache_utils_test.cpp
         ./block_cache/block_cache_hit_rate_counter_test.cpp
         ./util/thrift_rpc_helper_test.cpp

@@ -20,7 +20,6 @@
 #include "common/tracer.h"
 #include "gutil/strings/substitute.h"
 #include "io/io_profiler.h"
-#include "runtime/large_int_value.h"
 #include "storage/chunk_helper.h"
 #include "storage/primary_key_dump.h"
 #include "storage/primary_key_encoder.h"
@@ -29,6 +28,7 @@
 #include "storage/tablet.h"
 #include "storage/tablet_reader.h"
 #include "storage/tablet_updates.h"
+#include "types/large_int_value.h"
 #include "util/stack_util.h"
 #include "util/starrocks_metrics.h"
 #include "util/xxh3.h"
@@ -1184,8 +1184,8 @@ Status PrimaryIndex::_do_load(Tablet* tablet) {
     _set_schema(pkey_schema);
 
     // load persistent index if enable persistent index meta
-
-    if (tablet->get_enable_persistent_index()) {
+    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
+    if (tablet->get_enable_persistent_index() && (fix_size <= 128)) {
         // TODO
         // PersistentIndex and tablet data are currently stored in the same directory
         // We may need to support the separation of PersistentIndex and Tablet data
@@ -1593,7 +1593,8 @@ Status PrimaryIndex::reset(Tablet* tablet, EditVersion version, PersistentIndexM
     auto pkey_schema = ChunkHelper::convert_schema(tablet_schema_ptr, pk_columns);
     _set_schema(pkey_schema);
 
-    if (tablet->get_enable_persistent_index()) {
+    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(_pk_schema);
+    if (tablet->get_enable_persistent_index() && (fix_size <= 128)) {
         if (_persistent_index != nullptr) {
             _persistent_index.reset();
         }

@@ -2199,7 +2199,8 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
         }
         AbstractJob job = null;
         try {
-            job = GlobalStateMgr.getCurrentState().getBackupHandler().getAbstractJobByDbName(statement.getDbName());
+            job = GlobalStateMgr.getCurrentState().getBackupHandler().getAbstractJob(statement.isExternalCatalog(),
+                                                                                     statement.getDbName());
         } catch (DdlException e) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, statement.getDbName());
         }

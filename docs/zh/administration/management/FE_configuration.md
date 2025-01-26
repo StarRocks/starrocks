@@ -1750,7 +1750,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Long
 - 单位：bytes
 - 是否动态：是
-- 描述：自动统计信息采集的最大分区大小。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。
+- 描述：自动统计信息采集的单次任务最大数据量。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。
 - 引入版本：-
 
 ##### statistic_collect_max_row_count_per_query
@@ -1807,6 +1807,60 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：直方图最大采样行数。
 - 引入版本：-
 
+##### connector_table_query_trigger_analyze_small_table_rows
+
+- 默认值：10000000
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：查询触发 ANALYZE 任务的小表阈值。
+- 引入版本：v3.4.0
+
+##### connector_table_query_trigger_analyze_small_table_interval
+
+- 默认值：2 * 3600
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：查询触发 ANALYZE 任务的小表采集间隔。
+- 引入版本：v3.4.0
+
+##### connector_table_query_trigger_analyze_large_table_interval
+
+- 默认值：12 * 3600
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：查询触发 ANALYZE 任务的大表采集间隔。
+- 引入版本：v3.4.0
+
+##### connector_table_query_trigger_analyze_max_pending_task_num
+
+- 默认值：100
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：FE 中处于 Pending 状态的查询触发 ANALYZE 任务的最大数量。
+- 引入版本：v3.4.0
+
+##### connector_table_query_trigger_analyze_schedule_interval
+
+- 默认值：30
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：Schedule 线程调度查询触发 ANALYZE 任务的周期。
+- 引入版本：v3.4.0
+
+##### connector_table_query_trigger_analyze_max_running_task_num
+
+- 默认值：2
+- 类型：Int
+- 单位：-
+- 是否动态：是
+- 描述：FE 中处于 Running 状态的查询触发 ANALYZE 任务的最大数量。
+- 引入版本：v3.4.0
+
 ##### enable_local_replica_selection
 
 - 默认值：false
@@ -1824,6 +1878,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 是否动态：是
 - 描述：: 分区裁剪允许的最大递归深度。增加递归深度可以裁剪更多元素但同时增加 CPU 资源消耗。
 - 引入版本：-
+
+##### slow_query_analyze_threshold
+
+- 默认值：5
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：查询触发 Query Feedback 分析的执行时间阈值。
+- 引入版本：v3.4.0
 
 ### 导入导出
 
@@ -3133,11 +3196,11 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 ##### lake_enable_ingest_slowdown
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：是
-- 描述：是否为存算分离集群开启导入限速功能。开启导入限速功能后，当某个表分区的 Compaction Score 超过了 `lake_ingest_slowdown_threshold`，该表分区上的导入任务将会被限速。只有当 `run_mode` 设置为 `shared_data` 后，该配置项才会生效。
+- 描述：是否为存算分离集群开启导入限速功能。开启导入限速功能后，当某个表分区的 Compaction Score 超过了 `lake_ingest_slowdown_threshold`，该表分区上的导入任务将会被限速。只有当 `run_mode` 设置为 `shared_data` 后，该配置项才会生效。自 v3.3.6 起，默认值由 `false` 变为 `true`。
 - 引入版本：v3.2.0
 
 ##### lake_ingest_slowdown_threshold
@@ -3173,11 +3236,11 @@ Compaction Score 代表了一个表分区是否值得进行 Compaction 的评分
 
 ##### lake_compaction_score_upper_bound
 
-- 默认值：0
+- 默认值：2000
 - 类型：Long
 - 单位：-
 - 是否动态：是
-- 描述：表分区的 Compaction Score 的上限, `0` 表示没有上限。只有当 `lake_enable_ingest_slowdown` 设置为 `true` 后，该配置项才会生效。当表分区 Compaction Score 达到或超过该上限后，所有涉及到该分区的导入任务将会被无限延迟提交，直到 Compaction Score 降到该值以下或者任务超时。
+- 描述：表分区的 Compaction Score 的上限, `0` 表示没有上限。只有当 `lake_enable_ingest_slowdown` 设置为 `true` 后，该配置项才会生效。当表分区 Compaction Score 达到或超过该上限后，新的导入会被拒绝。自 v3.3.6 起，默认值由 `0` 变为 `2000`。
 - 引入版本：v3.2.0
 
 ##### lake_compaction_disable_tables

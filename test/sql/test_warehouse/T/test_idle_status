@@ -1,0 +1,5 @@
+-- name: test_idle_status
+
+admin set frontend config ("warehouse_idle_check_enable" = "true");
+
+shell: curl ${url}/api/idle_status

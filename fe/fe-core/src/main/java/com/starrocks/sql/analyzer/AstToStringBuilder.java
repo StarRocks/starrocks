@@ -146,6 +146,7 @@ import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.storagevolume.StorageVolume;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang.NotImplementedException;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
@@ -1907,26 +1908,39 @@ public class AstToStringBuilder {
             createTableSql.append(String.join(", ", partitionNames)).append(")");
         }
 
-        // Location
-        String location = null;
-        if (table.isHiveTable() || table.isHudiTable()) {
-            location = (table).getTableLocation();
-        } else if (table.isIcebergTable()) {
-            location = table.getTableLocation();
-        } else if (table.isDeltalakeTable()) {
-            location = table.getTableLocation();
-        } else if (table.isPaimonTable()) {
-            location = table.getTableLocation();
-        }
-
         // Comment
         if (!Strings.isNullOrEmpty(table.getComment())) {
             createTableSql.append("\nCOMMENT (\"").append(table.getComment()).append("\")");
         }
 
-        if (!Strings.isNullOrEmpty(location)) {
-            createTableSql.append("\nPROPERTIES (\"location\" = \"").append(location).append("\");");
+        // Properties
+        Map<String, String> properties = new HashMap<>();
+        try {
+            properties = new HashMap<>(table.getProperties());
+        } catch (NotImplementedException e) {
         }
+
+        // Location
+        String location = null;
+        try {
+            location = table.getTableLocation();
+            if (!Strings.isNullOrEmpty(location)) {
+                properties.put("location", location);
+            }
+        } catch (NotImplementedException e) {
+        }
+
+        if (!properties.isEmpty()) {
+            createTableSql.append("\nPROPERTIES (");
+            for (Map.Entry<String, String> kv : properties.entrySet()) {
+                createTableSql.append("\"" + kv.getKey() + "\" = \"").append(kv.getValue()).append("\",");
+            }
+            if (createTableSql.charAt(createTableSql.length() - 1) == ',') {
+                createTableSql.deleteCharAt(createTableSql.length() - 1);
+            }
+            createTableSql.append(")");
+        }
+        createTableSql.append(";");
 
         return createTableSql.toString();
     }

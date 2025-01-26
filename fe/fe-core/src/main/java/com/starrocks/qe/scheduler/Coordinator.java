@@ -143,6 +143,10 @@ public abstract class Coordinator {
         return List.of();
     }
 
+    // Release query queue resources
+    public void onReleaseSlots() {
+    }
+
     public abstract void onFinished();
 
     public abstract LogicalSlot getSlot();

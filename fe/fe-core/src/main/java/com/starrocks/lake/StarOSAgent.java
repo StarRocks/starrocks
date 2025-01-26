@@ -36,6 +36,7 @@ import com.staros.proto.PlacementRelationship;
 import com.staros.proto.QuitMetaGroupInfo;
 import com.staros.proto.ReplicaInfo;
 import com.staros.proto.ReplicaRole;
+import com.staros.proto.ReplicationType;
 import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
@@ -96,6 +97,17 @@ public class StarOSAgent {
     public boolean init(StarManagerServer server) {
         client = new StarClient(server);
         client.connectServer(String.format("127.0.0.1:%d", Config.cloud_native_meta_port));
+        GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
+            client.setClientReadTimeoutSec(Config.star_client_read_timeout_seconds);
+            client.setClientListTimeoutSec(Config.star_client_list_timeout_seconds);
+            client.setClientWriteTimeoutSec(Config.star_client_write_timeout_seconds);
+        });
+        return true;
+    }
+
+    public boolean initForTest() {
+        client = new StarClient(null);
+        client.connectServer(String.format("127.0.0.1:%d", Config.cloud_native_meta_port));
         return true;
     }
 
@@ -128,7 +140,12 @@ public class StarOSAgent {
         LOG.info("get serviceId {} from starMgr", serviceId);
     }
 
+    public String getRawServiceId() {
+        return serviceId;
+    }
+
     public String addFileStore(FileStoreInfo fsInfo) throws DdlException {
+        prepare();
         try {
             return client.addFileStore(fsInfo, serviceId);
         } catch (StarClientException e) {
@@ -137,6 +154,7 @@ public class StarOSAgent {
     }
 
     public void removeFileStoreByName(String fsName) throws DdlException {
+        prepare();
         try {
             client.removeFileStoreByName(fsName, serviceId);
         } catch (StarClientException e) {
@@ -145,6 +163,7 @@ public class StarOSAgent {
     }
 
     public void updateFileStore(FileStoreInfo fsInfo) throws DdlException {
+        prepare();
         try {
             client.updateFileStore(fsInfo, serviceId);
         } catch (StarClientException e) {
@@ -153,6 +172,7 @@ public class StarOSAgent {
     }
 
     public FileStoreInfo getFileStoreByName(String fsName) throws DdlException {
+        prepare();
         try {
             return client.getFileStoreByName(fsName, serviceId);
         } catch (StarClientException e) {
@@ -164,6 +184,7 @@ public class StarOSAgent {
     }
 
     public FileStoreInfo getFileStore(String fsKey) throws DdlException {
+        prepare();
         try {
             return client.getFileStore(fsKey, serviceId);
         } catch (StarClientException e) {
@@ -175,6 +196,7 @@ public class StarOSAgent {
     }
 
     public List<FileStoreInfo> listFileStore() throws DdlException {
+        prepare();
         try {
             return client.listFileStore(serviceId);
         } catch (StarClientException e) {
@@ -199,6 +221,7 @@ public class StarOSAgent {
     }
 
     public FilePathInfo allocateFilePath(long dbId, long tableId) throws DdlException {
+        prepare();
         try {
             FileStoreType fsType = getFileStoreType(Config.cloud_native_storage_type);
             if (fsType == null || fsType == FileStoreType.INVALID) {
@@ -214,6 +237,7 @@ public class StarOSAgent {
     }
 
     public FilePathInfo allocateFilePath(String storageVolumeId, long dbId, long tableId) throws DdlException {
+        prepare();
         try {
             String suffix = constructTablePath(dbId, tableId);
             FilePathInfo pathInfo = client.allocateFilePath(serviceId, storageVolumeId, suffix);
@@ -284,6 +308,7 @@ public class StarOSAgent {
     }
 
     public long getWorkerTabletNum(String workerIpPort) {
+        prepare();
         try {
             WorkerInfo workerInfo = client.getWorkerInfo(serviceId, workerIpPort);
             return workerInfo.getTabletNum();
@@ -743,8 +768,8 @@ public class StarOSAgent {
         String owner = "Starrocks";
         WorkerGroupDetailInfo result = null;
         try {
-            result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(),
-                    Collections.emptyMap());
+            result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(), Collections.emptyMap(),
+                    0, ReplicationType.NO_REPLICATION);
         } catch (StarClientException e) {
             LOG.warn("Failed to create worker group. error: {}", e.getMessage());
             throw new DdlException("Failed to create worker group. error: " + e.getMessage());

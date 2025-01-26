@@ -24,11 +24,11 @@ import org.junit.Test;
 
 import java.util.List;
 
-public class MvRewriteSingleTableTest extends MvRewriteTestBase {
+public class MvRewriteSingleTableTest extends MVTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         starRocksAssert.withTable(cluster, "depts");
         starRocksAssert.withTable(cluster, "emps");
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);

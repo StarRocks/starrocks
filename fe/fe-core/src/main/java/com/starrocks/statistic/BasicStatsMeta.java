@@ -142,6 +142,9 @@ public class BasicStatsMeta implements Writable {
         return properties;
     }
 
+    /**
+     * Return a number within [0,1] to indicate the health of table stats, 1 means all good.
+     */
     public double getHealthy() {
         Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
@@ -159,9 +162,8 @@ public class BasicStatsMeta implements Writable {
             tableRowCount += partition.getRowCount();
             Optional<Long> statistic = tableStatistics.getOrDefault(partition.getId(), Optional.empty());
             cachedTableRowCount += statistic.orElse(0L);
-            LocalDateTime loadTime = StatisticUtils.getPartitionLastUpdateTime(partition);
 
-            if (partition.hasData() && !isUpdatedAfterLoad(loadTime)) {
+            if (!StatisticUtils.isPartitionStatsHealthy(table, partition, this, statistic.orElse(0L))) {
                 updatePartitionCount++;
             }
         }
@@ -243,6 +245,10 @@ public class BasicStatsMeta implements Writable {
 
     public void addColumnStatsMeta(ColumnStatsMeta columnStatsMeta) {
         this.columnStatsMetaMap.put(columnStatsMeta.getColumnName(), columnStatsMeta);
+    }
+
+    public void resetDeltaRows() {
+        this.deltaRows = 0;
     }
 
     public BasicStatsMeta clone() {

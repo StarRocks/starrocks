@@ -60,7 +60,6 @@ import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
-import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
@@ -216,13 +215,13 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         }
     }
 
-    public TransactionStatus getLabelStatus(long dbId, String label) {
+    public TransactionStateSnapshot getLabelStatus(long dbId, String label) {
         try {
             DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
             return dbTransactionMgr.getLabelState(label);
         } catch (AnalysisException e) {
             LOG.warn("Get transaction status by label " + label + " failed", e);
-            return TransactionStatus.UNKNOWN;
+            return new TransactionStateSnapshot(TransactionStatus.UNKNOWN, null);
         }
     }
 
@@ -494,9 +493,9 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         dbTransactionMgr.abortTransaction(label, reason);
     }
 
-    public TTransactionStatus getTxnStatus(Database db, long transactionId) throws UserException {
+    public TransactionStateSnapshot getTxnState(Database db, long transactionId) throws UserException {
         DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(db.getId());
-        return dbTransactionMgr.getTxnStatus(transactionId);
+        return dbTransactionMgr.getTxnState(transactionId);
     }
 
     /**

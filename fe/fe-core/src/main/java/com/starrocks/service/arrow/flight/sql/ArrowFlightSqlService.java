@@ -31,13 +31,21 @@ public class ArrowFlightSqlService {
 
     private static final Logger LOG = LogManager.getLogger(ArrowFlightSqlService.class);
 
+    private final Location location;
     private final FlightServer flightServer;
 
-    protected volatile boolean running;
+    protected volatile boolean running = false;
 
     public ArrowFlightSqlService(int port) {
+        // Disable Arrow Flight SQL feature if port is not set to a positive value.
+        if (port <= 0) {
+            this.location = null;
+            this.flightServer = null;
+            return;
+        }
+
         BufferAllocator allocator = new RootAllocator();
-        Location location = Location.forGrpcInsecure("0.0.0.0", port);
+        this.location = Location.forGrpcInsecure("0.0.0.0", port);
 
         ArrowFlightSqlTokenManager arrowFlightSqlTokenManager = new ArrowFlightSqlTokenManager();
         ArrowFlightSqlSessionManager arrowFlightSqlSessionManager =
@@ -49,40 +57,51 @@ public class ArrowFlightSqlService {
         ArrowFlightSqlAuthenticator arrowFlightSqlAuthenticator =
                 new ArrowFlightSqlAuthenticator(arrowFlightSqlTokenManager);
 
-        flightServer = FlightServer.builder(allocator, location, producer)
+        this.flightServer = FlightServer.builder(allocator, location, producer)
                 .headerAuthenticator(arrowFlightSqlAuthenticator)
                 .build();
     }
 
     public void start() {
+        if (location == null) {
+            LOG.info("[ARROW] Arrow Flight SQL server is disabled. You can modify `arrow_flight_port` in `fe.conf` " +
+                    "to a positive value to enable it.");
+            return;
+        }
+
+        if (running) {
+            return;
+        }
+
         try {
             flightServer.start();
             running = true;
-            LOG.info("Arrow Flight SQL server start.");
-            flightServer.awaitTermination();
-        } catch (InterruptedException e) {
-            LOG.error("Arrow Flight SQL server was interrupted", e);
-            Thread.currentThread().interrupt();
-            System.exit(-1);
+            LOG.info("[ARROW] Arrow Flight SQL server starts on {}:{}.",
+                    location.getUri().getHost(), location.getUri().getPort());
         } catch (Exception e) {
-            LOG.error("Arrow Flight SQL server start failed");
+            LOG.error("[ARROW] Failed to start Arrow Flight SQL server on {}:{}. Its port might be occupied. You can " +
+                            "modify `arrow_flight_port` in `fe.conf` to an unused port or set it to -1 to disable it.",
+                    location.getUri().getHost(),
+                    location.getUri().getPort(), e);
             System.exit(-1);
         }
     }
 
     public void stop() {
-        if (running) {
-            running = false;
-            try {
-                LOG.info("Stopping Arrow Flight SQL server .");
-                flightServer.shutdown();
-                flightServer.awaitTermination(1, TimeUnit.SECONDS);
-            } catch (InterruptedException e) {
-                LOG.warn("Interrupted while stopping Arrow Flight SQL server", e);
-                Thread.currentThread().interrupt();
-            } catch (Exception e) {
-                LOG.warn("Error while stopping Arrow Flight SQL server", e);
-            }
+        if (!running) {
+            return;
+        }
+
+        running = false;
+        try {
+            LOG.info("[ARROW] Stopping Arrow Flight SQL server .");
+            flightServer.shutdown();
+            flightServer.awaitTermination(1, TimeUnit.SECONDS);
+        } catch (InterruptedException e) {
+            LOG.warn("[ARROW] Interrupted while stopping Arrow Flight SQL server", e);
+            Thread.currentThread().interrupt();
+        } catch (Exception e) {
+            LOG.warn("[ARROW] Error while stopping Arrow Flight SQL server", e);
         }
     }
 

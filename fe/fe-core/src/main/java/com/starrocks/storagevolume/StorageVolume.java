@@ -19,6 +19,8 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.google.gson.annotations.SerializedName;
+import com.staros.proto.ADLS2CredentialInfo;
+import com.staros.proto.ADLS2FileStoreInfo;
 import com.staros.proto.AwsCredentialInfo;
 import com.staros.proto.AzBlobCredentialInfo;
 import com.staros.proto.AzBlobFileStoreInfo;
@@ -52,7 +54,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         UNKNOWN,
         S3,
         HDFS,
-        AZBLOB
+        AZBLOB,
+        ADLS2
     }
 
     // Without id, the scenario like "create storage volume 'a', drop storage volume 'a', create storage volume 'a'"
@@ -174,12 +177,25 @@ public class StorageVolume implements Writable, GsonPostProcessable {
     public String getComment() {
         return comment;
     }
+
+    public void setLocations(List<String> locations) {
+        this.locations = locations;
+    }
+
     public List<String> getLocations() {
         return locations;
     }
 
+    public void setType(String type) {
+        this.svt = toStorageVolumeType(type);
+    }
+
     public String getType() {
         return svt.toString();
+    }
+
+    public Map<String, String> getProperties() {
+        return params;
     }
 
     private StorageVolumeType toStorageVolumeType(String svt) {
@@ -190,6 +206,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 return StorageVolumeType.HDFS;
             case "azblob":
                 return StorageVolumeType.AZBLOB;
+            case "adls2":
+                return StorageVolumeType.ADLS2;
             default:
                 return StorageVolumeType.UNKNOWN;
         }
@@ -203,6 +221,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                 return cloudConfiguration.getCloudType() == CloudType.HDFS;
             case AZBLOB:
                 return cloudConfiguration.getCloudType() == CloudType.AZURE;
+            case ADLS2:
+                return cloudConfiguration.getCloudType() == CloudType.AZURE;
             default:
                 return false;
         }
@@ -213,6 +233,8 @@ public class StorageVolume implements Writable, GsonPostProcessable {
         params.computeIfPresent(CloudConfigurationConstants.AWS_S3_SECRET_KEY, (key, value) -> CREDENTIAL_MASK);
         params.computeIfPresent(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY, (key, value) -> CREDENTIAL_MASK);
         params.computeIfPresent(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY, (key, value) -> CREDENTIAL_MASK);
+        params.computeIfPresent(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, (key, value) -> CREDENTIAL_MASK);
     }
 
     public void getProcNodeData(BaseProcResult result) {
@@ -294,7 +316,7 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                     params.put(CloudConfigurationConstants.HDFS_USERNAME_DEPRECATED, userName);
                 }
                 return params;
-            case AZBLOB:
+            case AZBLOB: {
                 AzBlobFileStoreInfo azBlobFileStoreInfo = fsInfo.getAzblobFsInfo();
                 params.put(CloudConfigurationConstants.AZURE_BLOB_ENDPOINT, azBlobFileStoreInfo.getEndpoint());
                 AzBlobCredentialInfo azBlobcredentialInfo = azBlobFileStoreInfo.getCredential();
@@ -307,6 +329,21 @@ public class StorageVolume implements Writable, GsonPostProcessable {
                     params.put(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN, sasToken);
                 }
                 return params;
+            }
+            case ADLS2: {
+                ADLS2FileStoreInfo adls2FileStoreInfo = fsInfo.getAdls2FsInfo();
+                params.put(CloudConfigurationConstants.AZURE_ADLS2_ENDPOINT, adls2FileStoreInfo.getEndpoint());
+                ADLS2CredentialInfo adls2credentialInfo = adls2FileStoreInfo.getCredential();
+                String sharedKey = adls2credentialInfo.getSharedKey();
+                if (!Strings.isNullOrEmpty(sharedKey)) {
+                    params.put(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY, sharedKey);
+                }
+                String sasToken = adls2credentialInfo.getSasToken();
+                if (!Strings.isNullOrEmpty(sasToken)) {
+                    params.put(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN, sasToken);
+                }
+                return params;
+            }
             default:
                 return params;
         }

@@ -85,6 +85,7 @@ import com.starrocks.load.loadv2.dpp.DppResult;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
 import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
@@ -119,6 +120,7 @@ import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -190,6 +192,14 @@ public class SparkLoadJob extends BulkLoadJob {
         this.resourceDesc = resourceDesc;
         timeoutSecond = Config.spark_load_default_timeout_second;
         jobType = EtlJobType.SPARK;
+    }
+
+    public SparkLoadJob(long dbId, String label, ResourceDesc resourceDesc, OriginStatement originStmt, ConnectContext context)
+            throws MetaNotFoundException {
+        this(dbId, label, resourceDesc, originStmt);
+        if (context != null) {
+            this.warehouseId = context.getCurrentWarehouseId();
+        }
     }
 
     @Override
@@ -840,6 +850,13 @@ public class SparkLoadJob extends BulkLoadJob {
             }
         });
         clearJob();
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+    }
+
+    @Override
+    public void afterAborted(TransactionState txnState, boolean txnOperated, String txnStatusChangeReason) {
+        super.afterAborted(txnState, txnOperated, txnStatusChangeReason);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
     }
 
     @Override

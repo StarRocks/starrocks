@@ -21,7 +21,11 @@ import com.starrocks.memory.MemoryTrackable;
 import java.util.List;
 
 public interface IDeltaLakeMetastore extends IMetastore, MemoryTrackable {
+    String getCatalogName();
+
     Table getTable(String dbName, String tableName);
 
     List<String> getPartitionKeys(String dbName, String tableName);
+
+    DeltaLakeSnapshot getLatestSnapshot(String dbName, String tableName);
 }

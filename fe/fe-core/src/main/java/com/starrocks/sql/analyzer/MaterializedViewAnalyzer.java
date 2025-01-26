@@ -51,6 +51,7 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -902,19 +903,24 @@ public class MaterializedViewAnalyzer {
                 // - otherwise use range partition as before.
                 // To be compatible with old implementations, if the partition column is not a string type,
                 // still use range partition.
-                // TODO: remove this compatibility code in the future, use list partition directly later.
-                if (partitionExprType.isStringType() &&
-                        mvPartitionByExprs.stream().allMatch(t -> t instanceof SlotRef) &&
-                        !(partitionRefTableExpr instanceof FunctionCallExpr)) {
+                // NOTE: If enable_mv_list_partition_for_external_table is true, create list partition mv
+                // for all external tables. Otherwise, use original range partition instead.
+                if (Config.enable_mv_list_partition_for_external_table) {
                     statement.setPartitionType(PartitionType.LIST);
                 } else {
-                    statement.setPartitionType(PartitionType.RANGE);
-                    checkRangePartitionColumnLimit(mvPartitionByExprs);
+                    if (partitionExprType.isStringType() &&
+                            mvPartitionByExprs.stream().allMatch(t -> t instanceof SlotRef) &&
+                            !(partitionRefTableExpr instanceof FunctionCallExpr)) {
+                        statement.setPartitionType(PartitionType.LIST);
+                    } else {
+                        statement.setPartitionType(PartitionType.RANGE);
+                        checkRangePartitionColumnLimit(mvPartitionByExprs);
+                    }
                 }
             }
         }
 
-        private  void checkRangePartitionColumnLimit(List<Expr> partitionByExprs) {
+        private void checkRangePartitionColumnLimit(List<Expr> partitionByExprs) {
             if (partitionByExprs.size() > 1) {
                 throw new SemanticException("Materialized view with range partition type " +
                         "only supports single column");

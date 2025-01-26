@@ -42,10 +42,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
-import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -69,9 +65,10 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.planner.MaterializedViewTestBase.getRefBaseTablePartitionColumn;
 
-public class MvRewritePreprocessorTest extends MvRewriteTestBase {
+public class MvRewritePreprocessorTest extends MVTestBase {
     @BeforeClass
-    public static void before() throws Exception {
+    public static void beforeClass() throws Exception {
+        MVTestBase.beforeClass();
         starRocksAssert.useTable("t0");
         starRocksAssert.useTable("t1");
         starRocksAssert.useTable("t2");
@@ -224,12 +221,6 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
             Pair<Table, Column> partitionTableAndColumn = getRefBaseTablePartitionColumn(mv);
             Assert.assertEquals("tbl_with_mv", partitionTableAndColumn.first.getName());
 
-            ScalarOperator scalarOperator = materializationContext.getMvPartialPartitionPredicate();
-            if (scalarOperator != null) {
-                Assert.assertTrue(scalarOperator instanceof CompoundPredicateOperator);
-                Assert.assertTrue(((CompoundPredicateOperator) scalarOperator).isAnd());
-            }
-
             refreshMaterializedView("test", "mv_4");
             executeInsertSql(connectContext, "insert into tbl_with_mv partition(p2) values(\"2020-02-20\", 20, 30)");
             Optimizer optimizer2 = new Optimizer();
@@ -239,10 +230,6 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
             MaterializationContext materializationContext2 =
                     optimizer2.getContext().getCandidateMvs().iterator().next();
             Assert.assertEquals("mv_4", materializationContext2.getMv().getName());
-            ScalarOperator scalarOperator2 = materializationContext2.getMvPartialPartitionPredicate();
-            if (scalarOperator2 != null) {
-                Assert.assertTrue(scalarOperator2 instanceof CompoundPredicateOperator);
-            }
             starRocksAssert.dropMaterializedView("mv_4");
         }
 
@@ -271,16 +258,6 @@ public class MvRewritePreprocessorTest extends MvRewriteTestBase {
             Assert.assertEquals("mv_5", materializationContext3.getMv().getName());
             List<LogicalScanOperator> scanExpr3 = MvUtils.getScanOperator(materializationContext3.getMvExpression());
             Assert.assertEquals(1, scanExpr3.size());
-            ScalarOperator scalarOperator3 = materializationContext3.getMvPartialPartitionPredicate();
-            if (scalarOperator3 != null) {
-                Assert.assertNotNull(scalarOperator3);
-                Assert.assertTrue(scalarOperator3 instanceof CompoundPredicateOperator);
-                Assert.assertTrue(((CompoundPredicateOperator) scalarOperator3).isAnd());
-                Assert.assertTrue(scalarOperator3.getChild(0) instanceof BinaryPredicateOperator);
-                Assert.assertTrue(scalarOperator3.getChild(0).getChild(0) instanceof ColumnRefOperator);
-                ColumnRefOperator columnRef = (ColumnRefOperator) scalarOperator3.getChild(0).getChild(0);
-                Assert.assertEquals("k1", columnRef.getName());
-            }
             LogicalOlapScanOperator scanOperator = materializationContext3.getScanMvOperator();
             Assert.assertEquals(1, scanOperator.getSelectedPartitionId().size());
         }

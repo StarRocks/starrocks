@@ -25,6 +25,7 @@ import com.starrocks.catalog.MvBaseTableUpdateInfo;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
@@ -56,7 +57,6 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.connector.PartitionUtil.createPartitionKey;
 import static com.starrocks.connector.PartitionUtil.generateMVPartitionName;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 import static com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator.SUPPORTED_PARTITION_PRUNE_EXTERNAL_SCAN_TYPES;
@@ -212,21 +212,46 @@ public class MVCompensationBuilder {
             if (mvBaseTableUpdateInfo == null) {
                 return null;
             }
-            Map<String, Range<PartitionKey>> refTablePartitionNameWithRanges =
-                    mvBaseTableUpdateInfo.getPartitionNameWithRanges();
-            List<PartitionKey> partitionKeys = Lists.newArrayList();
-            try {
-                for (String partitionName : refTablePartitionNamesToRefresh) {
-                    Preconditions.checkState(refTablePartitionNameWithRanges.containsKey(partitionName));
-                    Range<PartitionKey> partitionKeyRange = refTablePartitionNameWithRanges.get(partitionName);
-                    partitionKeys.add(partitionKeyRange.lowerEndpoint());
+            PartitionInfo partitionInfo = mvContext.getMv().getPartitionInfo();
+            if (partitionInfo.isRangePartition()) {
+                Map<String, Range<PartitionKey>> refTablePartitionNameWithRanges =
+                        mvBaseTableUpdateInfo.getPartitionNameWithRanges();
+                List<PRangeCell> partitionKeys = Lists.newArrayList();
+                try {
+                    for (String partitionName : refTablePartitionNamesToRefresh) {
+                        Preconditions.checkState(refTablePartitionNameWithRanges.containsKey(partitionName));
+                        Range<PartitionKey> partitionKeyRange = refTablePartitionNameWithRanges.get(partitionName);
+                        partitionKeys.add(PRangeCell.of(partitionKeyRange));
+                    }
+                } catch (Exception e) {
+                    logMVRewrite("Failed to get partition keys for ref base table: {}", refBaseTable.getName(),
+                            DebugUtil.getStackTrace(e));
+                    return MVCompensation.createUnkownState(sessionVariable);
                 }
-            } catch (Exception e) {
-                logMVRewrite("Failed to get partition keys for ref base table: {}", refBaseTable.getName(),
-                        DebugUtil.getStackTrace(e));
-                return MVCompensation.createUnkownState(sessionVariable);
+                return ofExternalTableCompensation(refBaseTable, partitionKeys);
+            } else {
+                Preconditions.checkArgument(partitionInfo.isListPartition());
+                Map<String, PListCell> partitionNameWithLists = mvBaseTableUpdateInfo.getPartitionNameWithLists();
+                List<PRangeCell> partitionKeys = Lists.newArrayList();
+                try {
+                    List<Column> partitionCols = refBaseTable.getPartitionColumns();
+                    for (String partitionName : refTablePartitionNamesToRefresh) {
+                        Preconditions.checkState(partitionNameWithLists.containsKey(partitionName));
+                        // TODO: we are assuming PListCell's cells' order is by partition's columns order, we may introduce
+                        // partition columns in PListCell.
+                        partitionNameWithLists.get(partitionName)
+                                .toPartitionKeys(partitionCols)
+                                .stream()
+                                .map(PRangeCell::of)
+                                .forEach(partitionKeys::add);
+                    }
+                } catch (Exception e) {
+                    logMVRewrite("Failed to get partition keys for ref base table: {}", refBaseTable.getName(),
+                            DebugUtil.getStackTrace(e));
+                    return MVCompensation.createUnkownState(sessionVariable);
+                }
+                return ofExternalTableCompensation(refBaseTable, partitionKeys);
             }
-            return ofExternalTableCompensation(refBaseTable, partitionKeys);
         } else {
             return MVCompensation.createUnkownState(sessionVariable);
         }
@@ -286,7 +311,7 @@ public class MVCompensationBuilder {
     }
 
     private MVCompensation ofExternalTableCompensation(Table refBaseTable,
-                                                       List<PartitionKey> toRefreshRefTablePartitions) {
+                                                       List<PRangeCell> toRefreshRefTablePartitions) {
         Map<Table, BaseCompensation<?>> compensationMap = Collections.singletonMap(refBaseTable,
                 new ExternalTableCompensation(toRefreshRefTablePartitions));
         return new MVCompensation(sessionVariable, MVTransparentState.COMPENSATE, compensationMap);
@@ -299,19 +324,27 @@ public class MVCompensationBuilder {
             return new MVCompensation(sessionVariable, MVTransparentState.COMPENSATE, compensations);
         }
     }
-
     private MVCompensation getMVCompensationForExternal(Table refBaseTable,
                                                         Set<String> refTablePartitionNamesToRefresh,
                                                         LogicalScanOperator refScanOperator) {
         SessionVariable sessionVariable = mvContext.getOptimizerContext().getSessionVariable();
+        MaterializedView mv = mvContext.getMv();
         try {
             ScanOperatorPredicates scanOperatorPredicates = refScanOperator.getScanOperatorPredicates();
             Collection<Long> selectPartitionIds = scanOperatorPredicates.getSelectedPartitionIds();
-            List<PartitionKey> selectPartitionKeys = scanOperatorPredicates.getSelectedPartitionKeys();
+            // NOTE: ref base table's partition keys may contain multi columns, but mv may only contain one column.
+            List<Integer> colIndexes = PartitionUtil.getRefBaseTablePartitionColumIndexes(mv, refBaseTable);
+            if (colIndexes == null) {
+                return MVCompensation.createUnkownState(sessionVariable);
+            }
+            List<PartitionKey> selectPartitionKeys = scanOperatorPredicates.getSelectedPartitionKeys()
+                    .stream()
+                    .map(partitionKey -> PartitionUtil.getSelectedPartitionKey(partitionKey, colIndexes))
+                    .collect(Collectors.toList());
             // For scan operator which support prune partitions with OptExternalPartitionPruner,
             // we could only compensate partitions which selected partitions need to refresh.
             if (SUPPORTED_PARTITION_PRUNE_EXTERNAL_SCAN_TYPES.contains(refScanOperator.getOpType())) {
-                if (Objects.isNull(selectPartitionIds) || selectPartitionIds.isEmpty()) {
+                if (CollectionUtils.isEmpty(selectPartitionIds)) {
                     // see OptExternalPartitionPruner#computePartitionInfo:
                     // it's not the same meaning when selectPartitionIds is null and empty for hive and other tables
                     if (refScanOperator.getOpType() == OperatorType.LOGICAL_HIVE_SCAN) {
@@ -320,16 +353,20 @@ public class MVCompensationBuilder {
                         return MVCompensation.createUnkownState(sessionVariable);
                     }
                 }
-
-                if (selectPartitionKeys.stream()
+                Set<String> selectPartitionNames = selectPartitionKeys.stream()
                         .map(PartitionUtil::generateMVPartitionName)
-                        .noneMatch(refTablePartitionNamesToRefresh::contains)) {
+                        .collect(Collectors.toSet());
+                if (selectPartitionNames.stream().noneMatch(refTablePartitionNamesToRefresh::contains)) {
                     return MVCompensation.createNoCompensateState(sessionVariable);
                 }
+                // if all partitions need to refresh, no need rewrite.
+                if (refTablePartitionNamesToRefresh.containsAll(selectPartitionNames)) {
+                    return MVCompensation.createNoRewriteState(sessionVariable);
+                }
             }
-            // if mv's to refresh partitions contains any of query's select partition ids, then rewrite with compensate.
-            List<PartitionKey> toRefreshRefTablePartitions = getMVCompensatePartitionsOfExternal(refBaseTable,
-                    refTablePartitionNamesToRefresh, refScanOperator);
+            // if mv's to refresh partitions contains any of query's select partition ids, then rewrite with compensation.
+            List<PRangeCell> toRefreshRefTablePartitions = getMVCompensatePartitionsOfExternal(refBaseTable,
+                    selectPartitionKeys, refTablePartitionNamesToRefresh, refScanOperator);
             if (toRefreshRefTablePartitions == null) {
                 return MVCompensation.createUnkownState(sessionVariable);
             }
@@ -373,48 +410,36 @@ public class MVCompensationBuilder {
         return refTableCompensatePartitionIds;
     }
 
-    private List<PartitionKey> getMVCompensatePartitionsOfExternal(Table refBaseTable,
+    private List<PRangeCell> getMVCompensatePartitionsOfExternal(Table refBaseTable,
+                                                                   List<PartitionKey> selectPartitionKeys,
                                                                    Set<String> refTablePartitionNamesToRefresh,
                                                                    LogicalScanOperator refScanOperator)
             throws AnalysisException {
         if (SUPPORTED_PARTITION_PRUNE_EXTERNAL_SCAN_TYPES.contains(refScanOperator.getOpType())) {
             // For external table which support partition prune with OptExternalPartitionPruner,
             // could use selectPartitionKeys to get the compensate partitions.
-            return getMVCompensatePartitionsOfExternalWithPartitionPruner(refTablePartitionNamesToRefresh,
-                    refScanOperator);
+            return getMVCompensatePartitionsOfExternalWithPartitionPruner(selectPartitionKeys,
+                    refTablePartitionNamesToRefresh, refScanOperator);
         } else {
             return getMVCompensatePartitionsOfExternalWithoutPartitionPruner(refBaseTable, refTablePartitionNamesToRefresh);
         }
     }
 
-    private List<PartitionKey> getMVCompensatePartitionsOfExternalWithPartitionPruner(
+    private List<PRangeCell> getMVCompensatePartitionsOfExternalWithPartitionPruner(
+            List<PartitionKey> selectPartitionKeys,
             Set<String> refTablePartitionNamesToRefresh,
             LogicalScanOperator refScanOperator) {
-        List<PartitionKey> refTableCompensatePartitionKeys = Lists.newArrayList();
-        ScanOperatorPredicates scanOperatorPredicates = null;
-        try {
-            scanOperatorPredicates = refScanOperator.getScanOperatorPredicates();
-        } catch (Exception e) {
-            return null;
-        }
-        if (scanOperatorPredicates == null) {
-            return null;
-        }
-        List<PartitionKey> selectPartitionKeys = scanOperatorPredicates.getSelectedPartitionKeys();
-        // different behavior for different external table types
-        if (selectPartitionKeys.isEmpty() && refScanOperator.getOpType() != OperatorType.LOGICAL_HIVE_SCAN) {
-            return null;
-        }
+        List<PRangeCell> refTableCompensatePartitionKeys = Lists.newArrayList();
         for (PartitionKey partitionKey : selectPartitionKeys) {
             String partitionName = generateMVPartitionName(partitionKey);
             if (refTablePartitionNamesToRefresh.contains(partitionName)) {
-                refTableCompensatePartitionKeys.add(partitionKey);
+                refTableCompensatePartitionKeys.add(PRangeCell.of(partitionKey));
             }
         }
         return refTableCompensatePartitionKeys;
     }
 
-    private List<PartitionKey> getMVCompensatePartitionsOfExternalWithoutPartitionPruner(
+    private List<PRangeCell> getMVCompensatePartitionsOfExternalWithoutPartitionPruner(
             Table refBaseTable,
             Set<String> refTablePartitionNamesToRefresh) {
         MvBaseTableUpdateInfo baseTableUpdateInfo = mvUpdateInfo.getBaseTableUpdateInfos().get(refBaseTable);
@@ -423,7 +448,13 @@ public class MVCompensationBuilder {
         }
 
         Map<String, PCell> nameToPartitionKeys = baseTableUpdateInfo.getNameToPartKeys();
-        List<PartitionKey> partitionKeys = Lists.newArrayList();
+        List<PRangeCell> partitionKeys = Lists.newArrayList();
+        MaterializedView mv = mvContext.getMv();
+        Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
+        if (!refBaseTablePartitionColumns.containsKey(refBaseTable)) {
+            return null;
+        }
+        List<Column> partitionColumns = refBaseTablePartitionColumns.get(refBaseTable);
         try {
             for (String partitionName : refTablePartitionNamesToRefresh) {
                 if (!nameToPartitionKeys.containsKey(partitionName)) {
@@ -431,10 +462,12 @@ public class MVCompensationBuilder {
                 }
                 PCell pCell = nameToPartitionKeys.get(partitionName);
                 if (pCell instanceof PRangeCell) {
-                    partitionKeys.add(((PRangeCell) pCell).getRange().lowerEndpoint());
+                    partitionKeys.add(((PRangeCell) pCell));
                 } else if (pCell instanceof PListCell) {
-                    List<Column> partitionColumns = refBaseTable.getPartitionColumns();
-                    partitionKeys.add(createPartitionKey(((PListCell) pCell).getPartitionItems().get(0), partitionColumns));
+                    final List<PartitionKey> keys = ((PListCell) pCell).toPartitionKeys(partitionColumns);
+                    keys.stream()
+                            .map(key -> PRangeCell.of(key))
+                            .forEach(partitionKeys::add);
                 }
             }
         } catch (Exception e) {

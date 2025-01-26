@@ -20,7 +20,6 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
@@ -52,6 +51,7 @@ import com.starrocks.sql.optimizer.rule.transformation.ConvertToEqualForNullRule
 import com.starrocks.sql.optimizer.rule.transformation.DeriveRangeJoinPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateConstantCTERule;
+import com.starrocks.sql.optimizer.rule.transformation.EliminateSortColumnWithEqualityPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.IcebergEqualityDeleteRewriteRule;
@@ -65,6 +65,7 @@ import com.starrocks.sql.optimizer.rule.transformation.OnPredicateMoveAroundRule
 import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnMinMaxRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnValueOnlyOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
+import com.starrocks.sql.optimizer.rule.transformation.PullUpScanPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownAggregateGroupingSetsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnExpressionToChildProject;
 import com.starrocks.sql.optimizer.rule.transformation.PushDownLimitRankingWindowRule;
@@ -180,7 +181,7 @@ public class Optimizer {
                                   ColumnRefSet requiredColumns,
                                   ColumnRefFactory columnRefFactory) {
         return optimize(connectContext, logicOperatorTree, null, null, requiredProperty,
-                requiredColumns, columnRefFactory, new VectorSearchOptions());
+                requiredColumns, columnRefFactory);
     }
 
     public OptExpression optimize(ConnectContext connectContext,
@@ -189,13 +190,10 @@ public class Optimizer {
                                   StatementBase stmt,
                                   PhysicalPropertySet requiredProperty,
                                   ColumnRefSet requiredColumns,
-                                  ColumnRefFactory columnRefFactory,
-                                  VectorSearchOptions vectorSearchOptions) {
+                                  ColumnRefFactory columnRefFactory) {
         try {
             // prepare for optimizer
             prepare(connectContext, columnRefFactory, logicOperatorTree);
-
-            context.setVectorSearchOptions(vectorSearchOptions);
 
             // prepare for mv rewrite
             prepareMvRewrite(connectContext, logicOperatorTree, columnRefFactory, requiredColumns);
@@ -430,19 +428,21 @@ public class Optimizer {
     private void ruleBasedMaterializedViewRewrite(OptExpression tree,
                                                   TaskContext rootTaskContext,
                                                   ColumnRefSet requiredColumns) {
-        if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null ||
-                context.getQueryMaterializationContext().hasRewrittenSuccess()) {
+        if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null) {
             return;
         }
 
         // do rule based mv rewrite
-        doRuleBasedMaterializedViewRewrite(tree, rootTaskContext);
+        if (!context.getQueryMaterializationContext().hasRewrittenSuccess()) {
+            doRuleBasedMaterializedViewRewrite(tree, rootTaskContext);
+        }
 
         // NOTE: Since union rewrite will generate Filter -> Union -> OlapScan -> OlapScan, need to push filter below Union
         // and do partition predicate again.
         // TODO: move this into doRuleBasedMaterializedViewRewrite
         // TODO: Do it in CBO if needed later.
         boolean isNeedFurtherPartitionPrune = Utils.isOptHasAppliedRule(tree, op -> op.isOpRuleBitSet(OP_MV_UNION_REWRITE));
+        OptimizerTraceUtil.logMVPrepare("is further partition prune: {}", isNeedFurtherPartitionPrune);
         if (isNeedFurtherPartitionPrune && context.getQueryMaterializationContext().hasRewrittenSuccess()) {
             // reset partition prune bit to do partition prune again.
             MvUtils.getScanOperator(tree).forEach(scan -> {
@@ -457,6 +457,7 @@ public class Optimizer {
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PUSH_DOWN_PREDICATE);
             // It's necessary for external table since its predicate is not used directly after push down.
             ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PARTITION_PRUNE);
+            ruleRewriteIterative(tree, rootTaskContext, RuleSetType.PRUNE_EMPTY_OPERATOR);
             ruleRewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         }
     }
@@ -672,6 +673,7 @@ public class Optimizer {
         // After this rule, we shouldn't generate logical project operator
         ruleRewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
 
+        ruleRewriteOnlyOnce(tree, rootTaskContext, new EliminateSortColumnWithEqualityPredicateRule());
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PushDownTopNBelowOuterJoinRule());
         // intersect rewrite depend on statistics
         Utils.calculateStatistics(tree, rootTaskContext.getOptimizerContext());
@@ -699,6 +701,11 @@ public class Optimizer {
         ruleRewriteOnlyOnce(tree, rootTaskContext, UnionToValuesRule.getInstance());
 
         ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.VECTOR_REWRITE);
+        // this rule should be after mv
+        // @TODO: it can also be applied to other table scan operator
+        if (context.getSessionVariable().isEnableScanPredicateExprReuse()) {
+            ruleRewriteOnlyOnce(tree, rootTaskContext, PullUpScanPredicateRule.OLAP_SCAN);
+        }
 
         tree = SimplifyCaseWhenPredicateRule.INSTANCE.rewrite(tree, rootTaskContext);
         deriveLogicalProperty(tree);

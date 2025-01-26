@@ -118,6 +118,8 @@ struct TCreateTabletReq {
     21: optional i32 compression_level = -1;
     // Whether or not use shared tablet initial metadata.
     22: optional bool enable_tablet_creation_optimization = false;
+    // Global transaction id
+    24: optional i64 gtid = 0;
 }
 
 struct TDropTabletReq {

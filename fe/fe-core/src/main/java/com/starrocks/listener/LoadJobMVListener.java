@@ -95,6 +95,9 @@ public class LoadJobMVListener implements LoadJobListener {
      * @throws MetaNotFoundException
      */
     private void triggerToRefreshRelatedMVs(TransactionState transactionState, boolean isTriggerIfBaseTableIsMV) {
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            return;
+        }
         // Refresh materialized view when base table update transaction has been visible
         long dbId = transactionState.getDbId();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
@@ -133,6 +136,9 @@ public class LoadJobMVListener implements LoadJobListener {
      * @throws MetaNotFoundException
      */
     private void doTriggerToRefreshRelatedMVs(Database db, Table table) throws DdlException, MetaNotFoundException {
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            return;
+        }
         if (table == null) {
             return;
         }

@@ -96,6 +96,7 @@ import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -178,6 +179,10 @@ import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
 import com.starrocks.thrift.TBeginRemoteTxnResponse;
+import com.starrocks.thrift.TClusterSnapshotJobsRequest;
+import com.starrocks.thrift.TClusterSnapshotJobsResponse;
+import com.starrocks.thrift.TClusterSnapshotsRequest;
+import com.starrocks.thrift.TClusterSnapshotsResponse;
 import com.starrocks.thrift.TColumnDef;
 import com.starrocks.thrift.TColumnDesc;
 import com.starrocks.thrift.TCommitRemoteTxnRequest;
@@ -333,6 +338,7 @@ import com.starrocks.transaction.TabletCommitInfo;
 import com.starrocks.transaction.TabletFailInfo;
 import com.starrocks.transaction.TransactionNotFoundException;
 import com.starrocks.transaction.TransactionState;
+import com.starrocks.transaction.TransactionStateSnapshot;
 import com.starrocks.transaction.TxnCommitAttachment;
 import com.starrocks.warehouse.Warehouse;
 import com.starrocks.warehouse.WarehouseInfo;
@@ -546,7 +552,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         View view = (View) table;
                         String ddlSql = view.getInlineViewDef();
 
-                        ConnectContext connectContext = new ConnectContext();
+                        ConnectContext connectContext = ConnectContext.buildInner();
                         connectContext.setQualifiedUser(AuthenticationMgr.ROOT_USER);
                         connectContext.setCurrentUserIdentity(UserIdentity.ROOT);
                         connectContext.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
@@ -1445,10 +1451,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         try {
-            TTransactionStatus status =
-                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTxnStatus(db, request.getTxnId());
-            LOG.debug("txn {} status is {}", request.getTxnId(), status);
-            result.setStatus(status);
+            TransactionStateSnapshot transactionStateSnapshot =
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTxnState(db, request.getTxnId());
+            LOG.debug("txn {} status is {}", request.getTxnId(), transactionStateSnapshot);
+            result.setStatus(transactionStateSnapshot.getStatus().toThrift());
+            result.setReason(transactionStateSnapshot.getReason());
         } catch (Throwable e) {
             result.setStatus(TTransactionStatus.UNKNOWN);
             LOG.warn("catch unknown result.", e);
@@ -1717,6 +1724,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     public TMergeCommitResult requestMergeCommit(TMergeCommitRequest request) throws TException {
         TMergeCommitResult result = new TMergeCommitResult();
         try {
+            GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
+            Database db = globalStateMgr.getLocalMetastore().getDb(request.getDb());
+            if (db == null) {
+                throw new UserException(String.format("unknown database [%s]", request.getDb()));
+            }
+            Table table = db.getTable(request.getTbl());
+            if (table == null) {
+                throw new UserException(String.format("unknown table [%s.%s]", request.getDb(), request.getTbl()));
+            }
             checkPasswordAndLoadPriv(request.getUser(), request.getPasswd(), request.getDb(),
                     request.getTbl(), request.getUser_ip());
             TableId tableId = new TableId(request.getDb(), request.getTbl());
@@ -2321,7 +2337,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             }
 
             // If a create partition request is from BE or CN, the warehouse information may be lost, we can get it from txn state.
-            ConnectContext ctx = com.starrocks.common.util.Util.getOrCreateConnectContext();
+            ConnectContext ctx = Util.getOrCreateInnerContext();
             if (txnState.getWarehouseId() != WarehouseManager.DEFAULT_WAREHOUSE_ID) {
                 ctx.setCurrentWarehouseId(txnState.getWarehouseId());
             }
@@ -3005,5 +3021,15 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             response.setStatus(status);
             return response;
         }
+    }
+
+    @Override
+    public TClusterSnapshotsResponse getClusterSnapshotsInfo(TClusterSnapshotsRequest params) {
+        return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllInfo();
+    }
+
+    @Override
+    public TClusterSnapshotJobsResponse getClusterSnapshotJobsInfo(TClusterSnapshotJobsRequest params) {
+        return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllJobsInfo();
     }
 }

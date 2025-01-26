@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TableName;
@@ -64,6 +65,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.routineload.RoutineLoadMgr;
@@ -132,7 +134,6 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.assertj.core.util.Sets;
 import org.junit.Assert;
 import org.junit.jupiter.params.provider.Arguments;
 
@@ -890,7 +891,7 @@ public class StarRocksAssert {
             withMaterializedView(sql);
             action.run();
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assert.fail(DebugUtil.getStackTrace(e));
         } finally {
             // Create mv may fail.
             if (!Strings.isNullOrEmpty(mvName)) {

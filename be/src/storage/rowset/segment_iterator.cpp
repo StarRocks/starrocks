@@ -46,8 +46,6 @@
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/index/vector/vector_search_option.h"
 #include "storage/lake/update_manager.h"
-#include "storage/olap_runtime_range_pruner.h"
-#include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/projection_iterator.h"
 #include "storage/range.h"
 #include "storage/roaring2range.h"
@@ -61,6 +59,8 @@
 #include "storage/rowset/rowid_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
+#include "storage/runtime_range_pruner.h"
+#include "storage/runtime_range_pruner.hpp"
 #include "storage/storage_engine.h"
 #include "storage/types.h"
 #include "storage/update_manager.h"
@@ -407,7 +407,7 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
         _result_order = _opts.vector_search_option->result_order;
         _use_ivfpq = _opts.vector_search_option->use_ivfpq;
         _query_params = _opts.vector_search_option->query_params;
-        if (_vector_range > 0 && _use_ivfpq) {
+        if (_vector_range >= 0 && _use_ivfpq) {
             _k = _opts.vector_search_option->k * _opts.vector_search_option->pq_refine_factor *
                  _opts.vector_search_option->k_factor;
         } else {
@@ -603,7 +603,7 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
 
     {
         SCOPED_RAW_TIMER(&_opts.stats->vector_search_timer);
-        if (_vector_range > 0) {
+        if (_vector_range >= 0) {
             st = _ann_reader->range_search(_query_view, _k, &result_ids, &result_distances, &del_id_filter,
                                            static_cast<float>(_vector_range), _result_order);
         } else {
@@ -768,7 +768,8 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     iter_opts.has_preaggregation = _opts.has_preaggregation;
 
     RandomAccessFileOptions opts{.skip_fill_local_cache = !_opts.lake_io_opts.fill_data_cache,
-                                 .buffer_size = _opts.lake_io_opts.buffer_size};
+                                 .buffer_size = _opts.lake_io_opts.buffer_size,
+                                 .skip_disk_cache = _opts.lake_io_opts.skip_disk_cache};
 
     ColumnAccessPath* access_path = nullptr;
     if (_column_access_paths.find(cid) != _column_access_paths.end()) {

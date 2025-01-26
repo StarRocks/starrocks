@@ -24,6 +24,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -33,6 +35,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
+import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -351,6 +354,15 @@ public class IcebergMetadata implements ConnectorMetadata {
         asyncRefreshOthersFeMetadataCache(stmt.getDbName(), stmt.getTableName());
     }
 
+    public void updateTableProperty(Database db, IcebergTable icebergTable) {
+        Map<String, String> properties = new HashMap(icebergTable.getNativeTable().properties());
+        List<UniqueConstraint> uniqueConstraints = PropertyAnalyzer.analyzeUniqueConstraint(properties, db, icebergTable);
+        icebergTable.setUniqueConstraints(uniqueConstraints);
+        List<ForeignKeyConstraint> foreignKeyConstraints =
+                PropertyAnalyzer.analyzeForeignKeyConstraint(properties, db, icebergTable);
+        icebergTable.setForeignKeyConstraints(foreignKeyConstraints);
+    }
+
     @Override
     public Table getTable(String dbName, String tblName) {
         TableIdentifier identifier = TableIdentifier.of(dbName, tblName);
@@ -369,9 +381,12 @@ public class IcebergMetadata implements ConnectorMetadata {
                 dbName = dbName.toLowerCase();
                 tblName = tblName.toLowerCase();
             }
-            Table table = IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
+            Database db = getDb(dbName);
+            IcebergTable table =
+                    IcebergApiConverter.toIcebergTable(icebergTable, catalogName, dbName, tblName, catalogType.name());
             table.setComment(icebergTable.properties().getOrDefault(COMMENT, ""));
             tables.put(identifier, icebergTable);
+            updateTableProperty(db, table);
             return table;
         } catch (StarRocksConnectorException e) {
             LOG.error("Failed to get iceberg table {}", identifier, e);

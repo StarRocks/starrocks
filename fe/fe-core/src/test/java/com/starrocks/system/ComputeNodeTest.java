@@ -63,6 +63,7 @@ public class ComputeNodeTest {
 
         BackendHbResponse hbResponse = new BackendHbResponse();
         ComputeNode node = new ComputeNode();
+        node.setArrowFlightPort(hbResponse.getArrowFlightPort());
         node.setBrpcPort(hbResponse.getBrpcPort()); // Don't return needSync by different BrpcPort.
         CoordinatorMonitor coordinatorMonitor = CoordinatorMonitor.getInstance();
 

@@ -468,7 +468,6 @@ public:
     using CppType = RunTimeCppType<Type>;
     using ColumnType = RunTimeColumnType<Type>;
     using ContainerType = RunTimeProxyContainerType<Type>;
-    using SelfType = RuntimeBloomFilter<Type>;
 
     RuntimeBloomFilter() { _init_min_max(); }
     ~RuntimeBloomFilter() override = default;
@@ -476,7 +475,27 @@ public:
     RuntimeBloomFilter* create_empty(ObjectPool* pool) override {
         auto* p = pool->add(new RuntimeBloomFilter());
         return p;
-    };
+    }
+
+    static RuntimeBloomFilter* create_with_empty_range_without_null(ObjectPool* pool) {
+        auto* rf = pool->add(new RuntimeBloomFilter());
+        rf->_always_true = true;
+        return rf;
+    }
+
+    static RuntimeBloomFilter* create_with_only_null_range(ObjectPool* pool) {
+        auto* rf = pool->add(new RuntimeBloomFilter());
+        rf->insert_null();
+        rf->_always_true = true;
+        return rf;
+    }
+
+    static RuntimeBloomFilter* create_with_full_range_without_null(ObjectPool* pool) {
+        auto* rf = pool->add(new RuntimeBloomFilter());
+        rf->_init_full_range();
+        rf->_always_true = true;
+        return rf;
+    }
 
     // create a min/max LT/GT RuntimeFilter with val
     template <bool is_min>
@@ -503,6 +522,16 @@ public:
     }
 
     template <bool is_min>
+    static RuntimeBloomFilter* create_with_range(ObjectPool* pool, CppType val, bool is_close_internal,
+                                                 bool need_null) {
+        auto* rf = create_with_range<is_min>(pool, val, is_close_internal);
+        if (need_null) {
+            rf->insert_null();
+        }
+        return rf;
+    }
+
+    template <bool is_min>
     void update_min_max(CppType val) {
         // now slice have not support update min/max
         if constexpr (IsSlice<CppType>) {
@@ -519,6 +548,24 @@ public:
                 _max = val;
                 _update_version();
             }
+        }
+    }
+
+    void update_to_all_null() {
+        DCHECK(_has_null);
+
+        if (is_empty_range()) {
+            return;
+        }
+        _init_min_max();
+        _update_version();
+    }
+
+    void update_to_empty_and_not_null() {
+        if (!is_empty_range() || _has_null) {
+            _init_min_max();
+            _has_null = false;
+            _update_version();
         }
     }
 
@@ -727,8 +774,16 @@ public:
     // [min_value, max_value] overlapped with [min, max]
     bool filter_zonemap_with_min_max(const CppType* min_value, const CppType* max_value) const {
         if (min_value == nullptr || max_value == nullptr) return false;
-        if (*max_value < _min) return true;
-        if (*min_value > _max) return true;
+        if (_left_close_interval) {
+            if (*max_value < _min) return true;
+        } else {
+            if (*max_value <= _min) return true;
+        }
+        if (_right_close_interval) {
+            if (*min_value > _max) return true;
+        } else {
+            if (*min_value >= _max) return true;
+        }
         return false;
     }
 
@@ -749,6 +804,27 @@ public:
         } else {
             dispatch_layout<WithModuloArg<ModuloOp>::HashValueCompute>(_global, layout, columns, num_rows,
                                                                        _hash_partition_bf.size(), _hash_values);
+        }
+    }
+
+    bool test_data(CppType value) const { return _test_data(value); }
+
+    bool is_empty_range() const { return _min > _max; }
+    bool is_full_range() const {
+        if constexpr (IsSlice<CppType>) {
+            return _min == Slice::min_value() && _max == Slice::max_value();
+        } else if constexpr (std::is_integral_v<CppType> || std::is_floating_point_v<CppType>) {
+            return _min == std::numeric_limits<CppType>::lowest() && _max == std::numeric_limits<CppType>::max();
+        } else if constexpr (IsDate<CppType>) {
+            return _min == DateValue::MIN_DATE_VALUE && _max == DateValue::MAX_DATE_VALUE;
+        } else if constexpr (IsTimestamp<CppType>) {
+            return _min = TimestampValue::MIN_TIMESTAMP_VALUE && _max == TimestampValue::MAX_TIMESTAMP_VALUE;
+        } else if constexpr (IsDecimal<CppType>) {
+            return _min == DecimalV2Value::get_min_decimal() && _max == DecimalV2Value::get_max_decimal();
+        } else if constexpr (Type != TYPE_JSON) {
+            return _min == RunTimeTypeLimits<Type>::min_value() && _max == RunTimeTypeLimits<Type>::max_value();
+        } else {
+            return false;
         }
     }
 

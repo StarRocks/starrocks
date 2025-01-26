@@ -44,10 +44,8 @@ public class TableKeeper {
     private final String tableName;
     private final String createTableSql;
 
-    private boolean databaseExisted = false;
-    private boolean tableExisted = false;
-    private boolean tableCorrected = false;
-    private Supplier<Integer> ttlSupplier;
+    private final boolean tableCorrected = false;
+    private final Supplier<Integer> ttlSupplier;
 
     public TableKeeper(String database,
                        String table,
@@ -61,20 +59,16 @@ public class TableKeeper {
 
     public synchronized void run() {
         try {
-            if (!databaseExisted) {
-                databaseExisted = checkDatabaseExists();
-                if (!databaseExisted) {
-                    LOG.warn("database not exists: {}", databaseName);
-                    return;
-                }
+            if (!checkDatabaseExists()) {
+                LOG.warn("database not exists: {}", databaseName);
+                return;
             }
-            if (!tableExisted) {
+            if (!checkTableExists()) {
                 createTable();
                 LOG.info("table created: {}", tableName);
-                tableExisted = true;
             }
-            correctTable();
-            if (tableExisted) {
+            if (checkTableExists()) {
+                correctTable();
                 changeTTL();
             }
         } catch (Exception e) {
@@ -86,11 +80,15 @@ public class TableKeeper {
      * Is the table ready for insert
      */
     public synchronized boolean isReady() {
-        return databaseExisted && tableExisted;
+        return checkDatabaseExists() && checkTableExists();
     }
 
     public boolean checkDatabaseExists() {
         return GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(databaseName) != null;
+    }
+
+    public boolean checkTableExists() {
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetTable(databaseName, tableName).isPresent();
     }
 
     public void createTable() throws UserException {
@@ -176,20 +174,8 @@ public class TableKeeper {
         return createTableSql;
     }
 
-    public boolean isDatabaseExisted() {
-        return databaseExisted;
-    }
-
-    public boolean isTableExisted() {
-        return tableExisted;
-    }
-
     public boolean isTableCorrected() {
         return tableCorrected;
-    }
-
-    public void setDatabaseExisted(boolean databaseExisted) {
-        this.databaseExisted = databaseExisted;
     }
 
     public static TableKeeperDaemon startDaemon() {

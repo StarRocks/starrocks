@@ -305,6 +305,23 @@ public class ConnectContext {
         this.sessionId = UUIDUtil.genUUID();
     }
 
+    /**
+     * Build a ConnectContext for normal query.
+     */
+    public static ConnectContext build() {
+        return new ConnectContext();
+    }
+
+    /**
+     * Build a ConnectContext for inner query which is used for StarRocks internal query.
+     */
+    public static ConnectContext buildInner() {
+        ConnectContext connectContext = new ConnectContext();
+        // disable materialized view rewrite for inner query
+        connectContext.getSessionVariable().setEnableMaterializedViewRewrite(false);
+        return connectContext;
+    }
+
     public void putPreparedStmt(String stmtName, PrepareStmtContext ctx) {
         this.preparedStmtCtxs.put(stmtName, ctx);
     }
@@ -1087,7 +1104,7 @@ public class ConnectContext {
     public StmtExecutor executeSql(String sql) throws Exception {
         StatementBase sqlStmt = SqlParser.parse(sql, getSessionVariable()).get(0);
         sqlStmt.setOrigStmt(new OriginStatement(sql, 0));
-        StmtExecutor executor = new StmtExecutor(this, sqlStmt);
+        StmtExecutor executor = StmtExecutor.newInternalExecutor(this, sqlStmt);
         setExecutor(executor);
         setThreadLocalInfo();
         executor.execute();
@@ -1186,7 +1203,7 @@ public class ConnectContext {
             CleanTemporaryTableStmt cleanTemporaryTableStmt = new CleanTemporaryTableStmt(sessionId);
             cleanTemporaryTableStmt.setOrigStmt(
                     new OriginStatement("clean temporary table on session '" + sessionId.toString() + "'"));
-            executor = new StmtExecutor(this, cleanTemporaryTableStmt);
+            executor = StmtExecutor.newInternalExecutor(this, cleanTemporaryTableStmt);
             executor.execute();
         } catch (Throwable e) {
             LOG.warn("Failed to clean temporary table on session {}, {}", sessionId, e);

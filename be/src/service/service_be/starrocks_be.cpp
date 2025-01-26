@@ -309,8 +309,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
 
     // Start Arrow Flight SQL server
     auto arrow_flight_sql_server = std::make_unique<ArrowFlightSqlServer>();
-    if (auto status = arrow_flight_sql_server->start(config::be_arrow_port); !status.ok()) {
-        LOG(ERROR) << process_name << " arrow flight sql server did not start correctly, exiting: " << status.message();
+    if (auto status = arrow_flight_sql_server->start(config::arrow_flight_port); !status.ok()) {
+        LOG(ERROR) << process_name << " Arrow Flight Sql Server did not start correctly, exiting: " << status.message()
+                   << ". Its port might be occupied. You can modify `arrow_flight_port` in `be.conf` to an unused port "
+                      "or set it to -1 to disable it.";
         shutdown_logging();
         exit(1);
     }
@@ -349,6 +351,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     heartbeat_server->join();
     heartbeat_server.reset();
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": heartbeat server exit successfully";
+
+    arrow_flight_sql_server->stop();
+    arrow_flight_sql_server.reset();
+    LOG(INFO) << process_name << " exit step " << exit_step++ << ": Arrow Flight SQL server exit successfully";
 
     http_server->stop();
     brpc_server->Stop(0);

@@ -540,6 +540,8 @@ TEST(StringToFloat, Basic) {
     test_all_float_variants("in finity", StringParser::PARSE_FAILURE);
     test_all_float_variants("na", StringParser::PARSE_FAILURE);
     test_all_float_variants("ThisIsANaN", StringParser::PARSE_FAILURE);
+    test_all_float_variants("10.1.2.3", StringParser::PARSE_FAILURE);
+    test_all_float_variants("10.1 max", StringParser::PARSE_FAILURE);
 }
 
 TEST(StringToFloat, InvalidLeadingTrailing) {

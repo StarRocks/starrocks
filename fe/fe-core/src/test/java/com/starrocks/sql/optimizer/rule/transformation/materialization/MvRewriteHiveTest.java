@@ -33,11 +33,11 @@ import java.util.Set;
 
 import static com.starrocks.utframe.UtFrameUtils.getQueryScanOperators;
 
-public class MvRewriteHiveTest extends MvRewriteTestBase {
+public class MvRewriteHiveTest extends MVTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
     }
 

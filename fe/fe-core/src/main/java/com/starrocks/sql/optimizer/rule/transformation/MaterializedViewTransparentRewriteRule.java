@@ -32,12 +32,12 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator;
@@ -157,10 +157,11 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         logMVRewrite(context, this, "MV to refresh partition info: {}", mvUpdateInfo);
 
         MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
-                mv, mvPlanContext, ConstantOperator.TRUE, mvUpdateInfo, queryTables);
+                mv, mvPlanContext, mvUpdateInfo, queryTables);
 
         Map<Column, ColumnRefOperator> columnToColumnRefMap = olapScanOperator.getColumnMetaToColRefMap();
-        List<Column> mvColumns = mv.getBaseSchema();
+        // use ordered output columns to ensure the order of output columns if the mv contains order-by clause.
+        List<Column> mvColumns = mv.getOrderedOutputColumns();
         List<ColumnRefOperator> expectOutputColumns = mvColumns.stream()
                 .map(c -> columnToColumnRefMap.get(c))
                 .collect(Collectors.toList());
@@ -204,7 +205,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         mvUpdateInfo.addMvToRefreshPartitionNames(mv.getPartitionNames());
 
         MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
-                mv, mvPlanContext, ConstantOperator.TRUE, mvUpdateInfo, queryTables);
+                mv, mvPlanContext, mvUpdateInfo, queryTables);
         logMVRewrite(mvContext, "Get mv transparent plan failed, and redirect to mv's defined query");
         Map<Column, ColumnRefOperator> columnToColumnRefMap = olapScanOperator.getColumnMetaToColRefMap();
         List<Column> mvColumns = mv.getBaseSchema();
@@ -217,7 +218,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
     /**
      * Get transparent plan if possible.
      * What's the transparent plan?
-     * see {@link MvPartitionCompensator#getMvTransparentPlan(MaterializationContext, MVCompensation, List)
+     * see {@link MvPartitionCompensator#getMvTransparentPlan(MaterializationContext, MVCompensation, List, ColumnRefSet)}
      */
     private OptExpression getMvTransparentPlan(MaterializationContext mvContext,
                                                OptExpression input,
@@ -247,7 +248,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
             return null;
         }
         OptExpression transparentPlan = MvPartitionCompensator.getMvTransparentPlan(mvContext, mvCompensation,
-                expectOutputColumns);
+                expectOutputColumns, false);
         return transparentPlan;
     }
 

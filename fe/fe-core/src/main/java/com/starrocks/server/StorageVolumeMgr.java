@@ -15,6 +15,7 @@
 package com.starrocks.server;
 
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
@@ -69,6 +70,8 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     private static final String S3 = "s3";
 
     private static final String AZBLOB = "azblob";
+
+    private static final String ADLS2 = "adls2";
 
     private static final String HDFS = "hdfs";
 
@@ -152,27 +155,31 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
     }
 
     public void updateStorageVolume(AlterStorageVolumeStmt stmt) throws DdlException {
-        Map<String, String> params = new HashMap<>();
-        Optional<Boolean> enabled = parseProperties(stmt.getProperties(), params);
-        updateStorageVolume(stmt.getName(), params, enabled, stmt.getComment());
+        updateStorageVolume(stmt.getName(), null, null, stmt.getProperties(), stmt.getComment());
     }
 
-    public void updateStorageVolume(String name, Map<String, String> params, Optional<Boolean> enabled, String comment)
-            throws DdlException {
+    public void updateStorageVolume(String name, String svType, List<String> locations,
+            Map<String, String> properties, String comment) throws DdlException {
+        Map<String, String> params = new HashMap<>();
+        Optional<Boolean> enabled = parseProperties(properties, params);
+        updateStorageVolume(name, svType, locations, params, enabled, comment);
+    }
+
+    public void updateStorageVolume(String name, String svType, List<String> locations,
+            Map<String, String> params, Optional<Boolean> enabled, String comment) throws DdlException {
+        List<String> immutableProperties = Lists.newArrayList(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX,
+                CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX);
+        for (String param : immutableProperties) {
+            if (params.containsKey(param)) {
+                throw new DdlException(String.format("Storage volume property '%s' is immutable!", param));
+            }
+        }
         try (LockCloseable lock = new LockCloseable(rwLock.writeLock())) {
             StorageVolume sv = getStorageVolumeByName(name);
             Preconditions.checkState(sv != null, "Storage volume '%s' does not exist", name);
             StorageVolume copied = new StorageVolume(sv);
             validateParams(copied.getType(), params);
 
-            List<String> immutableProperties =
-                    Lists.newArrayList(CloudConfigurationConstants.AWS_S3_NUM_PARTITIONED_PREFIX,
-                            CloudConfigurationConstants.AWS_S3_ENABLE_PARTITIONED_PREFIX);
-            for (String param : immutableProperties) {
-                if (params.containsKey(param)) {
-                    throw new DdlException(String.format("Storage volume property '%s' is immutable!", param));
-                }
-            }
             if (enabled.isPresent()) {
                 boolean enabledValue = enabled.get();
                 if (!enabledValue) {
@@ -182,7 +189,15 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                 copied.setEnabled(enabledValue);
             }
 
-            if (!comment.isEmpty()) {
+            if (!Strings.isNullOrEmpty(svType)) {
+                copied.setType(svType);
+            }
+
+            if (locations != null) {
+                copied.setLocations(locations);
+            }
+
+            if (!Strings.isNullOrEmpty(comment)) {
                 copied.setComment(comment);
             }
 
@@ -340,6 +355,7 @@ public abstract class StorageVolumeMgr implements Writable, GsonPostProcessable 
                 switch (svType.toLowerCase()) {
                     case S3:
                     case AZBLOB:
+                    case ADLS2:
                         if (!scheme.equalsIgnoreCase(svType)) {
                             throw new DdlException("Invalid location " + location);
                         }

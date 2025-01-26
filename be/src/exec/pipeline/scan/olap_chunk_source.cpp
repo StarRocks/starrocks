@@ -37,9 +37,9 @@
 #include "storage/chunk_helper.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/index/vector/vector_search_option.h"
-#include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/predicate_parser.h"
 #include "storage/projection_iterator.h"
+#include "storage/runtime_range_pruner.hpp"
 #include "storage/storage_engine.h"
 #include "storage/tablet_index.h"
 #include "types/logical_type.h"
@@ -82,6 +82,7 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     if (_use_vector_index) {
         _use_ivfpq = vector_search_options.use_ivfpq;
         _vector_distance_column_name = vector_search_options.vector_distance_column_name;
+        _vector_slot_id = vector_search_options.vector_slot_id;
         _params.vector_search_option = std::make_shared<VectorSearchOption>();
     }
     const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_olap_scan_node.tuple_id);
@@ -264,7 +265,7 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
         _params.sorted_by_keys_per_tablet = thrift_olap_scan_node.sorted_by_keys_per_tablet;
     }
     _params.runtime_range_pruner =
-            OlapRuntimeScanRangePruner(parser, _scan_ctx->conjuncts_manager().unarrived_runtime_filters());
+            RuntimeScanRangePruner(parser, _scan_ctx->conjuncts_manager().unarrived_runtime_filters());
     _morsel->init_tablet_reader_params(&_params);
 
     ASSIGN_OR_RETURN(auto pred_tree, _scan_ctx->conjuncts_manager().get_predicate_tree(parser, _predicate_free_pool));
@@ -319,12 +320,10 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
     for (auto slot : *_slots) {
         DCHECK(slot->is_materialized());
         int32_t index;
-        if (_use_vector_index && !_use_ivfpq) {
-            index = _tablet_schema->field_index(slot->col_name(), _vector_distance_column_name);
-            if (slot->col_name() == _vector_distance_column_name) {
-                _params.vector_search_option->vector_column_id = index;
-                _params.vector_search_option->vector_slot_id = slot->id();
-            }
+        if (_use_vector_index && !_use_ivfpq && slot->id() == _vector_slot_id) {
+            index = _tablet_schema->num_columns();
+            _params.vector_search_option->vector_column_id = index;
+            _params.vector_search_option->vector_slot_id = slot->id();
         } else {
             index = _tablet_schema->field_index(slot->col_name());
         }
@@ -351,12 +350,7 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
 
 Status OlapChunkSource::_init_unused_output_columns(const std::vector<std::string>& unused_output_columns) {
     for (const auto& col_name : unused_output_columns) {
-        int32_t index;
-        if (_use_vector_index && !_use_ivfpq) {
-            index = _tablet_schema->field_index(col_name, _vector_distance_column_name);
-        } else {
-            index = _tablet_schema->field_index(col_name);
-        }
+        int32_t index = _tablet_schema->field_index(col_name);
         if (index < 0) {
             std::stringstream ss;
             ss << "invalid field name: " << col_name;
@@ -561,8 +555,8 @@ Status OlapChunkSource::_init_global_dicts(TabletReaderParams* params) {
         if (iter != global_dict_map.end()) {
             auto& dict_map = iter->second.first;
             int32_t index;
-            if (_use_vector_index && !_use_ivfpq) {
-                index = _tablet_schema->field_index(slot->col_name(), _vector_distance_column_name);
+            if (_use_vector_index && !_use_ivfpq && slot->id() == _vector_slot_id) {
+                index = _tablet_schema->num_columns();
             } else {
                 index = _tablet_schema->field_index(slot->col_name());
             }

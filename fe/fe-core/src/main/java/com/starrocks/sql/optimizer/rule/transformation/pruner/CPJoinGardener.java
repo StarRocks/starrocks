@@ -21,7 +21,7 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.UnionFind;
@@ -33,7 +33,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -271,11 +270,8 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
         if (scanOp.hasLimit()) {
             return visit(optExpression, context);
         }
-        //TODO(by satanson): non-OlapTable will be supported in future
-        if (!(scanOp.getTable() instanceof OlapTable)) {
-            return visit(optExpression, context);
-        }
-        OlapTable table = ((OlapTable) scanOp.getTable());
+
+        Table table = scanOp.getTable();
         // A Table that has no PK/UK/FK can not associate with other tables via
         // cardinality-preserving relations.
         if (!table.hasUniqueConstraints() && !table.hasForeignKeyConstraints()) {
@@ -652,7 +648,7 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
 
         Map<Long, List<CPNode>> tableIdToChildGroups = Maps.newHashMap();
         for (CPNode child : children) {
-            LogicalOlapScanOperator scanOp = child.getValue().getOp().cast();
+            LogicalScanOperator scanOp = child.getValue().getOp().cast();
             Long tableId = scanOp.getTable().getId();
             tableIdToChildGroups.computeIfAbsent(tableId, k -> Lists.newArrayList()).add(child);
         }
@@ -1020,10 +1016,8 @@ public class CPJoinGardener extends OptExpressionVisitor<Boolean, Void> {
                 }
             });
             if (newColRefToColMetaMap.isEmpty()) {
-                Preconditions.checkArgument(scanOperator.getTable() instanceof OlapTable);
-                OlapTable table = (OlapTable) scanOperator.getTable();
-                Preconditions.checkArgument(!table.getKeyColumns().isEmpty());
-                Column firstKeyColumn = table.getKeyColumns().get(0);
+                Table table = scanOperator.getTable();
+                Column firstKeyColumn = table.getPresentivateColumn();
                 ColumnRefOperator firstKeyColRef = scanOperator.getColumnMetaToColRefMap().get(firstKeyColumn);
                 newColRefToColMetaMap.put(firstKeyColRef, firstKeyColumn);
             }

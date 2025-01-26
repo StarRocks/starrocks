@@ -278,7 +278,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
                         + " from " + ParseUtil.backquote(dbName) + "." + ParseUtil.backquote(tableName)
                         + " partition (" + ParseUtil.backquote(partitionName) + ")";
             String taskName = getName() + "_" + tmpPartitionName;
-            OptimizeTask rewriteTask = TaskBuilder.buildOptimizeTask(taskName, properties, rewriteSql, dbName);
+            OptimizeTask rewriteTask = TaskBuilder.buildOptimizeTask(taskName, properties, rewriteSql, dbName, warehouseId);
             rewriteTask.setPartitionName(partitionName);
             rewriteTask.setTempPartitionName(tmpPartitionName);
             rewriteTasks.add(rewriteTask);
@@ -769,7 +769,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         LOG.info("execute sql : {}", sql);
         ConnectContext context = ConnectContext.get();
         if (context == null) {
-            context = new ConnectContext();
+            context = ConnectContext.buildInner();
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             context.setCurrentUserIdentity(UserIdentity.ROOT);
             context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
@@ -780,7 +780,7 @@ public class OnlineOptimizeJobV2 extends AlterJobV2 implements GsonPostProcessab
         if (parsedStmt instanceof InsertStmt) {
             ((InsertStmt) parsedStmt).setIsVersionOverwrite(true);
         }
-        StmtExecutor executor = new StmtExecutor(context, parsedStmt);
+        StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
 
         // set default session variables for stats context
         SessionVariable sessionVariable = context.getSessionVariable();

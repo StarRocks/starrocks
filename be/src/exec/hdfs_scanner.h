@@ -17,6 +17,7 @@
 #include <atomic>
 #include <boost/algorithm/string.hpp>
 
+#include "connector/deletion_vector/deletion_bitmap.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/scan/morsel.h"
 #include "exprs/expr.h"
@@ -39,6 +40,13 @@ struct HdfsSplitContext : public pipeline::ScanSplitContext {
     virtual std::unique_ptr<HdfsSplitContext> clone() = 0;
 };
 using HdfsSplitContextPtr = std::unique_ptr<HdfsSplitContext>;
+
+struct SkipRowsContext {
+    DeletionBitmapPtr deletion_bitmap;
+
+    bool has_skip_rows() { return deletion_bitmap != nullptr && !deletion_bitmap->empty(); }
+};
+using SkipRowsContextPtr = std::shared_ptr<SkipRowsContext>;
 
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
@@ -100,7 +108,11 @@ struct HdfsScanStats {
     // Iceberg v2 only!
     int64_t iceberg_delete_file_build_ns = 0;
     int64_t iceberg_delete_files_per_scan = 0;
-    int64_t iceberg_delete_file_build_filter_ns = 0;
+
+    // deletion vector
+    int64_t deletion_vector_build_ns = 0;
+    int64_t deletion_vector_build_count = 0;
+    int64_t build_rowid_filter_ns = 0;
 };
 
 class HdfsParquetProfile;
@@ -405,6 +417,8 @@ protected:
     static CompressionTypePB get_compression_type_from_path(const std::string& filename);
 
     void do_update_iceberg_v2_counter(RuntimeProfile* parquet_profile, const std::string& parent_name);
+    void do_update_deletion_vector_build_counter(RuntimeProfile* parent_profile);
+    void do_update_deletion_vector_filter_counter(RuntimeProfile* parent_profile);
 
 private:
     bool _opened = false;

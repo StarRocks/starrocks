@@ -96,8 +96,9 @@ using starrocks::PrimaryKeyDump;
 
 DEFINE_string(root_path, "", "storage root path");
 DEFINE_string(operation, "",
-              "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, show_meta, "
-              "check_table_meta_consistency, print_lake_metadata, print_lake_txn_log, print_lake_schema");
+              "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, get_persistent_index_meta, "
+              "delete_persistent_index_meta, show_meta, check_table_meta_consistency, print_lake_metadata, "
+              "print_lake_txn_log, print_lake_schema");
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
 DEFINE_string(tablet_uid, "", "tablet_uid for tablet meta");
 DEFINE_int64(table_id, 0, "table id for table meta");
@@ -133,6 +134,8 @@ std::string get_usage(const std::string& progname) {
       {progname} --operation=delete_meta --tablet_file=<file_path>
     delete_rowset_meta:
       {progname} --operation=delete_rowset_meta --root_path=</path/to/storage/path> --tablet_uid=<tablet_uid> --rowset_id=<rowset_id>
+    get_persistent_index_meta:
+      {progname} --operation=get_persistent_index_meta --root_path=</path/to/storage/path> --tablet_id=<tabletid>
     delete_persistent_index_meta:
       {progname} --operation=delete_persistent_index_meta --root_path=</path/to/storage/path> --tablet_id=<tabletid>
       {progname} --operation=delete_persistent_index_meta --root_path=</path/to/storage/path> --table_id=<tableid>
@@ -263,6 +266,25 @@ void delete_rowset_meta(DataDir* data_dir) {
         return;
     }
     std::cout << "delete rowset meta successfully" << std::endl;
+}
+
+void get_persistent_index_meta(DataDir* data_dir) {
+    starrocks::PersistentIndexMetaPB index_meta;
+    auto st = TabletMetaManager::get_persistent_index_meta(data_dir, FLAGS_tablet_id, &index_meta);
+    if (!st.ok()) {
+        std::cerr << "get persistent index meta failed for tablet: " << FLAGS_tablet_id
+                  << ", status: " << st.to_string() << std::endl;
+        return;
+    }
+    json2pb::Pb2JsonOptions options;
+    options.pretty_json = true;
+    std::string json;
+    std::string error;
+    if (!json2pb::ProtoMessageToJson(index_meta, &json, options, &error)) {
+        std::cerr << "Fail to convert protobuf to json: " << error << std::endl;
+        return;
+    }
+    std::cout << json << '\n';
 }
 
 void delete_persistent_index_meta(DataDir* data_dir) {
@@ -1030,6 +1052,7 @@ int meta_tool_main(int argc, char** argv) {
     google::ParseCommandLineFlags(&argc, &argv, true);
     starrocks::date::init_date_cache();
     starrocks::config::disable_storage_page_cache = true;
+    starrocks::MemChunkAllocator::init_instance(nullptr, 2ul * 1024 * 1024 * 1024);
 
     if (empty_args || FLAGS_operation.empty()) {
         show_usage();
@@ -1107,7 +1130,6 @@ int meta_tool_main(int argc, char** argv) {
         }
 
     } else if (FLAGS_operation == "dump_short_key_index") {
-        starrocks::MemChunkAllocator::init_instance(nullptr, 2ul * 1024 * 1024 * 1024);
         if (FLAGS_file == "") {
             std::cout << "no file set for dump short key index" << std::endl;
             return -1;
@@ -1206,6 +1228,7 @@ int meta_tool_main(int argc, char** argv) {
                                                   "load_meta",
                                                   "delete_meta",
                                                   "delete_rowset_meta",
+                                                  "get_persistent_index_meta",
                                                   "delete_persistent_index_meta",
                                                   "compact_meta",
                                                   "get_meta_stats",
@@ -1220,7 +1243,8 @@ int meta_tool_main(int argc, char** argv) {
 
         bool read_only = false;
         if (FLAGS_operation == "get_meta" || FLAGS_operation == "get_meta_stats" || FLAGS_operation == "ls" ||
-            FLAGS_operation == "check_table_meta_consistency" || FLAGS_operation == "scan_dcgs") {
+            FLAGS_operation == "check_table_meta_consistency" || FLAGS_operation == "scan_dcgs" ||
+            FLAGS_operation == "get_persistent_index_meta") {
             read_only = true;
         }
 
@@ -1243,6 +1267,8 @@ int meta_tool_main(int argc, char** argv) {
             delete_meta(data_dir.get());
         } else if (FLAGS_operation == "delete_rowset_meta") {
             delete_rowset_meta(data_dir.get());
+        } else if (FLAGS_operation == "get_persistent_index_meta") {
+            get_persistent_index_meta(data_dir.get());
         } else if (FLAGS_operation == "delete_persistent_index_meta") {
             delete_persistent_index_meta(data_dir.get());
         } else if (FLAGS_operation == "compact_meta") {

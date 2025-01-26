@@ -56,7 +56,6 @@ import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -72,7 +71,6 @@ import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.load.Load;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.ImportColumnDesc;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -82,6 +80,7 @@ import com.starrocks.thrift.TBrokerScanRangeParams;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileScanNode;
+import com.starrocks.thrift.TFileScanType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
@@ -162,7 +161,14 @@ public class FileScanNode extends LoadScanNode {
     private boolean useVectorizedLoad;
 
     private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
+    
     private boolean flexibleColumnMapping = false;
+    // When column mismatch, files query/load and other type load have different behaviors.
+    // Query returns error, while load counts the filtered rows, and return error or not is based on max filter ratio,
+    // files load will not filter rows if file column count is larger that the schema,
+    // so need to check files query/load or other type load in scanner.
+    // Currently only used in csv scanner.
+    private TFileScanType fileScanType = TFileScanType.LOAD;
 
     private boolean nullExprInAutoIncrement;
 
@@ -225,8 +231,10 @@ public class FileScanNode extends LoadScanNode {
         }
     }
 
-    private boolean isLoad() {
-        return desc.getTable() == null;
+    // broker table is deprecated
+    // TODO: remove
+    private boolean isBrokerTable() {
+        return desc.getTable() != null;
     }
 
     @Deprecated
@@ -256,6 +264,10 @@ public class FileScanNode extends LoadScanNode {
 
     public void setFlexibleColumnMapping(boolean enable) {
         this.flexibleColumnMapping = enable;
+    }
+
+    public void setFileScanType(TFileScanType fileScanType) {
+        this.fileScanType = fileScanType;
     }
 
     public void setUseVectorizedLoad(boolean useVectorizedLoad) {
@@ -315,6 +327,7 @@ public class FileScanNode extends LoadScanNode {
         params.setEscape(fileGroup.getEscape());
         params.setJson_file_size_limit(Config.json_file_size_limit);
         params.setFlexible_column_mapping(flexibleColumnMapping);
+        params.setFile_scan_type(fileScanType);
         initColumns(context);
         initWhereExpr(fileGroup.getWhereExpr(), analyzer);
     }
@@ -339,7 +352,7 @@ public class FileScanNode extends LoadScanNode {
         // for query, there is no column exprs, they will be got from table's schema in "Load.initColumns"
         List<ImportColumnDesc> columnExprs = Lists.newArrayList();
         List<String> columnsFromPath = Lists.newArrayList();
-        if (isLoad()) {
+        if (!isBrokerTable()) {
             columnExprs = context.fileGroup.getColumnExprList();
             columnsFromPath = context.fileGroup.getColumnsFromPath();
         }
@@ -495,7 +508,7 @@ public class FileScanNode extends LoadScanNode {
         }
         Preconditions.checkState(fileStatusesList.size() == fileGroups.size());
 
-        if (isLoad() && filesAdded == 0) {
+        if (!isBrokerTable() && filesAdded == 0) {
             // return at most 3 paths to users
             int limit = 3;
             List<String> allFilePaths =
@@ -528,25 +541,7 @@ public class FileScanNode extends LoadScanNode {
     }
 
     private void assignBackends() throws UserException {
-        nodes = Lists.newArrayList();
-
-        // TODO: need to refactor after be split into cn + dn
-        if (RunMode.isSharedDataMode()) {
-            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
-            for (long cnId : computeNodeIds) {
-                ComputeNode cn = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(cnId);
-                if (cn != null && cn.isAvailable()) {
-                    nodes.add(cn);
-                }
-            }
-        } else {
-            for (ComputeNode be : GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getIdToBackend().values()) {
-                if (be.isAvailable()) {
-                    nodes.add(be);
-                }
-            }
-        }
-
+        nodes = getAvailableComputeNodes(warehouseId);
         if (nodes.isEmpty()) {
             throw new UserException("No available backends");
         }
@@ -741,7 +736,7 @@ public class FileScanNode extends LoadScanNode {
     @Override
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
-        if (!isLoad()) {
+        if (isBrokerTable()) {
             BrokerTable brokerTable = (BrokerTable) targetTable;
             output.append(prefix).append("TABLE: ").append(brokerTable.getName()).append("\n");
             output.append(prefix).append("PATH: ")

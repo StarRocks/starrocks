@@ -11,7 +11,7 @@ From v3.0 onwards, StarRocks can integrate with Microsoft Azure Storage (Azure B
 - Batch load data from Azure Storage.
 - Back up data from and restore data to Azure Storage.
 - Query Parquet and ORC files in Azure Storage.
-- Query [Hive](../data_source/catalog/hive_catalog.md), [Iceberg](../data_source/catalog/iceberg_catalog.md), [Hudi](../data_source/catalog/hudi_catalog.md), and [Delta Lake](../data_source/catalog/deltalake_catalog.md) tables in Azure Storage.
+- Query [Hive](../data_source/catalog/hive_catalog.md), [Iceberg](../data_source/catalog/iceberg/iceberg_catalog.md), [Hudi](../data_source/catalog/hudi_catalog.md), and [Delta Lake](../data_source/catalog/deltalake_catalog.md) tables in Azure Storage.
 
 StarRocks supports the following types of Azure Storage accounts:
 

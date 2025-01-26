@@ -21,6 +21,8 @@ import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AdminCancelRepairTableStmt;
 import com.starrocks.sql.ast.AdminCheckTabletsStmt;
 import com.starrocks.sql.ast.AdminRepairTableStmt;
+import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
+import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.AdminSetPartitionVersionStmt;
 import com.starrocks.sql.ast.AdminSetReplicaStatusStmt;
@@ -151,6 +153,7 @@ import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.translate.TranslateStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
@@ -589,6 +592,19 @@ public class Analyzer {
         @Override
         public Void visitPauseRoutineLoadStatement(PauseRoutineLoadStmt statement, ConnectContext session) {
             PauseRoutineLoadAnalyzer.analyze(statement, session);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminSetAutomatedSnapshotOnStatement(AdminSetAutomatedSnapshotOnStmt statement, ConnectContext context) {
+            ClusterSnapshotAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAdminSetAutomatedSnapshotOffStatement(AdminSetAutomatedSnapshotOffStmt statement,
+                                                               ConnectContext context) {
+            ClusterSnapshotAnalyzer.analyze(statement, context);
             return null;
         }
 
@@ -1069,6 +1085,13 @@ public class Analyzer {
 
         @Override
         public Void visitShowNodesStatement(ShowNodesStmt statement, ConnectContext context) {
+            return null;
+        }
+
+        // ---------------------------------------- Translate Statement --------------------------------------------------
+        @Override
+        public Void visitTranslateStatement(TranslateStmt statement, ConnectContext context) {
+            TranslateAnalyzer.analyze(statement, context);
             return null;
         }
     }

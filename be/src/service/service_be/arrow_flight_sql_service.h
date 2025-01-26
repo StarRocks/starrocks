@@ -26,6 +26,7 @@ namespace starrocks {
 class ArrowFlightSqlServer : public arrow::flight::sql::FlightSqlServerBase {
 public:
     Status start(int port);
+    void stop();
 
     arrow::Result<std::unique_ptr<arrow::flight::FlightInfo>> GetFlightInfoSchemas(
             const arrow::flight::ServerCallContext& context, const arrow::flight::sql::GetDbSchemas& command,
@@ -37,6 +38,8 @@ public:
 
 private:
     static arrow::Result<std::pair<std::string, std::string>> decode_ticket(const std::string& ticket);
+
+    bool _running = false;
 };
 
 } // namespace starrocks

@@ -1,0 +1,62 @@
+-- name: test_pre_cache_agg_with_runtime_filter
+CREATE TABLE `t0` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"colocate_with" = "${uuid0}",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+CREATE TABLE `t1` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` varchar(20) NULL COMMENT "",
+  `c2` varchar(200) NULL COMMENT "",
+  `c3` int(11) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`) BUCKETS 48
+PROPERTIES (
+"colocate_with" = "${uuid0}",
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "false",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into t0 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+-- result:
+-- !result
+insert into t1 SELECT generate_series, generate_series, generate_series, generate_series FROM TABLE(generate_series(1,  40960));
+-- result:
+-- !result
+set enable_query_cache=true;
+-- result:
+-- !result
+select count(*),sum(v) from (select c0,c1,c2,count(distinct c3) v from t0 group by c0,c1,c2)l join [broadcast] t1 r on l.c0 = r.c1 where r.c2 < 5000;
+-- result:
+4999	4999
+-- !result
+select count(*),sum(v) from (select c0,c1,c2,count(distinct c3) v from t0 group by c0,c1,c2)l join [broadcast] t1 r on l.v = r.c1 where r.c2 < 5000;
+-- result:
+40960	40960
+-- !result
+select count(*) from (select c0,c1 from t0 group by c0,c1)l join t1 r on l.c1 = r.c1 and l.c0=r.c0 where r.c2 < 5000;
+-- result:
+4999
+-- !result

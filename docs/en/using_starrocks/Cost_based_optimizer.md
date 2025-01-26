@@ -126,7 +126,7 @@ In addition, StarRocks allows you to configure collection policies based on tabl
 
   - When the collection interval is met and the statistics health is higher than the threshold for automatic sampled collection (`statistic_auto_collect_sample_threshold`) and lower than the automatic collection threshold (`statistic_auto_collect_ratio`), full collection is triggered.
 
-  - When the size of the largest partition to collect data (`statistic_max_full_collect_data_size`) is greater than 100 GB, sampled collection is triggered.
+  - When the size of partitions to collect data (`statistic_max_full_collect_data_size`) is greater than 100 GB, sampled collection is triggered.
 
   - Only statistics of partitions whose update time is later than the time of the previous collection task are collected. Statistics of partitions with no data change are not collected.
 
@@ -151,7 +151,7 @@ The following table describes the default settings. If you need to modify them, 
 | statistic_auto_collect_large_table_interval | LONG    | 43200        | The interval for automatically collecting full statistics of large tables. Unit: seconds. Default value: 43200 (12 hours).                               |
 | statistic_auto_collect_ratio          | FLOAT    | 0.8               | The threshold for determining  whether the statistics for automatic collection are healthy. If statistics health is below this threshold, automatic collection is triggered. |
 | statistic_auto_collect_sample_threshold  | DOUBLE | 0.3   | The statistics health threshold for triggering automatic sampled collection. If the health value of statistics is lower than this threshold, automatic sampled collection is triggered. |
-| statistic_max_full_collect_data_size | LONG      | 107374182400      | The size of the largest partition for automatic collection to collect data. Unit: Byte. Default value: 107374182400 (100 GB). If a partition exceeds this value, full collection is discarded and sampled collection is performed instead. |
+| statistic_max_full_collect_data_size | LONG      | 107374182400      | The data size of the partitions for automatic collection to collect data. Unit: Byte. Default value: 107374182400 (100 GB). If the data size exceeds this value, full collection is discarded and sampled collection is performed instead. |
 | statistic_full_collect_buffer | LONG | 20971520 | The maximum buffer size taken by automatic collection tasks. Unit: Byte. Default value: 20971520 (20 MB). |
 | statistic_collect_max_row_count_per_query | INT  | 5000000000        | The maximum number of rows to query for a single analyze task. An analyze task will be split into multiple queries if this value is exceeded. |
 | statistic_collect_too_many_version_sleep | LONG | 600000 | The sleep time of automatic collection tasks if the table on which the collection task runs has too many data versions. Unit: ms. Default value: 600000 (10 minutes).  |
@@ -486,9 +486,9 @@ The task ID for a manual collection task can be obtained from SHOW ANALYZE STATU
 
 `statistic_collect_parallel`: Used to adjust the parallelism of statistics collection tasks that can run on BEs. Default value: 1. You can increase this value to speed up collection tasks.
 
-## Collect statistics of Hive/Iceberg/Hudi tables
+## Collect statistics of external tables
 
-Since v3.2.0, StarRocks supports collecting statistics of Hive, Iceberg, and Hudi tables. The syntax is similar to collecting StarRocks internal tables. **However, only manual full collection, manual histogram collection (since v3.2.7), and automatic full collection are supported. Sampled collection is not supported.** Since v3.3.0, StarRocks supports collecting statistics of sub-fields in STRUCT.
+Since v3.2.0, StarRocks supports collecting statistics of Hive, Iceberg, and Hudi tables. The syntax is similar to collecting StarRocks internal tables. **However, only manual full collection, manual histogram collection (since v3.2.7), and automatic full collection are supported. Sampled collection is not supported.** Since v3.3.0, StarRocks supports collecting statistics of Delta Lake tables and statistics of sub-fields in STRUCT. Since v3.4.0, StarRocks supports automatic statistics collection via query-triggered ANALYZE tasks.
 
 The collected statistics are stored in the `external_column_statistics` table of the `_statistics_` in the `default_catalog`. They are not stored in Hive Metastore and cannot be shared by other search engines. You can query data from the `default_catalog._statistics_.external_column_statistics` table to verify whether statistics are collected for a Hive/Iceberg/Hudi table.
 
@@ -514,15 +514,99 @@ partition_name:
 
 ### Limits
 
-The following limits apply when you collect statistics for Hive, Iceberg, Hudi tables:
+The following limits apply when you collect statistics for external tables:
 
-1. You can collect statistics of only Hive, Iceberg, and Hudi tables.
-2. Only manual full collection, manual histogram collection (since v3.2.7), and automatic full collection are supported. Sampled collection is not supported.
-3. For the system to automatically collect full statistics, you must create an Analyze job, which is different from collecting statistics of StarRocks internal tables where the system does this in the background by default.
-4. For automatic collection tasks, you can only collect statistics of a specific table. You cannot collect statistics of all tables in a database or statistics of all databases in an external catalog.
-5. For automatic collection tasks, StarRocks can detect whether data in Hive and Iceberg tables are updated and if so, collect statistics of only partitions whose data is updated. StarRocks cannot perceive whether data in Hudi tables are updated and can only perform periodic full collection.
+- You can collect statistics of only Hive, Iceberg, Hudi, and Delta Lake (Since v3.3.0) tables.
+- Only manual full collection, manual histogram collection (since v3.2.7), and automatic full collection are supported. Sampled collection is not supported.
+- For the system to automatically collect full statistics, you must create an Analyze job, which is different from collecting statistics of StarRocks internal tables where the system does this in the background by default.
+- For automatic collection tasks:
+  - You can only collect statistics of a specific table. You cannot collect statistics of all tables in a database or statistics of all databases in an external catalog.
+  - StarRocks can detect whether data in Hive and Iceberg tables are updated and if so, collect statistics of only partitions whose data is updated. StarRocks cannot perceive whether data in Hudi tables are updated and can only perform periodic full collection.
+- For query-triggered collection tasks:
+  - Currently, only Leader FE node can trigger ANALYZE tasks.
+  - The system only supports checking for partition changes on Hive and Iceberg tables, and only collects statistics on the partitions where the data has changed. For the Delta Lake/Hudi tables, the system collects statistics of the entire table.
+  - If Partition Transforms are applied to Iceberg tables, the collection of statistics is supported only for `identity`, `year`, `month`, `day`, `hour` type Transforms.
+  - Collecting statistics for Partition Evolution for Iceberg tables is not supported.
 
 The following examples happen in a database under the Hive external catalog. If you want to collect statistics of a Hive table from the `default_catalog`, reference the table in the `[catalog_name.][database_name.]<table_name>` format.
+
+### Query-triggered collection
+
+Since v3.4.0, the system supports automatic statistics collection of external tables by query-triggered ANALYZE tasks. When querying Hive, Iceberg, Hudi, or Delta Lake tables, the system will automatically trigger ANALYZE tasks in the background to collect statistics of the corresponding tables and columns, and use it for subsequent query plan optimization.
+
+Workflow:
+
+1. When the optimizer queries the cached statistics in FE, it will determine the object of the ANALYZE task based on the queried tables and columns (the ANALYZE task will only collect the statistics of the columns included in the query).
+2. The system will encapsulate the task object as an ANALYZE task and add it to the PendingTaskQueue.
+3. The Scheduler thread periodically fetches tasks from the PendingTaskQueue and add them to the RunningTasksQueue.
+4. During the execution of the ANALYZE task, it collects statistics and writes them to the BE and clears the expired statistics cached in the FE.
+
+This feature is enabled by default. You can control the above process with the following system variables and configuration items.
+
+#### System variable
+
+##### enable_query_trigger_analyze
+
+- Default: true
+- Type: Boolean
+- Description: Whether to enable query-trigger ANALYZE tasks.
+- Introduced in: v3.4.0
+
+#### FE configuration
+
+##### connector_table_query_trigger_analyze_small_table_rows
+
+- Default: 10000000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The threshold for determining whether a table is a small table for query-trigger ANALYZE tasks.
+- Introduced in: v3.4.0
+
+##### connector_table_query_trigger_analyze_small_table_interval
+
+- Default: 2 * 3600
+- Type: Int
+- Unit: Second
+- Is mutable: Yes
+- Description: The interval for query-trigger ANALYZE tasks of small tables.
+- Introduced in: v3.4.0
+
+##### connector_table_query_trigger_analyze_large_table_interval
+
+- Default: 12 * 3600
+- Type: Int
+- Unit: Second
+- Is mutable: Yes
+- Description: The interval for query-trigger ANALYZE tasks of large tables.
+- Introduced in: v3.4.0
+
+##### connector_table_query_trigger_analyze_max_pending_task_num
+
+- Default: 100
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of query-trigger ANALYZE tasks that are in Pending state on the FE.
+- Introduced in: v3.4.0
+
+##### connector_table_query_trigger_analyze_schedule_interval
+
+- Default: 30
+- Type: Int
+- Unit: Second
+- Is mutable: Yes
+- Description: The interval at which the Scheduler thread schedules to query-trigger ANALYZE tasks.
+- Introduced in: v3.4.0
+
+##### connector_table_query_trigger_analyze_max_running_task_num
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of query-trigger ANALYZE tasks that are in Running state on the FE.
+- Introduced in: v3.4.0
 
 ### Manual collection
 

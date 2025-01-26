@@ -217,6 +217,7 @@ Status StreamLoadAction::_handle(StreamLoadContext* ctx) {
 }
 
 Status StreamLoadAction::_handle_batch_write(starrocks::HttpRequest* http_req, StreamLoadContext* ctx) {
+    ctx->mc_read_data_cost_nanos = MonotonicNanos() - ctx->start_nanos;
     ctx->load_parameters = get_load_parameters_from_http(http_req);
     ctx->buffer->flip();
     return _exec_env->batch_write_mgr()->append_data(ctx);

@@ -62,6 +62,7 @@ import com.starrocks.thrift.TListPipesParams;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionStateSnapshot;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -1073,8 +1074,8 @@ public class PipeManagerTest {
                     FileListRepo.PipeFileState.LOADING, "insert-label");
             new MockUp<GlobalTransactionMgr>() {
                 @Mock
-                public TransactionStatus getLabelStatus(long dbId, String label) {
-                    return TransactionStatus.COMMITTED;
+                public TransactionStateSnapshot getLabelStatus(long dbId, String label) {
+                    return new TransactionStateSnapshot(TransactionStatus.COMMITTED, "");
                 }
             };
 

@@ -42,7 +42,6 @@ import com.starrocks.catalog.TabletMeta;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.Status;
@@ -51,7 +50,6 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.journal.JournalTask;
 import com.starrocks.lake.LakeTablet;
-import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.Utils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.gson.GsonUtils;
@@ -86,7 +84,6 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
 
 public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
@@ -291,6 +288,10 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getTransactionIDGenerator().peekNextTransactionId();
     }
 
+    public static long getNextGtid() {
+        return GlobalStateMgr.getCurrentState().getGtidGenerator().nextGtid();
+    }
+
     @VisibleForTesting
     public void setIsCancelling(boolean isCancelling) {
         this.isCancelling.set(isCancelling);
@@ -320,7 +321,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
-            MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(table.getBaseIndexId());
+
             if (enableTabletCreationOptimization) {
                 numTablets = physicalPartitionIndexMap.size();
             } else {
@@ -330,6 +331,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             countDownLatch = new MarkedCountDownLatch<>((int) numTablets);
             createReplicaLatch = countDownLatch;
             long baseIndexId = table.getBaseIndexId();
+            long gtid = getNextGtid();
             for (long physicalPartitionId : physicalPartitionIndexMap.rowKeySet()) {
                 PhysicalPartition physicalPartition = table.getPhysicalPartition(physicalPartitionId);
                 Preconditions.checkState(physicalPartition != null);
@@ -389,6 +391,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                                 .setCreateSchemaFile(createSchemaFile)
                                 .setTabletSchema(tabletSchema)
                                 .setEnableTabletCreationOptimization(enableTabletCreationOptimization)
+                                .setGtid(gtid)
                                 .build();
                         // For each partition, the schema file is created only when the first Tablet is created
                         createSchemaFile = false;
@@ -412,6 +415,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             OlapTable table = getTableOrThrow(db, tableId);
             Preconditions.checkState(table.getState() == OlapTable.OlapTableState.SCHEMA_CHANGE);
             watershedTxnId = getNextTransactionId();
+            watershedGtid = getNextGtid();
             addShadowIndexToCatalog(table, watershedTxnId);
         }
 
@@ -595,30 +599,6 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
 
         EditLog.waitInfinity(editLogFuture);
 
-        // Delete tablet and shards
-        for (MaterializedIndex droppedIndex : droppedIndexes) {
-            List<Long> shards = droppedIndex.getTablets().stream().map(Tablet::getId).collect(Collectors.toList());
-            // TODO: what if unusedShards deletion is partially successful?
-            StarMgrMetaSyncer.dropTabletAndDeleteShard(shards, GlobalStateMgr.getCurrentState().getStarOSAgent());
-        }
-
-        // since we use same shard group to do schema change, must clear old shard before
-        // updating colocation info. it's possible that after edit log above is written, fe crashes,
-        // and colocation info will not be updated , but it should be a rare case
-        try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
-            OlapTable table = (db != null) ? db.getTable(tableId) : null;
-            if (table == null) {
-                LOG.info("database or table been dropped before updating colocation info, schema change job {}", jobId);
-            } else {
-                try {
-                    GlobalStateMgr.getCurrentState().getColocateTableIndex().updateLakeTableColocationInfo(table, true, null);
-                } catch (DdlException e) {
-                    // log an error if update colocation info failed, schema change already succeeded
-                    LOG.error("table {} update colocation info failed after schema change, {}.", tableId, e.getMessage());
-                }
-            }
-        }
-
         if (span != null) {
             span.end();
         }
@@ -651,6 +631,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             txnInfo.combinedTxnLog = false;
             txnInfo.txnType = TxnTypePB.TXN_NORMAL;
             txnInfo.commitTime = finishedTimeMs / 1000;
+            txnInfo.gtid = watershedGtid;
             for (long partitionId : physicalPartitionIndexMap.rowKeySet()) {
                 long commitVersion = commitVersionMap.get(partitionId);
                 Map<Long, MaterializedIndex> shadowIndexMap = physicalPartitionIndexMap.row(partitionId);
@@ -753,6 +734,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
             this.indexChange = other.indexChange;
             this.indexes = other.indexes;
             this.watershedTxnId = other.watershedTxnId;
+            this.watershedGtid = other.watershedGtid;
             this.startTime = other.startTime;
             this.commitVersionMap = other.commitVersionMap;
             // this.schemaChangeBatchTask = other.schemaChangeBatchTask;
@@ -929,7 +911,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                 createReplicaLatch.countDownToZero(new Status(TStatusCode.OK, ""));
             }
             synchronized (this) {
-                return cancelImpl(errMsg);
+                return cancelInternal(errMsg);
             }
         } finally {
             isCancelling.set(false);

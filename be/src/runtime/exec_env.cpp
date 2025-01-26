@@ -205,8 +205,6 @@ Status GlobalEnv::_init_mem_tracker() {
     _process_mem_tracker = regist_tracker(MemTracker::PROCESS, bytes_limit, "process");
     _jemalloc_metadata_tracker =
             regist_tracker(MemTracker::JEMALLOC, -1, "jemalloc_metadata", _process_mem_tracker.get());
-    _jemalloc_fragmentation_tracker =
-            regist_tracker(MemTracker::JEMALLOC, -1, "jemalloc_fragmentation", _process_mem_tracker.get());
     int64_t query_pool_mem_limit =
             calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
     _query_pool_mem_tracker =
@@ -480,6 +478,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     std::unique_ptr<ThreadPool> load_rowset_pool;
     std::unique_ptr<ThreadPool> load_segment_pool;
+    std::unique_ptr<ThreadPool> put_combined_txn_log_thread_pool;
     RETURN_IF_ERROR(
             ThreadPoolBuilder("load_rowset_pool")
                     .set_min_threads(0)
@@ -499,6 +498,14 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _load_segment_thread_pool = load_segment_pool.release();
 
     _broker_mgr = new BrokerMgr(this);
+
+    RETURN_IF_ERROR(ThreadPoolBuilder("put_combined_txn_log_thread_pool")
+                            .set_min_threads(0)
+                            .set_max_threads(config::put_combined_txn_log_thread_pool_num_max)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(500))
+                            .build(&put_combined_txn_log_thread_pool));
+    _put_combined_txn_log_thread_pool = put_combined_txn_log_thread_pool.release();
+
 #ifndef BE_TEST
     _bfd_parser = BfdParser::create();
 #endif
@@ -511,14 +518,15 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     std::unique_ptr<ThreadPool> batch_write_thread_pool;
     RETURN_IF_ERROR(ThreadPoolBuilder("batch_write")
-                            .set_min_threads(config::batch_write_thread_pool_num_min)
-                            .set_max_threads(config::batch_write_thread_pool_num_max)
-                            .set_max_queue_size(config::batch_write_thread_pool_queue_size)
+                            .set_min_threads(config::merge_commit_thread_pool_num_min)
+                            .set_max_threads(config::merge_commit_thread_pool_num_max)
+                            .set_max_queue_size(config::merge_commit_thread_pool_queue_size)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
                             .build(&batch_write_thread_pool));
     auto batch_write_executor =
             std::make_unique<bthreads::ThreadPoolExecutor>(batch_write_thread_pool.release(), kTakesOwnership);
     _batch_write_mgr = new BatchWriteMgr(std::move(batch_write_executor));
+    RETURN_IF_ERROR(_batch_write_mgr->init());
 
     _routine_load_task_executor = new RoutineLoadTaskExecutor(this);
     RETURN_IF_ERROR(_routine_load_task_executor->init());
@@ -742,17 +750,24 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_result_queue_mgr);
     SAFE_DELETE(_result_mgr);
     SAFE_DELETE(_stream_mgr);
+    SAFE_DELETE(_batch_write_mgr);
     SAFE_DELETE(_external_scan_context_mgr);
     SAFE_DELETE(_lake_tablet_manager);
     SAFE_DELETE(_lake_update_manager);
     SAFE_DELETE(_lake_replication_txn_manager);
     SAFE_DELETE(_cache_mgr);
+    SAFE_DELETE(_put_combined_txn_log_thread_pool);
     _dictionary_cache_pool.reset();
     _automatic_partition_pool.reset();
     _metrics = nullptr;
 }
 
 void ExecEnv::_wait_for_fragments_finish() {
+    if (config::loop_count_wait_fragments_finish < 0) {
+        LOG(WARNING) << "'config::loop_count_wait_fragments_finish' is set to a negative integer, ignore it.";
+        return;
+    }
+
     size_t max_loop_secs = config::loop_count_wait_fragments_finish * 10;
     if (max_loop_secs == 0) {
         return;

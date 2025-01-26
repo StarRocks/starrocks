@@ -123,20 +123,22 @@ std::vector<JoinRuntimeFilter*>* ChunksSorterTopn::runtime_filters(ObjectPool* p
     size_t current_max_value_row_id = _topn_type == TTopNType::RANK ? order_by_column->size() - 1 : max_value_row_id;
     // _topn_type != TTopNType::RANK means we need reserve the max_value
     bool is_close_interval = _topn_type == TTopNType::RANK || _sort_desc.num_columns() != 1;
-
-    if (order_by_column->is_null(current_max_value_row_id)) {
-        return nullptr;
-    }
+    bool asc = _sort_desc.descs[0].asc_order();
+    bool null_first = _sort_desc.descs[0].is_null_first();
 
     if (_runtime_filter.empty()) {
-        auto rf = type_dispatch_predicate<JoinRuntimeFilter*>(
+        auto* rf = type_dispatch_predicate<JoinRuntimeFilter*>(
                 (*_sort_exprs)[0]->root()->type().type, false, detail::SortRuntimeFilterBuilder(), pool,
-                order_by_column, current_max_value_row_id, _sort_desc.descs[0].asc_order(), is_close_interval);
-        _runtime_filter.emplace_back(rf);
+                order_by_column, current_max_value_row_id, asc, null_first, is_close_interval);
+        if (rf == nullptr) {
+            return nullptr;
+        } else {
+            _runtime_filter.emplace_back(rf);
+        }
     } else {
         type_dispatch_predicate<std::nullptr_t>(
                 (*_sort_exprs)[0]->root()->type().type, false, detail::SortRuntimeFilterUpdater(),
-                _runtime_filter.back(), order_by_column, current_max_value_row_id, _sort_desc.descs[0].asc_order());
+                _runtime_filter.back(), order_by_column, current_max_value_row_id, asc, null_first, is_close_interval);
     }
 
     return &_runtime_filter;
@@ -470,11 +472,11 @@ Status ChunksSorterTopn::_hybrid_sort_common(RuntimeState* state, std::pair<Perm
     // case2: rows_to_keep > 0, which means `SMALLER_THAN_MIN_OF_SEGMENT` part itself not suffice, we need to get more elements
     // from both `INCLUDE_IN_SEGMENT` part and _merged_segment. And notice that `INCLUDE_IN_SEGMENT` part may be empty
     if (rows_to_keep > 0) {
+        const size_t sorted_size = _merged_segment.chunk->num_rows();
+        rows_to_keep = std::min(rows_to_keep, sorted_size + second_size);
         if (big_chunk == nullptr) {
             big_chunk.reset(segments[new_permutation.second[0].chunk_index].chunk->clone_empty(rows_to_keep).release());
         }
-        const size_t sorted_size = _merged_segment.chunk->num_rows();
-        rows_to_keep = std::min(rows_to_keep, sorted_size + second_size);
         if (_topn_type == TTopNType::RANK && sorted_size + second_size > rows_to_keep) {
             // For rank type, there may exist a wide equal range, so we need to keep all elements of part2 and part3
             rows_to_keep = sorted_size + second_size;

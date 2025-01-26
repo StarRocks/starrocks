@@ -43,7 +43,7 @@
 
 #include "common/logging.h"
 #include "gutil/strings/fastmem.h"
-#include "runtime/large_int_value.h"
+#include "types/large_int_value.h"
 #include "util/mysql_global.h"
 
 namespace starrocks {

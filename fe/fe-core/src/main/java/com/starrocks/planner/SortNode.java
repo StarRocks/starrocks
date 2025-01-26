@@ -50,8 +50,10 @@ import com.starrocks.common.IdGenerator;
 import com.starrocks.common.UserException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.TopNType;
 import com.starrocks.thrift.TExplainLevel;
+import com.starrocks.thrift.TLateMaterializeMode;
 import com.starrocks.thrift.TNormalPlanNode;
 import com.starrocks.thrift.TNormalSortInfo;
 import com.starrocks.thrift.TNormalSortNode;
@@ -220,10 +222,18 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         msg.sort_node = new TSortNode(sortInfo, useTopN);
         msg.sort_node.setOffset(offset);
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
-        msg.sort_node.setMax_buffered_rows(sessionVariable.getFullSortMaxBufferedRows());
-        msg.sort_node.setMax_buffered_bytes(sessionVariable.getFullSortMaxBufferedBytes());
+        SessionVariable defaultVariable = GlobalStateMgr.getCurrentState().getVariableMgr().getDefaultSessionVariable();
+        if (sessionVariable.getFullSortMaxBufferedBytes() != defaultVariable.getFullSortMaxBufferedBytes()) {
+            msg.sort_node.setMax_buffered_bytes(sessionVariable.getFullSortMaxBufferedBytes());
+        }
+        if (sessionVariable.getFullSortMaxBufferedRows() != defaultVariable.getFullSortMaxBufferedRows()) {
+            msg.sort_node.setMax_buffered_rows(sessionVariable.getFullSortMaxBufferedRows());
+        }
+
         msg.sort_node.setLate_materialization(sessionVariable.isFullSortLateMaterialization());
         msg.sort_node.setEnable_parallel_merge(sessionVariable.isEnableParallelMerge());
+        TLateMaterializeMode mode = TLateMaterializeMode.valueOf(sessionVariable.getParallelMergeLateMaterializationMode().toUpperCase());
+        msg.sort_node.setParallel_merge_late_materialize_mode(mode);
 
         if (info.getPartitionExprs() != null) {
             msg.sort_node.setPartition_exprs(Expr.treesToThrift(info.getPartitionExprs()));

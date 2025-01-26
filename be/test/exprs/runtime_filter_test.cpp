@@ -30,9 +30,90 @@ class RuntimeFilterTest : public ::testing::Test {
 public:
     void SetUp() override {}
     void TearDown() override {}
-
-public:
 };
+
+class RuntimeBloomFilterTest : public ::testing::Test {
+public:
+    void SetUp() override {}
+    void TearDown() override {}
+
+protected:
+    using Int32RF = RuntimeBloomFilter<TYPE_INT>;
+    ObjectPool _pool;
+};
+
+TEST_F(RuntimeBloomFilterTest, filter_zonemap_with_min_max) {
+    // > 10
+    auto* rf = Int32RF::create_with_range<true>(&_pool, 10, false);
+    int32_t min = 5;
+    int32_t max = 10;
+    ASSERT_TRUE(rf->filter_zonemap_with_min_max(&min, &max));
+
+    // >= 10
+    rf = Int32RF::create_with_range<true>(&_pool, 10, true);
+    min = 5;
+    max = 10;
+    ASSERT_FALSE(rf->filter_zonemap_with_min_max(&min, &max));
+
+    min = 5;
+    max = 9;
+    ASSERT_TRUE(rf->filter_zonemap_with_min_max(&min, &max));
+
+    // < 10
+    rf = Int32RF::create_with_range<false>(&_pool, 10, false);
+    min = 10;
+    max = 15;
+    ASSERT_TRUE(rf->filter_zonemap_with_min_max(&min, &max));
+
+    // <= 10
+    rf = Int32RF::create_with_range<false>(&_pool, 10, true);
+    min = 10;
+    max = 15;
+    ASSERT_FALSE(rf->filter_zonemap_with_min_max(&min, &max));
+
+    min = 11;
+    max = 15;
+    ASSERT_TRUE(rf->filter_zonemap_with_min_max(&min, &max));
+}
+
+TEST_F(RuntimeBloomFilterTest, create_with_empty_range) {
+    auto* rf = Int32RF::create_with_empty_range_without_null(&_pool);
+    ASSERT_TRUE(rf->is_empty_range());
+    ASSERT_FALSE(rf->has_null());
+}
+
+TEST_F(RuntimeBloomFilterTest, create_with_only_null_range) {
+    auto* rf = Int32RF::create_with_only_null_range(&_pool);
+    ASSERT_TRUE(rf->is_empty_range());
+    ASSERT_TRUE(rf->has_null());
+}
+
+TEST_F(RuntimeBloomFilterTest, create_with_full_range_without_null) {
+    auto* rf = Int32RF::create_with_full_range_without_null(&_pool);
+    ASSERT_TRUE(rf->is_full_range());
+    ASSERT_FALSE(rf->has_null());
+}
+
+TEST_F(RuntimeBloomFilterTest, create_with_range) {
+    auto* rf = Int32RF::create_with_range<true>(&_pool, 10, true, true);
+    ASSERT_EQ(rf->min_value(), 10);
+    ASSERT_EQ(rf->max_value(), std::numeric_limits<int32_t>::max());
+    ASSERT_TRUE(rf->has_null());
+}
+
+TEST_F(RuntimeBloomFilterTest, update_to_all_null) {
+    auto* rf = Int32RF::create_with_range<true>(&_pool, 10, true, true);
+
+    rf->update_to_all_null();
+    ASSERT_EQ(rf->rf_version(), 1);
+    ASSERT_TRUE(rf->is_empty_range());
+    ASSERT_TRUE(rf->has_null());
+
+    rf->update_to_all_null();
+    ASSERT_EQ(rf->rf_version(), 1);
+    ASSERT_TRUE(rf->is_empty_range());
+    ASSERT_TRUE(rf->has_null());
+}
 
 TEST_F(RuntimeFilterTest, TestSimdBlockFilter) {
     SimdBlockFilter bf0;
@@ -113,7 +194,7 @@ static std::shared_ptr<BinaryColumn> gen_random_binary_column(const std::string&
         size_t length = length_g(rd);
         std::string s;
         s.reserve(length);
-        for (auto i = 0; i < length; ++i) {
+        for (auto j = 0; j < length; ++j) {
             s.push_back(alphabet[g(rd)]);
         }
         col->append(Slice(s));
@@ -131,8 +212,8 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilter) {
     EXPECT_EQ(bf.min_value(), 0);
     EXPECT_EQ(bf.max_value(), 187);
     for (int i = 0; i <= 200; i += 17) {
-        EXPECT_TRUE(bf._test_data(i));
-        EXPECT_FALSE(bf._test_data(i + 1));
+        EXPECT_TRUE(bf.test_data(i));
+        EXPECT_FALSE(bf.test_data(i + 1));
     }
     EXPECT_FALSE(rf->has_null());
     bf.insert_null();
@@ -164,24 +245,19 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilter) {
 
 TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterSlice) {
     RuntimeBloomFilter<TYPE_VARCHAR> bf;
-    // JoinRuntimeFilter* rf = &bf;
-    std::vector<std::string> data = {"aa", "bb", "cc", "dd"};
-    std::vector<Slice> values;
-    for (const auto& s : data) {
-        values.emplace_back(Slice(s));
-    }
     bf.init(100);
+    std::vector<Slice> values{"aa", "bb", "cc", "d"};
     for (auto& s : values) {
         bf.insert(s);
     }
     EXPECT_EQ(bf.min_value(), values[0]);
     EXPECT_EQ(bf.max_value(), values[values.size() - 1]);
     for (auto& s : values) {
-        EXPECT_TRUE(bf._test_data(s));
+        EXPECT_TRUE(bf.test_data(s));
     }
     std::vector<std::string> ex_data = {"ee", "ff", "gg"};
     for (const auto& s : ex_data) {
-        EXPECT_FALSE(bf._test_data(Slice(s)));
+        EXPECT_FALSE(bf.test_data(Slice(s)));
     }
 }
 
@@ -274,9 +350,9 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterMerge) {
     bf2.merge(rf0);
     bf2.merge(rf1);
     for (int i = 0; i <= 200; i += 17) {
-        EXPECT_TRUE(bf2._test_data(i));
-        EXPECT_TRUE(bf2._test_data(i + 1));
-        EXPECT_FALSE(bf2._test_data(i + 2));
+        EXPECT_TRUE(bf2.test_data(i));
+        EXPECT_TRUE(bf2.test_data(i + 1));
+        EXPECT_FALSE(bf2.test_data(i + 2));
     }
     EXPECT_EQ(bf2.min_value(), 0);
     EXPECT_EQ(bf2.max_value(), 188);
@@ -770,32 +846,6 @@ TEST_F(RuntimeFilterTest, TestShuffleHashBucketRuntimeFilter2) {
 }
 TEST_F(RuntimeFilterTest, TestShuffleHashBucketRuntimeFilter3) {
     test_shuffle_hash_bucket_grf_helper(100, 5);
-}
-
-void test_local_hash_bucket_grf_helper(size_t num_rows, const std::vector<int32_t>& bucketseq_to_partition) {
-    DCHECK(!bucketseq_to_partition.empty());
-    auto num_buckets = bucketseq_to_partition.size();
-    std::unordered_set<int32_t> partitions(bucketseq_to_partition.begin(), bucketseq_to_partition.end());
-    partitions.erase(BUCKET_ABSENT);
-    auto num_partitions = partitions.size();
-    DCHECK(std::all_of(partitions.begin(), partitions.end(),
-                       [num_partitions](auto part_idx) { return part_idx < num_partitions; }));
-
-    auto part_by_func = [num_rows, num_buckets](BinaryColumn* column, std::vector<uint32_t>& hash_values,
-                                                std::vector<size_t>& num_rows_per_partitions) {
-        hash_values.assign(num_rows, 0);
-        column->crc32_hash(hash_values.data(), 0, num_rows);
-        for (auto i = 0; i < num_rows; ++i) {
-            hash_values[i] %= num_buckets;
-            ++num_rows_per_partitions[hash_values[i]];
-        }
-    };
-    auto grf_config_func = [](JoinRuntimeFilter* grf, JoinRuntimeFilter::RunningContext* ctx) {
-        grf->set_join_mode(TRuntimeFilterBuildJoinMode::LOCAL_HASH_BUCKET);
-    };
-    RuntimeFilterLayout layout;
-    layout.init(1, bucketseq_to_partition);
-    test_grf_helper(num_rows, num_partitions, part_by_func, grf_config_func, layout);
 }
 
 TEST_F(RuntimeFilterTest, TestLocalHashBucketRuntimeFilter1) {

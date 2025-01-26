@@ -133,7 +133,11 @@ struct TInternalScanRange {
   12: optional bool fill_data_cache = true;
   // used for per-bucket compute optimize
   13: optional i32 bucket_sequence
-  14: optional i64 gtid
+  // skip page cache when access page data
+  14: optional bool skip_page_cache = false;
+  // skip local disk data cache when access page data
+  15: optional bool skip_disk_cache = false;
+  16: optional i64 gtid
 }
 
 enum TFileFormatType {
@@ -209,6 +213,13 @@ struct THdfsProperties {
   12: optional CloudConfiguration.TCloudConfiguration cloud_configuration
 }
 
+enum TFileScanType {
+    // broker load, stream load, except insert from files
+    LOAD,
+    FILES_INSERT,
+    FILES_QUERY
+}
+
 struct TBrokerScanRangeParams {
     1: required i8 column_separator;
     2: required i8 row_delimiter;
@@ -271,6 +282,7 @@ struct TBrokerScanRangeParams {
     30: optional i64 schema_sample_file_count
     31: optional i64 schema_sample_file_row_count
     32: optional bool flexible_column_mapping
+    33: optional TFileScanType file_scan_type
 }
 
 // Broker scan range
@@ -558,6 +570,7 @@ struct TVectorSearchOptions {
   8: optional bool use_ivfpq;
   9: optional double pq_refine_factor;
   10: optional double k_factor;
+  11: optional i32 vector_slot_id;
 }
 
 // If you find yourself changing this struct, see also TLakeScanNode
@@ -776,18 +789,6 @@ enum TAggregationOp {
   PERCENT_RANK
 }
 
-//struct TAggregateFunctionCall {
-  // The aggregate function to call.
-//  1: required Types.TFunction fn
-
-  // The input exprs to this aggregate function
-//  2: required list<Exprs.TExpr> input_exprs
-
-  // If set, this aggregate function udf has varargs and this is the index for the
-  // first variable argument.
-//  3: optional i32 vararg_start_idx
-//}
-
 struct TAggregationNode {
   1: optional list<Exprs.TExpr> grouping_exprs
   // aggregate exprs. The root of each expr is the aggregate function. The
@@ -861,6 +862,12 @@ enum TTopNType {
   DENSE_RANK
 }
 
+enum TLateMaterializeMode {
+  AUTO,
+  ALWAYS,
+  NEVER,
+}
+
 struct TSortNode {
   1: required TSortInfo sort_info
   // Indicates whether the backend service should use topn vs. sorting
@@ -900,6 +907,7 @@ struct TSortNode {
   32: optional list<Exprs.TExpr> pre_agg_exprs;
   33: optional list<Types.TSlotId> pre_agg_output_slot_id;
   34: optional bool pre_agg_insert_local_shuffle;
+  40: optional TLateMaterializeMode parallel_merge_late_materialize_mode;
 }
 
 enum TAnalyticWindowType {
@@ -1058,6 +1066,7 @@ struct TExchangeNode {
   // Sender's partition type
   4: optional Partitions.TPartitionType partition_type;
   5: optional bool enable_parallel_merge
+  6: optional TLateMaterializeMode parallel_merge_late_materialize_mode;
 }
 
 // This contains all of the information computed by the plan as part of the resource
@@ -1162,6 +1171,11 @@ struct TProjectNode {
     1: optional map<Types.TSlotId, Exprs.TExpr> slot_map
     // Used for common operator compute result reuse
     2: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
+}
+
+struct TSelectNode {
+     // used for common expressions compute result reuse
+    1: optional map<Types.TSlotId, Exprs.TExpr> common_slot_map
 }
 
 struct TMetaScanNode {
@@ -1326,6 +1340,8 @@ struct TPlanNode {
   70: optional TStreamScanNode stream_scan_node;
   71: optional TStreamJoinNode stream_join_node;
   72: optional TStreamAggregationNode stream_agg_node;
+
+  81: optional TSelectNode select_node; 
 }
 
 // A flattened representation of a tree of PlanNodes, obtained by depth-first

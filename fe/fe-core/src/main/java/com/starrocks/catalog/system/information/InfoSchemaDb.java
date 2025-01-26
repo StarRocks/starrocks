@@ -88,6 +88,8 @@ public class InfoSchemaDb extends Database {
             super.registerTableUnlocked(BeDataCacheMetricsTable.create());
             super.registerTableUnlocked(PartitionsMetaSystemTable.create());
             super.registerTableUnlocked(TemporaryTablesTable.create());
+            super.registerTableUnlocked(ClusterSnapshotsTable.create());
+            super.registerTableUnlocked(ClusterSnapshotJobsTable.create());
         }
     }
 

@@ -135,6 +135,7 @@ set(STORAGE_FILES
     column_not_in_predicate.cpp
     column_null_predicate.cpp
     column_or_predicate.cpp
+    column_and_predicate.cpp
     column_expr_predicate.cpp
     conjunctive_predicates.cpp
     predicate_tree/predicate_tree.cpp

@@ -37,9 +37,13 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -98,6 +102,13 @@ public class OptOlapPartitionPruner {
             selectedPartitionIds = evaluator.prunePartitions(extractor, logicalOlapScanOperator.getPredicate());
         }
 
+        try {
+            checkScanPartitionLimit(selectedPartitionIds.size());
+        } catch (StarRocksPlannerException e) {
+            LOG.warn("{} queryId: {}", e.getMessage(), DebugUtil.printId(ConnectContext.get().getQueryId()));
+            throw new StarRocksPlannerException(e.getMessage(), ErrorType.USER_ERROR);
+        }
+
         final Pair<ScalarOperator, List<ScalarOperator>> prunePartitionPredicate =
                 prunePartitionPredicates(logicalOlapScanOperator, selectedPartitionIds);
 
@@ -132,6 +143,14 @@ public class OptOlapPartitionPruner {
         } else {
             ansPartitionIds = (selectedPartitionIds == null) ? newSelectedPartitionIds : selectedPartitionIds;
         }
+
+        try {
+            checkScanPartitionLimit(ansPartitionIds.size());
+        } catch (StarRocksPlannerException e) {
+            LOG.warn("{} queryId: {}", e.getMessage(), DebugUtil.printId(ConnectContext.get().getQueryId()));
+            throw new StarRocksPlannerException(e.getMessage(), ErrorType.USER_ERROR);
+        }
+
         final LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
         builder.withOperator(newOlapScanOperator)
                 .setSelectedPartitionId(ansPartitionIds)
@@ -140,6 +159,22 @@ public class OptOlapPartitionPruner {
                 // use the new pruned partition predicates
                 .setPrunedPartitionPredicates(newOlapScanOperator.getPrunedPartitionPredicates());
         return builder.build();
+    }
+
+    private static void checkScanPartitionLimit(int selectedPartitionNum) throws StarRocksPlannerException {
+        int scanOlapPartitionNumLimit = 0;
+        try {
+            scanOlapPartitionNumLimit = ConnectContext.get().getSessionVariable().getScanOlapPartitionNumLimit();
+        } catch (Exception e) {
+            LOG.warn("fail to get variable scan_olap_partition_num_limit, set default value 0, msg: {}", e.getMessage());
+        }
+        if (scanOlapPartitionNumLimit > 0 && selectedPartitionNum > scanOlapPartitionNumLimit) {
+            String msg = "Exceeded the limit of number of olap table partitions to be scanned. " +
+                         "Number of partitions allowed: " + scanOlapPartitionNumLimit +
+                         ", number of partitions to be scanned: " + selectedPartitionNum +
+                         ". Please adjust the SQL or change the limit by set variable scan_olap_partition_num_limit.";
+            throw new StarRocksPlannerException(msg, ErrorType.USER_ERROR);
+        }
     }
 
     private static Pair<ScalarOperator, List<ScalarOperator>> prunePartitionPredicates(
@@ -243,7 +278,9 @@ public class OptOlapPartitionPruner {
             return null;
         }
 
-        scanPredicates.removeAll(prunedPartitionPredicates);
+        if (!table.getDistributionColumnNames().contains(columnName)) {
+            scanPredicates.removeAll(prunedPartitionPredicates);
+        }
 
         if (column.isAllowNull() && containsNullValue(minRange)
                 && !checkFilterNullValue(scanPredicates, logicalOlapScanOperator.getPredicate().clone())) {

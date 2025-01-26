@@ -40,4 +40,8 @@ public enum MVTransparentState {
     public boolean isCompensate() {
         return this == COMPENSATE;
     }
+
+    public boolean isUnknown() {
+        return this == UNKNOWN;
+    }
 }

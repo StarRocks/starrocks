@@ -20,7 +20,7 @@
 
 namespace starrocks {
 
-class ColumnOrPredicate : public ColumnPredicate {
+class ColumnOrPredicate final : public ColumnPredicate {
 public:
     explicit ColumnOrPredicate(const TypeInfoPtr& type_info, ColumnId cid) : ColumnPredicate(type_info, cid) {}
 
@@ -58,6 +58,8 @@ public:
 
     Status convert_to(const ColumnPredicate** output, const TypeInfoPtr& target_type_info,
                       ObjectPool* obj_pool) const override;
+
+    std::string debug_string() const override;
 
 private:
     Status _evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const;

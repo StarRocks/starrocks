@@ -1028,4 +1028,27 @@ public class GlobalTransactionMgrTest {
                 "Invalid timeout: '1'. Expected values should be between 2 and 3 seconds",
                 () -> GlobalTransactionMgr.checkValidTimeoutSecond(1, 3, 2));
     }
+
+    @Test
+    public void testGetLabelStatus() throws Exception {
+        FakeGlobalStateMgr.setGlobalStateMgr(masterGlobalStateMgr);
+        String label = UUID.randomUUID().toString();
+        TransactionStateSnapshot state1 = masterTransMgr.getLabelStatus(GlobalStateMgrTestUtil.testDbId1, label);
+        Assert.assertNotNull(state1);
+        Assert.assertEquals(TransactionStatus.UNKNOWN, state1.getStatus());
+        Assert.assertNull(state1.getReason());
+
+        masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
+                        label, transactionSource, LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+        TransactionStateSnapshot state2 = masterTransMgr.getLabelStatus(GlobalStateMgrTestUtil.testDbId1, label);
+        Assert.assertNotNull(state2);
+        Assert.assertEquals(TransactionStatus.PREPARE, state2.getStatus());
+        Assert.assertEquals("", state2.getReason());
+
+        masterTransMgr.abortTransaction(GlobalStateMgrTestUtil.testDbId1, label, "artificial failure");
+        TransactionStateSnapshot state3 = masterTransMgr.getLabelStatus(GlobalStateMgrTestUtil.testDbId1, label);
+        Assert.assertNotNull(state3);
+        Assert.assertEquals(TransactionStatus.ABORTED, state3.getStatus());
+        Assert.assertEquals("artificial failure", state3.getReason());
+    }
 }

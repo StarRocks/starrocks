@@ -118,6 +118,7 @@ import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerConfig;
+import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -280,7 +281,7 @@ public class UtFrameUtils {
             feConfMap.put("aws_s3_access_key", "dummy_access_key");
             feConfMap.put("aws_s3_secret_key", "dummy_secret_key");
             // turn on mock starletAgent inside StarOS
-            StarletAgentFactory.forTest = true;
+            StarletAgentFactory.AGENT_TYPE = StarletAgentFactory.AgentType.MOCK_STARLET_AGENT;
         }
         feConfMap.put("tablet_create_timeout_second", "10");
         frontend.init(starRocksHome + "/" + runningDir, feConfMap);
@@ -1315,6 +1316,8 @@ public class UtFrameUtils {
 
             // Disable text based rewrite by default.
             connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(false);
+            // disable mv analyze stats in FE UTs
+            connectContext.getSessionVariable().setAnalyzeForMv("");
         }
 
         new MockUp<PlanTestBase>() {
@@ -1335,6 +1338,15 @@ public class UtFrameUtils {
             @Mock
             public void execute() throws Exception {
                 runnable.run();
+            }
+        };
+    }
+
+    public static void mockEnableQueryContextCache() {
+        new MockUp<QueryMaterializationContext>() {
+            @Mock
+            public boolean isEnableQueryContextCache() {
+                return true;
             }
         };
     }
