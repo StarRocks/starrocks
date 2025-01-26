@@ -1563,4 +1563,29 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         }
     }
 
+    @Test
+    public void testPriorityComparison() {
+        // Test case with different health values
+        StatisticsCollectJob.Priority priority1 =
+                new StatisticsCollectJob.Priority(LocalDateTime.now(), LocalDateTime.now(), 0.5);
+        StatisticsCollectJob.Priority priority2 =
+                new StatisticsCollectJob.Priority(LocalDateTime.now(), LocalDateTime.now(), 0.6);
+        Assert.assertTrue(priority1.compareTo(priority2) < 0);
+
+        // Test case with different staleness values
+        LocalDateTime now = LocalDateTime.now();
+        StatisticsCollectJob.Priority priority3 = new StatisticsCollectJob.Priority(now, now.minusSeconds(100), 0.5);
+        StatisticsCollectJob.Priority priority4 = new StatisticsCollectJob.Priority(now, now.minusSeconds(50), 0.5);
+        Assert.assertTrue(priority3.compareTo(priority4) < 0);
+
+        // Test case with both different health and staleness values
+        StatisticsCollectJob.Priority priority5 = new StatisticsCollectJob.Priority(now, now.minusSeconds(100), 0.5);
+        StatisticsCollectJob.Priority priority6 = new StatisticsCollectJob.Priority(now, now.minusSeconds(50), 0.6);
+        Assert.assertTrue(priority5.compareTo(priority6) < 0);
+
+        // Test case with statsUpdateTime set to LocalDateTime.MIN
+        StatisticsCollectJob.Priority priority7 = new StatisticsCollectJob.Priority(now, LocalDateTime.MIN, 0.5);
+        StatisticsCollectJob.Priority priority8 = new StatisticsCollectJob.Priority(now, now.minusSeconds(10), 0.5);
+        Assert.assertTrue(priority7.compareTo(priority8) < 0);
+    }
 }
