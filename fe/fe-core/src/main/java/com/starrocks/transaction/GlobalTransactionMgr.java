@@ -274,28 +274,21 @@ public class GlobalTransactionMgr implements MemoryTrackable {
     public void prepareTransaction(long dbId, long transactionId, List<TabletCommitInfo> tabletCommitInfos,
                                    List<TabletFailInfo> tabletFailInfos,
                                    TxnCommitAttachment txnCommitAttachment)
-<<<<<<< HEAD
             throws UserException {
-        if (Config.disable_load_job) {
-            throw new TransactionCommitFailedException("disable_load_job is set to true, all load jobs are prevented");
-        }
-=======
-            throws StarRocksException {
         // timeout is 0, means no timeout
         prepareTransaction(dbId, transactionId, tabletCommitInfos, tabletFailInfos, txnCommitAttachment, 0);
     }
->>>>>>> 7c98728a86 ([BugFix] Fix concurrent issue in olap table listener (#54051))
 
     public void prepareTransaction(
             @NotNull long dbId, long transactionId, @NotNull List<TabletCommitInfo> tabletCommitInfos,
             @NotNull List<TabletFailInfo> tabletFailInfos,
-            @Nullable TxnCommitAttachment attachment, long timeoutMs) throws StarRocksException {
+            @Nullable TxnCommitAttachment attachment, long timeoutMs) throws UserException {
         TransactionState transactionState = getTransactionState(dbId, transactionId);
         List<Long> tableId = transactionState.getTableIdList();
         LOG.debug("try to pre commit transaction: {}", transactionId);
         Locker locker = new Locker();
         if (!locker.tryLockTablesWithIntensiveDbLock(dbId, tableId, LockType.WRITE, timeoutMs, TimeUnit.MILLISECONDS)) {
-            throw new StarRocksException("get database write lock timeout, database=" + dbId + ", timeout=" + timeoutMs + "ms");
+            throw new UserException("get database write lock timeout, database=" + dbId + ", timeout=" + timeoutMs + "ms");
         }
         try {
             if (Config.disable_load_job) {
