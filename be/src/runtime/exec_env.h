@@ -274,6 +274,7 @@ public:
     ThreadPool* streaming_load_thread_pool() { return _streaming_load_thread_pool; }
     ThreadPool* load_rowset_thread_pool() { return _load_rowset_thread_pool; }
     ThreadPool* load_segment_thread_pool() { return _load_segment_thread_pool; }
+    ThreadPool* put_combined_txn_log_thread_pool() { return _put_combined_txn_log_thread_pool; }
 
     pipeline::DriverExecutor* wg_driver_executor();
     workgroup::ScanExecutor* scan_executor();
@@ -363,6 +364,7 @@ private:
 
     ThreadPool* _load_segment_thread_pool = nullptr;
     ThreadPool* _load_rowset_thread_pool = nullptr;
+    ThreadPool* _put_combined_txn_log_thread_pool = nullptr;
 
     PriorityThreadPool* _udf_call_pool = nullptr;
     PriorityThreadPool* _pipeline_prepare_pool = nullptr;
