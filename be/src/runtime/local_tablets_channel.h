@@ -227,8 +227,6 @@ private:
     mutable bthread::Mutex _status_lock;
     Status _status = Status::OK();
 
-    std::set<int64_t> _immutable_partition_ids;
-
     std::map<string, string> _column_to_expr_value;
 
     // Profile counters
