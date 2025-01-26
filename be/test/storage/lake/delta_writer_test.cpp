@@ -83,6 +83,7 @@ protected:
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
     int64_t _partition_id = 456;
+    RuntimeProfile _dummy_runtime_profile{"dummy"};
 };
 
 TEST_F(LakeDeltaWriterTest, test_build) {
@@ -154,6 +155,7 @@ TEST_F(LakeDeltaWriterTest, test_open) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         delta_writer->close();
@@ -180,6 +182,7 @@ TEST_F(LakeDeltaWriterTest, test_write) {
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_schema_id(_tablet_schema->id())
                                                .set_immutable_tablet_size(1)
+                                               .set_profile(&_dummy_runtime_profile)
                                                .build());
     ASSERT_OK(delta_writer->open());
 
@@ -202,18 +205,16 @@ TEST_F(LakeDeltaWriterTest, test_write) {
     ASSERT_FALSE(txnlog->has_op_compaction());
     ASSERT_FALSE(txnlog->has_op_schema_change());
     ASSERT_TRUE(txnlog->op_write().has_rowset());
-    ASSERT_EQ(2, txnlog->op_write().rowset().segments_size());
-    ASSERT_TRUE(txnlog->op_write().rowset().overlapped());
+    ASSERT_EQ(1, txnlog->op_write().rowset().segments_size());
+    ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(2 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
 
     // Check segment file
     ASSIGN_OR_ABORT(auto fs, FileSystem::CreateSharedFromString(kTestDirectory));
     auto path0 = _tablet_mgr->segment_location(tablet_id, txnlog->op_write().rowset().segments(0));
-    auto path1 = _tablet_mgr->segment_location(tablet_id, txnlog->op_write().rowset().segments(1));
 
     ASSIGN_OR_ABORT(auto seg0, Segment::open(fs, FileInfo{path0}, 0, _tablet_schema));
-    ASSIGN_OR_ABORT(auto seg1, Segment::open(fs, FileInfo{path1}, 1, _tablet_schema));
 
     OlapReaderStatistics statistics;
     SegmentReadOptions opts;
@@ -226,10 +227,10 @@ TEST_F(LakeDeltaWriterTest, test_write) {
         ASSIGN_OR_ABORT(auto seg_iter, segment->new_iterator(*_schema, opts));
         auto read_chunk_ptr = ChunkHelper::new_chunk(*_schema, 1024);
         ASSERT_OK(seg_iter->get_next(read_chunk_ptr.get()));
-        ASSERT_EQ(kChunkSize, read_chunk_ptr->num_rows());
-        for (int i = 0; i < kChunkSize; i++) {
-            EXPECT_EQ(i, read_chunk_ptr->get(i)[0].get_int32());
-            EXPECT_EQ(i * 3, read_chunk_ptr->get(i)[1].get_int32());
+        ASSERT_EQ(kChunkSize * 2, read_chunk_ptr->num_rows());
+        for (int i = 0; i < kChunkSize * 2; i += 2) {
+            EXPECT_EQ(i / 2, read_chunk_ptr->get(i)[0].get_int32());
+            EXPECT_EQ((i / 2) * 3, read_chunk_ptr->get(i)[1].get_int32());
         }
         read_chunk_ptr->reset();
         ASSERT_TRUE(seg_iter->get_next(read_chunk_ptr.get()).is_end_of_file());
@@ -237,7 +238,6 @@ TEST_F(LakeDeltaWriterTest, test_write) {
     };
 
     check_segment(seg0);
-    check_segment(seg1);
 }
 
 TEST_F(LakeDeltaWriterTest, test_write_without_schema_file) {
@@ -269,6 +269,7 @@ TEST_F(LakeDeltaWriterTest, test_write_without_schema_file) {
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
                                                .build());
 
     ASSERT_OK(delta_writer->open());
@@ -304,6 +305,7 @@ TEST_F(LakeDeltaWriterTest, test_close) {
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
                                                .build());
     ASSERT_OK(delta_writer->open());
 
@@ -343,6 +345,7 @@ TEST_F(LakeDeltaWriterTest, test_finish_without_write_txn_log) {
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
                                                .build());
     ASSERT_OK(delta_writer->open());
 
@@ -375,6 +378,7 @@ TEST_F(LakeDeltaWriterTest, test_empty_write) {
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
                                                .build());
     ASSERT_OK(delta_writer->open());
     ASSERT_OK(delta_writer->finish_with_txnlog());
@@ -404,6 +408,7 @@ TEST_F(LakeDeltaWriterTest, test_negative_txn_id) {
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
                                                .build());
     ASSERT_OK(delta_writer->open());
     ASSERT_ERROR(delta_writer->finish_with_txnlog());
@@ -429,6 +434,7 @@ TEST_F(LakeDeltaWriterTest, test_memory_limit_unreached) {
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
                                                .build());
     ASSERT_OK(delta_writer->open());
 
@@ -479,6 +485,7 @@ TEST_F(LakeDeltaWriterTest, test_reached_memory_limit) {
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
                                                .build());
     ASSERT_OK(delta_writer->open());
 
@@ -502,8 +509,8 @@ TEST_F(LakeDeltaWriterTest, test_reached_memory_limit) {
     ASSERT_FALSE(txnlog->has_op_compaction());
     ASSERT_FALSE(txnlog->has_op_schema_change());
     ASSERT_TRUE(txnlog->op_write().has_rowset());
-    ASSERT_EQ(3, txnlog->op_write().rowset().segments_size());
-    ASSERT_TRUE(txnlog->op_write().rowset().overlapped());
+    ASSERT_EQ(1, txnlog->op_write().rowset().segments_size());
+    ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(3 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
 }
@@ -531,6 +538,7 @@ TEST_F(LakeDeltaWriterTest, test_reached_parent_memory_limit) {
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
                                                .build());
     ASSERT_OK(delta_writer->open());
 
@@ -553,8 +561,8 @@ TEST_F(LakeDeltaWriterTest, test_reached_parent_memory_limit) {
     ASSERT_FALSE(txnlog->has_op_compaction());
     ASSERT_FALSE(txnlog->has_op_schema_change());
     ASSERT_TRUE(txnlog->op_write().has_rowset());
-    ASSERT_EQ(3, txnlog->op_write().rowset().segments_size());
-    ASSERT_TRUE(txnlog->op_write().rowset().overlapped());
+    ASSERT_EQ(1, txnlog->op_write().rowset().segments_size());
+    ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(3 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
 }
@@ -583,6 +591,7 @@ TEST_F(LakeDeltaWriterTest, test_memtable_full) {
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
                                                .build());
     ASSERT_OK(delta_writer->open());
 
@@ -604,8 +613,8 @@ TEST_F(LakeDeltaWriterTest, test_memtable_full) {
     ASSERT_FALSE(txnlog->has_op_compaction());
     ASSERT_FALSE(txnlog->has_op_schema_change());
     ASSERT_TRUE(txnlog->op_write().has_rowset());
-    ASSERT_EQ(3, txnlog->op_write().rowset().segments_size());
-    ASSERT_TRUE(txnlog->op_write().rowset().overlapped());
+    ASSERT_EQ(1, txnlog->op_write().rowset().segments_size());
+    ASSERT_FALSE(txnlog->op_write().rowset().overlapped());
     ASSERT_EQ(3 * kChunkSize, txnlog->op_write().rowset().num_rows());
     ASSERT_GT(txnlog->op_write().rowset().data_size(), 0);
 }
@@ -632,6 +641,7 @@ TEST_F(LakeDeltaWriterTest, test_write_oom) {
                                                .set_partition_id(_partition_id)
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_schema_id(_tablet_schema->id())
+                                               .set_profile(&_dummy_runtime_profile)
                                                .set_immutable_tablet_size(1)
                                                .build());
     ASSERT_OK(delta_writer->open());

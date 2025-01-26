@@ -68,6 +68,8 @@ protected:
         config::min_cumulative_compaction_num_singleton_deltas = _min_cumulative_compaction_num_singleton_deltas;
     }
 
+    RuntimeProfile _dummy_runtime_profile{"dummy"};
+
 private:
     bool _enable_size_tiered_compaction_strategy = config::enable_size_tiered_compaction_strategy;
     int64_t _vertical_compaction_max_columns_per_group = config::vertical_compaction_max_columns_per_group;
@@ -154,6 +156,7 @@ TEST_P(LakeDuplicateKeyCompactionTest, test1) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -292,6 +295,7 @@ TEST_P(LakeDuplicateKeyOverlapSegmentsCompactionTest, test) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         for (int j = 0; j < i + 1; ++j) {
@@ -451,6 +455,7 @@ TEST_P(LakeUniqueKeyCompactionTest, test1) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -574,6 +579,7 @@ TEST_P(LakeUniqueKeyCompactionWithDeleteTest, test_base_compaction_with_delete) 
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
