@@ -932,11 +932,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 timeoutMs / 1000, warehouseId);
     }
 
-<<<<<<< HEAD
-    public void unprotectedPrepareTxn() throws UserException {
-=======
-    public void unprotectedPrepareTxn() throws StarRocksException, LockTimeoutException {
->>>>>>> 7c98728a8 ([BugFix] Fix concurrent issue in olap table listener (#54051))
+    public void unprotectedPrepareTxn() throws UserException, LockTimeoutException {
         List<TabletCommitInfo> commitInfos = TabletCommitInfo.fromThrift(coord.getCommitInfos());
         List<TabletFailInfo> failInfos = TabletFailInfo.fromThrift(coord.getFailInfos());
         finishPreparingTimeMs = System.currentTimeMillis();
