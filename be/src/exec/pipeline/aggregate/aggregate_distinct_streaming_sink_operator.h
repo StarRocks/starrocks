@@ -71,7 +71,9 @@ private:
     AggregatorPtr _aggregator = nullptr;
     // Whether prev operator has no output
     bool _is_finished = false;
+    bool _agg_group_by_with_limit = false;
     LimitedMemAggState _limited_mem_state;
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };
 
 class AggregateDistinctStreamingSinkOperatorFactory final : public OperatorFactory {
