@@ -14,7 +14,6 @@
 
 package com.starrocks.statistic;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -43,9 +42,12 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.velocity.VelocityContext;
 import org.apache.velocity.app.VelocityEngine;
+import org.jetbrains.annotations.NotNull;
 
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.LocalDateTime;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -62,7 +64,7 @@ public abstract class StatisticsCollectJob {
     protected final StatsConstants.AnalyzeType type;
     protected final StatsConstants.ScheduleType scheduleType;
     protected final Map<String, String> properties;
-    protected int priority = 0;
+    protected Priority priority;
 
     protected StatisticsCollectJob(Database db, Table table, List<String> columnNames,
                                    StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
@@ -134,19 +136,11 @@ public abstract class StatisticsCollectJob {
         return CollectionUtils.isEmpty(columnNames);
     }
 
-    /**
-     * Healthy is [0.0, 1.0], lower healthy means higher priority
-     */
-    public void setPriorityWithHealthy(double healthy) {
-        Preconditions.checkArgument(healthy >= 0.0 && healthy <= 1.0);
-        this.priority = (int) (100 - 100 * healthy);
-    }
-
-    public void setPriority(int priority) {
+    public void setPriority(Priority priority) {
         this.priority = priority;
     }
 
-    public int getPriority() {
+    public Priority getPriority() {
         return this.priority;
     }
 
@@ -262,21 +256,45 @@ public abstract class StatisticsCollectJob {
         return sb.toString();
     }
 
+    public static class Priority implements Comparable<Priority> {
+        public LocalDateTime tableUpdateTime;
+        public LocalDateTime statsUpdateTime;
+        public double healthy;
+
+        public Priority(LocalDateTime tableUpdateTime, LocalDateTime statsUpdateTime, double healthy) {
+            this.tableUpdateTime = tableUpdateTime;
+            this.statsUpdateTime = statsUpdateTime;
+            this.healthy = healthy;
+        }
+
+        public long statsStaleness() {
+            if (statsUpdateTime != LocalDateTime.MIN) {
+                Duration gap = Duration.between(statsUpdateTime, tableUpdateTime);
+                // If the tableUpdate < statsUpdate, the duration can be a negative value, so normalize it to 0
+                return Math.max(0, gap.getSeconds());
+            } else {
+                Duration gap = Duration.between(tableUpdateTime, LocalDateTime.now());
+                return Math.max(0, gap.getSeconds()) + 3600;
+            }
+        }
+
+        @Override
+        public int compareTo(@NotNull Priority o) {
+            // Lower health means higher priority
+            if (healthy != o.healthy) {
+                return Double.compare(healthy, o.healthy);
+            }
+            // Higher staleness means higher priority
+            return Long.compare(o.statsStaleness(), statsStaleness());
+        }
+    }
+
     public static class ComparatorWithPriority
             implements Comparator<StatisticsCollectJob> {
 
         @Override
         public int compare(StatisticsCollectJob o1, StatisticsCollectJob o2) {
-            // Compare by job priority first
-            if (o1.getPriority() != o2.getPriority()) {
-                return Integer.compare(o1.getPriority(), o2.getPriority());
-            }
-            // If priority is the same, compare by type
-            if (!o1.getType().equals(o2.getType())) {
-                return o1.getType().compareTo(o2.getType());
-            }
-            // If type is the same, compare by scheduleType
-            return o1.getScheduleType().compareTo(o2.getScheduleType());
+            return o1.getPriority().compareTo(o2.getPriority());
         }
     }
 }
