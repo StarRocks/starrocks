@@ -17,5 +17,6 @@ extern "C" {
 // https://github.com/llvm/llvm-project/blob/main/compiler-rt/lib/builtins/int_to_fp_impl.inc
 // this implementation is 20x faster than gcc
 double __wrap___floattidf(__int128 a);
+double __real___floattidf(__int128 a);
 }
 } // namespace starrocks

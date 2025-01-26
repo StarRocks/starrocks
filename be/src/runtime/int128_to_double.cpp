@@ -88,7 +88,7 @@ double __wrap___floattidf(__int128 a) {
         dst_rep_t i;
     } rep = {.i = result};
 
-    DCHECK(std::abs(rep.f - static_cast<double>(a)) < 0.001);
+    DCHECK(std::abs(rep.f - __real___floattidf(a)) < 0.001);
     return rep.f;
 }
 } // namespace starrocks
