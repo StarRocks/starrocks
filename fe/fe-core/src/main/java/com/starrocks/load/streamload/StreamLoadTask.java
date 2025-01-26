@@ -36,6 +36,7 @@ import com.starrocks.common.util.LogKey;
 import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.rest.TransactionResult;
@@ -940,7 +941,7 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 timeoutMs / 1000, warehouseId);
     }
 
-    public void unprotectedPrepareTxn() throws UserException {
+    public void unprotectedPrepareTxn() throws UserException, LockTimeoutException {
         List<TabletCommitInfo> commitInfos = TabletCommitInfo.fromThrift(coord.getCommitInfos());
         List<TabletFailInfo> failInfos = TabletFailInfo.fromThrift(coord.getFailInfos());
         finishPreparingTimeMs = System.currentTimeMillis();
@@ -948,8 +949,8 @@ public class StreamLoadTask extends AbstractTxnStateChangeCallback
                 beforeLoadTimeMs, startLoadingTimeMs, startPreparingTimeMs, finishPreparingTimeMs,
                 endTimeMs, numRowsNormal, numRowsAbnormal, numRowsUnselected, numLoadBytesTotal,
                 trackingUrl);
-        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().prepareTransaction(dbId,
-                txnId, commitInfos, failInfos, txnCommitAttachment);
+        GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().prepareTransaction(
+                dbId, txnId, commitInfos, failInfos, txnCommitAttachment, timeoutMs);
     }
 
     public boolean checkNeedRemove(long currentMs, boolean isForce) {
