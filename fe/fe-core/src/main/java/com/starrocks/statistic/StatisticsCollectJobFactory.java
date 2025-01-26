@@ -51,6 +51,11 @@ public class StatisticsCollectJobFactory {
     private StatisticsCollectJobFactory() {
     }
 
+    /**
+     * Build several statistics jobs for ANALYZE with priority
+     *
+     * @return jobs order by priority
+     */
     public static List<StatisticsCollectJob> buildStatisticsCollectJob(NativeAnalyzeJob nativeAnalyzeJob) {
         List<StatisticsCollectJob> statsJobs = Lists.newArrayList();
         if (StatsConstants.DEFAULT_ALL_ID == nativeAnalyzeJob.getDbId()) {
@@ -88,6 +93,8 @@ public class StatisticsCollectJobFactory {
                     nativeAnalyzeJob.getColumns(), nativeAnalyzeJob.getColumnTypes());
         }
 
+        // Put higher priority jobs at the front
+        statsJobs.sort(new StatisticsCollectJob.ComparatorWithPriority());
         return statsJobs;
     }
 
@@ -181,6 +188,7 @@ public class StatisticsCollectJobFactory {
                     externalAnalyzeJob.getColumnTypes());
         }
 
+        statsJobs.sort(new StatisticsCollectJob.ComparatorWithPriority());
         return statsJobs;
     }
 
@@ -383,6 +391,7 @@ public class StatisticsCollectJobFactory {
         BasicStatsMeta basicStatsMeta = GlobalStateMgr.getCurrentAnalyzeMgr().getBasicStatsMetaMap().get(table.getId());
         double healthy = 0;
         LocalDateTime tableUpdateTime = StatisticUtils.getTableLastUpdateTime(table);
+        LocalDateTime statsUpdateTime = basicStatsMeta != null ? basicStatsMeta.getUpdateTime() : LocalDateTime.MIN;
         if (basicStatsMeta != null) {
             if (basicStatsMeta.isUpdatedAfterLoad(tableUpdateTime)) {
                 LOG.debug("statistics job doesn't work on non-update table: {}, " +
@@ -432,18 +441,22 @@ public class StatisticsCollectJobFactory {
                             table.getName(), basicStatsMeta.getUpdateTime(), healthy,
                             Config.statistic_auto_collect_sample_threshold, ByteSizeUnit.BYTES.toMB(sumDataSize),
                             ByteSizeUnit.BYTES.toMB(Config.statistic_auto_collect_small_table_size));
-                    createSampleStatsJob(allTableJobMap, job, db, table, columnNames, columnTypes);
+                    StatisticsCollectJob.Priority priority =
+                            new StatisticsCollectJob.Priority(tableUpdateTime, statsUpdateTime, healthy);
+                    createSampleStatsJob(allTableJobMap, job, db, table, columnNames, columnTypes, priority);
                     return;
                 }
             }
         }
 
+        StatisticsCollectJob.Priority priority =
+                new StatisticsCollectJob.Priority(tableUpdateTime, statsUpdateTime, healthy);
         LOG.debug("statistics job work on un-health table: {}, healthy: {}, Type: {}", table.getName(), healthy,
                 job.getAnalyzeType());
         if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.SAMPLE)) {
-            createSampleStatsJob(allTableJobMap, job, db, table, columnNames, columnTypes);
+            createSampleStatsJob(allTableJobMap, job, db, table, columnNames, columnTypes, priority);
         } else if (job.getAnalyzeType().equals(StatsConstants.AnalyzeType.FULL)) {
-            createFullStatsJob(allTableJobMap, job, basicStatsMeta, db, table, columnNames, columnTypes);
+            createFullStatsJob(allTableJobMap, job, basicStatsMeta, db, table, columnNames, columnTypes, priority);
         } else {
             throw new StarRocksPlannerException("Unknown analyze type " + job.getAnalyzeType(),
                     ErrorType.INTERNAL_ERROR);
@@ -452,7 +465,7 @@ public class StatisticsCollectJobFactory {
 
     private static void createSampleStatsJob(List<StatisticsCollectJob> allTableJobMap, NativeAnalyzeJob job,
                                              Database db, Table table, List<String> columnNames,
-                                             List<Type> columnTypes) {
+                                             List<Type> columnTypes, StatisticsCollectJob.Priority priority) {
         StatisticsCollectJob sample = buildStatisticsCollectJob(db, table, null, columnNames, columnTypes,
                 StatsConstants.AnalyzeType.SAMPLE, job.getScheduleType(), job.getProperties());
         allTableJobMap.add(sample);
@@ -460,7 +473,8 @@ public class StatisticsCollectJobFactory {
 
     private static void createFullStatsJob(List<StatisticsCollectJob> allTableJobMap,
                                            NativeAnalyzeJob job, BasicStatsMeta stats,
-                                           Database db, Table table, List<String> columnNames, List<Type> columnTypes) {
+                                           Database db, Table table, List<String> columnNames, List<Type> columnTypes,
+                                           StatisticsCollectJob.Priority priority) {
         StatsConstants.AnalyzeType analyzeType;
         List<Partition> partitionList = table.getPartitions().stream()
                 .filter(partition -> !StatisticUtils.isPartitionStatsHealthy(table, partition, stats))
@@ -476,9 +490,11 @@ public class StatisticsCollectJobFactory {
         }
 
         if (!partitionList.isEmpty()) {
-            allTableJobMap.add(buildStatisticsCollectJob(db, table,
+            StatisticsCollectJob statisticsCollectJob = buildStatisticsCollectJob(db, table,
                     partitionList.stream().map(Partition::getId).collect(Collectors.toList()), columnNames, columnTypes,
-                    analyzeType, job.getScheduleType(), Maps.newHashMap()));
+                    analyzeType, job.getScheduleType(), Maps.newHashMap());
+            statisticsCollectJob.setPriority(priority);
+            allTableJobMap.add(statisticsCollectJob);
         }
     }
 }
