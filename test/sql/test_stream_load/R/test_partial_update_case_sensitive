@@ -1,0 +1,51 @@
+-- name: test_partial_update_case_sensitive
+create database test_partial_update_case_sensitive;
+-- result:
+-- !result
+use test_partial_update_case_sensitive;
+-- result:
+-- !result
+CREATE TABLE test1 (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `name` char(16) NULL DEFAULT "" COMMENT "",
+  `city` char(16) NULL DEFAULT "" COMMENT "",
+  `age` char(24) NULL DEFAULT "" COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`id`)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into test_partial_update_case_sensitive.test1 values(1,'name1','SD',5),(2,'name2','SH',25),(3,'name3','BJ',50);
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue"  -H "format: csv" -H "partial_update: true" -H "columns: ID, city" -H column_separator:, -T ${root_path}/lib/../common/data/stream_load/test_partial_update_case_sensitive.csv ${url}/api/test_partial_update_case_sensitive/test1/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+sync;
+-- result:
+-- !result
+select * from test_partial_update_case_sensitive.test1;
+-- result:
+2	name2	SH	25
+1	name1	"xx"	5
+3	name3	BJ	50
+-- !result
+select * from test_partial_update_case_sensitive.test1 where name = "name1";
+-- result:
+1	name1	"xx"	5
+-- !result
+drop database test_partial_update_case_sensitive force;
+-- result:
+-- !result
