@@ -124,12 +124,8 @@ public class BypassWriteTransactionHandler implements TransactionOperationHandle
     private TransactionResult handlePrepareTransaction(Database db,
                                                        String label,
                                                        List<TabletCommitInfo> committedTablets,
-<<<<<<< HEAD
-                                                       List<TabletFailInfo> failedTablets) throws UserException {
-=======
                                                        List<TabletFailInfo> failedTablets,
-                                                       long timeoutMillis) throws StarRocksException {
->>>>>>> 7c98728a86 ([BugFix] Fix concurrent issue in olap table listener (#54051))
+                                                       long timeoutMillis) throws UserException {
         long dbId = db.getId();
         TransactionState txnState = getTxnState(dbId, label);
         long txnId = txnState.getTransactionId();
