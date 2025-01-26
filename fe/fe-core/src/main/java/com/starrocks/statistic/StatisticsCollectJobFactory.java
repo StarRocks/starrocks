@@ -529,7 +529,8 @@ public class StatisticsCollectJobFactory {
                 .filter(partition -> !StatisticUtils.isPartitionStatsHealthy(table, partition, stats))
                 .collect(Collectors.toList());
 
-        if (partitionList.stream().anyMatch(p -> p.getDataSize() > Config.statistic_max_full_collect_data_size)) {
+        long totalDataSize = partitionList.stream().mapToLong(Partition::getDataSize).sum();
+        if (totalDataSize > Config.statistic_max_full_collect_data_size) {
             analyzeType = StatsConstants.AnalyzeType.SAMPLE;
             LOG.debug("statistics job choose sample on table: {}, partition data size greater than config: {}",
                     table.getName(), Config.statistic_max_full_collect_data_size);
