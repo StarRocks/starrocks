@@ -493,6 +493,7 @@ set(EXEC_FILES
         ./storage/lake/lake_persistent_index_test.cpp
         ./storage/lake/replication_txn_manager_test.cpp
         ./storage/lake/persistent_index_sstable_test.cpp
+        ./storage/lake/write_combined_txn_log_test.cpp
         ./block_cache/datacache_utils_test.cpp
         ./block_cache/block_cache_hit_rate_counter_test.cpp
         ./util/thrift_rpc_helper_test.cpp
