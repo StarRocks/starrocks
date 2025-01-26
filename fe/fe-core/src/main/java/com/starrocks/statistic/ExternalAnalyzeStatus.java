@@ -152,6 +152,11 @@ public class ExternalAnalyzeStatus implements AnalyzeStatus, Writable {
     }
 
     @Override
+    public void setStartTime(LocalDateTime startTime) {
+        this.startTime = startTime;
+    }
+
+    @Override
     public void setEndTime(LocalDateTime endTime) {
         this.endTime = endTime;
     }

@@ -64,6 +64,8 @@ public interface AnalyzeStatus {
 
     LocalDateTime getEndTime();
 
+    void setStartTime(LocalDateTime endTime);
+
     void setEndTime(LocalDateTime endTime);
 
     void setStatus(StatsConstants.ScheduleStatus status);
