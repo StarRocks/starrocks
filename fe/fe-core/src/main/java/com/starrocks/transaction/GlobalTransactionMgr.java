@@ -286,8 +286,13 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         TransactionState transactionState = getTransactionState(dbId, transactionId);
         List<Long> tableId = transactionState.getTableIdList();
         LOG.debug("try to pre commit transaction: {}", transactionId);
+        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        if (db == null) {
+            LOG.warn("Database {} does not exist", dbId);
+            throw new UserException("Database[" + dbId + "] does not exist");
+        }
         Locker locker = new Locker();
-        if (!locker.tryLockTablesWithIntensiveDbLock(dbId, tableId, LockType.WRITE, timeoutMs, TimeUnit.MILLISECONDS)) {
+        if (!locker.tryLockTablesWithIntensiveDbLock(db, tableId, LockType.WRITE, timeoutMs, TimeUnit.MILLISECONDS)) {
             throw new UserException("get database write lock timeout, database=" + dbId + ", timeout=" + timeoutMs + "ms");
         }
         try {
