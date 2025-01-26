@@ -447,15 +447,8 @@ Status TabletManager::put_txn_slog(const TxnLogPtr& log, const std::string& path
     return put_txn_log(log, path);
 }
 
-<<<<<<< HEAD
-=======
-Status TabletManager::put_txn_vlog(const TxnLogPtr& log, int64_t version) {
-    return put_txn_log(log, txn_vlog_location(log->tablet_id(), version));
-}
-
 DEFINE_FAIL_POINT(put_combined_txn_log_success);
 DEFINE_FAIL_POINT(put_combined_txn_log_fail);
->>>>>>> af3d78f12f ([Enhancement] Write combined txn log parallel (#55143))
 Status TabletManager::put_combined_txn_log(const starrocks::CombinedTxnLogPB& logs) {
     FAIL_POINT_TRIGGER_RETURN(put_combined_txn_log_success, Status::OK());
     FAIL_POINT_TRIGGER_RETURN(put_combined_txn_log_fail, Status::InternalError("write combined_txn_log_fail"));
