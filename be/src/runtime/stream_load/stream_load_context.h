@@ -179,6 +179,10 @@ public:
 
     static void release(StreamLoadContext* context);
 
+    // for transaction stream load
+    bool tsl_reach_timeout();
+    bool tsl_reach_idle_timeout(int32_t check_interval);
+
 public:
     // 1) Before the stream load receiving thread exits, Fragment may have been destructed.
     // At this time, mem_tracker may have been destructed,

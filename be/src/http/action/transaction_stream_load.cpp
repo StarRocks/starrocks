@@ -159,6 +159,7 @@ public:
         if (_ctx->unref()) {
             delete _ctx;
         }
+        _ctx = nullptr;
     }
 
 private:
