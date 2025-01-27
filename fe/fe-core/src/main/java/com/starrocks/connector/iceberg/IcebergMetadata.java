@@ -306,7 +306,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         }
 
         ConnectorViewDefinition viewDefinition = ConnectorViewDefinition.fromCreateViewStmt(stmt);
-        icebergCatalog.createView(viewDefinition, stmt.isReplace());
+        icebergCatalog.createView(catalogName, viewDefinition, stmt.isReplace());
     }
 
     @Override
