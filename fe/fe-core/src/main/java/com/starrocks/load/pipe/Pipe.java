@@ -179,7 +179,9 @@ public class Pipe implements GsonPostProcessable {
                     }
                 }
             }
-            this.properties.put(key, value);
+            if (this.properties != properties) {
+                this.properties.put(key, value);
+            }
         }
     }
 
