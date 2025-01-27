@@ -2971,6 +2971,18 @@ public class AggregateTest extends PlanTestBase {
     }
 
     @Test
+    public void testOnlyGroupByLimit() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select distinct v1 + v2 as vx from t0 limit 10";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 4: expr\n" +
+                "  |  limit: 10");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
     public void testHavingAggregate() throws Exception {
         String sql = "select * from (" +
                 "select sum(v1), f2, v3 from " +
