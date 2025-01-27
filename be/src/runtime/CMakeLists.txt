@@ -106,6 +106,7 @@ set(RUNTIME_FILES
     dictionary_cache_sink.cpp
     type_pack.cpp
     customized_result_writer.cpp
+    int128_to_double.cpp
 )
 
 set(RUNTIME_FILES ${RUNTIME_FILES}
