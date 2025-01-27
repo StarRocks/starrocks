@@ -239,13 +239,20 @@ size_t AggHashMapVariant::allocated_memory_usage(const MemPool* pool) const {
     });
 }
 
+<<<<<<< HEAD
 void AggHashSetVariant::init(RuntimeState* state, Type type_, AggStatistics* agg_stat) {
     type = type_;
     switch (type_) {
+=======
+void AggHashSetVariant::init(RuntimeState* state, Type type, AggStatistics* agg_stat) {
+    _type = type;
+    _agg_stat = agg_stat;
+    switch (_type) {
+>>>>>>> 4f452658be ([Enhancement] support push down agg distinct limit (#55455))
 #define M(NAME)                                                                                                    \
     case Type::NAME:                                                                                               \
         hash_set_with_key = std::make_unique<detail::AggHashSetVariantTypeTraits<Type::NAME>::HashSetWithKeyType>( \
-                state->chunk_size());                                                                              \
+                state->chunk_size(), _agg_stat);                                                                   \
         break;
         APPLY_FOR_AGG_VARIANT_ALL(M)
 #undef M
@@ -255,7 +262,7 @@ void AggHashSetVariant::init(RuntimeState* state, Type type_, AggStatistics* agg
 #define CONVERT_TO_TWO_LEVEL_SET(DST, SRC)                                                                            \
     if (type == AggHashSetVariant::Type::SRC) {                                                                       \
         auto dst = std::make_unique<detail::AggHashSetVariantTypeTraits<Type::DST>::HashSetWithKeyType>(              \
-                state->chunk_size());                                                                                 \
+                state->chunk_size(), _agg_stat);                                                                      \
         std::visit(                                                                                                   \
                 [&](auto& hash_set_with_key) {                                                                        \
                     if constexpr (std::is_same_v<typename decltype(hash_set_with_key->hash_set)::key_type,            \

@@ -65,6 +65,11 @@ private:
     AggregatorPtr _aggregator = nullptr;
     // Whether prev operator has no output
     bool _is_finished = false;
+<<<<<<< HEAD
+=======
+    LimitedMemAggState _limited_mem_state;
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
+>>>>>>> 4f452658be ([Enhancement] support push down agg distinct limit (#55455))
 };
 
 class AggregateDistinctStreamingSinkOperatorFactory final : public OperatorFactory {

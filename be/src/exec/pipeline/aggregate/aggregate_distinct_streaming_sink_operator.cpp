@@ -23,6 +23,14 @@ namespace starrocks::pipeline {
 Status AggregateDistinctStreamingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
     RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
+<<<<<<< HEAD
+=======
+    if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::LIMITED_MEM) {
+        _limited_mem_state.limited_memory_size = config::streaming_agg_limited_memory_size;
+    }
+    _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::FORCE_PREAGGREGATION;
+    _aggregator->attach_sink_observer(state, this->_observer);
+>>>>>>> 4f452658be ([Enhancement] support push down agg distinct limit (#55455))
     return _aggregator->open(state);
 }
 
@@ -34,13 +42,22 @@ void AggregateDistinctStreamingSinkOperator::close(RuntimeState* state) {
 }
 
 Status AggregateDistinctStreamingSinkOperator::set_finishing(RuntimeState* state) {
+<<<<<<< HEAD
     _is_finished = true;
+=======
+    if (_is_finished) return Status::OK();
+    ONCE_DETECT(_set_finishing_once);
+    auto notify = _aggregator->defer_notify_source();
+    auto defer = DeferOp([this]() {
+        _aggregator->sink_complete();
+        _is_finished = true;
+    });
+>>>>>>> 4f452658be ([Enhancement] support push down agg distinct limit (#55455))
 
     if (_aggregator->hash_set_variant().size() == 0) {
         _aggregator->set_ht_eos();
     }
 
-    _aggregator->sink_complete();
     return Status::OK();
 }
 
@@ -57,7 +74,14 @@ Status AggregateDistinctStreamingSinkOperator::push_chunk(RuntimeState* state, c
 
     _aggregator->update_num_input_rows(chunk_size);
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
-
+    bool limit_with_no_agg = _aggregator->limit() != -1;
+    if (limit_with_no_agg) {
+        auto size = _aggregator->hash_set_variant().size();
+        if (size >= _aggregator->limit()) {
+            (void)set_finishing(state);
+            return Status::OK();
+        }
+    }
     RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
 
     if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::FORCE_STREAMING) {

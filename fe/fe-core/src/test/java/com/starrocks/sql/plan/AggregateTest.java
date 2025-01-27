@@ -2491,4 +2491,138 @@ public class AggregateTest extends PlanTestBase {
         assertContains(plan, "aggregate: array_agg_distinct[([6: t1f, DOUBLE, true]); " +
                 "args: DOUBLE; result: ARRAY<DOUBLE>; args nullable: true; result nullable: true]");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCountIfTypeCheck() throws Exception {
+        String sql = "select count_if(v1 is null) from t0";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "aggregate: count[(if[([4: expr, BOOLEAN, false], 1, NULL); " +
+                "args: BOOLEAN,BIGINT,BIGINT; result: BIGINT; args nullable: true; result nullable: true]);");
+    }
+
+    @Test
+    public void testOuterJoinBelowDistinctAgg() throws Exception {
+        String sql = "select count(distinct v1), count(v4), abs(1) as a " +
+                "from (select * from t0 left join t1 on v1 = v5) t group by a having max(v6) > a";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "10:Project\n" +
+                "  |  <slot 7> : 7: abs\n" +
+                "  |  <slot 8> : 8: count\n" +
+                "  |  <slot 9> : 9: count\n" +
+                "  |  \n" +
+                "  9:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(8: count), count(9: count), max(10: max)\n" +
+                "  |  group by: 7: abs\n" +
+                "  |  having: 10: max > CAST(abs(1) AS BIGINT)");
+    }
+
+    @Test
+    public void testRemoveGroupByConstant() throws Exception {
+        String sql = "select count(*), abs(1) as a, abs(2) as b, 'c' from t0 group by a, b, 'c'";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:Project\n" +
+                "  |  <slot 4> : 4: abs\n" +
+                "  |  <slot 7> : 7: count\n" +
+                "  |  <slot 8> : abs(2)\n" +
+                "  |  <slot 9> : 'c'\n" +
+                "  |  \n" +
+                "  2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: 4: abs");
+
+        sql = "select count(*), abs(1) as a, abs(2) as b from t0 group by a, b, v1 having a > b";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: 1: v1\n" +
+                "  |  having: abs(1) > abs(2)");
+
+        sql = "select count(*), abs(1) as a, abs(2) as b from t0 group by a + b, v1 having a > b";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "2:Project\n" +
+                "  |  <slot 5> : 5: count\n" +
+                "  |  <slot 6> : abs(1)\n" +
+                "  |  <slot 7> : abs(2)\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(*)\n" +
+                "  |  group by: 1: v1\n" +
+                "  |  having: abs(1) > abs(2)");
+
+        sql = "select max(a), a from (select v1, abs(1) as a, abs(2) as b from t0) t group by a, v1";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "2:Project\n" +
+                "  |  <slot 7> : abs(1)\n" +
+                "  |  <slot 8> : 8: max\n" +
+                "  |  \n" +
+                "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: max(abs(1))\n" +
+                "  |  group by: 1: v1");
+    }
+
+    @Test
+    public void testMultiCountDistinctWithHavingLimit() throws Exception {
+        String sql = "select count(distinct t1b) as x, count(distinct t1c) as y from test_all_type having x = 2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  8:AGGREGATE (merge finalize)\n" +
+                "  |  output: count(11: count)\n" +
+                "  |  group by: \n" +
+                "  |  having: 11: count = 2");
+
+        sql = "select count(distinct t1b) as x, count(distinct t1c) as y from test_all_type having x = 2 limit 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(2: t1b), multi_distinct_count(3: t1c)\n" +
+                "  |  group by: \n" +
+                "  |  having: 11: count = 2\n" +
+                "  |  limit: 10");
+
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+        sql = "select avg(distinct t1b) as x, count(distinct t1c) as y from test_all_type having x = 2 limit 10";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: multi_distinct_count(3: t1c), multi_distinct_count(2: t1b), multi_distinct_sum(2: t1b)\n" +
+                "  |  group by: \n" +
+                "  |  having: CAST(14: multi_distinct_sum AS DOUBLE) / CAST(13: multi_distinct_count AS DOUBLE) = 2.0\n" +
+                "  |  limit: 10");
+    }
+
+    @Test
+    public void testAvgDecimalScale() throws Exception {
+        String sql = "select avg(v2 - 1.86659630566164 * (v3 - 3.062175673706)) from t0 group by v1;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  5 <-> [5: avg, DECIMAL128(38,18), true]\n" +
+                "  |  cardinality: 1");
+    }
+
+    @Test
+    public void testOnlyGroupByLimit() throws Exception {
+        FeConstants.runningUnitTest = true;
+        String sql = "select distinct v1 + v2 as vx from t0 limit 10";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  2:AGGREGATE (update serialize)\n" +
+                "  |  STREAMING\n" +
+                "  |  group by: 4: expr\n" +
+                "  |  limit: 10");
+        FeConstants.runningUnitTest = false;
+    }
+
+    @Test
+    public void testHavingAggregate() throws Exception {
+        String sql = "select * from (" +
+                "select sum(v1), f2, v3 from " +
+                "   (select v1, v2, v2 + 2 as f2, v3 from t0) cc " +
+                "group by v2, f2, v3 having (f2 + sum(v1)) > 0" +
+                ") xx ";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:AGGREGATE (update finalize)\n" +
+                "  |  output: sum(1: v1)\n" +
+                "  |  group by: 2: v2, 3: v3\n" +
+                "  |  having: 2: v2 + 2 + 5: sum > 0");
+    }
+>>>>>>> 4f452658be ([Enhancement] support push down agg distinct limit (#55455))
 }

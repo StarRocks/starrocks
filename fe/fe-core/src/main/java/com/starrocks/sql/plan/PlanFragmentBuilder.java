@@ -1661,6 +1661,7 @@ public class PlanFragmentBuilder {
                         hasColocateOlapScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(true);
                 }
+                aggregationNode.setLimit(node.getLimit());
             } else if (node.getType().isGlobal() || (node.getType().isLocal() && !node.isSplit())) {
                 // Local && un-split aggregate meanings only execute local pre-aggregation, we need promise
                 // output type match other node, so must use `update finalized` phase

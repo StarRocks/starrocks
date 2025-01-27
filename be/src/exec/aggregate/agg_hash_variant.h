@@ -591,7 +591,12 @@ struct AggHashSetVariant {
     size_t allocated_memory_usage(const MemPool* pool) const;
 
 private:
+<<<<<<< HEAD
     Type type = Type::phase1_slice;
+=======
+    Type _type = Type::phase1_slice;
+    AggStatistics* _agg_stat = nullptr;
+>>>>>>> 4f452658be ([Enhancement] support push down agg distinct limit (#55455))
 };
 
 } // namespace starrocks
