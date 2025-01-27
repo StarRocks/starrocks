@@ -57,12 +57,12 @@ protected:
     // - reffed at constructor() of both sink and source operator,
     // - unreffed at close() of both sink and source operator.
     AggregatorPtr _aggregator = nullptr;
+    bool _agg_group_by_with_limit = false;
 
 private:
     // Whether prev operator has no output
     std::atomic_bool _is_finished = false;
     // whether enable aggregate group by limit optimize
-    bool _agg_group_by_with_limit = false;
     std::atomic<int64_t>& _shared_limit_countdown;
 };
 

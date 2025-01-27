@@ -112,6 +112,8 @@ Status SpillableAggregateBlockingSinkOperator::prepare(RuntimeState* state) {
     _peak_revocable_mem_bytes = _unique_metrics->AddHighWaterMarkCounter(
             "PeakRevocableMemoryBytes", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     _hash_table_spill_times = ADD_COUNTER(_unique_metrics.get(), "HashTableSpillTimes", TUnit::UNIT);
+    _agg_group_by_with_limit = false;
+    _aggregator->params()->enable_pipeline_share_limit = false;
 
     return Status::OK();
 }

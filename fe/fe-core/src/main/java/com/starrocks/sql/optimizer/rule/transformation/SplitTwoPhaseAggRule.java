@@ -92,12 +92,18 @@ public class SplitTwoPhaseAggRule extends SplitAggregateRule {
             }
         }
 
+        long localAggLimit = Operator.DEFAULT_LIMIT;
+        boolean isOnlyGroupBy = aggOp.getAggregations().isEmpty();
+        if (isOnlyGroupBy && aggOp.getLimit() < context.getSessionVariable().cboPushDownDistinctLimit()) {
+            localAggLimit = aggOp.getLimit();
+        }
+
         LogicalAggregationOperator local = new LogicalAggregationOperator.Builder().withOperator(aggOp)
                 .setType(AggType.LOCAL)
                 .setAggregations(createNormalAgg(AggType.LOCAL, newAggMap))
                 .setSplit()
                 .setPredicate(null)
-                .setLimit(Operator.DEFAULT_LIMIT)
+                .setLimit(localAggLimit)
                 .setProjection(null)
                 .build();
         OptExpression localOptExpression = OptExpression.create(local, input.getInputs());
