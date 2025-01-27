@@ -651,7 +651,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String CBO_PUSHDOWN_TOPN_LIMIT = "cbo_push_down_topn_limit";
 
+<<<<<<< HEAD
     public static final String ENABLE_CONSTANT_UNION_TO_VALUES = "enable_constant_union_to_values";
+=======
+    public static final String CBO_PUSHDOWN_DISTINCT_LIMIT = "cbo_push_down_distinct_limit";
+>>>>>>> 4f452658be ([Enhancement] support push down agg distinct limit (#55455))
 
     public static final String ENABLE_AGGREGATION_PIPELINE_SHARE_LIMIT = "enable_aggregation_pipeline_share_limit";
 
@@ -1344,8 +1348,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = CBO_PUSHDOWN_TOPN_LIMIT)
     private long cboPushDownTopNLimit = 1000;
 
+<<<<<<< HEAD
     @VarAttr(name = ENABLE_CONSTANT_UNION_TO_VALUES, flag = VariableMgr.INVISIBLE)
     private boolean enableConstantUnionToValues = true;
+=======
+    @VarAttr(name = CBO_PUSHDOWN_DISTINCT_LIMIT)
+    private long cboPushDownDistinctLimit = 4096;
+>>>>>>> 4f452658be ([Enhancement] support push down agg distinct limit (#55455))
 
     @VarAttr(name = ENABLE_AGGREGATION_PIPELINE_SHARE_LIMIT, flag = VariableMgr.INVISIBLE)
     private boolean enableAggregationPipelineShareLimit = true;
@@ -1371,8 +1380,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return cboPushDownTopNLimit;
     }
 
+<<<<<<< HEAD
     public boolean isEnableConstantUnionToValues() {
         return enableConstantUnionToValues;
+=======
+    public long cboPushDownDistinctLimit() {
+        return cboPushDownDistinctLimit;
+>>>>>>> 4f452658be ([Enhancement] support push down agg distinct limit (#55455))
     }
 
     public void setCboPushDownTopNLimit(long cboPushDownTopNLimit) {
