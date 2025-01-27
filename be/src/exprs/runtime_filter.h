@@ -69,6 +69,15 @@ public:
         const __m256i mask = make_mask(hash >> _log_num_buckets);
         __m256i* const bucket = &reinterpret_cast<__m256i*>(_directory)[bucket_idx];
         _mm256_store_si256(bucket, _mm256_or_si256(*bucket, mask));
+#elif defined(__ARM_NEON)
+        uint32x4_t masks[2];
+        make_mask(hash >> _log_num_buckets, masks);
+        uint32x4_t directory_1 = vld1q_u32(&_directory[bucket_idx][0]);
+        uint32x4_t directory_2 = vld1q_u32(&_directory[bucket_idx][4]);
+        directory_1 = vorrq_u32(directory_1, masks[0]);
+        directory_2 = vorrq_u32(directory_2, masks[1]);
+        vst1q_u32(&_directory[bucket_idx][0], directory_1);
+        vst1q_u32(&_directory[bucket_idx][4], directory_2);
 #else
         uint32_t masks[BITS_SET_PER_BLOCK];
         make_mask(hash >> _log_num_buckets, masks);
