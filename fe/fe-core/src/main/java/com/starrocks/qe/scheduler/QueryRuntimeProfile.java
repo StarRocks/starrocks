@@ -405,8 +405,11 @@ public class QueryRuntimeProfile {
     }
 
     public RuntimeProfile buildQueryProfile(boolean needMerge) {
-        if (!needMerge || !jobSpec.isEnablePipeline()) {
+        if (!needMerge) {
             return queryProfile;
+        }
+        if (!jobSpec.isEnablePipeline()) {
+            return mergeNonPipelineProfile();
         }
 
         RuntimeProfile newQueryProfile = new RuntimeProfile(queryProfile.getName());
@@ -613,6 +616,21 @@ public class QueryRuntimeProfile {
         Optional<RuntimeProfile> mergedLoadChannelProfile = mergeLoadChannelProfile();
         mergedLoadChannelProfile.ifPresent(newQueryProfile::addChild);
 
+        return newQueryProfile;
+    }
+
+    RuntimeProfile mergeNonPipelineProfile() {
+        if (loadChannelProfile.isEmpty()) {
+            return queryProfile;
+        }
+        RuntimeProfile newQueryProfile = new RuntimeProfile(queryProfile.getName());
+        newQueryProfile.copyAllInfoStringsFrom(queryProfile, null);
+        newQueryProfile.copyAllCountersFrom(queryProfile);
+        for (RuntimeProfile fragmentProfile : fragmentProfiles) {
+            newQueryProfile.addChild(fragmentProfile);
+        }
+        Optional<RuntimeProfile> mergedLoadChannelProfile = mergeLoadChannelProfile();
+        mergedLoadChannelProfile.ifPresent(newQueryProfile::addChild);
         return newQueryProfile;
     }
 

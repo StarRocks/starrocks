@@ -155,14 +155,24 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
         _colocate_mv_index = table_sink.enable_colocate_mv_index && config::enable_load_colocate_mv;
     }
 
-    // Query context is only available for pipeline engine
-    auto query_ctx = state->query_ctx();
-    if (query_ctx) {
+    if (state->query_ctx()) {
+        // Query context is only available for pipeline engine (insert/broker load)
+        auto query_ctx = state->query_ctx();
         _load_channel_profile_config.set_enable_profile(query_ctx->get_enable_profile_flag());
         _load_channel_profile_config.set_big_query_profile_threshold_ns(
                 query_ctx->get_big_query_profile_threshold_ns());
         _load_channel_profile_config.set_runtime_profile_report_interval_ns(
                 query_ctx->get_runtime_profile_report_interval_ns());
+    } else {
+        // For non-pipeline engine (stream load/routine load), get the profile config from query options
+        auto& query_options = state->query_options();
+        if (query_options.__isset.enable_profile) {
+            _load_channel_profile_config.set_enable_profile(query_options.enable_profile);
+        }
+        if (query_options.__isset.load_profile_collect_second) {
+            _load_channel_profile_config.set_big_query_profile_threshold_ns(query_options.load_profile_collect_second *
+                                                                            1e9);
+        }
     }
     return Status::OK();
 }
