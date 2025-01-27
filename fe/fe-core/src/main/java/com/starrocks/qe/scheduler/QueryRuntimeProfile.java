@@ -167,6 +167,10 @@ public class QueryRuntimeProfile {
         }
     }
 
+    public List<RuntimeProfile> getFragmentProfiles() {
+        return fragmentProfiles;
+    }
+
     public List<String> getDeltaUrls() {
         return deltaUrls;
     }
