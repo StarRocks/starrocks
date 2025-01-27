@@ -270,10 +270,22 @@ pipeline::OpFactories AggregateBlockingNode::decompose_to_pipeline(pipeline::Pip
                 _decompose_to_pipeline<StreamingAggregatorFactory, SortedAggregateStreamingSourceOperatorFactory,
                                        SortedAggregateStreamingSinkOperatorFactory>(ops_with_sink, context);
     } else {
+<<<<<<< HEAD
         if (runtime_state()->enable_spill() && runtime_state()->enable_agg_spill() && has_group_by_keys) {
             ops_with_source =
                     _decompose_to_pipeline<AggregatorFactory, SpillableAggregateBlockingSourceOperatorFactory,
                                            SpillableAggregateBlockingSinkOperatorFactory>(ops_with_sink, context);
+=======
+        // disable spill when group by with a small limit
+        bool enable_agg_spill = runtime_state()->enable_spill() && runtime_state()->enable_agg_spill();
+        if (limit() != -1 && limit() < runtime_state()->chunk_size()) {
+            enable_agg_spill = false;
+        }
+        if (enable_agg_spill && has_group_by_keys) {
+            ops_with_source = _decompose_to_pipeline<AggregatorFactory, SpillableAggregateBlockingSourceOperatorFactory,
+                                                     SpillableAggregateBlockingSinkOperatorFactory>(ops_with_sink,
+                                                                                                    context, false);
+>>>>>>> 4f452658be ([Enhancement] support push down agg distinct limit (#55455))
         } else {
             ops_with_source = _decompose_to_pipeline<AggregatorFactory, AggregateBlockingSourceOperatorFactory,
                                                      AggregateBlockingSinkOperatorFactory>(ops_with_sink, context);
