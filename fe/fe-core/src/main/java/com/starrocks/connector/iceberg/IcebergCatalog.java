@@ -26,6 +26,7 @@ import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.memory.MemoryTrackable;
 import org.apache.iceberg.FileScanTask;
+import org.apache.iceberg.MetadataTableType;
 import org.apache.iceberg.MetadataTableUtils;
 import org.apache.iceberg.PartitionSpec;
 import org.apache.iceberg.PartitionsTable;
@@ -35,10 +36,12 @@ import org.apache.iceberg.StructLike;
 import org.apache.iceberg.Table;
 import org.apache.iceberg.TableScan;
 import org.apache.iceberg.catalog.Namespace;
+import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.util.StructProjection;
 import org.apache.iceberg.view.View;
+import org.apache.iceberg.view.ViewBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -49,6 +52,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutorService;
 
+import static com.google.common.base.Preconditions.checkArgument;
+import static com.starrocks.connector.iceberg.IcebergApiConverter.buildViewProperties;
+import static com.starrocks.connector.iceberg.IcebergApiConverter.convertDbNameToNamespace;
+import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
 import static org.apache.iceberg.StarRocksIcebergTableScan.newTableScanContext;
 
 public interface IcebergCatalog extends MemoryTrackable {
@@ -99,7 +106,31 @@ public interface IcebergCatalog extends MemoryTrackable {
         }
     }
 
-    default boolean createView(ConnectorViewDefinition connectorViewDefinition, boolean replace) {
+    default boolean createView(String catalogName, ConnectorViewDefinition connectorViewDefinition, boolean replace) {
+        return createViewDefault(connectorViewDefinition.getDatabaseName(), connectorViewDefinition, replace);
+    }
+
+    default boolean createViewDefault(String catalogName, ConnectorViewDefinition definition, boolean replace) {
+        Schema schema = IcebergApiConverter.toIcebergApiSchema(definition.getColumns());
+        Namespace ns = convertDbNameToNamespace(definition.getDatabaseName());
+        ViewBuilder viewBuilder = getViewBuilder(TableIdentifier.of(ns, definition.getViewName()));
+        viewBuilder = viewBuilder.withSchema(schema)
+                .withQuery("starrocks", definition.getInlineViewDef())
+                .withDefaultNamespace(ns)
+                .withDefaultCatalog(definition.getCatalogName())
+                .withProperties(buildViewProperties(definition, catalogName))
+                .withLocation(defaultTableLocation(ns, definition.getViewName()));
+
+        if (replace) {
+            viewBuilder.createOrReplace();
+        } else {
+            viewBuilder.create();
+        }
+
+        return true;
+    }
+
+    default ViewBuilder getViewBuilder(TableIdentifier identifier) {
         throw new StarRocksConnectorException("This catalog doesn't support creating views");
     }
 
@@ -132,10 +163,18 @@ public interface IcebergCatalog extends MemoryTrackable {
     }
 
     default String defaultTableLocation(Namespace ns, String tableName) {
-        return "";
+        Map<String, String> properties = loadNamespaceMetadata(ns);
+        String databaseLocation = properties.get(LOCATION_PROPERTY);
+        checkArgument(databaseLocation != null, "location must be set for %s.%s", ns, tableName);
+
+        if (databaseLocation.endsWith("/")) {
+            return databaseLocation + tableName;
+        } else {
+            return databaseLocation + "/" + tableName;
+        }
     }
 
-    default Map<String, Object> loadNamespaceMetadata(Namespace ns) {
+    default Map<String, String> loadNamespaceMetadata(Namespace ns) {
         return new HashMap<>();
     }
 
@@ -152,7 +191,7 @@ public interface IcebergCatalog extends MemoryTrackable {
         Table nativeTable = icebergTable.getNativeTable();
         Map<String, Partition> partitionMap = Maps.newHashMap();
         PartitionsTable partitionsTable = (PartitionsTable) MetadataTableUtils.
-                createMetadataTableInstance(nativeTable, org.apache.iceberg.MetadataTableType.PARTITIONS);
+                createMetadataTableInstance(nativeTable, MetadataTableType.PARTITIONS);
         TableScan tableScan = partitionsTable.newScan();
         if (snapshotId != -1) {
             tableScan = tableScan.useSnapshot(snapshotId);

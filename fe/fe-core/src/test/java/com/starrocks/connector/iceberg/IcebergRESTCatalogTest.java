@@ -54,18 +54,17 @@ import java.util.concurrent.Executors;
 
 import static com.starrocks.catalog.Table.TableType.ICEBERG_VIEW;
 import static com.starrocks.catalog.Type.INT;
-import static com.starrocks.connector.iceberg.IcebergCatalogProperties.HIVE_METASTORE_URIS;
 import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_CATALOG_TYPE;
 
 public class IcebergRESTCatalogTest {
     private static final String CATALOG_NAME = "iceberg_rest_catalog";
-    public static final IcebergCatalogProperties DEFAULT_CATALOG_PROPERTIES;
     public static final Map<String, String> DEFAULT_CONFIG = new HashMap<>();
+    public static final IcebergCatalogProperties DEFAULT_CATALOG_PROPERTIES;
+
     public static final HdfsEnvironment HDFS_ENVIRONMENT = new HdfsEnvironment();
 
     static {
-        DEFAULT_CONFIG.put(HIVE_METASTORE_URIS, "thrift://188.122.12.1:8732"); // non-exist ip, prevent to connect local service
-        DEFAULT_CONFIG.put(ICEBERG_CATALOG_TYPE, "hive");
+        DEFAULT_CONFIG.put(ICEBERG_CATALOG_TYPE, "rest");
         DEFAULT_CATALOG_PROPERTIES = new IcebergCatalogProperties(DEFAULT_CONFIG);
     }
 
@@ -184,10 +183,6 @@ public class IcebergRESTCatalogTest {
             {
                 restCatalog.loadNamespaceMetadata(Namespace.of("db"));
                 result = ImmutableMap.of("location", "xxxxx");
-                minTimes = 1;
-
-                restCatalog.name();
-                result = "rest_catalog";
                 minTimes = 1;
             }
         };
