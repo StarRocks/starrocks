@@ -53,7 +53,7 @@ public class FieldReference extends Expr {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equalsWithoutChild(Object o) {
         if (this == o) {
             return true;
         }
