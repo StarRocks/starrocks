@@ -1,0 +1,11 @@
+-- name: test_iceberg_view
+
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", "iceberg.catalog.type"="hive", "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}","enable_iceberg_metadata_cache"="true","aws.s3.access_key" = "${oss_ak}","aws.s3.secret_key" = "${oss_sk}","aws.s3.endpoint" = "${oss_endpoint}");
+
+create view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view as select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.day_partition;
+
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view;
+
+drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view;
+
+drop catalog iceberg_sql_test_${uuid0};

@@ -188,8 +188,8 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
-    public boolean createView(ConnectorViewDefinition connectorViewDefinition, boolean replace) {
-        return delegate.createView(connectorViewDefinition, replace);
+    public boolean createView(String catalogName, ConnectorViewDefinition connectorViewDefinition, boolean replace) {
+        return delegate.createView(catalogName, connectorViewDefinition, replace);
     }
 
     @Override
