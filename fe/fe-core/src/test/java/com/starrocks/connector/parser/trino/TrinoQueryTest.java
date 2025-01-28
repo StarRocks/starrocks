@@ -1047,16 +1047,16 @@ public class TrinoQueryTest extends TrinoTestBase {
         assertPlanContains(sql, "CAST(1: ta AS BIGINT) + 1");
 
         sql = "select try(cast ('aa' as int))";
-        assertPlanContains(sql, "<slot 2> : CAST('aa' AS INT)");
+        assertPlanContains(sql, "<slot 2> : TRY(CAST('aa' AS INT))");
 
         sql = "select try(2 / 0)";
-        assertPlanContains(sql, "<slot 2> : NULL");
+        assertPlanContains(sql, "<slot 2> : TRY(NULL)");
 
         sql = "select try(100 / v1) from t0 where v1 = 0";
-        assertPlanContains(sql, "100.0 / CAST(1: v1 AS DOUBLE)");
+        assertPlanContains(sql, "TRY(100.0 / CAST(1: v1 AS DOUBLE))");
 
         sql = "select coalesce(try(100 / v1), 1) from t0 where v1 = 0";
-        assertPlanContains(sql, "coalesce(100.0 / CAST(1: v1 AS DOUBLE), 1.0)");
+        assertPlanContains(sql, "coalesce(TRY(100.0 / CAST(1: v1 AS DOUBLE)), 1.0)");
     }
 
     @Test
