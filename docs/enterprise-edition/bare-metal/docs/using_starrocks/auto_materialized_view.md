@@ -1,3 +1,6 @@
+---
+sidebar_position: 1
+---
 # Automatic Materialized View Recommendation
 
 This topic describes how to leverage the Automatic Materialized View Recommendation feature to generate schemas for materialized views that can be used to accelerate the queries in your business scenarios.

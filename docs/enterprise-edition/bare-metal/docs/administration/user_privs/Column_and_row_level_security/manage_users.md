@@ -1,5 +1,5 @@
 # Users and privileges
-import TimezoneError from '../_assets/commonMarkdown/_timezone.md'
+import TimezoneError from '../../../_assets/commonMarkdown/_timezone.md'
 
 ## Root password
 
@@ -14,7 +14,7 @@ grep -r password /log/web/*
 
 You can connect to CelerData through a MySQL client, or use the Web UI of CelerData Manager to create cluster uses and grant privileges to users. The following figure shows operations on the **Editor** page of the Web UI.
 
-![img](../_assets/manager/manager-008.png)
+![img](../../../_assets/manager/manager-008.png)
 
 ## Change password
 

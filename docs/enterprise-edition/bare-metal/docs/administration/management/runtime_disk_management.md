@@ -1,5 +1,3 @@
-Runtime Disk Management
-
 # Runtime Disk Management
 
 This topic introduces the Runtime Disk Management feature of the StarRocks Enterprise Edition.

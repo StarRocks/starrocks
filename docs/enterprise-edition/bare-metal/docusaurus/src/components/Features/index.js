@@ -15,15 +15,6 @@ const ChineseFeatureList = [
     ),
   },
   {
-    title: '快速入门信息',
-    url: '../../quick_start/',
-    description: (
-      <>
-        快速部署、导入、查询
-      </>
-    ),
-  },
-  {
     title: '导入数据',
     url: '../../loading/Loading_intro/',
     description: (
@@ -113,15 +104,6 @@ const EnglishFeatureList = [
     description: (
       <>
         OLAP, features, architecture
-      </>
-    ),
-  },
-  {
-    title: 'Quick Start',
-    url: '../../quick_start/',
-    description: (
-      <>
-        Get up and running quickly.
       </>
     ),
   },

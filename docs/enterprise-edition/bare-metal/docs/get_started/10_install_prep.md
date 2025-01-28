@@ -1,5 +1,6 @@
-# Prepare for installation
-import TimezoneError from '../_assets/commonMarkdown/_timezone.md
+# Installation
+
+import TimezoneError from '../_assets/commonMarkdown/_timezone.md'
 
 1. **Obtain information of your StarRocks cluster.** 
 

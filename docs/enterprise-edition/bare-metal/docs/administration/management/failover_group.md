@@ -39,7 +39,7 @@ Failover Group can serve the following purposes:
 
 ### Architecture
 
-![Architecture diagram](./_assets/failover_group/failover_group_1.PNG)
+![Architecture diagram](../../_assets/failover_group/failover_group_1.PNG)
 
 Failover Group involves multiple clusters and allows for flexible replication relationships to be established between them using failover groups.
 
@@ -53,7 +53,7 @@ In the event of a primary cluster failure, failover can be initiated by selectin
 
 ### Workflow
 
-![Failover workflow](./_assets/failover_group/failover_group_2.PNG)
+![Failover workflow](../../_assets/failover_group/failover_group_2.PNG)
 
 Data synchronization between the primary and secondary clusters occurs periodically, with each synchronization requiring the completion of the previous one before initiating the next. Data synchronization is initiated by the secondary cluster, which pulls data from the primary cluster, following these specific steps:
 

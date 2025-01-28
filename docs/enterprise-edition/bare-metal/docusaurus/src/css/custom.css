@@ -85,14 +85,39 @@ a {
     var(--ifm-transition-timing-default);
 }
 
-/* When we generate PDF files we do not need to show the feedback widget. */
+/* When we generate PDF files:
+ 
+ - avoid breaks in the middle of:
+   - code blocks
+   - admonitions (notes, tips, etc.)
+
+ - we do not need to show the:
+   - feedback widget.
+   - edit this page
+   - breadcrumbs
+
+ */
 @media print {
-    .theme-edit-this-page {
+  .theme-code-block , .theme-admonition {
+     break-inside: avoid;
+  }
+}
+
+@media print {
+    .theme-edit-this-page , .feedback_Ak7m , .theme-doc-breadcrumbs   {
         display: none;
     }
 }
+/*
 @media print {
     .feedback_Ak7m {
         display: none;
     }
 }
+
+@media print {
+  .theme-doc-breadcrumbs {
+     display: none;
+  }
+}
+*/

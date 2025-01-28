@@ -31,7 +31,7 @@ const config = {
   trailingSlash: true,
 
   onBrokenAnchors: 'ignore',
-  onBrokenLinks: 'ignore',
+  onBrokenLinks: 'throw',
   onBrokenMarkdownLinks: 'throw',
 
   i18n: {

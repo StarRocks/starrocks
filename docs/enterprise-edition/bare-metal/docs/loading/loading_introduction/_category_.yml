@@ -1,0 +1,6 @@
+position: 1 # float position is supported
+label: 'Introduction'
+collapsible: true
+collapsed: true
+link:
+  type: generated-index

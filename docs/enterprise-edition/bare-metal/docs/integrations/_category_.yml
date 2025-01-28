@@ -1,0 +1,7 @@
+position: 70 # float position is supported
+label: 'Integration'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: integrations/integrations

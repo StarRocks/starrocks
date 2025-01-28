@@ -1,6 +1,6 @@
 # Deploy a StarRocks cluster
 
-import TimezoneError from '../_assets/commonMarkdown/_timezone.md
+import TimezoneError from '../_assets/commonMarkdown/_timezone.md'
 
 1. Access the Web interface and configure a MySQL database for storing the management, query, and alerting information of CelerData Manager. 
 
@@ -31,7 +31,7 @@ All the installations are performed in the user environment and will not affect 
 
 1. **Obtain the information of the original cluster.**
 
-If you connect to StarRocks via the MySQL client, run the following SQL commands to view and confirm the information of the FE , BE, and broker.
+If you connect to StarRocks via the MySQL client, run the following SQL commands to view and confirm the information of the FE, BE, and broker.
 
 ```SQL
 show frontends;
@@ -41,7 +41,7 @@ show broker;
 
 Pay special attention to the following information:
 
-- Quantity, IP address, and version of FE , BE, and broker
+- Quantity, IP address, and version of FE, BE, and broker
 - Information of leader, follower, and observer FEs
 
 1. Disable the daemon (such as Supervisor) of the original StarRocks cluster and start it using a script. 
@@ -141,7 +141,7 @@ grep -r password manager/center/log/web/*
 
 1. Install **BE**
 
-  ![img](./_assets/manager/manager-001.jpg)
+  ![img](../_assets/manager/manager-001.jpg)
 
 1. Install broker. We recommend that you install a broker for all nodes. 
 
@@ -185,9 +185,3 @@ You can skip this step if you do not need SSL configuration.
 2. In the installation directory of CelerData Manager, run `./centerctl.sh restart web` to restart Web UI and run `./centerctl.sh status web` to check the status of Web UI. If the state displays RUNNING, the restart succeeds.
 
 3. Access https://mgr_host:port in your browser.
-
-> If you configure an *SSL* *certificate for* Nginx,
->
-> ssl_key = xxx.key
->
-> ssl_cert = xxx.pem

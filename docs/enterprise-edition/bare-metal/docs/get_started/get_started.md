@@ -1,5 +1,6 @@
-# CelerData Manager
-import TimezoneError from '../_assets/commonMarkdown/_timezone.md
+# Introduction
+
+import TimezoneError from '../_assets/commonMarkdown/_timezone.md'
 
 CelerData Manager is a visual database management and development tool. It provides the following functions to improve the O&M efficiency and cut the O&M costs of your StarRocks clusters:
 
@@ -45,4 +46,4 @@ A StarRocks cluster consists of two types of modules: core modules and system mo
   - **Center service**: pulls and summarizes information reported by Agents, and provides query services.  
   - **Agent**: a program for information collection. It collects information such as metrics. 
 
-For more information about StarRocks, see [StarRocks architecture](https://docs.starrocks.io/docs/introduction/Architecture/).
+For more information about StarRocks, see [StarRocks architecture](../introduction/Architecture.md)

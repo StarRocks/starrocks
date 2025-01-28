@@ -1,0 +1,8 @@
+position: 90 # float position is supported
+label: 'Data Loading'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: loading/Loading_intro
+

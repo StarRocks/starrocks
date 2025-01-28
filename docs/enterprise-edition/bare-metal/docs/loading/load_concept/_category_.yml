@@ -1,0 +1,8 @@
+position: 900 # float position is supported
+label: 'Strict Mode'
+collapsible: true
+collapsed: true
+link:
+  type: doc
+  id: loading/load_concept/strict_mode
+

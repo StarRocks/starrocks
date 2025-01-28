@@ -1,6 +1,6 @@
 # Manage a StarRocks cluster
 
-import TimezoneError from '../_assets/commonMarkdown/_timezone.md
+import TimezoneError from '../_assets/commonMarkdown/_timezone.md'
 
 ## Upgrade/Rollback
 
@@ -38,7 +38,7 @@ The upgrade procedure is upgrading CelerData Manager first and then upgrading St
 
 1. In the upper-right corner of the home page, click the **root** drop-down list and click the upgrade button indicated by a version. 
 
-![img](./_assets/manager/manager-002.png)
+![img](../_assets/manager/manager-002.png)
 
 1. In the **Hint** dialog box, enter the path of **Manger-xxx.tar.gz** in the decompressed **file** folder. 
 
@@ -87,12 +87,12 @@ After the rollback is complete, check the version on the **Nodes** tab.
 
 1. Choose **Nodes** > **Add Host.** Click **Add Host** to deploy a new Agent to manage the node. (Adding nodes requires re-signing the License.) 
 
-![img](./_assets/manager/manager-005.png)
+![img](../_assets/manager/manager-005.png)
 
 After the node is added, it will be displayed in the **Add Host** section. 
 
 1. In the **BE node** section, click **Scale Out** and enter the required information in the **BE Setu**p dialog box. 
-   ![img](./_assets/manager/manager-006.png)
+   ![img](../_assets/manager/manager-006.png)
 2. Click **Confirm** to complete the scale-out. Load balancing will be automatically triggered after the scale-out is complete. 
 
 If you need to increase the license quota, contact StarRocks technical support.
@@ -108,7 +108,7 @@ During the decommission, you can view the progress by checking the number of tab
 1. In the **Add Host** section of the **Nodes** page, click **Add Host** to deploy a new Agent to manage the node. (Adding nodes requires re-signing the License.) 
 2. After the node is added, click **Scale Out** and enter the required information. Click **Confirm** to complete the scale-out.
 
-![img](./_assets/manager/manager-007.png)
+![img](../_assets/manager/manager-007.png)
 
 ### FE scale-in
 
