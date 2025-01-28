@@ -1,5 +1,10 @@
+<<<<<<< HEAD
 position: 50 # float position is supported
 label: 'Indexes'
+=======
+position: 60 # float position is supported
+label: 'Query Acceleration'
+>>>>>>> ff432b6418 ([Doc] index page for query acceleration (#55504))
 collapsible: true
 collapsed: true
 link:

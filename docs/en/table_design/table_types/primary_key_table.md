@@ -159,4 +159,38 @@ PROPERTIES("replication_num" = "3",
 
 After table creation, you can run load jobs to load data into the Primary Key table. For more information about supported loading methods, see [Overview of data loading](../../loading/Loading_intro.md).
 
+<<<<<<< HEAD
 If you need to update data in the Primary Key table, you can [run a load job](../../loading/Load_to_Primary_Key_tables.md) or execute a DML statement ([UPDATE](../../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md) or [DELETE](../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md)). Also, these update operations guarantee atomicity.
+=======
+   ![pk5](../../_assets/table_design/pk5.png)
+
+- The table is a flat table that is composed of hundreds or thousands of columns. The Primary Key comprises only a small portion of the table data and consumes only a small amount of memory. For example, a user status or profile table consists of a large number of columns but only tens to hundreds of millions of users. In this situation, the amount of memory consumed by the primary key is controllable.
+  
+  As shown in the following figure, the table contains only a few rows, and the Primary Key of the table comprises only a small portion of the table.
+   ![pk6](../../_assets/table_design/pk6.png)
+
+</TabItem>
+
+</Tabs>
+
+### Sort key
+
+From v3.0, the Primary Key table decouples the sort key from the Primary Key. The sort key is composed of the columns defined in `ORDER BY`, and can consist of any combination of columns, as long as the data type of the columns meets the requirement of the sort key.
+
+During data loading, the data is stored after being sorted according to the sort key. The sort key is also used to build the Prefix index to accelerate queries. It is recommended to [design the sort key appropriately to form the Prefix index that can accelerate queries](../indexes/Prefix_index_sort_key.md#how-to-design-the-sort-key-appropriately-to-form-the-prefix-index-that-can-accelerate-queries).
+
+:::info
+
+- If the sort key is specified, the Prefix index is built based on the sort key. If no sorti key is specified,the Prefix index are built based on the Primary Key.
+- After table creation, you can use `ALTER TABLE ... ORDER BY ...` to change the sort key. Deleting the sort key is not supported, and modifying the data types of sort columns is not supported.
+
+:::
+
+## What's more
+
+- To load data into the table created, you can refer to [Loading overview](../../loading/Loading_intro.md) to choose an appropriate load options.
+- If you need to change data in the Primary Key table, you can refer to [change data through loading](../../loading/Load_to_Primary_Key_tables.md) or use DML ([INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md), [UPDATE](../../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md), and [DELETE](../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md)).
+- If you want to further accelerate queries, you can refer to [Query Acceleration](../../using_starrocks/using_starrocks.mdx).
+- If you need to modify the table schema, you can refer to [ALTER TABLE](../../sql-reference/sql-statements/Resource/ALTER_RESOURCE.md).
+- An [AUTO_INCREMENT](../../sql-reference/sql-statements/generated_columns.md) column can be used as the Primary Key.
+>>>>>>> ff432b6418 ([Doc] index page for query acceleration (#55504))
