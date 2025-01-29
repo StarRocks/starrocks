@@ -310,7 +310,14 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowMaterializedViewStatement(ShowMaterializedViewsStmt statement, ConnectContext context) {
             String dbName = statement.getDb();
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            String catalogName = statement.getCatalogName();
+            Database db;
+            if (catalogName == null) {
+                db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            } else {
+                db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+            }
+
             MetaUtils.checkDbNullAndReport(db, dbName);
 
             List<MaterializedView> materializedViews = Lists.newArrayList();
