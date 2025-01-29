@@ -976,7 +976,7 @@ public class ShowExecutorTest {
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
-        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("testDb", (String) null);
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("default_catalog", "testDb", (String) null);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         verifyShowMaterializedViewResult(resultSet);
@@ -984,7 +984,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowMaterializedViewFromUnknownDatabase() throws DdlException, AnalysisException {
-        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("emptyDb", (String) null);
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("default_catalog", "emptyDb", (String) null);
 
         expectedEx.expect(SemanticException.class);
         expectedEx.expectMessage("Unknown database 'emptyDb'");
@@ -996,12 +996,12 @@ public class ShowExecutorTest {
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
-        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("testDb", "bcd%");
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("default_catalog", "testDb", "bcd%");
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assert.assertFalse(resultSet.next());
 
-        stmt = new ShowMaterializedViewsStmt("testDb", "%test%");
+        stmt = new ShowMaterializedViewsStmt("default_catalog", "testDb", "%test%");
 
         resultSet = ShowExecutor.execute(stmt, ctx);
         verifyShowMaterializedViewResult(resultSet);
