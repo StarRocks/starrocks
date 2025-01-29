@@ -101,7 +101,7 @@ Bitmap 索引适用于优化等值 `=` 查询、`[NOT] IN` 范围查询、`>`，
 - 建表后使用 CREATE INDEX 创建 Bitmap 索引。详细参数说明和示例，参见 [CREATE INDEX](../../sql-reference/sql-statements/data-definition/CREATE_INDEX.md)。
 
     ```SQL
-    CREATE INDEX lo_quantity_index (lo_quantity) ON lineorder_partial USING BITMAP;
+    CREATE INDEX lo_quantity_index ON lineorder_partial (lo_quantity) USING BITMAP;
     ```
 
 ### 创建进度
