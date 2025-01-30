@@ -1,0 +1,151 @@
+-- name: test_driving_table_selection
+create table T (a int, b int, c int) properties("replication_num"="1");
+-- result:
+-- !result
+insert into T values(1,1,1),(2,2,2),(3,3,3);
+-- result:
+-- !result
+create table T0  properties("replication_num"="1")  as select * from T;
+-- result:
+-- !result
+create table T1  properties("replication_num"="1")  as select * from T;
+-- result:
+-- !result
+create table T2  properties("replication_num"="1")  as select * from T;
+-- result:
+-- !result
+explain select *  from T where T.a = (select a from T0) or T.b = (select b from T1) or T.c = (select c from T2);
+-- result:
+PLAN FRAGMENT 0
+ OUTPUT EXPRS:1: a | 2: b | 3: c
+  PARTITION: UNPARTITIONED
+
+  RESULT SINK
+
+  16:Project
+  |  <slot 1> : 1: a
+  |  <slot 2> : 2: b
+  |  <slot 3> : 3: c
+  |  
+  15:NESTLOOP JOIN
+  |  join op: INNER JOIN
+  |  colocate: false, reason: 
+  |  other join predicates: ((1: a = 4: a) OR (2: b = 9: b)) OR (3: c = 14: c)
+  |  
+  |----14:EXCHANGE
+  |    
+  12:NESTLOOP JOIN
+  |  join op: CROSS JOIN
+  |  colocate: false, reason: 
+  |  
+  |----11:EXCHANGE
+  |    
+  7:NESTLOOP JOIN
+  |  join op: CROSS JOIN
+  |  colocate: false, reason: 
+  |  
+  |----6:EXCHANGE
+  |    
+  2:ASSERT NUMBER OF ROWS
+  |  assert number of rows: LE 1
+  |  
+  1:EXCHANGE
+
+PLAN FRAGMENT 1
+ OUTPUT EXPRS:
+  PARTITION: RANDOM
+
+  STREAM DATA SINK
+    EXCHANGE ID: 14
+    UNPARTITIONED
+
+  13:OlapScanNode
+     TABLE: T
+     PREAGGREGATION: ON
+     partitions=1/1
+     rollup: T
+     tabletRatio=1/1
+     tabletList=75040
+     cardinality=3
+     avgRowSize=3.0
+
+PLAN FRAGMENT 2
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 11
+    UNPARTITIONED
+
+  10:ASSERT NUMBER OF ROWS
+  |  assert number of rows: LE 1
+  |  
+  9:EXCHANGE
+
+PLAN FRAGMENT 3
+ OUTPUT EXPRS:
+  PARTITION: RANDOM
+
+  STREAM DATA SINK
+    EXCHANGE ID: 09
+    UNPARTITIONED
+
+  8:OlapScanNode
+     TABLE: T1
+     PREAGGREGATION: ON
+     partitions=1/1
+     rollup: T1
+     tabletRatio=1/1
+     tabletList=75056
+     cardinality=3
+     avgRowSize=1.0
+
+PLAN FRAGMENT 4
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 06
+    UNPARTITIONED
+
+  5:ASSERT NUMBER OF ROWS
+  |  assert number of rows: LE 1
+  |  
+  4:EXCHANGE
+
+PLAN FRAGMENT 5
+ OUTPUT EXPRS:
+  PARTITION: RANDOM
+
+  STREAM DATA SINK
+    EXCHANGE ID: 04
+    UNPARTITIONED
+
+  3:OlapScanNode
+     TABLE: T0
+     PREAGGREGATION: ON
+     partitions=1/1
+     rollup: T0
+     tabletRatio=1/1
+     tabletList=75048
+     cardinality=3
+     avgRowSize=1.0
+
+PLAN FRAGMENT 6
+ OUTPUT EXPRS:
+  PARTITION: RANDOM
+
+  STREAM DATA SINK
+    EXCHANGE ID: 01
+    UNPARTITIONED
+
+  0:OlapScanNode
+     TABLE: T2
+     PREAGGREGATION: ON
+     partitions=1/1
+     rollup: T2
+     tabletRatio=1/1
+     tabletList=75064
+     cardinality=3
+     avgRowSize=1.0
+-- !result
