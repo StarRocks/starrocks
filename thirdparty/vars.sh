@@ -392,10 +392,10 @@ DATASKETCHES_SOURCE="datasketches-cpp-4.0.0"
 DATASKETCHES_MD5SUM="724cd1df9735de2b8939d298f0d95ea2"
 
 # libfiu
-FIU_DOWNLOAD="https://blitiri.com.ar/p/libfiu/files/1.1/libfiu-1.1.tar.gz"
+FIU_DOWNLOAD="https://github.com/albertito/libfiu/archive/refs/tags/1.1.tar.gz"
 FIU_NAME="libfiu-1.1.tar.gz"
 FIU_SOURCE="libfiu-1.1"
-FIU_MD5SUM="51092dcb7801efb511b7b962388d9ff4"
+FIU_MD5SUM="356b527e00fc2358e3fc111e7ada3cd0"
 
 # libdeflate
 LIBDEFLATE_DOWNLOAD="https://github.com/ebiggers/libdeflate/archive/refs/tags/v1.18.zip"
