@@ -4,7 +4,9 @@ import TimezoneError from '../_assets/commonMarkdown/_timezone.md'
 
 1. Access the Web interface and configure a MySQL database for storing the management, query, and alerting information of CelerData Manager. 
 
-> If you have multiple CelerData clusters, we strongly recommend that you configure different MySQL accounts for different clusters to prevent unexpected issues caused by incorrect configurations.
+:::note
+If you have multiple CelerData clusters, we strongly recommend that you configure different MySQL accounts for different clusters to prevent unexpected issues caused by incorrect configurations.
+:::
 
 1. After the configuration is complete, click **Test Connection.** If the test is successful (**OK** is displayed at the top of the page), click **Next**.
 2. Specify the nodes to deploy, and the installation directories of **Agent** and **Supervisor**. Enter the internal network IP addresses for **Host IP** and use the default values for other parameters.
@@ -27,16 +29,18 @@ All the installations are performed in the user environment and will not affect 
 
 ## Migrate an existing cluster
 
-> This step is required if you upgrade your cluster from StarRocks open-source to Enterprise Edition. If you want to install a new cluster, perform the steps in 1.2.2 "Install a new cluster."
+:::note
+This step is required if you upgrade your cluster from StarRocks open-source to Enterprise Edition. If you want to install a new cluster, perform the steps in 1.2.2 "Install a new cluster."
+:::
 
 1. **Obtain the information of the original cluster.**
 
 If you connect to StarRocks via the MySQL client, run the following SQL commands to view and confirm the information of the FE, BE, and broker.
 
 ```SQL
-show frontends;
-show backends;
-show broker;
+SHOW frontends;
+SHOW backends;
+SHOW broker;
 ```
 
 Pay special attention to the following information:
@@ -46,7 +50,9 @@ Pay special attention to the following information:
 
 1. Disable the daemon (such as Supervisor) of the original StarRocks cluster and start it using a script. 
 
-> **IMPORTANT**: If this step is not performed, the Supervisor of the new CelerData Manager will conflict with the old Supervisor, causing the installation to fail.
+:::note Important
+If this step is not performed, the Supervisor of the new CelerData Manager will conflict with the old Supervisor, causing the installation to fail.
+:::
 
 Assume that the installation directories are all under `~/CelerData`. If the actual directories are different from this, modify the directories.
 
@@ -62,7 +68,7 @@ cd ~/CelerData/be
 # Use the above echo command to check whether BE and Supervisor are started.
 
 # Check BE startup on your MySQL client.
-mysql> show backends;
+mysql> SHOW backends;
 
 
 #### Use a script to start FE.
@@ -78,7 +84,7 @@ cd ~/CelerData/fe
 sed -i 's/DATE = `date +%Y%m%d-%H%M%S`/DATE = "$(date +%Y%m%d-%H%M%S)"/g' conf/fe.conf
 
 # Check FE startup in your MySQL client.
-mysql> show frontends;
+mysql> SHOW frontends;
 
 
 #### Use a script to start broker.
@@ -89,7 +95,7 @@ cd ~/CelerData/apache_hdfs_broker
 ./control.sh stop && sleep 2 && bin/start_broker.sh --daemon
 
 # Check broker startup in MySQL.
-mysql> show broker;
+mysql> SHOW broker;
 
 #### Check Supervisor again.
 ps aux | grep supervisor
@@ -143,7 +149,7 @@ grep -r password manager/center/log/web/*
 
   ![img](../_assets/manager/manager-001.jpg)
 
-1. Install broker. We recommend that you install a broker for all nodes. 
+1. Install broker if needed.
 
 1. Install **Center service**
 
@@ -184,4 +190,4 @@ You can skip this step if you do not need SSL configuration.
 
 2. In the installation directory of CelerData Manager, run `./centerctl.sh restart web` to restart Web UI and run `./centerctl.sh status web` to check the status of Web UI. If the state displays RUNNING, the restart succeeds.
 
-3. Access https://mgr_host:port in your browser.
+3. Access `https://mgr_host:port` in your browser.

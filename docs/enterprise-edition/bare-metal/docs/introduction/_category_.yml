@@ -1,5 +1,5 @@
 position: 15 # float position is supported
-label: 'Introduction'
+label: 'StarRocks Introduction'
 collapsible: true
 collapsed: true
 link:

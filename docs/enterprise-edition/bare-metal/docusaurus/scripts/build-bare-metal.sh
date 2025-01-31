@@ -13,6 +13,7 @@ cp -r temp/oss-temp/* docusaurus/docs/
 
 # Remove open-source docs that will not be used and not overwritten
 rm -rf docusaurus/docs/deployment
+rm docusaurus/docs/introduction/what_is_starrocks.md
 
 # Overwrite the open-source docs with BYOC docs
 # (except for the ones removed in "Do not use these BYOC docs")
@@ -20,6 +21,10 @@ rm -rf docusaurus/docs/deployment
 
 # Overwrite again with bare-metal docs
 cp -r temp/bare-metal-temp/* docusaurus/docs/
+
+# We need the plan-cluster doc
+# Rename it to 15_ so it comes in right after install.
+cp temp/oss-temp/deployment/plan_cluster.md docusaurus/docs/deployment/15_plan_cluster.md
 
 rm -f docusaurus/docs/README.md
 
