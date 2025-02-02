@@ -42,7 +42,7 @@ under the License.
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.8</jacoco.version>
         <iceberg.version>1.7.1</iceberg.version>
-        <paimon.version>0.8.2</paimon.version>
+        <paimon.version>1.0.0</paimon.version>
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
         <staros.version>3.4-rc3</staros.version>
         <python>python</python>
