@@ -190,11 +190,13 @@ public class PaimonMetadata implements ConnectorMetadata {
         if (databases.containsKey(dbName)) {
             return databases.get(dbName);
         }
-        if (paimonNativeCatalog.databaseExists(dbName)) {
+        try {
+            // get database from paimon catalog to see if the database exists
+            paimonNativeCatalog.getDatabase(dbName);
             Database db = new Database(CONNECTOR_ID_GENERATOR.getNextId().asInt(), dbName);
             databases.put(dbName, db);
             return db;
-        } else {
+        } catch (Catalog.DatabaseNotExistException e) {
             LOG.error("Paimon database {}.{} does not exist.", catalogName, dbName);
             return null;
         }
@@ -235,7 +237,12 @@ public class PaimonMetadata implements ConnectorMetadata {
 
     @Override
     public boolean tableExists(String dbName, String tableName) {
-        return paimonNativeCatalog.tableExists(Identifier.create(dbName, tableName));
+        try {
+            paimonNativeCatalog.getTable(Identifier.create(dbName, tableName));
+            return true;
+        } catch (Catalog.TableNotExistException e) {
+            return false;
+        }
     }
 
     @Override
