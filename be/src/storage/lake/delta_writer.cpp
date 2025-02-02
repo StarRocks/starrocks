@@ -15,6 +15,8 @@
 #include "storage/lake/delta_writer.h"
 
 #include <bthread/bthread.h>
+#include <bthread/condition_variable.h>
+#include <bthread/mutex.h>
 #include <fmt/format.h>
 
 #include <memory>
@@ -40,6 +42,7 @@
 #include "storage/memtable_sink.h"
 #include "storage/primary_key_encoder.h"
 #include "storage/storage_engine.h"
+#include "util/countdown_latch.h"
 
 namespace starrocks::lake {
 
@@ -239,12 +242,29 @@ bool DeltaWriterImpl::is_immutable() const {
 
 Status DeltaWriterImpl::check_immutable() {
     if (_immutable_tablet_size > 0 && !_is_immutable.load(std::memory_order_relaxed)) {
-        if (_tablet_manager->in_writing_data_size(_tablet_id) > _immutable_tablet_size) {
+        auto default_val = -1;
+        auto in_write_size = _tablet_manager->in_writing_data_size_or_default(_tablet_id, default_val);
+        if (in_write_size == default_val) {
+            // Trigger the IO op (possibly remote IO op), make sure the IO is running in non-bthread env.
+            if (!bthread_self()) {
+                in_write_size = _tablet_manager->add_in_writing_data_size(_tablet_id, 0);
+            } else {
+                // NOTE: do the op in pthread env, just in case the underlying env invokes jni call.
+                GenericCountDownLatch<bthread::Mutex, bthread::ConditionVariable> latch(1);
+                std::thread t([this, &in_write_size, &latch] {
+                    in_write_size = _tablet_manager->add_in_writing_data_size(_tablet_id, 0);
+                    latch.count_down();
+                });
+                // allow yield the current bthread, instead of blocking the pthread by t.join()
+                latch.wait();
+                t.join();
+            }
+        }
+        if (in_write_size > _immutable_tablet_size) {
             _is_immutable.store(true, std::memory_order_relaxed);
         }
         VLOG(2) << "check delta writer, tablet=" << _tablet_id << ", txn=" << _txn_id
-                << ", immutable_tablet_size=" << _immutable_tablet_size
-                << ", data_size=" << _tablet_manager->in_writing_data_size(_tablet_id)
+                << ", immutable_tablet_size=" << _immutable_tablet_size << ", data_size=" << in_write_size
                 << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
     }
     return Status::OK();

@@ -14,6 +14,7 @@
 
 #include "storage/lake/async_delta_writer.h"
 
+#include <bthread/bthread.h>
 #include <gtest/gtest.h>
 
 #include <random>
@@ -38,6 +39,7 @@
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
+#include "util/bthreads/util.h"
 #include "util/countdown_latch.h"
 
 namespace starrocks::lake {
@@ -466,6 +468,51 @@ TEST_F(LakeAsyncDeltaWriterTest, test_open_after_close) {
     auto st = delta_writer->open();
     ASSERT_FALSE(st.ok());
     ASSERT_EQ("AsyncDeltaWriter has been closed", st.message());
+}
+
+TEST_F(LakeAsyncDeltaWriterTest, test_check_immutable) {
+    int64_t immutable_size = 1024;
+    { // check immutable in pthread
+        auto txn_id = next_id();
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        auto schema = TabletSchema::create(metadata->schema());
+        auto tablet_id = metadata->id();
+        ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(schema->id())
+                                                   .set_immutable_tablet_size(immutable_size)
+                                                   .build());
+        auto st = delta_writer->check_immutable();
+        EXPECT_TRUE(st.ok()) << st;
+        EXPECT_FALSE(delta_writer->is_immutable());
+    }
+    { // check immutable again in bthread
+        auto txn_id = next_id();
+        auto metadata = generate_simple_tablet_metadata(DUP_KEYS);
+        auto schema = TabletSchema::create(metadata->schema());
+        auto tablet_id = metadata->id();
+        ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(schema->id())
+                                                   .set_immutable_tablet_size(immutable_size)
+                                                   .build());
+        ASSIGN_OR_ABORT(auto tid, bthreads::start_bthread([&] {
+                            // running in bthread
+                            EXPECT_TRUE(bthread_self());
+                            auto st = delta_writer->check_immutable();
+                            EXPECT_TRUE(st.ok()) << st;
+                            EXPECT_FALSE(delta_writer->is_immutable());
+                        }));
+        bthread_join(tid, nullptr);
+    }
 }
 
 TEST_F(LakeAsyncDeltaWriterTest, test_concurrent_write_and_close) {

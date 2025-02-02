@@ -743,15 +743,24 @@ void TabletManager::update_metacache_limit(size_t new_capacity) {
 }
 
 int64_t TabletManager::in_writing_data_size(int64_t tablet_id) {
-    {
-        std::shared_lock rdlock(_meta_lock);
-        const auto& it = _tablet_in_writing_size.find(tablet_id);
-        if (it != _tablet_in_writing_size.end()) {
-            VLOG(2) << "tablet " << tablet_id << " in writing data size: " << it->second;
-            return it->second;
-        }
+    auto default_val = -1;
+    auto size = in_writing_data_size_or_default(tablet_id, -1);
+    if (size != default_val) {
+        return size;
+    } else {
+        return add_in_writing_data_size(tablet_id, 0);
     }
-    return add_in_writing_data_size(tablet_id, 0);
+}
+
+int64_t TabletManager::in_writing_data_size_or_default(int64_t tablet_id, int64_t default_val) {
+    std::shared_lock rdlock(_meta_lock);
+    const auto& it = _tablet_in_writing_size.find(tablet_id);
+    if (it != _tablet_in_writing_size.end()) {
+        VLOG(2) << "tablet " << tablet_id << " in writing data size: " << it->second;
+        return it->second;
+    } else {
+        return default_val;
+    }
 }
 
 int64_t TabletManager::add_in_writing_data_size(int64_t tablet_id, int64_t size) {

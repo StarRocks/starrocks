@@ -185,6 +185,12 @@ public:
 
     int64_t in_writing_data_size(int64_t tablet_id);
 
+    // Get the in-writing data size if found, otherwise return default_val.
+    // Differ from `in_writing_data_size`, it doesn't trigger `add_in_writing_data_size()`
+    // if not found from local cache. Giving the caller ability to handle it properly instead of
+    // invoking the `add_in_writing_data_size()` immediately.
+    int64_t in_writing_data_size_or_default(int64_t tablet_id, int64_t default_val);
+
     int64_t add_in_writing_data_size(int64_t tablet_id, int64_t size);
 
     void clean_in_writing_data_size();
