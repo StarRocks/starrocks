@@ -20,10 +20,10 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.scheduler.MVRefreshTestBase;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -43,7 +43,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 
-public class DropPartitionWithExprListTest extends MVRefreshTestBase {
+public class DropPartitionWithExprListTest extends MVTestBase  {
     private static final Logger LOG = LogManager.getLogger(DropPartitionWithExprListTest.class);
     protected static ConnectContext connectContext;
     protected static PseudoCluster cluster;
