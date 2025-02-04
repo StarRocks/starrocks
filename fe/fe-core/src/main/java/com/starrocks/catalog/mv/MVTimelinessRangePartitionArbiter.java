@@ -176,7 +176,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
                     " is null.");
             return null;
         }
-
+        // TODO: collect base table's `baseTableUpdateInfos` for mv's partition compensation if base table is partial refreshed.
         Map<String, Range<PartitionKey>> adds = rangePartitionDiff.getAdds();
         for (Map.Entry<String, Range<PartitionKey>> addEntry : adds.entrySet()) {
             String mvPartitionName = addEntry.getKey();

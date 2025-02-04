@@ -1316,7 +1316,6 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
             logMVRewrite(mvRewriteContext, "MV cannot be applied for rewrite");
             return null;
         }
-
         MVCompensation mvCompensation = materializationContext.getMvCompensation();
         boolean isTransparentRewrite = mvCompensation.isTransparentRewrite();
         logMVRewrite(mvRewriteContext, "Get compensation predicates:{}, isTransparentRewrite: {}",

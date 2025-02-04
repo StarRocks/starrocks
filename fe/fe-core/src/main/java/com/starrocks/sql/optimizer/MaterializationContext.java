@@ -472,12 +472,14 @@ public class MaterializationContext {
         if (mvCompensation == null) {
             // only set this when `queryExpression` contains ref table, otherwise the cached value maybe dirty.
             this.mvCompensation = MvPartitionCompensator.getMvCompensation(queryExpression, this);
-            logMVRewrite(mv.getName(), "Init mv compensation: {}", mvCompensation);
+            logMVRewrite(mv.getName(), "MV compensation: {}", mvCompensation);
         }
         return this.mvCompensation;
     }
 
     public MVCompensation getMvCompensation() {
+        Preconditions.checkArgument(mvCompensation != null,
+                "MV compensation should be initialized before used");
         return mvCompensation;
     }
 

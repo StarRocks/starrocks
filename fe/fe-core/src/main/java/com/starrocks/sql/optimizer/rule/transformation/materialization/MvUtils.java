@@ -985,7 +985,11 @@ public class MvUtils {
             return new BoolLiteral(true);
         }
         // to avoid duplicate values
-        return new InPredicate(slotRef, Lists.newArrayList(Sets.newHashSet(values)), false);
+        if (values.size() == 1) {
+            return new BinaryPredicate(BinaryType.EQ, slotRef, values.get(0));
+        } else {
+            return new InPredicate(slotRef, Lists.newArrayList(Sets.newHashSet(values)), false);
+        }
     }
 
     /**
@@ -1355,9 +1359,16 @@ public class MvUtils {
         return Optional.of(matches.get(0).cast());
     }
 
-    public static boolean isStr2Date(Expr expr) {
+    public static boolean isFuncCallExpr(Expr expr, String expectFuncName) {
+        if (expr == null) {
+            return false;
+        }
         return expr instanceof FunctionCallExpr
-                && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(FunctionSet.STR2DATE);
+                && ((FunctionCallExpr) expr).getFnName().getFunction().equalsIgnoreCase(expectFuncName);
+    }
+
+    public static boolean isStr2Date(Expr expr) {
+        return isFuncCallExpr(expr, FunctionSet.STR2DATE);
     }
 
     public static Map<String, String> getPartitionProperties(MaterializedView materializedView) {

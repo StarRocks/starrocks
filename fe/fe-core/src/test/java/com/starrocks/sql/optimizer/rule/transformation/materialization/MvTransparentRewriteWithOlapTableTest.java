@@ -931,21 +931,53 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
     }
 
     @Test
+    public void testTransparentMVWithListPartitions1() {
+        starRocksAssert.withTable(t1, () -> {
+            String insertSql = "insert into t1 values(1, 1, '2021-12-01', 'beijing'), (1, 1, '2021-12-01', 'guangdong');";
+            cluster.runSql("test", insertSql);
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
+                            " PARTITION BY (province) " +
+                            " DISTRIBUTED BY HASH(province) " +
+                            " REFRESH DEFERRED MANUAL " +
+                            " PROPERTIES (\n" +
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
+                            " ) " +
+                            " AS select * from t1;",
+                    () -> {
+                        {
+                            String plan = getFragmentPlan("select * from mv0");
+                            PlanTestBase.assertContains(plan, "UNION", "mv0", "t1");
+                        }
+                        cluster.runSql("test", String.format("REFRESH MATERIALIZED VIEW mv0 PARTITION ('%s') with sync mode",
+                                "beijing"));
+                        MaterializedView mv1 = getMv("test", "mv0");
+                        Set<String> mvNames = mv1.getPartitionNames();
+                        Assert.assertEquals("[p1, p2]", mvNames.toString());
+                        // transparent mv
+                        {
+                            String plan = getFragmentPlan("select * from mv0");
+                            PlanTestBase.assertContains(plan, "UNION", "mv0", "t1");
+                        }
+                    });
+        });
+    }
+
+    @Test
     public void testTransparentMVWithListPartitionsPartialColumns2() {
         starRocksAssert.withTable(t3, () -> {
             String insertSql = "insert into t3 values(1, 1, '2024-01-01', 'beijing')," +
                     "(1, 1, '2022-01-01', 'hangzhou');";
             cluster.runSql("test", insertSql);
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
-                            " PARTITION BY (dt) " +
+                            " PARTITION BY (province, dt) " +
                             " REFRESH DEFERRED MANUAL " +
                             " AS select province, dt, min(age) from t3 group by province, dt;",
                     () -> {
-                        cluster.runSql("test", String.format("REFRESH MATERIALIZED VIEW mv0 PARTITION (('%s')) " +
-                                "with sync mode", "2024-01-01"));
+                        cluster.runSql("test", String.format("REFRESH MATERIALIZED VIEW mv0 PARTITION (('%s', '%s')) " +
+                                "with sync mode", "beijing", "2024-01-01"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1, p3]", mvNames.toString());
+                        Assert.assertEquals("[p1, p2, p3, p4]", mvNames.toString());
                         // transparent mv
                         {
                             String plan = getFragmentPlan("select min(age) from t3 group by province;", TExplainLevel.COSTS, "");

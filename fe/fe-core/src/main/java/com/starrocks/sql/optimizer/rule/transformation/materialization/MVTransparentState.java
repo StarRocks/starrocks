@@ -24,10 +24,11 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
  * - UNKNOWN: others we set it unknown.
  */
 public enum MVTransparentState {
-    NO_REWRITE,
-    NO_COMPENSATE,
-    COMPENSATE,
-    UNKNOWN;
+    NO_REWRITE,     // MV cannot be used to rewrite because of its refresh-ness is stale
+    NO_COMPENSATE,  // MV can be used for rewrite without any compensation
+    COMPENSATE,     // MV can be used for rewrite with partition compensation union.
+    UNKNOWN;        // MV's compensation state is unknown, it cannot be used to rewrite in `CHECKED` mode, but can be used in
+    // `LOOSE` mode.
 
     public boolean isNoRewrite() {
         return this == NO_REWRITE;

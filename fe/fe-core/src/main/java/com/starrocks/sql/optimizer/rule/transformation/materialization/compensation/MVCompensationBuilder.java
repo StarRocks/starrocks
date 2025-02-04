@@ -454,7 +454,6 @@ public class MVCompensationBuilder {
         if (!refBaseTablePartitionColumns.containsKey(refBaseTable)) {
             return null;
         }
-        List<Column> partitionColumns = refBaseTablePartitionColumns.get(refBaseTable);
         try {
             for (String partitionName : refTablePartitionNamesToRefresh) {
                 if (!nameToPartitionKeys.containsKey(partitionName)) {
@@ -464,10 +463,9 @@ public class MVCompensationBuilder {
                 if (pCell instanceof PRangeCell) {
                     partitionKeys.add(((PRangeCell) pCell));
                 } else if (pCell instanceof PListCell) {
-                    final List<PartitionKey> keys = ((PListCell) pCell).toPartitionKeys(partitionColumns);
-                    keys.stream()
-                            .map(key -> PRangeCell.of(key))
-                            .forEach(partitionKeys::add);
+                    List<Column> partitionColumns = refBaseTable.getPartitionColumns();
+                    List<PartitionKey> keys = ((PListCell) pCell).toPartitionKeys(partitionColumns);
+                    keys.stream().forEach(key -> partitionKeys.add(PRangeCell.of(key)));
                 }
             }
         } catch (Exception e) {

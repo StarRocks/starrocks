@@ -69,6 +69,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.Index;
@@ -226,6 +227,7 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
 import com.starrocks.sql.util.EitherOr;
 import com.starrocks.system.Backend;
@@ -2810,7 +2812,9 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
 
         // create partition info
-        PartitionInfo partitionInfo = buildPartitionInfo(stmt);
+        // add generate columns into base schema
+        PartitionInfo partitionInfo = buildPartitionInfo(stmt, baseSchema);
+
         // create distribution info
         DistributionDesc distributionDesc = stmt.getDistributionDesc();
         Preconditions.checkNotNull(distributionDesc);
@@ -3032,7 +3036,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         return randomInterval > 0 ? ThreadLocalRandom.current().nextLong(randomInterval) : randomInterval;
     }
 
-    public static PartitionInfo buildPartitionInfo(CreateMaterializedViewStatement stmt) throws DdlException {
+    public static PartitionInfo buildPartitionInfo(CreateMaterializedViewStatement stmt,
+                                                   List<Column> baseSchema) throws DdlException {
         List<Expr> partitionByExprs = stmt.getPartitionByExprs();
         PartitionType partitionType = stmt.getPartitionType();
         List<Column> mvPartitionColumns = stmt.getPartitionColumns();
@@ -3043,13 +3048,30 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
 
             if (partitionType == PartitionType.LIST) {
-                for (Expr partitionByExpr : partitionByExprs) {
-                    if (!(partitionByExpr instanceof SlotRef)) {
-                        throw new DdlException("List partition only support partition by slot ref column:"
+                Map<Integer, Column> generatedPartitionCols = stmt.getGeneratedPartitionCols();
+                List<Column> newPartitionColumns = new ArrayList<>();
+                Preconditions.checkNotNull(baseSchema);
+                for (int i = 0; i < partitionByExprs.size(); i++) {
+                    Expr partitionByExpr = partitionByExprs.get(i);
+                    Column mvPartitionColumn = mvPartitionColumns.get(i);
+                    if (!(partitionByExpr instanceof SlotRef || MvUtils.isFuncCallExpr(partitionByExpr,
+                            FunctionSet.DATE_TRUNC))) {
+                        throw new DdlException("List partition only support partition by slot ref column or date_trunc:"
                                 + partitionByExpr.toSql());
                     }
+                    if (!(partitionByExpr instanceof SlotRef)) {
+                        Column generatedCol = generatedPartitionCols.get(i);
+                        if (generatedCol == null) {
+                            throw new DdlException("Partition expression for list must be a generated column: "
+                                    + partitionByExpr.toSql());
+                        }
+                        baseSchema.add(generatedCol);
+                        newPartitionColumns.add(generatedCol);
+                    } else {
+                        newPartitionColumns.add(mvPartitionColumn);
+                    }
                 }
-                return new ListPartitionInfo(PartitionType.LIST, mvPartitionColumns);
+                return new ListPartitionInfo(PartitionType.LIST, newPartitionColumns);
             } else {
                 if (partitionByExprs.size() > 1) {
                     throw new DdlException("Only support one partition column for range partition");

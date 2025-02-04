@@ -144,14 +144,6 @@ public class MvUpdateInfo {
         if (mvToRefreshType == MvToRefreshType.FULL) {
             return null;
         }
-        if (queryRewriteConsistencyMode == TableProperty.QueryRewriteConsistencyMode.LOOSE) {
-            MvBaseTableUpdateInfo mvBaseTableUpdateInfo = baseTableUpdateInfos.get(refBaseTable);
-            if (mvBaseTableUpdateInfo == null) {
-                return null;
-            }
-            return mvBaseTableUpdateInfo.getToRefreshPartitionNames();
-        }
-
         if (mvPartToBasePartNames == null || mvPartToBasePartNames.isEmpty()) {
             return null;
         }
