@@ -37,6 +37,7 @@ package com.starrocks.server;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Joiner;
 import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.HashMultimap;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
@@ -3527,7 +3528,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     public void alterTableProperties(Database db, OlapTable table, Map<String, String> properties)
             throws DdlException {
         Map<String, String> propertiesToPersist = new HashMap<>(properties);
-        Map<String, Object> results = validateToBeModifiedProps(properties, table);
+        Map<String, Object> results = validateToBeModifiedProps(properties, db, table);
 
         TableProperty tableProperty = table.getTableProperty();
         for (String key : results.keySet()) {
@@ -3597,21 +3598,61 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                                 ImmutableMap.of(key, propertiesToPersist.get(key)));
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
             }
+            if (propertiesToPersist.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+                String ttlRetentionCondition =
+                        propertiesToPersist.get(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION);
+                tableProperty.getProperties().put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION,
+                        ttlRetentionCondition);
+                tableProperty.setPartitionRetentionCondition(ttlRetentionCondition);
+                // register or remove ttl partition table
+                if (Strings.isNullOrEmpty(ttlRetentionCondition)) {
+                    GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().removeTtlPartitionTable(db.getId(),
+                            table.getId());
+                } else {
+                    GlobalStateMgr.getCurrentState().getDynamicPartitionScheduler().registerTtlPartitionTable(db.getId(),
+                            table.getId());
+                }
+                ModifyTablePropertyOperationLog info = new ModifyTablePropertyOperationLog(db.getId(), table.getId(),
+                        ImmutableMap.of(key, propertiesToPersist.get(key)));
+                GlobalStateMgr.getCurrentState().getEditLog().logAlterTableProperties(info);
+            }
         }
     }
 
-    private Map<String, Object> validateToBeModifiedProps(Map<String, String> properties, OlapTable table) throws DdlException {
+    private Map<String, Object> validateToBeModifiedProps(Map<String, String> properties,
+                                                          Database db, OlapTable table) throws DdlException {
         Map<String, Object> results = Maps.newHashMap();
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
+            if (!table.getPartitionInfo().isRangePartition()) {
+                throw new DdlException("Table[" + table.getName() + "] is not range partitioned. "
+                        + "no need to set partition live number.");
+            }
             int partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
             results.put(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER, partitionLiveNumber);
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
+            if (!table.getPartitionInfo().isRangePartition()) {
+                throw new DdlException("Table[" + table.getName() + "] is not range partitioned. "
+                        + "no need to set partition ttl.");
+            }
             Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
             if (ttlDuration == null) {
                 throw new DdlException("Invalid partition ttl duration");
             }
             results.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration);
+        }
+        // partition retention condition
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+            if (!table.getPartitionInfo().isPartitioned()) {
+                throw new DdlException("Table[" + table.getName() + "] is not partitioned. "
+                        + "no need to set partition retention condition.");
+            }
+            String partitionRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(
+                    db, table, properties, true);
+            if (Strings.isNullOrEmpty(partitionRetentionCondition)) {
+                throw new DdlException("Invalid partition retention condition");
+            }
+            results.put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, partitionRetentionCondition);
         }
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
             try {

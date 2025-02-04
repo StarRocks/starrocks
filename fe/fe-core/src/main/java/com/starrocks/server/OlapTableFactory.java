@@ -655,21 +655,30 @@ public class OlapTableFactory implements AbstractTableFactory {
             table.setCompressionLevel(compressionLevel);
 
             // partition live number
-            int partitionLiveNumber;
             if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
-                partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
+                int partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
                 table.setPartitionLiveNumber(partitionLiveNumber);
             }
 
             // analyze partition ttl duration
-            Pair<String, PeriodDuration> ttlDuration = null;
             if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
-                ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
+                Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
                 if (ttlDuration == null) {
                     throw new DdlException("Invalid partition ttl duration");
                 }
                 table.getTableProperty().getProperties().put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration.first);
                 table.getTableProperty().setPartitionTTL(ttlDuration.second);
+            }
+
+            // analyze partition retention condition
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+                String ttlCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(db, table, properties, true);
+                if (ttlCondition == null) {
+                    throw new DdlException("Invalid partition retention condition");
+                }
+                table.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlCondition);
+                table.getTableProperty().setPartitionRetentionCondition(ttlCondition);
             }
 
             try {

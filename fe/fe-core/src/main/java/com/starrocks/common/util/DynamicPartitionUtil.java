@@ -78,6 +78,7 @@ import java.util.Map;
 import java.util.TimeZone;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER;
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION;
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_PARTITION_TTL;
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER;
 
@@ -498,12 +499,18 @@ public class DynamicPartitionUtil {
             Map<String, String> properties = tableProperty.getProperties();
             if (!properties.containsKey(PROPERTIES_PARTITION_TTL_NUMBER) &&
                     !properties.containsKey(PROPERTIES_PARTITION_LIVE_NUMBER) &&
-                    !properties.containsKey(PROPERTIES_PARTITION_TTL)) {
+                    !properties.containsKey(PROPERTIES_PARTITION_TTL) ||
+                    !properties.containsKey(PROPERTIES_PARTITION_RETENTION_CONDITION)) {
                 return false;
             }
             return true;
         } else if (partitionInfo instanceof ListPartitionInfo) {
-            return false;
+            // if ttl is not set in table property, return false
+            Map<String, String> properties = tableProperty.getProperties();
+            if (!properties.containsKey(PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+                return false;
+            }
+            return true;
         } else {
             return false;
         }
@@ -521,8 +528,14 @@ public class DynamicPartitionUtil {
             if (tableProperty.getPartitionTTLNumber() > 0 || !tableProperty.getPartitionTTL().isZero()) {
                 return true;
             }
+            if (!Strings.isNullOrEmpty(tableProperty.getPartitionRetentionCondition())) {
+                return true;
+            }
             return false;
         } else if (partitionInfo instanceof ListPartitionInfo) {
+            if (!Strings.isNullOrEmpty(tableProperty.getPartitionRetentionCondition())) {
+                return true;
+            }
             return false;
         } else {
             return false;

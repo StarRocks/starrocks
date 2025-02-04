@@ -105,6 +105,7 @@ import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import org.apache.commons.collections4.CollectionUtils;
@@ -118,7 +119,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.ErrorMsgProxy.PARSER_ERROR_MSG;
-import static com.starrocks.sql.optimizer.rule.transformation.partition.PartitionSelector.getPartitionNamesByExpr;
 
 public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext> {
     private final Table table;
@@ -215,6 +215,8 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             PropertyAnalyzer.analyzePartitionLiveNumber(properties, false);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
             PropertyAnalyzer.analyzePartitionTTL(properties, false);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+            // do nothing
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM)) {
             PropertyAnalyzer.analyzeReplicationNum(properties, false);
         } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
@@ -1274,7 +1276,8 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             Database db = context.getGlobalStateMgr().getMetadataMgr()
                     .getDb(context.getCurrentCatalog(), context.getDatabase());
             TableName tableName = new TableName(db.getFullName(), table.getName());
-            List<String> dropPartitionNames = getPartitionNamesByExpr(context, tableName, olapTable, expr, true);
+            List<String> dropPartitionNames = PartitionSelector.getPartitionNamesByExpr(context, tableName,
+                    olapTable, expr, true);
             clause.setResolvedPartitionNames(dropPartitionNames);
         }
 
