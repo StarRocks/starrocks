@@ -144,11 +144,6 @@ public class MvUpdateInfo {
         if (mvToRefreshType == MvToRefreshType.FULL) {
             return null;
         }
-        // TODO: For loose check mode, we cannot use compensate yet since there is no base table compensation info
-        // in the mv update info.
-        if (queryRewriteConsistencyMode == TableProperty.QueryRewriteConsistencyMode.LOOSE) {
-            return null;
-        }
         if (mvPartToBasePartNames == null || mvPartToBasePartNames.isEmpty()) {
             return null;
         }
