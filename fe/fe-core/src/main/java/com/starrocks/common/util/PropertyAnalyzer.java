@@ -1475,9 +1475,9 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, String.valueOf(number));
                 materializedView.getTableProperty().setPartitionTTLNumber(number);
-                if (isNonPartitioned) {
+                if (!materializedView.getPartitionInfo().isRangePartition()) {
                     throw new AnalysisException(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER
-                            + " does not support non-partitioned materialized view.");
+                            + " does not support non-range-partitioned materialized view.");
                 }
             }
             // partition auto refresh partitions limit
@@ -1486,9 +1486,9 @@ public class PropertyAnalyzer {
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT, String.valueOf(limit));
                 materializedView.getTableProperty().setAutoRefreshPartitionsLimit(limit);
-                if (isNonPartitioned) {
+                if (!materializedView.getPartitionInfo().isRangePartition()) {
                     throw new AnalysisException(PropertyAnalyzer.PROPERTIES_AUTO_REFRESH_PARTITIONS_LIMIT
-                            + " does not support non-partitioned materialized view.");
+                            + " does not support non-range-partitioned materialized view.");
                 }
             }
             // partition refresh number

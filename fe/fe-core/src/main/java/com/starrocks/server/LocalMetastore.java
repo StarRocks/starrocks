@@ -3641,6 +3641,14 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             }
             results.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration);
         }
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER)) {
+            if (!table.getPartitionInfo().isRangePartition()) {
+                throw new DdlException("Table[" + table.getName() + "] is not range partitioned. "
+                        + "no need to set partition live number.");
+            }
+            int partitionTTLNumber = PropertyAnalyzer.analyzePartitionTTLNumber(properties);
+            results.put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL_NUMBER, partitionTTLNumber);
+        }
         // partition retention condition
         if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
             if (!table.getPartitionInfo().isPartitioned()) {

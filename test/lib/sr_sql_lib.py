@@ -2725,6 +2725,12 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
         else:
             tools.assert_true(False, "clear stale column stats timeout. The number of stale column stats is %s" % num)
 
+    def print_table_partitions_num(self, table_name) -> str:
+        res = self.execute_sql("SHOW PARTITIONS FROM %s" % table_name, True)
+        tools.assert_true(res["status"], "show schema change task error")
+        ans = res["result"]
+        return str(len(ans))
+
     def assert_table_partitions_num(self, table_name, expect_num):
         res = self.execute_sql("SHOW PARTITIONS FROM %s" % table_name, True)
         tools.assert_true(res["status"], "show schema change task error")

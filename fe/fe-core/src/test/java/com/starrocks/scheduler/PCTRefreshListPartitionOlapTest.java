@@ -1018,31 +1018,22 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
     @Test
     public void testPartialRefreshSingleColumnMVWithSingleValues2() {
-        Database testDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
         starRocksAssert.withTable(S2, () -> {
-            starRocksAssert.withMaterializedView("create materialized view mv1\n" +
-                            "partition by dt \n" +
-                            "distributed by random \n" +
-                            "REFRESH DEFERRED MANUAL \n" +
-                            "properties (" +
-                            "   'partition_refresh_number' = '1'," +
-                            "   'partition_ttl_number' = '1'" +
-                            ")" +
-                            "as select dt, province, sum(age) from s2 group by dt, province;",
-                    (obj) -> {
-                        String mvName = (String) obj;
-                        MaterializedView materializedView = ((MaterializedView) GlobalStateMgr.getCurrentState()
-                                .getLocalMetastore().getTable(testDb.getFullName(), mvName));
-                        Task task = TaskBuilder.buildMvTask(materializedView, testDb.getFullName());
-                        TaskRun taskRun = TaskRunBuilder.newBuilder(task).build();
-                        ExecPlan execPlan = getExecPlan(taskRun);
-                        Assert.assertEquals(null, execPlan);
-                        List<String> partitions =
-                                materializedView.getPartitions().stream().map(Partition::getName).sorted()
-                                        .collect(Collectors.toList());
-                        // If mv has partition_ttl_number, ensure only create ttl number partitions.
-                        Assert.assertEquals("[p3]", partitions.toString());
-                    });
+            try {
+                starRocksAssert.withMaterializedView("create materialized view mv1\n" +
+                        "partition by dt \n" +
+                        "distributed by random \n" +
+                        "REFRESH DEFERRED MANUAL \n" +
+                        "properties (" +
+                        "   'partition_refresh_number' = '1'," +
+                        "   'partition_ttl_number' = '1'" +
+                        ")" +
+                        "as select dt, province, sum(age) from s2 group by dt, province;");
+                Assert.fail();
+            } catch (Exception e) {
+                Assert.assertTrue(e.getMessage().contains("Invalid parameter partition_ttl_number does not support " +
+                        "non-range-partitioned materialized view"));
+            }
         });
     }
 

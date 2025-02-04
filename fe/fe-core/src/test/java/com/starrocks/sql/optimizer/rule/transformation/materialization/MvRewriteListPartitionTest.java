@@ -16,6 +16,7 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.sql.plan.PlanTestBase;
+import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -290,37 +291,18 @@ public class MvRewriteListPartitionTest extends MVTestBase {
     @Test
     public void testRewriteMultiColumnsPartitionedMVWithTTLPartitionNumber() {
         starRocksAssert.withTable(T3, () -> {
-            // update base table
-            String insertSql = "insert into t3 partition(p1) values(1, 1, '2021-12-01', 'beijing');";
-            executeInsertSql(connectContext, insertSql);
-            // refresh complete
-            withRefreshedMV("create materialized view mv1\n" +
-                            "partition by province \n" +
-                            "distributed by random \n" +
-                            "REFRESH DEFERRED MANUAL \n" +
-                            "properties ('partition_ttl_number' = '1')" +
-                            "as select dt, province, sum(age) from t3 group by dt, province;",
-                    () -> {
-                        String query = "select dt, province, sum(age) from t3 group by dt, province;";
-                        {
-                            String plan = getFragmentPlan(query);
-                            // assert contains mv1
-                            PlanTestBase.assertContains(plan, "     TABLE: mv1\n" +
-                                    "     PREAGGREGATION: ON\n" +
-                                    "     partitions=1/1\n" +
-                                    "     rollup: mv1");
-                        }
-                        {
-                            String sql = "insert into t3 partition(p2) values(1, 1, '2024-01-01', 'guangdong');";
-                            executeInsertSql(connectContext, sql);
-                            // mv is ttl outdated, use base table instead
-                            String plan = getFragmentPlan(query);
-                            PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
-                                    "     TABLE: t3\n" +
-                                    "     PREAGGREGATION: ON\n" +
-                                    "     partitions=4/4");
-                        }
-                    });
+            try {
+                starRocksAssert.withMaterializedView("create materialized view mv1\n" +
+                        "partition by province \n" +
+                        "distributed by random \n" +
+                        "REFRESH DEFERRED MANUAL \n" +
+                        "properties ('partition_ttl_number' = '1')" +
+                        "as select dt, province, sum(age) from t3 group by dt, province;");
+                Assert.fail();
+            } catch (Exception e) {
+                Assert.assertTrue(e.getMessage().contains("Invalid parameter partition_ttl_number does not support " +
+                        "non-range-partitioned materialized view"));
+            }
         });
     }
 
