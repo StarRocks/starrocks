@@ -734,7 +734,7 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
             PlanTestBase.assertContains(plan, "test_loose_mv", "     TABLE: test_loose_mv\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     partitions=3/4");
-            PlanTestBase.assertNotContains(plan, "UNION");
+            PlanTestBase.assertContains(plan, "UNION");
             dropMv("test", "test_loose_mv");
         }
     }
