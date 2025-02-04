@@ -38,6 +38,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -248,6 +249,31 @@ public abstract class MVTimelinessArbiter {
     }
 
     /**
+     * Collect mv to base table partition names mapping to be used in {@code MvUpdate#getBaseTableToRefreshPartitionNames}
+     * for union compensate rewrite.
+     */
+    protected void collectMVToBaseTablePartitionNames(Map<Table, Map<String, PCell>> refBaseTablePartitionMap,
+                                                      PartitionDiff diff,
+                                                      MvUpdateInfo mvUpdateInfo) {
+        Map<String, PCell> mvPartitionToCells = mv.getPartitionCells(Optional.empty());
+        diff.getDeletes().keySet().forEach(mvPartitionToCells::remove);
+        mvPartitionToCells.putAll(diff.getAdds());
+        Map<String, Map<Table, Set<String>>> mvToBaseNameRef = differ
+                .generateMvRefMap(mvPartitionToCells, refBaseTablePartitionMap);
+        mvUpdateInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
+    }
+
+    /**
+     * TODO: Optimize performance in loos/force_mv mode
+     * TODO: in loose mode, ignore partition that both exists in baseTable and mv
+     */
+    protected void collectBaseTableUpdatePartitionNamesInLoose(MvUpdateInfo mvUpdateInfo) {
+        Map<Table, List<Column>> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
+        // collect & update mv's to refresh partitions based on base table's partition changes
+        collectBaseTableUpdatePartitionNames(refBaseTableAndColumns, mvUpdateInfo);
+    }
+
+    /**
      * In Loose mode, do not need to check mv partition's data is consistent with base table's partition's data.
      * Only need to check the mv partition existence.
      */
@@ -270,6 +296,8 @@ public abstract class MVTimelinessArbiter {
                     mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
         }
         addEmptyPartitionsToRefresh(mvUpdateInfo);
+        collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
+        collectMVToBaseTablePartitionNames(refBaseTablePartitionMap, diff, mvUpdateInfo);
         return mvUpdateInfo;
     }
 }
