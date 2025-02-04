@@ -22,130 +22,174 @@ PLAN FRAGMENT 0
 
   RESULT SINK
 
-  16:Project
-  |  <slot 1> : 1: a
-  |  <slot 2> : 2: b
-  |  <slot 3> : 3: c
-  |  
-  15:NESTLOOP JOIN
-  |  join op: INNER JOIN
-  |  colocate: false, reason: 
-  |  other join predicates: ((1: a = 4: a) OR (2: b = 9: b)) OR (3: c = 14: c)
-  |  
-  |----14:EXCHANGE
-  |    
-  12:NESTLOOP JOIN
-  |  join op: CROSS JOIN
-  |  colocate: false, reason: 
-  |  
-  |----11:EXCHANGE
-  |    
-  7:NESTLOOP JOIN
-  |  join op: CROSS JOIN
-  |  colocate: false, reason: 
-  |  
-  |----6:EXCHANGE
-  |    
-  2:ASSERT NUMBER OF ROWS
-  |  assert number of rows: LE 1
-  |  
-  1:EXCHANGE
+  23:EXCHANGE
 
 PLAN FRAGMENT 1
  OUTPUT EXPRS:
   PARTITION: RANDOM
 
   STREAM DATA SINK
-    EXCHANGE ID: 14
+    EXCHANGE ID: 23
     UNPARTITIONED
 
-  13:OlapScanNode
+  22:Project
+  |  <slot 1> : 1: a
+  |  <slot 2> : 2: b
+  |  <slot 3> : 3: c
+  |  
+  21:NESTLOOP JOIN
+  |  join op: INNER JOIN
+  |  colocate: false, reason: 
+  |  other join predicates: ((1: a = 4: a) OR (2: b = 9: b)) OR (3: c = 14: c)
+  |  
+  |----20:EXCHANGE
+  |    
+  0:UNION
+  |  
+  |----18:EXCHANGE
+  |    
+  13:EXCHANGE
+
+PLAN FRAGMENT 2
+ OUTPUT EXPRS:
+  PARTITION: RANDOM
+
+  STREAM DATA SINK
+    EXCHANGE ID: 20
+    UNPARTITIONED
+
+  19:OlapScanNode
      TABLE: T
      PREAGGREGATION: ON
      partitions=1/1
      rollup: T
      tabletRatio=1/1
-     tabletList=75040
+     tabletList=77041
      cardinality=3
      avgRowSize=3.0
 
-PLAN FRAGMENT 2
+PLAN FRAGMENT 3
  OUTPUT EXPRS:
   PARTITION: UNPARTITIONED
 
   STREAM DATA SINK
-    EXCHANGE ID: 11
-    UNPARTITIONED
+    EXCHANGE ID: 18
+    RANDOM
 
-  10:ASSERT NUMBER OF ROWS
+  17:Project
+  |  <slot 4> : 4: a
+  |  <slot 9> : NULL
+  |  <slot 14> : NULL
+  |  
+  16:ASSERT NUMBER OF ROWS
   |  assert number of rows: LE 1
   |  
-  9:EXCHANGE
+  15:EXCHANGE
 
-PLAN FRAGMENT 3
+PLAN FRAGMENT 4
  OUTPUT EXPRS:
   PARTITION: RANDOM
 
   STREAM DATA SINK
-    EXCHANGE ID: 09
+    EXCHANGE ID: 15
     UNPARTITIONED
 
-  8:OlapScanNode
-     TABLE: T1
+  14:OlapScanNode
+     TABLE: T0
      PREAGGREGATION: ON
      partitions=1/1
-     rollup: T1
+     rollup: T0
      tabletRatio=1/1
-     tabletList=75056
+     tabletList=77049
      cardinality=3
      avgRowSize=1.0
-
-PLAN FRAGMENT 4
- OUTPUT EXPRS:
-  PARTITION: UNPARTITIONED
-
-  STREAM DATA SINK
-    EXCHANGE ID: 06
-    UNPARTITIONED
-
-  5:ASSERT NUMBER OF ROWS
-  |  assert number of rows: LE 1
-  |  
-  4:EXCHANGE
 
 PLAN FRAGMENT 5
  OUTPUT EXPRS:
   PARTITION: RANDOM
 
   STREAM DATA SINK
-    EXCHANGE ID: 04
-    UNPARTITIONED
+    EXCHANGE ID: 13
+    RANDOM
 
-  3:OlapScanNode
-     TABLE: T0
-     PREAGGREGATION: ON
-     partitions=1/1
-     rollup: T0
-     tabletRatio=1/1
-     tabletList=75048
-     cardinality=3
-     avgRowSize=1.0
+  12:Project
+  |  <slot 4> : NULL
+  |  <slot 9> : 9: b
+  |  <slot 14> : 14: c
+  |  
+  1:UNION
+  |  
+  |----11:EXCHANGE
+  |    
+  6:EXCHANGE
 
 PLAN FRAGMENT 6
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 11
+    RANDOM
+
+  10:Project
+  |  <slot 9> : NULL
+  |  <slot 14> : 14: c
+  |  
+  9:ASSERT NUMBER OF ROWS
+  |  assert number of rows: LE 1
+  |  
+  8:EXCHANGE
+
+PLAN FRAGMENT 7
  OUTPUT EXPRS:
   PARTITION: RANDOM
 
   STREAM DATA SINK
-    EXCHANGE ID: 01
+    EXCHANGE ID: 08
     UNPARTITIONED
 
-  0:OlapScanNode
+  7:OlapScanNode
      TABLE: T2
      PREAGGREGATION: ON
      partitions=1/1
      rollup: T2
      tabletRatio=1/1
-     tabletList=75064
+     tabletList=77065
+     cardinality=3
+     avgRowSize=1.0
+
+PLAN FRAGMENT 8
+ OUTPUT EXPRS:
+  PARTITION: UNPARTITIONED
+
+  STREAM DATA SINK
+    EXCHANGE ID: 06
+    RANDOM
+
+  5:Project
+  |  <slot 9> : 9: b
+  |  <slot 14> : NULL
+  |  
+  4:ASSERT NUMBER OF ROWS
+  |  assert number of rows: LE 1
+  |  
+  3:EXCHANGE
+
+PLAN FRAGMENT 9
+ OUTPUT EXPRS:
+  PARTITION: RANDOM
+
+  STREAM DATA SINK
+    EXCHANGE ID: 03
+    UNPARTITIONED
+
+  2:OlapScanNode
+     TABLE: T1
+     PREAGGREGATION: ON
+     partitions=1/1
+     rollup: T1
+     tabletRatio=1/1
+     tabletList=77057
      cardinality=3
      avgRowSize=1.0
 -- !result

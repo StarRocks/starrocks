@@ -31,6 +31,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.junit.Test;
 
@@ -98,7 +99,7 @@ public class DrivingTableSelectionRuleTest {
         projection2ColumnRefMap.putAll(t2Scan.getRowOutputInfo().getColumnRefMap());
         projection3ColumnRefMap.putAll(t3Scan.getRowOutputInfo().getColumnRefMap());
 
-        ScalarOperator onKeys = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
+        ScalarOperator onKeys = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
                 new BinaryPredicateOperator(BinaryType.EQ, c1Operator, c4Operator),
                 new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR,
                         new BinaryPredicateOperator(BinaryType.EQ, c2Operator, c5Operator),
@@ -117,18 +118,18 @@ public class DrivingTableSelectionRuleTest {
 
         OptimizerContext context = new OptimizerContext(new Memo(), columnRefFactory);
 
-        System.out.println(innerJoin.debugString());
+        System.out.println("Before: " + innerJoin.debugString());
         assertTrue(rule.check(innerJoin, context));
         List<OptExpression> transform = rule.transform(innerJoin, context);
 
-        OptExpression joinTree = transform.get(0);
-        System.out.println(joinTree.debugString());
+        OptExpression newJoinTree = transform.get(0);
+        System.out.println("After: " + newJoinTree.debugString());
 
         // JOIN
         {
-            assertEquals(0, ((LogicalOlapScanOperator) joinTree.inputAt(1).getOp()).getTable().getId());
-            assertEquals(3,
-                    ((LogicalOlapScanOperator) joinTree.inputAt(0).inputAt(0).inputAt(0).inputAt(0).inputAt(0).inputAt(0)
+            assertEquals(0, ((LogicalOlapScanOperator) newJoinTree.inputAt(1).getOp()).getTable().getId());
+            assertEquals(2,
+                    ((LogicalOlapScanOperator) newJoinTree.inputAt(0).inputAt(0).inputAt(0).inputAt(0).inputAt(0).inputAt(0)
                             .getOp()).getTable()
                             .getId());
         }
@@ -139,15 +140,19 @@ public class DrivingTableSelectionRuleTest {
             map0.putAll(t2Scan.getRowOutputInfo().getColumnRefMap());
             map0.putAll(t3Scan.getRowOutputInfo().getColumnRefMap());
 
-            assertEquals(map0, ((LogicalProjectOperator) joinTree.inputAt(0).getOp()).getColumnRefMap());
+            assertEquals(map0, ((LogicalProjectOperator) newJoinTree.inputAt(0).getOp()).getColumnRefMap());
 
             Map<ColumnRefOperator, ScalarOperator> map1 = new HashMap<>();
-            map1.putAll(t1Scan.getRowOutputInfo().getColumnRefMap());
+            map1.putAll(t2Scan.getRowOutputInfo().getColumnRefMap());
             map1.putAll(t3Scan.getRowOutputInfo().getColumnRefMap());
 
-            assertEquals(map1, ((LogicalProjectOperator) joinTree.inputAt(0).inputAt(0).inputAt(0).getOp()).getColumnRefMap());
-            assertEquals(new HashMap<>(t3Scan.getRowOutputInfo().getColumnRefMap()),
-                    ((LogicalProjectOperator) joinTree.inputAt(0).inputAt(0).inputAt(0).inputAt(0).inputAt(0)
+            assertEquals(map1, ((LogicalProjectOperator) newJoinTree.inputAt(0).inputAt(0).inputAt(0).getOp()).getColumnRefMap());
+
+            Map<ColumnRefOperator, ScalarOperator> map2 = new HashMap<>(t3Scan.getRowOutputInfo().getColumnRefMap());
+            t2Scan.getRowOutputInfo().getColumnRefMap().forEach((k, v) -> map2.put(k, ConstantOperator.createNull(v.getType())));
+
+            assertEquals(map2,
+                    ((LogicalProjectOperator) newJoinTree.inputAt(0).inputAt(0).inputAt(0).inputAt(0).inputAt(1)
                             .getOp()).getColumnRefMap());
         }
     }
