@@ -936,9 +936,6 @@ public class MaterializedViewAnalyzer {
             }
         }
 
-<<<<<<< HEAD
-        private void checkRangePartitionColumnLimit(List<Expr> partitionByExprs) {
-=======
         private void checkMVGeneratedPartitionColumns(CreateMaterializedViewStatement statement,
                                                       Map<TableName, Table> tableNameTableMap) {
             PartitionType partitionType = statement.getPartitionType();
@@ -969,7 +966,6 @@ public class MaterializedViewAnalyzer {
         }
 
         private  void checkRangePartitionColumnLimit(List<Expr> partitionByExprs) {
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
             if (partitionByExprs.size() > 1) {
                 throw new SemanticException("Materialized view with range partition type " +
                         "only supports single column");

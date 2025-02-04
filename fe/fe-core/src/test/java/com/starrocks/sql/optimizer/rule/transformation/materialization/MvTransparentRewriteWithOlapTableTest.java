@@ -85,53 +85,6 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                         "PARTITION `p3` VALUES LESS THAN ('9')"
                 )
         );
-<<<<<<< HEAD
-=======
-
-        // table whose partitions have multiple values
-        t1 = "CREATE TABLE t1 (\n" +
-                "      id BIGINT,\n" +
-                "      age SMALLINT,\n" +
-                "      dt VARCHAR(10),\n" +
-                "      province VARCHAR(64) not null\n" +
-                ")\n" +
-                "DUPLICATE KEY(id)\n" +
-                "PARTITION BY LIST (province) (\n" +
-                "     PARTITION p1 VALUES IN (\"beijing\",\"chongqing\") ,\n" +
-                "     PARTITION p2 VALUES IN (\"guangdong\") \n" +
-                ")\n" +
-                "DISTRIBUTED BY RANDOM\n";
-
-        // table whose partitions have only single values
-        t2 = "CREATE TABLE t2 (\n" +
-                "      id BIGINT,\n" +
-                "      age SMALLINT,\n" +
-                "      dt VARCHAR(10),\n" +
-                "      province VARCHAR(64) not null\n" +
-                ")\n" +
-                "DUPLICATE KEY(id)\n" +
-                "PARTITION BY LIST (province) (\n" +
-                "     PARTITION p1 VALUES IN (\"beijing\") ,\n" +
-                "     PARTITION p2 VALUES IN (\"guangdong\") \n" +
-                ")\n" +
-                "DISTRIBUTED BY RANDOM\n";
-        // table whose partitions have multi columns
-        t3 = "CREATE TABLE t3 (\n" +
-                "      id BIGINT,\n" +
-                "      age SMALLINT,\n" +
-                "      dt VARCHAR(10) not null,\n" +
-                "      province VARCHAR(64) not null\n" +
-                ")\n" +
-                "DUPLICATE KEY(id)\n" +
-                "PARTITION BY LIST (province, dt) (\n" +
-                "     PARTITION p1 VALUES IN ((\"beijing\", \"2024-01-01\")),\n" +
-                "     PARTITION p2 VALUES IN ((\"guangdong\", \"2024-01-01\")), \n" +
-                "     PARTITION p3 VALUES IN ((\"beijing\", \"2024-01-02\")),\n" +
-                "     PARTITION p4 VALUES IN ((\"guangdong\", \"2024-01-02\")) \n" +
-                ")\n" +
-                "DISTRIBUTED BY RANDOM\n";
-    }
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
 
         // table whose partitions have multiple values
         t1 = "CREATE TABLE t1 (\n" +
@@ -946,7 +899,6 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
     }
 
     @Test
-<<<<<<< HEAD
     public void testTransparentMVWithListPartitionsPartialColumns1() {
         starRocksAssert.withTable(t3, () -> {
             String insertSql = "insert into t3 values(1, 1, '2024-01-01', 'beijing')," +
@@ -973,7 +925,12 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                     "  |  child exprs:\n" +
                                     "  |      [11: dt, VARCHAR, false]\n" +
                                     "  |      [15: dt, VARCHAR, false]");
-=======
+                        }
+                    });
+        });
+    }
+
+    @Test
     public void testTransparentMVWithListPartitions1() {
         starRocksAssert.withTable(t1, () -> {
             String insertSql = "insert into t1 values(1, 1, '2021-12-01', 'beijing'), (1, 1, '2021-12-01', 'guangdong');";
@@ -1000,33 +957,27 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                         {
                             String plan = getFragmentPlan("select * from mv0");
                             PlanTestBase.assertContains(plan, "UNION", "mv0", "t1");
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
                         }
                     });
         });
     }
 
     @Test
-<<<<<<< HEAD
     public void testTransparentMVWithListPartitionsPartialColumns2() {
-=======
-    public void testTransparentMVWithListPartitions2() {
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
         starRocksAssert.withTable(t3, () -> {
             String insertSql = "insert into t3 values(1, 1, '2024-01-01', 'beijing')," +
                     "(1, 1, '2022-01-01', 'hangzhou');";
             cluster.runSql("test", insertSql);
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
-<<<<<<< HEAD
-                            " PARTITION BY (dt) " +
+                            " PARTITION BY (province, dt) " +
                             " REFRESH DEFERRED MANUAL " +
                             " AS select province, dt, min(age) from t3 group by province, dt;",
                     () -> {
-                        cluster.runSql("test", String.format("REFRESH MATERIALIZED VIEW mv0 PARTITION (('%s')) " +
-                                "with sync mode", "2024-01-01"));
+                        cluster.runSql("test", String.format("REFRESH MATERIALIZED VIEW mv0 PARTITION (('%s', '%s')) " +
+                                "with sync mode", "beijing", "2024-01-01"));
                         MaterializedView mv1 = getMv("test", "mv0");
                         Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1, p3]", mvNames.toString());
+                        Assert.assertEquals("[p1, p2, p3, p4]", mvNames.toString());
                         // transparent mv
                         {
                             String plan = getFragmentPlan("select min(age) from t3 group by province;", TExplainLevel.COSTS, "");
@@ -1036,34 +987,10 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                                     "  |  child exprs:\n" +
                                     "  |      [9: province, VARCHAR, false] | [11: min(age), SMALLINT, true]\n" +
                                     "  |      [14: province, VARCHAR, false] | [16: min, SMALLINT, true]");
-=======
-                            " PARTITION BY (province, dt) " +
-                            " DISTRIBUTED BY HASH(province) " +
-                            " REFRESH DEFERRED MANUAL " +
-                            " PROPERTIES (\n" +
-                            " 'transparent_mv_rewrite_mode' = 'true'" +
-                            " ) " +
-                            " AS select * from t3;",
-                    () -> {
-                        {
-                            String plan = getFragmentPlan("select * from mv0");
-                            PlanTestBase.assertContains(plan, "UNION", "mv0", "t3");
-                        }
-                        cluster.runSql("test", String.format("REFRESH MATERIALIZED VIEW mv0 PARTITION (('%s', '%s')) " +
-                                        "with sync mode", "beijing", "2024-01-01"));
-                        MaterializedView mv1 = getMv("test", "mv0");
-                        Set<String> mvNames = mv1.getPartitionNames();
-                        Assert.assertEquals("[p1, p2, p3, p4]", mvNames.toString());
-                        // transparent mv
-                        {
-                            String plan = getFragmentPlan("select * from mv0");
-                            PlanTestBase.assertContains(plan, "UNION", "mv0", "t3");
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
                         }
                     });
         });
     }
-<<<<<<< HEAD
 
     @Test
     public void testTransparentRewriteWithAggregateColumnsPrune() {
@@ -1391,6 +1318,3 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
         });
     }
 }
-=======
-}
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))

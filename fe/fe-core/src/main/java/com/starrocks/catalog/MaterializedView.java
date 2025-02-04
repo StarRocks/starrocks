@@ -2102,7 +2102,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     }
 
     /**
-<<<<<<< HEAD
      * Get mv's ordered columns if the mv has defined its output columns order.
      * @return: mv's defined output columns in the defined order
      */
@@ -2117,7 +2116,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
             return outputColumns;
         }
-=======
+    }
+
+    /*
      * For MV, its schema has relations with defined query's schema.`getBaseSchema` should not return the generated columns
      * since they are inner columns and not visible to users.
      * For now, the generated columns of mv can be created when mv's partition expression is not slot ref and its partition type
@@ -2139,6 +2140,5 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             }
         }
         return schema;
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
     }
 }

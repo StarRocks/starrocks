@@ -216,20 +216,12 @@ public class MVCompensationBuilder {
             if (partitionInfo.isRangePartition()) {
                 Map<String, Range<PartitionKey>> refTablePartitionNameWithRanges =
                         mvBaseTableUpdateInfo.getPartitionNameWithRanges();
-<<<<<<< HEAD
                 List<PRangeCell> partitionKeys = Lists.newArrayList();
-=======
-                List<PartitionKey> partitionKeys = Lists.newArrayList();
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
                 try {
                     for (String partitionName : refTablePartitionNamesToRefresh) {
                         Preconditions.checkState(refTablePartitionNameWithRanges.containsKey(partitionName));
                         Range<PartitionKey> partitionKeyRange = refTablePartitionNameWithRanges.get(partitionName);
-<<<<<<< HEAD
                         partitionKeys.add(PRangeCell.of(partitionKeyRange));
-=======
-                        partitionKeys.add(partitionKeyRange.lowerEndpoint());
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
                     }
                 } catch (Exception e) {
                     logMVRewrite("Failed to get partition keys for ref base table: {}", refBaseTable.getName(),
@@ -240,16 +232,11 @@ public class MVCompensationBuilder {
             } else {
                 Preconditions.checkArgument(partitionInfo.isListPartition());
                 Map<String, PListCell> partitionNameWithLists = mvBaseTableUpdateInfo.getPartitionNameWithLists();
-<<<<<<< HEAD
                 List<PRangeCell> partitionKeys = Lists.newArrayList();
-=======
-                List<PartitionKey> partitionKeys = Lists.newArrayList();
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
                 try {
                     List<Column> partitionCols = refBaseTable.getPartitionColumns();
                     for (String partitionName : refTablePartitionNamesToRefresh) {
                         Preconditions.checkState(partitionNameWithLists.containsKey(partitionName));
-<<<<<<< HEAD
                         // TODO: we are assuming PListCell's cells' order is by partition's columns order, we may introduce
                         // partition columns in PListCell.
                         partitionNameWithLists.get(partitionName)
@@ -257,13 +244,6 @@ public class MVCompensationBuilder {
                                 .stream()
                                 .map(PRangeCell::of)
                                 .forEach(partitionKeys::add);
-=======
-                        PListCell pCell = partitionNameWithLists.get(partitionName);
-                        // TODO: we are assuming PListCell's cells' order is by partition's columns order, we may introduce
-                        // partition columns in PListCell.
-                        List<PartitionKey> keys = pCell.toPartitionKeys(partitionCols);
-                        partitionKeys.addAll(keys);
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
                     }
                 } catch (Exception e) {
                     logMVRewrite("Failed to get partition keys for ref base table: {}", refBaseTable.getName(),
@@ -385,13 +365,8 @@ public class MVCompensationBuilder {
                 }
             }
             // if mv's to refresh partitions contains any of query's select partition ids, then rewrite with compensation.
-<<<<<<< HEAD
             List<PRangeCell> toRefreshRefTablePartitions = getMVCompensatePartitionsOfExternal(refBaseTable,
                     selectPartitionKeys, refTablePartitionNamesToRefresh, refScanOperator);
-=======
-            List<PartitionKey> toRefreshRefTablePartitions = getMVCompensatePartitionsOfExternal(refBaseTable,
-                    refTablePartitionNamesToRefresh, refScanOperator);
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
             if (toRefreshRefTablePartitions == null) {
                 return MVCompensation.createUnkownState(sessionVariable);
             }
@@ -479,7 +454,6 @@ public class MVCompensationBuilder {
         if (!refBaseTablePartitionColumns.containsKey(refBaseTable)) {
             return null;
         }
-        List<Column> partitionColumns = refBaseTablePartitionColumns.get(refBaseTable);
         try {
             for (String partitionName : refTablePartitionNamesToRefresh) {
                 if (!nameToPartitionKeys.containsKey(partitionName)) {
@@ -489,16 +463,9 @@ public class MVCompensationBuilder {
                 if (pCell instanceof PRangeCell) {
                     partitionKeys.add(((PRangeCell) pCell));
                 } else if (pCell instanceof PListCell) {
-<<<<<<< HEAD
-                    final List<PartitionKey> keys = ((PListCell) pCell).toPartitionKeys(partitionColumns);
-                    keys.stream()
-                            .map(key -> PRangeCell.of(key))
-                            .forEach(partitionKeys::add);
-=======
                     List<Column> partitionColumns = refBaseTable.getPartitionColumns();
                     List<PartitionKey> keys = ((PListCell) pCell).toPartitionKeys(partitionColumns);
-                    partitionKeys.addAll(keys);
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
+                    keys.stream().forEach(key -> partitionKeys.add(PRangeCell.of(key)));
                 }
             }
         } catch (Exception e) {

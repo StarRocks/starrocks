@@ -259,11 +259,7 @@ public class IcebergPartitionUtils {
         PartitionField partitionField = table.getPartitionFiled(partitionColName);
         if (partitionField == null) {
             throw new StarRocksConnectorException("Partition column %s not found in table %s.%s.%s",
-<<<<<<< HEAD
-                    partitionColumn, table.getCatalogName(), table.getCatalogDBName(), table.getCatalogTableName());
-=======
-                    partitionColName, table.getCatalogName(), table.getRemoteDbName(), table.getRemoteTableName());
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
+                    partitionColName, table.getCatalogName(), table.getCatalogDBName(), table.getCatalogTableName());
         }
         IcebergPartitionTransform transform = IcebergPartitionTransform.fromString(partitionField.transform().toString());
         if (transform == IcebergPartitionTransform.IDENTITY) {

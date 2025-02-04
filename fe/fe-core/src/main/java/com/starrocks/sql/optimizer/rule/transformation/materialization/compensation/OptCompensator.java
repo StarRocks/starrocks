@@ -25,24 +25,18 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionInfo;
-<<<<<<< HEAD
-=======
 import com.starrocks.catalog.PartitionKey;
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
-import com.starrocks.sql.common.PRangeCell;
-=======
 import com.starrocks.sql.analyzer.AnalyzeState;
 import com.starrocks.sql.analyzer.ExpressionAnalyzer;
 import com.starrocks.sql.analyzer.Field;
 import com.starrocks.sql.analyzer.RelationFields;
 import com.starrocks.sql.analyzer.RelationId;
 import com.starrocks.sql.analyzer.Scope;
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
+import com.starrocks.sql.common.PRangeCell;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -51,18 +45,13 @@ import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
-<<<<<<< HEAD
-import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import org.apache.iceberg.PartitionField;
-=======
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
+import org.apache.iceberg.PartitionField;
 import org.apache.iceberg.Snapshot;
 
 import java.util.List;
@@ -151,18 +140,23 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
         }
         List<Column> refBaseTablePartitionCols = refBaseTablePartitionColumns.get(refBaseTable);
         Preconditions.checkState(refBaseTablePartitionCols != null);
-<<<<<<< HEAD
         List<ScalarOperator> partitionColumnRefs = refBaseTablePartitionCols
                 .stream()
                 .map(col -> scanOperator.getColumnReference(col))
                 .collect(Collectors.toList());
-
-=======
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
         ScalarOperator externalExtraPredicate = null;
         if (scanOperator.getOpType() == OperatorType.LOGICAL_ICEBERG_SCAN) {
             PartitionInfo mvPartitionInfo = mv.getPartitionInfo();
             IcebergTable cachedIcebergTable = (IcebergTable) refBaseTable;
+
+            // refresh iceberg table's metadata
+            String catalogName = cachedIcebergTable.getCatalogName();
+            String dbName = cachedIcebergTable.getCatalogDBName();
+            TableName refTableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
+            Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(refTableName).orElse(null);
+            if (currentTable == null) {
+                return null;
+            }
             if (!mvPartitionInfo.isListPartition()) {
                 List<ColumnRefOperator> refPartitionColRefs = refBaseTablePartitionCols
                         .stream()
@@ -185,42 +179,6 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
                 externalExtraPredicate =  convertPartitionKeyRangesToListPredicate(refPartitionColRefs,
                         partitionKeys, !isContainPartitionTransform);
             } else {
-                externalExtraPredicate = convertPartitionKeyRangesToListPredicate(partitionColumnRefs,
-                        partitionKeys, true);
-            }
-
-            // refresh iceberg table's metadata
-            String catalogName = cachedIcebergTable.getCatalogName();
-<<<<<<< HEAD
-            String dbName = cachedIcebergTable.getCatalogDBName();
-=======
-            String dbName = cachedIcebergTable.getRemoteDbName();
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
-            TableName refTableName = new TableName(catalogName, dbName, cachedIcebergTable.getName());
-            Table currentTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(refTableName).orElse(null);
-            if (currentTable == null) {
-                return null;
-            }
-
-            builder.setTable(currentTable);
-            TableVersionRange versionRange = TableVersionRange.withEnd(
-                    Optional.ofNullable(((IcebergTable) currentTable).getNativeTable().currentSnapshot())
-                            .map(Snapshot::snapshotId));
-            builder.setTableVersionRange(versionRange);
-<<<<<<< HEAD
-        } else {
-            externalExtraPredicate = convertPartitionKeyRangesToListPredicate(partitionColumnRefs, partitionKeys,
-                    true);
-        }
-        Preconditions.checkState(externalExtraPredicate != null);
-        externalExtraPredicate.setRedundant(true);
-
-        Preconditions.checkState(externalExtraPredicate != null);
-        ScalarOperator finalPredicate = Utils.compoundAnd(scanOperator.getPredicate(), externalExtraPredicate);
-        builder.setPredicate(finalPredicate);
-=======
-            PartitionInfo mvPartitionInfo = mv.getPartitionInfo();
-            if (mvPartitionInfo.isListPartition()) {
                 List<Column> mvPartitionCols = mv.getPartitionColumns();
                 // to iceberg, `partitionKeys` are using LocalTime as partition values which cannot be used to prune iceberg
                 // partitions directly because iceberg uses UTC time in its partition metadata.
@@ -249,7 +207,8 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
                                         col.getType(), refTableName, null))
                                 .collect(Collectors.toList())));
                 List<ScalarOperator> externalPredicates = Lists.newArrayList();
-                for (PartitionKey partitionKey : partitionKeys) {
+                for (PRangeCell pRangeCell : partitionKeys) {
+                    PartitionKey partitionKey = pRangeCell.getRange().lowerEndpoint();
                     List<LiteralExpr> literalExprs = partitionKey.getKeys();
                     Preconditions.checkState(literalExprs.size() == refBaseTablePartitionCols.size());
                     List<ScalarOperator> predicates = Lists.newArrayList();
@@ -273,25 +232,27 @@ public class OptCompensator extends OptExpressionVisitor<OptExpression, Void> {
                                     optimizerContext.getColumnRefFactory());
                             predicates.add(predicate);
                         }
-                        externalPredicates.add(Utils.compoundAnd(predicates));
                     }
-                    externalExtraPredicate = Utils.compoundOr(externalPredicates);
+                    externalPredicates.add(Utils.compoundAnd(predicates));
                 }
+                externalExtraPredicate = Utils.compoundOr(externalPredicates);
             }
-        }
-        if (externalExtraPredicate == null) {
-            List<ScalarOperator> refPartitionColRefs = refBaseTablePartitionCols
-                    .stream()
-                    .map(col -> scanOperator.getColumnReference(col))
-                    .collect(Collectors.toList());
-            externalExtraPredicate = convertPartitionKeysToListPredicate(refPartitionColRefs, partitionKeys);
+
+            builder.setTable(currentTable);
+            TableVersionRange versionRange = TableVersionRange.withEnd(
+                    Optional.ofNullable(((IcebergTable) currentTable).getNativeTable().currentSnapshot())
+                            .map(Snapshot::snapshotId));
+            builder.setTableVersionRange(versionRange);
+        } else {
+            externalExtraPredicate = convertPartitionKeyRangesToListPredicate(partitionColumnRefs, partitionKeys,
+                    true);
         }
         Preconditions.checkState(externalExtraPredicate != null);
         externalExtraPredicate.setRedundant(true);
+
+        Preconditions.checkState(externalExtraPredicate != null);
         ScalarOperator finalPredicate = Utils.compoundAnd(scanOperator.getPredicate(), externalExtraPredicate);
         builder.setPredicate(finalPredicate);
-
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
         return builder.build();
     }
 

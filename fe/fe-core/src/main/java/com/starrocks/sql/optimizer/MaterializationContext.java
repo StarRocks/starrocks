@@ -472,41 +472,15 @@ public class MaterializationContext {
         if (mvCompensation == null) {
             // only set this when `queryExpression` contains ref table, otherwise the cached value maybe dirty.
             this.mvCompensation = MvPartitionCompensator.getMvCompensation(queryExpression, this);
-<<<<<<< HEAD
-            logMVRewrite(mv.getName(), "Init mv compensation: {}", mvCompensation);
-=======
             logMVRewrite(mv.getName(), "MV compensation: {}", mvCompensation);
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
         }
         return this.mvCompensation;
     }
 
     public MVCompensation getMvCompensation() {
-<<<<<<< HEAD
-        return mvCompensation;
-=======
         Preconditions.checkArgument(mvCompensation != null,
                 "MV compensation should be initialized before used");
         return mvCompensation;
-    }
-
-    /**
-     * Check the mv context can be used for rewrite:
-     * - if mv compensation's state is no rewrite, return false
-     * - if mv compensation's state is unkwown & check mode is checked, return false
-     * - otherwise return true.
-     */
-    public boolean isNoRewrite() {
-        Preconditions.checkArgument(mvCompensation != null,
-                "MV compensation should be initialized before used");
-        if (mvCompensation.getState().isNoRewrite()) {
-            return true;
-        }
-        if (mvUpdateInfo.getQueryRewriteConsistencyMode() == CHECKED && mvCompensation.getState().isUnknown()) {
-            return true;
-        }
-        return false;
->>>>>>> df6e03c49 ([Feature] (Part 2) Support create materialized view from Iceberg table with multi partition columns and partition transforms (#52966))
     }
 
     /**
