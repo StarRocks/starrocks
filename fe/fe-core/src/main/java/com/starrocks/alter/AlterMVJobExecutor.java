@@ -19,10 +19,7 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-<<<<<<< HEAD
 import com.starrocks.catalog.Column;
-=======
->>>>>>> e92bd403b ([Feature] (Part 3) Support partition_redention_condition property for native tables (#53478))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
