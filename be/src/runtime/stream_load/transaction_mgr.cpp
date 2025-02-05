@@ -405,8 +405,8 @@ void TransactionMgr::_clean_stream_context() {
                         fmt::format("transaction is aborted by idle timeout {} seconds.", ctx->idle_timeout_sec));
             }
             if (!status.ok()) {
-                ctx->timeout_detected.store(true, std::memory_order_release);
                 if (ctx->lock.try_lock()) {
+                    ctx->timeout_detected.store(true, std::memory_order_release);
                     ctx->status = status;
                     auto st = _rollback_transaction(ctx);
                     LOG(INFO) << "Abort transaction " << ctx->brief() << ", reason: " << status.message()
