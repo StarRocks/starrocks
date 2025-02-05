@@ -355,7 +355,7 @@ If you want to load only the data records whose values in the first column of `e
 ```Bash
 curl --location-trusted -u <username>:<password> -H "label:label4" \
     -H "Expect:100-continue" \
-    -H "columns: col1, col2, col3]"\
+    -H "columns: col1, col2, col3"\
     -H "where: col1 = 20180601" \
     -T example4.csv -XPUT \
     http://<fe_host>:<fe_http_port>/api/test_db/table4/_stream_load
