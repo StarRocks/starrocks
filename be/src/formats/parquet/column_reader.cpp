@@ -17,8 +17,6 @@
 #include <glog/logging.h>
 
 #include <algorithm>
-#include <ostream>
-#include <unordered_map>
 #include <utility>
 
 #include "column/chunk.h"
@@ -35,6 +33,18 @@
 #include "storage/column_predicate.h"
 
 namespace starrocks::parquet {
+
+void ColumnOffsetIndexCtx::collect_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
+                                            int64_t* end_offset, bool active) {
+    for (size_t i = 0; i < page_selected.size(); i++) {
+        if (page_selected[i]) {
+            auto r = io::SharedBufferedInputStream::IORange(
+                    offset_index.page_locations[i].offset, offset_index.page_locations[i].compressed_page_size, active);
+            ranges->emplace_back(r);
+            *end_offset = std::max(*end_offset, r.offset + r.size);
+        }
+    }
+}
 
 Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnReader* reader,
                                                                    bool* is_group_filtered) {

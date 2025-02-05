@@ -14,6 +14,7 @@
 
 #include "formats/parquet/scalar_column_reader.h"
 
+#include "formats/parquet/column_reader.h"
 #include "formats/parquet/stored_column_reader_with_index.h"
 #include "formats/parquet/utils.h"
 #include "formats/parquet/zone_map_filter_evaluator.h"

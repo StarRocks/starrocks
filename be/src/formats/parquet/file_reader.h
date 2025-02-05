@@ -100,23 +100,10 @@ private:
     bool _filter_group(const GroupReaderPtr& group_reader);
     StatusOr<bool> _update_rf_and_filter_group(const GroupReaderPtr& group_reader);
 
-    bool _filter_group_with_min_max_conjuncts(const GroupReaderPtr& group_reader);
-
-    bool _filter_group_with_bloom_filter_min_max_conjuncts(const GroupReaderPtr& group_reader);
-
-    bool _filter_group_with_more_filter(const GroupReaderPtr& group_reader);
-
     // get row group to read
     // if scan range conatain the first byte in the row group, will be read
     // TODO: later modify the larger block should be read
     bool _select_row_group(const tparquet::RowGroup& row_group);
-
-    // make min/max chunk from stats of row group meta
-    // exist=true: group meta contain statistics info
-    Status _read_min_max_chunk(const GroupReaderPtr& group_reader, const std::vector<SlotDescriptor*>& slots,
-                               ChunkPtr* min_chunk, ChunkPtr* max_chunk) const;
-    Status _read_has_nulls(const GroupReaderPtr& group_reader, const std::vector<SlotDescriptor*>& slots,
-                           std::vector<bool>* has_nulls);
 
     // only scan partition column + not exist column
     Status _exec_no_materialized_column_scan(ChunkPtr* chunk);
