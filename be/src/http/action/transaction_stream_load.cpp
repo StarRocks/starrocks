@@ -267,8 +267,9 @@ int TransactionStreamLoadAction::on_header(HttpRequest* req) {
         return -1;
     }
 
-    if (!ctx->lock.try_lock()) {
-        _send_error_reply(req, Status::TransactionInProcessing("Transaction in processing, please retry later"));
+    Status lock_st = ctx->try_lock();
+    if (!lock_st.ok()) {
+        _send_error_reply(req, lock_st);
         return -1;
     }
     // referenced by the http request

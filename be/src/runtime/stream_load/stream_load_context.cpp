@@ -308,6 +308,20 @@ void StreamLoadContext::release(StreamLoadContext* context) {
     }
 }
 
+Status StreamLoadContext::try_lock() {
+    if (lock.try_lock()) {
+        return Status::OK();
+    }
+    // try_lock can be failed in two cases
+    // 1. the transaction timeouts, and the clean thread is holding the lock to roll back the transaction.
+    //    In this case, timeout_detected must have been set to true
+    // 2. there are concurrent requests, and some request is holding the lock
+    if (timeout_detected.load(std::memory_order_acquire)) {
+        return Status::Aborted("The load is timeout, and will be aborted");
+    }
+    return Status::TransactionInProcessing("Transaction is in processing");
+}
+
 bool StreamLoadContext::tsl_reach_timeout() {
     return timeout_second > 0 && (UnixSeconds() - begin_txn_ts) > timeout_second;
 }

@@ -251,8 +251,8 @@ Status TransactionMgr::commit_transaction(const HttpRequest* req, std::string* r
             *resp = _build_reply(label, TXN_COMMIT, st);
             return st;
         }
-        if (!ctx->lock.try_lock()) {
-            st = Status::TransactionInProcessing("Transaction in processing, please retry later");
+        st = ctx->try_lock();
+        if (!st.ok()) {
             *resp = _build_reply(label, TXN_COMMIT, st);
             return st;
         }
@@ -405,6 +405,7 @@ void TransactionMgr::_clean_stream_context() {
                         fmt::format("transaction is aborted by idle timeout {} seconds.", ctx->idle_timeout_sec));
             }
             if (!status.ok()) {
+                ctx->timeout_detected.store(true, std::memory_order_release);
                 if (ctx->lock.try_lock()) {
                     ctx->status = status;
                     auto st = _rollback_transaction(ctx);
