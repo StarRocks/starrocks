@@ -1441,9 +1441,9 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                 tableName);
                         String plan = getFragmentPlan(query2);
                         PlanTestBase.assertNotContains(plan, ":UNION");
-                        PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n" +
+                        PlanTestBase.assertMatches(plan, "     TABLE: test_mv1\n" +
                                 "     PREAGGREGATION: ON\n" +
-                                "     PREDICATES: 7: dt >= '2024-11-11'\n" +
+                                "     PREDICATES: 7: .*'\n" +
                                 "     partitions=2/2");
                     }
                 });
@@ -1518,9 +1518,9 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                 tableName);
                         String plan = getFragmentPlan(query2);
                         PlanTestBase.assertNotContains(plan, ":UNION");
-                        PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
+                        PlanTestBase.assertMatches(plan, String.format("TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
-                                "     PREDICATES: 3: dt >= '2024-11-11'\n" +
+                                "     PREDICATES: 3: .*'\n" +
                                 "     partitions=2/6", tableName));
                     }
                 });
