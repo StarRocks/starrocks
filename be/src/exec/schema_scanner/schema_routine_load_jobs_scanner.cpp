@@ -44,10 +44,7 @@ SchemaScanner::ColumnDesc SchemaRoutineLoadJobsScanner::_s_tbls_columns[] = {
          true},
         {"ERROR_LOG_URLS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"TRACKING_SQL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"OTHER_MSG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"LATEST_SOURCE_POSITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"OFFSET_LAG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false}
-        };
+        {"OTHER_MSG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true}};
 
 SchemaRoutineLoadJobsScanner::SchemaRoutineLoadJobsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -80,7 +77,7 @@ Status SchemaRoutineLoadJobsScanner::fill_chunk(ChunkPtr* chunk) {
     for (; _cur_idx < _result.loads.size(); _cur_idx++) {
         auto& info = _result.loads[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            if (slot_id < 1 || slot_id > 21) {
+            if (slot_id < 1 || slot_id > 19) {
                 return Status::InternalError(strings::Substitute("invalid slot id: $0", slot_id));
             }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
@@ -231,18 +228,6 @@ Status SchemaRoutineLoadJobsScanner::fill_chunk(ChunkPtr* chunk) {
                 } else {
                     down_cast<NullableColumn*>(column.get())->append_nulls(1);
                 }
-                break;
-            }
-            case 20: {
-                // latest_source_position
-                Slice latest_source_position = Slice(info.latest_source_position);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&latest_source_position);
-                break;
-            }
-            case 21: {
-                // offset_lag
-                Slice offset_lag = Slice(info.offset_lag);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&offset_lag);
                 break;
             }
             default:

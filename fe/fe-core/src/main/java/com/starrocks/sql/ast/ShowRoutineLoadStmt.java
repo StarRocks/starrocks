@@ -90,7 +90,6 @@ public class ShowRoutineLoadStmt extends ShowStmt {
         }
 
         builder.add("LatestSourcePosition");
-        builder.add("OffsetLag");
         TITLE_NAMES = builder.build();
     }
 

@@ -175,36 +175,6 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         return gson.toJson(partitionOffsets);
     }
 
-
-    @Override
-    protected String getSourceLagString(String progressJsonStr) {
-
-        Gson gson = new Gson();
-
-        Map<String, String> progress = gson.fromJson(progressJsonStr, Map.class);
-
-        if (progress == null || progress.isEmpty()) {
-            return gson.toJson(progress);
-        }
-
-        if (latestPartitionOffsets == null || latestPartitionOffsets.isEmpty()) {
-            return gson.toJson(latestPartitionOffsets);
-        }
-
-        Map<String, String> partitionLag = Maps.newHashMap();
-
-        for (Map.Entry<Integer, Long> entry : latestPartitionOffsets.entrySet()) {
-            // progress and latest all have same id
-            String mapKey = entry.getKey().toString();
-            if (progress.containsKey(mapKey)) {
-                Long lag = entry.getValue() - Long.valueOf(progress.get(mapKey));
-                lag = lag < 0 ? 0 : lag;
-                partitionLag.put(mapKey, lag.toString());
-            }
-        }
-        return gson.toJson(partitionLag);
-    }
-
     public void setPartitionOffset(int partition, long offset) {
         latestPartitionOffsets.put(Integer.valueOf(partition), Long.valueOf(offset));
     }

@@ -643,8 +643,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     protected abstract String getSourceProgressString();
 
-    protected abstract String getSourceLagString(String progressJsonStr);
-
     public double getMaxFilterRatio() {
         return maxFilterRatio;
     }
@@ -1550,10 +1548,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             row.add(dataSourcePropertiesJsonToString());
             row.add(customPropertiesJsonToString());
             row.add(getStatistic());
-
-            String progressJsonStr = getProgress().toJsonString();
-
-            row.add(progressJsonStr);
+            row.add(getProgress().toJsonString());
             row.add(getTimestampProgress().toJsonString());
             switch (state) {
                 case PAUSED:
@@ -1590,9 +1585,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                     row.add(e.getMessage());
                 }
             }
-
             row.add(getSourceProgressString());
-            row.add(getSourceLagString(progressJsonStr));
 
             return row;
         } finally {
@@ -2051,10 +2044,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             info.setCustom_properties(customPropertiesJsonToString());
             info.setData_source_type(dataSourceType.name());
             info.setStatistic(getStatistic());
-
-            String progressJsonStr = getProgress().toJsonString();
-
-            info.setProgress(progressJsonStr);
+            info.setProgress(getProgress().toJsonString());
             switch (state) {
                 case PAUSED:
                     info.setReasons_of_state_changed(pauseReason == null ? "" : pauseReason.toString());
@@ -2072,12 +2062,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 info.setTracking_sql("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
             }
             info.setOther_msg(otherMsg);
-
-            info.setLatest_source_position(getSourceProgressString());
-            info.setOffset_lag(getSourceLagString(progressJsonStr));
-
             return info;
-
         } finally {
             readUnlock();
         }
