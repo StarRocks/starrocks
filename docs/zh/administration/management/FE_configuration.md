@@ -2926,16 +2926,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：云原生元数据服务监听端口。
 - 引入版本：-
 
-<!--
+
 ##### enable_load_volume_from_conf
 
-- 默认值：true
+- 默认值：false
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：
-- 引入版本：-
--->
+- 描述：是否允许 StarRocks 使用 FE 配置文件中指定的存储相关属性创建默认存储卷。自 v3.4.1 起，默认值由 `true` 变为 `false`。
+- 引入版本：v3.1.0
+
 
 ##### cloud_native_storage_type
 
