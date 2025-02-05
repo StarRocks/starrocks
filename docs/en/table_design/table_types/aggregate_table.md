@@ -307,7 +307,7 @@ FROM t1
 WHERE dt >= '2024-01-01'
 GROUP BY dt;
 
--- Direct query against the aggregate function and the rollup will also be transparently accelerated by test_mv1.
+-- Direct queries against the aggregate function and the rollup will also be transparently accelerated by test_mv1.
 SELECT 
     min(id),
     max(id),
