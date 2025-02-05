@@ -45,7 +45,7 @@ Properties include:
 | ------------- | ------------ | ---------------------------------------------------------------- |
 | type          | Yes          | The type of the UDF. Setting it to `Python` indicates to create a Python-based UDF. |
 | symbol        | Yes          | The name of the class for the Python project to which the UDF belongs. The value of this parameter is in the `<package_name>.<class_name>` format. |
-| input         | No           | Type of input. Valid values: `scalar` (Default) and `arrow`.     |
+| input         | No           | Type of input. Valid values: `scalar` (Default) and `arrow` (vectorized input).     |
 | file          | No           | The HTTP URL from which you can download the Python package file that contains the code for the UDF. The value of this parameter is in the `http://<http_server_ip>:<http_server_port>/<python_package_name>` format. Note the package name must have the suffix `.py.zip`. Default value: `inline`, which indicates to create an inline UDF. |
 
 ### Create an inline scalar input UDF using Python

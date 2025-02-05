@@ -45,7 +45,7 @@ Properties 包括以下参数：
 | ------------- | ------- | ------------------------------------------------------------- |
 | type          | 是      | 用于标记所创建的 UDF 类型。取值为 `Python`，表示基于 Python 的 UDF。 |
 | symbol        | 是      | UDF 所在项目的类名。格式为 `<package_name>.<class_name>`。        |
-| input         | 否      | 输入类型。有效值：`scalar`（默认）和 `arrow`。                     |
+| input         | 否      | 输入类型。有效值：`scalar`（默认）和 `arrow` (向量输入)。                     |
 | file          | 否      | UDF 所在 Python 包的 HTTP 路径。格式为 `http://<http_server_ip>:<http_server_port>/<jar_package_name>`。注意 Python 包名必须以 `.py.zip` 结尾。默认值：`inline`，表示创建内联 UDF。 |
 
 ### 创建标量输入的内联函数
