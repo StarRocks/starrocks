@@ -1,0 +1,115 @@
+-- name: test_dict_lake_period_version
+create external catalog hive_sql_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+-- result:
+-- !result
+use hive_sql_test_${uuid0}.hive_oss_db;
+-- result:
+-- !result
+create table dict_version_test (
+c1 int,
+c2 string
+);
+-- result:
+-- !result
+insert into dict_version_test values (1, '1');
+-- result:
+-- !result
+insert into dict_version_test values (2, '2');
+-- result:
+-- !result
+insert into dict_version_test values (3, '3');
+-- result:
+-- !result
+insert into dict_version_test values (4, '4');
+-- result:
+-- !result
+insert into dict_version_test values (5, '5');
+-- result:
+-- !result
+insert into dict_version_test values (6, '6');
+-- result:
+-- !result
+select count(c2) from dict_version_test;
+-- result:
+6
+-- !result
+function: wait_global_dict_ready('c2', 'dict_version_test')
+-- result:
+
+-- !result
+select count(c2) from dict_version_test;
+-- result:
+6
+-- !result
+function: wait_global_dict_ready('c2', 'dict_version_test')
+-- result:
+
+-- !result
+insert into dict_version_test values (7, '7');
+-- result:
+-- !result
+select count(c2) from dict_version_test;
+-- result:
+7
+-- !result
+function: wait_global_dict_ready('c2', 'dict_version_test')
+-- result:
+
+-- !result
+insert into dict_version_test values (8, '8');
+-- result:
+-- !result
+select count(c2) from dict_version_test;
+-- result:
+8
+-- !result
+function: wait_global_dict_ready('c2', 'dict_version_test')
+-- result:
+
+-- !result
+insert into dict_version_test values (9, '9');
+-- result:
+-- !result
+select count(c2) from dict_version_test;
+-- result:
+9
+-- !result
+function: wait_global_dict_ready('c2', 'dict_version_test')
+-- result:
+
+-- !result
+insert into dict_version_test values (10, '10');
+-- result:
+-- !result
+select count(c2) from dict_version_test;
+-- result:
+10
+-- !result
+function: wait_global_dict_ready('c2', 'dict_version_test')
+-- result:
+
+-- !result
+insert into dict_version_test values (11, '11');
+-- result:
+-- !result
+select count(c2) from dict_version_test;
+-- result:
+11
+-- !result
+function: try_collect_dict_N_times('c2', 'dict_version_test', 5)
+-- result:
+None
+-- !result
+function: assert_no_global_dict('c2', 'dict_version_test')
+-- result:
+None
+-- !result
+drop table dict_version_test force;
+-- result:
+-- !result
+drop catalog hive_sql_test_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result

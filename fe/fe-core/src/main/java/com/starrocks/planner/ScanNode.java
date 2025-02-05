@@ -34,6 +34,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.base.Joiner;
 import com.google.common.base.MoreObjects;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.SlotDescriptor;
@@ -48,9 +49,11 @@ import com.starrocks.thrift.TColumnAccessPath;
 import com.starrocks.thrift.TScanRangeLocations;
 import org.jetbrains.annotations.TestOnly;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -64,6 +67,9 @@ public abstract class ScanNode extends PlanNode {
     protected DataCacheOptions dataCacheOptions = null;
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
     protected ScanOptimzeOption scanOptimzeOption;
+    // The column names applied dict optimization
+    // used for explain
+    protected final List<String> appliedDictStringColumns = new ArrayList<>();
 
     public ScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
         super(id, desc.getId().asList(), planNodeName);
@@ -97,6 +103,18 @@ public abstract class ScanNode extends PlanNode {
 
     public ScanOptimzeOption getScanOptimzeOption() {
         return scanOptimzeOption;
+    }
+
+    public void updateAppliedDictStringColumns(Set<Integer> appliedColumnIds) {
+        for (SlotDescriptor slot : desc.getSlots()) {
+            if (appliedColumnIds.contains(slot.getId().asInt())) {
+                appliedDictStringColumns.add(slot.getColumn().getName());
+            }
+        }
+    }
+
+    public TupleDescriptor getDesc() {
+        return desc;
     }
 
     public String getTableName() {
@@ -182,5 +200,20 @@ public abstract class ScanNode extends PlanNode {
     }
 
     public void setScanSampleStrategy(RemoteFilesSampleStrategy strategy) {
+    }
+
+    protected String explainColumnDict(String prefix) {
+        StringBuilder output = new StringBuilder();
+        if (!appliedDictStringColumns.isEmpty()) {
+            int maxSize = Math.min(appliedDictStringColumns.size(), 5);
+            List<String> printList = appliedDictStringColumns.subList(0, maxSize);
+            String format_template = "dict_col=%s";
+            if (appliedDictStringColumns.size() > 5) {
+                format_template = format_template + "...";
+            }
+            output.append(prefix).append(String.format(format_template, Joiner.on(",").join(printList)));
+            output.append("\n");
+        }
+        return output.toString();
     }
 }
