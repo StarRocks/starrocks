@@ -2936,7 +2936,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### enable_load_volume_from_conf
 
-- Default: true
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: No
