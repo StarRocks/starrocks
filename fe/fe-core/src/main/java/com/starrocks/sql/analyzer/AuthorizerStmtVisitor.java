@@ -170,6 +170,7 @@ import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowComputeNodesStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDataSkewStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowExportStmt;
 import com.starrocks.sql.ast.ShowFrontendsStmt;
@@ -436,6 +437,13 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
     public Void visitShowDataStatement(ShowDataStmt statement, ConnectContext context) {
         // `show data` only show tables that user has any privilege on, we will check it in
         // the execution logic, not here, see `ShowExecutor#handleShowData()` for details.
+        return null;
+    }
+
+    @Override
+    public Void visitShowDataSkewStatement(ShowDataSkewStmt statement, ConnectContext context) {
+        // `show data` only show tables that user has any privilege on, we will check it in
+        // the execution logic, not here, see `ShowExecutor#handleShowSkewData()` for details.
         return null;
     }
 

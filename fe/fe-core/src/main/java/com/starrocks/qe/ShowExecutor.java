@@ -184,6 +184,7 @@ import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateRoutineLoadStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
 import com.starrocks.sql.ast.ShowDataCacheRulesStmt;
+import com.starrocks.sql.ast.ShowDataSkewStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowDeleteStmt;
@@ -1349,6 +1350,30 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowUserPropertyStatement(ShowUserPropertyStmt statement, ConnectContext context) {
             return new ShowResultSet(statement.getMetaData(), statement.getRows(context));
+        }
+
+        @Override
+        public ShowResultSet visitShowDataSkewStatement(ShowDataSkewStmt statement, ConnectContext context) {
+
+            //check privilege
+            try {
+                Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(),
+                        context.getCurrentRoleIds(), new TableName(statement.getDbName(), statement.getTblName()));
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+                        context.getCurrentUserIdentity(),
+                        context.getCurrentRoleIds(),
+                        PrivilegeType.ANY.name(), ObjectType.TABLE.name(), statement.getTblName());
+            }
+
+            List<List<String>> results;
+            try {
+                results = MetadataViewer.getDataSkew(statement);
+            } catch (DdlException e) {
+                throw new SemanticException(e.getMessage());
+            }
+            return new ShowResultSet(statement.getMetaData(), results);
+
         }
 
         @Override

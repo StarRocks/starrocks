@@ -42,6 +42,7 @@ statement
     | alterDatabaseRenameStatement
     | recoverDbStmt
     | showDataStmt
+    | showDataSkewStmt
 
     // Table Statement
     | createTableStatement
@@ -379,6 +380,10 @@ recoverDbStmt
 showDataStmt
     : SHOW DATA
     | SHOW DATA FROM qualifiedName
+    ;
+
+showDataSkewStmt
+    : SHOW DATA SKEW FROM qualifiedName partitionNames?
     ;
 
 // ------------------------------------------- Table Statement ---------------------------------------------------------

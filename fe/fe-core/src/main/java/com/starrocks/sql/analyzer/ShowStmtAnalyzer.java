@@ -60,6 +60,7 @@ import com.starrocks.sql.ast.ShowColumnStmt;
 import com.starrocks.sql.ast.ShowCreateDbStmt;
 import com.starrocks.sql.ast.ShowCreateExternalCatalogStmt;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.ast.ShowDataSkewStmt;
 import com.starrocks.sql.ast.ShowDataStmt;
 import com.starrocks.sql.ast.ShowDbStmt;
 import com.starrocks.sql.ast.ShowDeleteStmt;
@@ -302,6 +303,14 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowDataStatement(ShowDataStmt node, ConnectContext context) {
+            String dbName = node.getDbName();
+            dbName = getDatabaseName(dbName, context);
+            node.setDbName(dbName);
+            return null;
+        }
+
+        @Override
+        public Void visitShowDataSkewStatement(ShowDataSkewStmt node, ConnectContext context) {
             String dbName = node.getDbName();
             dbName = getDatabaseName(dbName, context);
             node.setDbName(dbName);
