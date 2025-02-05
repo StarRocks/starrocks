@@ -104,7 +104,7 @@ col_name agg_func_name(parameter1_type, [parameter2_type], ...)
 - 为保证稳定性和扩展性，通用聚合函数状态列默认均为 Nullable 类型（count 聚合函数除外），无法手动修改。
 - 定义多参数聚合函数时，参数值无需明确，系统仅根据类型推导，而非具体值。
 - 当前不支持 ORDER BY、DISTINCT 等复杂参数。
-- 部分内置聚合函数暂不支持通用聚合状态功能，例如 `GROUP_CONCAT`、`WINDOW_FUNNEL`、`APPROX_TOP_K` 等。详情参考 [FunctionSet.java#UNSUPPORTED_AGG_STATE_FUNCTIONS]()。
+- 部分内置聚合函数暂不支持通用聚合状态功能，例如 `GROUP_CONCAT`、`WINDOW_FUNNEL`、`APPROX_TOP_K` 等。详情参考 [FunctionSet.java#UNSUPPORTED_AGG_STATE_FUNCTIONS](https://github.com/StarRocks/starrocks/blob/main/fe/fe-core/src/main/java/com/starrocks/catalog/FunctionSet.java#L776)。
 
 :::
 
