@@ -68,8 +68,6 @@ public:
     }
 
     TableMetricsPtr get_table_metrics(uint64_t table_id) {
-        // @TODO for load task, table may not exists in sender side
-        // @TODO we should create one
         std::shared_lock l(_mu);
         DCHECK(_metrics_map.contains(table_id));
         return _metrics_map.at(table_id);
