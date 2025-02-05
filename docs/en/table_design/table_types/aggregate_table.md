@@ -290,7 +290,7 @@ GROUP BY dt;
 -- Wait until rollup creation finishes.
 show alter table rollup;
 
--- Direct query against the aggregate function will be transparently accelerated by test_mv1.
+-- Direct queries against the aggregate function will be transparently accelerated by test_mv1.
 SELECT 
     dt,
     min(id),
