@@ -40,8 +40,6 @@ import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUpdateTabletMetaInfoReq;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.After;
@@ -178,13 +176,8 @@ public class LakeTableAlterMetaJobTest {
 
     @Test
     public void testUpdatePartitonMetaFailed() {
+        UtFrameUtils.mockInitWarehouseEnv();
         new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                            WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
             @Mock
             public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
                 return null;

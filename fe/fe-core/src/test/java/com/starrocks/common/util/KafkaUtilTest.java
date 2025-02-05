@@ -14,13 +14,11 @@
 
 package com.starrocks.common.util;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.StatusPB;
@@ -30,11 +28,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
-import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -56,10 +52,6 @@ public class KafkaUtilTest {
     @Mocked
     SystemInfoService service;
     @Mocked
-    WarehouseManager warehouseManager;
-    @Mocked
-    Warehouse warehouse;
-    @Mocked
     BackendServiceClient client;
 
     @Before
@@ -73,53 +65,13 @@ public class KafkaUtilTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
-                globalStateMgr.getWarehouseMgr();
-                result = warehouseManager;
                 BackendServiceClient.getInstance();
                 minTimes = 0;
                 result = client;
             }
         };
 
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public List<Long> getAllComputeNodeIds(long warehouseId) {
-                return Lists.newArrayList(1L);
-            }
-
-            @Mock
-            public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
-                return 1L;
-            }
-
-            @Mock
-            public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
-                return 1L;
-            }
-
-            @Mock
-            public ComputeNode getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-
-            @Mock
-            public ComputeNode getAllComputeNodeIdsAssignToTablet(String warehouseName, LakeTablet tablet) {
-                return null;
-            }
-
-            @Mock
-            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
-                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
-            }
-        };
+        UtFrameUtils.mockInitWarehouseEnv();
     }
 
     @Test

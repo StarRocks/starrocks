@@ -67,8 +67,6 @@ import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.hadoop.util.ThreadUtil;
@@ -414,20 +412,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
             }
         };
 
-        GlobalStateMgr.getCurrentState().initDefaultWarehouse();
-
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                            WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public List<Long> getAllComputeNodeIds(long warehouseId) {
-                return Lists.newArrayList(1L);
-            }
-        };
+        UtFrameUtils.mockInitWarehouseEnv();
 
         String stmt = "alter table testDb1.testTable1 order by (v1, v2)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
@@ -442,12 +427,6 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         Assert.assertEquals(0L, alterJobV2.warehouseId);
 
         new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                            WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
             @Mock
             public List<Long> getAllComputeNodeIds(long warehouseId) {
                 return Lists.newArrayList();

@@ -40,7 +40,6 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.DefaultWarehouse;
 import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
@@ -136,6 +135,8 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testPendingJobNoAliveBackend() {
+        UtFrameUtils.mockInitWarehouseEnv();
+
         new MockUp<Utils>() {
             @Mock
             public Long chooseNodeId(LakeTablet tablet) {
@@ -150,12 +151,6 @@ public class LakeTableSchemaChangeJobTest {
         };
 
         new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                            WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
             @Mock
             public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
                 return null;
@@ -574,13 +569,7 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testShow() {
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouseAllowNull(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                            WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-        };
+        UtFrameUtils.mockInitWarehouseEnv();
 
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
 
