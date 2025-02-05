@@ -16,7 +16,7 @@ FE nodes are mainly responsible for metadata management, client connection manag
 
 In production, we recommend you deploy at least **THREE** Follower FE nodes in your StarRocks cluster to prevent single points of failure (SPOFs). The Leader FE will be automatically elected from these three followers.
 
-StarRocks uses the BDB JE protocol to manage the metadata across FE nodes. StarRocks elects a Leader FE node from all Follower FE nodes. Only the Leader FE node can write metadata. The other Follower FE nodes only update their metadata based on the logs from the Leader FE node. Each time the Leader FE node fails, StarRocks re-elects a new Leader FE node as long as more than half of the Follower FE nodes are alive.
+StarRocks uses the Raft protocol to manage the metadata across FE nodes. StarRocks elects a Leader FE node from all Follower FE nodes. Only the Leader FE node can write metadata. The other Follower FE nodes only update their metadata based on the logs from the Leader FE node. Each time the Leader FE node fails, StarRocks re-elects a new Leader FE node as long as more than half of the Follower FE nodes are alive.
 
 If your application generates highly concurrent query requests, you can add Observer FE nodes to your cluster. Observer FE nodes only process the query requests and do not participate in the election for the Leader FE node.
 

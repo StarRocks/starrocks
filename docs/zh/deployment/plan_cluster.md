@@ -16,7 +16,7 @@ FE 节点主要负责元数据管理、客户端连接管理、查询计划和�
 
 对于 StarRocks 生产集群，建议您至少部署**三个** Follower FE 节点，以防止单点故障。Leader FE 会从 Follower FE 中自动选出。
 
-StarRocks 通过 BDB JE 协议跨 FE 节点管理元数据。StarRocks 从所有 Follower FE 节点中选出一个 Leader FE 节点。只有 Leader FE 节点可以写入元数据，其他 Follower FE 节点只能根据 Leader FE 节点的日志更新元数据。如果 Leader FE 节点掉线，只要超过半数的 Follower FE 节点存活，StarRocks 就会重新选举出一个新的 Leader FE 节点。
+StarRocks 通过 Raft 协议跨 FE 节点管理元数据。StarRocks 从所有 Follower FE 节点中选出一个 Leader FE 节点。只有 Leader FE 节点可以写入元数据，其他 Follower FE 节点只能根据 Leader FE 节点的日志更新元数据。如果 Leader FE 节点掉线，只要超过半数的 Follower FE 节点存活，StarRocks 就会重新选举出一个新的 Leader FE 节点。
 
 如果您的应用程序会产生高并发查询请求，您可以在集群中添加 Observer FE 节点。Observer FE 节点只负责处理查询请求，不会参与 Leader FE 节点的选举。
 
