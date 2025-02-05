@@ -145,7 +145,7 @@ public class CompactionScheduler extends Daemon {
                     job.getPartition().setMinRetainVersion(0);
                     errorMsg = Objects.requireNonNull(job.getFailMessage(), "getFailMessage() is null");
                     LOG.error("Compaction job {} failed: {}", job.getDebugString(), errorMsg);
-                    job.abort(); // Abort any executing task, if present.
+                    job.abort(errorMsg); // Abort any executing task, if present.
                 } else if (taskResult != CompactionTask.TaskResult.NOT_FINISHED) {
                     errorMsg = String.format("Unexpected compaction result: %s, %s", taskResult.name(), job.getDebugString());
                     LOG.error(errorMsg);
@@ -207,6 +207,8 @@ public class CompactionScheduler extends Daemon {
             List<TabletCommitInfo> finishedTablets = job.buildTabletCommitInfo();
             transactionMgr.abortTransaction(job.getDb().getId(), job.getTxnId(), reason, finishedTablets,
                     Collections.emptyList(), null);
+            // try to cancel tasks on be
+            cancelCompaction(job.getTxnId(), reason);
         } catch (StarRocksException ex) {
             LOG.error("Fail to abort txn " + job.getTxnId(), ex);
         }
@@ -306,7 +308,7 @@ public class CompactionScheduler extends Daemon {
             LOG.error(e.getMessage(), e);
             partition.setMinRetainVersion(0);
             nextCompactionInterval = MIN_COMPACTION_INTERVAL_MS_ON_FAILURE;
-            abortTransactionIgnoreError(job, e.getMessage());
+            abortTransactionIgnoreException(job, e.getMessage());
             job.finish();
             history.offer(CompactionRecord.build(job, e.getMessage()));
             return null;
@@ -414,16 +416,6 @@ public class CompactionScheduler extends Daemon {
         job.setCommitTs(System.currentTimeMillis());
     }
 
-    private void abortTransactionIgnoreError(CompactionJob job, String reason) {
-        try {
-            List<TabletCommitInfo> finishedTablets = job.buildTabletCommitInfo();
-            transactionMgr.abortTransaction(job.getDb().getId(), job.getTxnId(), reason, finishedTablets,
-                    Collections.emptyList(), null);
-        } catch (StarRocksException ex) {
-            LOG.error(ex);
-        }
-    }
-
     // get running compaction and history compaction, sorted by start time
     @NotNull
     List<CompactionRecord> getHistory() {
@@ -442,7 +434,7 @@ public class CompactionScheduler extends Daemon {
     }
 
     @NotNull
-    public void cancelCompaction(long txnId) {
+    public void cancelCompaction(long txnId, String reason) {
         for (Iterator<Map.Entry<PartitionIdentifier, CompactionJob>> iterator = runningCompactions.entrySet().iterator();
                 iterator.hasNext(); ) {
             Map.Entry<PartitionIdentifier, CompactionJob> entry = iterator.next();
@@ -450,7 +442,7 @@ public class CompactionScheduler extends Daemon {
 
             if (job.getTxnId() == txnId) {
                 // just abort compaction task here, the background thread can abort transaction automatically
-                job.abort();
+                job.abort(reason);
                 break;
             }
         }

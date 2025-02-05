@@ -155,7 +155,7 @@ TEST_F(LakeCompactionSchedulerTest, test_issue44136) {
     auto cb = ::google::protobuf::NewCallback(notify, latch);
     _compaction_scheduler.compact(nullptr, &request, &response, cb);
 
-    _compaction_scheduler.abort(txn_id);
+    _compaction_scheduler.abort(txn_id, "test" /* reason */);
 
     latch->wait();
 }

@@ -146,8 +146,8 @@ public class CompactionJob {
         this.finishTs = System.currentTimeMillis();
     }
 
-    public void abort() {
-        tasks.forEach(CompactionTask::abort);
+    public void abort(String reason) {
+        tasks.forEach(task -> task.abort(reason));
     }
 
     public PhysicalPartition getPartition() {
