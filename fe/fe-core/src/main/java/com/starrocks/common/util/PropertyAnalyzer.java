@@ -426,7 +426,8 @@ public class PropertyAnalyzer {
     public static String analyzePartitionRetentionCondition(Database db,
                                                             OlapTable olapTable,
                                                             Map<String, String> properties,
-                                                            boolean removeProperties) {
+                                                            boolean removeProperties,
+                                                            Map<Expr, Expr> exprToAdjustMap) {
         String partitionRetentionCondition = "";
         if (properties != null && properties.containsKey(PROPERTIES_PARTITION_RETENTION_CONDITION)) {
             partitionRetentionCondition = properties.get(PROPERTIES_PARTITION_RETENTION_CONDITION);
@@ -446,8 +447,9 @@ public class PropertyAnalyzer {
             // validate retention condition
             TableName tableName = new TableName(db.getFullName(), olapTable.getName());
             ConnectContext connectContext = ConnectContext.get() == null ? new ConnectContext(null) : ConnectContext.get();
+
             try {
-                PartitionSelector.getPartitionIdsByExpr(connectContext, tableName, olapTable, whereExpr, false);
+                PartitionSelector.getPartitionIdsByExpr(connectContext, tableName, olapTable, whereExpr, false, exprToAdjustMap);
             } catch (Exception e) {
                 throw new SemanticException("Failed to validate retention condition: " + e.getMessage());
             }
@@ -1399,7 +1401,8 @@ public class PropertyAnalyzer {
     public static void analyzeMVProperties(Database db,
                                            MaterializedView materializedView,
                                            Map<String, String> properties,
-                                           boolean isNonPartitioned) throws DdlException {
+                                           boolean isNonPartitioned,
+                                           Map<Expr, Expr> exprAdjustedMap) throws DdlException {
         try {
             // replicated storage
             materializedView.setEnableReplicatedStorage(
@@ -1463,7 +1466,7 @@ public class PropertyAnalyzer {
                             + " is only supported by partitioned materialized-view");
                 }
                 String ttlRetentionCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(db, materializedView,
-                        properties, true);
+                        properties, true, exprAdjustedMap);
                 materializedView.getTableProperty().getProperties()
                         .put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlRetentionCondition);
                 materializedView.getTableProperty().setPartitionRetentionCondition(ttlRetentionCondition);

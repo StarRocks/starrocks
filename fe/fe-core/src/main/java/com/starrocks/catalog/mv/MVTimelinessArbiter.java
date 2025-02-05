@@ -302,6 +302,7 @@ public abstract class MVTimelinessArbiter {
                     mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
         }
         addEmptyPartitionsToRefresh(mvUpdateInfo);
+        collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
         collectMVToBaseTablePartitionNames(refBaseTablePartitionMap, diff, mvUpdateInfo);
         return mvUpdateInfo;
     }
@@ -366,6 +367,7 @@ public abstract class MVTimelinessArbiter {
         if (CollectionUtils.isEmpty(mvUpdateInfo.getMvToRefreshPartitionNames())) {
             return mvUpdateInfo;
         }
+        collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
         // collect base table's partition infos
         collectMVToBaseTablePartitionNames(refBaseTablePartitionMap, diff, mvUpdateInfo);
         return mvUpdateInfo;

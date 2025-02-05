@@ -154,7 +154,8 @@ public abstract class MVPCTRefreshPartitioner {
             if (!refBaseTableMVPartitionMap.containsKey(basePartitionName)) {
                 LOG.warn("Cannot find need refreshed ref base table partition from synced partition info: {}, " +
                         "refBaseTableMVPartitionMaps: {}", basePartitionName, refBaseTableMVPartitionMaps);
-                return null;
+                // refBaseTableMVPartitionMap may not contain basePartitionName if it's filtered by ttl.
+                continue;
             }
             result.addAll(refBaseTableMVPartitionMap.get(basePartitionName));
         }

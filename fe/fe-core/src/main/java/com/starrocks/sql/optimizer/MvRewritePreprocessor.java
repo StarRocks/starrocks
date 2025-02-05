@@ -914,7 +914,7 @@ public class MvRewritePreprocessor {
 
         // first add base schema to avoid replaced in full schema.
         Set<String> columnNames = Sets.newHashSet();
-        for (Column column : mv.getBaseSchema()) {
+        for (Column column : mv.getBaseSchemaWithoutGeneratedColumn()) {
             ColumnRefOperator columnRef = columnRefFactory.create(column.getName(),
                     column.getType(),
                     column.isAllowNull());

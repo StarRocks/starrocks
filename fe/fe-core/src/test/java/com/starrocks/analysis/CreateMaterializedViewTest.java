@@ -4842,7 +4842,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "as select dt, province, sum(age) from t3 group by dt, province;");
                 Assert.fail();
             } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("Partition expression with function is not supported yet"));
+                Assert.assertTrue(e.getMessage().contains("List partition expression can only be ref-base-table's partition " +
+                        "expression but contains"));
             }
         }
         starRocksAssert.dropTable("t3");
@@ -5252,5 +5253,49 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Assert.assertEquals("dt > current_date() - interval 1 month", retentionCondition);
         starRocksAssert.dropMaterializedView("mv1");
         starRocksAssert.dropTable("r1");
+    }
+
+    @Test
+    public void testCreateMVWithMultiCommonPartitionExpressions1() throws Exception {
+        starRocksAssert.withTable("create table tt1(k1 datetime, k2 datetime, v int) " +
+                "partition by date_trunc('day', k1), date_trunc('month', k2);\n");
+        starRocksAssert.withMaterializedView("\n" +
+                "CREATE MATERIALIZED VIEW mv1\n" +
+                "PARTITION BY (date_trunc('day', k1), date_trunc('month', k2))\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES(\n" +
+                "    \"auto_refresh_partitions_limit\"=\"30\"\n" +
+                ")\n" +
+                "as select * from tt1;");
+        MaterializedView mv = starRocksAssert.getMv("test", "mv1");
+        Assert.assertTrue(mv != null);
+        String alterTableSql = "ALTER MATERIALIZED VIEW mv1 SET ('partition_retention_condition' = " +
+                "'date_trunc(\\'day\\', k1) > current_date() - interval 2 month')";
+        starRocksAssert.alterMvProperties(alterTableSql);
+        String retentionCondition = mv.getTableProperty().getPartitionRetentionCondition();
+        Assert.assertEquals("date_trunc('day', k1) > current_date() - interval 2 month", retentionCondition);
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropTable("tt1");
+    }
+
+    @Test
+    public void testCreateMVWithMultiCommonPartitionExpressions2() throws Exception {
+        starRocksAssert.withTable("create table tt1(k1 datetime, k2 datetime, v int) " +
+                "partition by date_trunc('day', k1), date_trunc('month', k2);\n");
+        starRocksAssert.withMaterializedView("\n" +
+                "CREATE MATERIALIZED VIEW mv1\n" +
+                "PARTITION BY (date_trunc('day', k1), date_trunc('month', k2))\n" +
+                "REFRESH ASYNC\n" +
+                "PROPERTIES(\n" +
+                "    \"auto_refresh_partitions_limit\"=\"30\",\n" +
+                "   'partition_retention_condition' = 'date_trunc(\\'day\\', k1) > current_date() - interval 2 month'" +
+                ")\n" +
+                "as select * from tt1;");
+        MaterializedView mv = starRocksAssert.getMv("test", "mv1");
+        Assert.assertTrue(mv != null);
+        String retentionCondition = mv.getTableProperty().getPartitionRetentionCondition();
+        Assert.assertEquals("date_trunc('day', k1) > current_date() - interval 2 month", retentionCondition);
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropTable("tt1");
     }
 }
