@@ -76,7 +76,7 @@ public class SkewJoinTest extends PlanTestBase {
 
     @Test
     public void testSkewJoin() throws Exception {
-        String sql = "select v2, v5 from t0 join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
+        String sql = "select v2, v5 from t0 join[`skew`|t0.v1(1,2)] t1 on v1 = v4 ";
         String sqlPlan = getFragmentPlan(sql);
         assertCContains(sqlPlan, " equal join conjunct: 7: rand_col = 14: rand_col\n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4");
@@ -96,7 +96,7 @@ public class SkewJoinTest extends PlanTestBase {
 
     @Test
     public void testSkewJoinWithLeftJoin() throws Exception {
-        String sql = "select v2, v5 from t0 left join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
+        String sql = "select v2, v5 from t0 left join[`skew`|t0.v1(1,2)] t1 on v1 = v4 ";
         String sqlPlan = getFragmentPlan(sql);
         assertCContains(sqlPlan, " join op: LEFT OUTER JOIN (PARTITIONED)");
 
@@ -111,7 +111,7 @@ public class SkewJoinTest extends PlanTestBase {
 
     @Test
     public void testSkewJoinWithException1() throws Exception {
-        String sql = "select v2, v5 from t0 right join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
+        String sql = "select v2, v5 from t0 right join[`skew`|t0.v1(1,2)] t1 on v1 = v4 ";
         expectedException.expect(StarRocksPlannerException.class);
         expectedException.expectMessage("RIGHT JOIN does not support SKEW JOIN optimize");
         getFragmentPlan(sql);
@@ -119,7 +119,7 @@ public class SkewJoinTest extends PlanTestBase {
 
     @Test
     public void testSkewJoinWithException2() throws Exception {
-        String sql = "select v2, v5 from t0 right semi join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
+        String sql = "select v2, v5 from t0 right semi join[`skew`|t0.v1(1,2)] t1 on v1 = v4 ";
         expectedException.expect(StarRocksPlannerException.class);
         expectedException.expectMessage("RIGHT JOIN does not support SKEW JOIN optimize");
         getFragmentPlan(sql);
@@ -127,7 +127,7 @@ public class SkewJoinTest extends PlanTestBase {
 
     @Test
     public void testSkewJoinWithException3() throws Exception {
-        String sql = "select v2, v5 from t0 right anti join[skew|t0.v1(1,2)] t1 on v1 = v4 ";
+        String sql = "select v2, v5 from t0 right anti join[`skew`|t0.v1(1,2)] t1 on v1 = v4 ";
         expectedException.expect(StarRocksPlannerException.class);
         expectedException.expectMessage("RIGHT JOIN does not support SKEW JOIN optimize");
         getFragmentPlan(sql);
@@ -135,7 +135,7 @@ public class SkewJoinTest extends PlanTestBase {
 
     @Test
     public void testSkewJoinWithException4() throws Exception {
-        String sql = "select v2, v5 from t0 cross join[skew|t0.v1(1,2)] t1";
+        String sql = "select v2, v5 from t0 cross join[`skew`|t0.v1(1,2)] t1";
         expectedException.expect(StarRocksPlannerException.class);
         expectedException.expectMessage("CROSS JOIN does not support SKEW JOIN optimize");
         getFragmentPlan(sql);
@@ -143,7 +143,7 @@ public class SkewJoinTest extends PlanTestBase {
 
     @Test
     public void testSkewJoinWithException5() throws Exception {
-        String sql = "select v2, v5 from t0 join[skew|t0.v1(1,2)] t1";
+        String sql = "select v2, v5 from t0 join[`skew`|t0.v1(1,2)] t1";
         expectedException.expect(StarRocksPlannerException.class);
         expectedException.expectMessage("CROSS JOIN does not support SKEW JOIN optimize");
         getFragmentPlan(sql);
@@ -151,7 +151,7 @@ public class SkewJoinTest extends PlanTestBase {
 
     @Test
     public void testSkewJoinWithException6() throws Exception {
-        String sql = "select v2, v5 from t0 left join[skew|abs(t0.v1)(1,2)] t1 on v1 = v4 ";
+        String sql = "select v2, v5 from t0 left join[`skew`|abs(t0.v1)(1,2)] t1 on v1 = v4 ";
         expectedException.expect(StarRocksPlannerException.class);
         expectedException.expectMessage("Skew join column must be a column reference");
         getFragmentPlan(sql);
@@ -159,7 +159,7 @@ public class SkewJoinTest extends PlanTestBase {
 
     @Test
     public void testSkewJoinWithException7() throws Exception {
-        String sql = "select t1.c2, t3.c3 from hive0.partitioned_db.t1 join[skew] hive0.partitioned_db.t3" +
+        String sql = "select t1.c2, t3.c3 from hive0.partitioned_db.t1 join[`skew`] hive0.partitioned_db.t3" +
                 " on t1.c1 = t3.c1";
         expectedException.expect(StarRocksPlannerException.class);
         expectedException.expectMessage("Skew join column must be specified");
@@ -168,7 +168,7 @@ public class SkewJoinTest extends PlanTestBase {
 
     @Test
     public void testSkewJoinWithHiveTable() throws Exception {
-        String sql = "select t1.c2, t3.c3 from hive0.partitioned_db.t1 join[skew|t1.c1(1,2)] hive0.partitioned_db.t3" +
+        String sql = "select t1.c2, t3.c3 from hive0.partitioned_db.t1 join[`skew`|t1.c1(1,2)] hive0.partitioned_db.t3" +
                 " on t1.c1 = t3.c1";
         String sqlPlan = getFragmentPlan(sql);
         assertCContains(sqlPlan, " equal join conjunct: 9: rand_col = 16: rand_col\n" +
@@ -186,7 +186,7 @@ public class SkewJoinTest extends PlanTestBase {
     @Test
     public void testSkewJoinWithStructType() throws Exception {
         String sql = "select struct_tbl.c0, struct_tbl.c2.a, t3.c2 from default_catalog.test.struct_tbl " +
-                "join[skew|test.struct_tbl.c1.a(1,2)] hive0.partitioned_db.t3 on c1.a = t3.c1 ";
+                "join[`skew`|test.struct_tbl.c1.a(1,2)] hive0.partitioned_db.t3 on c1.a = t3.c1 ";
         String sqlPlan = getFragmentPlan(sql);
         assertCContains(sqlPlan, "HASH JOIN\n" +
                 "  |  join op: INNER JOIN (PARTITIONED)\n" +
@@ -238,7 +238,7 @@ public class SkewJoinTest extends PlanTestBase {
 
     @Test
     public void testSkewJoinWithMultiJoin() throws Exception {
-        String sql = "select t1.c2, t3.c3 from hive0.partitioned_db.t1 join[skew|t1.c1(1,2)] hive0.partitioned_db.t3" +
+        String sql = "select t1.c2, t3.c3 from hive0.partitioned_db.t1 join[`skew`|t1.c1(1,2)] hive0.partitioned_db.t3" +
                 " on t1.c1 = t3.c1 join hive0.partitioned_db2.t2 on t1.c2 = t2.c2";
         String sqlPlan = getFragmentPlan(sql);
         assertCContains(sqlPlan, "equal join conjunct: 2: c2 = 10: c2");
