@@ -209,7 +209,7 @@ The upgrade process lasts for a while. You can run the command `kubectl -n starr
 
 #### Scale out BE cluster
 
-Run the following command to scale in and out out the BE cluster to 9 nodes:
+Run the following command to scale the BE cluster to 9 nodes:
 
 ```bash
 kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"replicas":9}}}'
