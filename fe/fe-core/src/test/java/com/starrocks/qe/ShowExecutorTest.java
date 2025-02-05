@@ -1131,7 +1131,7 @@ public class ShowExecutorTest {
                         "  `year` int(11) DEFAULT NULL,\n" +
                         "  `dt` int(11) DEFAULT NULL\n" +
                         ")\n" +
-                        "PARTITION BY ( year, dt )\n" +
+                        "PARTITION BY (year, dt)\n" +
                         "PROPERTIES (\"location\" = \"hdfs://hadoop/hive/warehouse/test.db/test\");",
                 resultSet.getResultRows().get(0).get(1));
     }
