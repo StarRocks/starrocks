@@ -347,6 +347,7 @@ public class MvRewriteHiveTest extends MVTestBase {
                 "WHERE l_shipdate='1998-01-03'\n" +
                 "GROUP BY " +
                 "`l_orderkey`, `l_suppkey`, `l_shipdate`;").explainContains(mvName);
+
         starRocksAssert.query("SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
                 "FROM `hive0`.`partitioned_db`.`lineitem_mul_par3` as a \n " +
                 "WHERE l_shipdate='1998-01-01'\n" +

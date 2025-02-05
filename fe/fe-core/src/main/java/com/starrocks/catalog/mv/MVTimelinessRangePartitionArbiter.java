@@ -15,7 +15,6 @@
 package com.starrocks.catalog.mv;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
@@ -23,15 +22,11 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.scheduler.TableWithPartitions;
 import com.starrocks.sql.common.PCell;
-import com.starrocks.sql.common.PRangeCell;
-import com.starrocks.sql.common.RangePartitionDiff;
-import com.starrocks.sql.common.RangePartitionDiffResult;
+import com.starrocks.sql.common.PartitionDiff;
 import com.starrocks.sql.common.RangePartitionDiffer;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -43,7 +38,6 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.common.RangePartitionDiffer.syncBaseTablePartitionInfos;
 import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
 /**
@@ -55,6 +49,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
 
     public MVTimelinessRangePartitionArbiter(MaterializedView mv, boolean isQueryRewrite) {
         super(mv, isQueryRewrite);
+        this.differ = new RangePartitionDiffer(mv, isQueryRewrite, null);
     }
 
     @Override
@@ -87,49 +82,42 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         Preconditions.checkArgument(partitionExprOpt.isPresent(),
                 "Materialized view %s has no partition expr.", mv.getName());
         Expr partitionExpr = partitionExprOpt.get();
-        Map<Table, Map<String, Range<PartitionKey>>> basePartitionNameToRangeMap =
-                RangePartitionDiffer.syncBaseTablePartitionInfos(mv);
+        Map<Table, Map<String, PCell>> basePartitionNameToRangeMap = syncBaseTablePartitions(mv);
+        if (basePartitionNameToRangeMap == null) {
+            logMVPrepare(mv, "Sync base table partition infos failed");
+            return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.FULL);
+        }
 
         // If base table is materialized view, add partition name to cell mapping into base table partition mapping,
         // otherwise base table(mv) may lose partition names of the real base table changed partitions.
-        collectExtraBaseTableChangedPartitions(mvTimelinessInfo.getBaseTableUpdateInfos(), entry -> {
-            Table baseTable = entry.getKey();
-            Preconditions.checkState(basePartitionNameToRangeMap.containsKey(baseTable));
-            Map<String, Range<PartitionKey>> refBaseTablePartitionRangeMap = basePartitionNameToRangeMap.get(baseTable);
-            Map<String, PCell> basePartitionNameToRanges = entry.getValue();
-            basePartitionNameToRanges.entrySet().forEach(e -> refBaseTablePartitionRangeMap.put(e.getKey(),
-                    ((PRangeCell) e.getValue()).getRange()));
-        });
+        collectExtraBaseTableChangedPartitions(mvTimelinessInfo.getBaseTableUpdateInfos(), basePartitionNameToRangeMap);
 
         // There may be a performance issue here, because it will fetch all partitions of base tables and mv partitions.
-        RangePartitionDiffResult differ = RangePartitionDiffer.computeRangePartitionDiff(mv, null,
-                basePartitionNameToRangeMap, isQueryRewrite);
-        if (differ == null) {
+        PartitionDiff diff = getChangedPartitionDiff(mv, basePartitionNameToRangeMap);
+        if (diff == null) {
             throw new AnalysisException(String.format("Compute partition difference of mv %s with base table failed.",
                     mv.getName()));
         }
 
         // no needs to refresh the deleted partitions, because the deleted partitions are not in the mv's partition map.
         Set<String> mvToRefreshPartitionNames = Sets.newHashSet();
-        Map<String, Range<PartitionKey>> mvPartitionNameToRangeMap = differ.mvRangePartitionMap;
-        RangePartitionDiff rangePartitionDiff = differ.rangePartitionDiff;
+        Map<String, PCell> mvPartitionToCells = mv.getPartitionCells(Optional.empty());
 
         // remove ref base table's deleted partitions from `mvPartitionMap`
-        mvToRefreshPartitionNames.addAll(rangePartitionDiff.getDeletes().keySet());
-        rangePartitionDiff.getDeletes().keySet().stream().forEach(mvPartitionNameToRangeMap::remove);
-        // add all ref base table's added partitions to `mvPartitionMap`
-        mvToRefreshPartitionNames.addAll(rangePartitionDiff.getAdds().keySet());
-        mvPartitionNameToRangeMap.putAll(rangePartitionDiff.getAdds());
-        // add mv partition name to range map into timeline info to be used if it's a sub mv of nested mv
-        Map<String, PCell> mvPartitionNameToCell = mvPartitionNameToRangeMap.entrySet().stream()
-                .collect(Collectors.toMap(e -> e.getKey(), e -> new PRangeCell(e.getValue())));
-        mvTimelinessInfo.addMVPartitionNameToCellMap(mvPartitionNameToCell);
+        mvToRefreshPartitionNames.addAll(diff.getDeletes().keySet());
+        mvToRefreshPartitionNames.addAll(diff.getAdds().keySet());
 
-        Map<Table, List<Expr>> refBaseTablePartitionExprs = mv.getRefBaseTablePartitionExprs();
-        Map<Table, Map<String, Set<String>>> baseToMvNameRef = RangePartitionDiffer
-                .generateBaseRefMap(basePartitionNameToRangeMap, refBaseTablePartitionExprs, mvPartitionNameToRangeMap);
-        Map<String, Map<Table, Set<String>>> mvToBaseNameRef = RangePartitionDiffer
-                .generateMvRefMap(mvPartitionNameToRangeMap, refBaseTablePartitionExprs, basePartitionNameToRangeMap);
+        diff.getDeletes().keySet().stream().forEach(mvPartitionToCells::remove);
+        // add all ref base table's added partitions to `mvPartitionMap`
+        diff.getAdds().entrySet().stream()
+                        .forEach(e -> mvPartitionToCells.put(e.getKey(), e.getValue()));
+        // add mv partition name to range map into timeline info to be used if it's a sub mv of nested mv
+        mvTimelinessInfo.addMVPartitionNameToCellMap(mvPartitionToCells);
+
+        Map<Table, Map<String, Set<String>>> baseToMvNameRef =
+                differ.generateBaseRefMap(basePartitionNameToRangeMap, mvPartitionToCells);
+        Map<String, Map<Table, Set<String>>> mvToBaseNameRef =
+                differ.generateMvRefMap(mvPartitionToCells, basePartitionNameToRangeMap);
         mvTimelinessInfo.getBasePartToMvPartNames().putAll(baseToMvNameRef);
         mvTimelinessInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
 
@@ -141,7 +129,7 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
                     .map(e -> new TableWithPartitions(e.getKey(), e.getValue()))
                     .collect(Collectors.toList());
             if (mv.isCalcPotentialRefreshPartition(baseTableWithPartitions,
-                    basePartitionNameToRangeMap, mvToRefreshPartitionNames, mvPartitionNameToRangeMap)) {
+                    basePartitionNameToRangeMap, mvToRefreshPartitionNames, mvPartitionToCells)) {
                 // because the relation of partitions between materialized view and base partition table is n: m,
                 // should calculate the candidate partitions recursively.
                 SyncPartitionUtils.calcPotentialRefreshPartition(mvToRefreshPartitionNames, baseChangedPartitionNames,
@@ -151,56 +139,5 @@ public final class MVTimelinessRangePartitionArbiter extends MVTimelinessArbiter
         // update mv's to refresh partitions
         mvTimelinessInfo.addMvToRefreshPartitionNames(mvToRefreshPartitionNames);
         return mvTimelinessInfo;
-    }
-
-    @Override
-    protected MvUpdateInfo getMVTimelinessUpdateInfoInLoose() {
-        final MvUpdateInfo mvUpdateInfo = new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.PARTIAL,
-                TableProperty.QueryRewriteConsistencyMode.LOOSE);
-        final Map<Table, Map<String, Range<PartitionKey>>> rBTPartitionMap = syncBaseTablePartitionInfos(mv);
-        RangePartitionDiff rangePartitionDiff = null;
-        RangePartitionDiffResult diff = null;
-        try {
-            // There may be a performance issue here, because it will fetch all partitions of base tables and mv partitions.
-            diff = RangePartitionDiffer.computeRangePartitionDiff(mv, null, rBTPartitionMap, isQueryRewrite);
-            if (diff == null) {
-                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.UNKNOWN);
-            }
-            rangePartitionDiff = diff.rangePartitionDiff;
-        } catch (Exception e) {
-            LOG.warn("Materialized view compute partition difference with base table failed.", e);
-            return null;
-        }
-        if (rangePartitionDiff == null) {
-            LOG.warn("Materialized view compute partition difference with base table failed, the diff of range partition" +
-                    " is null.");
-            return null;
-        }
-        // TODO: collect base table's `baseTableUpdateInfos` for mv's partition compensation if base table is partial refreshed.
-        Map<String, Range<PartitionKey>> adds = rangePartitionDiff.getAdds();
-        for (Map.Entry<String, Range<PartitionKey>> addEntry : adds.entrySet()) {
-            String mvPartitionName = addEntry.getKey();
-            mvUpdateInfo.addMvToRefreshPartitionNames(mvPartitionName);
-        }
-        addEmptyPartitionsToRefresh(mvUpdateInfo);
-        collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
-        collectMVToBaseTablePartitionNames(rBTPartitionMap, rangePartitionDiff, mvUpdateInfo);
-        return mvUpdateInfo;
-    }
-
-    /**
-     * Collect mv to base table partition names mapping to be used in {@code MvUpdate#getBaseTableToRefreshPartitionNames}
-     * for union compensate rewrite.
-     */
-    protected void collectMVToBaseTablePartitionNames(Map<Table, Map<String, Range<PartitionKey>>> refBaseTablePartitionMap,
-                                                      RangePartitionDiff diff,
-                                                      MvUpdateInfo mvUpdateInfo) {
-        Map<String, Range<PartitionKey>> mvPartitionToCells = mv.getRangePartitionMap();
-        diff.getDeletes().keySet().forEach(mvPartitionToCells::remove);
-        mvPartitionToCells.putAll(diff.getAdds());
-        final Map<Table, List<Expr>> tableToExprMap = mv.getRefBaseTablePartitionExprs();
-        Map<String, Map<Table, Set<String>>> mvToBaseNameRef = RangePartitionDiffer
-                .generateMvRefMap(mvPartitionToCells, tableToExprMap, refBaseTablePartitionMap);
-        mvUpdateInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
     }
 }
