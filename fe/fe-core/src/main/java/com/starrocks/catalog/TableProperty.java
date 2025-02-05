@@ -100,7 +100,9 @@ public class TableProperty implements Writable, GsonPostProcessable {
         DISABLE,    // 0: disable query rewrite
         LOOSE,      // 1: enable query rewrite, and skip the partition version check, still need to check mv partition exist
         CHECKED,    // 2: enable query rewrite, and rewrite only if mv partition version is consistent with table meta
-        NOCHECK;   // 3: enable query rewrite, and rewrite without any check
+        NOCHECK,    // 3: enable query rewrite, and rewrite without any check
+        FORCE_MV;   // 4: force to use mv, if mv contains no ttl; otherwise, use mv for partitions are in ttl range and
+        // use base table for partitions are out of ttl range
 
         public static QueryRewriteConsistencyMode defaultQueryRewriteConsistencyMode() {
             return CHECKED;
