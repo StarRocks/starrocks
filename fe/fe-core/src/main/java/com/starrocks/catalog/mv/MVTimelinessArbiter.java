@@ -327,28 +327,6 @@ public abstract class MVTimelinessArbiter {
     }
 
     /**
-     * TODO: Optimize performance in loos/force_mv mode
-     */
-    protected void collectBaseTableUpdatePartitionNamesInLoose(MvUpdateInfo mvUpdateInfo) {
-        Map<Table, List<Column>> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
-        // collect & update mv's to refresh partitions based on base table's partition changes
-        collectBaseTableUpdatePartitionNames(refBaseTableAndColumns, mvUpdateInfo);
-        Set<Table> refBaseTables = mv.getRefBaseTablePartitionColumns().keySet();
-        MaterializedView.AsyncRefreshContext context = mv.getRefreshScheme().getAsyncRefreshContext();
-        for (Table table : refBaseTables) {
-            Map<String, MaterializedView.BasePartitionInfo> mvBaseTableVisibleVersionMap =
-                    context.getBaseTableVisibleVersionMap()
-                            .computeIfAbsent(table.getId(), k -> Maps.newHashMap());
-            for (String partitionName : mvBaseTableVisibleVersionMap.keySet()) {
-                if (mvUpdateInfo.getBaseTableToRefreshPartitionNames(table) != null) {
-                    // in loose mode, ignore partition that both exists in baseTable and mv
-                    mvUpdateInfo.getBaseTableToRefreshPartitionNames(table).remove(partitionName);
-                }
-            }
-        }
-    }
-
-    /**
      * In Force MV mode, do not to check mv's consistency with base table's partition's data if ttl is not expired.
      * - if mv contains no ttl, always no need to refresh;
      * - if mv contains ttl, no need to refresh if query's partitions is in ttl's lifecycle; and need to refresh if

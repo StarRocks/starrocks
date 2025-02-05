@@ -160,12 +160,8 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                 mv, mvPlanContext, mvUpdateInfo, queryTables);
 
         Map<Column, ColumnRefOperator> columnToColumnRefMap = olapScanOperator.getColumnMetaToColRefMap();
-<<<<<<< HEAD
         // use ordered output columns to ensure the order of output columns if the mv contains order-by clause.
         List<Column> mvColumns = mv.getOrderedOutputColumns();
-=======
-        List<Column> mvColumns = mv.getBaseSchemaWithoutGeneratedColumn();
->>>>>>> 43f125ec5 ([BugFix] (Part 6) Fix partition_retention_condition for iceberg with partition transforms (#53869))
         List<ColumnRefOperator> expectOutputColumns = mvColumns.stream()
                 .map(c -> columnToColumnRefMap.get(c))
                 .collect(Collectors.toList());

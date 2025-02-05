@@ -2100,7 +2100,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         }
         return this.defineQueryParseNode;
     }
-<<<<<<< HEAD
 
     /**
      * Get mv's ordered columns if the mv has defined its output columns order.
@@ -2118,32 +2117,4 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return outputColumns;
         }
     }
-
-    /*
-     * For MV, its schema has relations with defined query's schema.`getBaseSchema` should not return the generated columns
-     * since they are inner columns and not visible to users.
-     * For now, the generated columns of mv can be created when mv's partition expression is not slot ref and its partition type
-     * is LIST.
-     */
-    @Override
-    public List<Column> getBaseSchema() {
-        if (!hasGeneratedColumn()) {
-            return getSchemaByIndexId(baseIndexId);
-        }
-
-        List<Column> schema = Lists.newArrayList(getSchemaByIndexId(baseIndexId));
-        while (schema.size() > 0) {
-            // check last column is whether is a generated column or not
-            if (schema.get(schema.size() - 1).isGeneratedColumn()) {
-                schema.remove(schema.size() - 1);
-            } else {
-                break;
-            }
-        }
-        return schema;
-    }
-
-
-=======
->>>>>>> 43f125ec5 ([BugFix] (Part 6) Fix partition_retention_condition for iceberg with partition transforms (#53869))
 }

@@ -898,27 +898,6 @@ public class MvRewritePreprocessor {
     }
 
     /**
-<<<<<<< HEAD
-=======
-     * Get mv's ordered columns by defined output columns order.
-     * @param mv: mv to check
-     * @return: mv's defined output columns in the defined order
-     */
-    public static List<Column> getMvOutputColumns(MaterializedView mv) {
-        if (mv.getQueryOutputIndices() == null || mv.getQueryOutputIndices().isEmpty()) {
-            return mv.getBaseSchemaWithoutGeneratedColumn();
-        } else {
-            List<Column> schema = mv.getBaseSchemaWithoutGeneratedColumn();
-            List<Column> outputColumns = Lists.newArrayList();
-            for (Integer index : mv.getQueryOutputIndices()) {
-                outputColumns.add(schema.get(index));
-            }
-            return outputColumns;
-        }
-    }
-
-    /**
->>>>>>> 43f125ec5 ([BugFix] (Part 6) Fix partition_retention_condition for iceberg with partition transforms (#53869))
      * Make a LogicalOlapScanOperator by using MV's schema which includes:
      * - partition infos.
      * - distribution infos.
