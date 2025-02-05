@@ -217,7 +217,7 @@ kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merg
 
 ### Scale in BE cluster
 
-When scaling in BE nodes, you need to scale them one by one, each at a time, and wait for the tablet on the BE to be re-distributed before proceeding. If there are tables with single replications, taking a BE node offline may cause data loss if the tablets fail to be redistributed.
+When scaling in BE nodes, you need to scale them one at a time, and wait for the tablets on the BEs to be re-distributed before proceeding. If there are tables with single replicas, taking a BE node offline may cause data loss if the tablets fail to be redistributed.
 
 Execute the following command to scale in a cluster with 10 BE nodes to 9.
 
