@@ -349,10 +349,7 @@ public class MvRewriteHiveTest extends MVTestBase {
                 "GROUP BY " +
                 "`l_orderkey`, `l_suppkey`, `l_shipdate`;").explainContains(mvName);
 
-<<<<<<< HEAD
-=======
         FeConstants.enablePruneEmptyOutputScan = true;
->>>>>>> 65e0b15a3 ([Feature] (Part 5) Support query_rewrite_consistency force_mv mode (#53819))
         starRocksAssert.query("SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`, sum(l_orderkey)  " +
                 "FROM `hive0`.`partitioned_db`.`lineitem_mul_par3` as a \n " +
                 "WHERE l_shipdate='1998-01-01'\n" +

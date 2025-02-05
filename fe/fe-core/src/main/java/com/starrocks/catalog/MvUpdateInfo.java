@@ -145,11 +145,7 @@ public class MvUpdateInfo {
         if (mvToRefreshType == MvToRefreshType.FULL) {
             return null;
         }
-<<<<<<< HEAD
-        if (mvPartToBasePartNames == null || mvPartToBasePartNames.isEmpty()) {
-=======
         if (CollectionUtils.sizeIsEmpty(mvPartToBasePartNames)) {
->>>>>>> 65e0b15a3 ([Feature] (Part 5) Support query_rewrite_consistency force_mv mode (#53819))
             return null;
         }
         // MV's partition names to refresh are not only affected by the ref base table, but also other base tables.

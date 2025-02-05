@@ -40,24 +40,14 @@ import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
-<<<<<<< HEAD
-=======
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
->>>>>>> 65e0b15a3 ([Feature] (Part 5) Support query_rewrite_consistency force_mv mode (#53819))
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-<<<<<<< HEAD
-=======
-import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
-import static com.starrocks.utframe.UtFrameUtils.getFragmentPlan;
-
->>>>>>> 65e0b15a3 ([Feature] (Part 5) Support query_rewrite_consistency force_mv mode (#53819))
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class PCTRefreshListPartitionOlapTest extends MVTestBase {
     private static String T1;
@@ -1391,7 +1381,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         Assert.assertTrue(processor.getNextTaskRun() == null);
                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
                         Assert.assertTrue(execPlan == null);
-                        String plan = getFragmentPlan(connectContext, query);
+                        String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     partitions=4/4", tableName));
@@ -1404,7 +1394,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                 now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
                         addListPartition(tableName, "p6", "guangdong",
                                 now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
-                        String plan = getFragmentPlan(connectContext, query);
+                        String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     partitions=6/6", tableName));
@@ -1414,7 +1404,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         String alterMVSql = String.format("alter materialized view %s set (" +
                                 "'query_rewrite_consistency' = 'loose')", mvName);
                         starRocksAssert.alterMvProperties(alterMVSql);
-                        String plan = getFragmentPlan(connectContext, query);
+                        String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     partitions=6/6", tableName));
@@ -1424,7 +1414,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         String alterMVSql = String.format("alter materialized view %s set (" +
                                 "'query_rewrite_consistency' = 'force_mv')", mvName);
                         starRocksAssert.alterMvProperties(alterMVSql);
-                        String plan = getFragmentPlan(connectContext, query);
+                        String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, ":UNION");
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
@@ -1437,7 +1427,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
 
                     refreshMV("test", mv);
                     {
-                        String plan = getFragmentPlan(connectContext, query);
+                        String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, ":UNION");
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
@@ -1449,7 +1439,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                     {
                         String query2 = String.format("select * from %s where dt >= current_date() - interval 1 month ",
                                 tableName);
-                        String plan = getFragmentPlan(connectContext, query2);
+                        String plan = getFragmentPlan(query2);
                         PlanTestBase.assertNotContains(plan, ":UNION");
                         PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n" +
                                 "     PREAGGREGATION: ON\n" +
@@ -1494,7 +1484,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
                         Assert.assertEquals(2, mv.getVisiblePartitions().size());
                         Assert.assertTrue(processor.getNextTaskRun() == null);
-                        String plan = getFragmentPlan(connectContext, query);
+                        String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, "TABLE: test_mv1\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     partitions=2/2");
@@ -1513,7 +1503,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                                 now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
                         addListPartition(tableName, "p6", "guangdong",
                                 now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")), true);
-                        String plan = getFragmentPlan(connectContext, query);
+                        String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, ":UNION");
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
@@ -1526,7 +1516,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                     {
                         String query2 = String.format("select * from %s where dt >= current_date() - interval 1 month ",
                                 tableName);
-                        String plan = getFragmentPlan(connectContext, query2);
+                        String plan = getFragmentPlan(query2);
                         PlanTestBase.assertNotContains(plan, ":UNION");
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +

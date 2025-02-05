@@ -302,26 +302,8 @@ public abstract class MVTimelinessArbiter {
                     mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
         }
         addEmptyPartitionsToRefresh(mvUpdateInfo);
-<<<<<<< HEAD
-        collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
-=======
         collectMVToBaseTablePartitionNames(refBaseTablePartitionMap, diff, mvUpdateInfo);
         return mvUpdateInfo;
-    }
-
-    /**
-     * Collect mv to base table partition names mapping to be used in {@code MvUpdate#getBaseTableToRefreshPartitionNames}
-     * for union compensate rewrite.
-     */
-    protected void collectMVToBaseTablePartitionNames(Map<Table, Map<String, PCell>> refBaseTablePartitionMap,
-                                                      PartitionDiff diff,
-                                                      MvUpdateInfo mvUpdateInfo) {
-        Map<String, PCell> mvPartitionToCells = mv.getPartitionCells(Optional.empty());
-        diff.getDeletes().keySet().forEach(mvPartitionToCells::remove);
-        mvPartitionToCells.putAll(diff.getAdds());
-        Map<String, Map<Table, Set<String>>> mvToBaseNameRef = differ
-                .generateMvRefMap(mvPartitionToCells, refBaseTablePartitionMap);
-        mvUpdateInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
     }
 
     public Set<String> getMVRetentionPartitionNames(MaterializedView mv,
@@ -385,7 +367,6 @@ public abstract class MVTimelinessArbiter {
             return mvUpdateInfo;
         }
         // collect base table's partition infos
->>>>>>> 65e0b15a3 ([Feature] (Part 5) Support query_rewrite_consistency force_mv mode (#53819))
         collectMVToBaseTablePartitionNames(refBaseTablePartitionMap, diff, mvUpdateInfo);
         return mvUpdateInfo;
     }

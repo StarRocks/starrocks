@@ -35,86 +35,32 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBas
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TGetTasksParams;
-<<<<<<< HEAD
 import com.starrocks.utframe.UtFrameUtils;
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
-import org.junit.Assert;
-=======
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
->>>>>>> 65e0b15a3 ([Feature] (Part 5) Support query_rewrite_consistency force_mv mode (#53819))
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
-<<<<<<< HEAD
-=======
-import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
->>>>>>> 65e0b15a3 ([Feature] (Part 5) Support query_rewrite_consistency force_mv mode (#53819))
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
 import static com.starrocks.scheduler.TaskRun.MV_ID;
-<<<<<<< HEAD
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
     private static final Logger LOG = LogManager.getLogger(PartitionBasedMvRefreshProcessorOlapPart2Test.class);
-=======
-import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
-import static com.starrocks.utframe.UtFrameUtils.getFragmentPlan;
-
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTestBase {
-    private static final Logger LOG = LogManager.getLogger(PartitionBasedMvRefreshProcessorOlapPart2Test.class);
-
     private static String R1;
     private static String R2;
-    @BeforeClass
-    public static void beforeClass() throws Exception {
-        MVRefreshTestBase.beforeClass();
-        // range partition table
-        R1 = "CREATE TABLE r1 \n" +
-                "(\n" +
-                "    dt date,\n" +
-                "    k2 int,\n" +
-                "    v1 int \n" +
-                ")\n" +
-                "PARTITION BY RANGE(dt)\n" +
-                "(\n" +
-                "    PARTITION p0 values [('2021-12-01'),('2022-01-01')),\n" +
-                "    PARTITION p1 values [('2022-01-01'),('2022-02-01')),\n" +
-                "    PARTITION p2 values [('2022-02-01'),('2022-03-01')),\n" +
-                "    PARTITION p3 values [('2022-03-01'),('2022-04-01'))\n" +
-                ")\n" +
-                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                "PROPERTIES('replication_num' = '1');";
-        R2 = "CREATE TABLE r2 \n" +
-                "(\n" +
-                "    dt date,\n" +
-                "    k2 int,\n" +
-                "    v1 int \n" +
-                ")\n" +
-                "PARTITION BY date_trunc('day', dt)\n" +
-                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
-                "PROPERTIES('replication_num' = '1');";
-    }
->>>>>>> 65e0b15a3 ([Feature] (Part 5) Support query_rewrite_consistency force_mv mode (#53819))
 
-    private static String R1;
-    private static String R2;
     @BeforeClass
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
@@ -642,7 +588,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                         Assert.assertTrue(processor.getNextTaskRun() == null);
                         ExecPlan execPlan = processor.getMvContext().getExecPlan();
                         Assert.assertTrue(execPlan == null);
-                        String plan = getFragmentPlan(connectContext, query);
+                        String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     partitions=4/4", tableName));
@@ -659,7 +605,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                                 now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
                                 now.plusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
                                 true);
-                        String plan = getFragmentPlan(connectContext, query);
+                        String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     partitions=6/6", tableName));
@@ -669,7 +615,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                         String alterMVSql = String.format("alter materialized view %s set (" +
                                 "'query_rewrite_consistency' = 'loose')", mvName);
                         starRocksAssert.alterMvProperties(alterMVSql);
-                        String plan = getFragmentPlan(connectContext, query);
+                        String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     partitions=6/6", tableName));
@@ -679,7 +625,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                         String alterMVSql = String.format("alter materialized view %s set (" +
                                 "'query_rewrite_consistency' = 'force_mv')", mvName);
                         starRocksAssert.alterMvProperties(alterMVSql);
-                        String plan = getFragmentPlan(connectContext, query);
+                        String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, ":UNION");
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
@@ -692,7 +638,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
 
                     refreshMV("test", mv);
                     {
-                        String plan = getFragmentPlan(connectContext, query);
+                        String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, ":UNION");
                         PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
                                 "     PREAGGREGATION: ON\n" +
@@ -704,7 +650,7 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                     {
                         String query2 = String.format("select * from %s where dt >= current_date() - interval 1 month ",
                                 tableName);
-                        String plan = getFragmentPlan(connectContext, query2);
+                        String plan = getFragmentPlan(query2);
                         PlanTestBase.assertNotContains(plan, ":UNION");
                         PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n" +
                                 "     PREAGGREGATION: ON\n" +

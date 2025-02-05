@@ -353,20 +353,12 @@ public class MVCompensationBuilder {
                         return MVCompensation.createUnkownState(sessionVariable);
                     }
                 }
-<<<<<<< HEAD
-                Set<String> selectPartitionNames = selectPartitionKeys.stream()
-=======
 
                 // NOTE: ref base table's partition keys may contain multi columns, but mv may only contain one column.
-                List<Integer> colIndexes = PartitionUtil.getRefBaseTablePartitionColumIndexes(mv, refBaseTable);
-                if (colIndexes == null) {
-                    return MVCompensation.createUnkownState(sessionVariable);
-                }
                 List<PartitionKey> newPartitionKeys = selectPartitionKeys.stream()
                         .map(partitionKey -> PartitionUtil.getSelectedPartitionKey(partitionKey, colIndexes))
                         .collect(Collectors.toList());
                 Set<String> selectPartitionNames = newPartitionKeys.stream()
->>>>>>> 65e0b15a3 ([Feature] (Part 5) Support query_rewrite_consistency force_mv mode (#53819))
                         .map(PartitionUtil::generateMVPartitionName)
                         .collect(Collectors.toSet());
                 if (selectPartitionNames.stream().noneMatch(refTablePartitionNamesToRefresh::contains)) {
@@ -437,18 +429,12 @@ public class MVCompensationBuilder {
             return getMVCompensatePartitionsOfExternalWithoutPartitionPruner(refBaseTable, refTablePartitionNamesToRefresh);
         }
     }
-<<<<<<< HEAD
 
     private List<PRangeCell> getMVCompensatePartitionsOfExternalWithPartitionPruner(
             List<PartitionKey> selectPartitionKeys,
             Set<String> refTablePartitionNamesToRefresh,
             LogicalScanOperator refScanOperator) {
         List<PRangeCell> refTableCompensatePartitionKeys = Lists.newArrayList();
-=======
-    private List<PartitionKey> getMVCompensatePartitionsOfExternalWithPartitionPruner(
-            Set<String> refTablePartitionNamesToRefresh,
-            LogicalScanOperator refScanOperator) {
-        List<PartitionKey> refTableCompensatePartitionKeys = Lists.newArrayList();
         ScanOperatorPredicates scanOperatorPredicates = null;
         try {
             scanOperatorPredicates = refScanOperator.getScanOperatorPredicates();
@@ -458,7 +444,6 @@ public class MVCompensationBuilder {
         if (scanOperatorPredicates == null) {
             return null;
         }
-        List<PartitionKey> selectPartitionKeys = scanOperatorPredicates.getSelectedPartitionKeys();
         // different behavior for different external table types
         if (selectPartitionKeys.isEmpty() && refScanOperator.getOpType() != OperatorType.LOGICAL_HIVE_SCAN) {
             return null;
@@ -468,16 +453,11 @@ public class MVCompensationBuilder {
         if (colIndexes == null) {
             return null;
         }
->>>>>>> 65e0b15a3 ([Feature] (Part 5) Support query_rewrite_consistency force_mv mode (#53819))
         for (PartitionKey partitionKey : selectPartitionKeys) {
             PartitionKey newPartitionKey = PartitionUtil.getSelectedPartitionKey(partitionKey, colIndexes);
             String partitionName = generateMVPartitionName(newPartitionKey);
             if (refTablePartitionNamesToRefresh.contains(partitionName)) {
-<<<<<<< HEAD
                 refTableCompensatePartitionKeys.add(PRangeCell.of(partitionKey));
-=======
-                refTableCompensatePartitionKeys.add(newPartitionKey);
->>>>>>> 65e0b15a3 ([Feature] (Part 5) Support query_rewrite_consistency force_mv mode (#53819))
             }
         }
         return refTableCompensatePartitionKeys;
