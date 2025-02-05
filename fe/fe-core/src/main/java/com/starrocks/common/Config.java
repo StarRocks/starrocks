@@ -2789,6 +2789,12 @@ public class Config extends ConfigBase {
     public static int lake_compaction_history_size = 20;
 
     @ConfField(mutable = true)
+    public static long lake_min_compaction_interval_ms_on_success = 10000;
+
+    @ConfField(mutable = true)
+    public static long lake_min_compaction_interval_ms_on_failure = 60000;
+
+    @ConfField(mutable = true)
     public static String lake_compaction_warehouse = "default_warehouse";
 
     @ConfField(mutable = true)
