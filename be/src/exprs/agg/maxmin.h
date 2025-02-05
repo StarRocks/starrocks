@@ -268,6 +268,44 @@ public:
         }
     }
 
+    void update_state_removable_cumulatively(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                             int64_t current_row_position, int64_t partition_start,
+                                             int64_t partition_end, int64_t rows_start_offset, int64_t rows_end_offset,
+                                             bool ignore_subtraction, bool ignore_addition,
+                                             [[maybe_unused]] bool has_null) const override {
+        [[maybe_unused]] const auto& column = down_cast<const BinaryColumn&>(*columns[0]);
+
+        const int64_t previous_frame_first_position = current_row_position - 1 + rows_start_offset;
+        int64_t current_frame_last_position = current_row_position + rows_end_offset;
+        if (!ignore_subtraction && previous_frame_first_position >= partition_start &&
+            previous_frame_first_position < partition_end) {
+            if (OP::equals(this->data(state), column.get_data()[previous_frame_first_position])) {
+                current_frame_last_position = std::min(current_frame_last_position, partition_end - 1);
+                this->data(state).reset();
+                int64_t frame_start = previous_frame_first_position + 1;
+                int64_t frame_end = current_frame_last_position + 1;
+                if (has_null) {
+                    const auto null_column = down_cast<const NullColumn*>(columns[1]);
+                    const uint8_t* f_data = null_column->raw_data();
+                    for (size_t i = frame_start; i < frame_end; ++i) {
+                        if (f_data[i] == 0) {
+                            update(ctx, columns, state, i);
+                        }
+                    }
+                } else {
+                    update_batch_single_state_with_frame(ctx, state, columns, partition_start, partition_end,
+                                                         frame_start, frame_end);
+                }
+                return;
+            }
+        }
+
+        if (!ignore_addition && current_frame_last_position >= partition_start &&
+            current_frame_last_position < partition_end) {
+            update(ctx, columns, state, current_frame_last_position);
+        }
+    }
+
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_binary());
         Slice value = column->get(row_num).get_slice();
