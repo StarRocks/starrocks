@@ -195,7 +195,10 @@ public:
                                                      int64_t partition_start, int64_t partition_end,
                                                      int64_t rows_start_offset, int64_t rows_end_offset,
                                                      bool ignore_subtraction, bool ignore_addition,
-                                                     [[maybe_unused]] bool has_null) const {}
+                                                     [[maybe_unused]] bool has_null) const {
+        // can't invoke this function
+        DCHECK(0);
+    }
 
     // Contains a loop with calls to "merge" function.
     // You can collect arguments into array "states"
