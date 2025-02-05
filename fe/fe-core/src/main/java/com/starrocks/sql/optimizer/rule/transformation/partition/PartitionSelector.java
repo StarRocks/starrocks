@@ -28,6 +28,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ListPartitionInfo;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
@@ -61,6 +62,7 @@ import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.OperatorFunctionChecker;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
@@ -190,6 +192,8 @@ public class PartitionSelector {
         if (scalarOperator == null) {
             throw new SemanticException("Failed to translate where expression to scalar operator:" + whereExpr.toSql());
         }
+        // validate scalar operator
+        validateRetentionConditionPredicate(olapTable, scalarOperator);
 
         List<ColumnRefOperator> usedPartitionColumnRefs = Lists.newArrayList();
         scalarOperator.getColumnRefs(usedPartitionColumnRefs);
@@ -628,5 +632,30 @@ public class PartitionSelector {
         String jsonQuery = String.format(JSON_QUERY_TEMPLATE, "PARTITION_VALUE", partitionColumnIndex, partitionColType);
         Expr expr = SqlParser.parseSqlToExpr(jsonQuery, SqlModeHelper.MODE_DEFAULT);
         return expr;
+    }
+
+    public static void validateRetentionConditionPredicate(OlapTable olapTable,
+                                                           ScalarOperator predicate) {
+        PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+        if (partitionInfo.isListPartition()) {
+            // support common partition expressions for list partition tables
+        } else if (partitionInfo.isRangePartition()) {
+            Pair<Boolean, String> result = OperatorFunctionChecker.onlyContainMonotonicFunctions(predicate);
+            if (!result.first) {
+                throw new SemanticException("Retention condition must only contain monotonic functions for range partition " +
+                        "tables but contains: " + result.second);
+            }
+        } else {
+            throw new SemanticException("Unsupported partition type: " + partitionInfo.getType() + " for retention condition");
+        }
+
+        // extra check for materialized view
+        if (olapTable instanceof MaterializedView)  {
+            Pair<Boolean, String> result = OperatorFunctionChecker.onlyContainFEConstantFunctions(predicate);
+            if (!result.first) {
+                throw new SemanticException("Retention condition must only contain FE constant functions for materialized" +
+                        " view but contains: " + result.second);
+            }
+        }
     }
 }
