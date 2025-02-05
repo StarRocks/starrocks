@@ -187,7 +187,7 @@ agg_intermediate_type {agg_func_name}_union(input_col)
 
 :::note
 
-The `_union` function is an aggregate function. It returns the intermediate state type instead of the type of function's final result.
+`_union` is an aggregate function. It returns the intermediate state type instead of the type of function's final result.
 
 :::
 
