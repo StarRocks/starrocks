@@ -316,7 +316,7 @@ bool StreamLoadContext::tsl_reach_idle_timeout(int32_t check_interval) {
     if (idle_timeout_sec <= 0) {
         return false;
     }
-    // if there is data to consume, the load is till active
+    // if there is data to consume, the load is still active
     std::shared_ptr<MessageBodySink> sink = body_sink;
     if (sink && !sink->exhausted()) {
         last_active_ts = UnixSeconds();
