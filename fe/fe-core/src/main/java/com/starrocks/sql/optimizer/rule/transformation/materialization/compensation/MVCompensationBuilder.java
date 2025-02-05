@@ -127,12 +127,7 @@ public class MVCompensationBuilder {
 
     public TableCompensation getRefBaseTableCompensation(Table refBaseTable,
                                                          Optional<LogicalScanOperator> scanOperatorOpt) {
-        // if query consistency is not `force_mv`, use the old compensation logic.
-        if (isEnableRefBaseTableCompensationByPartitionKeys(refBaseTable)) {
-            return getRefBaseTableCompensationByPartitionKeys(refBaseTable, scanOperatorOpt);
-        } else {
-            return null;
-        }
+        return getRefBaseTableCompensationByPartitionKeys(refBaseTable, scanOperatorOpt);
     }
 
     private boolean isEnableRefBaseTableCompensationByPartitionKeys(Table refBaseTable) {
