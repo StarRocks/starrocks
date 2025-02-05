@@ -31,6 +31,8 @@ double __wrap___floattidf(__int128 a) {
         dstSigBits = 52,
     };
 
+    [[maybe_unused]] __int128 original_value = a;
+
     if (a == 0) return 0.0;
 
     enum {
@@ -88,7 +90,7 @@ double __wrap___floattidf(__int128 a) {
         dst_rep_t i;
     } rep = {.i = result};
 
-    DCHECK(std::abs(rep.f - __real___floattidf(a)) < 0.001);
+    DCHECK(std::abs(rep.f - __real___floattidf(original_value)) < 0.001);
     return rep.f;
 }
 } // namespace starrocks
