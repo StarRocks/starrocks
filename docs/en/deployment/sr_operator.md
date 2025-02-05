@@ -206,7 +206,6 @@ The upgrade process lasts for a while. You can run the command `kubectl -n starr
 
 ### Scale StarRocks cluster
 
-The following takes scaling out the BE and FE clusters as examples.
 
 #### Scale out BE cluster
 
