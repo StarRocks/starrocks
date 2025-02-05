@@ -15,14 +15,18 @@
 package com.starrocks.qe;
 
 import com.google.common.collect.ImmutableSet;
+import com.starrocks.analysis.SlotId;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.InternalErrorCode;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.connector.ConnectorMetadata;
+import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
+import com.starrocks.connector.statistics.ConnectorTableColumnKey;
 import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.rpc.RpcException;
@@ -31,6 +35,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.optimizer.statistics.IRelaxDictManager;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
 import org.apache.logging.log4j.LogManager;
@@ -38,6 +43,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 public class ExecuteExceptionHandler {
@@ -53,6 +59,8 @@ public class ExecuteExceptionHandler {
             handleRpcException((RpcException) e, context);
         } else if (e instanceof StarRocksException) {
             handleUserException((StarRocksException) e, context);
+        } else if (e instanceof GlobalDictNotMatchException) {
+            handleGlobalDictNotMatchException((GlobalDictNotMatchException) e, context);
         } else {
             throw e;
         }
@@ -86,6 +94,36 @@ public class ExecuteExceptionHandler {
             throw e;
         }
         Tracers.record(Tracers.Module.EXTERNAL, "HMS.RETRY", String.valueOf(context.retryTime + 1));
+    }
+
+    private static void tryTriggerRefreshDictAsync(GlobalDictNotMatchException e, RetryContext context) {
+        Pair<Optional<Integer>, Optional<String>> err = e.extract();
+        if (err.first.isEmpty()) {
+            return;
+        }
+        SlotId slotId = new SlotId(err.first.get());
+        for (ScanNode scanNode : context.execPlan.getScanNodes()) {
+            if (scanNode.getDesc().getSlots().stream().anyMatch(x -> x.getId().equals(slotId))) {
+                String columnName = scanNode.getDesc().getSlot(slotId.asInt()).getColumn().getName();
+                String tableUUID = scanNode.getDesc().getTable().getUUID();
+                IRelaxDictManager.getInstance().invalidTemporarily(tableUUID, columnName);
+                GlobalStateMgr.getCurrentState().getConnectorTableTriggerAnalyzeMgr().
+                        addDictUpdateTask(new ConnectorTableColumnKey(tableUUID, columnName), err.second);
+                return;
+            }
+        }
+    }
+
+    private static void handleGlobalDictNotMatchException(GlobalDictNotMatchException e, RetryContext context)
+            throws Exception {
+        // trigger async collect dict
+        tryTriggerRefreshDictAsync(e, context);
+
+        // rerun without low cardinality optimization
+        ConnectContext connectContext = context.connectContext;
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeOnLake(false);
+        rebuildExecPlan(e, context);
+        connectContext.getSessionVariable().setUseLowCardinalityOptimizeOnLake(true);
     }
 
     private static void handleRpcException(RpcException e, RetryContext context) throws Exception {

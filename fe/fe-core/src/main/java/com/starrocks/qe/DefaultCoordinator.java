@@ -56,6 +56,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.AuditStatisticsUtil;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.RuntimeProfile;
+import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.mysql.MysqlCommand;
@@ -904,6 +905,10 @@ public class DefaultCoordinator extends Coordinator {
 
             if (copyStatus.isRemoteFileNotFound()) {
                 throw new RemoteFileNotFoundException(copyStatus.getErrorMsg());
+            }
+
+            if (copyStatus.isGlobalDictNotMatch()) {
+                throw new GlobalDictNotMatchException(copyStatus.getErrorMsg());
             }
 
             if (copyStatus.isRpcError()) {
