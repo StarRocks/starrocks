@@ -206,15 +206,28 @@ The upgrade process lasts for a while. You can run the command `kubectl -n starr
 
 ### Scale StarRocks cluster
 
-This topic takes scaling out the BE and FE clusters as examples.
 
 #### Scale out BE cluster
 
-Run the following command to scale out the BE cluster to 9 nodes:
+Run the following command to scale the BE cluster to 9 nodes:
 
 ```bash
 kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"replicas":9}}}'
 ```
+
+### Scale in BE cluster
+
+When scaling in BE nodes, you need to scale them one at a time, and wait for the tablets on the BEs to be re-distributed before proceeding. If there are tables with single replicas, taking a BE node offline may cause data loss if the tablets fail to be redistributed.
+
+Execute the following command to scale in a cluster with 10 BE nodes to 9.
+
+```bash
+kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"replicas":9}}}'
+```
+
+After scaling in, you must manually drop the nodes whose `alive` status is `false`.
+
+The redistribution of tablets will take some time. You can check the progress by executing `SHOW PROC '/statistic';`.
 
 #### Scale out FE cluster
 
