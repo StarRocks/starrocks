@@ -1460,7 +1460,6 @@ public class MvUtils {
         return baseTableInfos.stream().map(BaseTableInfo::getReadableString).collect(Collectors.joining(","));
     }
 
-<<<<<<< HEAD
     public static ScalarOperator convertPartitionKeyRangesToListPredicate(List<? extends ScalarOperator> partitionColRefs,
                                                                           Collection<PRangeCell> pRangeCells,
                                                                           boolean areAllRangePartitionsSingleton) {
@@ -1472,8 +1471,6 @@ public class MvUtils {
         return convertPartitionKeysToListPredicate(partitionColRefs, partitionRanges, areAllRangePartitionsSingleton);
     }
 
-=======
->>>>>>> 6c1b836ff ([Refactor] Refactor mv partition compensate (#54387))
     public static ScalarOperator convertPartitionKeysToListPredicate(List<? extends ScalarOperator> partitionColRefs,
                                                                      Collection<PartitionKey> partitionRanges) {
         final List<ScalarOperator> values = Lists.newArrayList();

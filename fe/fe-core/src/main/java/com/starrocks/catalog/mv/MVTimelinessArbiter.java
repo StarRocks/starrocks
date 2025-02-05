@@ -270,16 +270,6 @@ public abstract class MVTimelinessArbiter {
     }
 
     /**
-     * TODO: Optimize performance in loos/force_mv mode
-     * TODO: in loose mode, ignore partition that both exists in baseTable and mv
-     */
-    protected void collectBaseTableUpdatePartitionNamesInLoose(MvUpdateInfo mvUpdateInfo) {
-        Map<Table, List<Column>> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
-        // collect & update mv's to refresh partitions based on base table's partition changes
-        collectBaseTableUpdatePartitionNames(refBaseTableAndColumns, mvUpdateInfo);
-    }
-
-    /**
      * In Loose mode, do not need to check mv partition's data is consistent with base table's partition's data.
      * Only need to check the mv partition existence.
      */
@@ -326,8 +316,6 @@ public abstract class MVTimelinessArbiter {
     }
 
     /**
-<<<<<<< HEAD
-=======
      * TODO: Optimize performance in loos/force_mv mode
      * TODO: in loose mode, ignore partition that both exists in baseTable and mv
      */
@@ -338,7 +326,6 @@ public abstract class MVTimelinessArbiter {
     }
 
     /**
->>>>>>> 6c1b836ff ([Refactor] Refactor mv partition compensate (#54387))
      * In Force MV mode, do not to check mv's consistency with base table's partition's data if ttl is not expired.
      * - if mv contains no ttl, always no need to refresh;
      * - if mv contains ttl, no need to refresh if query's partitions is in ttl's lifecycle; and need to refresh if
