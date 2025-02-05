@@ -140,7 +140,7 @@ agg_intermediate_type {agg_func_name}_state(input_col1, [input_col2], ...)
 
 :::note
 
-The `_state` function is scalar function. You do not need to define the aggregate column for the computation of input parameter state.
+`_state` is a scalar function. You do not need to define the aggregate column for the computation of input parameter state.
 
 :::
 
