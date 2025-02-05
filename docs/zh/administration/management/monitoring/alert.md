@@ -344,7 +344,7 @@ starrocks_fe_meta_log_count{job="$job_name",instance="$fe_master"} > 100000
 **PromSQL**
 
 ```Bash
-starrocks_fe_thread_pool{job="$job_name"} > 3000
+starrocks_fe_thread_pool{job="$job_name", type!="completed_task_count"} > 3000
 ```
 
 **报警描述**

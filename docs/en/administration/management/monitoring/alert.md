@@ -345,7 +345,7 @@ In the **fe.log** of the Leader FE node, search for records like `begin to gener
 **PromSQL**
 
 ```Bash
-starrocks_fe_thread_pool{job="$job_name"} > 3000
+starrocks_fe_thread_pool{job="$job_name", type!="completed_task_count"} > 3000
 ```
 
 **Alert Description**
