@@ -27,13 +27,10 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.MetaNotFoundException;
-<<<<<<< HEAD
-import com.starrocks.common.profile.Timer;
-import com.starrocks.common.profile.Tracers;
-=======
 import com.starrocks.common.UserException;
 import com.starrocks.common.Version;
->>>>>>> 1059bf7c21 ([Enhancement] Optimize hive table change mv refresh (#45118))
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
@@ -176,21 +173,7 @@ public class HiveMetadata implements ConnectorMetadata {
                         hmsTable.getDbName(), hmsTable.getTableName(), hmsTable.getTableLocation()));
             }
         } else {
-<<<<<<< HEAD
-            if (!stmt.isForceDrop()) {
-                throw new DdlException(String.format("Table location will be cleared." +
-                        " 'Force' must be set when dropping a hive table." +
-                        " Please execute 'drop table %s.%s.%s force'", stmt.getCatalogName(), dbName, tableName));
-            }
-            HiveTable hiveTable = null;
-            try {
-                hiveTable = (HiveTable) getTable(dbName, tableName);
-            } catch (Exception e) {
-                // ignore not found exception
-            }
-=======
             HiveTable hiveTable = (HiveTable) getTable(dbName, tableName);
->>>>>>> 1059bf7c21 ([Enhancement] Optimize hive table change mv refresh (#45118))
             if (hiveTable == null && stmt.isSetIfExists()) {
                 LOG.warn("Table {}.{} doesn't exist", dbName, tableName);
                 return;
@@ -301,8 +284,7 @@ public class HiveMetadata implements ConnectorMetadata {
             String locateName = fileStatus.getPath().toUri().getPath();
             String fileName = PartitionUtil.getSuffixName(paths.get(i).toUri().getPath(), locateName);
             RemoteFileDesc fileDesc = new RemoteFileDesc(fileName, "", fileStatus.getLen(),
-                    fileStatus.getModificationTime(), ImmutableList.of(),
-                    ImmutableList.of());
+                    fileStatus.getModificationTime(), ImmutableList.of());
             RemoteFileInfo.Builder builder = RemoteFileInfo.builder()
                     .setFormat(partition.getInputFormat())
                     .setFullPath(partition.getFullPath())
@@ -453,9 +435,9 @@ public class HiveMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void alterTable(AlterTableStmt stmt) throws UserException {
+    public void alterTable(ConnectContext context, AlterTableStmt stmt) throws UserException {
         // (FIXME) add this api just for tests of external table
-        List<AlterClause> alterClauses = stmt.getOps();
+        List<AlterClause> alterClauses = stmt.getAlterClauseList();
         for (AlterClause alterClause : alterClauses) {
             if (alterClause instanceof AddPartitionClause) {
                 addPartition(stmt, alterClause);

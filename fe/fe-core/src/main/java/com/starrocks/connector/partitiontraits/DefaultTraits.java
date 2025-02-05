@@ -121,6 +121,18 @@ public abstract class DefaultTraits extends ConnectorPartitionTraits  {
         return partitionNameWithPartition;
     }
 
+
+    @Override
+    public Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(List<String> partitionNames) {
+        Map<String, PartitionInfo> partitionNameWithPartition = Maps.newHashMap();
+        List<PartitionInfo> partitions = getPartitions(partitionNames);
+        Preconditions.checkState(partitions.size() == partitionNames.size(), "corrupted partition meta");
+        for (int index = 0; index < partitionNames.size(); ++index) {
+            partitionNameWithPartition.put(partitionNames.get(index), partitions.get(index));
+        }
+        return partitionNameWithPartition;
+    }
+
     @Override
     public Optional<Long> maxPartitionRefreshTs() {
         throw new NotImplementedException("Not support maxPartitionRefreshTs");

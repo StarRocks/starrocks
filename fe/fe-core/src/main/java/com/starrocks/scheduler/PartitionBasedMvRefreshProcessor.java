@@ -26,6 +26,7 @@ import com.google.common.util.concurrent.Uninterruptibles;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -53,12 +54,7 @@ import com.starrocks.connector.ConnectorPartitionTraits;
 import com.starrocks.connector.ConnectorTableInfo;
 import com.starrocks.connector.HivePartitionDataInfo;
 import com.starrocks.connector.PartitionUtil;
-<<<<<<< HEAD
-=======
 import com.starrocks.connector.TableUpdateArbitrator;
-import com.starrocks.lake.LakeMaterializedView;
-import com.starrocks.lake.LakeTable;
->>>>>>> 1059bf7c21 ([Enhancement] Optimize hive table change mv refresh (#45118))
 import com.starrocks.metric.IMaterializedViewMetricsEntity;
 import com.starrocks.metric.MaterializedViewMetricsRegistry;
 import com.starrocks.qe.ConnectContext;
@@ -238,11 +234,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                                            Map<TableSnapshotInfo, Set<String>> baseTableCandidatePartitions)
             throws AnalysisException, LockTimeoutException {
         // collect partition infos of ref base tables
-<<<<<<< HEAD
         LOG.debug("Start to sync and check partitions for mv: {}", materializedView.getName());
-=======
-        LOG.info("start to sync and check partitions for mv: {}", materializedView.getName());
->>>>>>> 1059bf7c21 ([Enhancement] Optimize hive table change mv refresh (#45118))
         int retryNum = 0;
         boolean checked = false;
         Stopwatch stopwatch = Stopwatch.createStarted();
@@ -557,11 +549,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     materializedView.getName(), String.join(",", mvToRefreshedPartitions), refTablePartitionNames);
         }
         mvContext.setExecPlan(execPlan);
-<<<<<<< HEAD
         LOG.info("Finished mv refresh plan for {}", materializedView.getName());
-=======
-        LOG.info("prepared refresh plan for mv:{}", materializedView.getName());
->>>>>>> 1059bf7c21 ([Enhancement] Optimize hive table change mv refresh (#45118))
         return insertStmt;
     }
 
@@ -755,31 +743,17 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         MaterializedViewExceptions.inactiveReasonForBaseTableNotExists(baseTableInfo.getTableName()));
                 throw new DmlException("Materialized view base table: %s not exist.", baseTableInfo.getTableInfoStr());
             }
+            Table table = optTable.get();
 
-<<<<<<< HEAD
             // refresh old table
             if (table.isNativeTableOrMaterializedView() || table.isHiveView()) {
                 LOG.debug("No need to refresh table:{} because it is native table or materialized view or connector view",
                         baseTableInfo.getTableInfoStr());
                 continue;
             }
-            TableSnapshotInfo snapshotInfo = new TableSnapshotInfo(baseTableInfo, table);
-            Set<String> basePartitions = baseTableCandidatePartitions.get(snapshotInfo);
-            if (CollectionUtils.isNotEmpty(basePartitions)) {
-                // only refresh referenced partitions, to reduce metadata overhead
-                List<String> realPartitionNames = basePartitions.stream()
-                        .flatMap(name -> mvContext.getExternalTableRealPartitionName(table, name).stream())
-                        .collect(Collectors.toList());
-                connectContext.getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
-                        baseTableInfo.getDbName(), table, realPartitionNames, false);
-            } else {
-                // refresh the whole table, which may be costly in extreme case
-                connectContext.getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
-=======
-            Table table = optTable.get();
             if (!table.isNativeTableOrMaterializedView() && !table.isConnectorView()) {
+                // refresh the whole table, which may be costly in extreme case
                 context.getCtx().getGlobalStateMgr().getMetadataMgr().refreshTable(baseTableInfo.getCatalogName(),
->>>>>>> 1059bf7c21 ([Enhancement] Optimize hive table change mv refresh (#45118))
                         baseTableInfo.getDbName(), table, Lists.newArrayList(), true);
                 // should clear query cache
                 context.getCtx().getGlobalStateMgr().getMetadataMgr().removeQueryMetadata();
@@ -876,7 +850,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         // acquire db write lock to modify meta of mv
         Locker locker = new Locker();
-        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
+        if (!locker.lockDatabaseAndCheckExist(db, mv, LockType.WRITE)) {
             throw new DmlException("repair mv meta failed. database:" + db.getFullName() + " not exist");
         }
         try {
@@ -932,7 +906,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     newBaseTableInfo.getCatalogName(), newBaseTableInfo.getDbName(),
                     newBaseTableInfo.getTableIdentifier(), newConnectorTableInfo);
         } finally {
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockTableWithIntensiveDbLock(db, mv, LockType.WRITE);
         }
     }
 
@@ -945,19 +919,12 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             ExecPlan execPlan,
                             Map<TableSnapshotInfo, Set<String>> refTableAndPartitionNames) {
         LOG.info("start to update meta for mv:{}", materializedView.getName());
-<<<<<<< HEAD
 
         // check
         Table mv = db.getTable(materializedView.getId());
         if (mv == null) {
             throw new DmlException(
                     "update meta failed. materialized view:" + materializedView.getName() + " not exist");
-=======
-        Locker locker = new Locker();
-        // update the meta if succeed
-        if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
-            throw new DmlException("update meta failed. database:" + db.getFullName() + " not exist");
->>>>>>> 1059bf7c21 ([Enhancement] Optimize hive table change mv refresh (#45118))
         }
         // check
         if (mvRefreshedPartitions == null || refTableAndPartitionNames == null) {
@@ -1055,7 +1022,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
         // prepare mv context
         mvContext = new MvTaskRunContext(context);
-<<<<<<< HEAD
         // prepare partition ttl number
         int partitionTTLNumber = materializedView.getTableProperty().getPartitionTTLNumber();
         mvContext.setPartitionTTLNumber(partitionTTLNumber);
@@ -1080,9 +1046,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             throw new DmlException(String.format("materialized view:%s in database:%s refresh failed: partition info %s not " +
                     "supported", mv.getName(), context.ctx.getDatabase(), partitionInfo));
         }
-=======
-        LOG.info("finish prepare refresh of mv:{}, mv name:{}, jobId: {}", mvId, materializedView.getName(), jobId);
->>>>>>> 1059bf7c21 ([Enhancement] Optimize hive table change mv refresh (#45118))
     }
 
     /**
@@ -1093,29 +1056,11 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         // collect base table snapshot infos
         snapshotBaseTables = collectBaseTableSnapshotInfos(materializedView);
 
-<<<<<<< HEAD
         // do sync partitions (add or drop partitions) for materialized view
         boolean result = mvRefreshPartitioner.syncAddOrDropPartitions();
         LOG.info("Finish sync mv:{} partitions, cost(ms): {}", materializedView.getName(),
                 stopwatch.elapsed(TimeUnit.MILLISECONDS));
         return result;
-=======
-        PartitionInfo partitionInfo = materializedView.getPartitionInfo();
-        if (!(partitionInfo instanceof SinglePartitionInfo)) {
-            Pair<Table, Column> partitionTableAndColumn = getRefBaseTableAndPartitionColumn(snapshotBaseTables);
-            mvContext.setRefBaseTable(partitionTableAndColumn.first);
-            mvContext.setRefBaseTablePartitionColumn(partitionTableAndColumn.second);
-        }
-        int partitionTTLNumber = materializedView.getTableProperty().getPartitionTTLNumber();
-        mvContext.setPartitionTTLNumber(partitionTTLNumber);
-
-        if (partitionInfo instanceof ExpressionRangePartitionInfo) {
-            syncPartitionsForExpr(context);
-        } else if (partitionInfo instanceof ListPartitionInfo) {
-            syncPartitionsForList();
-        }
-        LOG.info("finish sync partitions. mv:{}", materializedView.getName());
->>>>>>> 1059bf7c21 ([Enhancement] Optimize hive table change mv refresh (#45118))
     }
 
     /**
@@ -1322,12 +1267,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             parentStmtExecutor.registerSubStmtExecutor(executor);
         }
         ctx.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
-<<<<<<< HEAD
-=======
         ctx.getSessionVariable().setEnableInsertStrict(false);
         // enable profile by default for mv refresh task
         ctx.getSessionVariable().setEnableProfile(true);
->>>>>>> 1059bf7c21 ([Enhancement] Optimize hive table change mv refresh (#45118))
         LOG.info("[QueryId:{}] start to refresh materialized view {}", ctx.getQueryId(), materializedView.getName());
         try {
             executor.handleDMLStmtWithProfile(execPlan, insertStmt);

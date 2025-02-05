@@ -165,7 +165,7 @@ public class DirectoryBasedUpdateArbitratorTest {
                 int fileDescNum = i + 1;
                 remoteFileDescs = Lists.newArrayList();
                 for (int j = 0; j < fileDescNum; j++) {
-                    RemoteFileDesc fileDesc = new RemoteFileDesc("name", "gzip", 100, modificationTime + j, null, null);
+                    RemoteFileDesc fileDesc = new RemoteFileDesc("name", "gzip", 100, modificationTime + j, null);
                     remoteFileDescs.add(fileDesc);
                 }
             }

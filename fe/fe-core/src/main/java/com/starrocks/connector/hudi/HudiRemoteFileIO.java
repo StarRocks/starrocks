@@ -22,11 +22,8 @@ import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import org.apache.hadoop.conf.Configuration;
-<<<<<<< HEAD
-=======
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
->>>>>>> 1059bf7c21 ([Enhancement] Optimize hive table change mv refresh (#45118))
 import org.apache.hudi.common.config.HoodieMetadataConfig;
 import org.apache.hudi.common.engine.HoodieLocalEngineContext;
 import org.apache.hudi.common.fs.FSUtils;
@@ -140,12 +137,9 @@ public class HudiRemoteFileIO implements RemoteFileIO {
             destroyHudiContext(hudiContext);
         }
     }
-<<<<<<< HEAD
-=======
 
     @Override
     public FileStatus[] getFileStatus(Path... files) {
         throw new UnsupportedOperationException("getFileStatus");
     }
->>>>>>> 1059bf7c21 ([Enhancement] Optimize hive table change mv refresh (#45118))
 }

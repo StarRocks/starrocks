@@ -413,7 +413,7 @@ public class HiveMetastoreOperationsTest {
                 properties,
                 new HashMap<>(),
                 "my table comment");
-        List<Column> columns = stmt.getColumnDefs().stream().map(ColumnDef::toColumn).collect(Collectors.toList());
+        List<Column> columns = stmt.getColumnDefs().stream().map(c -> c.toColumn(null)).collect(Collectors.toList());
         stmt.setColumns(columns);
 
         Assert.assertTrue(mockedHmsOps.createTable(stmt));
@@ -451,7 +451,7 @@ public class HiveMetastoreOperationsTest {
                 properties,
                 new HashMap<>(),
                 "my table comment");
-        List<Column> columns = stmt.getColumnDefs().stream().map(ColumnDef::toColumn).collect(Collectors.toList());
+        List<Column> columns = stmt.getColumnDefs().stream().map(c -> c.toColumn(null)).collect(Collectors.toList());
         stmt.setColumns(columns);
 
         Assert.assertTrue(mockedHmsOps.createTable(stmt));
@@ -488,7 +488,7 @@ public class HiveMetastoreOperationsTest {
                 properties,
                 new HashMap<>(),
                 "my table comment");
-        List<Column> columns = stmt.getColumnDefs().stream().map(ColumnDef::toColumn).collect(Collectors.toList());
+        List<Column> columns = stmt.getColumnDefs().stream().map(c -> c.toColumn(null)).collect(Collectors.toList());
         stmt.setColumns(columns);
 
         Assert.assertTrue(mockedHmsOps.createTable(stmt));

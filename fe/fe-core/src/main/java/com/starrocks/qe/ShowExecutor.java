@@ -58,12 +58,6 @@ import com.starrocks.catalog.ConnectorView;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DynamicPartitionProperty;
 import com.starrocks.catalog.Function;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.HiveMetaStoreTable;
-import com.starrocks.catalog.HiveTable;
-import com.starrocks.catalog.IcebergView;
->>>>>>> 1059bf7c21 ([Enhancement] Optimize hive table change mv refresh (#45118))
 import com.starrocks.catalog.Index;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.LocalTablet;
@@ -797,55 +791,6 @@ public class ShowExecutor {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName);
             }
 
-<<<<<<< HEAD
-=======
-            // create table catalogName.dbName.tableName (
-            StringBuilder createTableSql = new StringBuilder();
-            if (table.isHiveTable() && ((HiveTable) table).getHiveTableType() == HiveTable.HiveTableType.EXTERNAL_TABLE) {
-                createTableSql.append("CREATE EXTERNAL TABLE ");
-            } else {
-                createTableSql.append("CREATE TABLE ");
-            }
-            createTableSql.append("`").append(tableName).append("`")
-                    .append(" (\n");
-
-            // Columns
-            List<String> columns = table.getFullSchema().stream().map(
-                    this::toMysqlDDL).collect(Collectors.toList());
-            createTableSql.append(String.join(",\n", columns))
-                    .append("\n)");
-
-            // Partition column names
-            if (table.getType() != JDBC && !table.isUnPartitioned()) {
-                createTableSql.append("\nPARTITION BY ( ")
-                        .append(String.join(", ", table.getPartitionColumnNames()))
-                        .append(" )");
-            }
-
-            // Location
-            String location = null;
-            if (table.isHiveTable() || table.isHudiTable()) {
-                location = ((HiveMetaStoreTable) table).getTableLocation();
-            } else if (table.isIcebergTable()) {
-                location = table.getTableLocation();
-            } else if (table.isDeltalakeTable()) {
-                location = table.getTableLocation();
-            } else if (table.isPaimonTable()) {
-                location = table.getTableLocation();
-            } else if (table instanceof IcebergView) {
-                location = table.getTableLocation();
-            }
-
-            // Comment
-            if (!Strings.isNullOrEmpty(table.getComment())) {
-                createTableSql.append("\nCOMMENT (\"").append(table.getComment()).append("\")");
-            }
-
-            if (!Strings.isNullOrEmpty(location)) {
-                createTableSql.append("\nPROPERTIES (\"location\" = \"").append(location).append("\");");
-            }
-
->>>>>>> 1059bf7c21 ([Enhancement] Optimize hive table change mv refresh (#45118))
             List<List<String>> rows = Lists.newArrayList();
             if (table.isConnectorView()) {
                 String createViewSql = AstToStringBuilder.getExternalCatalogViewDdlStmt((ConnectorView) table);
