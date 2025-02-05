@@ -355,7 +355,7 @@ GROUP BY dt;
 -- Refresh the materialized view.
 REFRESH MATERIALIZED VIEW test_mv2 WITH SYNC MODE;
 
--- Direct query against the aggregate function will be transparently accelerated by test_mv2.
+-- Direct queries against the aggregate function will be transparently accelerated by test_mv2.
 SELECT 
     dt,
     min(id),
