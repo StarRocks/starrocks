@@ -353,7 +353,12 @@ public class MVCompensationBuilder {
                         return MVCompensation.createUnkownState(sessionVariable);
                     }
                 }
-                Set<String> selectPartitionNames = selectPartitionKeys.stream()
+
+                // NOTE: ref base table's partition keys may contain multi columns, but mv may only contain one column.
+                List<PartitionKey> newPartitionKeys = selectPartitionKeys.stream()
+                        .map(partitionKey -> PartitionUtil.getSelectedPartitionKey(partitionKey, colIndexes))
+                        .collect(Collectors.toList());
+                Set<String> selectPartitionNames = newPartitionKeys.stream()
                         .map(PartitionUtil::generateMVPartitionName)
                         .collect(Collectors.toSet());
                 if (selectPartitionNames.stream().noneMatch(refTablePartitionNamesToRefresh::contains)) {
@@ -430,8 +435,27 @@ public class MVCompensationBuilder {
             Set<String> refTablePartitionNamesToRefresh,
             LogicalScanOperator refScanOperator) {
         List<PRangeCell> refTableCompensatePartitionKeys = Lists.newArrayList();
+        ScanOperatorPredicates scanOperatorPredicates = null;
+        try {
+            scanOperatorPredicates = refScanOperator.getScanOperatorPredicates();
+        } catch (Exception e) {
+            return null;
+        }
+        if (scanOperatorPredicates == null) {
+            return null;
+        }
+        // different behavior for different external table types
+        if (selectPartitionKeys.isEmpty() && refScanOperator.getOpType() != OperatorType.LOGICAL_HIVE_SCAN) {
+            return null;
+        }
+        Table refBaseTable = refScanOperator.getTable();
+        List<Integer> colIndexes = PartitionUtil.getRefBaseTablePartitionColumIndexes(mvContext.getMv(), refBaseTable);
+        if (colIndexes == null) {
+            return null;
+        }
         for (PartitionKey partitionKey : selectPartitionKeys) {
-            String partitionName = generateMVPartitionName(partitionKey);
+            PartitionKey newPartitionKey = PartitionUtil.getSelectedPartitionKey(partitionKey, colIndexes);
+            String partitionName = generateMVPartitionName(newPartitionKey);
             if (refTablePartitionNamesToRefresh.contains(partitionName)) {
                 refTableCompensatePartitionKeys.add(PRangeCell.of(partitionKey));
             }
@@ -446,7 +470,7 @@ public class MVCompensationBuilder {
         if (baseTableUpdateInfo == null) {
             return null;
         }
-
+        // use update info's partition to cells since it's accurate.
         Map<String, PCell> nameToPartitionKeys = baseTableUpdateInfo.getPartitonToCells();
         List<PRangeCell> partitionKeys = Lists.newArrayList();
         try {

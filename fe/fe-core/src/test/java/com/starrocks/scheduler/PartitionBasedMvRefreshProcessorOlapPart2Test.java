@@ -15,6 +15,8 @@
 package com.starrocks.scheduler;
 
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
@@ -34,6 +36,8 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
@@ -42,6 +46,8 @@ import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -52,9 +58,9 @@ import static com.starrocks.scheduler.TaskRun.MV_ID;
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
     private static final Logger LOG = LogManager.getLogger(PartitionBasedMvRefreshProcessorOlapPart2Test.class);
-
     private static String R1;
     private static String R2;
+
     @BeforeClass
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
@@ -509,5 +515,166 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                             });
                 }
         );
+    }
+
+
+    private String toPartitionVal(String val) {
+        return val == null ? "NULL" : String.format("'%s'", val);
+    }
+
+    private void addRangePartition(String tbl, String pName, String pVal1, String pVal2, boolean isInsertValue) {
+        // mock the check to ensure test can run
+        new MockUp<ExpressionRangePartitionInfo>() {
+            @Mock
+            public boolean isAutomaticPartition() {
+                return false;
+            }
+        };
+        new MockUp<ExpressionRangePartitionInfoV2>() {
+            @Mock
+            public boolean isAutomaticPartition() {
+                return false;
+            }
+        };
+        try {
+            String addPartitionSql = String.format("ALTER TABLE %s ADD " +
+                    "PARTITION %s VALUES [(%s),(%s))", tbl, pName, toPartitionVal(pVal1), toPartitionVal(pVal2));
+            System.out.println(addPartitionSql);
+            starRocksAssert.alterTable(addPartitionSql);
+
+            // insert values
+            if (isInsertValue) {
+                String insertSql = String.format("insert into %s partition(%s) values('%s', 1, 1);",
+                        tbl, pName, pVal1);
+                executeInsertSql(insertSql);
+            }
+        } catch (Exception e) {
+            LOG.error("Failed to add partition", e);
+        }
+    }
+
+    private void addRangePartition(String tbl, String pName, String pVal1, String pVal2) {
+        addRangePartition(tbl, pName, pVal1, pVal2, false);
+    }
+
+    private void withTablePartitions(String tableName) {
+        if (tableName.equalsIgnoreCase("r1")) {
+            return;
+        }
+
+        addRangePartition(tableName, "p1", "2024-01-01", "2024-01-02");
+        addRangePartition(tableName, "p2", "2024-01-02", "2024-01-03");
+        addRangePartition(tableName, "p3", "2024-01-03", "2024-01-04");
+        addRangePartition(tableName, "p4", "2024-01-04", "2024-01-05");
+    }
+
+    private void testMVRefreshWithTTLCondition(String tableName) {
+        withTablePartitions(tableName);
+        String mvCreateDdl = String.format("create materialized view test_mv1\n" +
+                "partition by (dt) \n" +
+                "distributed by random \n" +
+                "REFRESH DEFERRED MANUAL \n" +
+                "PROPERTIES ('partition_retention_condition' = 'dt >= current_date() - interval 1 month')\n " +
+                "as select * from %s;", tableName);
+        starRocksAssert.withMaterializedView(mvCreateDdl,
+                () -> {
+                    String mvName = "test_mv1";
+                    MaterializedView mv = starRocksAssert.getMv("test", mvName);
+                    String query = String.format("select * from %s ", tableName);
+                    {
+                        // all partitions are expired, no need to create partitions for mv
+                        PartitionBasedMvRefreshProcessor processor = refreshMV("test", mv);
+                        Assert.assertEquals(0, mv.getVisiblePartitions().size());
+                        Assert.assertTrue(processor.getNextTaskRun() == null);
+                        ExecPlan execPlan = processor.getMvContext().getExecPlan();
+                        Assert.assertTrue(execPlan == null);
+                        String plan = getFragmentPlan(query);
+                        PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
+                                "     PREAGGREGATION: ON\n" +
+                                "     partitions=4/4", tableName));
+                    }
+
+                    {
+                        // add new partitions
+                        LocalDateTime now = LocalDateTime.now();
+                        addRangePartition(tableName, "p5",
+                                now.minusMonths(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
+                                now.minusMonths(1).plusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
+                                true);
+                        addRangePartition(tableName, "p6",
+                                now.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
+                                now.plusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
+                                true);
+                        String plan = getFragmentPlan(query);
+                        PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
+                                "     PREAGGREGATION: ON\n" +
+                                "     partitions=6/6", tableName));
+                    }
+
+                    {
+                        String alterMVSql = String.format("alter materialized view %s set (" +
+                                "'query_rewrite_consistency' = 'loose')", mvName);
+                        starRocksAssert.alterMvProperties(alterMVSql);
+                        String plan = getFragmentPlan(query);
+                        PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
+                                "     PREAGGREGATION: ON\n" +
+                                "     partitions=6/6", tableName));
+                    }
+
+                    {
+                        String alterMVSql = String.format("alter materialized view %s set (" +
+                                "'query_rewrite_consistency' = 'force_mv')", mvName);
+                        starRocksAssert.alterMvProperties(alterMVSql);
+                        String plan = getFragmentPlan(query);
+                        PlanTestBase.assertContains(plan, ":UNION");
+                        PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
+                                "     PREAGGREGATION: ON\n" +
+                                "     partitions=4/6", tableName));
+                        PlanTestBase.assertContains(plan, "TABLE: test_mv1\n" +
+                                "     PREAGGREGATION: ON\n" +
+                                "     partitions=0/0");
+
+                    }
+
+                    refreshMV("test", mv);
+                    {
+                        String plan = getFragmentPlan(query);
+                        PlanTestBase.assertContains(plan, ":UNION");
+                        PlanTestBase.assertContains(plan, String.format("TABLE: %s\n" +
+                                "     PREAGGREGATION: ON\n" +
+                                "     partitions=4/6", tableName));
+                        PlanTestBase.assertContains(plan, "TABLE: test_mv1\n" +
+                                "     PREAGGREGATION: ON\n" +
+                                "     partitions=2/2");
+                    }
+                    {
+                        String query2 = String.format("select * from %s where dt >= current_date() - interval 1 month ",
+                                tableName);
+                        String plan = getFragmentPlan(query2);
+                        PlanTestBase.assertNotContains(plan, ":UNION");
+                        PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n" +
+                                "     PREAGGREGATION: ON\n" +
+                                "     partitions=2/2\n" +
+                                "     rollup: test_mv1");
+                    }
+                });
+    }
+
+    @Test
+    public void testMVRefreshWithTTLConditionTT1() {
+        starRocksAssert.withTable(R1,
+                (obj) -> {
+                    String tableName = (String) obj;
+                    testMVRefreshWithTTLCondition(tableName);
+                });
+    }
+
+    @Test
+    public void testMVRefreshWithTTLConditionTT2() {
+        starRocksAssert.withTable(R2,
+                (obj) -> {
+                    String tableName = (String) obj;
+                    testMVRefreshWithTTLCondition(tableName);
+                });
     }
 }

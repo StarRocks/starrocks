@@ -88,4 +88,10 @@ public final class MVTimelinessNonPartitionArbiter extends MVTimelinessArbiter {
         }
         return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
     }
+
+    @Override
+    public MvUpdateInfo getMVTimelinessUpdateInfoInForceMVMode() {
+        // for force mv mode, always no need to refresh for non-partitioned mv.
+        return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
+    }
 }
