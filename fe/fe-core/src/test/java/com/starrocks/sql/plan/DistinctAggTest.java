@@ -57,7 +57,7 @@ public class DistinctAggTest extends PlanTestBase {
 
     @Test
     void testDistinctConstant() throws Exception {
-        String sql = "select b1, count(distinct [skew] a1) as cnt from (select split('a,b,c', ',') as a1, 'aaa' as b1) " +
+        String sql = "select b1, count(distinct [`skew`] a1) as cnt from (select split('a,b,c', ',') as a1, 'aaa' as b1) " +
                 "t1 group by b1";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "2:AGGREGATE (update finalize)\n" +
