@@ -202,6 +202,14 @@ public enum RuleType {
 
     TF_CTE_ADD_PROJECTION,
 
+<<<<<<< HEAD
+=======
+    TF_PREDICATE_PROPAGATE,
+
+    TF_VECTOR_REWRITE_RULE,
+    TF_HOIST_HEAVY_COST_UPON_TOPN,
+
+>>>>>>> daa380dd5f ([Enhancement] Hoist heavy-cost(decimal divide) upon top-n (#55417))
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,
     IMP_HIVE_LSCAN_TO_PSCAN,
