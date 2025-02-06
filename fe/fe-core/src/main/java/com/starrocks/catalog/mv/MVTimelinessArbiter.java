@@ -292,44 +292,7 @@ public abstract class MVTimelinessArbiter {
         collectMVToBaseTablePartitionNames(refBaseTablePartitionMap, diff, mvUpdateInfo);
         return mvUpdateInfo;
     }
-
-<<<<<<< HEAD
-    public Set<String> getMVRetentionPartitionNames(MaterializedView mv,
-                                                    String retentionCondition,
-                                                    Map<String, PCell> toCheckPartitionNames) {
-        long dbId = mv.getDbId();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        if (db == null) {
-            return null;
-        }
-        // TODO: How to cache it to avoid querying every time?
-        // check all added partitions are in ttl's lifecycle or not
-        List<String> retentionPartitionNames = PartitionSelector.getReservedPartitionsByRetentionCondition(db, mv,
-                retentionCondition, toCheckPartitionNames, true);
-        if (retentionPartitionNames == null) {
-            logMVPrepare(mv, "Get expired partitions by retention condition failed");
-            return null;
-        }
-        return Sets.newHashSet(retentionPartitionNames);
-    }
-
-=======
-    /**
-     * Collect mv to base table partition names mapping to be used in {@code MvUpdate#getBaseTableToRefreshPartitionNames}
-     * for union compensate rewrite.
-     */
-    protected void collectMVToBaseTablePartitionNames(Map<Table, Map<String, PCell>> refBaseTablePartitionMap,
-                                                      PartitionDiff diff,
-                                                      MvUpdateInfo mvUpdateInfo) {
-        Map<String, PCell> mvPartitionToCells = mv.getPartitionCells(Optional.empty());
-        diff.getDeletes().keySet().forEach(mvPartitionToCells::remove);
-        mvPartitionToCells.putAll(diff.getAdds());
-        Map<String, Map<Table, Set<String>>> mvToBaseNameRef = differ
-                .generateMvRefMap(mvPartitionToCells, refBaseTablePartitionMap);
-        mvUpdateInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
-    }
     
->>>>>>> d928cac11 ([Enhancement] Optimize partition retention condition compensation rewrite performance in force_mv mode (#54072))
     /**
      * TODO: Optimize performance in loos/force_mv mode
      * TODO: in loose mode, ignore partition that both exists in baseTable and mv
