@@ -208,6 +208,29 @@ static ssize_t read_tablet(const TabletSharedPtr& tablet, int64_t version) {
     return read_until_eof(iter);
 }
 
+<<<<<<< HEAD
+=======
+TEST_F(RowsetUpdateStateTest, with_deletes) {
+    const int N = 100;
+    _tablet = create_tablet(rand(), rand());
+    // create full rowsets first
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    std::vector<int64_t> delete_keys;
+    for (int i = 0; i < N / 2; i++) {
+        delete_keys.push_back(N + i);
+    }
+    Int64Column deletes;
+    deletes.append_numbers(delete_keys.data(), sizeof(int64_t) * delete_keys.size());
+    RowsetSharedPtr rowset = create_rowset(_tablet, keys, &deletes);
+    auto st = _tablet->rowset_commit(2, rowset, 2000);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    ASSERT_EQ(2, _tablet->updates()->max_version());
+}
+
+>>>>>>> cc437c9ac7 ([BugFix] Prevent drop tablet during apply in RowsetUpdateStateTest.with_deletes (#55548))
 TEST_F(RowsetUpdateStateTest, prepare_partial_update_states) {
     const int N = 100;
     _tablet = create_tablet(rand(), rand());
