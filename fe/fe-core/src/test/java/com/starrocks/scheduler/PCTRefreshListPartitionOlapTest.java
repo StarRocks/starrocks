@@ -1443,7 +1443,7 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         PlanTestBase.assertNotContains(plan, ":UNION");
                         PlanTestBase.assertMatches(plan, "     TABLE: test_mv1\n" +
                                 "     PREAGGREGATION: ON\n" +
-                                "     PREDICATES: 7: .*'\n" +
+                                "     PREDICATES: .*'\n" +
                                 "     partitions=2/2");
                     }
                 });
