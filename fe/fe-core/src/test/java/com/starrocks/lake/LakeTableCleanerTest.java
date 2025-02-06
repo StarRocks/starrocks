@@ -24,8 +24,15 @@ import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
+<<<<<<< HEAD
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
+=======
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -40,8 +47,35 @@ import java.util.concurrent.CompletableFuture;
 public class LakeTableCleanerTest {
     private final ShardInfo shardInfo;
 
+<<<<<<< HEAD
     public LakeTableCleanerTest() {
         shardInfo = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/2")).build();
+=======
+    @Mocked
+    private StarOSAgent starOSAgent;
+
+    public LakeTableCleanerTest() {
+        shardInfo = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/2")).build();
+    }
+
+    @Before
+    public void setup() {
+        UtFrameUtils.mockInitWarehouseEnv();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public StarOSAgent getStarOSAgent() {
+                return starOSAgent;
+            }
+        };
+
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public ShardInfo getShardInfo(long shardId, long workerGroupId) throws StarClientException {
+                return shardInfo;
+            }
+        };
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
     }
 
     @Test

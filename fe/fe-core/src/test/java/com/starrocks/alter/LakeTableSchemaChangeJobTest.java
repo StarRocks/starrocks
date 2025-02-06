@@ -52,12 +52,23 @@ import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
+=======
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CreateDbStmt;
+import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.task.AgentBatchTask;
+import com.starrocks.utframe.MockedWarehouseManager;
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.commons.lang3.concurrent.ConcurrentUtils;
@@ -230,6 +241,14 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testPendingJobNoAliveBackend() {
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
+            }
+        };
+
         new MockUp<Utils>() {
             @Mock
             public Long chooseBackend(LakeTablet tablet) {
@@ -243,6 +262,10 @@ public class LakeTableSchemaChangeJobTest {
             }
         };
 
+<<<<<<< HEAD
+=======
+        mockedWarehouseManager.setComputeNodesAssignedToTablet(null);
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
         Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
             schemaChangeJob.runPendingJob();
         });
@@ -981,4 +1004,38 @@ public class LakeTableSchemaChangeJobTest {
         schemaChangeJob.cancel("test");
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, schemaChangeJob.getJobState());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testShow() {
+        UtFrameUtils.mockInitWarehouseEnv();
+
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+
+        LakeTableSchemaChangeJob alterJobV2 =
+                    new LakeTableSchemaChangeJob(12345L, db.getId(), table.getId(), table.getName(), 10);
+        alterJobV2.addIndexSchema(1L, 2L, "a", (short) 1, Lists.newArrayList());
+
+        schemaChangeHandler.addAlterJobV2(alterJobV2);
+        System.out.println(schemaChangeHandler.getAlterJobInfosByDb(db));
+
+        SchemaChangeHandler schemaChangeHandler2 = new SchemaChangeHandler();
+        alterJobV2 = new LakeTableSchemaChangeJob(12345L, db.getId(), table.getId(), table.getName(), 10);
+        alterJobV2.addIndexSchema(1L, 2L, "a", (short) 1, Lists.newArrayList());
+        schemaChangeHandler2.addAlterJobV2(alterJobV2);
+        System.out.println(schemaChangeHandler2.getAlterJobInfosByDb(db));
+    }
+
+    @Test
+    public void testCancelPendingJobWithFlag() throws Exception {
+        schemaChangeJob.setIsCancelling(true);
+        schemaChangeJob.runPendingJob();
+        schemaChangeJob.setIsCancelling(false);
+
+        schemaChangeJob.setWaitingCreatingReplica(true);
+        schemaChangeJob.cancel("");
+        schemaChangeJob.setWaitingCreatingReplica(false);
+    }
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
 }

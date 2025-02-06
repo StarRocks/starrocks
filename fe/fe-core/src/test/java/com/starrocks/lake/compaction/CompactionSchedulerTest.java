@@ -14,6 +14,10 @@
 
 package com.starrocks.lake.compaction;
 
+<<<<<<< HEAD
+=======
+import com.google.common.collect.Sets;
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
@@ -24,6 +28,11 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.DatabaseTransactionMgr;
 import com.starrocks.transaction.TransactionState;
+<<<<<<< HEAD
+=======
+import com.starrocks.utframe.MockedWarehouseManager;
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -66,6 +75,11 @@ public class CompactionSchedulerTest {
             }
         };
 
+<<<<<<< HEAD
+=======
+        UtFrameUtils.mockInitWarehouseEnv();
+
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
         // default value
         Config.lake_compaction_default_timeout_second = 86400;
         // value smaller than `lake_compaction_default_timeout_second`
@@ -135,4 +149,34 @@ public class CompactionSchedulerTest {
         Assert.assertEquals(2, list.size());
         Assert.assertTrue(list.get(0).getStartTs() >= list.get(1).getStartTs());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testCompactionTaskLimit() {
+        CompactionScheduler compactionScheduler = new CompactionScheduler(new CompactionMgr(), null, null, null, "");
+
+        int defaultValue = Config.lake_compaction_max_tasks;
+        // explicitly set config to a value bigger than default -1
+        Config.lake_compaction_max_tasks = 10;
+        Assert.assertEquals(10, compactionScheduler.compactionTaskLimit());
+
+        // reset config to default value
+        Config.lake_compaction_max_tasks = defaultValue;
+
+        Backend b1 = new Backend(10001L, "192.168.0.1", 9050);
+        ComputeNode c1 = new ComputeNode(10001L, "192.168.0.2", 9050);
+        ComputeNode c2 = new ComputeNode(10001L, "192.168.0.3", 9050);
+
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
+            }
+        };
+        mockedWarehouseManager.setComputeNodesAssignedToTablet(Sets.newHashSet(b1, c1, c2));
+        Assert.assertEquals(3 * 16, compactionScheduler.compactionTaskLimit());
+    }
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
 }

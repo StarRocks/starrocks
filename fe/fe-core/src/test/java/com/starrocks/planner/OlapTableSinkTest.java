@@ -61,6 +61,10 @@ import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
+<<<<<<< HEAD
+=======
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -104,6 +108,14 @@ public class OlapTableSinkTest {
         return tuple;
     }
 
+<<<<<<< HEAD
+=======
+    @Before
+    public void before() {
+        UtFrameUtils.mockInitWarehouseEnv();
+    }
+
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
     @Test
     public void testSinglePartition() throws UserException {
         TupleDescriptor tuple = getTuple();

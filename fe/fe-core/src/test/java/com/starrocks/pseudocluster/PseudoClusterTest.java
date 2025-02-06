@@ -259,6 +259,17 @@ public class PseudoClusterTest {
             }
         };
 
+<<<<<<< HEAD
+=======
+        new MockUp<LocalMetastore>() {
+            @Mock
+            void buildPartitions(Database db, OlapTable table, List<PhysicalPartition> partitions, long warehouseId)
+                    throws DdlException {
+                return;
+            }
+        };
+
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();
         try {

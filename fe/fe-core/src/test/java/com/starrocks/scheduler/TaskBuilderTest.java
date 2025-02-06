@@ -16,6 +16,10 @@ package com.starrocks.scheduler;
 
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.TableProperty;
+<<<<<<< HEAD
+=======
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -23,6 +27,12 @@ public class TaskBuilderTest {
 
     @Test
     public void testTaskBuilderForMv() {
+<<<<<<< HEAD
+=======
+        // mock the warehouse of MaterializedView for creating task
+        UtFrameUtils.mockInitWarehouseEnv();
+
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
         MaterializedView mv = new MaterializedView();
         mv.setName("aa.bb.cc");
         mv.setViewDefineSql("select * from table1");

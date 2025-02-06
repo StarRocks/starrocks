@@ -45,16 +45,29 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.streamload.StreamLoadInfo;
 import com.starrocks.load.streamload.StreamLoadParam;
+=======
+import com.starrocks.common.StarRocksException;
+import com.starrocks.load.routineload.KafkaRoutineLoadJob;
+import com.starrocks.load.routineload.RoutineLoadJob;
+import com.starrocks.load.streamload.StreamLoadInfo;
+import com.starrocks.load.streamload.StreamLoadKvParams;
+import com.starrocks.sql.ast.ImportColumnsStmt;
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
 import com.starrocks.thrift.TCompressionType;
 import com.starrocks.thrift.TFileFormatType;
 import com.starrocks.thrift.TFileType;
 import com.starrocks.thrift.TStreamLoadPutRequest;
 import com.starrocks.thrift.TUniqueId;
+<<<<<<< HEAD
+=======
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
 import mockit.Expectations;
 import mockit.Injectable;
 import mockit.Mocked;
@@ -81,6 +94,14 @@ public class StreamLoadPlannerTest {
     @Mocked
     Partition partition;
 
+<<<<<<< HEAD
+=======
+    @Before
+    public void before() {
+        UtFrameUtils.mockInitWarehouseEnv();
+    }
+
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
     @Test
     public void testNormalPlan() throws UserException {
         List<Column> columns = Lists.newArrayList();

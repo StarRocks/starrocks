@@ -29,6 +29,7 @@ import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TResultBatch;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -36,6 +37,7 @@ import mockit.Mocked;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -49,6 +51,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class FileListRepoTest {
 
+<<<<<<< HEAD
+=======
+    @Before
+    public void setUp() {
+        UtFrameUtils.mockInitWarehouseEnv();
+    }
+
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
     @Test
     public void testTestFileRecord() {
         long lastModified = 191231231231L;

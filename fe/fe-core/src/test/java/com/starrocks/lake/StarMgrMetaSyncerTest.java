@@ -44,10 +44,20 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
+=======
+import com.starrocks.server.LocalMetastore;
+import com.starrocks.server.NodeMgr;
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStatusCode;
+<<<<<<< HEAD
+=======
+import com.starrocks.transaction.GtidGenerator;
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -82,6 +92,12 @@ public class StarMgrMetaSyncerTest {
     @Mocked
     private ColocateTableIndex colocateTableIndex;
 
+<<<<<<< HEAD
+=======
+    @Mocked
+    private LocalMetastore localMetastore;
+
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
     long shardGroupId = 12L;
 
     @Before
@@ -90,7 +106,68 @@ public class StarMgrMetaSyncerTest {
         long tableId = 2L;
         long partitionId = 3L;
 
+<<<<<<< HEAD
         new MockUp<GlobalStateMgr>() {
+=======
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState();
+                minTimes = 0;
+                result = globalStateMgr;
+            }
+        };
+
+        new Expectations(globalStateMgr) {
+            {
+                globalStateMgr.getNodeMgr();
+                minTimes = 0;
+                result = nodeMgr;
+
+                globalStateMgr.getLocalMetastore();
+                minTimes = 0;
+                result = localMetastore;
+
+                globalStateMgr.getStarOSAgent();
+                minTimes = 0;
+                result = starOSAgent;
+
+                globalStateMgr.getLockManager();
+                minTimes = 0;
+                result = new LockManager();
+
+                globalStateMgr.getGtidGenerator();
+                minTimes = 0;
+                result = new GtidGenerator();
+
+                globalStateMgr.getClusterSnapshotMgr();
+                minTimes = 0;
+                result = new ClusterSnapshotMgr();
+            }
+        };
+
+        new Expectations() {
+            {
+                starOSAgent.getPrimaryComputeNodeIdByShard(anyLong);
+                minTimes = 0;
+                result = 1;
+
+                systemInfoService.getBackend(1);
+                minTimes = 0;
+                result = new Backend(10001, "host1", 1001);
+            }
+        };
+
+        new Expectations(nodeMgr) {
+            {
+                nodeMgr.getClusterInfo();
+                minTimes = 0;
+                result = systemInfoService;
+            }
+        };
+
+        new MockUp<LocalMetastore>() {
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
             @Mock
             public SystemInfoService getCurrentSystemInfo() {
                 return systemInfoService;
@@ -139,6 +216,7 @@ public class StarMgrMetaSyncerTest {
             }
         };
 
+<<<<<<< HEAD
         new Expectations() {
             {
                 starOSAgent.getPrimaryComputeNodeIdByShard(anyLong);
@@ -151,6 +229,9 @@ public class StarMgrMetaSyncerTest {
             }
         };
 
+=======
+        UtFrameUtils.mockInitWarehouseEnv();
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
     }
 
     @Test

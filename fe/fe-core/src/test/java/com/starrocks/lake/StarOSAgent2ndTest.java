@@ -33,6 +33,10 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
+<<<<<<< HEAD
+=======
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -178,6 +182,11 @@ public class StarOSAgent2ndTest {
         int workerHeartbeatPort = 9050;
         long shardId = 10L;
 
+<<<<<<< HEAD
+=======
+        UtFrameUtils.mockInitWarehouseEnv();
+
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
         WorkerInfo workerInfo = WorkerInfo.newBuilder()
                 .setIpPort(String.format("%s:%d", workerHost, workerStarletPort))
                 .setWorkerId(1L)

@@ -16,7 +16,11 @@ package com.starrocks.common.util;
 
 import com.google.common.collect.Lists;
 import com.starrocks.common.LoadException;
+<<<<<<< HEAD
 import com.starrocks.common.UserException;
+=======
+import com.starrocks.common.StarRocksException;
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.StatusPB;
@@ -28,8 +32,13 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
+<<<<<<< HEAD
 import com.starrocks.warehouse.Cluster;
 import com.starrocks.warehouse.Warehouse;
+=======
+import com.starrocks.utframe.MockedWarehouseManager;
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -50,10 +59,6 @@ public class KafkaUtilTest {
     @Mocked
     SystemInfoService service;
     @Mocked
-    WarehouseManager warehouseManager;
-    @Mocked
-    Warehouse warehouse;
-    @Mocked
     BackendServiceClient client;
 
     @Before
@@ -67,17 +72,25 @@ public class KafkaUtilTest {
 
         new Expectations() {
             {
+<<<<<<< HEAD
                 GlobalStateMgr.getCurrentState();
                 result = globalStateMgr;
                 globalStateMgr.getWarehouseMgr();
                 result = warehouseManager;
                 warehouseManager.getDefaultWarehouse();
                 result = warehouse;
+=======
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
                 BackendServiceClient.getInstance();
                 minTimes = 0;
                 result = client;
             }
         };
+<<<<<<< HEAD
+=======
+
+        UtFrameUtils.mockInitWarehouseEnv();
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
     }
 
     @Test
@@ -217,4 +230,23 @@ public class KafkaUtilTest {
         LoadException e = Assert.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
         Assert.assertTrue(e.getMessage().contains("be process failed"));
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testWarehouseNotExist() {
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
+            }
+        };
+        mockedWarehouseManager.setThrowUnknownWarehouseException();
+
+        KafkaUtil.ProxyAPI api = new KafkaUtil.ProxyAPI();
+        LoadException e = Assert.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
+        Assert.assertEquals("Failed to send get kafka partition info request. err: Warehouse id: 1 not exist.", e.getMessage());
+    }
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
 }

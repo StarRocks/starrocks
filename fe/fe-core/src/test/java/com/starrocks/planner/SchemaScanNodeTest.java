@@ -18,9 +18,17 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.server.GlobalStateMgr;
+<<<<<<< HEAD
 import com.starrocks.system.Frontend;
 import java.util.ArrayList;
 import java.util.List;
+=======
+import com.starrocks.server.RunMode;
+import com.starrocks.system.ComputeNode;
+import com.starrocks.system.Frontend;
+import com.starrocks.system.SystemInfoService;
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -53,4 +61,53 @@ public class SchemaScanNodeTest {
 
         Assert.assertNotNull(scanNode.getFrontends());
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testComputeBeScanRanges() {
+        new MockUp<RunMode>() {
+            @Mock
+            public RunMode getCurrentRunMode() {
+                return RunMode.SHARED_DATA;
+            }
+        };
+
+        UtFrameUtils.mockInitWarehouseEnv();
+
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public ComputeNode getBackendOrComputeNode(long nodeId) {
+                ComputeNode computeNode = new ComputeNode(1L, "127.0.0.1", 9030);
+                computeNode.setAlive(true);
+                return computeNode;
+            }
+        };
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        SystemTable table = new SystemTable(0, "fe_metrics", null, null, null);
+        desc.setTable(table);
+        SchemaScanNode scanNode = new SchemaScanNode(new PlanNodeId(0), desc);
+        scanNode.computeBeScanRanges();
+    }
+
+    @Test
+    public void testComputeNodeScanRanges() {
+        new MockUp<SystemInfoService>() {
+            @Mock
+            public List<ComputeNode> getComputeNodes() {
+                ComputeNode computeNode = new ComputeNode(1L, "127.0.0.1", 9030);
+                computeNode.setAlive(true);
+                return List.of(computeNode);
+            }
+        };
+
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        SystemTable table = new SystemTable(0, "be_datacache_metrics", null, null, null);
+        desc.setTable(table);
+        SchemaScanNode scanNode = new SchemaScanNode(new PlanNodeId(0), desc);
+        scanNode.computeBeScanRanges();
+        Assert.assertEquals(1, scanNode.getScanRangeLocations(0).size());
+    }
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
 }

@@ -35,6 +35,10 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletStat;
 import com.starrocks.thrift.TTabletStatResult;
 import com.starrocks.thrift.TTabletType;
+<<<<<<< HEAD
+=======
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
@@ -58,6 +62,15 @@ public class TabletStatMgrTest {
     private static final long TABLE_ID = 2;
     private static final long PARTITION_ID = 3;
     private static final long INDEX_ID = 4;
+<<<<<<< HEAD
+=======
+    private static final long PH_PARTITION_ID = 5;
+
+    @Before
+    public void before() {
+        UtFrameUtils.mockInitWarehouseEnv();
+    }
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
 
     @Test
     public void testUpdateLocalTabletStat(@Mocked GlobalStateMgr globalStateMgr, @Mocked Utils utils,
