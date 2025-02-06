@@ -44,9 +44,50 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
         check(3, sql, high);
     }
 
+<<<<<<< HEAD
     @ParameterizedTest(name = "{0}")
     @MethodSource("testCastProvider")
     public void debugTPCDSPushDownAgg(String sql, int orig, int auto, int force, int mid, int high) throws Exception {
+=======
+    @Test
+    public void testQuery58() throws Exception {
+        connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
+        String sql = getTPCDS("Q58");
+        String plan = getCostExplain(sql);
+        assertContains(plan, "  |----5:EXCHANGE\n" +
+                "  |       distribution type: BROADCAST\n" +
+                "  |       cardinality: 73049\n" +
+                "  |       probe runtime filters:\n" +
+                "  |       - filter_id = 3, probe_expr = (191: d_date)");
+    }
+
+    //    @ParameterizedTest(name = "{0}")
+    //    @MethodSource("testPushDownProvider")
+    public void debugTPCDSPushDownAgg(String sql, int orig, int auto, boolean autoChange, int force, boolean forceChange, int mid,
+                                      boolean midChange, int high, boolean highChange) throws Exception {
+        orig = getAggNum(-1, sql);
+        auto = getAggNum(0, sql);
+        force = getAggNum(1, sql);
+        mid = getAggNum(2, sql);
+        high = getAggNum(3, sql);
+
+        String origPlan = getPlan(-1, sql);
+        String autoPlan = getPlan(0, sql);
+        String forcePlan = getPlan(1, sql);
+        String midPlan = getPlan(2, sql);
+        String highPlan = getPlan(3, sql);
+
+        System.out.printf("Arguments.of(\"%s\", %d, %d, %s, %d, %s, %d, %s, %d, %s),\n", sql, orig,
+                auto, !origPlan.equals(autoPlan),
+                force, !origPlan.equals(forcePlan),
+                mid, !origPlan.equals(midPlan),
+                high, !origPlan.equals(highPlan));
+    }
+
+    //    @ParameterizedTest(name = "{0}")
+    //    @MethodSource("testUnPushDownProvider")
+    public void debugTPCDSUnPushDownAgg(String sql, int orig, int auto, int force, int mid, int high) throws Exception {
+>>>>>>> daa380dd5f ([Enhancement] Hoist heavy-cost(decimal divide) upon top-n (#55417))
         orig = getAggNum(-1, sql);
         auto = getAggNum(0, sql);
         force = getAggNum(1, sql);
