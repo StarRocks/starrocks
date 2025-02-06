@@ -2992,7 +2992,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (options.isSetTemporary_table_only() && options.temporary_table_only) {
             TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
             Set<UUID> sessions = ExecuteEnv.getInstance().getScheduler().listAllSessionsId();
-            sessions.retainAll(temporaryTableMgr.listSessions());
+            sessions.retainAll(temporaryTableMgr.listSessions().keySet());
             List<TSessionInfo> sessionInfos = new ArrayList<>();
             for (UUID session : sessions) {
                 TSessionInfo sessionInfo = new TSessionInfo();
