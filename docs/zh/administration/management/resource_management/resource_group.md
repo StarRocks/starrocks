@@ -422,7 +422,7 @@ ALTER RESOURCE GROUP <group_name> DROP ALL;
 
 ### 查看资源组的使用信息
 
-从 v3.1.4 版本开始，StarRocks 支持 SQL 语句 [SHOW USAGE RESOURCE GROUPS](../../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_RUNNING_QUERIES.md)，用以展示每个资源组在各个 BE 上的使用信息。各个字段的含义如下：
+从 v3.1.4 版本开始，StarRocks 支持 SQL 语句 [SHOW USAGE RESOURCE GROUPS](../../../sql-reference/sql-statements/cluster-management/resource_group/SHOW_USAGE_RESOURCE_GROUPS.md)，用以展示每个资源组在各个 BE 上的使用信息。各个字段的含义如下：
 
 - `Name`：资源组的名称。
 - `Id`：资源组的 ID。
