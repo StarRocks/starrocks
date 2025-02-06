@@ -37,10 +37,9 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
+import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.After;
@@ -135,7 +134,13 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testPendingJobNoAliveBackend() {
-        UtFrameUtils.mockInitWarehouseEnv();
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
+            }
+        };
 
         new MockUp<Utils>() {
             @Mock
@@ -150,18 +155,7 @@ public class LakeTableSchemaChangeJobTest {
             }
         };
 
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
-                return null;
-            }
-
-            @Mock
-            public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
-                return null;
-            }
-        };
-
+        mockedWarehouseManager.setComputeNodesAssignedToTablet(null);
         Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
             schemaChangeJob.runPendingJob();
         });
@@ -579,13 +573,6 @@ public class LakeTableSchemaChangeJobTest {
 
         schemaChangeHandler.addAlterJobV2(alterJobV2);
         System.out.println(schemaChangeHandler.getAlterJobInfosByDb(db));
-
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouseAllowNull(long warehouseId) {
-                return null;
-            }
-        };
 
         SchemaChangeHandler schemaChangeHandler2 = new SchemaChangeHandler();
         alterJobV2 = new LakeTableSchemaChangeJob(12345L, db.getId(), table.getId(), table.getName(), 10);

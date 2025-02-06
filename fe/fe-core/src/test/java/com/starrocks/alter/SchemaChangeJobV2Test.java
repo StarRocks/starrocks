@@ -66,6 +66,7 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
+import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -412,7 +413,13 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
             }
         };
 
-        UtFrameUtils.mockInitWarehouseEnv();
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
+            }
+        };
 
         String stmt = "alter table testDb1.testTable1 order by (v1, v2)";
         AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(stmt, starRocksAssert.getCtx());
@@ -426,13 +433,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         AlterJobV2 alterJobV2 = schemaChangeHandler.analyzeAndCreateJob(Lists.newArrayList(clause), db, olapTable);
         Assert.assertEquals(0L, alterJobV2.warehouseId);
 
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public List<Long> getAllComputeNodeIds(long warehouseId) {
-                return Lists.newArrayList();
-            }
-        };
-
+        mockedWarehouseManager.setAllComputeNodeIds(Lists.newArrayList());
         try {
             alterJobV2 = schemaChangeHandler.analyzeAndCreateJob(Lists.newArrayList(clause), db, olapTable);
             Assert.fail();

@@ -15,8 +15,6 @@
 package com.starrocks.common.util;
 
 import com.google.common.collect.Lists;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.LoadException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.proto.PProxyRequest;
@@ -30,6 +28,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
@@ -40,7 +39,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -204,13 +202,15 @@ public class KafkaUtilTest {
     }
 
     @Test
-    public void testWarehouseNotExist() throws StarRocksException {
-        new MockUp<WarehouseManager>() {
+    public void testWarehouseNotExist() {
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        new MockUp<GlobalStateMgr>() {
             @Mock
-            public List<Long> getAllComputeNodeIds(long warehouseId) {
-                throw ErrorReportException.report(ErrorCode.ERR_UNKNOWN_WAREHOUSE, String.format("id: %d", 1L));
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
             }
         };
+        mockedWarehouseManager.setThrowUnknownWarehouseException();
 
         KafkaUtil.ProxyAPI api = new KafkaUtil.ProxyAPI();
         LoadException e = Assert.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));

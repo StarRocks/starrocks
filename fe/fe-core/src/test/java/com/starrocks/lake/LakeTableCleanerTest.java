@@ -47,7 +47,6 @@ public class LakeTableCleanerTest {
 
     public LakeTableCleanerTest() {
         shardInfo = ShardInfo.newBuilder().setFilePath(FilePathInfo.newBuilder().setFullPath("oss://1/2")).build();
-        UtFrameUtils.mockInitWarehouseEnv();
     }
 
     @Before

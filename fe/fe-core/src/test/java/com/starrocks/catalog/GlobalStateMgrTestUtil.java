@@ -49,7 +49,6 @@ import com.starrocks.sql.ast.SingleRangePartitionDesc;
 import com.starrocks.system.Backend;
 import com.starrocks.thrift.TStorageMedium;
 import com.starrocks.thrift.TStorageType;
-import com.starrocks.utframe.UtFrameUtils;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
@@ -114,9 +113,6 @@ public class GlobalStateMgrTestUtil {
                 testStartVersion);
         LocalMetastore metastore = (LocalMetastore) globalStateMgr.getLocalMetastore();
         metastore.unprotectCreateDb(db);
-
-        // init default warehouse
-        UtFrameUtils.mockInitWarehouseEnv();
         return globalStateMgr;
     }
 

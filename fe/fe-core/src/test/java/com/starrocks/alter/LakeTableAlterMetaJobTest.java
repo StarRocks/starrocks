@@ -25,7 +25,6 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -39,6 +38,7 @@ import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUpdateTabletMetaInfoReq;
+import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
 import mockit.MockUp;
@@ -176,13 +176,14 @@ public class LakeTableAlterMetaJobTest {
 
     @Test
     public void testUpdatePartitonMetaFailed() {
-        UtFrameUtils.mockInitWarehouseEnv();
-        new MockUp<WarehouseManager>() {
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        new MockUp<GlobalStateMgr>() {
             @Mock
-            public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
-                return null;
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
             }
         };
+        mockedWarehouseManager.setComputeNodeId(null);
         Assert.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
         job.run();
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());
