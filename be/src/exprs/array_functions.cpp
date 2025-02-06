@@ -64,10 +64,6 @@ StatusOr<ColumnPtr> ArrayFunctions::array_length([[maybe_unused]] FunctionContex
     }
 }
 
-StatusOr<ColumnPtr> ArrayFunctions::array_ndims([[maybe_unused]] FunctionContext* context, const Columns& columns) {
-    return nullptr;
-}
-
 template <bool OnlyNullData, bool ConstData>
 static StatusOr<ColumnPtr> do_array_append(const Column& elements, const UInt32Column& offsets, const Column& data) {
     size_t num_array = offsets.size() - 1;
