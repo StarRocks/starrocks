@@ -816,12 +816,14 @@ Status Aggregator::compute_single_agg_state(Chunk* chunk, size_t chunk_size) {
         SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
         // batch call update or merge for singe stage
         if (!_is_merge_funcs[i] && !use_intermediate) {
-            _agg_functions[i]->update_batch_single_state(_agg_fn_ctxs[i], chunk_size, _agg_input_raw_columns[i].data(),
-                                                         _single_agg_state + _agg_states_offsets[i]);
+            _agg_functions[i]->update_batch_single_state_exception_safe(_agg_fn_ctxs[i], chunk_size,
+                                                                        _agg_input_raw_columns[i].data(),
+                                                                        _single_agg_state + _agg_states_offsets[i]);
         } else {
             DCHECK_GE(_agg_input_columns[i].size(), 1);
-            _agg_functions[i]->merge_batch_single_state(_agg_fn_ctxs[i], _single_agg_state + _agg_states_offsets[i],
-                                                        _agg_input_columns[i][0].get(), 0, chunk_size);
+            _agg_functions[i]->merge_batch_single_state_exception_safe(_agg_fn_ctxs[i],
+                                                                       _single_agg_state + _agg_states_offsets[i],
+                                                                       _agg_input_columns[i][0].get(), 0, chunk_size);
         }
     }
     RETURN_IF_ERROR(check_has_error());
@@ -839,12 +841,13 @@ Status Aggregator::compute_batch_agg_states(Chunk* chunk, size_t chunk_size) {
         SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
         // batch call update or merge
         if (!_is_merge_funcs[i] && !use_intermediate) {
-            _agg_functions[i]->update_batch(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
-                                            _agg_input_raw_columns[i].data(), _tmp_agg_states.data());
+            _agg_functions[i]->update_batch_exception_safe(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
+                                                           _agg_input_raw_columns[i].data(), _tmp_agg_states.data());
         } else {
             DCHECK_GE(_agg_input_columns[i].size(), 1);
-            _agg_functions[i]->merge_batch(_agg_fn_ctxs[i], _agg_input_columns[i][0]->size(), _agg_states_offsets[i],
-                                           _agg_input_columns[i][0].get(), _tmp_agg_states.data());
+            _agg_functions[i]->merge_batch_exception_safe(_agg_fn_ctxs[i], _agg_input_columns[i][0]->size(),
+                                                          _agg_states_offsets[i], _agg_input_columns[i][0].get(),
+                                                          _tmp_agg_states.data());
         }
     }
     RETURN_IF_ERROR(check_has_error());
@@ -860,14 +863,14 @@ Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t 
         RETURN_IF_ERROR(evaluate_agg_input_column(chunk, agg_expr_ctxs[i], i));
         SCOPED_THREAD_LOCAL_STATE_ALLOCATOR_SETTER(_allocator.get());
         if (!_is_merge_funcs[i] && !use_intermediate) {
-            _agg_functions[i]->update_batch_selectively(_agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i],
-                                                        _agg_input_raw_columns[i].data(), _tmp_agg_states.data(),
-                                                        _streaming_selection);
+            _agg_functions[i]->update_batch_selectively_exception_safe(
+                    _agg_fn_ctxs[i], chunk_size, _agg_states_offsets[i], _agg_input_raw_columns[i].data(),
+                    _tmp_agg_states.data(), _streaming_selection);
         } else {
             DCHECK_GE(_agg_input_columns[i].size(), 1);
-            _agg_functions[i]->merge_batch_selectively(_agg_fn_ctxs[i], _agg_input_columns[i][0]->size(),
-                                                       _agg_states_offsets[i], _agg_input_columns[i][0].get(),
-                                                       _tmp_agg_states.data(), _streaming_selection);
+            _agg_functions[i]->merge_batch_selectively_exception_safe(
+                    _agg_fn_ctxs[i], _agg_input_columns[i][0]->size(), _agg_states_offsets[i],
+                    _agg_input_columns[i][0].get(), _tmp_agg_states.data(), _streaming_selection);
         }
     }
     RETURN_IF_ERROR(check_has_error());
