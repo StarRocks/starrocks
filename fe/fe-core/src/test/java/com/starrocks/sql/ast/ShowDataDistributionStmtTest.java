@@ -105,7 +105,7 @@ public class ShowDataDistributionStmtTest {
                 Assert.assertTrue(e.getMessage().contains(exp));
             }
 
-            //2.5 check: invaild sql syntax
+            //2.5 check: invaild sql
             List<String> invaildSql = Arrays.asList(
                     "show data distribution unpartition_table;",
                     "show data distribution1 from unpartition_table;",
