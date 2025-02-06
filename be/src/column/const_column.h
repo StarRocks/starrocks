@@ -110,7 +110,7 @@ public:
 
     void append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) override;
 
-    ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
+    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
 
     bool append_nulls(size_t count) override {
         DCHECK_GT(count, 0);

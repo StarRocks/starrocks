@@ -169,7 +169,7 @@ public:
     // for example: column(1,2)->replicate({0,2,5}) = column(1,1,2,2,2)
     // FixedLengthColumn, BinaryColumn and ConstColumn override this function for better performance.
     // TODO(fzh): optimize replicate() for ArrayColumn, ObjectColumn and others.
-    virtual ColumnPtr replicate(const std::vector<uint32_t>& offsets) {
+    virtual StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) {
         auto dest = this->clone_empty();
         auto dest_size = offsets.size() - 1;
         DCHECK(this->size() >= dest_size) << "The size of the source column is less when duplicating it.";

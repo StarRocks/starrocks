@@ -220,7 +220,7 @@ public:
         _slices_cache = false;
     }
 
-    ColumnPtr replicate(const std::vector<uint32_t>& offsets) override;
+    StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) override;
 
     void fill_default(const Filter& filter) override;
 

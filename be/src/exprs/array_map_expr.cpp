@@ -171,9 +171,11 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         } else {
             if (captured_column->is_array()) {
                 auto view_column = ArrayViewColumn::from_array_column(captured_column);
-                cur_chunk->append_column(view_column->replicate(aligned_offsets->get_data()), slot_id);
+                ASSIGN_OR_RETURN(auto replicated_view_column, view_column->replicate(aligned_offsets->get_data()));
+                cur_chunk->append_column(replicated_view_column, slot_id);
             } else {
-                cur_chunk->append_column(captured_column->replicate(aligned_offsets->get_data()), slot_id);
+                ASSIGN_OR_RETURN(auto replicated_column, captured_column->replicate(aligned_offsets->get_data()));
+                cur_chunk->append_column(replicated_column, slot_id);
             }
         }
     }
@@ -189,7 +191,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
             ASSIGN_OR_RETURN(tmp_col, context->evaluate(_children[0], cur_chunk.get()));
         }
         tmp_col->check_or_die();
-        column = tmp_col->replicate(aligned_offsets->get_data());
+        ASSIGN_OR_RETURN(column, tmp_col->replicate(aligned_offsets->get_data()));
         column = ColumnHelper::align_return_type(column, type().children[0], column->size(), true);
     } else {
         // if all input arguments are constant and lambda expr doesn't rely on other capture columns,
