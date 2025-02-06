@@ -100,7 +100,7 @@ col_name agg_func_name(parameter1_type, [parameter2_type], ...)
 - For stability and extensibility, the aggregate state column type is always Nullable (except for the count function) and cannot be modified.
 - Parameter values are unnecessary for defining multi-parameter functions because types can be inferred and parameter values are not involved in computation.
 - Complex parameters like ORDER BY and DISTINCT are not supported.
-- Some built-in functions, such as `GROUP_CONCAT`, `WINDOW_FUNNEL`, and `APPROX_TOP_K`, are not supported. For detailed information, see [FunctionSet.java#UNSUPPORTED_AGG_STATE_FUNCTIONS](https://github.com/StarRocks/starrocks/blob/main/fe/fe-core/src/main/java/com/starrocks/catalog/FunctionSet.java#L776).
+- The support for specific built-in functions, such as `GROUP_CONCAT`, `WINDOW_FUNNEL`, and `APPROX_TOP_K`, is still under development. They will be supported in future releases. For detailed information, see [FunctionSet.java#UNSUPPORTED_AGG_STATE_FUNCTIONS](https://github.com/StarRocks/starrocks/blob/main/fe/fe-core/src/main/java/com/starrocks/catalog/FunctionSet.java#L776).
 
 :::
 
