@@ -107,6 +107,16 @@ public class AnalyzeStmtTest {
                 ");";
         starRocksAssert.withTable(createStructTableSql);
 
+        String upperColumnTableSql = "CREATE TABLE upper_tbl(\n" +
+                "Ka1 int, \n" +
+                "Kb2 varchar(32), \n" +
+                "Kc3 int, \n" +
+                "Kd4 int" +
+                ") DISTRIBUTED BY HASH(`Ka1`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(upperColumnTableSql);
     }
 
     @Test
@@ -498,5 +508,15 @@ public class AnalyzeStmtTest {
         analyzeSuccess("analyze sample table db.tbl properties(\"medium_high_weight_sample_ratio\" = \"0.6\")");
         analyzeSuccess("analyze sample table db.tbl properties(\"medium_low_weight_sample_ratio\" = \"0.6\")");
         analyzeSuccess("analyze sample table db.tbl properties(\"low_weight_sample_ratio\" = \"0.6\")");
+    }
+
+    @Test
+    public void testUpperColumn() {
+        try {
+            AnalyzeTestUtil.connectContext.getSessionVariable().setEnableAnalyzePhasePruneColumns(true);
+            analyzeSuccess("select Ka1 from db.upper_tbl");
+        } finally {
+            AnalyzeTestUtil.connectContext.getSessionVariable().setEnableAnalyzePhasePruneColumns(false);
+        }
     }
 }
