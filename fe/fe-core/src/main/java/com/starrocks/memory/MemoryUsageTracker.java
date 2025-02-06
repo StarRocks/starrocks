@@ -71,6 +71,9 @@ public class MemoryUsageTracker extends FrontendDaemon {
         registerMemoryTracker("TabletInvertedIndex", currentState.getTabletInvertedIndex());
         registerMemoryTracker("LocalMetastore", currentState.getLocalMetastore());
 
+        // MV
+        registerMemoryTracker("MV", currentState.getMaterializedViewMgr().getMvTimelinessMgr());
+
         registerMemoryTracker("Query", new QueryTracker());
         registerMemoryTracker("Profile", ProfileManager.getInstance());
         registerMemoryTracker("Agent", new AgentTaskTracker());
