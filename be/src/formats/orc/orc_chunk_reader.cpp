@@ -1126,7 +1126,7 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct,
     }
 
 bool OrcChunkReader::_add_runtime_filter(const uint64_t column_id, const SlotDescriptor* slot,
-                                         const JoinRuntimeFilter* rf,
+                                         const RuntimeFilter* rf,
                                          std::unique_ptr<orc::SearchArgumentBuilder>& builder) {
     LogicalType ltype = slot->type().type;
     auto type_it = _supported_logical_types.find(ltype);
@@ -1186,7 +1186,7 @@ Status OrcChunkReader::build_search_argument_by_predicates(const OrcPredicates* 
     if (orc_predicates->rf_collector != nullptr) {
         for (auto& it : orc_predicates->rf_collector->descriptors()) {
             RuntimeFilterProbeDescriptor* rf_desc = it.second;
-            const JoinRuntimeFilter* filter = rf_desc->runtime_filter(-1);
+            const RuntimeFilter* filter = rf_desc->runtime_filter(-1);
             SlotId probe_slot_id;
             if (filter == nullptr || filter->has_null() || !rf_desc->is_probe_slot_ref(&probe_slot_id)) continue;
             auto it2 = slot_id_to_pos_in_src_slot_descriptors.find(probe_slot_id);

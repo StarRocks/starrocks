@@ -134,7 +134,7 @@ private:
 
 class MinMaxPredicateBuilder {
 public:
-    MinMaxPredicateBuilder(ObjectPool* pool, SlotId slot_id, const JoinRuntimeFilter* filter)
+    MinMaxPredicateBuilder(ObjectPool* pool, SlotId slot_id, const RuntimeFilter* filter)
             : _pool(pool), _slot_id(slot_id), _filter(filter) {}
 
     template <LogicalType ltype>
@@ -147,7 +147,7 @@ public:
 private:
     ObjectPool* _pool;
     SlotId _slot_id;
-    const JoinRuntimeFilter* _filter;
+    const RuntimeFilter* _filter;
 };
 
 } // namespace starrocks

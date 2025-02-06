@@ -77,7 +77,7 @@ TEST_F(RuntimeBloomFilterTest, evaluate_with_min_max) {
     rf->insert(10);
     rf->insert(20);
     auto col = ColumnTestHelper::build_column<int32_t>({5, 10, 15, 20, 25});
-    JoinRuntimeFilter::RunningContext ctx1;
+    RuntimeFilter::RunningContext ctx1;
     ctx1.use_merged_selection = false;
     rf->evaluate(col.get(), &ctx1);
     _check_equal(ctx1.selection, {0, 1, 1, 1, 0});
@@ -85,7 +85,7 @@ TEST_F(RuntimeBloomFilterTest, evaluate_with_min_max) {
     // [10, 20)
     rf->set_left_close_interval(true);
     rf->set_right_close_interval(false);
-    JoinRuntimeFilter::RunningContext ctx2;
+    RuntimeFilter::RunningContext ctx2;
     ctx2.use_merged_selection = false;
     rf->evaluate(col.get(), &ctx2);
     _check_equal(ctx2.selection, {0, 1, 1, 0, 0});
@@ -93,7 +93,7 @@ TEST_F(RuntimeBloomFilterTest, evaluate_with_min_max) {
     // (10, 20]
     rf->set_left_close_interval(false);
     rf->set_right_close_interval(true);
-    JoinRuntimeFilter::RunningContext ctx3;
+    RuntimeFilter::RunningContext ctx3;
     ctx3.use_merged_selection = false;
     rf->evaluate(col.get(), &ctx3);
     _check_equal(ctx3.selection, {0, 0, 1, 1, 0});
@@ -101,7 +101,7 @@ TEST_F(RuntimeBloomFilterTest, evaluate_with_min_max) {
     // (10, 20)
     rf->set_left_close_interval(false);
     rf->set_right_close_interval(false);
-    JoinRuntimeFilter::RunningContext ctx4;
+    RuntimeFilter::RunningContext ctx4;
     ctx4.use_merged_selection = false;
     rf->evaluate(col.get(), &ctx4);
     _check_equal(ctx4.selection, {0, 0, 1, 0, 0});
@@ -269,7 +269,7 @@ static std::shared_ptr<BinaryColumn> gen_random_binary_column(const std::string&
 
 TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilter) {
     Int32RF bf;
-    JoinRuntimeFilter* rf = &bf;
+    RuntimeFilter* rf = &bf;
     bf.init(100);
     for (int i = 0; i <= 200; i += 17) {
         bf.insert(i);
@@ -294,7 +294,7 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilter) {
     }
     Chunk chunk;
     chunk.append_column(column, 0);
-    JoinRuntimeFilter::RunningContext ctx;
+    RuntimeFilter::RunningContext ctx;
     ctx.use_merged_selection = false;
     auto& selection = ctx.selection;
     selection.assign(column->size(), 1);
@@ -327,7 +327,7 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterSlice) {
 
 TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterSerialize) {
     RuntimeBloomFilter<TYPE_INT> bf0;
-    JoinRuntimeFilter* rf0 = &bf0;
+    RuntimeFilter* rf0 = &bf0;
     bf0.init(100);
     int rf_version = RF_VERSION_V2;
     for (int i = 0; i <= 200; i += 17) {
@@ -339,7 +339,7 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterSerialize) {
     size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf_version, rf0, buffer.data());
     buffer.resize(actual_size);
 
-    JoinRuntimeFilter* rf1 = nullptr;
+    RuntimeFilter* rf1 = nullptr;
     ObjectPool pool;
     RuntimeFilterHelper::deserialize_runtime_filter(&pool, &rf1, buffer.data(), actual_size);
     EXPECT_TRUE(rf1->check_equal(*rf0));
@@ -347,7 +347,7 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterSerialize) {
 
 TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterSerialize2) {
     Int32RF bf0;
-    JoinRuntimeFilter* rf0 = &bf0;
+    RuntimeFilter* rf0 = &bf0;
     bf0.init(100);
     for (int i = 0; i <= 200; i += 17) {
         bf0.insert(i);
@@ -356,7 +356,7 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterSerialize2) {
     EXPECT_EQ(bf0.max_value(&_pool), 187);
 
     StringRF bf1;
-    JoinRuntimeFilter* rf1 = &bf1;
+    RuntimeFilter* rf1 = &bf1;
     std::vector<std::string> data = {"aa", "bb", "cc", "dd"};
     std::vector<Slice> values;
     for (const auto& s : data) {
@@ -376,14 +376,14 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterSerialize2) {
     std::vector<uint8_t> buffer0(max_size, 0);
     size_t actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf_version, rf0, buffer0.data());
     buffer0.resize(actual_size);
-    JoinRuntimeFilter* rf2 = nullptr;
+    RuntimeFilter* rf2 = nullptr;
     RuntimeFilterHelper::deserialize_runtime_filter(&pool, &rf2, buffer0.data(), actual_size);
 
     max_size = RuntimeFilterHelper::max_runtime_filter_serialized_size(rf1);
     buffer0.assign(max_size, 0);
     actual_size = RuntimeFilterHelper::serialize_runtime_filter(rf_version, rf1, buffer0.data());
     buffer0.resize(actual_size);
-    JoinRuntimeFilter* rf3 = nullptr;
+    RuntimeFilter* rf3 = nullptr;
     RuntimeFilterHelper::deserialize_runtime_filter(&pool, &rf3, buffer0.data(), actual_size);
 
     EXPECT_TRUE(rf2->check_equal(*rf0));
@@ -392,7 +392,7 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterSerialize2) {
 
 TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterMerge) {
     Int32RF bf0;
-    JoinRuntimeFilter* rf0 = &bf0;
+    RuntimeFilter* rf0 = &bf0;
     bf0.init(100);
     for (int i = 0; i <= 200; i += 17) {
         bf0.insert(i);
@@ -401,7 +401,7 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterMerge) {
     EXPECT_EQ(bf0.max_value(&_pool), 187);
 
     RuntimeBloomFilter<TYPE_INT> bf1;
-    JoinRuntimeFilter* rf1 = &bf1;
+    RuntimeFilter* rf1 = &bf1;
     bf1.init(100);
     for (int i = 1; i <= 200; i += 17) {
         bf1.insert(i);
@@ -424,7 +424,7 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterMerge) {
 
 TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterMerge2) {
     StringRF bf0;
-    JoinRuntimeFilter* rf0 = &bf0;
+    RuntimeFilter* rf0 = &bf0;
     std::vector<std::string> data = {"bb", "cc", "dd"};
     {
         std::vector<Slice> values;
@@ -441,7 +441,7 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterMerge2) {
     }
 
     StringRF bf1;
-    JoinRuntimeFilter* rf1 = &bf1;
+    RuntimeFilter* rf1 = &bf1;
     std::vector<std::string> data2 = {"aa", "bb", "cc", "dc"};
 
     {
@@ -466,7 +466,7 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterMerge2) {
 
 TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterMerge3) {
     StringRF bf0;
-    JoinRuntimeFilter* rf0 = &bf0;
+    RuntimeFilter* rf0 = &bf0;
     ObjectPool pool;
     int rf_version = RF_VERSION_V2;
     {
@@ -493,7 +493,7 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterMerge3) {
     EXPECT_EQ(pbf0->max_value(&_pool), Slice("dd", 2));
 
     RuntimeBloomFilter<TYPE_VARCHAR> bf1;
-    JoinRuntimeFilter* rf1 = &bf1;
+    RuntimeFilter* rf1 = &bf1;
     {
         std::vector<std::string> data = {"aa", "cc", "dc"};
         std::vector<Slice> values;
@@ -525,7 +525,7 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterMerge3) {
 
 typedef std::function<void(BinaryColumn*, std::vector<uint32_t>&, std::vector<size_t>&)> PartitionByFunc;
 typedef std::function<PartitionByFunc(bool)> PartitionByFuncGen;
-typedef std::function<void(JoinRuntimeFilter*, JoinRuntimeFilter::RunningContext*)> GrfConfigFunc;
+typedef std::function<void(RuntimeFilter*, RuntimeFilter::RunningContext*)> GrfConfigFunc;
 
 using TestHelper = std::function<void(size_t, size_t, PartitionByFunc, GrfConfigFunc, const RuntimeFilterLayout&)>;
 using TestPipelineLevelRfHelper = std::function<void(TRuntimeFilterBuildJoinMode::type, size_t, size_t,
@@ -535,7 +535,7 @@ template <bool compatibility>
 void test_grf_helper_template(size_t num_rows, size_t num_partitions, const PartitionByFunc& part_func,
                               const GrfConfigFunc& grf_config_func, const RuntimeFilterLayout& layout) {
     std::vector<RuntimeBloomFilter<TYPE_VARCHAR>> bfs(num_partitions);
-    std::vector<JoinRuntimeFilter*> rfs(num_partitions);
+    std::vector<RuntimeFilter*> rfs(num_partitions);
     for (auto p = 0; p < num_partitions; ++p) {
         rfs[p] = &bfs[p];
     }
@@ -567,14 +567,14 @@ void test_grf_helper_template(size_t num_rows, size_t num_partitions, const Part
 
     RuntimeBloomFilter<TYPE_VARCHAR> grf;
     for (auto p = 0; p < num_partitions; ++p) {
-        JoinRuntimeFilter* grf_component;
+        RuntimeFilter* grf_component;
         RuntimeFilterHelper::deserialize_runtime_filter(&pool, &grf_component, (const uint8_t*)serialized_rfs[p].data(),
                                                         serialized_rfs[p].size());
         ASSERT_EQ(grf_component->size(), num_rows_per_partitions[p]);
         grf.concat(grf_component);
     }
     ASSERT_EQ(grf.size(), num_rows);
-    JoinRuntimeFilter::RunningContext running_ctx;
+    RuntimeFilter::RunningContext running_ctx;
     grf_config_func(&grf, &running_ctx);
     {
         running_ctx.selection.assign(num_rows, 1);
@@ -597,8 +597,8 @@ void test_grf_helper_template(size_t num_rows, size_t num_partitions, const Part
     }
 }
 
-void split_merged_rf(const RuntimeFilterLayout& layout, const std::vector<JoinRuntimeFilter*>& rfs,
-                     const Columns& columns, std::vector<std::vector<JoinRuntimeFilter*>>& rfs_per_instance,
+void split_merged_rf(const RuntimeFilterLayout& layout, const std::vector<RuntimeFilter*>& rfs,
+                     const Columns& columns, std::vector<std::vector<RuntimeFilter*>>& rfs_per_instance,
                      std::vector<Columns>& columns_per_instance) {
     auto local_layout = layout.local_layout();
     size_t num_instances = -1;
@@ -606,13 +606,13 @@ void split_merged_rf(const RuntimeFilterLayout& layout, const std::vector<JoinRu
         num_instances = 1;
         rfs_per_instance.reserve(1);
         DCHECK(rfs.size() == num_instances);
-        rfs_per_instance.push_back(std::vector<JoinRuntimeFilter*>{rfs[0]});
+        rfs_per_instance.push_back(std::vector<RuntimeFilter*>{rfs[0]});
         columns_per_instance.push_back(Columns{columns[0]});
     } else if (local_layout == TRuntimeFilterLayoutMode::PIPELINE_SHUFFLE) {
         num_instances = layout.num_instances();
         DCHECK(rfs.size() == num_instances * layout.num_drivers_per_instance());
         for (auto i = 0; i < num_instances; ++i) {
-            rfs_per_instance.push_back(std::vector<JoinRuntimeFilter*>{});
+            rfs_per_instance.push_back(std::vector<RuntimeFilter*>{});
             columns_per_instance.push_back(Columns{});
             auto& current_rfs = rfs_per_instance.back();
             auto& current_columns = columns_per_instance.back();
@@ -648,7 +648,7 @@ void split_merged_rf(const RuntimeFilterLayout& layout, const std::vector<JoinRu
                 auto num_drivers = drivers.size();
                 ASSERT_TRUE(std::all_of(drivers.begin(), drivers.end(),
                                         [num_drivers](auto d) { return 0 <= d && d < num_drivers; }));
-                rfs_per_instance.push_back(std::vector<JoinRuntimeFilter*>{});
+                rfs_per_instance.push_back(std::vector<RuntimeFilter*>{});
                 columns_per_instance.push_back(Columns{});
                 auto& current_rfs = rfs_per_instance.back();
                 auto& current_columns = columns_per_instance.back();
@@ -661,7 +661,7 @@ void split_merged_rf(const RuntimeFilterLayout& layout, const std::vector<JoinRu
         } else {
             DCHECK(rfs.size() == num_instances * layout.num_drivers_per_instance());
             for (auto i = 0; i < num_instances; ++i) {
-                rfs_per_instance.push_back(std::vector<JoinRuntimeFilter*>{});
+                rfs_per_instance.push_back(std::vector<RuntimeFilter*>{});
                 columns_per_instance.push_back(Columns{});
                 auto& current_rfs = rfs_per_instance.back();
                 auto& current_columns = columns_per_instance.back();
@@ -682,7 +682,7 @@ void test_pipeline_level_grf_helper_template(TRuntimeFilterBuildJoinMode::type j
                                              size_t num_partitions, const PartitionByFuncGen& part_func_gen,
                                              const RuntimeFilterLayout& layout) {
     std::vector<RuntimeBloomFilter<TYPE_VARCHAR>> bfs(num_partitions);
-    std::vector<JoinRuntimeFilter*> rfs(num_partitions);
+    std::vector<RuntimeFilter*> rfs(num_partitions);
     for (auto p = 0; p < num_partitions; ++p) {
         rfs[p] = &bfs[p];
     }
@@ -716,11 +716,11 @@ void test_pipeline_level_grf_helper_template(TRuntimeFilterBuildJoinMode::type j
     }
 
     int rf_version = RF_VERSION_V2;
-    std::vector<std::vector<JoinRuntimeFilter*>> rfs_per_instance;
+    std::vector<std::vector<RuntimeFilter*>> rfs_per_instance;
     std::vector<Columns> columns_per_instance;
     split_merged_rf(layout, rfs, columns, rfs_per_instance, columns_per_instance);
     std::vector<RuntimeBloomFilter<TYPE_VARCHAR>> pipeline_level_bfs_per_instance(rfs_per_instance.size());
-    std::vector<JoinRuntimeFilter*> merged_rf_per_instance(rfs_per_instance.size());
+    std::vector<RuntimeFilter*> merged_rf_per_instance(rfs_per_instance.size());
     std::vector<std::string> serialized_rfs(merged_rf_per_instance.size());
     for (auto i = 0; i < rfs_per_instance.size(); ++i) {
         merged_rf_per_instance[i] = &pipeline_level_bfs_per_instance[i];
@@ -737,7 +737,7 @@ void test_pipeline_level_grf_helper_template(TRuntimeFilterBuildJoinMode::type j
         ASSERT_EQ(merged_rf->num_hash_partitions(), rfs_per_instance[i].size());
         auto merged_num_rows = merged_column->size();
         {
-            JoinRuntimeFilter::RunningContext running_ctx;
+            RuntimeFilter::RunningContext running_ctx;
             running_ctx.selection.assign(merged_num_rows, 1);
             running_ctx.use_merged_selection = false;
             running_ctx.compatibility = compatibility;
@@ -749,7 +749,7 @@ void test_pipeline_level_grf_helper_template(TRuntimeFilterBuildJoinMode::type j
         if (layout.local_layout() != TRuntimeFilterLayoutMode::PIPELINE_BUCKET) {
             size_t negative_num_rows = 100;
             auto negative_column = gen_random_binary_column(alphabet1, 100, negative_num_rows);
-            JoinRuntimeFilter::RunningContext running_ctx;
+            RuntimeFilter::RunningContext running_ctx;
             running_ctx.selection.assign(negative_num_rows, 1);
             running_ctx.use_merged_selection = false;
             running_ctx.compatibility = compatibility;
@@ -767,13 +767,13 @@ void test_pipeline_level_grf_helper_template(TRuntimeFilterBuildJoinMode::type j
 
     RuntimeBloomFilter<TYPE_VARCHAR> grf;
     for (auto p = 0; p < serialized_rfs.size(); ++p) {
-        JoinRuntimeFilter* grf_component;
+        RuntimeFilter* grf_component;
         RuntimeFilterHelper::deserialize_runtime_filter(&pool, &grf_component, (const uint8_t*)serialized_rfs[p].data(),
                                                         serialized_rfs[p].size());
         grf.concat(grf_component);
     }
     ASSERT_EQ(grf.size(), num_rows - num_bucket_absent);
-    JoinRuntimeFilter::RunningContext running_ctx;
+    RuntimeFilter::RunningContext running_ctx;
     grf.set_join_mode(join_mode);
     grf.set_global();
     {
@@ -823,7 +823,7 @@ void test_colocate_or_bucket_shuffle_grf_helper(size_t num_rows, size_t num_part
             }
         }
     };
-    auto grf_config_func = [&mode](JoinRuntimeFilter* grf, JoinRuntimeFilter::RunningContext* ctx) {
+    auto grf_config_func = [&mode](RuntimeFilter* grf, RuntimeFilter::RunningContext* ctx) {
         grf->set_global();
         grf->set_join_mode(mode);
     };
@@ -875,7 +875,7 @@ void test_partitioned_or_shuffle_hash_bucket_grf_helper(size_t num_rows, size_t 
             ++num_rows_per_partitions[hash_values[i]];
         }
     };
-    auto grf_config_func = [type](JoinRuntimeFilter* grf, JoinRuntimeFilter::RunningContext* ctx) {
+    auto grf_config_func = [type](JoinRuntimeFilter* grf, RuntimeFilter::RunningContext* ctx) {
         grf->set_global();
         grf->set_join_mode(type);
     };

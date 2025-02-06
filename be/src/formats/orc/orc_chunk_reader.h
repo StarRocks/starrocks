@@ -152,7 +152,7 @@ private:
     Status _add_conjunct(const Expr* conjunct,
                          const std::unordered_map<SlotId, size_t>& slot_id_to_pos_in_src_slot_descriptors,
                          std::unique_ptr<orc::SearchArgumentBuilder>& builder);
-    bool _add_runtime_filter(const uint64_t column_id, const SlotDescriptor* slot_desc, const JoinRuntimeFilter* rf,
+    bool _add_runtime_filter(const uint64_t column_id, const SlotDescriptor* slot_desc, const RuntimeFilter* rf,
                              std::unique_ptr<orc::SearchArgumentBuilder>& builder);
 
     void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to);
