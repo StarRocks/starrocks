@@ -539,18 +539,6 @@ uint32_t BinaryColumnBase<T>::max_one_element_serialize_size() const {
 }
 
 template <typename T>
-uint32_t BinaryColumnBase<T>::serialize(size_t idx, uint8_t* pos) {
-    // max size of one string is 2^32, so use uint32_t not T
-    auto binary_size = static_cast<uint32_t>(_offsets[idx + 1] - _offsets[idx]);
-    T offset = _offsets[idx];
-
-    strings::memcpy_inlined(pos, &binary_size, sizeof(uint32_t));
-    strings::memcpy_inlined(pos + sizeof(uint32_t), &_bytes[offset], binary_size);
-
-    return sizeof(uint32_t) + binary_size;
-}
-
-template <typename T>
 uint32_t BinaryColumnBase<T>::serialize_default(uint8_t* pos) {
     // max size of one string is 2^32, so use uint32_t not T
     uint32_t binary_size = 0;
@@ -588,6 +576,41 @@ void BinaryColumnBase<T>::deserialize_and_append_batch(Buffer<Slice>& srcs, size
     for (size_t i = 0; i < chunk_size; ++i) {
         srcs[i].data = (char*)deserialize_and_append((uint8_t*)srcs[i].data);
     }
+}
+
+template <typename T>
+void BinaryColumnBase<T>::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes,
+                                                          size_t chunk_size, uint32_t max_one_row_size,
+                                                          uint8_t* null_masks, bool has_null) {
+    uint32_t* sizes = slice_sizes.data();
+
+    if (!has_null) {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            memcpy(dst + i * max_one_row_size + sizes[i], &has_null, sizeof(bool));
+            sizes[i] += static_cast<uint32_t>(sizeof(bool)) +
+                        serialize(i, dst + i * max_one_row_size + sizes[i] + sizeof(bool));
+        }
+    } else {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            memcpy(dst + i * max_one_row_size + sizes[i], null_masks + i, sizeof(bool));
+            sizes[i] += sizeof(bool);
+
+            if (!null_masks[i]) {
+                sizes[i] += serialize(i, dst + i * max_one_row_size + sizes[i]);
+            }
+        }
+    }
+}
+
+template <typename T>
+void BinaryColumnBase<T>::deserialize_and_append_batch_nullable(Buffer<Slice>& srcs, size_t chunk_size,
+                                                                Buffer<uint8_t>& is_nulls, bool& has_null) {
+    const uint32_t string_size = *((bool*)srcs[0].data) // is null
+                                         ? 4
+                                         : *((uint32_t*)(srcs[0].data + sizeof(bool))); // first string size
+    _bytes.reserve(chunk_size * string_size * 2);
+    ColumnFactory<Column, BinaryColumnBase<T>>::deserialize_and_append_batch_nullable(srcs, chunk_size, is_nulls,
+                                                                                      has_null);
 }
 
 template <typename T>
