@@ -544,6 +544,7 @@ public class QueryOptimizer extends Optimizer {
         // we need to compute the stats of child project(like subfield).
         skewJoinOptimize(tree, rootTaskContext);
         scheduler.rewriteOnce(tree, rootTaskContext, new IcebergEqualityDeleteRewriteRule());
+        scheduler.rewriteOnce(tree, rootTaskContext, new DeriveRangeJoinPredicateRule());
 
         tree = pruneSubfield(tree, rootTaskContext, requiredColumns);
 

@@ -1,10 +1,12 @@
 -- name: test_driving_table_selection
 create table T (a int, b int, c int) properties("replication_num"="1");
 
-insert into T values(1,1,1),(2,2,2),(3,3,3);
+insert into T values(1,1,1);
 
 create table T0  properties("replication_num"="1")  as select * from T;
 create table T1  properties("replication_num"="1")  as select * from T;
 create table T2  properties("replication_num"="1")  as select * from T;
 
-explain select *  from T where T.a = (select a from T0) or T.b = (select b from T1) or T.c = (select c from T2);
+select *  from T where T.a = (select a from T0) or T.b = (select b from T1) or T.c = (select c from T2);
+
+select *  from T where T.a = (select a from T0) and T.b = (select b from T1) or T.c = (select c from T2);

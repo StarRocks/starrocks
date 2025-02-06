@@ -21,9 +21,9 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
-import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -33,6 +33,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Test;
 
 import java.util.HashMap;
@@ -105,18 +106,20 @@ public class DrivingTableSelectionRuleTest {
                         new BinaryPredicateOperator(BinaryType.EQ, c2Operator, c5Operator),
                         new BinaryPredicateOperator(BinaryType.EQ, c3Operator, c6Operator)));
         OptExpression crossJoin1 = OptExpression.create(new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null), tScan, t1Scan);
-        OptExpression projection1 = OptExpression.create(LogicalProjectOperator.builder()
-                .setColumnRefMap(projection1ColumnRefMap).build(), crossJoin1);
+        OptExpression projection1 =
+                OptExpression.create(LogicalProjectOperator.builder().setColumnRefMap(projection1ColumnRefMap).build(),
+                        crossJoin1);
         OptExpression crossJoin2 =
                 OptExpression.create(new LogicalJoinOperator(JoinOperator.CROSS_JOIN, null), projection1, t2Scan);
-        OptExpression projection2 = OptExpression.create(LogicalProjectOperator.builder()
-                .setColumnRefMap(projection2ColumnRefMap).build(), crossJoin2);
-        OptExpression projection3 = OptExpression.create(LogicalProjectOperator.builder()
-                .setColumnRefMap(projection3ColumnRefMap).build(), t3Scan);
+        OptExpression projection2 =
+                OptExpression.create(LogicalProjectOperator.builder().setColumnRefMap(projection2ColumnRefMap).build(),
+                        crossJoin2);
+        OptExpression projection3 =
+                OptExpression.create(LogicalProjectOperator.builder().setColumnRefMap(projection3ColumnRefMap).build(), t3Scan);
         OptExpression innerJoin =
                 OptExpression.create(new LogicalJoinOperator(JoinOperator.INNER_JOIN, onKeys), projection2, projection3);
 
-        OptimizerContext context = new OptimizerContext(new Memo(), columnRefFactory);
+        OptimizerContext context = OptimizerFactory.mockContext(UtFrameUtils.createDefaultCtx(), columnRefFactory);
 
         System.out.println("Before: " + innerJoin.debugString());
         assertTrue(rule.check(innerJoin, context));
@@ -130,8 +133,7 @@ public class DrivingTableSelectionRuleTest {
             assertEquals(0, ((LogicalOlapScanOperator) newJoinTree.inputAt(1).getOp()).getTable().getId());
             assertEquals(2,
                     ((LogicalOlapScanOperator) newJoinTree.inputAt(0).inputAt(0).inputAt(0).inputAt(0).inputAt(0).inputAt(0)
-                            .getOp()).getTable()
-                            .getId());
+                            .getOp()).getTable().getId());
         }
         // Projection
         {
@@ -151,9 +153,8 @@ public class DrivingTableSelectionRuleTest {
             Map<ColumnRefOperator, ScalarOperator> map2 = new HashMap<>(t3Scan.getRowOutputInfo().getColumnRefMap());
             t2Scan.getRowOutputInfo().getColumnRefMap().forEach((k, v) -> map2.put(k, ConstantOperator.createNull(v.getType())));
 
-            assertEquals(map2,
-                    ((LogicalProjectOperator) newJoinTree.inputAt(0).inputAt(0).inputAt(0).inputAt(0).inputAt(1)
-                            .getOp()).getColumnRefMap());
+            assertEquals(map2, ((LogicalProjectOperator) newJoinTree.inputAt(0).inputAt(0).inputAt(0).inputAt(0).inputAt(1)
+                    .getOp()).getColumnRefMap());
         }
     }
 }
