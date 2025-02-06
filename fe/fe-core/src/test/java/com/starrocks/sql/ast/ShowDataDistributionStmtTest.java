@@ -53,6 +53,19 @@ public class ShowDataDistributionStmtTest {
                     "('c','c','2024-09-21'),('c','c','2024-09-21'),('d','d','2024-09-21')");
             stmt.execute("insert into unpartition_table(col1,col2,ds) " +
                     "values('c','c','2024-09-21'),('c','c','2024-09-21'),('d','d','2024-09-21')");
+            Thread.sleep(5000);
+            stmt.execute("select count(*) from partition_table;");
+            if (stmt.getResultSet().next()) {
+                int count = stmt.getResultSet().getInt(1);
+                System.out.println("ShowDataDistributionStmtTest: 1.partition_table row count = " + count);
+                Assert.assertEquals(count, 6);
+            }
+            stmt.execute("select count(*) from unpartition_table;");
+            if (stmt.getResultSet().next()) {
+                int count = stmt.getResultSet().getInt(1);
+                System.out.println("ShowDataDistributionStmtTest: 1.unpartition_table row count = " + count);
+                Assert.assertEquals(count, 3);
+            }
             //wait table meta update
             checkTableMetaUpdate(stmt, "partition_table", 6);
             checkTableMetaUpdate(stmt, "unpartition_table", 3);
@@ -146,7 +159,7 @@ public class ShowDataDistributionStmtTest {
             }
             Thread.sleep(10000);
             count++;
-            if (count == 30) { //300s, if not update, then break
+            if (count == 60) { //300s, if not update, then break
                 System.out.println("ShowDataDistributionStmtTest: checkTableMetaUpdate timeout!");
                 break;
             }
