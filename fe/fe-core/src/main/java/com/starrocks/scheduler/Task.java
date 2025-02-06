@@ -231,8 +231,6 @@ public class Task implements Writable {
         return GsonUtils.GSON.fromJson(json, Task.class);
     }
 
-
-
     @Override
     public String toString() {
         return "Task{" +
