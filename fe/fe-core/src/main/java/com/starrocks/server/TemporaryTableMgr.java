@@ -44,6 +44,15 @@ public class TemporaryTableMgr {
         private Table<Long, String, Long> temporaryTables = HashBasedTable.create();
 
         private ReadWriteLock rwLock = new ReentrantReadWriteLock();
+        private long createTime;
+
+        public TemporaryTableTable(long createTime) {
+            this.createTime = createTime;
+        }
+
+        public long getCreateTime() {
+            return createTime;
+        }
 
         public Long getTableId(Long databaseId, String tableName) {
             try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
@@ -90,9 +99,12 @@ public class TemporaryTableMgr {
 
     // session id -> TemporaryTableTable
     private Map<UUID, TemporaryTableTable> tablesMap = Maps.newConcurrentMap();
+    private ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
     public void addTemporaryTable(UUID sessionId, long databaseId, String tableName, long tableId) {
-        tablesMap.putIfAbsent(sessionId, new TemporaryTableTable());
+        try (CloseableLock ignored = CloseableLock.lock(rwLock.writeLock())) {
+            tablesMap.computeIfAbsent(sessionId, k -> new TemporaryTableTable(System.nanoTime()));
+        }
         TemporaryTableTable tables = tablesMap.get(sessionId);
         tables.addTable(databaseId, tableName, tableId);
         LOG.info("add temporary table, session[{}], db id[{}], table name[{}], table id[{}]",
@@ -141,7 +153,9 @@ public class TemporaryTableMgr {
     }
 
     public void removeTemporaryTables(UUID sessionId) {
-        tablesMap.remove(sessionId);
+        try (CloseableLock ignored = CloseableLock.lock(rwLock.writeLock())) {
+            tablesMap.remove(sessionId);
+        }
         LOG.info("remove all temporary tables in session[{}]", sessionId.toString());
     }
 
@@ -156,16 +170,17 @@ public class TemporaryTableMgr {
     // get all temporary tables under specific databases, return a Table<databaseId, tableId, sessionId>
     public Table<Long, Long, UUID> getAllTemporaryTables(Set<Long> requiredDatabaseIds) {
         Table<Long, Long, UUID> result = HashBasedTable.create();
-        tablesMap.forEach((sessionId, tables) -> {
-            // db id -> table name -> table id
-            Table<Long, String, Long> allTables = tables.getAllTables();
-            for (Table.Cell<Long, String, Long> cell : allTables.cellSet()) {
-                if (requiredDatabaseIds.contains(cell.getRowKey())) {
-                    result.put(cell.getRowKey(), cell.getValue(), sessionId);
+        try (CloseableLock ignored = CloseableLock.lock(rwLock.readLock())) {
+            tablesMap.forEach((sessionId, tables) -> {
+                // db id -> table name -> table id
+                Table<Long, String, Long> allTables = tables.getAllTables();
+                for (Table.Cell<Long, String, Long> cell : allTables.cellSet()) {
+                    if (requiredDatabaseIds.contains(cell.getRowKey())) {
+                        result.put(cell.getRowKey(), cell.getValue(), sessionId);
+                    }
                 }
-            }
-
-        });
+            });
+        }
         return result;
     }
 
@@ -173,8 +188,14 @@ public class TemporaryTableMgr {
         return tablesMap.containsKey(sessionId);
     }
 
-    public Set<UUID> listSessions() {
-        return tablesMap.keySet();
+    public Map<UUID, Long> listSessions() {
+        Map<UUID, Long> result = Maps.newHashMap();
+        try (CloseableLock ignored = CloseableLock.lock(rwLock.readLock())) {
+            tablesMap.forEach((sessionId, tables) -> {
+                result.put(sessionId, tables.getCreateTime());
+            });
+        }
+        return result;
     }
 
 
