@@ -271,9 +271,14 @@ uint64_t SegmentWriter::current_filesz() const {
 }
 
 Status SegmentWriter::finalize(uint64_t* segment_file_size, uint64_t* index_size, uint64_t* footer_position) {
+    int64_t t0 = MonotonicMillis();
     RETURN_IF_ERROR(finalize_columns(index_size));
+    int64_t t1 = MonotonicMillis();
     *footer_position = _wfile->size();
-    return finalize_footer(segment_file_size);
+    Status st = finalize_footer(segment_file_size);
+    int64_t t2 = MonotonicMillis();
+    LOG(INFO) << "[SegmentWriter] finalize: " << (t1 - t0) << "ms, " << (t2 - t1) << "ms, path " << segment_path();
+    return st;
 }
 
 Status SegmentWriter::finalize_columns(uint64_t* index_size) {
@@ -379,17 +384,22 @@ Status SegmentWriter::_write_footer() {
 }
 
 Status SegmentWriter::_write_raw_data(const std::vector<Slice>& slices) {
+    int64_t t0 = MonotonicMillis();
     RETURN_IF_ERROR(_wfile->appendv(&slices[0], slices.size()));
+    int64_t t1 = MonotonicMillis();
+    LOG(INFO) << "[SegmentWriter] write raw data: " << (t1 - t0) << "ms, path " << segment_path();
     return Status::OK();
 }
 
 Status SegmentWriter::append_chunk(const Chunk& chunk) {
+    int64_t t0 = MonotonicMillis();
     size_t chunk_num_rows = chunk.num_rows();
     size_t chunk_num_columns = chunk.num_columns();
     for (size_t i = 0; i < chunk_num_columns; ++i) {
         const Column* col = chunk.get_column_by_index(i).get();
         RETURN_IF_ERROR(_column_writers[i]->append(*col));
     }
+    int64_t t1 = MonotonicMillis();
 
     // TODO(cbl): put the fill full row column logic here is a bit hacky, this segment writer is used in many other
     //            situations(compaction etc.), so better to put it into somewhere early in the write pipeline
@@ -422,6 +432,8 @@ Status SegmentWriter::append_chunk(const Chunk& chunk) {
     } else {
         _num_rows_written += chunk_num_rows;
     }
+    int64_t t2 = MonotonicMillis();
+    LOG(INFO) << "[SegmentWriter] append_chunk: " << (t1 - t0) << "ms, " << (t2 - t1) << "ms, path " << segment_path();
     return Status::OK();
 }
 

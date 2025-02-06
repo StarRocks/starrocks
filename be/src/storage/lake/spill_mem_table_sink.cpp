@@ -130,6 +130,7 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
         return _writer->flush(segment);
     }
     if (chunk.num_rows() == 0) return Status::OK();
+    int64_t t0 = MonotonicMillis();
     // 1. create new block group
     _block_manager->block_container()->create_block_group();
     auto output = std::make_shared<LoadSpillOutputDataStream>(_block_manager);
@@ -137,6 +138,8 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
     RETURN_IF_ERROR(_do_spill(chunk, output));
     // 3. flush
     RETURN_IF_ERROR(output->flush());
+    int64_t t1 = MonotonicMillis();
+    LOG(INFO) << "[SpillMemTableSink] flush_chunk: " << (t1 - t0) << "ms, tid : " << _block_manager->tablet_id();
     return Status::OK();
 }
 

@@ -62,7 +62,10 @@ public:
             segment = std::make_unique<SegmentPB>();
 
             _flush_token->_stats.cur_flush_count++;
+            int64_t t0 = MonotonicMillis();
             _flush_token->_flush_memtable(_memtable.get(), segment.get(), _eos);
+            int64_t t1 = MonotonicMillis();
+            LOG(INFO) << "[MemtableFlushTask] flush: " << (t1 - t0) << "ms, tablet id : " << _memtable->tablet_id();
             _flush_token->_stats.cur_flush_count--;
             _memtable.reset();
 
