@@ -582,12 +582,12 @@ Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t li
             columns.push_back(column);
         }
 
-        MutableJoinRuntimeFilterPtr filter = nullptr;
+        MutableRuntimeFilterPtr filter = nullptr;
         auto multi_partitioned = rf_desc->layout().pipeline_level_multi_partitioned();
         multi_partitioned |= rf_desc->num_colocate_partition() > 0;
         if (multi_partitioned) {
             LogicalType build_type = rf_desc->build_expr_type();
-            filter = std::shared_ptr<JoinRuntimeFilter>(
+            filter = std::shared_ptr<RuntimeFilter>(
                     RuntimeFilterHelper::create_runtime_bloom_filter(nullptr, build_type));
             if (filter == nullptr) {
                 _runtime_bloom_filter_build_params.emplace_back();

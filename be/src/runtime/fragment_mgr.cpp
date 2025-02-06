@@ -472,7 +472,7 @@ Status FragmentMgr::cancel(const TUniqueId& id, const PPlanFragmentCancelReason&
 }
 
 void FragmentMgr::receive_runtime_filter(const PTransmitRuntimeFilterParams& params,
-                                         const std::shared_ptr<const JoinRuntimeFilter>& shared_rf) {
+                                         const std::shared_ptr<const RuntimeFilter>& shared_rf) {
     std::shared_ptr<FragmentExecState> exec_state;
     const PUniqueId& query_id = params.query_id();
     _exec_env->add_rf_event({query_id, params.filter_id(), BackendOptions::get_localhost(), "RECV_TOTAL_RF_RPC"});

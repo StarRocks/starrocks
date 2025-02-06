@@ -84,7 +84,7 @@ Status DataSource::parse_runtime_filters(RuntimeState* state) {
     for (const auto& item : _runtime_filters->descriptors()) {
         RuntimeFilterProbeDescriptor* probe = item.second;
         DCHECK(runtime_bloom_filter_eval_context.driver_sequence != -1);
-        const JoinRuntimeFilter* filter = probe->runtime_filter(runtime_bloom_filter_eval_context.driver_sequence);
+        const RuntimeFilter* filter = probe->runtime_filter(runtime_bloom_filter_eval_context.driver_sequence);
         if (filter == nullptr) continue;
         SlotId slot_id;
         if (!probe->is_probe_slot_ref(&slot_id)) continue;
