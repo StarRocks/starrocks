@@ -104,6 +104,16 @@ public class AnalyzeStmtTest {
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
         starRocksAssert.withTable(createStructTableSql);
+        String upperColumnTableSql = "CREATE TABLE upper_tbl(\n" +
+                "Ka1 int, \n" +
+                "Kb2 varchar(32), \n" +
+                "Kc3 int, \n" +
+                "Kd4 int" +
+                ") DISTRIBUTED BY HASH(`Ka1`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(upperColumnTableSql);
     }
 
     @Test
@@ -467,5 +477,15 @@ public class AnalyzeStmtTest {
         analyzeFail("select distinct v5 from tarray");
         analyzeFail("select * from tarray order by v5");
         analyzeFail("select DENSE_RANK() OVER(partition by v5 order by v4) from tarray");
+    }
+
+    @Test
+    public void testUpperColumn() {
+        try {
+            AnalyzeTestUtil.connectContext.getSessionVariable().setEnableAnalyzePhasePruneColumns(true);
+            analyzeSuccess("select Ka1 from db.upper_tbl");
+        } finally {
+            AnalyzeTestUtil.connectContext.getSessionVariable().setEnableAnalyzePhasePruneColumns(false);
+        }
     }
 }
