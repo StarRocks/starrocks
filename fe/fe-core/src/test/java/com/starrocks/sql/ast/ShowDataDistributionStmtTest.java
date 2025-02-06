@@ -75,12 +75,14 @@ public class ShowDataDistributionStmtTest {
                 String exp = "Partition does not exist";
                 Assert.assertTrue(e.getMessage().contains(exp));
             }
+            System.out.println("ShowDataDistributionStmtTest: 2.1check partition table done!");
 
             //2.2 check: unpartition table
             stmt.execute("show data distribution from unpartition_table;");
             checkExpAndActValUnPartitionTable(stmt.getResultSet());
             stmt.execute("show data distribution from unpartition_table partition(unpartition_table);");
             checkExpAndActValUnPartitionTable(stmt.getResultSet());
+            System.out.println("ShowDataDistributionStmtTest: 2.2check unpartition table done!");
 
             //2.3 check: table not exist
             try {
@@ -89,6 +91,7 @@ public class ShowDataDistributionStmtTest {
                 String exp = "Table does not exist";
                 Assert.assertTrue(e.getMessage().contains(exp));
             }
+            System.out.println("ShowDataDistributionStmtTest: 2.3check table not exist done!");
 
             //2.4 check: privilege
             //create user and grant select privilege on other db
@@ -104,6 +107,7 @@ public class ShowDataDistributionStmtTest {
                         "on TABLE partition_table for this operation";
                 Assert.assertTrue(e.getMessage().contains(exp));
             }
+            System.out.println("ShowDataDistributionStmtTest: 2.4check privilege done!");
 
             //2.5 check: invaild sql
             List<String> invaildSql = Arrays.asList(
@@ -120,22 +124,32 @@ public class ShowDataDistributionStmtTest {
                     Assert.assertTrue(e.getMessage().contains(exp));
                 }
             }
+            System.out.println("ShowDataDistributionStmtTest: 2.5check invaild sql done!");
         } finally {
+            System.out.println("ShowDataDistributionStmtTest: 2.check done!");
             stmt.close();
             connection.close();
             PseudoCluster.getInstance().shutdown(true);
+            System.out.println("ShowDataDistributionStmtTest: done!");
         }
     }
 
     public void checkTableMetaUpdate(Statement stmt, String tableName, int actRowCount) throws Exception {
         stmt.execute("show data from " + tableName);
+        int count = 0;
         while (stmt.getResultSet().next()) {
             String tblName = stmt.getResultSet().getString(1);
             int rowCount = stmt.getResultSet().getInt(5);
             if (tblName.equals(tableName) && rowCount == actRowCount) { // meta updated
+                System.out.println("ShowDataDistributionStmtTest: 1.init env done!");
                 break;
             }
-            Thread.sleep(5000);
+            Thread.sleep(10000);
+            count++;
+            if (count == 30) { //300s, if not update, then break
+                System.out.println("ShowDataDistributionStmtTest: checkTableMetaUpdate timeout!");
+                break;
+            }
             stmt.execute("show data from " + tableName);
         }
     }
