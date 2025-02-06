@@ -89,9 +89,10 @@ inline Range<T> Range<T>::filter(const Filter* const filter) const {
     DCHECK(span_size() == filter->size());
     int32_t start = filter->size();
     int32_t end = -1;
-    for (int32_t i = 0; i < filter->size(); i++) {
+    for (int32_t i = 0; i < filter->size() && start > end; i++) {
         start = start > i && filter->data()[i] == 1 ? i : start;
-        end = end < i && filter->data()[i] == 1 ? i : end;
+        int32_t tail_index = filter->size() - 1 - i;
+        end = end < tail_index && filter->data()[tail_index] == 1 ? tail_index : end;
     }
     return start <= end ? Range<T>(_begin + start, _begin + end + 1) : Range<T>(_begin, _begin);
 }
