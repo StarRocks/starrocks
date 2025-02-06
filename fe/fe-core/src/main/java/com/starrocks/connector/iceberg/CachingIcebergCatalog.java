@@ -193,6 +193,11 @@ public class CachingIcebergCatalog implements IcebergCatalog {
     }
 
     @Override
+    public boolean alterView(View currentView, ConnectorViewDefinition connectorViewDefinition) {
+        return delegate.alterView(currentView, connectorViewDefinition);
+    }
+
+    @Override
     public boolean dropView(String dbName, String viewName) {
         return delegate.dropView(dbName, viewName);
     }

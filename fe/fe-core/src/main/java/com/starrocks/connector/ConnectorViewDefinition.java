@@ -14,10 +14,14 @@
 
 package com.starrocks.connector;
 
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.sql.ast.AlterViewClause;
+import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 
 import java.util.List;
+import java.util.Map;
 
 public class ConnectorViewDefinition {
     private final String catalogName;
@@ -26,19 +30,25 @@ public class ConnectorViewDefinition {
     private final String comment;
     private final List<Column> columns;
     private final String inlineViewDef;
+    private final AlterViewStmt.AlterDialectType alterDialect;
+    private final Map<String, String> properties;
 
     public ConnectorViewDefinition(String catalogName,
                                    String databaseName,
                                    String viewName,
                                    String comment,
                                    List<Column> columns,
-                                   String inlineViewDef) {
+                                   String inlineViewDef,
+                                   AlterViewStmt.AlterDialectType alterDialect,
+                                   Map<String, String> properties) {
         this.catalogName = catalogName;
         this.databaseName = databaseName;
         this.viewName = viewName;
         this.comment = comment;
         this.columns = columns;
         this.inlineViewDef = inlineViewDef;
+        this.alterDialect = alterDialect;
+        this.properties = properties;
     }
 
     public static ConnectorViewDefinition fromCreateViewStmt(CreateViewStmt stmt) {
@@ -48,7 +58,22 @@ public class ConnectorViewDefinition {
                 stmt.getTable(),
                 stmt.getComment(),
                 stmt.getColumns(),
-                stmt.getInlineViewDef());
+                stmt.getInlineViewDef(),
+                AlterViewStmt.AlterDialectType.NONE,
+                Maps.newHashMap());
+    }
+
+    public static ConnectorViewDefinition fromAlterViewStmt(AlterViewStmt stmt) {
+        AlterViewClause alterViewClause = stmt.getAlterClause();
+        return new ConnectorViewDefinition(
+                stmt.getCatalog(),
+                stmt.getDbName(),
+                stmt.getTable(),
+                "",
+                alterViewClause == null ? null : alterViewClause.getColumns(),
+                alterViewClause == null ? null : alterViewClause.getInlineViewDef(),
+                stmt.getAlterDialectType(),
+                stmt.getProperties());
     }
 
     public String getCatalogName() {
@@ -73,5 +98,13 @@ public class ConnectorViewDefinition {
 
     public String getInlineViewDef() {
         return inlineViewDef;
+    }
+
+    public AlterViewStmt.AlterDialectType getAlterDialectType() {
+        return alterDialect;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
     }
 }
