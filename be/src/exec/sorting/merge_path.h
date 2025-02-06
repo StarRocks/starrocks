@@ -491,13 +491,8 @@ private:
     std::chrono::steady_clock::time_point _pending_start;
     // First pending should not be recorded, because it all comes from the operator dependency
     bool _is_first_pending = true;
-<<<<<<< HEAD
-=======
 
     TLateMaterializeMode::type _late_materialization_mode;
-
-    starrocks::pipeline::Observable _observable;
->>>>>>> 37ed8644bb ([Enhancement] add  session variable parallel_merge_late_materialization_mode control the parallel merge behaviour (#55082))
 };
 
 } // namespace starrocks::merge_path
