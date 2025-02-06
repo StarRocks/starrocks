@@ -25,7 +25,6 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -39,9 +38,8 @@ import com.starrocks.thrift.TPersistentIndexType;
 import com.starrocks.thrift.TTabletMetaType;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUpdateTabletMetaInfoReq;
+import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.After;
@@ -177,8 +175,10 @@ public class LakeTableAlterMetaJobTest {
 
     @Test
     public void testUpdatePartitonMetaFailed() {
-        new MockUp<WarehouseManager>() {
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        new MockUp<GlobalStateMgr>() {
             @Mock
+<<<<<<< HEAD
             public Warehouse getWarehouse(long warehouseId) {
                 return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
                         WarehouseManager.DEFAULT_WAREHOUSE_NAME);
@@ -187,8 +187,13 @@ public class LakeTableAlterMetaJobTest {
             @Mock
             public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
                 return null;
+=======
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
             }
         };
+        mockedWarehouseManager.setComputeNodeId(null);
         Assert.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
         job.run();
         Assert.assertEquals(AlterJobV2.JobState.CANCELLED, job.getJobState());

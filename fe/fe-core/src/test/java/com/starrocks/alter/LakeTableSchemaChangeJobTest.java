@@ -39,11 +39,9 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
+import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.After;
@@ -137,6 +135,14 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testPendingJobNoAliveBackend() {
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
+            }
+        };
+
         new MockUp<Utils>() {
             @Mock
             public Long chooseNodeId(LakeTablet tablet) {
@@ -150,6 +156,7 @@ public class LakeTableSchemaChangeJobTest {
             }
         };
 
+<<<<<<< HEAD
         new MockUp<WarehouseManager>() {
             @Mock
             public Warehouse getWarehouse(long warehouseId) {
@@ -168,6 +175,9 @@ public class LakeTableSchemaChangeJobTest {
             }
         };
 
+=======
+        mockedWarehouseManager.setComputeNodesAssignedToTablet(null);
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
         Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
             schemaChangeJob.runPendingJob();
         });
@@ -586,6 +596,7 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testShow() {
+<<<<<<< HEAD
         new MockUp<WarehouseManager>() {
             @Mock
             public Warehouse getWarehouseAllowNull(long warehouseId) {
@@ -593,6 +604,9 @@ public class LakeTableSchemaChangeJobTest {
                         WarehouseManager.DEFAULT_WAREHOUSE_NAME);
             }
         };
+=======
+        UtFrameUtils.mockInitWarehouseEnv();
+>>>>>>> f8b49ee5a7 ([UT] Refactor shared-data ut code for warehouse related cases (#55563))
 
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
 
@@ -602,13 +616,6 @@ public class LakeTableSchemaChangeJobTest {
 
         schemaChangeHandler.addAlterJobV2(alterJobV2);
         System.out.println(schemaChangeHandler.getAlterJobInfosByDb(db));
-
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouseAllowNull(long warehouseId) {
-                return null;
-            }
-        };
 
         SchemaChangeHandler schemaChangeHandler2 = new SchemaChangeHandler();
         alterJobV2 = new LakeTableSchemaChangeJob(12345L, db.getId(), table.getId(), table.getName(), 10);
