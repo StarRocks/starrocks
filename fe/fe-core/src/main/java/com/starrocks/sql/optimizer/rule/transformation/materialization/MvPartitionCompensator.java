@@ -197,6 +197,7 @@ public class MvPartitionCompensator {
         // duplicate mv's plan and output columns
         OptExpressionDuplicator duplicator = new OptExpressionDuplicator(mvContext);
         OptExpression newMvScanPlan = duplicator.duplicate(mvScanOptExpression);
+        newMvScanPlan.getOp().setOpRuleBit(OP_MV_UNION_REWRITE);
         // output columns order by mv's columns
         List<ColumnRefOperator> mvScanOutputColumns = duplicator.getMappedColumns(orgMvScanOutputColumns);
         return Pair.create(newMvScanPlan, mvScanOutputColumns);
