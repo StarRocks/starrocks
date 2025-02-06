@@ -374,11 +374,9 @@ public class MetadataViewer {
                     row.add(partition.getName());
                     row.add(String.valueOf(i));
                     row.add(String.valueOf(rowCountStatistics.get(i)));
-                    row.add(totalRowCount == rowCountStatistics.get(i) ? (totalRowCount == 0L ? "00.00 %" : "100.00 %") :
-                            df.format((double) rowCountStatistics.get(i) / totalRowCount));
+                    row.add(totalRowCount == 0L ? "0.00 %" : df.format((double) rowCountStatistics.get(i) / totalRowCount));
                     row.add(String.valueOf(dataSizeStatistics.get(i)));
-                    row.add(totalDataSize == dataSizeStatistics.get(i) ? (totalDataSize == 0L ? "00.00 %" : "100.00 %") :
-                            df.format((double) dataSizeStatistics.get(i) / totalDataSize));
+                    row.add(totalDataSize == 0L ? "0.00 %" : df.format((double) dataSizeStatistics.get(i) / totalDataSize));
                     result.add(row);
                 }
             }
