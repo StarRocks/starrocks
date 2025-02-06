@@ -622,7 +622,7 @@ Status TabletUpdates::get_apply_version_and_rowsets(int64_t* version, std::vecto
     return Status::OK();
 }
 
-Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time,
+Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uint32_t wait_time_ms,
                                     bool is_version_overwrite, bool is_double_write) {
     auto span = Tracer::Instance().start_trace("rowset_commit");
     auto scope_span = trace::Scope(span);
@@ -699,8 +699,8 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
             }
             _try_commit_pendings_unlocked();
             _check_for_apply();
-            if (wait_time > 0) {
-                st = _wait_for_version(EditVersion(version, 0), wait_time, ul);
+            if (wait_time_ms > 0) {
+                st = _wait_for_version(EditVersion(version, 0), wait_time_ms, ul);
             }
         }
     }
