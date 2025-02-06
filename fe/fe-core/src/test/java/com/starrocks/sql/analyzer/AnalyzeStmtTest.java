@@ -103,6 +103,20 @@ public class AnalyzeStmtTest {
                 "    \"replication_num\" = \"1\"\n" +
                 ");";
         starRocksAssert.withTable(createStructTableSql);
+<<<<<<< HEAD
+=======
+
+        String upperColumnTableSql = "CREATE TABLE upper_tbl(\n" +
+                "Ka1 int, \n" +
+                "Kb2 varchar(32), \n" +
+                "Kc3 int, \n" +
+                "Kd4 int" +
+                ") DISTRIBUTED BY HASH(`Ka1`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(upperColumnTableSql);
+>>>>>>> 88faea032 ([BugFix] Fix prune column check the case of column error (#55562))
     }
 
     @Test
@@ -468,4 +482,38 @@ public class AnalyzeStmtTest {
         analyzeFail("select * from tarray order by v5");
         analyzeFail("select DENSE_RANK() OVER(partition by v5 order by v4) from tarray");
     }
+<<<<<<< HEAD
+=======
+
+    @Test
+    public void testAnalyzePredicateColumns() {
+        StatisticsMetaManager statistic = new StatisticsMetaManager();
+        statistic.createStatisticsTablesForTest();
+        TableKeeper keeper = PredicateColumnsStorage.createKeeper();
+        keeper.run();
+
+        AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess("analyze table db.tbl all columns");
+        Assert.assertTrue(stmt.isAllColumns());
+        stmt = (AnalyzeStmt) analyzeSuccess("analyze table db.tbl predicate columns");
+        Assert.assertTrue(stmt.isUsePredicateColumns());
+    }
+
+    @Test
+    public void testAnalyzeTableWithSampleRatio() {
+        analyzeSuccess("analyze sample table db.tbl properties(\"high_weight_sample_ratio\" = \"0.6\")");
+        analyzeSuccess("analyze sample table db.tbl properties(\"medium_high_weight_sample_ratio\" = \"0.6\")");
+        analyzeSuccess("analyze sample table db.tbl properties(\"medium_low_weight_sample_ratio\" = \"0.6\")");
+        analyzeSuccess("analyze sample table db.tbl properties(\"low_weight_sample_ratio\" = \"0.6\")");
+    }
+
+    @Test
+    public void testUpperColumn() {
+        try {
+            AnalyzeTestUtil.connectContext.getSessionVariable().setEnableAnalyzePhasePruneColumns(true);
+            analyzeSuccess("select Ka1 from db.upper_tbl");
+        } finally {
+            AnalyzeTestUtil.connectContext.getSessionVariable().setEnableAnalyzePhasePruneColumns(false);
+        }
+    }
+>>>>>>> 88faea032 ([BugFix] Fix prune column check the case of column error (#55562))
 }
