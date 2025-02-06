@@ -21,6 +21,7 @@ import com.starrocks.analysis.CastExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.TryExpr;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -35,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.LambdaFunctionOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.operator.scalar.TryOperator;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.Assert;
@@ -283,6 +285,26 @@ public class ExpressionTest extends PlanTestBase {
 
         List<TupleId> tids = ImmutableList.of(new TupleId(111));
         Assert.assertTrue(lexpr.getChild(1).isBoundByTupleIds(tids));
+
+        // trino try
+        BinaryPredicateOperator binary =
+                new BinaryPredicateOperator(BinaryType.EQ, columnRefOperator, ConstantOperator.createInt(1));
+        ScalarOperator tryOperator = new TryOperator(binary);
+        ColumnRefOperator tryColumnRef = new ColumnRefOperator(1, Type.INT, "try", true);
+
+        HashMap<ColumnRefOperator, ScalarOperator> projectMapForTry = new HashMap<>();
+        projectMapForTry.put(tryColumnRef, tryOperator);
+        projectMapForTry.put(columnRefOperator, ConstantOperator.createInt(1));
+
+        HashMap<ColumnRefOperator, Expr> variableToSlotRefForTry = new HashMap<>();
+        variableToSlotRefForTry.put(columnRefOperator, new IntLiteral(1));
+
+        ScalarOperatorToExpr.FormatterContext contextForTry =
+                new ScalarOperatorToExpr.FormatterContext(variableToSlotRefForTry, projectMapForTry);
+
+        Expr tryExpression = ScalarOperatorToExpr.buildExecExpression(tryColumnRef, contextForTry);
+
+        Assert.assertTrue(tryExpression instanceof TryExpr);
     }
 
     @Test
@@ -815,7 +837,6 @@ public class ExpressionTest extends PlanTestBase {
                 "        lambda common expressions:{<slot 8> <-> array_length(<slot 2>)}\n" +
                 "        , <slot 2>), [[[1,23],[4,3,2]],[[3]]])");
     }
-
 
     @Test
     public void testInPredicateNormalize() throws Exception {
