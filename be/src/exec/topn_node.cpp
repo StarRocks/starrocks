@@ -15,6 +15,7 @@
 #include "exec/topn_node.h"
 
 #include <memory>
+#include <type_traits>
 
 #include "exec/chunks_sorter.h"
 #include "exec/chunks_sorter_full_sort.h"
@@ -341,14 +342,14 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
     SourceOperatorFactoryPtr source_operator;
 
     source_operator = std::make_shared<SourceFactory>(context->next_operator_id(), id(), context_factory);
-    if (!is_partition_topn && enable_parallel_merge) {
+    if constexpr (std::is_same_v<LocalParallelMergeSortSourceOperatorFactory, SourceFactory>) {
         down_cast<LocalParallelMergeSortSourceOperatorFactory*>(source_operator.get())
                 ->set_tuple_desc(_materialized_tuple_desc);
         down_cast<LocalParallelMergeSortSourceOperatorFactory*>(source_operator.get())->set_is_gathered(need_merge);
-    }
-    if (enable_parallel_merge && _tnode.sort_node.__isset.parallel_merge_late_materialize_mode) {
-        down_cast<LocalParallelMergeSortSourceOperatorFactory*>(source_operator.get())
-                ->set_materialized_mode(_tnode.sort_node.parallel_merge_late_materialize_mode);
+        if (_tnode.sort_node.__isset.parallel_merge_late_materialize_mode) {
+            down_cast<LocalParallelMergeSortSourceOperatorFactory*>(source_operator.get())
+                    ->set_materialized_mode(_tnode.sort_node.parallel_merge_late_materialize_mode);
+        }
     }
 
     ops_sink_with_sort.emplace_back(std::move(sink_operator));
