@@ -28,6 +28,7 @@
 #include "exprs/binary_predicate.h"
 #include "exprs/expr_context.h"
 #include "exprs/in_const_predicate.hpp"
+#include "exprs/runtime_filter.h"
 #include "formats/parquet/column_chunk_reader.h"
 #include "formats/parquet/metadata.h"
 #include "formats/parquet/page_reader.h"
@@ -56,7 +57,7 @@ public:
     void TearDown() override {}
 
 protected:
-    using Int32RF = RuntimeBloomFilter<TYPE_INT>;
+    using Int32RF = ComposedRuntimeFilter<TYPE_INT>;
 
     StatusOr<RuntimeFilterProbeDescriptor*> gen_runtime_filter_desc(SlotId slot_id);
 
@@ -804,7 +805,7 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_row_gro
 
     ASSIGN_OR_RETURN(auto* rf_desc, gen_runtime_filter_desc(slot_id));
 
-    rf->init(10);
+    rf->get_bloom_filter()->init(10);
     rf->insert(start);
     rf->insert(end);
     if (has_null) {
@@ -837,10 +838,10 @@ StatusOr<HdfsScannerContext*> FileReaderTest::_create_context_for_filter_page_in
                                     {"col3", TYPE_INT_DESC, 3},        {"col4", TYPE_INT_DESC, 4},
                                     {"col5", TYPE_INT_DESC, 5},        {""}};
 
-    auto* rf = _pool.add(new RuntimeBloomFilter<TYPE_INT>());
+    auto* rf = _pool.add(new ComposedRuntimeFilter<TYPE_INT>());
     ASSIGN_OR_RETURN(auto* rf_desc, gen_runtime_filter_desc(slot_id));
 
-    rf->init(10);
+    rf->bloom_filter().init(10);
     rf->insert(start);
     rf->insert(end);
     if (has_null) {
@@ -3250,7 +3251,7 @@ TEST_F(FileReaderTest, update_rf_and_filter_row_group) {
     ASSERT_EQ(chunk->debug_row(1), "[2, 22]");
     ASSERT_EQ(chunk->debug_row(2), "[3, 33]");
 
-    auto* rf = Int32RF::create_with_range<false>(&_pool, 3, false);
+    auto* rf = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<false>(&_pool, 3, false);
     ctx->runtime_filter_collector->descriptors().at(1)->set_runtime_filter(rf);
 
     chunk->reset();
