@@ -178,9 +178,9 @@ std::vector<RuntimeFilter*>* ChunksSorterHeapSort::runtime_filters(ObjectPool* p
     bool null_first = _sort_desc.descs[0].is_null_first();
 
     if (_runtime_filter.empty()) {
-        auto rf = type_dispatch_predicate<RuntimeFilter*>(
-                (*_sort_exprs)[0]->root()->type().type, false, detail::SortRuntimeFilterBuilder(), pool,
-                top_cursor_column, cursor_rid, asc, null_first, is_close_interval);
+        auto rf = type_dispatch_predicate<RuntimeFilter*>((*_sort_exprs)[0]->root()->type().type, false,
+                                                          detail::SortRuntimeFilterBuilder(), pool, top_cursor_column,
+                                                          cursor_rid, asc, null_first, is_close_interval);
         if (rf == nullptr) {
             return nullptr;
         } else {

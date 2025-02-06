@@ -875,7 +875,7 @@ void test_partitioned_or_shuffle_hash_bucket_grf_helper(size_t num_rows, size_t 
             ++num_rows_per_partitions[hash_values[i]];
         }
     };
-    auto grf_config_func = [type](JoinRuntimeFilter* grf, RuntimeFilter::RunningContext* ctx) {
+    auto grf_config_func = [type](RuntimeFilter* grf, RuntimeFilter::RunningContext* ctx) {
         grf->set_global();
         grf->set_join_mode(type);
     };
@@ -1082,7 +1082,7 @@ void TestMultiColumnsOnRuntimeFilter(TRuntimeFilterBuildJoinMode::type join_mode
         break;
     }
 
-    JoinRuntimeFilter::RunningContext running_ctx;
+    RuntimeFilter::RunningContext running_ctx;
     running_ctx.selection.assign(num_rows, 2);
     running_ctx.use_merged_selection = false;
     running_ctx.compatibility = true;

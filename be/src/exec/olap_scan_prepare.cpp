@@ -578,8 +578,8 @@ Status ChunkPredicateBuilder<E, Type>::normalize_binary_predicate(const SlotDesc
 
 template <BoxedExprType E, CompoundNodeType Type>
 template <LogicalType SlotType, LogicalType MappingType, template <class> class Decoder, class... Args>
-void ChunkPredicateBuilder<E, Type>::normalized_rf_with_null(const RuntimeFilter* rf,
-                                                             const SlotDescriptor* slot_desc, Args&&... args) {
+void ChunkPredicateBuilder<E, Type>::normalized_rf_with_null(const RuntimeFilter* rf, const SlotDescriptor* slot_desc,
+                                                             Args&&... args) {
     DCHECK(Type == CompoundNodeType::AND);
     using RFColumnPredicateBuilder = detail::RuntimeColumnPredicateBuilder;
     ObjectPool* pool = _opts.obj_pool;

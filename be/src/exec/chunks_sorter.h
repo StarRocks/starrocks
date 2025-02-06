@@ -180,7 +180,7 @@ namespace detail {
 struct SortRuntimeFilterBuilder {
     template <LogicalType ltype>
     RuntimeFilter* operator()(ObjectPool* pool, const ColumnPtr& column, int rid, bool asc, bool null_first,
-                                  bool is_close_interval) {
+                              bool is_close_interval) {
         bool need_null = false;
         if (null_first) {
             need_null = true;
