@@ -597,8 +597,8 @@ void test_grf_helper_template(size_t num_rows, size_t num_partitions, const Part
     }
 }
 
-void split_merged_rf(const RuntimeFilterLayout& layout, const std::vector<RuntimeFilter*>& rfs,
-                     const Columns& columns, std::vector<std::vector<RuntimeFilter*>>& rfs_per_instance,
+void split_merged_rf(const RuntimeFilterLayout& layout, const std::vector<RuntimeFilter*>& rfs, const Columns& columns,
+                     std::vector<std::vector<RuntimeFilter*>>& rfs_per_instance,
                      std::vector<Columns>& columns_per_instance) {
     auto local_layout = layout.local_layout();
     size_t num_instances = -1;
