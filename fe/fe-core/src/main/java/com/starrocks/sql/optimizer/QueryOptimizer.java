@@ -50,6 +50,7 @@ import com.starrocks.sql.optimizer.rule.transformation.EliminateConstantCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateSortColumnWithEqualityPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
+import com.starrocks.sql.optimizer.rule.transformation.HoistHeavyCostExprsUponTopnRule;
 import com.starrocks.sql.optimizer.rule.transformation.IcebergEqualityDeleteRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.IcebergPartitionsTableRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
@@ -533,6 +534,7 @@ public class QueryOptimizer extends Optimizer {
         // otherwise the Node containing limit may be prune
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.MERGE_LIMIT_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, new PushDownProjectLimitRule());
+        scheduler.rewriteIterative(tree, rootTaskContext, new HoistHeavyCostExprsUponTopnRule());
 
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownLimitRankingWindowRule());
         rewriteGroupingSets(tree, rootTaskContext, sessionVariable);

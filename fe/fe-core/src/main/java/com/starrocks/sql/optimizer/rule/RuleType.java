@@ -210,6 +210,7 @@ public enum RuleType {
     TF_PREDICATE_PROPAGATE,
 
     TF_VECTOR_REWRITE_RULE,
+    TF_HOIST_HEAVY_COST_UPON_TOPN,
 
     // The following are implementation rules:
     IMPLEMENTATION_RULES,
