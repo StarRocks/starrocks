@@ -628,9 +628,9 @@ public class QueryAnalyzer {
                 for (Column column : fullSchema) {
                     // TODO: avoid analyze visible or not each time, cache it in schema
                     if (needPruneScanColumns && !column.isKey() &&
-                            !bucketColumns.contains(column.getName()) &&
-                            !partitionColumns.contains(column.getName()) &&
-                            !pruneScanColumns.contains(column.getName().toLowerCase())) {
+                            bucketColumns.stream().noneMatch(column.getName()::equalsIgnoreCase) &&
+                            partitionColumns.stream().noneMatch(column.getName()::equalsIgnoreCase) &&
+                            pruneScanColumns.stream().noneMatch(column.getName()::equalsIgnoreCase)) {
                         // reduce unnecessary columns init, but must init key columns/bucket columns/partition columns
                         continue;
                     }
