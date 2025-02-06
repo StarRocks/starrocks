@@ -617,21 +617,6 @@ private:
         }                                                                                                         \
     } while (0)
 
-        HANDLE_ELEMENT_TYPE(BooleanColumn);
-        HANDLE_ELEMENT_TYPE(Int8Column);
-        HANDLE_ELEMENT_TYPE(Int16Column);
-        HANDLE_ELEMENT_TYPE(Int32Column);
-        HANDLE_ELEMENT_TYPE(Int64Column);
-        HANDLE_ELEMENT_TYPE(Int128Column);
-        HANDLE_ELEMENT_TYPE(FloatColumn);
-        HANDLE_ELEMENT_TYPE(DoubleColumn);
-        HANDLE_ELEMENT_TYPE(DecimalColumn);
-        HANDLE_ELEMENT_TYPE(Decimal32Column);
-        HANDLE_ELEMENT_TYPE(Decimal64Column);
-        HANDLE_ELEMENT_TYPE(Decimal128Column);
-        HANDLE_ELEMENT_TYPE(BinaryColumn);
-        HANDLE_ELEMENT_TYPE(DateColumn);
-        HANDLE_ELEMENT_TYPE(TimestampColumn);
         HANDLE_ELEMENT_TYPE(ArrayColumn);
         HANDLE_ELEMENT_TYPE(JsonColumn);
         HANDLE_ELEMENT_TYPE(MapColumn);
@@ -950,21 +935,6 @@ private:
         }                                                                                                              \
     } while (0)
 
-        HANDLE_HAS_TYPE(BooleanColumn);
-        HANDLE_HAS_TYPE(Int8Column);
-        HANDLE_HAS_TYPE(Int16Column);
-        HANDLE_HAS_TYPE(Int32Column);
-        HANDLE_HAS_TYPE(Int64Column);
-        HANDLE_HAS_TYPE(Int128Column);
-        HANDLE_HAS_TYPE(FloatColumn);
-        HANDLE_HAS_TYPE(DoubleColumn);
-        HANDLE_HAS_TYPE(DecimalColumn);
-        HANDLE_HAS_TYPE(Decimal32Column);
-        HANDLE_HAS_TYPE(Decimal64Column);
-        HANDLE_HAS_TYPE(Decimal128Column);
-        HANDLE_HAS_TYPE(BinaryColumn);
-        HANDLE_HAS_TYPE(DateColumn);
-        HANDLE_HAS_TYPE(TimestampColumn);
         HANDLE_HAS_TYPE(ArrayColumn);
         HANDLE_HAS_TYPE(JsonColumn);
         HANDLE_HAS_TYPE(MapColumn);
