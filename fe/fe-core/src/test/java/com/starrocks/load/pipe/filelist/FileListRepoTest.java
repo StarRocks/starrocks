@@ -24,12 +24,12 @@ import com.starrocks.load.pipe.PipeFileRecord;
 import com.starrocks.load.pipe.PipeId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TResultBatch;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -37,6 +37,7 @@ import mockit.Mocked;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -50,12 +51,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class FileListRepoTest {
 
-    @Mocked
-    private WarehouseManager warehouseManager;
-
-    public FileListRepoTest() {
-        warehouseManager = new WarehouseManager();
-        warehouseManager.initDefaultWarehouse();
+    @Before
+    public void setUp() {
+        UtFrameUtils.mockInitWarehouseEnv();
     }
 
     @Test

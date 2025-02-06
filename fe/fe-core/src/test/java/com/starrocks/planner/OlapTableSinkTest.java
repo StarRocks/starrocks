@@ -17,7 +17,6 @@
 
 package com.starrocks.planner;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -51,11 +50,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.PartitionValue;
-import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
@@ -68,12 +64,9 @@ import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
-import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
-import mockit.Mock;
-import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -119,28 +112,7 @@ public class OlapTableSinkTest {
 
     @Before
     public void before() {
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public ComputeNode getComputeNode(LakeTablet tablet) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-
-            @Mock
-            public ComputeNode getComputeNode(Long warehouseId, LakeTablet tablet) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-
-            @Mock
-            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
-                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
-            }
-        };
+        UtFrameUtils.mockInitWarehouseEnv();
     }
 
     @Test

@@ -14,7 +14,6 @@
 
 package com.starrocks.catalog;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.jmockit.Deencapsulation;
@@ -27,7 +26,6 @@ import com.starrocks.proto.TabletStatResponse.TabletStat;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
@@ -36,8 +34,7 @@ import com.starrocks.thrift.TStorageType;
 import com.starrocks.thrift.TTabletStat;
 import com.starrocks.thrift.TTabletStatResult;
 import com.starrocks.thrift.TTabletType;
-import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Delegate;
 import mockit.Expectations;
 import mockit.Mock;
@@ -66,45 +63,7 @@ public class TabletStatMgrTest {
 
     @Before
     public void before() {
-        new MockUp<WarehouseManager>() {
-
-            @Mock
-            public Warehouse getWarehouse(String warehouseName) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
-                return 1L;
-            }
-
-            @Mock
-            public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
-                return 1L;
-            }
-
-            @Mock
-            public ComputeNode getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-
-            @Mock
-            public ComputeNode getAllComputeNodeIdsAssignToTablet(String warehouseName, LakeTablet tablet) {
-                return null;
-            }
-
-            @Mock
-            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
-                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
-            }
-        };
+        UtFrameUtils.mockInitWarehouseEnv();
     }
 
     @Test

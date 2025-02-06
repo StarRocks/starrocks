@@ -14,7 +14,6 @@
 
 package com.starrocks.lake;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.staros.client.StarClientException;
 import com.staros.proto.FilePathInfo;
@@ -54,14 +53,12 @@ import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.NodeMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.GtidGenerator;
-import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -103,9 +100,6 @@ public class StarMgrMetaSyncerTest {
     @Mocked
     private LocalMetastore localMetastore;
 
-    @Mocked
-    private WarehouseManager warehouseManager;
-
     long shardGroupId = 12L;
 
     @Before
@@ -137,10 +131,6 @@ public class StarMgrMetaSyncerTest {
                 globalStateMgr.getStarOSAgent();
                 minTimes = 0;
                 result = starOSAgent;
-
-                globalStateMgr.getWarehouseMgr();
-                minTimes = 0;
-                result = warehouseManager;
 
                 globalStateMgr.getLockManager();
                 minTimes = 0;
@@ -219,33 +209,7 @@ public class StarMgrMetaSyncerTest {
             }
         };
 
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public ComputeNode getComputeNode(LakeTablet tablet) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-
-            @Mock
-            public ComputeNode getComputeNode(String warehouseName, LakeTablet tablet) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-
-            @Mock
-            public ComputeNode getComputeNode(Long warehouseId, LakeTablet tablet) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-
-            @Mock
-            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
-                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
-            }
-        };
+        UtFrameUtils.mockInitWarehouseEnv();
     }
 
     @Test
