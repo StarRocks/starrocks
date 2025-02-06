@@ -529,7 +529,7 @@ public class AlterJobMgr {
             }
             view.setNewFullSchema(newFullSchema);
             view.setComment(comment);
-            AlterMVJobExecutor.inactiveRelatedMaterializedView(db, view,
+            AlterMVJobExecutor.inactiveRelatedMaterializedView(view,
                     MaterializedViewExceptions.inactiveReasonForBaseViewChanged(viewName), isReplay);
             db.dropTable(viewName);
             db.registerTableUnlocked(view);
