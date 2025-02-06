@@ -18,6 +18,7 @@
 
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
+
 namespace starrocks::pipeline {
 
 Status AggregateDistinctStreamingSinkOperator::prepare(RuntimeState* state) {
@@ -26,7 +27,11 @@ Status AggregateDistinctStreamingSinkOperator::prepare(RuntimeState* state) {
     if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::LIMITED_MEM) {
         _limited_mem_state.limited_memory_size = config::streaming_agg_limited_memory_size;
     }
-    _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::FORCE_PREAGGREGATION;
+    // If limit is small, streaming distinct forces pre-aggregation. After the limit is reached the operator will quickly finish.
+    // The limit in streaming agg is controlled by session variable: cbo_push_down_distinct_limit
+    if (_aggregator->limit() != -1) {
+        _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::FORCE_PREAGGREGATION;
+    }
     _aggregator->attach_sink_observer(state, this->_observer);
     return _aggregator->open(state);
 }
