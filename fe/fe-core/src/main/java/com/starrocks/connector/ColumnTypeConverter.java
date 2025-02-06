@@ -102,7 +102,7 @@ public class ColumnTypeConverter {
     public static final String STRUCT_PATTERN = "^struct<" + COMPLEX_PATTERN + ">";
     public static final String CHAR_PATTERN = "^char\\(([0-9]+)\\)";
     public static final String VARCHAR_PATTERN = "^varchar\\(([0-9,-1]+)\\)";
-    protected static final List<String> HIVE_UNSUPPORTED_TYPES = Arrays.asList("BINARY", "UNIONTYPE");
+    protected static final List<String> HIVE_UNSUPPORTED_TYPES = Arrays.asList("UNIONTYPE");
 
     public static Type fromHiveType(String hiveType) {
         String typeUpperCase = getTypeKeyword(hiveType).toUpperCase();
