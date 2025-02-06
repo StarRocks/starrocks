@@ -740,6 +740,38 @@ public class MetadataMgr {
         return getTableStatistics(session, catalogName, table, columns, partitionKeys, predicate, -1);
     }
 
+    public List<RemoteFileInfo> getRemoteFileInfos(Table table, List<String> partitionNames) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        ImmutableSet.Builder<RemoteFileInfo> files = ImmutableSet.builder();
+        if (connectorMetadata.isPresent()) {
+            try {
+                connectorMetadata.get().getRemoteFileInfos(table, partitionNames)
+                        .forEach(files::add);
+            } catch (Exception e) {
+                LOG.error("Failed to list partition file's metadata on catalog [{}], table [{}]",
+                        table.getCatalogName(), table, e);
+                throw e;
+            }
+        }
+        return ImmutableList.copyOf(files.build());
+    }
+
+    public List<RemoteFileInfo> getRemoteFileInfoForPartitions(Table table, List<String> partitionNames) {
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(table.getCatalogName());
+        ImmutableSet.Builder<RemoteFileInfo> files = ImmutableSet.builder();
+        if (connectorMetadata.isPresent()) {
+            try {
+                connectorMetadata.get().getRemoteFileInfoForPartitions(table, partitionNames)
+                        .forEach(files::add);
+            } catch (Exception e) {
+                LOG.error("Failed to list partition directory's metadata on catalog [{}], table [{}]",
+                        table.getCatalogName(), table, e);
+                throw e;
+            }
+        }
+        return ImmutableList.copyOf(files.build());
+    }
+
     public List<RemoteFileInfo> getRemoteFileInfos(String catalogName, Table table, List<PartitionKey> partitionKeys) {
         return getRemoteFileInfos(catalogName, table, partitionKeys, -1, null, null, -1);
     }

@@ -187,6 +187,8 @@ public abstract class ConnectorPartitionTraits {
 
     public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo();
 
+    public abstract Map<String, PartitionInfo> getPartitionNameWithPartitionInfo(List<String> partitionNames);
+
     /**
      * The max of refresh ts for all partitions
      */
