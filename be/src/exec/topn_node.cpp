@@ -335,13 +335,10 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
         down_cast<LocalParallelMergeSortSourceOperatorFactory*>(source_operator.get())
                 ->set_tuple_desc(_materialized_tuple_desc);
         down_cast<LocalParallelMergeSortSourceOperatorFactory*>(source_operator.get())->set_is_gathered(need_merge);
-<<<<<<< HEAD
-=======
         if (_tnode.sort_node.__isset.parallel_merge_late_materialize_mode) {
             down_cast<LocalParallelMergeSortSourceOperatorFactory*>(source_operator.get())
                     ->set_materialized_mode(_tnode.sort_node.parallel_merge_late_materialize_mode);
         }
->>>>>>> 56bc4afd8c ([BugFix] Fix down_cast failed in partition top n (#55318))
     }
     if (enable_parallel_merge && _tnode.sort_node.__isset.parallel_merge_late_materialize_mode) {
         down_cast<LocalParallelMergeSortSourceOperatorFactory*>(source_operator.get())
