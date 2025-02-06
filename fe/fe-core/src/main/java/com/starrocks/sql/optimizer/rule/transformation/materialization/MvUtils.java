@@ -1402,7 +1402,7 @@ public class MvUtils {
      *
      * @return the trimmed set.
      */
-    public static <K> Set<K> shrinkToSize(Set<K> set, int maxLength) {
+    public static <K> Collection<K> shrinkToSize(Collection<K> set, int maxLength) {
         if (set != null && set.size() > maxLength) {
             return set.stream().limit(maxLength).collect(Collectors.toSet());
         }

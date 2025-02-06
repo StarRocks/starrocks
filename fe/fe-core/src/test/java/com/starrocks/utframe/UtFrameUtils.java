@@ -1251,7 +1251,7 @@ public class UtFrameUtils {
             @Mock
             public MvUpdateInfo getMVTimelinessUpdateInfo(MaterializedView mv,
                                                           boolean isQueryRewrite) {
-                return new MvUpdateInfo(MvUpdateInfo.MvToRefreshType.NO_REFRESH);
+                return MvUpdateInfo.noRefresh(mv);
             }
         };
 
