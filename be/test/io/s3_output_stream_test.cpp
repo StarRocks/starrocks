@@ -31,12 +31,9 @@
 
 namespace starrocks::io {
 
-static const char* kBucketName = "s3-outputstream-test";
 static std::shared_ptr<Aws::S3::S3Client> g_s3client;
 
 static void init_s3client();
-static void init_bucket();
-static void destroy_bucket();
 static void destroy_s3client();
 
 class S3OutputStreamTest : public testing::Test {
@@ -57,11 +54,9 @@ public:
 void S3OutputStreamTest::SetUpTestCase() {
     Aws::InitAPI(Aws::SDKOptions());
     init_s3client();
-    init_bucket();
 }
 
 void S3OutputStreamTest::TearDownTestCase() {
-    destroy_bucket();
     destroy_s3client();
     Aws::ShutdownAPI(Aws::SDKOptions());
 }
@@ -71,27 +66,13 @@ void init_s3client() {
     config.endpointOverride = config::object_storage_endpoint;
     const char* ak = config::object_storage_access_key_id.c_str();
     const char* sk = config::object_storage_secret_access_key.c_str();
-    auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk);
+    const char* sts = config::object_storage_session_token_for_ut.c_str();
+    auto credentials = config::object_storage_session_token_for_ut.empty()
+                               ? std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk)
+                               : std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk, sts);
     g_s3client = std::make_shared<Aws::S3::S3Client>(std::move(credentials), std::move(config),
-                                                     Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, false);
-}
-
-void init_bucket() {
-    Aws::S3::Model::CreateBucketRequest request;
-    request.SetBucket(kBucketName);
-    Aws::S3::Model::CreateBucketOutcome outcome = g_s3client->CreateBucket(request);
-    LOG_IF(ERROR, !outcome.IsSuccess()) << outcome.GetError().GetMessage();
-}
-
-void destroy_bucket() {
-    Aws::S3::Model::DeleteBucketRequest request;
-    request.SetBucket(kBucketName);
-    Aws::S3::Model::DeleteBucketOutcome outcome = g_s3client->DeleteBucket(request);
-    if (outcome.IsSuccess()) {
-        std::cout << "Deleted bucket " << kBucketName << '\n';
-    } else {
-        std::cerr << "Fail to delete bucket " << kBucketName << ": " << outcome.GetError().GetMessage() << '\n';
-    }
+                                                     Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
+                                                     !config::object_storage_endpoint_path_style_access);
 }
 
 void destroy_s3client() {
@@ -100,14 +81,14 @@ void destroy_s3client() {
 
 void delete_object(const std::string& object) {
     Aws::S3::Model::DeleteObjectRequest request;
-    request.SetBucket(kBucketName);
+    request.SetBucket(config::object_storage_bucket.c_str());
     request.SetKey(object);
     Aws::S3::Model::DeleteObjectOutcome outcome = g_s3client->DeleteObject(request);
     if (!outcome.IsSuccess()) {
-        std::cerr << "Fail to delete s3://" << kBucketName << "/" << object << ": " << outcome.GetError().GetMessage()
-                  << '\n';
+        std::cerr << "Fail to delete s3://" << config::object_storage_bucket << "/" << object << ": "
+                  << outcome.GetError().GetMessage() << '\n';
     } else {
-        std::cout << "Deleted s3://" << kBucketName << "/" << object << '\n';
+        std::cout << "Deleted s3://" << config::object_storage_bucket << "/" << object << '\n';
     }
 }
 
@@ -115,8 +96,8 @@ TEST_F(S3OutputStreamTest, test_singlepart_upload) {
     char buff[128];
     const char* kObjectName = "test_singlepart_upload";
     delete_object(kObjectName);
-    S3OutputStream os(g_s3client, kBucketName, kObjectName, 1024, 1024);
-    S3InputStream is(g_s3client, kBucketName, kObjectName);
+    S3OutputStream os(g_s3client, config::object_storage_bucket.c_str(), kObjectName, 1024, 1024);
+    S3InputStream is(g_s3client, config::object_storage_bucket.c_str(), kObjectName);
 
     std::string s1("first line of singlepart upload\n");
     std::string s2("second line of singlepart upload\n");
@@ -137,8 +118,8 @@ TEST_F(S3OutputStreamTest, test_multipart_upload) {
     char buff[128];
     const char* kObjectName = "test_multipart_upload";
     delete_object(kObjectName);
-    S3OutputStream os(g_s3client, kBucketName, kObjectName, 12, /*5MB=*/5 * 1024 * 1024);
-    S3InputStream is(g_s3client, kBucketName, kObjectName, /*5MB=*/5 * 1024 * 1024);
+    S3OutputStream os(g_s3client, config::object_storage_bucket.c_str(), kObjectName, 12, /*5MB=*/5 * 1024 * 1024);
+    S3InputStream is(g_s3client, config::object_storage_bucket.c_str(), kObjectName);
 
     std::string s1("first line of multipart upload\n");
     std::string s2("second line of multipart upload\n");
@@ -159,8 +140,8 @@ TEST_F(S3OutputStreamTest, test_skip) {
     char buff[32];
     const char* kObjectName = "test_multipart_upload";
     delete_object(kObjectName);
-    S3OutputStream os(g_s3client, kBucketName, kObjectName, 1024, 1024);
-    S3InputStream is(g_s3client, kBucketName, kObjectName);
+    S3OutputStream os(g_s3client, config::object_storage_bucket.c_str(), kObjectName, 1024, 1024);
+    S3InputStream is(g_s3client, config::object_storage_bucket.c_str(), kObjectName);
 
     ASSERT_OK(os.write("abc", 3));
     ASSERT_OK(os.skip(2));
@@ -177,8 +158,8 @@ TEST_F(S3OutputStreamTest, test_get_direct_buffer_and_advance) {
     char buff[32];
     const char* kObjectName = "test_get_direct_buffer_and_advance";
     delete_object(kObjectName);
-    S3OutputStream os(g_s3client, kBucketName, kObjectName, 1024, 1024);
-    S3InputStream is(g_s3client, kBucketName, kObjectName);
+    S3OutputStream os(g_s3client, config::object_storage_bucket.c_str(), kObjectName, 1024, 1024);
+    S3InputStream is(g_s3client, config::object_storage_bucket.c_str(), kObjectName);
 
     ASSERT_OK(os.write("abc", 3));
     ASSIGN_OR_ABORT(uint8_t * buf, os.get_direct_buffer_and_advance(3));

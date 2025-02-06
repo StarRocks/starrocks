@@ -29,9 +29,6 @@
 
 namespace starrocks {
 
-// NOTE: The bucket must be created before running this test.
-constexpr static const char* kBucketName = "starrocks-fs-s3-ut";
-
 class S3FileSystemTest : public testing::Test {
 public:
     S3FileSystemTest() : _root_path(generate_uuid_string()) {}
@@ -42,6 +39,7 @@ public:
         CHECK(!config::object_storage_secret_access_key.empty())
                 << "Need set object_storage_secret_access_key in be_test.conf";
         CHECK(!config::object_storage_endpoint.empty()) << "Need set object_storage_endpoint in be_test.conf";
+        CHECK(!config::object_storage_bucket.empty()) << "Need set object_storage_bucket in be_test.conf";
 
         Aws::InitAPI(_s_options);
     }
@@ -61,9 +59,11 @@ public:
         Aws::ShutdownAPI(_s_options);
     }
 
-    std::string S3Path(std::string_view path) { return fmt::format("s3://{}/{}{}", kBucketName, _root_path, path); }
+    std::string S3Path(std::string_view path) {
+        return fmt::format("s3://{}/{}{}", config::object_storage_bucket, _root_path, path);
+    }
 
-    static std::string S3Root() { return fmt::format("s3://{}", kBucketName); }
+    static std::string S3Root() { return fmt::format("s3://{}", config::object_storage_bucket); }
 
     void CheckIsDirectory(FileSystem* fs, const std::string& dir_name, bool expected_success,
                           bool expected_is_dir = true) {

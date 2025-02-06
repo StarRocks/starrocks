@@ -88,15 +88,21 @@ void init_s3client() {
     const char* sk = config::object_storage_secret_access_key.empty()
                              ? getenv("STARROCKS_UT_S3_SK")
                              : config::object_storage_secret_access_key.c_str();
+    const char* sts = config::object_storage_session_token_for_ut.empty()
+                              ? getenv("STARROCKS_UT_S3_SESSION_TOKEN")
+                              : config::object_storage_session_token_for_ut.c_str();
     if (ak == nullptr) {
         FAIL() << "s3 access key id not set";
     }
     if (sk == nullptr) {
         FAIL() << "s3 secret access key not set";
     }
-    auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk);
+    auto credentials = config::object_storage_session_token_for_ut.empty()
+                               ? std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk)
+                               : std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(ak, sk, sts);
     g_s3client = std::make_shared<Aws::S3::S3Client>(std::move(credentials), std::move(config),
-                                                     Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never, true);
+                                                     Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
+                                                     !config::object_storage_endpoint_path_style_access);
 }
 
 void destroy_s3client() {

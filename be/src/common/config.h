@@ -928,6 +928,8 @@ CONF_Bool(rewrite_partial_segment, "true");
 // Properties to access object storage
 CONF_String(object_storage_access_key_id, "");
 CONF_String(object_storage_secret_access_key, "");
+// session token only used in unit tests.
+CONF_String(object_storage_session_token_for_ut, "");
 CONF_String(object_storage_endpoint, "");
 CONF_String(object_storage_bucket, "");
 // Tencent cos needs to add region information

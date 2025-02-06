@@ -225,7 +225,11 @@ S3ClientFactory::S3ClientPtr S3ClientFactory::new_client(const ClientConfigurati
     }
 
     if (!access_key_id.empty() && !secret_access_key.empty()) {
-        auto credentials = std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(access_key_id, secret_access_key);
+        auto credentials =
+                config::object_storage_session_token_for_ut.empty()
+                        ? std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(access_key_id, secret_access_key)
+                        : std::make_shared<Aws::Auth::SimpleAWSCredentialsProvider>(
+                                  access_key_id, secret_access_key, config::object_storage_session_token_for_ut);
         client = std::make_shared<Aws::S3::S3Client>(credentials, config,
                                                      /* signPayloads */
                                                      Aws::Client::AWSAuthV4Signer::PayloadSigningPolicy::Never,
