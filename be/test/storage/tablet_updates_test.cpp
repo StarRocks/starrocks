@@ -3336,6 +3336,9 @@ void TabletUpdatesTest::update_and_recover(bool enable_persistent_index) {
     }
     ASSERT_EQ(N, read_tablet(_tablet, version - 1));
     ASSERT_EQ(N / 2, read_tablet(_tablet, old_version));
+    // update_and_recover is called twice in the same test suite, but only the second tablet is dropped
+    (void)StorageEngine::instance()->tablet_manager()->drop_tablet(_tablet->tablet_id());
+    _tablet.reset();
 }
 
 TEST_F(TabletUpdatesTest, test_update_and_recover) {
