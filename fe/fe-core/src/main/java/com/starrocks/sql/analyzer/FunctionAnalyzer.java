@@ -820,7 +820,7 @@ public class FunctionAnalyzer {
                                 (targetType.isStringType() && argumentTypes[i].isStringType())) {
                         targetType = Type.getAssignmentCompatibleType(targetType, argumentTypes[i], false);
                         if (targetType.isInvalid()) {
-                            throw new SemanticException("Parameter's type is not invalid");
+                            throw new SemanticException("Parameter's type is invalid");
                         }
                     } else {
                         targetType = Type.DOUBLE;

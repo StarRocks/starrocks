@@ -3998,7 +3998,8 @@ PARALLEL_TEST(VecStringFunctionsTest, fieldIntTest) {
     columns.emplace_back(param1);
     columns.emplace_back(param2);
     columns.emplace_back(param3);
-    int res[] = {0, 1, 2, 0 , 0};
+    int res[] = {0, 1, 2, 0, 0};
+    ctx->set_function_state(FunctionContext::FRAGMENT_LOCAL, nullptr);
     ColumnPtr result = StringFunctions::field<TYPE_INT>(ctx.get(), columns).value();
 
     ASSERT_TRUE(result->is_numeric());

@@ -51,7 +51,7 @@ struct ConcatState {
     std::string tail;
 };
 
-template<LogicalType T>
+template <LogicalType T>
 struct FieldFuncState {
     bool all_const = false;
     bool list_all_const = false;
@@ -581,9 +581,9 @@ public:
     DEFINE_VECTORIZED_FN(ngram_search_case_insensitive);
 
     DEFINE_VECTORIZED_FN_TEMPLATE(field);
-    template <LogicalType Type>    
+    template <LogicalType Type>
     static Status field_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
-    template <LogicalType Type>    
+    template <LogicalType Type>
     static Status field_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     static Status ngram_search_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
@@ -695,7 +695,7 @@ StatusOr<ColumnPtr> StringFunctions::money_format_decimal(FunctionContext* conte
     return result.build(ColumnHelper::is_all_const(columns));
 }
 
-template <LogicalType Type>    
+template <LogicalType Type>
 Status StringFunctions::field_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
@@ -729,7 +729,7 @@ Status StringFunctions::field_prepare(FunctionContext* context, FunctionContext:
     return Status::OK();
 }
 
-template <LogicalType Type>    
+template <LogicalType Type>
 Status StringFunctions::field_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
     if (scope != FunctionContext::FRAGMENT_LOCAL) {
         return Status::OK();
@@ -751,15 +751,14 @@ StatusOr<ColumnPtr> StringFunctions::field(FunctionContext* context, const Colum
         result.append(0);
         return result.build(true);
     } else if (state != nullptr) {
-        LOG(WARNING) << "state:" << state->all_const << " " << state->list_all_const << std::endl;
         if (state->all_const) {
             const auto list_col = context->get_constant_column(0);
             const auto list_val = ColumnHelper::get_const_value<Type>(list_col);
             auto it = state->mp.find(list_val);
             if (it != state->mp.end()) {
-               result.append(it->second);
+                result.append(it->second);
             } else {
-               result.append(0);
+                result.append(0);
             }
             return result.build(true);
         } else if (state->list_all_const) {
@@ -791,7 +790,7 @@ StatusOr<ColumnPtr> StringFunctions::field(FunctionContext* context, const Colum
                 res = id;
                 break;
             }
-            id ++;
+            id++;
         }
 
         result.append(res);
