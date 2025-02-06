@@ -201,7 +201,7 @@ void RuntimeFilterPort::publish_local_colocate_filters(std::list<RuntimeFilterBu
     }
 }
 
-void RuntimeFilterPort::receive_runtime_filter(int32_t filter_id, const JoinRuntimeFilter* rf) {
+void RuntimeFilterPort::receive_runtime_filter(int32_t filter_id, const RuntimeFilter* rf) {
     _state->exec_env()->add_rf_event({
             _state->query_id(),
             filter_id,
@@ -219,7 +219,7 @@ void RuntimeFilterPort::receive_runtime_filter(int32_t filter_id, const JoinRunt
 }
 
 void RuntimeFilterPort::receive_shared_runtime_filter(int32_t filter_id,
-                                                      const std::shared_ptr<const JoinRuntimeFilter>& rf) {
+                                                      const std::shared_ptr<const RuntimeFilter>& rf) {
     auto it = _listeners.find(filter_id);
     if (it == _listeners.end()) return;
     auto& wait_list = it->second;
@@ -290,7 +290,7 @@ void RuntimeFilterMerger::merge_runtime_filter(PTransmitRuntimeFilterParams& par
 
     // to merge runtime filters
     ObjectPool* pool = &(status->pool);
-    JoinRuntimeFilter* rf = nullptr;
+    RuntimeFilter* rf = nullptr;
     int rf_version = RuntimeFilterHelper::deserialize_runtime_filter(
             pool, &rf, reinterpret_cast<const uint8_t*>(params.data().data()), params.data().size());
     if (rf == nullptr) {
@@ -370,8 +370,8 @@ void RuntimeFilterMerger::_send_total_runtime_filter(int rf_version, int32_t fil
     DCHECK(target_it != _targets.end());
     std::vector<TRuntimeFilterProberParams>* target_nodes = &(target_it->second);
 
-    JoinRuntimeFilter* out = nullptr;
-    JoinRuntimeFilter* first = status->filters.begin()->second;
+    RuntimeFilter* out = nullptr;
+    RuntimeFilter* first = status->filters.begin()->second;
     ObjectPool* pool = &(status->pool);
     out = first->create_empty(pool);
     if (!status->can_use_bf) {
@@ -664,7 +664,7 @@ void RuntimeFilterWorker::receive_runtime_filter(const PTransmitRuntimeFilterPar
 
 // receive total runtime filter in pipeline engine.
 static inline void receive_total_runtime_filter_pipeline(PTransmitRuntimeFilterParams& params,
-                                                         const std::shared_ptr<JoinRuntimeFilter>& shared_rf) {
+                                                         const std::shared_ptr<RuntimeFilter>& shared_rf) {
     auto& pb_query_id = params.query_id();
     TUniqueId query_id;
     query_id.hi = pb_query_id.hi();
@@ -726,7 +726,7 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
     auto [query_ctx, mem_tracker] = get_mem_tracker(request.query_id(), request.is_pipeline());
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
     // deserialize once, and all fragment instance shared that runtime filter.
-    JoinRuntimeFilter* rf = nullptr;
+    RuntimeFilter* rf = nullptr;
     const std::string& data = request.data();
     RuntimeFilterHelper::deserialize_runtime_filter(nullptr, &rf, reinterpret_cast<const uint8_t*>(data.data()),
                                                     data.size());
@@ -734,7 +734,7 @@ void RuntimeFilterWorker::_receive_total_runtime_filter(PTransmitRuntimeFilterPa
         return;
     }
     rf->set_global();
-    std::shared_ptr<JoinRuntimeFilter> shared_rf(rf);
+    std::shared_ptr<RuntimeFilter> shared_rf(rf);
     // for pipeline engine
     if (request.has_is_pipeline() && request.is_pipeline()) {
         receive_total_runtime_filter_pipeline(request, shared_rf);

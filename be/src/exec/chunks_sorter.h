@@ -128,7 +128,7 @@ public:
     virtual Status get_next(ChunkPtr* chunk, bool* eos) = 0;
 
     // RuntimeFilter generate by ChunkSorter only works in TopNSorter and HeapSorter
-    virtual std::vector<JoinRuntimeFilter*>* runtime_filters(ObjectPool* pool) { return nullptr; }
+    virtual std::vector<RuntimeFilter*>* runtime_filters(ObjectPool* pool) { return nullptr; }
 
     // Return accurate output rows of this operator
     virtual size_t get_output_rows() const = 0;
@@ -179,8 +179,8 @@ protected:
 namespace detail {
 struct SortRuntimeFilterBuilder {
     template <LogicalType ltype>
-    JoinRuntimeFilter* operator()(ObjectPool* pool, const ColumnPtr& column, int rid, bool asc, bool null_first,
-                                  bool is_close_interval) {
+    RuntimeFilter* operator()(ObjectPool* pool, const ColumnPtr& column, int rid, bool asc, bool null_first,
+                              bool is_close_interval) {
         bool need_null = false;
         if (null_first) {
             need_null = true;
@@ -220,7 +220,7 @@ struct SortRuntimeFilterBuilder {
 
 struct SortRuntimeFilterUpdater {
     template <LogicalType ltype>
-    std::nullptr_t operator()(JoinRuntimeFilter* filter, const ColumnPtr& column, int rid, bool asc, bool null_first,
+    std::nullptr_t operator()(RuntimeFilter* filter, const ColumnPtr& column, int rid, bool asc, bool null_first,
                               bool is_close_interval) {
         if (null_first) {
             if (column->is_null(rid)) {

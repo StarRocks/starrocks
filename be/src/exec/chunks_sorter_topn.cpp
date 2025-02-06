@@ -107,7 +107,7 @@ Status ChunksSorterTopn::do_done(RuntimeState* state) {
     return Status::OK();
 }
 
-std::vector<JoinRuntimeFilter*>* ChunksSorterTopn::runtime_filters(ObjectPool* pool) {
+std::vector<RuntimeFilter*>* ChunksSorterTopn::runtime_filters(ObjectPool* pool) {
     if (!_init_merged_segment) {
         return nullptr;
     }
@@ -127,7 +127,7 @@ std::vector<JoinRuntimeFilter*>* ChunksSorterTopn::runtime_filters(ObjectPool* p
     bool null_first = _sort_desc.descs[0].is_null_first();
 
     if (_runtime_filter.empty()) {
-        auto* rf = type_dispatch_predicate<JoinRuntimeFilter*>(
+        auto* rf = type_dispatch_predicate<RuntimeFilter*>(
                 (*_sort_exprs)[0]->root()->type().type, false, detail::SortRuntimeFilterBuilder(), pool,
                 order_by_column, current_max_value_row_id, asc, null_first, is_close_interval);
         if (rf == nullptr) {

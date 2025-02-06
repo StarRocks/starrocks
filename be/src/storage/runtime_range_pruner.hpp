@@ -64,7 +64,7 @@ struct RuntimeColumnPredicateBuilder {
             RangeType& range = full_range;
             range.set_index_filter_only(true);
 
-            const JoinRuntimeFilter* rf = desc->runtime_filter(driver_sequence);
+            const RuntimeFilter* rf = desc->runtime_filter(driver_sequence);
 
             // applied global-dict optimized column
             if constexpr (ltype == TYPE_VARCHAR) {
@@ -193,7 +193,7 @@ struct RuntimeColumnPredicateBuilder {
 
     template <class Range, LogicalType SlotType, LogicalType mapping_type, template <class> class Decoder,
               class... Args>
-    static void build_minmax_range(Range& range, const JoinRuntimeFilter* rf, ObjectPool* pool, Args&&... args) {
+    static void build_minmax_range(Range& range, const RuntimeFilter* rf, ObjectPool* pool, Args&&... args) {
         using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
 
         const RuntimeBloomFilter<mapping_type>* filter = down_cast<const RuntimeBloomFilter<mapping_type>*>(rf);

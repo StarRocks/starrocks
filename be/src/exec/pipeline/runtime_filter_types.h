@@ -34,7 +34,7 @@ using RuntimeInFilter = starrocks::ExprContext;
 using RuntimeBloomFilter = starrocks::RuntimeFilterBuildDescriptor;
 using RuntimeBloomFilterProbeDescriptor = starrocks::RuntimeFilterProbeDescriptor;
 using RuntimeBloomFilterProbeDescriptorPtr = RuntimeBloomFilterProbeDescriptor*;
-using RuntimeBloomFilterRunningContext = starrocks::JoinRuntimeFilter::RunningContext;
+using RuntimeBloomFilterRunningContext = RuntimeFilter::RunningContext;
 using RuntimeInFilterPtr = RuntimeInFilter*;
 using RuntimeBloomFilterPtr = RuntimeBloomFilter*;
 using RuntimeInFilters = std::vector<RuntimeInFilterPtr>;
@@ -50,7 +50,7 @@ using OptRuntimeBloomFilterBuildParams = std::vector<std::optional<RuntimeBloomF
 // Parameters used to build runtime bloom-filters.
 struct RuntimeBloomFilterBuildParam {
     RuntimeBloomFilterBuildParam(bool multi_partitioned, bool eq_null, bool is_empty, std::vector<ColumnPtr> columns,
-                                 MutableJoinRuntimeFilterPtr runtime_filter)
+                                 MutableRuntimeFilterPtr runtime_filter)
             : multi_partitioned(multi_partitioned),
               eq_null(eq_null),
               is_empty(is_empty),
@@ -60,7 +60,7 @@ struct RuntimeBloomFilterBuildParam {
     bool eq_null;
     bool is_empty;
     std::vector<ColumnPtr> columns;
-    MutableJoinRuntimeFilterPtr runtime_filter;
+    MutableRuntimeFilterPtr runtime_filter;
 };
 
 // RuntimeFilterCollector contains runtime in-filters and bloom-filters, it is stored in RuntimeFilerHub
@@ -402,7 +402,7 @@ public:
             // skip if ht.size() > limit, and it's only for local.
             if (!desc->has_remote_targets() && row_count > _local_rf_limit) continue;
             LogicalType build_type = desc->build_expr_type();
-            JoinRuntimeFilter* filter = RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type);
+            RuntimeFilter* filter = RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type);
             if (filter == nullptr) continue;
 
             if (desc->has_remote_targets() && row_count > _global_rf_limit) {
@@ -479,7 +479,7 @@ public:
             // skip if ht.size() > limit, and it's only for local.
             if (!desc->has_remote_targets() && row_count > _local_rf_limit) continue;
             LogicalType build_type = desc->build_expr_type();
-            JoinRuntimeFilter* filter = RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type);
+            RuntimeFilter* filter = RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type);
             if (filter == nullptr) continue;
             if (desc->has_remote_targets() && row_count > _global_rf_limit) {
                 filter->clear_bf();

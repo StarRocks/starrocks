@@ -131,7 +131,7 @@ void SimdBlockFilter::clear() {
     }
 }
 
-size_t JoinRuntimeFilter::max_serialized_size() const {
+size_t RuntimeFilter::max_serialized_size() const {
     // todo(yan): noted that it's not serialize compatible with 32-bit and 64-bit.
     auto num_partitions = _hash_partition_bf.size();
     size_t size = sizeof(_has_null) + sizeof(_size) + sizeof(num_partitions) + sizeof(_join_mode);
@@ -145,7 +145,7 @@ size_t JoinRuntimeFilter::max_serialized_size() const {
     return size;
 }
 
-size_t JoinRuntimeFilter::serialize(int serialize_version, uint8_t* data) const {
+size_t RuntimeFilter::serialize(int serialize_version, uint8_t* data) const {
     size_t offset = 0;
     auto num_partitions = _hash_partition_bf.size();
 #define JRF_COPY_FIELD(field)                     \
@@ -168,7 +168,7 @@ size_t JoinRuntimeFilter::serialize(int serialize_version, uint8_t* data) const 
     return offset;
 }
 
-size_t JoinRuntimeFilter::deserialize(int serialize_version, const uint8_t* data) {
+size_t RuntimeFilter::deserialize(int serialize_version, const uint8_t* data) {
     size_t offset = 0;
     size_t num_partitions = 0;
 #define JRF_COPY_FIELD(field)                     \
@@ -193,7 +193,7 @@ size_t JoinRuntimeFilter::deserialize(int serialize_version, const uint8_t* data
     return offset;
 }
 
-bool JoinRuntimeFilter::check_equal(const JoinRuntimeFilter& rf) const {
+bool RuntimeFilter::check_equal(const RuntimeFilter& rf) const {
     auto lhs_num_partitions = _hash_partition_bf.size();
     auto rhs_num_partitions = rf._hash_partition_bf.size();
     bool first = (_has_null == rf._has_null && _size == rf._size && lhs_num_partitions == rhs_num_partitions &&
@@ -211,7 +211,7 @@ bool JoinRuntimeFilter::check_equal(const JoinRuntimeFilter& rf) const {
     return true;
 }
 
-void JoinRuntimeFilter::clear_bf() {
+void RuntimeFilter::clear_bf() {
     if (_hash_partition_bf.empty()) {
         _bf.clear();
     } else {

@@ -92,7 +92,7 @@ public:
     const UnarrivedRuntimeFilterList& unarrived_runtime_filters() { return rt_ranger_params; }
 
     template <LogicalType SlotType, LogicalType MappingType, template <class> class Decoder, class... Args>
-    void normalized_rf_with_null(const JoinRuntimeFilter* rf, const SlotDescriptor* slot_desc, Args&&... args);
+    void normalized_rf_with_null(const RuntimeFilter* rf, const SlotDescriptor* slot_desc, Args&&... args);
 
 private:
     const ScanConjunctsManagerOptions& _opts;
