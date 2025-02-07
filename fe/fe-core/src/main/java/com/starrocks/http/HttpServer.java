@@ -64,6 +64,7 @@ import com.starrocks.http.rest.CheckDecommissionAction;
 import com.starrocks.http.rest.ConnectionAction;
 import com.starrocks.http.rest.ExecuteSqlAction;
 import com.starrocks.http.rest.FeatureAction;
+import com.starrocks.http.rest.GetClusterSnapshotRestoreStateAction;
 import com.starrocks.http.rest.GetDdlStmtAction;
 import com.starrocks.http.rest.GetLoadInfoAction;
 import com.starrocks.http.rest.GetLogFileAction;
@@ -176,6 +177,7 @@ public class HttpServer {
         // rest action
         HealthAction.registerAction(controller);
         FeatureAction.registerAction(controller);
+        GetClusterSnapshotRestoreStateAction.registerAction(controller);
         MetricsAction.registerAction(controller);
         ShowMetaInfoAction.registerAction(controller);
         ShowProcAction.registerAction(controller);
