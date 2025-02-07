@@ -95,8 +95,13 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
     if (_table_function == nullptr) {
         return Status::InternalError("can't find table function " + table_function_name);
     }
+    if (_tnode.table_function_node.__isset.fn_result_required) {
+        _fn_result_required = _tnode.table_function_node.fn_result_required;
+    } else {
+        _fn_result_required = true;
+    }
     RETURN_IF_ERROR(_table_function->init(table_fn, &_table_function_state));
-
+    _table_function_state->set_is_required(_fn_result_required);
     _table_function_exec_timer = ADD_TIMER(_unique_metrics, "TableFunctionExecTime");
     _table_function_exec_counter = ADD_COUNTER(_unique_metrics, "TableFunctionExecCount", TUnit::UNIT);
     RETURN_IF_ERROR(_table_function->prepare(_table_function_state));
@@ -159,8 +164,11 @@ ChunkPtr TableFunctionOperator::_build_chunk(const std::vector<ColumnPtr>& colum
     for (size_t i = 0; i < _outer_slots.size(); ++i) {
         chunk->append_column(columns[i], _outer_slots[i]);
     }
-    for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
-        chunk->append_column(columns[_outer_slots.size() + i], _fn_result_slots[i]);
+
+    if (_fn_result_required) {
+        for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
+            chunk->append_column(columns[_outer_slots.size() + i], _fn_result_slots[i]);
+        }
     }
 
     return chunk;
@@ -222,8 +230,10 @@ void TableFunctionOperator::_copy_result(const std::vector<ColumnPtr>& columns, 
             }
 
             // Build table function result
-            for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
-                columns[_outer_slots.size() + i]->append(*(fn_result_cols[i]), start, copy_rows);
+            if (_fn_result_required) {
+                for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
+                    columns[_outer_slots.size() + i]->append(*(fn_result_cols[i]), start, copy_rows);
+                }
             }
         }
 

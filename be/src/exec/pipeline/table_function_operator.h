@@ -73,6 +73,7 @@ private:
     size_t _next_output_row_offset = 0;
     // table function result
     std::pair<Columns, UInt32Column::Ptr> _table_function_result;
+    bool _fn_result_required = true;
     // table function param and return offset
     TableFunctionState* _table_function_state = nullptr;
 
