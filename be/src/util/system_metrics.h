@@ -34,6 +34,14 @@ class VectorIndexCacheMetrics;
 class RuntimeFilterMetrics;
 class VectorIndexCacheMetrics;
 
+class IOMetrics {
+public:
+    METRIC_DEFINE_INT_GAUGE(read_ops, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(read_bytes, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(write_ops, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(write_bytes, MetricUnit::BYTES);
+};
+
 class MemoryMetrics {
 public:
     METRIC_DEFINE_INT_GAUGE(jemalloc_allocated_bytes, MetricUnit::BYTES);
@@ -92,6 +100,7 @@ public:
                              const std::map<std::string, int64_t>& lst_rcv_map, int64_t interval_sec,
                              int64_t* send_rate, int64_t* rcv_rate);
     const MemoryMetrics* memory_metrics() const { return _memory_metrics.get(); }
+    IOMetrics* get_io_metrics_by_tag(uint32_t tag) const { return !_io_metrics.empty() ? _io_metrics[tag] : nullptr; }
 
 private:
     void _install_cpu_metrics(MetricRegistry*);
@@ -128,6 +137,8 @@ private:
 
     void _update_vector_index_cache_metrics();
 
+    void _install_io_metrics(MetricRegistry* registry);
+
 private:
     static const char* const _s_hook_name;
 
@@ -141,6 +152,7 @@ private:
     std::map<std::string, RuntimeFilterMetrics*> _runtime_filter_metrics;
     int _proc_net_dev_version = 0;
     std::unique_ptr<SnmpMetrics> _snmp_metrics;
+    std::vector<IOMetrics*> _io_metrics;
 
     char* _line_ptr = nullptr;
     size_t _line_buf_size = 0;

@@ -19,6 +19,7 @@
 #include <thread>
 
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/pipeline_metrics.h"
 #include "exec/workgroup/work_group.h"
 #include "testutil/parallel_test.h"
 
@@ -50,7 +51,8 @@ void _set_driver_level(DriverRawPtr driver, int level) {
 }
 
 PARALLEL_TEST(QuerySharedDriverQueueTest, test_basic) {
-    QuerySharedDriverQueue queue;
+    PipelineExecutorMetrics metrics;
+    QuerySharedDriverQueue queue(metrics.get_driver_queue_metrics());
 
     // Prepare drivers.
     QueryContext query_context;
@@ -89,7 +91,8 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_basic) {
 }
 
 PARALLEL_TEST(QuerySharedDriverQueueTest, test_cancel) {
-    QuerySharedDriverQueue queue;
+    PipelineExecutorMetrics metrics;
+    QuerySharedDriverQueue queue(metrics.get_driver_queue_metrics());
 
     // prepare drivers
     auto driver1 = std::make_shared<PipelineDriver>(_gen_operators(), nullptr, nullptr, nullptr, -1);
@@ -131,7 +134,8 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_cancel) {
 }
 
 PARALLEL_TEST(QuerySharedDriverQueueTest, test_take_block) {
-    QuerySharedDriverQueue queue;
+    PipelineExecutorMetrics metrics;
+    QuerySharedDriverQueue queue(metrics.get_driver_queue_metrics());
 
     // Prepare drivers.
     QueryContext query_context;
@@ -152,7 +156,8 @@ PARALLEL_TEST(QuerySharedDriverQueueTest, test_take_block) {
 }
 
 PARALLEL_TEST(QuerySharedDriverQueueTest, test_take_close) {
-    QuerySharedDriverQueue queue;
+    PipelineExecutorMetrics metrics;
+    QuerySharedDriverQueue queue(metrics.get_driver_queue_metrics());
 
     auto consumer_thread = std::make_shared<std::thread>([&queue] {
         auto maybe_driver = queue.take(true);
@@ -191,7 +196,8 @@ protected:
 
 TEST_F(WorkGroupDriverQueueTest, test_basic) {
     QueryContext query_ctx;
-    WorkGroupDriverQueue queue;
+    PipelineExecutorMetrics metrics;
+    WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics());
 
     // Prepare drivers for _wg2.
     int64_t sum_wg2_time_spent = 0;
@@ -271,7 +277,8 @@ TEST_F(WorkGroupDriverQueueTest, test_basic) {
 
 TEST_F(WorkGroupDriverQueueTest, test_take_block) {
     QueryContext query_ctx;
-    WorkGroupDriverQueue queue;
+    PipelineExecutorMetrics metrics;
+    WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics());
 
     // Prepare drivers.
     auto driver1 = std::make_shared<PipelineDriver>(_gen_operators(), &query_ctx, nullptr, nullptr, -1);
@@ -292,7 +299,8 @@ TEST_F(WorkGroupDriverQueueTest, test_take_block) {
 }
 
 TEST_F(WorkGroupDriverQueueTest, test_take_close) {
-    WorkGroupDriverQueue queue;
+    PipelineExecutorMetrics metrics;
+    WorkGroupDriverQueue queue(metrics.get_driver_queue_metrics());
 
     auto consumer_thread = std::make_shared<std::thread>([&queue] {
         auto maybe_driver = queue.take(true);
