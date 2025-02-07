@@ -37,10 +37,10 @@ on:
         description: 'RUN ADMIT?'
         type: string
         default: 'true'
-      WITH_COV:
+      WITH_FEATURE_COV:
         type: string
         default: 'false'
-      RETAIN_ENV:
+      IS_ARM:
         type: string
         default: 'false'
 
@@ -76,8 +76,8 @@ env:
   CLUSTER_NAME: ${{ inputs.CLUSTER_NAME }}
   IS_SELF_BUILD: ${{ inputs.IS_SELF_BUILD }}
   INCLUDE_ADMIT: ${{ inputs.INCLUDE_ADMIT }}
-  WITH_COV: ${{ inputs.WITH_COV }}
-  RETAIN_ENV: ${{ inputs.RETAIN_ENV }}
+  WITH_FEATURE_COV: ${{ inputs.WITH_FEATURE_COV }}
+  IS_ARM: ${{ inputs.IS_ARM }}
 
 jobs:
   deploy:
@@ -96,7 +96,8 @@ jobs:
         id: apply_resource
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          ./bin/elastic-cluster.sh --template ${CLUSTER_NAME} --linuxdistro ${LINUX_DISTRO}
+          [[ "${IS_ARM}" == "true" ]] && arm_arg="--arm"
+          ./bin/elastic-cluster.sh --template ${CLUSTER_NAME} --linuxdistro ${LINUX_DISTRO} ${arm_arg}
           conf_name=/var/local/env/${PR_NUMBER}-${BUILD_TYPE}-${LINUX_DISTRO}-starrocks_deploy.conf
           cp conf/starrocks_deploy.conf ${conf_name}
           echo "deploy_conf_file=${conf_name}" >> $GITHUB_OUTPUT
@@ -107,11 +108,7 @@ jobs:
         run: |
           cd ci-tool && source lib/init.sh
           echo ${TAR_PATH}
-          if [[ "${WITH_COV}" == "true" ]]; then
-            ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${TAR_PATH} --with-coverage
-          else
-            ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${TAR_PATH}
-          fi
+          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${TAR_PATH} --with-coverage
 
       - name: Clean ENV
         if: always()
@@ -231,7 +228,7 @@ jobs:
       - name: Restart BE (${{needs.deploy.outputs.be_list}})
         run: |
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
-          [[ "${WITH_COV}" != "true" ]] && skip_gcov="--skip-gcov"
+          [[ "${WITH_FEATURE_COV}" != "true" ]] && skip_gcov="--skip-gcov"
           ./bin/system-cov-be.sh --pr ${PR_NUMBER} --branch ${BRANCH} --repository ${{ github.repository }} ${skip_gcov}
 
       - name: Clean ENV
