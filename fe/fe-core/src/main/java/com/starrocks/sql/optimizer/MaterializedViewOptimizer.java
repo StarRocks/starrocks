@@ -29,12 +29,23 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 public class MaterializedViewOptimizer {
     public MvPlanContext optimize(MaterializedView mv,
                                   ConnectContext connectContext) {
-        return optimize(mv, connectContext, true);
+        return optimize(mv, connectContext, true, true);
     }
 
     public MvPlanContext optimize(MaterializedView mv,
                                   ConnectContext connectContext,
-                                  boolean inlineView) {
+                                  boolean inlineView,
+                                  boolean isCheckNonDeterministicFunction) {
+        // bind scope force to ensure thread local is set correctly by using connectContext
+        try (var guard = connectContext.bindScope()) {
+            return optimizeImpl(mv, connectContext, inlineView, isCheckNonDeterministicFunction);
+        }
+    }
+
+    private MvPlanContext optimizeImpl(MaterializedView mv,
+                                       ConnectContext connectContext,
+                                       boolean inlineView,
+                                       boolean isCheckNonDeterministicFunction) {
         // optimize the sql by rule and disable rule based materialized view rewrite
         OptimizerOptions optimizerOptions = OptimizerOptions.newRuleBaseOpt();
         // Disable partition prune for mv's plan so no needs  to compensate pruned predicates anymore.
@@ -63,15 +74,25 @@ public class MaterializedViewOptimizer {
             return new MvPlanContext(false, "MV Plan parse failed");
         }
         // check whether mv's defined query contains non-deterministic functions
-        Pair<Boolean, String> containsNonDeterministicFunctions = AnalyzerUtils.containsNonDeterministicFunction(stmt);
-        if (containsNonDeterministicFunctions != null && containsNonDeterministicFunctions.first) {
-            String invalidPlanReason = String.format("MV contains non-deterministic functions(%s)",
+        final Pair<Boolean, String> containsNonDeterministicFunctions = AnalyzerUtils.containsNonDeterministicFunction(stmt);
+        final boolean containsNDFunctions = containsNonDeterministicFunctions != null && containsNonDeterministicFunctions.first;
+        if (isCheckNonDeterministicFunction && containsNDFunctions) {
+            final String invalidPlanReason = String.format("MV contains non-deterministic functions(%s)",
                     containsNonDeterministicFunctions.second);
             return new MvPlanContext(false, invalidPlanReason);
         }
+        // push down mode
         int originAggPushDownMode = connectContext.getSessionVariable().getCboPushDownAggregateMode();
         if (originAggPushDownMode != -1) {
             connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
+        }
+        // disable function fold constants
+        final boolean originDisableFunctionFoldConstants = connectContext.getSessionVariable().isDisableFunctionFoldConstants();
+        if (!isCheckNonDeterministicFunction) {
+            // In some cases(eg, transparent mv), we can generate a plan for mv even
+            // if it contains non-deterministic functions, but we need to disable function fold constants because
+            // non-deterministic functions can be evaluated for each query.
+            connectContext.getSessionVariable().setDisableFunctionFoldConstants(true);
         }
 
         try {
@@ -89,10 +110,11 @@ public class MaterializedViewOptimizer {
             if (!isValidPlan) {
                 invalidPlanReason = MvUtils.getInvalidReason(mvPlan, inlineView);
             }
-            return new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory, isValidPlan, invalidPlanReason);
+            return new MvPlanContext(mvPlan, plans.second.getOutputColumn(), columnRefFactory, isValidPlan,
+                    containsNDFunctions, invalidPlanReason);
         } finally {
             connectContext.getSessionVariable().setCboPushDownAggregateMode(originAggPushDownMode);
+            connectContext.getSessionVariable().setDisableFunctionFoldConstants(originDisableFunctionFoldConstants);
         }
-
     }
 }
