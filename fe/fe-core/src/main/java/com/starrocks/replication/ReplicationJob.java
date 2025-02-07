@@ -147,6 +147,9 @@ public class ReplicationJob implements GsonPostProcessable {
         @SerializedName(value = "version")
         private final long version;
 
+        @SerializedName(value = "dataVersion")
+        private final long dataVersion;
+
         @SerializedName(value = "srcVersion")
         private final long srcVersion;
 
@@ -156,10 +159,11 @@ public class ReplicationJob implements GsonPostProcessable {
         @SerializedName(value = "indexInfos")
         private final Map<Long, IndexInfo> indexInfos;
 
-        public PartitionInfo(long partitionId, long version, long srcVersion, long srcVersionEpoch,
-                Map<Long, IndexInfo> indexInfos) {
+        public PartitionInfo(long partitionId, long version, long dataVersion,
+                long srcVersion, long srcVersionEpoch, Map<Long, IndexInfo> indexInfos) {
             this.partitionId = partitionId;
             this.version = version;
+            this.dataVersion = dataVersion;
             this.srcVersion = srcVersion;
             this.srcVersionEpoch = srcVersionEpoch;
             this.indexInfos = indexInfos;
@@ -171,6 +175,10 @@ public class ReplicationJob implements GsonPostProcessable {
 
         public long getVersion() {
             return version;
+        }
+
+        public long getDataVersion() {
+            return dataVersion;
         }
 
         public long getSrcVersion() {
@@ -653,13 +661,13 @@ public class ReplicationJob implements GsonPostProcessable {
                     throw new MetaNotFoundException("Partition " + tPartitionInfo.partition_id + " in table "
                             + table.getName() + " in database " + db.getFullName() + " not found");
                 }
-                Preconditions.checkState(partition.getCommittedVersion() == partition.getVisibleVersion(),
+                Preconditions.checkState(partition.getCommittedDataVersion() == partition.getDataVersion(),
                         "Partition " + tPartitionInfo.partition_id + " in table " + table.getName()
                                 + " in database " + db.getFullName() + " publish version not finished");
-                Preconditions.checkState(partition.getVisibleVersion() <= tPartitionInfo.src_version,
-                        "Target visible version: " + partition.getVisibleVersion()
-                                + " is larger than source visible version: " + tPartitionInfo.src_version);
-                if (partition.getVisibleVersion() == tPartitionInfo.src_version) {
+                Preconditions.checkState(partition.getDataVersion() <= tPartitionInfo.src_version,
+                        "Target data version: " + partition.getDataVersion()
+                                + " is larger than source data version: " + tPartitionInfo.src_version);
+                if (partition.getDataVersion() == tPartitionInfo.src_version) {
                     continue;
                 }
                 PartitionInfo partitionInfo = initPartitionInfo(olapTable, tPartitionInfo, partition);
@@ -708,7 +716,7 @@ public class ReplicationJob implements GsonPostProcessable {
             IndexInfo indexInfo = initIndexInfo(olapTable, tIndexInfo, index);
             indexInfos.put(indexInfo.getIndexId(), indexInfo);
         }
-        return new PartitionInfo(tPartitionInfo.partition_id, partition.getVisibleVersion(),
+        return new PartitionInfo(tPartitionInfo.partition_id, partition.getVisibleVersion(), partition.getDataVersion(),
                 tPartitionInfo.src_version, tPartitionInfo.src_version_epoch, indexInfos);
     }
 
@@ -765,13 +773,13 @@ public class ReplicationJob implements GsonPostProcessable {
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
         for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
             PhysicalPartition srcPartition = srcTable.getPhysicalPartition(physicalPartition.getName());
-            Preconditions.checkState(physicalPartition.getCommittedVersion() == physicalPartition.getVisibleVersion(),
+            Preconditions.checkState(physicalPartition.getCommittedDataVersion() == physicalPartition.getDataVersion(),
                     "Partition " + physicalPartition.getName() + " in table " + table.getName()
                             + " publish version not finished");
-            Preconditions.checkState(physicalPartition.getVisibleVersion() <= srcPartition.getVisibleVersion(),
-                    "Target visible version: " + physicalPartition.getVisibleVersion()
-                            + " is larger than source visible version: " + srcPartition.getVisibleVersion());
-            if (physicalPartition.getVisibleVersion() == srcPartition.getVisibleVersion()) {
+            Preconditions.checkState(physicalPartition.getDataVersion() <= srcPartition.getDataVersion(),
+                    "Target data version: " + physicalPartition.getDataVersion()
+                            + " is larger than source data version: " + srcPartition.getDataVersion());
+            if (physicalPartition.getDataVersion() == srcPartition.getDataVersion()) {
                 continue;
             }
             PartitionInfo partitionInfo = initPartitionInfo(table, srcTable, physicalPartition, srcPartition,
@@ -792,8 +800,8 @@ public class ReplicationJob implements GsonPostProcessable {
             IndexInfo indexInfo = initIndexInfo(table, srcTable, index, srcIndex, srcSystemInfoService);
             indexInfos.put(indexInfo.getIndexId(), indexInfo);
         }
-        return new PartitionInfo(partition.getId(), partition.getVisibleVersion(), srcPartition.getVisibleVersion(),
-                srcPartition.getVersionEpoch(), indexInfos);
+        return new PartitionInfo(partition.getId(), partition.getVisibleVersion(), partition.getDataVersion(),
+                srcPartition.getDataVersion(), srcPartition.getVersionEpoch(), indexInfos);
     }
 
     private static IndexInfo initIndexInfo(OlapTable table, OlapTable srcTable, MaterializedIndex index,
@@ -934,7 +942,8 @@ public class ReplicationJob implements GsonPostProcessable {
                                     tableId, partitionInfo.getPartitionId(), indexInfo.getIndexId(),
                                     tabletInfo.getTabletId(), getTabletType(tableType), transactionId,
                                     indexInfo.getSchemaHash(), partitionInfo.getVersion(),
-                                    srcToken, tabletInfo.getSrcTabletId(), getTabletType(srcTableType),
+                                    partitionInfo.getDataVersion(), srcToken,
+                                    tabletInfo.getSrcTabletId(), getTabletType(srcTableType),
                                     indexInfo.getSrcSchemaHash(), partitionInfo.getSrcVersion(),
                                     replicaInfo.getSrcBackends(),
                                     Config.replication_transaction_timeout_sec);
@@ -975,7 +984,7 @@ public class ReplicationJob implements GsonPostProcessable {
                         ReplicateSnapshotTask task = new ReplicateSnapshotTask(replicaInfo.getBackendId(), databaseId,
                                 tableId, partitionInfo.getPartitionId(), indexInfo.getIndexId(),
                                 tabletInfo.getTabletId(), getTabletType(tableType), transactionId,
-                                indexInfo.getSchemaHash(), partitionInfo.getVersion(),
+                                indexInfo.getSchemaHash(), partitionInfo.getVersion(), partitionInfo.getDataVersion(),
                                 srcToken, tabletInfo.getSrcTabletId(), getTabletType(srcTableType),
                                 indexInfo.getSrcSchemaHash(), partitionInfo.getSrcVersion(),
                                 flippedSrcSnapshotInfos, encryptionMeta);
