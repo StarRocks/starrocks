@@ -1199,6 +1199,7 @@ struct TTableFunctionNode {
     2: optional list<Types.TSlotId> param_columns
     3: optional list<Types.TSlotId> outer_columns
     4: optional list<Types.TSlotId> fn_result_columns
+    5: optional bool fn_result_required
 }
 
 struct TConnectorScanNode {  
