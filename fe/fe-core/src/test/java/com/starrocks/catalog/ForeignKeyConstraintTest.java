@@ -16,6 +16,7 @@ package com.starrocks.catalog;
 
 import com.google.api.client.util.Lists;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.server.GlobalStateMgr;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -309,5 +310,11 @@ public class ForeignKeyConstraintTest {
         Assert.assertEquals(1, foreignKeyConstraints1.get(0).getColumnRefPairs().size());
         Assert.assertEquals(ColumnId.create("lo_custkey"), foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).first);
         Assert.assertEquals(ColumnId.create("c_custkey"), foreignKeyConstraints1.get(0).getColumnRefPairs().get(0).second);
+    }
+
+    @Test
+    public void testFKGetShowCreateTableConstraintDesc() {
+        Assert.assertEquals("", ForeignKeyConstraint.getShowCreateTableConstraintDesc(null, null));
+        Assert.assertEquals("", UniqueConstraint.getShowCreateTableConstraintDesc(null, null));
     }
 }
