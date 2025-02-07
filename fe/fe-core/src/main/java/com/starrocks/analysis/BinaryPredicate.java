@@ -136,8 +136,8 @@ public class BinaryPredicate extends Predicate implements Writable {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (!super.equals(obj)) {
+    public boolean equalsWithoutChild(Object obj) {
+        if (!super.equalsWithoutChild(obj)) {
             return false;
         }
         return ((BinaryPredicate) obj).opcode == this.opcode;
