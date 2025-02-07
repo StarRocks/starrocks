@@ -87,11 +87,12 @@ inline Range<T> Range<T>::intersection(const Range& r) const {
 template <typename T>
 inline Range<T> Range<T>::filter(const Filter* const filter) const {
     DCHECK(span_size() == filter->size());
-    int32_t start = filter->size();
+    const int32_t len = filter->size();
+    int32_t start = len;
     int32_t end = -1;
-    for (int32_t i = 0; i < filter->size() && start > end; i++) {
+    for (int32_t i = 0; i < len && start > end; i++) {
         start = start > i && filter->data()[i] == 1 ? i : start;
-        int32_t tail_index = filter->size() - 1 - i;
+        int32_t tail_index = len - 1 - i;
         end = end < tail_index && filter->data()[tail_index] == 1 ? tail_index : end;
     }
     return start <= end ? Range<T>(_begin + start, _begin + end + 1) : Range<T>(_begin, _begin);
