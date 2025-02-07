@@ -112,6 +112,7 @@ import com.starrocks.sql.optimizer.rule.tree.PushDownAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.PushDownDistinctAggregateRule;
 import com.starrocks.sql.optimizer.rule.tree.ScalarOperatorsReuseRule;
 import com.starrocks.sql.optimizer.rule.tree.SimplifyCaseWhenPredicateRule;
+import com.starrocks.sql.optimizer.rule.tree.SkewShuffleJoinEliminationRule;
 import com.starrocks.sql.optimizer.rule.tree.SubfieldExprNoCopyRule;
 import com.starrocks.sql.optimizer.rule.tree.lowcardinality.LowCardinalityRewriteRule;
 import com.starrocks.sql.optimizer.rule.tree.prunesubfield.PruneSubfieldRule;
@@ -566,7 +567,7 @@ public class QueryOptimizer extends Optimizer {
 
         // apply skew join optimize after push down join on expression to child project,
         // we need to compute the stats of child project(like subfield).
-         if (sessionVariable.isEnableOptimizerSkewJoinByQueryRewrite() &&
+        if (sessionVariable.isEnableOptimizerSkewJoinByQueryRewrite() &&
                 !sessionVariable.isEnableOptimizerSkewJoinByBroadCastSkewValues()) {
             skewJoinOptimize(tree, rootTaskContext);
         }
