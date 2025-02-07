@@ -53,10 +53,16 @@ public class RestoreClusterSnapshotMgr {
     public static void init(String clusterSnapshotYamlFile, String[] args) throws StarRocksException {
         for (String arg : args) {
             if (arg.equalsIgnoreCase("-cluster_snapshot")) {
-                LOG.info("FE start to restore from a cluster snapshot");
+                LOG.info("FE start to restore from a cluster snapshot (-cluster_snapshot)");
                 instance = new RestoreClusterSnapshotMgr(clusterSnapshotYamlFile);
                 return;
             }
+        }
+
+        String restoreClusterSnapshotEnv = System.getenv("RESTORE_CLUSTER_SNAPSHOT");
+        if (restoreClusterSnapshotEnv != null && restoreClusterSnapshotEnv.equalsIgnoreCase("true")) {
+            LOG.info("FE start to restore from a cluster snapshot (RESTORE_CLUSTER_SNAPSHOT=true)");
+            instance = new RestoreClusterSnapshotMgr(clusterSnapshotYamlFile);
         }
     }
 
