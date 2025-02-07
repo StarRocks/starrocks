@@ -397,11 +397,6 @@ public class IntLiteral extends LiteralExpr {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        return super.equals(obj);
-    }
-
-    @Override
     public void parseMysqlParam(ByteBuffer data) {
         switch (type.getPrimitiveType()) {
             case TINYINT:

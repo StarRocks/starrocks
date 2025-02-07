@@ -121,8 +121,8 @@ public class CaseExpr extends Expr {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (!super.equals(obj)) {
+    public boolean equalsWithoutChild(Object obj) {
+        if (!super.equalsWithoutChild(obj)) {
             return false;
         }
         CaseExpr expr = (CaseExpr) obj;

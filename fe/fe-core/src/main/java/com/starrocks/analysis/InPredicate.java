@@ -165,8 +165,8 @@ public class InPredicate extends Predicate {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (super.equals(obj)) {
+    public boolean equalsWithoutChild(Object obj) {
+        if (super.equalsWithoutChild(obj)) {
             InPredicate expr = (InPredicate) obj;
             return isNotIn == expr.isNotIn;
         }

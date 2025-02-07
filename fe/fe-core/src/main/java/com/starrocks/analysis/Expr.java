@@ -871,12 +871,27 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
     @Override
     public abstract Expr clone();
 
-    @Override
-    public boolean equals(Object obj) {
-        if (obj == null) {
+    public boolean equalsWithoutChild(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (obj == null || (obj.getClass() != this.getClass())) {
             return false;
         }
-        if (obj.getClass() != this.getClass()) {
+        Expr expr = (Expr) obj;
+        if (fn == null && expr.fn == null) {
+            return true;
+        }
+        if (fn == null || expr.fn == null) {
+            return false;
+        }
+        // Both fn_'s are not null
+        return fn.equals(expr.fn);
+    }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (!equalsWithoutChild(obj)) {
             return false;
         }
         // don't compare type, this could be called pre-analysis
@@ -889,14 +904,7 @@ public abstract class Expr extends TreeNode<Expr> implements ParseNode, Cloneabl
                 return false;
             }
         }
-        if (fn == null && expr.fn == null) {
-            return true;
-        }
-        if (fn == null || expr.fn == null) {
-            return false;
-        }
-        // Both fn_'s are not null
-        return fn.equals(expr.fn);
+        return true;
     }
 
     @Override

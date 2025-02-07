@@ -204,7 +204,7 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
     }
 
     @Override
-    public boolean equals(Object obj) {
+    public boolean equalsWithoutChild(Object obj) {
         if (this == obj) {
             return true;
         }

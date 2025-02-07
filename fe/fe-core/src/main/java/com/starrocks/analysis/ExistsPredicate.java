@@ -99,7 +99,7 @@ public class ExistsPredicate extends Predicate {
     }
 
     @Override
-    public boolean equals(Object obj) {
+    public boolean equalsWithoutChild(Object obj) {
         if (this == obj) {
             return true;
         }

@@ -1796,8 +1796,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         if (materializationContext.getMv().getRefreshScheme().isSync()) {
             return null;
         }
-        JoinPredicatePushdown.JoinPredicatePushDownContext params = optimizerContext.getJoinPushDownParams();
-        if (!params.enableJoinPredicatePushDown) {
+        if (!optimizerContext.isEnableJoinPredicatePushDown()) {
             return null;
         }
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(rewriteContext.getMvExpression());

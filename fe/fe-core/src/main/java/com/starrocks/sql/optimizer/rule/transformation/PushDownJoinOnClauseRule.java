@@ -39,8 +39,7 @@ public class PushDownJoinOnClauseRule extends TransformationRule {
         if (joinOperator.hasPushDownJoinOnClause()) {
             return false;
         }
-        JoinPredicatePushdown.JoinPredicatePushDownContext params = context.getJoinPushDownParams();
-        if (!params.enableJoinPredicatePushDown) {
+        if (!context.isEnableJoinPredicatePushDown()) {
             return false;
         }
         return joinOperator.getOnPredicate() != null;

@@ -238,11 +238,6 @@ public class FloatLiteral extends LiteralExpr {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        return super.equals(obj);
-    }
-
-    @Override
     public void parseMysqlParam(ByteBuffer data) {
         if (type.getPrimitiveType() == PrimitiveType.FLOAT) {
             value = data.getFloat();
