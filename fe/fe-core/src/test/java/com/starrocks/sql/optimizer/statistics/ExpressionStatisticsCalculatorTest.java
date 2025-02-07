@@ -506,6 +506,18 @@ public class ExpressionStatisticsCalculatorTest {
         columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
         Assert.assertEquals(-1, columnStatistic.getMinValue(), 0.001);
         Assert.assertEquals(1, columnStatistic.getMaxValue(), 0.001);
+        
+        callOperator = new CallOperator(FunctionSet.LIKE, Type.BOOLEAN, Lists.newArrayList(left, right));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
+        Assert.assertEquals(0, columnStatistic.getMinValue(), 0.001);
+        Assert.assertEquals(1, columnStatistic.getMaxValue(), 0.001);
+        Assert.assertEquals(2, columnStatistic.getDistinctValuesCount(), 0.001);
+
+        callOperator = new CallOperator(FunctionSet.ILIKE, Type.BOOLEAN, Lists.newArrayList(left, right));
+        columnStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
+        Assert.assertEquals(0, columnStatistic.getMinValue(), 0.001);
+        Assert.assertEquals(1, columnStatistic.getMaxValue(), 0.001);
+        Assert.assertEquals(2, columnStatistic.getDistinctValuesCount(), 0.001);
         // test multiply/divide column rang is negative
         builder = Statistics.builder();
         leftStatistic = new ColumnStatistic(-100, -10, 0, 0, 20);
