@@ -64,8 +64,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: ${{ env.BASE_REF }}
-          sha: ${{ env.COMMIT_ID }}
+          ref: ${{ env.COMMIT_ID }}
 
       - name: Download BE UT XML
         id: download-ut-xml
