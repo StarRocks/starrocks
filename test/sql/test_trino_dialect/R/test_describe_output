@@ -13,12 +13,12 @@ PREPARE test_table_select2 FROM SELECT c0, 1 FROM t0;
 -- !result
 DESCRIBE OUTPUT test_table_select1;
 -- result:
-c0	default_catalog			INT	4	false
+c0	default_catalog			INT	4	unknown
 -- !result
 DESCRIBE OUTPUT test_table_select2;
 -- result:
-c0	default_catalog			INT	4	false
-expr				TINYINT	1	false
+c0	default_catalog			INT	4	unknown
+expr				TINYINT	1	unknown
 -- !result
 -- name: test_describe_output_expr
 set sql_dialect='trino';
@@ -41,23 +41,23 @@ PREPARE test_table_expr5 FROM SELECT cast('1' as int);
 -- !result
 DESCRIBE OUTPUT test_table_expr1;
 -- result:
-expr				TINYINT	1	false
+expr				TINYINT	1	unknown
 -- !result
 DESCRIBE OUTPUT test_table_expr2;
 -- result:
-expr				NULL_TYPE	1	false
+expr				NULL_TYPE	1	unknown
 -- !result
 DESCRIBE OUTPUT test_table_expr3;
 -- result:
-expr				TINYINT	1	false
+expr				TINYINT	1	unknown
 -- !result
 DESCRIBE OUTPUT test_table_expr4;
 -- result:
-expr				SMALLINT	2	false
+expr				SMALLINT	2	unknown
 -- !result
 DESCRIBE OUTPUT test_table_expr5;
 -- result:
-cast				INT	4	false
+cast				INT	4	unknown
 -- !result
 -- name: test_describe_output_mysql
 set sql_dialect='trino';
@@ -106,6 +106,6 @@ PREPARE test_table_select_mysql FROM SELECT * FROM mysql_ext;
 -- !result
 DESCRIBE OUTPUT test_table_select_mysql;
 -- result:
-id	default_catalog	db_b3bdee94bccb4e079e51a7afb573c8cb	t00	INT	4	false
-s	default_catalog	db_b3bdee94bccb4e079e51a7afb573c8cb	t00	VARCHAR(65533)	16	false
+id	default_catalog	db_814be9bb3213455bbfea7d841ebe827e	t00	INT	4	unknown
+s	default_catalog	db_814be9bb3213455bbfea7d841ebe827e	t00	VARCHAR(65533)	16	unknown
 -- !result

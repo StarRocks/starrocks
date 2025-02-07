@@ -556,8 +556,7 @@ public class ShowStmtAnalyzer {
                 }
                 row.add(column.getType().toString());
                 row.add(String.valueOf(column.getType().getTypeSize()));
-                // TODO
-                row.add("false");
+                row.add("unknown");
 
                 statement.getTotalRows().add(row);
             }
