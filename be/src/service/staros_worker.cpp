@@ -32,6 +32,7 @@
 #include "util/debug_util.h"
 #include "util/lru_cache.h"
 #include "util/sha.h"
+#include "util/starrocks_metrics.h"
 
 // cachemgr thread pool size
 DECLARE_int32(cachemgr_threadpool_size);
@@ -80,6 +81,12 @@ StarOSWorker::StarOSWorker() : _mtx(), _shards(), _fs_cache(new_lru_cache(1024))
 
 StarOSWorker::~StarOSWorker() = default;
 
+uint64_t StarOSWorker::get_table_id(const ShardInfo& shard) {
+    const auto& properties = shard.properties;
+    CHECK(properties.contains("tableId"));
+    return std::stoull(properties.at("tableId"));
+}
+
 absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
     std::unique_lock l(_mtx);
     auto it = _shards.find(shard.id);
@@ -90,7 +97,25 @@ absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
             return st;
         }
     }
+<<<<<<< HEAD
     _shards.insert_or_assign(shard.id, ShardInfoDetails(shard));
+=======
+    auto ret = _shards.insert_or_assign(shard.id, ShardInfoDetails(shard));
+    l.unlock();
+    if (ret.second) {
+#ifndef BE_TEST
+        StarRocksMetrics::instance()->table_metrics_mgr()->register_table(get_table_id(shard));
+#endif
+        // it is an insert op to the map
+        // NOTE:
+        //  1. Since the following statement is invoked outside the lock, it is possible that
+        //     the shard may be removed when retrieving from the callback.
+        //  2. Expect the callback is as quick and simple as possible, otherwise it will occupy
+        //     the GRPC thread too long and blocking response sent back to StarManager. A better
+        //     choice would be: starting a new thread pool and send callback tasks in the thread pool.
+        on_add_shard_event(shard.id);
+    }
+>>>>>>> 000cdd21b ([Enhancement] add more metrics to help locate hotspot issues (#53490))
     return absl::OkStatus();
 }
 
@@ -111,7 +136,14 @@ absl::Status StarOSWorker::invalidate_fs(const ShardInfo& info) {
 
 absl::Status StarOSWorker::remove_shard(const ShardId id) {
     std::unique_lock l(_mtx);
-    _shards.erase(id);
+    auto iter = _shards.find(id);
+    if (iter != _shards.end()) {
+#ifndef BE_TEST
+        uint64_t table_id = get_table_id(iter->second.shard_info);
+        StarRocksMetrics::instance()->table_metrics_mgr()->unregister_table(table_id);
+#endif
+        _shards.erase(iter);
+    }
     return absl::OkStatus();
 }
 

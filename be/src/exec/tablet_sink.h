@@ -42,6 +42,7 @@ class AddBatchCounter;
 class NodeChannel;
 class IndexChannel;
 class TabletSinkSender;
+class TableMetrics;
 
 // Write data to Olap Table.
 // When OlapTableSink::open() called, there will be a consumer thread running in the background.

@@ -661,8 +661,7 @@ void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op
     }
 }
 
-void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, int64_t schedule_count,
-                              int64_t execution_time) {
+void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     stop_timers();
     int64_t time_spent = 0;
     // The driver may be destructed after finalizing, so use a temporal driver to record
