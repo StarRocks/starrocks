@@ -27,6 +27,7 @@ public class RemoteSnapshotTask extends AgentTask {
     private final TTabletType tabletType;
     private final int schemaHash;
     private final long visibleVersion;
+    private final long dataVersion;
 
     private final String srcToken;
     private final long srcTabletId;
@@ -38,7 +39,7 @@ public class RemoteSnapshotTask extends AgentTask {
     private final int timeoutSec;
 
     public RemoteSnapshotTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
-            TTabletType tabletType, long transactionId, int schemaHash, long visibleVersion,
+            TTabletType tabletType, long transactionId, int schemaHash, long visibleVersion, long dataVersion,
             String srcToken, long srcTabletId, TTabletType srcTabletType, int srcSchemaHash,
             long srcVisibleVersion, List<TBackend> srcBackends, int timeoutSec) {
         super(null, backendId, TTaskType.REMOTE_SNAPSHOT, dbId, tableId, partitionId, indexId, tabletId, tabletId,
@@ -47,6 +48,7 @@ public class RemoteSnapshotTask extends AgentTask {
         this.tabletType = tabletType;
         this.schemaHash = schemaHash;
         this.visibleVersion = visibleVersion;
+        this.dataVersion = dataVersion;
         this.srcToken = srcToken;
         this.srcTabletId = srcTabletId;
         this.srcTabletType = srcTabletType;
@@ -66,6 +68,7 @@ public class RemoteSnapshotTask extends AgentTask {
         request.setTablet_type(tabletType);
         request.setSchema_hash(schemaHash);
         request.setVisible_version(visibleVersion);
+        request.setData_version(dataVersion);
 
         request.setSrc_token(srcToken);
         request.setSrc_tablet_id(srcTabletId);
@@ -85,6 +88,7 @@ public class RemoteSnapshotTask extends AgentTask {
         sb.append(", tablet id: ").append(tabletId).append(", tablet type: ").append(tabletType);
         sb.append(", schema hash: ").append(schemaHash);
         sb.append(", visible version: ").append(visibleVersion);
+        sb.append(", data version: ").append(dataVersion);
         sb.append(", src token: ").append(srcToken).append(", src tablet id: ").append(srcTabletId);
         sb.append(", src tablet type:").append(srcTabletType).append(", src schema hash: ").append(srcSchemaHash);
         sb.append(", src visible version: ").append(srcVisibleVersion);

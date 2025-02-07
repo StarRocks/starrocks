@@ -23,6 +23,7 @@ import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.Backend;
@@ -68,7 +69,7 @@ public class ReplicationJobTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_NOTHING);
         AnalyzeTestUtil.init();
         starRocksAssert = new StarRocksAssert(AnalyzeTestUtil.getConnectContext());
         starRocksAssert.withDatabase("test").useDatabase("test");
@@ -76,13 +77,13 @@ public class ReplicationJobTest {
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
 
         String sql = "create table single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
-                    "distributed by hash(key1) buckets 1\n" +
-                    "properties('replication_num' = '1'); ";
+                "distributed by hash(key1) buckets 1\n" +
+                "properties('replication_num' = '1'); ";
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql,
-                    AnalyzeTestUtil.getConnectContext());
+                AnalyzeTestUtil.getConnectContext());
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
         table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                    .getTable(db.getFullName(), "single_partition_duplicate_key");
+                .getTable(db.getFullName(), "single_partition_duplicate_key");
         srcTable = DeepCopy.copyWithGson(table, OlapTable.class);
 
         partition = table.getPartitions().iterator().next();
@@ -106,16 +107,16 @@ public class ReplicationJobTest {
         srcPartition.getDefaultPhysicalPartition().setNextDataVersion(99);
 
         job = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
     }
 
     @Test
     public void testJobId() {
         ReplicationJob jobWithoutId = new ReplicationJob(null, "test_token", db.getId(), table, srcTable,
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         Assert.assertFalse(jobWithoutId.getJobId().isEmpty());
         ReplicationJob jobWithId = new ReplicationJob("fake_id", "test_token", db.getId(), table, srcTable,
-                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo());
         Assert.assertEquals("fake_id", jobWithId.getJobId());
     }
 
@@ -141,7 +142,7 @@ public class ReplicationJobTest {
             job.finishRemoteSnapshotTask((RemoteSnapshotTask) task, request);
 
             Deencapsulation.invoke(new LeaderImpl(), "finishRemoteSnapshotTask",
-                        (RemoteSnapshotTask) task, request);
+                    (RemoteSnapshotTask) task, request);
             ((RemoteSnapshotTask) task).toThrift();
             task.toString();
         }
@@ -155,7 +156,7 @@ public class ReplicationJobTest {
             job.finishReplicateSnapshotTask((ReplicateSnapshotTask) task, request);
 
             Deencapsulation.invoke(new LeaderImpl(), "finishReplicateSnapshotTask",
-                        (ReplicateSnapshotTask) task, request);
+                    (ReplicateSnapshotTask) task, request);
             ((ReplicateSnapshotTask) task).toThrift();
             task.toString();
         }
@@ -165,8 +166,9 @@ public class ReplicationJobTest {
 
         Assert.assertEquals(partition.getDefaultPhysicalPartition().getCommittedVersion(),
                 srcPartition.getDefaultPhysicalPartition().getVisibleVersion());
+        // data version == visible version in shared-nothing mode
         Assert.assertEquals(partition.getDefaultPhysicalPartition().getCommittedDataVersion(),
-                srcPartition.getDefaultPhysicalPartition().getDataVersion());
+                srcPartition.getDefaultPhysicalPartition().getVisibleVersion());
     }
 
     @Test
@@ -349,7 +351,7 @@ public class ReplicationJobTest {
             tabletInfo.replica_replication_infos = new ArrayList<TReplicaReplicationInfo>();
             TReplicaReplicationInfo replicaInfo = new TReplicaReplicationInfo();
             Backend backend = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackends().iterator()
-                        .next();
+                    .next();
             replicaInfo.src_backend = new TBackend(backend.getHost(), backend.getBePort(), backend.getHttpPort());
             tabletInfo.replica_replication_infos.add(replicaInfo);
         }

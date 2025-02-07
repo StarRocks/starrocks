@@ -30,7 +30,7 @@ import java.util.Map;
  */
 public class ReplicationTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("partitionVersions")
-    private Map<Long, Long> partitionVersions; // The version of partitions
+    private Map<Long, Long> partitionVersions; // The data version of partitions, not the visible version
 
     @SerializedName("partitionVersionEpochs")
     private Map<Long, Long> partitionVersionEpochs; // The version epoch of partitions
