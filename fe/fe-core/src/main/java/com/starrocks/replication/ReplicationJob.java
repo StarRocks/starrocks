@@ -771,17 +771,6 @@ public class ReplicationJob implements GsonPostProcessable {
     private static Map<Long, PartitionInfo> initPartitionInfos(OlapTable table, OlapTable srcTable,
             SystemInfoService srcSystemInfoService) {
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
-<<<<<<< HEAD
-        for (PhysicalPartition partition : table.getPhysicalPartitions()) {
-            PhysicalPartition srcPartition = srcTable.getPhysicalPartition(partition.getName());
-            Preconditions.checkState(partition.getCommittedVersion() == partition.getVisibleVersion(),
-                    "Partition " + partition.getName() + " in table " + table.getName()
-                            + " publish version not finished");
-            Preconditions.checkState(partition.getVisibleVersion() <= srcPartition.getVisibleVersion(),
-                    "Target visible version: " + partition.getVisibleVersion()
-                            + " is larger than source visible version: " + srcPartition.getVisibleVersion());
-            if (partition.getVisibleVersion() == srcPartition.getVisibleVersion()) {
-=======
         for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
             PhysicalPartition srcPartition = srcTable.getPhysicalPartition(physicalPartition.getName());
             Preconditions.checkState(physicalPartition.getCommittedDataVersion() == physicalPartition.getDataVersion(),
@@ -791,10 +780,9 @@ public class ReplicationJob implements GsonPostProcessable {
                     "Target data version: " + physicalPartition.getDataVersion()
                             + " is larger than source data version: " + srcPartition.getDataVersion());
             if (physicalPartition.getDataVersion() == srcPartition.getDataVersion()) {
->>>>>>> 5f4c5cbc73 ([Enhancement] Support replication from another cluster  with compaction enabled in shared-data mode (#54787))
                 continue;
             }
-            PartitionInfo partitionInfo = initPartitionInfo(table, srcTable, partition, srcPartition,
+            PartitionInfo partitionInfo = initPartitionInfo(table, srcTable, physicalPartition, srcPartition,
                     srcSystemInfoService);
             partitionInfos.put(partitionInfo.getPartitionId(), partitionInfo);
         }

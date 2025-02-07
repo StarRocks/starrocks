@@ -1258,17 +1258,10 @@ public class DatabaseTransactionMgr {
                     ReplicationTxnCommitAttachment replicationTxnAttachment = (ReplicationTxnCommitAttachment) transactionState
                             .getTxnCommitAttachment();
                     Map<Long, Long> partitionVersions = replicationTxnAttachment.getPartitionVersions();
-<<<<<<< HEAD
-                    long newVersion = partitionVersions.get(partitionCommitInfo.getPartitionId());
-                    long versionDiff = newVersion - partition.getVisibleVersion();
-                    partitionCommitInfo.setVersion(newVersion);
-                    partitionCommitInfo.setDataVersion(partition.getDataVersion() + versionDiff);
-=======
-                    long newDataVersion = partitionVersions.get(partitionCommitInfo.getPhysicalPartitionId());
+                    long newDataVersion = partitionVersions.get(partitionCommitInfo.getPartitionId());
                     long dataVersionDiff = newDataVersion - partition.getDataVersion();
                     partitionCommitInfo.setVersion(partition.getCommittedVersion() + dataVersionDiff);
                     partitionCommitInfo.setDataVersion(newDataVersion);
->>>>>>> 5f4c5cbc73 ([Enhancement] Support replication from another cluster  with compaction enabled in shared-data mode (#54787))
                     Map<Long, Long> partitionVersionEpochs = replicationTxnAttachment.getPartitionVersionEpochs();
                     if (partitionVersionEpochs != null) {
                         long newVersionEpoch = partitionVersionEpochs.get(partitionCommitInfo.getPartitionId());

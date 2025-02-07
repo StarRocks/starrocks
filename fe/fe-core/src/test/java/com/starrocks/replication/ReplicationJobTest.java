@@ -82,12 +82,8 @@ public class ReplicationJobTest {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql,
                 AnalyzeTestUtil.getConnectContext());
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
-<<<<<<< HEAD
-        table = (OlapTable) db.getTable("single_partition_duplicate_key");
-=======
         table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                 .getTable(db.getFullName(), "single_partition_duplicate_key");
->>>>>>> 5f4c5cbc73 ([Enhancement] Support replication from another cluster  with compaction enabled in shared-data mode (#54787))
         srcTable = DeepCopy.copyWithGson(table, OlapTable.class);
 
         partition = table.getPartitions().iterator().next();
@@ -168,16 +164,11 @@ public class ReplicationJobTest {
         job.run();
         Assert.assertEquals(ReplicationJobState.COMMITTED, job.getState());
 
-<<<<<<< HEAD
-        Assert.assertEquals(partition.getCommittedVersion(), srcPartition.getVisibleVersion());
-        Assert.assertEquals(partition.getCommittedDataVersion(), srcPartition.getDataVersion());
-=======
-        Assert.assertEquals(partition.getDefaultPhysicalPartition().getCommittedVersion(),
-                srcPartition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(partition.getCommittedVersion(),
+                srcPartition.getVisibleVersion());
         // data version == visible version in shared-nothing mode
-        Assert.assertEquals(partition.getDefaultPhysicalPartition().getCommittedDataVersion(),
-                srcPartition.getDefaultPhysicalPartition().getVisibleVersion());
->>>>>>> 5f4c5cbc73 ([Enhancement] Support replication from another cluster  with compaction enabled in shared-data mode (#54787))
+        Assert.assertEquals(partition.getCommittedDataVersion(),
+                srcPartition.getVisibleVersion());
     }
 
     @Test
