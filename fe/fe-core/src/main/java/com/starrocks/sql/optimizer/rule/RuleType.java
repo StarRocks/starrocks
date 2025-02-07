@@ -202,6 +202,8 @@ public enum RuleType {
 
     TF_CTE_ADD_PROJECTION,
 
+    TF_HOIST_HEAVY_COST_UPON_TOPN,
+
     // The following are implementation rules:
     IMP_OLAP_LSCAN_TO_PSCAN,
     IMP_HIVE_LSCAN_TO_PSCAN,
