@@ -544,8 +544,8 @@ public:
 
     Status compact_op() {
         auto txn_id = next_id();
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, _tablet_metadata->id(), _version, false,
-                                                                    false, nullptr);
+        auto task_context =
+                std::make_unique<CompactionTaskContext>(txn_id, _tablet_metadata->id(), _version, false, nullptr);
         ASSIGN_OR_RETURN(auto task, _tablet_mgr->compact(task_context.get()));
         RETURN_IF_ERROR(task->execute(CompactionTask::kNoCancelFn));
         RETURN_IF_ERROR(publish_single_version(_tablet_metadata->id(), _version + 1, txn_id));
