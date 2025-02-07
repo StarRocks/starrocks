@@ -53,56 +53,48 @@ public class ShowDataDistributionStmtTest {
                     "('c','c','2024-09-21'),('c','c','2024-09-21'),('d','d','2024-09-21')");
             stmt.execute("insert into unpartition_table(col1,col2,ds) " +
                     "values('c','c','2024-09-21'),('c','c','2024-09-21'),('d','d','2024-09-21')");
-            Thread.sleep(3000);
-            //check insert data success
-            stmt.execute("select count(*) from partition_table;");
-            if (stmt.getResultSet().next()) {
-                int count = stmt.getResultSet().getInt(1);
-                System.out.println("ShowDataDistributionStmtTest: 1.partition_table row count = " + count);
-                Assert.assertEquals(count, 6);
-            }
-            stmt.execute("select count(*) from unpartition_table;");
-            if (stmt.getResultSet().next()) {
-                int count = stmt.getResultSet().getInt(1);
-                System.out.println("ShowDataDistributionStmtTest: 1.unpartition_table row count = " + count);
-                Assert.assertEquals(count, 3);
-            }
-            //wait table meta update
-            Thread.sleep(60000);
 
             //2.check
             //2.1 check: partition table
-            //2.1.1 entire table
-            stmt.execute("show data distribution from partition_table;");
+            stmt.execute("select count(*) from partition_table;");
             if (stmt.getResultSet().next()) {
+                //check insert data success and wait table meta update
+                int count = stmt.getResultSet().getInt(1);
+                System.out.println("ShowDataDistributionStmtTest: partition_table row count = " + count);
+                Assert.assertEquals(count, 6);
+                Thread.sleep(60000);
+                
+                //2.1.1 entire table
+                stmt.execute("show data distribution from partition_table;");
                 checkExpAndActValPartitionTable(stmt.getResultSet());
-            }
-            //2.1.2 single partition
-            stmt.execute("show data distribution from partition_table partition(p20240920);");
-            if (stmt.getResultSet().next()) {
+                //2.1.2 single partition
+                stmt.execute("show data distribution from partition_table partition(p20240920);");
                 checkExpAndActValPartitionTable(stmt.getResultSet());
-            }
-            //2.1.3 several partition
-            stmt.execute("show data distribution from partition_table partition(p20240920,p20240921);");
-            if (stmt.getResultSet().next()) {
+                //2.1.3 several partition
+                stmt.execute("show data distribution from partition_table partition(p20240920,p20240921);");
                 checkExpAndActValPartitionTable(stmt.getResultSet());
-            }
-            //2.1.4 not exist partition
-            try {
-                stmt.execute("show data distribution from partition_table partition(p20240929);");
-            } catch (Exception e) {
-                String exp = "Partition does not exist";
-                Assert.assertTrue(e.getMessage().contains(exp));
+                //2.1.4 not exist partition
+                try {
+                    stmt.execute("show data distribution from partition_table partition(p20240929);");
+                } catch (Exception e) {
+                    String exp = "Partition does not exist";
+                    Assert.assertTrue(e.getMessage().contains(exp));
+                }
             }
             System.out.println("ShowDataDistributionStmtTest: 2.1check partition table done!");
 
             //2.2 check: unpartition table
-            stmt.execute("show data distribution from unpartition_table;");
+            stmt.execute("select count(*) from unpartition_table;");
             if (stmt.getResultSet().next()) {
+                //check insert data success and wait table meta update
+                int count = stmt.getResultSet().getInt(1);
+                System.out.println("ShowDataDistributionStmtTest: unpartition_table row count = " + count);
+                Assert.assertEquals(count, 3);
+                Thread.sleep(60000);
+                
+                stmt.execute("show data distribution from unpartition_table;");
                 checkExpAndActValUnPartitionTable(stmt.getResultSet());
-            }
-            stmt.execute("show data distribution from unpartition_table partition(unpartition_table);");
-            if (stmt.getResultSet().next()) {
+                stmt.execute("show data distribution from unpartition_table partition(unpartition_table);");
                 checkExpAndActValUnPartitionTable(stmt.getResultSet());
             }
             System.out.println("ShowDataDistributionStmtTest: 2.2check unpartition table done!");
