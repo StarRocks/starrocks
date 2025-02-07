@@ -50,7 +50,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.concurrent.QueryableReentrantReadWriteLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -233,58 +232,6 @@ public class Database extends MetaObject implements Writable {
         }
     }
 
-    public void checkDataSizeQuota() throws DdlException {
-        Pair<Double, String> quotaUnitPair = DebugUtil.getByteUint(dataQuotaBytes);
-        String readableQuota = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(quotaUnitPair.first) + " "
-                + quotaUnitPair.second;
-        long usedDataQuota = getUsedDataQuotaWithLock();
-        long leftDataQuota = Math.max(dataQuotaBytes - usedDataQuota, 0);
-
-        Pair<Double, String> leftQuotaUnitPair = DebugUtil.getByteUint(leftDataQuota);
-        String readableLeftQuota = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(leftQuotaUnitPair.first) + " "
-                + leftQuotaUnitPair.second;
-
-        LOG.info("database[{}] data quota: left bytes: {} / total: {}",
-                fullQualifiedName, readableLeftQuota, readableQuota);
-
-        if (leftDataQuota == 0L) {
-            throw new DdlException("Database[" + fullQualifiedName
-                    + "] data size exceeds quota[" + readableQuota + "]");
-        }
-    }
-
-    public void checkReplicaQuota() throws DdlException {
-        long usedReplicaQuota = 0;
-        Locker locker = new Locker();
-        locker.lockDatabase(this, LockType.READ);
-        try {
-            for (Table table : this.idToTable.values()) {
-                if (!table.isOlapTableOrMaterializedView()) {
-                    continue;
-                }
-
-                OlapTable olapTable = (OlapTable) table;
-                usedReplicaQuota = usedReplicaQuota + olapTable.getReplicaCount();
-            }
-        } finally {
-            locker.unLockDatabase(this, LockType.READ);
-        }
-
-        long leftReplicaQuota = Math.max(replicaQuotaSize - usedReplicaQuota, 0L);
-        LOG.info("database[{}] replica quota: left number: {} / total: {}",
-                fullQualifiedName, leftReplicaQuota, replicaQuotaSize);
-
-        if (leftReplicaQuota == 0L) {
-            throw new DdlException("Database[" + fullQualifiedName
-                    + "] replica number exceeds quota[" + replicaQuotaSize + "]");
-        }
-    }
-
-    public void checkQuota() throws DdlException {
-        checkDataSizeQuota();
-        checkReplicaQuota();
-    }
-
     public boolean registerTableUnlocked(Table table) {
         if (table == null) {
             return false;
@@ -372,7 +319,6 @@ public class Database extends MetaObject implements Writable {
         }
     }
 
-
     /**
      * Drop a table from this database.
      *
@@ -380,9 +326,9 @@ public class Database extends MetaObject implements Writable {
      * Note: Prefer to modify {@link Table#onDrop(Database, boolean, boolean)} and
      * {@link Table#delete(long, boolean)} rather than this function.
      *
-     * @param tableId the id of the table to be dropped
+     * @param tableId     the id of the table to be dropped
      * @param isForceDrop is this a force drop
-     * @param isReplay is this a log replay operation
+     * @param isReplay    is this a log replay operation
      * @return The dropped table
      */
     public Table unprotectDropTable(long tableId, boolean isForceDrop, boolean isReplay) {

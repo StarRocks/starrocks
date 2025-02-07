@@ -104,6 +104,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
@@ -151,7 +152,10 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         this.db = db;
         this.table = table;
 
-        if (statement.hasSchemaChangeOp()) {
+        List<AlterOpType> alterOpTypes = statement.getAlterClauseList()
+                .stream().map(AlterClause::getOpType).collect(Collectors.toList());
+
+        if (alterOpTypes.contains(AlterOpType.SCHEMA_CHANGE) || alterOpTypes.contains(AlterOpType.OPTIMIZE)) {
             Locker locker = new Locker();
             locker.lockTableWithIntensiveDbLock(db, table.getId(), LockType.WRITE);
             try {
@@ -165,7 +169,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             }
 
             isSynchronous = false;
-        } else if (statement.hasRollupOp()) {
+        } else if (alterOpTypes.contains(AlterOpType.ADD_ROLLUP) || alterOpTypes.contains(AlterOpType.DROP_ROLLUP)) {
             Locker locker = new Locker();
             locker.lockTableWithIntensiveDbLock(db, table.getId(), LockType.WRITE);
             try {
