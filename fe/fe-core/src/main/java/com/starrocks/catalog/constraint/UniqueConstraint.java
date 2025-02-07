@@ -24,11 +24,8 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
-<<<<<<< HEAD
 import com.starrocks.sql.common.MetaUtils;
-=======
 import org.apache.commons.collections.CollectionUtils;
->>>>>>> d6abeca34a ([BugFix] Fix show create table with fk error (#55592))
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
