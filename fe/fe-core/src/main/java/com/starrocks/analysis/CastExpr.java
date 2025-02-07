@@ -241,14 +241,14 @@ public class CastExpr extends Expr {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equalsWithoutChild(Object o) {
         if (this == o) {
             return true;
         }
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        if (!super.equals(o)) {
+        if (!super.equalsWithoutChild(o)) {
             return false;
         }
         CastExpr castExpr = (CastExpr) o;

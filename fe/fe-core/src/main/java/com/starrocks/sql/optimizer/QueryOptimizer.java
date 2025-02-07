@@ -35,7 +35,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
-import com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.join.JoinReorderFactory;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
@@ -465,9 +464,13 @@ public class QueryOptimizer extends Optimizer {
         CTEUtils.collectCteOperators(tree, context);
 
         // see JoinPredicatePushdown
-        JoinPredicatePushdown.JoinPredicatePushDownContext joinPredicatePushDownContext =
-                context.getJoinPushDownParams();
-        joinPredicatePushDownContext.prepare(context, sessionVariable, mvRewriteStrategy);
+        if (sessionVariable.isEnableRboTablePrune()) {
+            context.setEnableJoinEquivalenceDerive(false);
+        }
+        if (mvRewriteStrategy.mvStrategy.isMultiStages()) {
+            context.setEnableJoinEquivalenceDerive(false);
+            context.setEnableJoinPredicatePushDown(false);
+        }
 
         // inline CTE if consume use once
         while (cteContext.hasInlineCTE()) {
@@ -528,7 +531,8 @@ public class QueryOptimizer extends Optimizer {
 
         // rule-based materialized view rewrite: early stage
         doMVRewriteWithMultiStages(tree, rootTaskContext);
-        joinPredicatePushDownContext.reset();
+        context.setEnableJoinEquivalenceDerive(true);
+        context.setEnableJoinPredicatePushDown(true);
 
         // Limit push must be after the column prune,
         // otherwise the Node containing limit may be prune
