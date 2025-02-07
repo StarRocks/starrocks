@@ -99,16 +99,25 @@ public class ShowDataDistributionStmtTest {
             }
             System.out.println("ShowDataDistributionStmtTest: 2.2check unpartition table done!");
 
-            //2.3 check: table not exist
+            //2.3 check: db not exist
+            try {
+                stmt.execute("show data distribution from no_exist_db.unpartition_table;");
+            } catch (Exception e) {
+                String exp = "Database no_exist_db does not exsit";
+                Assert.assertTrue(e.getMessage().contains(exp));
+            }
+            System.out.println("ShowDataDistributionStmtTest: 2.3check db not exist done!");
+
+            //2.4 check: table not exist
             try {
                 stmt.execute("show data distribution from no_exist_table;");
             } catch (Exception e) {
                 String exp = "Table does not exist";
                 Assert.assertTrue(e.getMessage().contains(exp));
             }
-            System.out.println("ShowDataDistributionStmtTest: 2.3check table not exist done!");
+            System.out.println("ShowDataDistributionStmtTest: 2.4check table not exist done!");
 
-            //2.4 check: privilege
+            //2.5 check: privilege
             //create user and grant select privilege on other db
             stmt.execute("CREATE USER IF NOT EXISTS test IDENTIFIED BY 'test';");
             stmt.execute("create database IF NOT EXISTS show_data_distribution_test_privilege_db");
@@ -122,9 +131,9 @@ public class ShowDataDistributionStmtTest {
                         "on TABLE partition_table for this operation";
                 Assert.assertTrue(e.getMessage().contains(exp));
             }
-            System.out.println("ShowDataDistributionStmtTest: 2.4check privilege done!");
+            System.out.println("ShowDataDistributionStmtTest: 2.5check privilege done!");
 
-            //2.5 check: invaild sql
+            //2.6 check: invaild sql
             List<String> invaildSql = Arrays.asList(
                     "show data distribution unpartition_table;",
                     "show data distribution1 from unpartition_table;",
@@ -139,7 +148,7 @@ public class ShowDataDistributionStmtTest {
                     Assert.assertTrue(e.getMessage().contains(exp));
                 }
             }
-            System.out.println("ShowDataDistributionStmtTest: 2.5check invaild sql done!");
+            System.out.println("ShowDataDistributionStmtTest: 2.6check invaild sql done!");
         } finally {
             System.out.println("ShowDataDistributionStmtTest: 2.check done!");
             stmt.close();
