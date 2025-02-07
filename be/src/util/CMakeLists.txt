@@ -61,6 +61,7 @@ set(UTIL_FILES
   thrift_client.cpp
   thrift_server.cpp
   stack_util.cpp
+  table_metrics.cpp
   system_metrics.cpp
   url_parser.cpp
   url_coding.cpp

@@ -187,12 +187,13 @@ struct SimpleTestContext {
         auto operators = pipeline.create_operators(1, 0);
         driver = std::make_unique<PipelineDriver>(operators, query_ctx, fragment_ctx, &pipeline, 1);
         driver->assign_observer();
-        driver_queue = std::make_unique<QuerySharedDriverQueue>();
+        driver_queue = std::make_unique<QuerySharedDriverQueue>(metrics.get_driver_queue_metrics());
         fragment_ctx->init_event_scheduler();
         fragment_ctx->event_scheduler()->attach_queue(driver_queue.get());
     }
 
     Pipeline pipeline;
+    PipelineExecutorMetrics metrics;
     std::unique_ptr<DriverQueue> driver_queue;
     std::unique_ptr<PipelineDriver> driver;
 };

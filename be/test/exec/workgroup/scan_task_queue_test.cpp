@@ -24,6 +24,7 @@
 #include <thread>
 
 #include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/pipeline_metrics.h"
 #include "exec/workgroup/scan_executor.h"
 #include "exec/workgroup/work_group.h"
 #include "testutil/assert.h"
@@ -39,7 +40,8 @@ PARALLEL_TEST(ScanExecutorTest, test_yield) {
                       .set_max_threads(4)
                       .set_max_queue_size(100)
                       .build(&thread_pool));
-    auto executor = std::make_unique<ScanExecutor>(std::move(thread_pool), std::move(queue));
+    pipeline::ScanExecutorMetrics metrics;
+    auto executor = std::make_unique<ScanExecutor>(std::move(thread_pool), std::move(queue), &metrics);
     DeferOp op([&]() { executor->close(); });
     executor->initialize(4);
 

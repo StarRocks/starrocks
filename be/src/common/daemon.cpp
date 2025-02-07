@@ -168,6 +168,7 @@ void calculate_metrics(void* arg_this) {
                 mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value(), datacache_mem_bytes,
                 mem_metrics->jit_cache_mem_bytes.value());
 
+        StarRocksMetrics::instance()->table_metrics_mgr()->cleanup();
         nap_sleep(15, [daemon] { return daemon->stopped(); });
     }
 }

@@ -238,6 +238,7 @@ set(EXEC_FILES
     pipeline/sort/spillable_partition_sort_sink_operator.cpp
     pipeline/sort/local_parallel_merge_sort_source_operator.cpp
     pipeline/sort/sort_context.cpp
+    pipeline/pipeline_metrics.cpp
     pipeline/pipeline_driver_executor.cpp
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp
