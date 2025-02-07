@@ -2048,7 +2048,7 @@ public class DatabaseTransactionMgr {
         }
 
         if (usedQuotaDataBytes == -1) {
-            usedQuotaDataBytes = db.getUsedDataQuotaWithLock();
+            usedQuotaDataBytes = globalStateMgr.getLocalMetastore().getUsedDataQuotaWithLock(db);
         }
 
         long dataQuotaBytes = db.getDataQuota();

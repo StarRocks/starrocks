@@ -113,6 +113,7 @@ import com.starrocks.common.MaterializedViewExceptions;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
@@ -806,16 +807,18 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                 LOG.info("create table[{}] which already exists", tableName);
                 return false;
             }
+
+            // only internal table should check quota and cluster capacity
+            if (!stmt.isExternal()) {
+                // check cluster capacity
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkClusterCapacity();
+
+                // check db quota
+                checkDataSizeQuota(db);
+                checkReplicaQuota(db);
+            }
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
-        }
-
-        // only internal table should check quota and cluster capacity
-        if (!stmt.isExternal()) {
-            // check cluster capacity
-            GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkClusterCapacity();
-            // check db quota
-            db.checkQuota();
         }
 
         AbstractTableFactory tableFactory = TableFactoryProvider.getFactory(stmt.getEngineName());
@@ -2739,10 +2742,16 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
         // check cluster capacity
         GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkClusterCapacity();
-        // check db quota
-        db.checkQuota();
-
         Locker locker = new Locker();
+        locker.lockDatabase(db.getId(), LockType.READ);
+        try {
+            // check db quota
+            checkDataSizeQuota(db);
+            checkReplicaQuota(db);
+        } finally {
+            locker.unLockDatabase(db.getId(), LockType.READ);
+        }
+
         if (!locker.lockDatabaseAndCheckExist(db, LockType.WRITE)) {
             throw new DdlException("create materialized failed. database:" + db.getFullName() + " not exist");
         }
@@ -5007,6 +5016,81 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         Long oldId = tableIdToIncrementId.putIfAbsent(tableId, id);
         if (oldId != null) {
             tableIdToIncrementId.replace(tableId, id);
+        }
+    }
+
+    public void checkDataSizeQuota(Database database) throws DdlException {
+        long dataQuotaBytes = database.getDataQuota();
+        String fullQualifiedName = database.getFullName();
+
+        Pair<Double, String> quotaUnitPair = DebugUtil.getByteUint(dataQuotaBytes);
+        String readableQuota = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(quotaUnitPair.first) + " "
+                + quotaUnitPair.second;
+        long usedDataQuota = 0;
+        for (Table table : database.getTables()) {
+            if (!table.isOlapTableOrMaterializedView()) {
+                continue;
+            }
+
+            OlapTable olapTable = (OlapTable) table;
+            usedDataQuota = usedDataQuota + olapTable.getDataSize();
+        }
+
+        long leftDataQuota = Math.max(dataQuotaBytes - usedDataQuota, 0);
+
+        Pair<Double, String> leftQuotaUnitPair = DebugUtil.getByteUint(leftDataQuota);
+        String readableLeftQuota = DebugUtil.DECIMAL_FORMAT_SCALE_3.format(leftQuotaUnitPair.first) + " "
+                + leftQuotaUnitPair.second;
+
+        LOG.info("database[{}] data quota: left bytes: {} / total: {}",
+                fullQualifiedName, readableLeftQuota, readableQuota);
+
+        if (leftDataQuota == 0L) {
+            throw new DdlException("Database[" + fullQualifiedName
+                    + "] data size exceeds quota[" + readableQuota + "]");
+        }
+    }
+
+    public long getUsedDataQuotaWithLock(Database database) {
+        long usedDataQuota = 0;
+        Locker locker = new Locker();
+        locker.lockDatabase(database.getId(), LockType.READ);
+        try {
+            for (Table table : database.getTables()) {
+                if (!table.isOlapTableOrMaterializedView()) {
+                    continue;
+                }
+
+                OlapTable olapTable = (OlapTable) table;
+                usedDataQuota = usedDataQuota + olapTable.getDataSize();
+            }
+            return usedDataQuota;
+        } finally {
+            locker.unLockDatabase(database.getId(), LockType.READ);
+        }
+    }
+
+    public void checkReplicaQuota(Database database) throws DdlException {
+        String fullQualifiedName = database.getFullName();
+        long replicaQuotaSize = database.getReplicaQuota();
+
+        long usedReplicaQuota = 0;
+        for (Table table : database.getTables()) {
+            if (!table.isOlapTableOrMaterializedView()) {
+                continue;
+            }
+
+            OlapTable olapTable = (OlapTable) table;
+            usedReplicaQuota = usedReplicaQuota + olapTable.getReplicaCount();
+        }
+
+        long leftReplicaQuota = Math.max(replicaQuotaSize - usedReplicaQuota, 0L);
+        LOG.info("database[{}] replica quota: left number: {} / total: {}",
+                fullQualifiedName, leftReplicaQuota, replicaQuotaSize);
+
+        if (leftReplicaQuota == 0L) {
+            throw new DdlException("Database[" + fullQualifiedName
+                    + "] replica number exceeds quota[" + replicaQuotaSize + "]");
         }
     }
 
