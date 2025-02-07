@@ -176,6 +176,12 @@ public:
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
+        // local persistent index will update index version, so we need to load first
+        if (_index_entry == nullptr) {
+            if (_metadata->enable_persistent_index() && _metadata->persistent_index_type() == PersistentIndexTypePB::LOCAL) {
+                RETURN_IF_ERROR(prepare_primary_index());
+            }
+        }
         // still need prepre primary index even there is an empty compaction
         if (_index_entry == nullptr && _has_empty_compaction) {
             // get lock to avoid gc
