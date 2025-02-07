@@ -32,6 +32,7 @@
 #include "fs/fs.h"
 #include "gutil/casts.h"
 #include "io/input_stream.h"
+#include "io/io_profiler.h"
 #include "runtime/exec_env.h"
 #include "storage/options.h"
 #include "util/defer_op.h"
@@ -141,6 +142,7 @@ Status LogBlockContainer::close() {
 
 Status LogBlockContainer::append_data(const std::vector<Slice>& data, size_t total_size) {
     RETURN_IF_ERROR(_writable_file->pre_allocate(total_size));
+    auto scope = IOProfiler::scope(IOProfiler::TAG::TAG_SPILL, 0);
     RETURN_IF_ERROR(_writable_file->appendv(data.data(), data.size()));
     _data_size += total_size;
     return Status::OK();
@@ -175,6 +177,11 @@ public:
     LogBlockReader(const Block* block, const BlockReaderOptions& options = {}) : BlockReader(block, options) {}
 
     ~LogBlockReader() override = default;
+
+    Status read_fully(void* data, int64_t count) override {
+        auto scope = IOProfiler::scope(IOProfiler::TAG_SPILL, 0);
+        return BlockReader::read_fully(data, count);
+    }
 
     std::string debug_string() override { return _block->debug_string(); }
 

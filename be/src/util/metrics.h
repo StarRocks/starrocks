@@ -161,12 +161,14 @@ protected:
     T _value;
 };
 
-template <typename T>
-class CoreLocalCounter : public Metric {
+template <typename T, MetricType Type>
+class CoreLocalMetric : public Metric {
 public:
-    CoreLocalCounter(MetricUnit unit) : Metric(MetricType::COUNTER, unit), _value() {}
+    static_assert(Type == MetricType::COUNTER || Type == MetricType::GAUGE,
+                  "CoreLocalMetric's type must be COUNTER or GAUGE");
 
-    ~CoreLocalCounter() override = default;
+    CoreLocalMetric(MetricUnit unit) : Metric(Type, unit), _value() {}
+    ~CoreLocalMetric() override = default;
 
     std::string to_string() const override {
         std::stringstream ss;
@@ -191,6 +193,11 @@ public:
 protected:
     CoreLocalValue<T> _value;
 };
+
+template <typename T>
+using CoreLocalCounter = CoreLocalMetric<T, MetricType::COUNTER>;
+template <typename T>
+using CoreLocalGauge = CoreLocalMetric<T, MetricType::GAUGE>;
 
 template <typename T>
 class AtomicCounter : public AtomicMetric<T> {
@@ -406,6 +413,8 @@ using IntGauge = AtomicGauge<int64_t>;
 using UIntGauge = AtomicGauge<uint64_t>;
 using DoubleGauge = LockGauge<double>;
 
+using IntCoreLocalGuage = CoreLocalGauge<int64_t>;
+
 } // namespace starrocks
 
 // Convenience macros to metric
@@ -429,3 +438,6 @@ using DoubleGauge = LockGauge<double>;
 
 #define METRIC_DEFINE_DOUBLE_GAUGE(metric_name, unit) \
     starrocks::DoubleGauge metric_name { unit }
+
+#define METRIC_DEFINE_INT_CORE_LOCAL_GAUGE(metric_name, unit) \
+    starrocks::IntCoreLocalGuage metric_name { unit }

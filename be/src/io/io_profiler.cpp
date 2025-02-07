@@ -21,6 +21,9 @@
 #include <unordered_set>
 
 #include "fmt/format.h"
+#include "util/stack_util.h"
+#include "util/starrocks_metrics.h"
+#include "util/system_metrics.h"
 
 namespace starrocks {
 
@@ -90,6 +93,7 @@ struct IOStatEntry {
         return fmt::format("{:>10} {:>10} {:>16} {:>8} {:>16} {:>8} {:>16} {:>8}", "Tablet", "TAG", "read_bytes", "ops",
                            "write_bytes", "ops", "total_bytes", "ops");
     }
+    uint32_t get_tag() const { return id >> 48UL; }
 
     std::string to_string() const {
         uint32_t tag = id >> 48UL;
@@ -121,8 +125,10 @@ void IOProfiler::reset() {
 }
 
 thread_local IOStatEntry* current_io_stat = nullptr;
+thread_local uint32_t current_io_tag = IOProfiler::TAG_NONE;
 
 void IOProfiler::set_context(uint32_t tag, uint64_t tablet_id) {
+    set_tag(tag);
     if (tablet_id == 0 || _context_io_mode == IOMode::IOMODE_NONE) {
         return;
     }
@@ -149,7 +155,13 @@ IOProfiler::IOStat IOProfiler::get_context_io() {
 }
 
 void IOProfiler::set_context(IOStatEntry* entry) {
+    uint32_t tag = entry == nullptr ? TAG::TAG_NONE : entry->get_tag();
+    set_tag(tag);
     current_io_stat = entry;
+}
+
+void IOProfiler::set_tag(uint32_t tag) {
+    current_io_tag = tag;
 }
 
 void IOProfiler::clear_context() {
@@ -194,12 +206,25 @@ void IOProfiler::_add_tls_read(int64_t bytes, int64_t latency_ns) {
     tls_io_stat.read_ops += 1;
     tls_io_stat.read_bytes += bytes;
     tls_io_stat.read_time_ns += latency_ns;
+    auto* metrics = StarRocksMetrics::instance()->system_metrics()->get_io_metrics_by_tag(current_io_tag);
+    if (UNLIKELY(metrics == nullptr)) {
+        // some r/w operations may be performed before metrics are initialized, in which case updating metrics is ignored.
+        return;
+    }
+    metrics->read_ops.increment(1);
+    metrics->read_bytes.increment(bytes);
 }
 
 void IOProfiler::_add_tls_write(int64_t bytes, int64_t latency_ns) {
     tls_io_stat.write_ops += 1;
     tls_io_stat.write_bytes += bytes;
     tls_io_stat.write_time_ns += latency_ns;
+    auto* metrics = StarRocksMetrics::instance()->system_metrics()->get_io_metrics_by_tag(current_io_tag);
+    if (UNLIKELY(metrics == nullptr)) {
+        return;
+    }
+    metrics->write_ops.increment(1);
+    metrics->write_bytes.increment(bytes);
 }
 
 void IOProfiler::_add_tls_sync(int64_t latency_ns) {
@@ -227,6 +252,8 @@ const char* IOProfiler::tag_to_string(uint32_t tag) {
         return "MIGRATE";
     case TAG_SIZE:
         return "SIZE";
+    case TAG_SPILL:
+        return "SPILL";
     default:
         return "UNKNOWN";
     }

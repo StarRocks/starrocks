@@ -44,6 +44,7 @@
 
 #include "gutil/strings/split.h" // for string split
 #include "gutil/strtoint.h"      //  for atoi64
+#include "io/io_profiler.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_worker.h"
@@ -168,6 +169,9 @@ SystemMetrics::~SystemMetrics() {
     for (auto& it : _runtime_filter_metrics) {
         delete it.second;
     }
+    for (auto& it : _io_metrics) {
+        delete it;
+    }
 }
 
 void SystemMetrics::install(MetricRegistry* registry, const std::set<std::string>& disk_devices,
@@ -185,6 +189,7 @@ void SystemMetrics::install(MetricRegistry* registry, const std::set<std::string
     _install_query_cache_metrics(registry);
     _install_runtime_filter_metrics(registry);
     _install_vector_index_cache_metrics(registry);
+    _install_io_metrics(registry);
     _registry = registry;
 }
 
@@ -824,5 +829,20 @@ void SystemMetrics::get_max_net_traffic(const std::map<std::string, int64_t>& ls
 
     *send_rate = max_send / interval_sec;
     *rcv_rate = max_rcv / interval_sec;
+}
+
+void SystemMetrics::_install_io_metrics(MetricRegistry* registry) {
+    for (uint32_t i = 0; i < IOProfiler::TAG::TAG_END; i++) {
+        std::string tag_name = IOProfiler::tag_to_string(i);
+        auto* metrics = new IOMetrics();
+#define REGISTER_IO_METRIC(name) \
+    registry->register_metric("io_" #name, MetricLabels().add("tag", tag_name), &metrics->name);
+        REGISTER_IO_METRIC(read_ops);
+        REGISTER_IO_METRIC(read_bytes);
+        REGISTER_IO_METRIC(write_ops);
+        REGISTER_IO_METRIC(write_bytes);
+
+        _io_metrics.emplace_back(metrics);
+    }
 }
 } // namespace starrocks

@@ -66,6 +66,7 @@
 #include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/ratelimit.h"
+#include "util/starrocks_metrics.h"
 #include "util/time.h"
 
 namespace starrocks {
@@ -85,6 +86,9 @@ Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir)
     _timestamped_version_tracker.construct_versioned_tracker(_tablet_meta->all_rs_metas());
     _max_version_schema = BaseTablet::tablet_schema();
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+#ifndef BE_TEST
+    StarRocksMetrics::instance()->table_metrics_mgr()->register_table(_tablet_meta->table_id());
+#endif
 }
 
 Tablet::Tablet() {
@@ -93,6 +97,9 @@ Tablet::Tablet() {
 
 Tablet::~Tablet() {
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+#ifndef BE_TEST
+    StarRocksMetrics::instance()->table_metrics_mgr()->unregister_table(_tablet_meta->table_id());
+#endif
 }
 
 Status Tablet::_init_once_action() {

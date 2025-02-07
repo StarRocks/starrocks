@@ -14,6 +14,7 @@
 
 #include "exec/pipeline/pipeline_driver_queue.h"
 
+#include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/source_operator.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
@@ -21,12 +22,13 @@
 namespace starrocks::pipeline {
 
 /// QuerySharedDriverQueue.
-QuerySharedDriverQueue::QuerySharedDriverQueue() {
+QuerySharedDriverQueue::QuerySharedDriverQueue(DriverQueueMetrics* metrics) : FactoryMethod(metrics) {
     double factor = 1;
     for (int i = QUEUE_SIZE - 1; i >= 0; --i) {
         // initialize factor for every sub queue,
         // Higher priority queues have more execution time,
         // so they have a larger factor.
+        _queues[i].set_metrics(metrics);
         _queues[i].factor_for_normal = factor;
         factor *= RATIO_OF_ADJACENT_QUEUE;
     }
@@ -57,6 +59,7 @@ void QuerySharedDriverQueue::put_back(const DriverRawPtr driver) {
         _cv.notify_one();
         ++_num_drivers;
     }
+    _metrics->driver_queue_len.increment(1);
 }
 
 void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) {
@@ -74,6 +77,7 @@ void QuerySharedDriverQueue::put_back(const std::vector<DriverRawPtr>& drivers) 
         _cv.notify_one();
     }
     _num_drivers += drivers.size();
+    _metrics->driver_queue_len.increment(drivers.size());
 }
 
 void QuerySharedDriverQueue::put_back_from_executor(const DriverRawPtr driver) {
@@ -121,6 +125,7 @@ StatusOr<DriverRawPtr> QuerySharedDriverQueue::take(const bool block) {
             driver_ptr->set_in_ready(false);
 
             --_num_drivers;
+            _metrics->driver_queue_len.increment(-1);
         }
     }
 
@@ -171,6 +176,7 @@ void SubQuerySharedDriverQueue::put(const DriverRawPtr driver) {
         queue.emplace_back(driver);
     }
     num_drivers++;
+    _metrics->driver_queue_len.increment(1);
 }
 
 void SubQuerySharedDriverQueue::cancel(const DriverRawPtr driver) {
@@ -188,6 +194,7 @@ DriverRawPtr SubQuerySharedDriverQueue::take(const bool block) {
         pending_cancel_queue.pop();
         cancelled_set.insert(driver);
         --num_drivers;
+        _metrics->driver_queue_len.increment(-1);
         return driver;
     }
 
@@ -199,6 +206,7 @@ DriverRawPtr SubQuerySharedDriverQueue::take(const bool block) {
             cancelled_set.erase(iter);
         } else {
             --num_drivers;
+            _metrics->driver_queue_len.increment(-1);
             return driver;
         }
     }
@@ -283,6 +291,7 @@ StatusOr<DriverRawPtr> WorkGroupDriverQueue::take(const bool block) {
     auto maybe_driver = wg_entity->queue()->take(block);
     if (maybe_driver.ok() && maybe_driver.value() != nullptr) {
         --_num_drivers;
+        _metrics->driver_queue_len.increment(-1);
     }
     return maybe_driver;
 }
@@ -352,6 +361,7 @@ void WorkGroupDriverQueue::_put_back(const DriverRawPtr driver) {
     }
 
     ++_num_drivers;
+    _metrics->driver_queue_len.increment(1);
 
     _cv.notify_one();
 }

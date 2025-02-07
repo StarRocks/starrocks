@@ -163,7 +163,6 @@ Status ColumnarSerde::serialize(RuntimeState* state, SerdeContext& ctx, const Ch
 
 StatusOr<ChunkUniquePtr> ColumnarSerde::deserialize(SerdeContext& ctx, BlockReader* reader) {
     char header_buffer[HEADER_SIZE];
-
     RETURN_IF_ERROR(reader->read_fully(header_buffer, HEADER_SIZE));
 
     int32_t sequence_id = UNALIGNED_LOAD32(header_buffer + SEQUENCE_OFFSET);

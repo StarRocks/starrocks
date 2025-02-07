@@ -18,6 +18,7 @@
 
 #include "common/status.h"
 #include "common/statusor.h"
+#include "util/system_metrics.h"
 
 namespace starrocks {
 
@@ -42,6 +43,9 @@ public:
         TAG_ALTER,
         TAG_MIGRATE,
         TAG_SIZE,
+        TAG_SPILL,
+
+        TAG_END,
     };
 
     struct IOStat {
@@ -64,6 +68,7 @@ public:
 
     static void set_context(uint32_t tag, uint64_t tablet_id);
     static void set_context(IOStatEntry* entry);
+    static void set_tag(uint32_t tag);
     static IOStatEntry* get_context();
     static IOStat get_context_io();
     static void clear_context();

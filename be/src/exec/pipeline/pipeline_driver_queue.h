@@ -24,9 +24,11 @@ namespace starrocks::pipeline {
 
 class DriverQueue;
 using DriverQueuePtr = std::unique_ptr<DriverQueue>;
+class DriverQueueMetrics;
 
 class DriverQueue {
 public:
+    DriverQueue(DriverQueueMetrics* metrics) : _metrics(metrics) {}
     virtual ~DriverQueue() = default;
     virtual void close() = 0;
 
@@ -46,6 +48,8 @@ public:
     bool empty() const { return size() == 0; }
 
     virtual bool should_yield(const DriverRawPtr driver, int64_t unaccounted_runtime_ns) const = 0;
+
+    DriverQueueMetrics* _metrics;
 };
 
 // SubQuerySharedDriverQueue is used to store the driver waiting to be executed.
@@ -82,6 +86,7 @@ public:
     inline bool empty() const { return num_drivers == 0; }
 
     inline size_t size() const { return num_drivers; }
+    void set_metrics(DriverQueueMetrics* metrics) { _metrics = metrics; }
 
     std::deque<DriverRawPtr> queue;
     std::queue<DriverRawPtr> pending_cancel_queue;
@@ -93,13 +98,14 @@ public:
 
 private:
     std::atomic<int64_t> _accu_consume_time = 0;
+    DriverQueueMetrics* _metrics;
 };
 
 class QuerySharedDriverQueue : public FactoryMethod<DriverQueue, QuerySharedDriverQueue> {
     friend class FactoryMethod<DriverQueue, QuerySharedDriverQueue>;
 
 public:
-    QuerySharedDriverQueue();
+    QuerySharedDriverQueue(DriverQueueMetrics* metrics);
     ~QuerySharedDriverQueue() override = default;
     void close() override;
     void put_back(const DriverRawPtr driver) override;
@@ -149,6 +155,7 @@ class WorkGroupDriverQueue : public FactoryMethod<DriverQueue, WorkGroupDriverQu
     friend class FactoryMethod<DriverQueue, WorkGroupDriverQueue>;
 
 public:
+    WorkGroupDriverQueue(DriverQueueMetrics* metrics) : FactoryMethod(metrics) {}
     ~WorkGroupDriverQueue() override = default;
     void close() override;
 

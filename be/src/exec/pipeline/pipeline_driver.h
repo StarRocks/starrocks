@@ -255,7 +255,7 @@ public:
     void set_morsel_queue(MorselQueue* morsel_queue) { _morsel_queue = morsel_queue; }
     Status prepare(RuntimeState* runtime_state);
     virtual StatusOr<DriverState> process(RuntimeState* runtime_state, int worker_id);
-    void finalize(RuntimeState* runtime_state, DriverState state, int64_t schedule_count, int64_t execution_time);
+    void finalize(RuntimeState* runtime_state, DriverState state);
     DriverAcct& driver_acct() { return _driver_acct; }
     DriverState driver_state() const { return _state; }
 

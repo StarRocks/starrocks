@@ -39,8 +39,10 @@
 #include <unordered_map>
 #include <vector>
 
+#include "exec/pipeline/pipeline_metrics.h"
 #include "util/metrics.h"
 #include "util/system_metrics.h"
+#include "util/table_metrics.h"
 
 namespace starrocks {
 
@@ -93,6 +95,7 @@ private:
 class StarRocksMetrics {
 public:
     // query execution
+    pipeline::PipelineExecutorMetrics pipeline_executor_metrics;
     METRIC_DEFINE_INT_GAUGE(pipe_prepare_pool_queue_len, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_GAUGE(pipe_scan_executor_queuing, MetricUnit::NOUNIT);
     METRIC_DEFINE_INT_GAUGE(pipe_driver_overloaded, MetricUnit::NOUNIT);
@@ -401,6 +404,9 @@ public:
 
     MetricRegistry* metrics() { return &_metrics; }
     SystemMetrics* system_metrics() { return &_system_metrics; }
+    TableMetricsManager* table_metrics_mgr() { return &_table_metrics_mgr; }
+    TableMetricsPtr table_metrics(uint64_t table_id) { return _table_metrics_mgr.get_table_metrics(table_id); }
+    pipeline::PipelineExecutorMetrics* get_pipeline_executor_metrics() { return &pipeline_executor_metrics; }
 
 private:
     // Don't allow constrctor
@@ -416,6 +422,7 @@ private:
 
     MetricRegistry _metrics;
     SystemMetrics _system_metrics;
+    TableMetricsManager _table_metrics_mgr;
 };
 
 }; // namespace starrocks

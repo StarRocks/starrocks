@@ -47,6 +47,7 @@ class PTabletWriterAddBatchResult;
 class PTabletWriterAddChunkRequest;
 class PTabletWriterAddSegmentRequest;
 class PTabletWriterAddSegmentResult;
+class TableMetrics;
 
 class TabletsChannel {
 public:
@@ -99,6 +100,7 @@ protected:
 
     mutable bthread::Mutex _immutable_partition_ids_lock;
     std::set<int64_t> _immutable_partition_ids;
+    std::shared_ptr<TableMetrics> _table_metrics;
 };
 
 struct TabletsChannelKey {
