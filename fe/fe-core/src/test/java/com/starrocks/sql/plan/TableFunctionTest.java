@@ -14,10 +14,12 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.planner.TableFunctionNode;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Optional;
 
 public class TableFunctionTest extends PlanTestBase {
     @Test
@@ -289,5 +291,39 @@ public class TableFunctionTest extends PlanTestBase {
                 "  |  <slot 28> : bitmap_and(10: b1, 25: sub_bitmap)");
         PlanTestBase.assertContains(plan, "tableFunctionName: unnest_bitmap");
         PlanTestBase.assertNotContains(plan, "bitmap_to_array");
+    }
+
+    @Test
+    public void testUnnesetFnResultNotRequired() throws Exception {
+        Object[][] testCaseList = new Object[][] {
+                {
+                        "select t.* from test_all_type t, unnest(split(t1a, ','))",
+                        false
+                },
+                {
+                        "select t.*, unnest from test_all_type t, unnest(split(t1a, ','))",
+                        true
+                },
+                {
+                        "SELECT y FROM TABLE(generate_series(1, 2)) t(x), LATERAL generate_series(1, 5000) t2(y);",
+                        true
+                }
+        };
+
+        for (Object[] tc : testCaseList) {
+            String sql = (String) tc[0];
+            Boolean isRequired = (Boolean) tc[1];
+            System.out.println(sql);
+            ExecPlan plan = getExecPlan(sql);
+
+            Optional<TableFunctionNode> optTableFuncNode = plan.getFragments()
+                    .stream()
+                    .flatMap(fragment -> fragment.collectNodes().stream())
+                    .filter(planNode -> planNode instanceof TableFunctionNode)
+                    .map(planNode -> (TableFunctionNode) planNode)
+                    .findFirst();
+            Assert.assertTrue(optTableFuncNode.isPresent());
+            Assert.assertEquals(optTableFuncNode.get().isFnResultRequired(), isRequired);
+        }
     }
 }
