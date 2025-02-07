@@ -55,7 +55,20 @@ public class ShowDataDistributionStmtTest {
                     "values('c','c','2024-09-21'),('c','c','2024-09-21'),('d','d','2024-09-21')");
 
             //2.check
-            //2.1 check: partition table
+            //2.0 check: vaild sql
+            List<String> vaildSql = Arrays.asList(
+                    "show data distribution from partition_table;",
+                    "show data distribution from partition_table partition(p20240920);",
+                    "show data distribution from partition_table partition(p20240920,p20240921);",
+                    "show data distribution from unpartition_table;",
+                    "show data distribution from unpartition_table partition(unpartition_table);"
+            );
+            for (String sql : vaildSql) {
+                Assert.assertTrue(stmt.execute(sql));
+            }
+            System.out.println("ShowDataDistributionStmtTest: 2.0check vaild sql done!");
+            
+            //2.1 check value: partition table
             stmt.execute("select count(*) from partition_table;");
             if (stmt.getResultSet().next()) {
                 //check insert data success and wait table meta update
@@ -83,7 +96,7 @@ public class ShowDataDistributionStmtTest {
             }
             System.out.println("ShowDataDistributionStmtTest: 2.1check partition table done!");
 
-            //2.2 check: unpartition table
+            //2.2 check value: unpartition table
             stmt.execute("select count(*) from unpartition_table;");
             if (stmt.getResultSet().next()) {
                 //check insert data success and wait table meta update
