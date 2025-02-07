@@ -42,6 +42,7 @@ public:
             auto* nullable_array_column = down_cast<NullableColumn*>(arg0);
 
             auto offset_column = col_array->offsets_column();
+<<<<<<< HEAD
             auto compacted_offset_column = UInt32Column::create();
             compacted_offset_column->append_datum(Datum(0));
 
@@ -61,6 +62,40 @@ public:
                     compacted_array_elements->append(
                             *(col_array->elements_column()), offset_column->get(row_idx).get_int32(),
                             offset_column->get(row_idx + 1).get_int32() - offset_column->get(row_idx).get_int32());
+=======
+            auto copy_count_column = UInt32Column::create();
+            copy_count_column->append(0);
+            ColumnPtr unnested_array_elements = col_array->elements_column()->clone_empty();
+            uint32_t offset = 0;
+            for (int row_idx = 0; row_idx < arg0->size(); ++row_idx) {
+                if (arg0->is_null(row_idx)) {
+                    if (state->get_is_left_join()) {
+                        // to support unnest with null.
+                        if (state->is_required()) {
+                            unnested_array_elements->append_nulls(1);
+                        }
+                        offset += 1;
+                    }
+                    copy_count_column->append(offset);
+                } else {
+                    if (offset_column->get(row_idx + 1).get_int32() == offset_column->get(row_idx).get_int32() &&
+                        state->get_is_left_join()) {
+                        // to support unnest with null.
+                        if (state->is_required()) {
+                            unnested_array_elements->append_nulls(1);
+                        }
+                        offset += 1;
+                    } else {
+                        auto length =
+                                offset_column->get(row_idx + 1).get_int32() - offset_column->get(row_idx).get_int32();
+                        if (state->is_required()) {
+                            unnested_array_elements->append(*(col_array->elements_column()),
+                                                            offset_column->get(row_idx).get_int32(), length);
+                        }
+                        offset += length;
+                    }
+                    copy_count_column->append(offset);
+>>>>>>> 4be4b5c34e ([Enhancement] Eliminate non-required unnest computation (#55431))
                 }
             }
 

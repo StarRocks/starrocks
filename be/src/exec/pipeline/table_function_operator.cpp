@@ -87,12 +87,21 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
     if (_table_function == nullptr) {
         return Status::InternalError("can't find table function " + table_function_name);
     }
+    if (_tnode.table_function_node.__isset.fn_result_required) {
+        _fn_result_required = _tnode.table_function_node.fn_result_required;
+    } else {
+        _fn_result_required = true;
+    }
     RETURN_IF_ERROR(_table_function->init(table_fn, &_table_function_state));
+<<<<<<< HEAD
 
     _input_chunk_index = 0;
     _table_function_result_eos = false;
     _remain_repeat_times = 0;
 
+=======
+    _table_function_state->set_is_required(_fn_result_required);
+>>>>>>> 4be4b5c34e ([Enhancement] Eliminate non-required unnest computation (#55431))
     _table_function_exec_timer = ADD_TIMER(_unique_metrics, "TableFunctionExecTime");
     _table_function_exec_counter = ADD_COUNTER(_unique_metrics, "TableFunctionExecCount", TUnit::UNIT);
     RETURN_IF_ERROR(_table_function->prepare(_table_function_state));
@@ -195,8 +204,11 @@ ChunkPtr TableFunctionOperator::_build_chunk(const std::vector<ColumnPtr>& colum
     for (size_t i = 0; i < _outer_slots.size(); ++i) {
         chunk->append_column(columns[i], _outer_slots[i]);
     }
-    for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
-        chunk->append_column(columns[_outer_slots.size() + i], _fn_result_slots[i]);
+
+    if (_fn_result_required) {
+        for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
+            chunk->append_column(columns[_outer_slots.size() + i], _fn_result_slots[i]);
+        }
     }
 
     return chunk;
@@ -212,6 +224,7 @@ Status TableFunctionOperator::_process_table_function(RuntimeState* state) {
     }
     return Status::OK();
 }
+<<<<<<< HEAD
 Status TableFunctionOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
     _input_chunk.reset();
     _remain_repeat_times = 0;
@@ -219,5 +232,53 @@ Status TableFunctionOperator::reset_state(RuntimeState* state, const std::vector
     _table_function_result_eos = false;
     _is_finished = false;
     return Status::OK();
+=======
+
+void TableFunctionOperator::_copy_result(const std::vector<ColumnPtr>& columns, uint32_t max_output_size) {
+    DCHECK_LE(_next_output_row, _table_function_result.first[0]->size());
+    DCHECK_LT(_next_output_row_offset, _table_function_result.second->size());
+    uint32_t curr_output_size = columns[0]->size();
+    const auto& fn_result_cols = _table_function_result.first;
+    const auto& offsets_col = _table_function_result.second;
+    while (curr_output_size < max_output_size && _next_output_row < fn_result_cols[0]->size()) {
+        uint32_t start = _next_output_row;
+        uint32_t end = offsets_col->get_data()[_next_output_row_offset + 1];
+        DCHECK_GE(start, offsets_col->get_data()[_next_output_row_offset]);
+        DCHECK_LE(start, end);
+        uint32_t copy_rows = std::min(end - start, max_output_size - curr_output_size);
+        VLOG(2) << "_next_output_row=" << _next_output_row << " start=" << start << " end=" << end
+                << " copy_rows=" << copy_rows << " input_size=" << fn_result_cols[0]->size()
+                << " _next_output_row_offset=" << _next_output_row_offset
+                << " _input_index_of_first_result=" << _input_index_of_first_result;
+
+        if (copy_rows > 0) {
+            // Build outer data, repeat multiple times
+            for (size_t i = 0; i < _outer_slots.size(); ++i) {
+                ColumnPtr& input_column_ptr = _input_chunk->get_column_by_slot_id(_outer_slots[i]);
+                Datum value = input_column_ptr->get(_input_index_of_first_result + _next_output_row_offset);
+                if (value.is_null()) {
+                    DCHECK(columns[i]->is_nullable());
+                    down_cast<NullableColumn*>(columns[i].get())->append_nulls(copy_rows);
+                } else {
+                    columns[i]->append_value_multiple_times(&value, copy_rows);
+                }
+            }
+
+            // Build table function result
+            if (_fn_result_required) {
+                for (size_t i = 0; i < _fn_result_slots.size(); ++i) {
+                    columns[_outer_slots.size() + i]->append(*(fn_result_cols[i]), start, copy_rows);
+                }
+            }
+        }
+
+        curr_output_size += copy_rows;
+        _next_output_row += copy_rows;
+        DCHECK_LE(start + copy_rows, end);
+        if (start + copy_rows == end) {
+            _next_output_row_offset++;
+        }
+    }
+>>>>>>> 4be4b5c34e ([Enhancement] Eliminate non-required unnest computation (#55431))
 }
 } // namespace starrocks::pipeline

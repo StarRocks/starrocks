@@ -70,8 +70,12 @@ private:
     size_t _remain_repeat_times = 0;
     // table function result
     std::pair<Columns, UInt32Column::Ptr> _table_function_result;
+<<<<<<< HEAD
     // table function return result end ?
     bool _table_function_result_eos = false;
+=======
+    bool _fn_result_required = true;
+>>>>>>> 4be4b5c34e ([Enhancement] Eliminate non-required unnest computation (#55431))
     // table function param and return offset
     TableFunctionState* _table_function_state = nullptr;
 

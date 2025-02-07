@@ -2614,6 +2614,12 @@ public class PlanFragmentBuilder {
             }
             udtfOutputTuple.computeMemLayout();
 
+            ColumnRefSet fnResultsRequired = ColumnRefSet.of();
+            optExpression.getRowOutputInfo().getColumnRefMap().values()
+                    .forEach(expr -> fnResultsRequired.union(expr.getUsedColumns()));
+            Optional.ofNullable(physicalTableFunction.getPredicate())
+                    .ifPresent(pred -> fnResultsRequired.union(pred.getUsedColumns()));
+            fnResultsRequired.intersect(physicalTableFunction.getFnResultColRefs());
             TableFunctionNode tableFunctionNode = new TableFunctionNode(context.getNextNodeId(),
                     inputFragment.getPlanRoot(),
                     udtfOutputTuple,
@@ -2623,8 +2629,15 @@ public class PlanFragmentBuilder {
                     physicalTableFunction.getOuterColRefs().stream().map(ColumnRefOperator::getId)
                             .collect(Collectors.toList()),
                     physicalTableFunction.getFnResultColRefs().stream().map(ColumnRefOperator::getId)
+<<<<<<< HEAD
                             .collect(Collectors.toList())
                     );
+=======
+                            .collect(Collectors.toList()),
+                    !fnResultsRequired.isEmpty() || physicalTableFunction.getOuterColRefs().isEmpty()
+            );
+
+>>>>>>> 4be4b5c34e ([Enhancement] Eliminate non-required unnest computation (#55431))
             tableFunctionNode.computeStatistics(optExpression.getStatistics());
             tableFunctionNode.setLimit(physicalTableFunction.getLimit());
             inputFragment.setPlanRoot(tableFunctionNode);

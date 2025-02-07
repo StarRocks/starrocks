@@ -39,6 +39,10 @@ public:
 
     const Status& status() const { return _status; }
 
+    void set_is_required(bool is_required) { _is_required = is_required; }
+
+    bool is_required() { return _is_required; }
+
 private:
     //Params of table function
     Columns _columns;
@@ -51,6 +55,13 @@ private:
      */
     int _offset;
     Status _status;
+<<<<<<< HEAD
+=======
+
+    // used to identify left join for table function
+    bool _is_left_join = false;
+    bool _is_required = true;
+>>>>>>> 4be4b5c34e ([Enhancement] Eliminate non-required unnest computation (#55431))
 };
 
 class TableFunction {
