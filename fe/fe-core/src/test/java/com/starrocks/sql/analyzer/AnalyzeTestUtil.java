@@ -25,9 +25,9 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 
 public class AnalyzeTestUtil {
-    private static ConnectContext connectContext;
-    private static StarRocksAssert starRocksAssert;
-    private static String DB_NAME = "test";
+    protected static ConnectContext connectContext;
+    protected static StarRocksAssert starRocksAssert;
+    protected static String DB_NAME = "test";
 
     public static void init() throws Exception {
         Config.enable_experimental_rowstore = true;
