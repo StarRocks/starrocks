@@ -1027,7 +1027,7 @@ CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 CONF_mBool(lake_print_delete_log, "false");
 CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 // The interval to check whether lake compaction is valid. Set to <= 0 to disable the check.
-CONF_mInt32(lake_compaction_check_valid_interval_minutes, "30"); // 30 minutes
+CONF_mInt32(lake_compaction_check_valid_interval_minutes, "10"); // 10 minutes
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
