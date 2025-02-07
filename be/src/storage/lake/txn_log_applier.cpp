@@ -178,7 +178,8 @@ public:
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
         // local persistent index will update index version, so we need to load first
         if (_index_entry == nullptr) {
-            if (_metadata->enable_persistent_index() && _metadata->persistent_index_type() == PersistentIndexTypePB::LOCAL) {
+            if (_metadata->enable_persistent_index() &&
+                _metadata->persistent_index_type() == PersistentIndexTypePB::LOCAL) {
                 RETURN_IF_ERROR(prepare_primary_index());
             }
         }
