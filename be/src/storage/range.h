@@ -90,10 +90,18 @@ inline Range<T> Range<T>::filter(const Filter* const filter) const {
     const int32_t len = filter->size();
     int32_t start = len;
     int32_t end = -1;
-    for (int32_t i = 0; i < len && start > end; i++) {
-        start = start > i && filter->data()[i] == 1 ? i : start;
-        int32_t tail_index = len - 1 - i;
-        end = end < tail_index && filter->data()[tail_index] == 1 ? tail_index : end;
+    for (int32_t i = 0; i < len; i++) {
+        if (filter->data()[i] == 1) {
+            start = i;
+            break;
+        }
+    }
+
+    for (int32_t i = len - 1; i >= 0; i--) {
+        if (filter->data()[i] == 1) {
+            end = i;
+            break;
+        }
     }
     return start <= end ? Range<T>(_begin + start, _begin + end + 1) : Range<T>(_begin, _begin);
 }
