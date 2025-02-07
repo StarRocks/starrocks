@@ -70,7 +70,7 @@ public class UpdateDbUsedDataQuotaDaemon extends FrontendDaemon {
                 continue;
             }
             try {
-                long usedDataQuotaBytes = db.getUsedDataQuotaWithLock();
+                long usedDataQuotaBytes = globalStateMgr.getLocalMetastore().getUsedDataQuotaWithLock(db);
                 globalTransactionMgr.updateDatabaseUsedQuotaData(dbId, usedDataQuotaBytes);
                 if (LOG.isDebugEnabled()) {
                     LOG.debug("Update database[{}] used data quota bytes : {}.", db.getOriginName(), usedDataQuotaBytes);

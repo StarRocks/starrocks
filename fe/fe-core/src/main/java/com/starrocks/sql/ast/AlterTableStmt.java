@@ -14,16 +14,14 @@
 
 package com.starrocks.sql.ast;
 
-import com.starrocks.alter.AlterOpType;
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 // Alter table statement.
 public class AlterTableStmt extends DdlStmt {
-    private TableName tbl;
+    private final TableName tbl;
     private final List<AlterClause> alterClauseList;
 
     public AlterTableStmt(TableName tbl, List<AlterClause> ops) {
@@ -34,10 +32,6 @@ public class AlterTableStmt extends DdlStmt {
         super(pos);
         this.tbl = tbl;
         this.alterClauseList = ops;
-    }
-
-    public void setTableName(String newTableName) {
-        tbl = new TableName(tbl.getDb(), newTableName);
     }
 
     public TableName getTbl() {
@@ -58,30 +52,6 @@ public class AlterTableStmt extends DdlStmt {
 
     public String getTableName() {
         return tbl.getTbl();
-    }
-
-    public boolean contains(AlterOpType op) {
-        List<AlterOpType> currentOps = alterClauseList.stream().map(AlterClause::getOpType).collect(Collectors.toList());
-        return currentOps.contains(op);
-    }
-
-    public boolean hasPartitionOp() {
-        List<AlterOpType> currentOps = alterClauseList.stream().map(AlterClause::getOpType).collect(Collectors.toList());
-        return currentOps.contains(AlterOpType.ADD_PARTITION)
-                || currentOps.contains(AlterOpType.DROP_PARTITION)
-                || currentOps.contains(AlterOpType.REPLACE_PARTITION)
-                || currentOps.contains(AlterOpType.MODIFY_PARTITION)
-                || currentOps.contains(AlterOpType.TRUNCATE_PARTITION);
-    }
-
-    public boolean hasSchemaChangeOp() {
-        List<AlterOpType> currentOps = alterClauseList.stream().map(AlterClause::getOpType).collect(Collectors.toList());
-        return currentOps.contains(AlterOpType.SCHEMA_CHANGE) || currentOps.contains(AlterOpType.OPTIMIZE);
-    }
-
-    public boolean hasRollupOp() {
-        List<AlterOpType> currentOps = alterClauseList.stream().map(AlterClause::getOpType).collect(Collectors.toList());
-        return currentOps.contains(AlterOpType.ADD_ROLLUP) || currentOps.contains(AlterOpType.DROP_ROLLUP);
     }
 
     @Override

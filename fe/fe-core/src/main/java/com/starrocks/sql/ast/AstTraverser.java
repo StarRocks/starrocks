@@ -87,7 +87,31 @@ public class AstTraverser<R, C> implements AstVisitor<R, C> {
         return null;
     }
 
-    // ------------------------------------------- Relation ----------------------------------==------------------------
+    // ------------------------------------------- DDL Statement -------------------------------------------------------
+
+    @Override
+    public R visitAlterTableStatement(AlterTableStmt statement, C context) {
+        statement.getAlterClauseList().forEach(x -> visit(x, context));
+        return null;
+    }
+
+    @Override
+    public R visitAlterViewStatement(AlterViewStmt statement, C context) {
+        if (statement.getAlterClause() != null) {
+            visit(statement.getAlterClause(), context);
+        }
+        return null;
+    }
+
+    @Override
+    public R visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, C context) {
+        if (statement.getAlterTableClause() != null) {
+            visit(statement.getAlterTableClause(), context);
+        }
+        return null;
+    }
+
+    // ------------------------------------------- Relation ------------------------------------------------------------
 
     @Override
     public R visitSelect(SelectRelation node, C context) {
