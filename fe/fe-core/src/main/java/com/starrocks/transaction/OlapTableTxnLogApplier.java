@@ -65,23 +65,21 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             }
             // The version of a replication transaction may not continuously
             if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
-                long versionDiff = partitionCommitInfo.getVersion() - partition.getNextVersion();
                 partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
-                partition.setNextDataVersion(partition.getNextDataVersion() + versionDiff + 1);
             } else if (txnState.isVersionOverwrite()) {
                 // overwrite empty partition, it's next version will less than overwrite version
                 // otherwise, it's next version will not change
                 if (partitionCommitInfo.getVersion() + 1 > partition.getNextVersion()) {
                     partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
-                    partition.setNextDataVersion(partition.getNextVersion());
                 }
             } else if (partitionCommitInfo.isDoubleWrite()) {
                 partition.setNextVersion(partitionCommitInfo.getVersion() + 1);
-                partition.setNextDataVersion(partition.getNextVersion());
             } else {
                 partition.setNextVersion(partition.getNextVersion() + 1);
-                partition.setNextDataVersion(partition.getNextDataVersion() + 1);
             }
+            // data version == visible version in shared-nothing mode
+            partition.setNextDataVersion(partition.getNextVersion());
+
             LOG.debug("partition[{}] next version[{}]", partitionId, partition.getNextVersion());
         }
     }
@@ -180,7 +178,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
             if (txnState.isVersionOverwrite()) {
                 if (partition.getVisibleVersion() < version) {
                     partition.updateVisibleVersion(version, versionTime, txnState.getTransactionId());
-                    partition.setDataVersion(partitionCommitInfo.getDataVersion());
+                    partition.setDataVersion(version); // data version == visible version in shared-nothing mode
                     if (partitionCommitInfo.getVersionEpoch() > 0) {
                         partition.setVersionEpoch(partitionCommitInfo.getVersionEpoch());
                     }
@@ -188,7 +186,7 @@ public class OlapTableTxnLogApplier implements TransactionLogApplier {
                 }
             } else {
                 partition.updateVisibleVersion(version, versionTime, txnState.getTransactionId());
-                partition.setDataVersion(partitionCommitInfo.getDataVersion());
+                partition.setDataVersion(version); // data version == visible version in shared-nothing mode
                 if (partitionCommitInfo.getVersionEpoch() > 0) {
                     partition.setVersionEpoch(partitionCommitInfo.getVersionEpoch());
                 }
