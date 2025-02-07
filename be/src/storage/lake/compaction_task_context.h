@@ -58,12 +58,20 @@ struct CompactionTaskStats {
 
 // Context of a single tablet compaction task.
 struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
+<<<<<<< HEAD
     explicit CompactionTaskContext(int64_t txn_id_, int64_t tablet_id_, int64_t version_, bool is_checker_,
+=======
+    explicit CompactionTaskContext(int64_t txn_id_, int64_t tablet_id_, int64_t version_, bool force_base_compaction_,
+>>>>>>> 2fd71c7c49 ([Enhancement] Refactor lake compaction task cancel checker in BE to ensure it can stop asap (#54832))
                                    std::shared_ptr<CompactionTaskCallback> cb_)
             : txn_id(txn_id_),
               tablet_id(tablet_id_),
               version(version_),
+<<<<<<< HEAD
               is_checker(is_checker_),
+=======
+              force_base_compaction(force_base_compaction_),
+>>>>>>> 2fd71c7c49 ([Enhancement] Refactor lake compaction task cancel checker in BE to ensure it can stop asap (#54832))
               callback(std::move(cb_)) {}
 
 #ifndef NDEBUG
@@ -79,8 +87,6 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     std::atomic<int64_t> finish_time{0};
     std::atomic<bool> skipped{false};
     std::atomic<int> runs{0};
-    // the first tablet of a compaction request, will ask FE periodically to see if compaction is valid
-    bool is_checker;
     Status status;
     Progress progress;
     int64_t enqueue_time_sec; // time point when put into queue
