@@ -307,23 +307,29 @@ private:
     }
 
     Status apply_replication_log(const TxnLogPB_OpReplication& op_replication, int64_t txn_id) {
-        if (op_replication.txn_meta().txn_state() != ReplicationTxnStatePB::TXN_REPLICATED) {
+        const auto& txn_meta = op_replication.txn_meta();
+
+        if (txn_meta.txn_state() != ReplicationTxnStatePB::TXN_REPLICATED) {
             LOG(WARNING) << "Fail to apply replication log, invalid txn meta state: "
-                         << ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state());
-            return Status::Corruption("Invalid txn meta state: " +
-                                      ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state()));
-        }
-        if (op_replication.txn_meta().snapshot_version() != _new_version) {
-            LOG(WARNING) << "Fail to apply replication log, mismatched snapshot version and new version"
-                         << ", snapshot version: " << op_replication.txn_meta().snapshot_version()
-                         << ", new version: " << _new_version;
-            return Status::Corruption("mismatched snapshot version and new version");
+                         << ReplicationTxnStatePB_Name(txn_meta.txn_state());
+            return Status::Corruption("Invalid txn meta state: " + ReplicationTxnStatePB_Name(txn_meta.txn_state()));
         }
 
-        if (op_replication.txn_meta().incremental_snapshot()) {
-            DCHECK(_new_version - _base_version == op_replication.op_writes_size())
-                    << ", base_version: " << _base_version << ", new_version: " << _new_version
-                    << ", op_write_size: " << op_replication.op_writes_size();
+        if (txn_meta.data_version() == 0) {
+            if (txn_meta.snapshot_version() != _new_version) {
+                LOG(WARNING) << "Fail to apply replication log, mismatched snapshot version and new version"
+                             << ", snapshot version: " << txn_meta.snapshot_version()
+                             << ", base version: " << txn_meta.visible_version() << ", new version: " << _new_version;
+                return Status::Corruption("mismatched snapshot version and new version");
+            }
+        } else if (txn_meta.snapshot_version() - txn_meta.data_version() + txn_meta.visible_version() != _new_version) {
+            LOG(WARNING) << "Fail to apply replication log, mismatched version, snapshot version: "
+                         << txn_meta.snapshot_version() << ", data version: " << txn_meta.data_version()
+                         << ", old version: " << txn_meta.visible_version() << ", new version: " << _new_version;
+            return Status::Corruption("mismatched version");
+        }
+
+        if (txn_meta.incremental_snapshot()) {
             for (const auto& op_write : op_replication.op_writes()) {
                 RETURN_IF_ERROR(apply_write_log(op_write, txn_id));
             }
@@ -581,26 +587,35 @@ private:
     }
 
     Status apply_replication_log(const TxnLogPB_OpReplication& op_replication) {
-        if (op_replication.txn_meta().txn_state() != ReplicationTxnStatePB::TXN_REPLICATED) {
+        const auto& txn_meta = op_replication.txn_meta();
+
+        if (txn_meta.txn_state() != ReplicationTxnStatePB::TXN_REPLICATED) {
             LOG(WARNING) << "Fail to apply replication log, invalid txn meta state: "
-                         << ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state());
-            return Status::Corruption("Invalid txn meta state: " +
-                                      ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state()));
-        }
-        if (op_replication.txn_meta().snapshot_version() != _new_version) {
-            LOG(WARNING) << "Fail to apply replication log, mismatched snapshot version and new version"
-                         << ", snapshot version: " << op_replication.txn_meta().snapshot_version()
-                         << ", new version: " << _new_version;
-            return Status::Corruption("mismatched snapshot version and new version");
+                         << ReplicationTxnStatePB_Name(txn_meta.txn_state());
+            return Status::Corruption("Invalid txn meta state: " + ReplicationTxnStatePB_Name(txn_meta.txn_state()));
         }
 
-        if (op_replication.txn_meta().incremental_snapshot()) {
+        if (txn_meta.data_version() == 0) {
+            if (txn_meta.snapshot_version() != _new_version) {
+                LOG(WARNING) << "Fail to apply replication log, mismatched snapshot version and new version"
+                             << ", snapshot version: " << txn_meta.snapshot_version()
+                             << ", base version: " << txn_meta.visible_version() << ", new version: " << _new_version;
+                return Status::Corruption("mismatched snapshot version and new version");
+            }
+        } else if (txn_meta.snapshot_version() - txn_meta.data_version() + txn_meta.visible_version() != _new_version) {
+            LOG(WARNING) << "Fail to apply replication log, mismatched version, snapshot version: "
+                         << txn_meta.snapshot_version() << ", data version: " << txn_meta.data_version()
+                         << ", old version: " << txn_meta.visible_version() << ", new version: " << _new_version;
+            return Status::Corruption("mismatched version");
+        }
+
+        if (txn_meta.incremental_snapshot()) {
             for (const auto& op_write : op_replication.op_writes()) {
                 RETURN_IF_ERROR(apply_write_log(op_write));
             }
             LOG(INFO) << "Apply incremental replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << _metadata->version() << ", new_version: " << _new_version
-                      << ", txn_id: " << op_replication.txn_meta().txn_id();
+                      << ", txn_id: " << txn_meta.txn_id();
         } else {
             auto old_rowsets = std::move(*_metadata->mutable_rowsets());
             _metadata->mutable_rowsets()->Clear();
@@ -614,7 +629,7 @@ private:
 
             LOG(INFO) << "Apply full replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << _metadata->version() << ", new_version: " << _new_version
-                      << ", txn_id: " << op_replication.txn_meta().txn_id();
+                      << ", txn_id: " << txn_meta.txn_id();
         }
 
         if (op_replication.has_source_schema()) {

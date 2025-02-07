@@ -1272,10 +1272,10 @@ public class DatabaseTransactionMgr {
                     ReplicationTxnCommitAttachment replicationTxnAttachment = (ReplicationTxnCommitAttachment) transactionState
                             .getTxnCommitAttachment();
                     Map<Long, Long> partitionVersions = replicationTxnAttachment.getPartitionVersions();
-                    long newVersion = partitionVersions.get(partitionCommitInfo.getPartitionId());
-                    long versionDiff = newVersion - partition.getVisibleVersion();
-                    partitionCommitInfo.setVersion(newVersion);
-                    partitionCommitInfo.setDataVersion(partition.getDataVersion() + versionDiff);
+                    long newDataVersion = partitionVersions.get(partitionCommitInfo.getPartitionId());
+                    long dataVersionDiff = newDataVersion - partition.getDataVersion();
+                    partitionCommitInfo.setVersion(partition.getCommittedVersion() + dataVersionDiff);
+                    partitionCommitInfo.setDataVersion(newDataVersion);
                     Map<Long, Long> partitionVersionEpochs = replicationTxnAttachment.getPartitionVersionEpochs();
                     if (partitionVersionEpochs != null) {
                         long newVersionEpoch = partitionVersionEpochs.get(partitionCommitInfo.getPartitionId());

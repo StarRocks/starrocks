@@ -389,6 +389,7 @@ struct TRemoteSnapshotRequest {
      12: optional Types.TVersion src_visible_version
      13: optional list<Types.TBackend> src_backends
      14: optional i32 timeout_sec
+     15: optional Types.TVersion data_version
  }
 
  struct TReplicateSnapshotRequest {
@@ -406,6 +407,7 @@ struct TRemoteSnapshotRequest {
      12: optional Types.TVersion src_visible_version
      13: optional list<Types.TSnapshotInfo> src_snapshot_infos
      14: optional binary encryption_meta
+     15: optional Types.TVersion data_version
  }
 
 enum TTabletMetaType {

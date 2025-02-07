@@ -24,8 +24,9 @@ import com.starrocks.common.io.DeepCopy;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ReplicationsProcNode;
 import com.starrocks.leader.LeaderImpl;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
@@ -71,9 +72,9 @@ public class ReplicationMgrTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
-        AnalyzeTestUtil.init();
-        starRocksAssert = new StarRocksAssert(AnalyzeTestUtil.getConnectContext());
+        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+        ConnectContext connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
         starRocksAssert.withDatabase("test").useDatabase("test");
 
         db = GlobalStateMgr.getCurrentState().getDb("test");
@@ -81,8 +82,7 @@ public class ReplicationMgrTest {
         String sql = "create table single_partition_duplicate_key (key1 int, key2 varchar(10))\n" +
                 "distributed by hash(key1) buckets 1\n" +
                 "properties('replication_num' = '1'); ";
-        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql,
-                AnalyzeTestUtil.getConnectContext());
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         StarRocksAssert.utCreateTableWithRetry(createTableStmt);
 
         table = (OlapTable) db.getTable("single_partition_duplicate_key");
