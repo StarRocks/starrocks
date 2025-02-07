@@ -503,6 +503,7 @@ jobs:
       DIFF_FILE: ${{ steps.diff.outputs.DIFF_FILE }}
     needs:
       - info
+      - be-ut
       - fe-ut
       - system-test-release-ubuntu
     steps:
