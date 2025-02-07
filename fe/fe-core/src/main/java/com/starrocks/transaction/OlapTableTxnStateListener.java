@@ -191,17 +191,11 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                     for (long tabletBackend : tabletBackends) {
                         Replica replica = tabletInvertedIndex.getReplica(tabletId, tabletBackend);
                         if (replica == null) {
-<<<<<<< HEAD
-                            Backend backend = GlobalStateMgr.getCurrentSystemInfo().getBackend(tabletBackend);
-                            throw new TransactionCommitFailedException("Not found replicas of tablet. "
-                                    + "tablet_id: " + tabletId + ", backend_id: " + backend.getHost());
-=======
                             Backend backend =
                                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(tabletBackend);
                             LOG.warn("Not found replica of tablet. tablet_id: {}, backend: {}, txn_id: {}", tabletId,
                                     backend.getHost(), txnState.getTransactionId());
                             continue;
->>>>>>> dbe544372e ([BugFix] Fix transaction commit failed due to replica not found (#55212))
                         }
                         // if the tablet have no replica's to commit or the tablet is a rolling up tablet, the commit backends maybe null
                         // if the commit backends is null, set all replicas as error replicas
