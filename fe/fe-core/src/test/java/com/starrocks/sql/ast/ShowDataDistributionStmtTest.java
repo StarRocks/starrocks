@@ -54,7 +54,7 @@ public class ShowDataDistributionStmtTest {
             stmt.execute("insert into unpartition_table(col1,col2,ds) " +
                     "values('c','c','2024-09-21'),('c','c','2024-09-21'),('d','d','2024-09-21')");
 
-            //2.check
+            //2.check 
             //2.1 check: partition table
             stmt.execute("select count(*) from partition_table;");
             if (stmt.getResultSet().next()) {
