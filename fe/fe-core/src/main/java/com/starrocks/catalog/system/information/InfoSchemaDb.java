@@ -41,6 +41,7 @@ public class InfoSchemaDb extends Database {
 
         super.registerTableUnlocked(TablesSystemTable.create(catalogName));
         super.registerTableUnlocked(PartitionsSystemTableSystemTable.create(catalogName));
+        super.registerTableUnlocked(ApplicableRolesSystemTable.create(catalogName));
         super.registerTableUnlocked(TablePrivilegesSystemTable.create(catalogName));
         super.registerTableUnlocked(ColumnPrivilegesSystemTable.create(catalogName));
         super.registerTableUnlocked(ReferentialConstraintsSystemTable.create(catalogName));

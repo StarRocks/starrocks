@@ -162,6 +162,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String TX_ISOLATION = "tx_isolation";
     public static final String TX_READ_ONLY = "tx_read_only";
     public static final String TRANSACTION_ISOLATION = "transaction_isolation";
+    public static final String DEFAULT_STORAGE_ENGINE = "default_storage_engine";
+    public static final String DEFAULT_TMP_STORAGE_ENGINE = "default_tmp_storage_engine";
     public static final String TRANSACTION_READ_ONLY = "transaction_read_only";
     public static final String CHARACTER_SET_CLIENT = "character_set_client";
     public static final String CHARACTER_SET_CONNNECTION = "character_set_connection";
@@ -1042,6 +1044,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private String collationDatabase = "utf8_general_ci";
     @VariableMgr.VarAttr(name = COLLATION_SERVER)
     private String collationServer = "utf8_general_ci";
+
+    // this is used to compatible mysql 8
+    @VariableMgr.VarAttr(name = DEFAULT_STORAGE_ENGINE)
+    private String defaultStorageEngine = "InnoDB";
+    @VariableMgr.VarAttr(name = DEFAULT_TMP_STORAGE_ENGINE)
+    private String defaultTmpStorageEngine = "InnoDB";
 
     // this is used to make c3p0 library happy
     @VariableMgr.VarAttr(name = SQL_AUTO_IS_NULL)
