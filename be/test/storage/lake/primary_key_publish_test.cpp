@@ -1444,7 +1444,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {
         auto old_val = config::lake_pk_compaction_min_input_segments;
         config::lake_pk_compaction_min_input_segments = 1;
         int64_t txn_id = next_id();
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
         EXPECT_EQ(100, task_context->progress.value());
@@ -1610,7 +1610,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels3) {
         auto old_val = config::lake_pk_compaction_min_input_segments;
         config::lake_pk_compaction_min_input_segments = 1;
         int64_t txn_id = next_id();
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
         EXPECT_EQ(100, task_context->progress.value());
@@ -1672,7 +1672,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels4) {
         auto old_val = config::lake_pk_compaction_min_input_segments;
         config::lake_pk_compaction_min_input_segments = 1;
         int64_t txn_id = next_id();
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
         EXPECT_EQ(100, task_context->progress.value());
@@ -1856,7 +1856,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
         config::lake_pk_compaction_min_input_segments = 1;
         config::lake_pk_index_sst_max_compaction_versions = 1;
         int64_t txn_id = next_id();
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
         EXPECT_EQ(100, task_context->progress.value());
@@ -1874,7 +1874,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     // 4. compaction with sst
     {
         int64_t txn_id = next_id();
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
         EXPECT_EQ(100, task_context->progress.value());
