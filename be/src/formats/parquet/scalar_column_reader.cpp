@@ -527,9 +527,8 @@ Status LowCardColumnReader::_check_current_dict() {
         auto res = _dict->find(slice);
         if (res == _dict->end()) {
             // error message format used to extract info, carefully
-            return Status::GlobalDictNotMatch(
-                    fmt::format("SlotId: {}, FileName: {} , file doesn't match global dict. ", _slot_id,
-                                _opts.file->filename()));
+            return Status::GlobalDictNotMatch(fmt::format("SlotId: {}, FileName: {} , file doesn't match global dict. ",
+                                                          _slot_id, _opts.file->filename()));
         } else {
             local_to_global[i] = res->second;
         }
@@ -584,9 +583,8 @@ Status LowRowsColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
         auto res = _dict->find(slice);
         if (res == _dict->end()) {
             // error message format used to extract info, carefully
-            return Status::GlobalDictNotMatch(
-                    fmt::format("SlotId: {}, FileName: {} , file doesn't match global dict. ", _slot_id,
-                                _opts.file->filename()));
+            return Status::GlobalDictNotMatch(fmt::format("SlotId: {}, FileName: {} , file doesn't match global dict. ",
+                                                          _slot_id, _opts.file->filename()));
         } else {
             dst_data_column->get_data()[i] = res->second;
         }
