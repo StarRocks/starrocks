@@ -15,7 +15,6 @@
 package com.starrocks.sql.spm;
 
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
@@ -60,7 +59,6 @@ public class SPMUpdateExprVisitor<C> implements AstVisitor<ParseNode, C> {
         stmt.setWhereClause(visitExpr(stmt.getWhereClause()));
         stmt.setGroupBy(visitExprList(stmt.getGroupBy()));
         stmt.setHaving(visitExpr(stmt.getHaving()));
-        stmt.setLimit((LimitElement) visit(stmt.getLimit()));
         return stmt;
     }
 
@@ -82,11 +80,6 @@ public class SPMUpdateExprVisitor<C> implements AstVisitor<ParseNode, C> {
             visit(relation);
         }
         return stmt;
-    }
-
-    @Override
-    public ParseNode visitLimitElement(LimitElement node, C context) {
-        return node;
     }
 
     @Override
