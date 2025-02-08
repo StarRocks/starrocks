@@ -234,7 +234,6 @@ import com.starrocks.transaction.TransactionCommitFailedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.transaction.TransactionStmtExecutor;
-import com.starrocks.transaction.VisibleStateWaiter;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
@@ -261,7 +260,6 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
 import java.util.stream.Collectors;
@@ -2420,7 +2418,7 @@ public class StmtExecutor {
             coord.setExecPlan(execPlan);
 
             int timeout = getExecTimeout();
-            long jobDeadLineMs = System.currentTimeMillis() + timeout * 1000;
+            long jobDeadLineMs = System.currentTimeMillis() + timeout * 1000L;
             coord.join(timeout);
             if (!coord.isDone()) {
                 /*
@@ -2615,18 +2613,19 @@ public class StmtExecutor {
                 } else {
                     attachment = new InsertTxnCommitAttachment(loadedRows);
                 }
-                VisibleStateWaiter visibleWaiter = transactionMgr.retryCommitOnRateLimitExceeded(
+
+                long timeoutMs = jobDeadLineMs - System.currentTimeMillis();
+                boolean status = transactionMgr.commitAndPublishTransaction(
                         database,
                         transactionId,
                         TabletCommitInfo.fromThrift(coord.getCommitInfos()),
                         TabletFailInfo.fromThrift(coord.getFailInfos()),
-                        attachment,
-                        jobDeadLineMs - System.currentTimeMillis());
+                        timeoutMs,
+                        Config.enable_sync_publish ? timeoutMs :
+                                context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
+                        attachment);
 
-                long publishWaitMs = Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() :
-                        context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000;
-
-                if (visibleWaiter.await(publishWaitMs, TimeUnit.MILLISECONDS)) {
+                if (status) {
                     txnStatus = TransactionStatus.VISIBLE;
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
                     // collect table-level metrics

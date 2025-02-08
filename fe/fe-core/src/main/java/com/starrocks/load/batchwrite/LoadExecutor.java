@@ -160,9 +160,9 @@ public class LoadExecutor implements Runnable {
         timeTrace.beginTxnTimeMs = System.currentTimeMillis();
         Pair<Database, OlapTable> pair = getDbAndTable();
         txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(
-                pair.first.getId(), Lists.newArrayList(pair.second.getId()), label,
+                pair.first.getId(), Lists.newArrayList(pair.second.getId()), label, null,
                 TransactionState.TxnCoordinator.fromThisFE(),
-                TransactionState.LoadJobSourceType.FRONTEND_STREAMING,
+                TransactionState.LoadJobSourceType.FRONTEND_STREAMING, -1,
                 streamLoadInfo.getTimeout(), streamLoadInfo.getWarehouseId());
     }
 
@@ -172,10 +172,10 @@ public class LoadExecutor implements Runnable {
         long publishTimeoutMs =
                 streamLoadInfo.getTimeout() * 1000L - (timeTrace.commitTxnTimeMs - timeTrace.beginTxnTimeMs);
         boolean publishSuccess = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().commitAndPublishTransaction(
-                database, txnId, tabletCommitInfo, tabletFailInfo, publishTimeoutMs, null);
+                database, txnId, tabletCommitInfo, tabletFailInfo, publishTimeoutMs, publishTimeoutMs, null);
         if (!publishSuccess) {
             LOG.warn("Publish timeout, txn_id: {}, label: {}, total timeout: {} ms, publish timeout: {} ms",
-                        txnId, label, streamLoadInfo.getTimeout() * 1000, publishTimeoutMs);
+                    txnId, label, streamLoadInfo.getTimeout() * 1000, publishTimeoutMs);
         }
     }
 
@@ -251,7 +251,7 @@ public class LoadExecutor implements Runnable {
                 if (filteredRows > (filteredRows + loadedRows) * maxFilterRatio) {
                     throw new LoadException(String.format("There is data quality issue, please check the " +
                                     "tracking url for details. Max filter ratio: %s. The tracking url: %s",
-                                    maxFilterRatio, coordinator.getTrackingUrl()));
+                            maxFilterRatio, coordinator.getTrackingUrl()));
                 }
             } else {
                 throw new LoadException(

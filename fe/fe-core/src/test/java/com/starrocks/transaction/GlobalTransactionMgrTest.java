@@ -69,6 +69,7 @@ import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TLoadSourceType;
 import com.starrocks.thrift.TRLTaskTxnCommitAttachment;
@@ -823,14 +824,12 @@ public class GlobalTransactionMgrTest {
         transTablets.add(tabletCommitInfo2);
         transTablets.add(tabletCommitInfo3);
         masterTransMgr.prepareTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets,
-                Lists.newArrayList(), null);
+                Lists.newArrayList(), null, 0);
         TransactionState transactionState = fakeEditLog.getTransaction(transactionId);
         assertEquals(TransactionStatus.PREPARED, transactionState.getTransactionStatus());
 
         try {
-            masterTransMgr.commitPreparedTransaction(
-                    masterGlobalStateMgr.getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDbId1), transactionId,
-                    (long) 1000);
+            masterTransMgr.commitPreparedTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, (long) 1000);
             Assert.fail("should throw publish timeout exception");
         } catch (StarRocksException e) {
         }
@@ -904,7 +903,7 @@ public class GlobalTransactionMgrTest {
                 .when(dbTransactionMgr)
                 .commitTransaction(1001L, Collections.emptyList(), Collections.emptyList(), null);
         Assert.assertThrows(CommitRateExceededException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001,
-                Collections.emptyList(), Collections.emptyList(), 10, null));
+                Collections.emptyList(), Collections.emptyList(), 10, 10, null));
     }
 
     @Test
@@ -922,7 +921,7 @@ public class GlobalTransactionMgrTest {
                 .when(dbTransactionMgr)
                 .commitTransaction(1001L, Collections.emptyList(), Collections.emptyList(), null);
         Assert.assertFalse(globalTransactionMgr.commitAndPublishTransaction(db, 1001,
-                Collections.emptyList(), Collections.emptyList(), 2, null));
+                Collections.emptyList(), Collections.emptyList(), 2, 2, null));
     }
 
     @Test
@@ -937,7 +936,7 @@ public class GlobalTransactionMgrTest {
                 .when(dbTransactionMgr)
                 .commitTransaction(1001L, Collections.emptyList(), Collections.emptyList(), null);
         Assert.assertThrows(StarRocksException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001,
-                Collections.emptyList(), Collections.emptyList(), 10, null));
+                Collections.emptyList(), Collections.emptyList(), 10, 10, null));
     }
 
     @Test
@@ -954,7 +953,7 @@ public class GlobalTransactionMgrTest {
                 .when(globalTransactionMgr)
                 .retryCommitOnRateLimitExceeded(db, 1001L, Collections.emptyList(), Collections.emptyList(), null, 10L);
         Assert.assertThrows(LockTimeoutException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001L,
-                Collections.emptyList(), Collections.emptyList(), 10L, null));
+                Collections.emptyList(), Collections.emptyList(), 10L, 10L, null));
     }
 
     @Test
@@ -974,7 +973,8 @@ public class GlobalTransactionMgrTest {
         Config.disable_load_job = true;
         boolean exceptionThrown = false;
         try {
-            masterTransMgr.beginTransaction(1L, null, "xxx", null, null, LoadJobSourceType.FRONTEND, 1L, 1000L);
+            masterTransMgr.beginTransaction(1L, null, "xxx", null, null,
+                    LoadJobSourceType.FRONTEND, 1L, 1000L, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         } catch (Exception e) {
             Assert.assertTrue(e instanceof ErrorReportException);
             Assert.assertEquals(ErrorCode.ERR_BEGIN_TXN_FAILED, ((ErrorReportException) e).getErrorCode());
@@ -987,7 +987,8 @@ public class GlobalTransactionMgrTest {
         Config.metadata_enable_recovery_mode = true;
         exceptionThrown = false;
         try {
-            masterTransMgr.beginTransaction(1L, null, "xxx", null, null, LoadJobSourceType.FRONTEND, 1L, 1000L);
+            masterTransMgr.beginTransaction(1L, null, "xxx", null, null,
+                    LoadJobSourceType.FRONTEND, 1L, 1000L, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         } catch (Exception e) {
             Assert.assertTrue(e instanceof ErrorReportException);
             Assert.assertEquals(ErrorCode.ERR_BEGIN_TXN_FAILED, ((ErrorReportException) e).getErrorCode());
@@ -1000,7 +1001,8 @@ public class GlobalTransactionMgrTest {
         GlobalStateMgr.getCurrentState().setSafeMode(true);
         exceptionThrown = false;
         try {
-            masterTransMgr.beginTransaction(1L, null, "xxx", null, null, LoadJobSourceType.FRONTEND, 1L, 1000L);
+            masterTransMgr.beginTransaction(1L, null, "xxx", null, null,
+                    LoadJobSourceType.FRONTEND, 1L, 1000L, WarehouseManager.DEFAULT_WAREHOUSE_ID);
         } catch (Exception e) {
             Assert.assertTrue(e instanceof ErrorReportException);
             Assert.assertEquals(ErrorCode.ERR_BEGIN_TXN_FAILED, ((ErrorReportException) e).getErrorCode());
@@ -1017,9 +1019,9 @@ public class GlobalTransactionMgrTest {
         GlobalTransactionMgr globalTransactionMgr = spy(new GlobalTransactionMgr(GlobalStateMgr.getCurrentState()));
         doThrow(LockTimeoutException.class)
                 .when(globalTransactionMgr)
-                .commitAndPublishTransaction(db, 1001L, Collections.emptyList(), Collections.emptyList(), 10L, null);
-        Assert.assertThrows(ErrorReportException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001L,
-                Collections.emptyList(), Collections.emptyList(), 10L));
+                .commitAndPublishTransaction(db, 1001L, Collections.emptyList(), Collections.emptyList(), 10L, 10L, null);
+        Assert.assertThrows(LockTimeoutException.class, () -> globalTransactionMgr.commitAndPublishTransaction(db, 1001L,
+                Collections.emptyList(), Collections.emptyList(), 10L, 10L, null));
     }
 
     @Test
@@ -1039,7 +1041,7 @@ public class GlobalTransactionMgrTest {
         Assert.assertNull(state1.getReason());
 
         masterTransMgr.beginTransaction(GlobalStateMgrTestUtil.testDbId1, Lists.newArrayList(GlobalStateMgrTestUtil.testTableId1),
-                        label, transactionSource, LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
+                label, transactionSource, LoadJobSourceType.FRONTEND, Config.stream_load_default_timeout_second);
         TransactionStateSnapshot state2 = masterTransMgr.getLabelStatus(GlobalStateMgrTestUtil.testDbId1, label);
         Assert.assertNotNull(state2);
         Assert.assertEquals(TransactionStatus.PREPARE, state2.getStatus());

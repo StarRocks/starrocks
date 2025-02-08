@@ -1412,7 +1412,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 db, request.getTxnId(),
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
                 TabletFailInfo.fromThrift(request.getFailInfos()),
-                timeoutMs, attachment);
+                timeoutMs,
+                timeoutMs,
+                attachment);
         if (!ret) {
             // committed success but not visible
             status.setStatus_code(TStatusCode.PUBLISH_TIMEOUT);
@@ -1567,8 +1569,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 db.getId(), request.getTxnId(),
                 TabletCommitInfo.fromThrift(request.getCommitInfos()),
                 TabletFailInfo.fromThrift(request.getFailInfos()),
-                attachment);
-
+                attachment,
+                0);
     }
 
     @Override

@@ -17,11 +17,15 @@ package com.starrocks.scheduler.mv;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.proto.PMVMaintenanceTaskResult;
 import com.starrocks.rpc.BackendServiceClient;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.thrift.MVTaskType;
 import com.starrocks.thrift.TMVMaintenanceTasks;
 import com.starrocks.thrift.TMVStartEpochTask;
@@ -87,14 +91,15 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
 
         MaterializedView view = mvMaintenanceJob.getView();
         long dbId = view.getDbId();
-        List<Long> tableIdList =  Arrays.asList(view.getId());
+        List<Long> tableIdList = Arrays.asList(view.getId());
         long currentTs = System.currentTimeMillis();
         String label = String.format("MV_REFRESH_%d-%d-%d", dbId, view.getId(), currentTs);
         TransactionState.TxnCoordinator txnCoordinator = TransactionState.TxnCoordinator.fromThisFE();
         TransactionState.LoadJobSourceType loadSource = TransactionState.LoadJobSourceType.MV_REFRESH;
         try {
             long txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                    .beginTransaction(dbId, tableIdList, label, txnCoordinator, loadSource, JOB_TIMEOUT);
+                    .beginTransaction(dbId, tableIdList, label, null, txnCoordinator, loadSource, -1,
+                            JOB_TIMEOUT, WarehouseManager.DEFAULT_WAREHOUSE_ID);
             epoch.setTxnId(txnId);
 
             // Init OlapSink's txnId
@@ -135,7 +140,8 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
             epoch.onCommitting();
 
             boolean published = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().commitAndPublishTransaction(database,
-                    epoch.getTxnId(), epoch.getCommitInfos(), epoch.getFailedInfos(), TXN_VISIBLE_TIMEOUT_MILLIS);
+                    epoch.getTxnId(), epoch.getCommitInfos(), epoch.getFailedInfos(), TXN_VISIBLE_TIMEOUT_MILLIS,
+                    TXN_VISIBLE_TIMEOUT_MILLIS, null);
             Preconditions.checkState(published, "must be published");
 
             // TODO(murphy) collect binlog consumption state from execution
@@ -151,6 +157,8 @@ class TxnBasedEpochCoordinator implements EpochCoordinator {
             // TODO(murphy) handle error
             LOG.warn("Failed to commit transaction for epoch {}", epoch);
             throw new RuntimeException(e);
+        } catch (LockTimeoutException e) {
+            throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
         }
     }
 

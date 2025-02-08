@@ -520,9 +520,11 @@ public class StatementPlanner {
                     dbId,
                     Lists.newArrayList(targetTable.getId()),
                     label,
+                    null,
                     new TransactionState.TxnCoordinator(TransactionState.TxnSourceType.FE,
                             FrontendOptions.getLocalHostAddress()),
                     sourceType,
+                    -1,
                     session.getExecTimeout(),
                     warehouseId);
 

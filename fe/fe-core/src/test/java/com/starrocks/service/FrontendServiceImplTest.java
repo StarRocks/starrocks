@@ -40,6 +40,7 @@ import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AddPartitionClause;
 import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.ast.ListPartitionDesc;
@@ -1098,7 +1099,8 @@ public class FrontendServiceImplTest {
         long transactionId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(db.getId(),
                     Lists.newArrayList(table.getId()), "1jdc689-xd232", requestId,
                     new TxnCoordinator(TxnSourceType.BE, "1.1.1.1"),
-                    TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, 600);
+                    TransactionState.LoadJobSourceType.BACKEND_STREAMING, -1, 600,
+                    WarehouseManager.DEFAULT_WAREHOUSE_ID);
         FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
         TGetLoadTxnStatusRequest request = new TGetLoadTxnStatusRequest();
         request.setDb("non-exist-db");
