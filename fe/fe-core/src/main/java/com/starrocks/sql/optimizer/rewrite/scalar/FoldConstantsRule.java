@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.scalar.LikePredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriteContext;
+import com.starrocks.sql.spm.SPMFunctions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -137,6 +138,9 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
     //
     @Override
     public ScalarOperator visitCastOperator(CastOperator operator, ScalarOperatorRewriteContext context) {
+        if (SPMFunctions.isSPMFunctions(operator.getChild(0))) {
+            return SPMFunctions.castSPMFunctions(operator.getChild(0), operator.getType());
+        }
         // cast null/null_type to any type
         if (hasNull(operator.getChildren()) || operator.getChild(0).getType().isNull()) {
             return ConstantOperator.createNull(operator.getType());
@@ -151,7 +155,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
         Optional<ConstantOperator> result = child.castTo(operator.getType());
         if (!result.isPresent()) {
             if (LOG.isDebugEnabled()) {
-                LOG.debug("Fold cast constant error: " + operator + ", " + child.toString());
+                LOG.debug("Fold cast constant error: " + operator + ", " + child);
             }
             return operator;
         } else {

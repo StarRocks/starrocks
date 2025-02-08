@@ -328,6 +328,11 @@ statement
     // Translate Statement
     | translateStatement
 
+    // SQL Plan Management Statement
+    | createBaselinePlanStatement
+    | dropBaselinePlanStatement
+    | showBaselinePlanStatement
+
     // Unsupported Statement
     | unsupportedStatement
     ;
@@ -1363,6 +1368,20 @@ killAnalyzeStatement
 analyzeProfileStatement
     : ANALYZE PROFILE FROM string
     | ANALYZE PROFILE FROM string ',' INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+
+// ----------------------------------------- SQL Plan Manager Statement -------------------------------------------------
+createBaselinePlanStatement
+    : CREATE GLOBAL? BASELINE (ON queryRelation)? USING queryRelation properties?
+    ;
+
+dropBaselinePlanStatement
+    : DROP BASELINE INTEGER_VALUE
+    ;
+
+showBaselinePlanStatement
+    : SHOW BASELINE
     ;
 
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
@@ -2955,7 +2974,7 @@ nonReserved
     : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
     | ARRAY_AGG | ARRAY_AGG_DISTINCT
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS
-    | BUILTIN | BASE | BEFORE
+    | BUILTIN | BASE | BEFORE | BASELINE
     | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT

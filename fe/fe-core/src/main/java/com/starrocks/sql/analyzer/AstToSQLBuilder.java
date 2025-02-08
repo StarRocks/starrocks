@@ -35,6 +35,7 @@ import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableFunctionRelation;
 import com.starrocks.sql.ast.TableRelation;
 import com.starrocks.sql.ast.TableSampleClause;
+import com.starrocks.sql.ast.ValuesRelation;
 import com.starrocks.sql.ast.ViewRelation;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -171,48 +172,7 @@ public class AstToSQLBuilder {
                 sqlBuilder.append("DISTINCT ");
             }
 
-            List<String> selectListString = new ArrayList<>();
-            if (CollectionUtils.isNotEmpty(stmt.getOutputExpression())) {
-                for (int i = 0; i < stmt.getOutputExpression().size(); ++i) {
-                    Expr expr = stmt.getOutputExpression().get(i);
-                    String columnName = stmt.getColumnOutputNames().get(i);
-
-                    if (expr instanceof FieldReference) {
-                        Field field = stmt.getScope().getRelationFields().getFieldByIndex(i);
-                        selectListString.add(buildColumnName(field.getRelationAlias(), field.getName(), columnName));
-                    } else if (expr instanceof SlotRef) {
-                        SlotRef slot = (SlotRef) expr;
-                        if (slot.getOriginType().isStructType()) {
-                            selectListString.add(buildStructColumnName(slot.getTblNameWithoutAnalyzed(),
-                                    slot.getColumnName(), columnName));
-                        } else {
-                            selectListString.add(buildColumnName(slot.getTblNameWithoutAnalyzed(), slot.getColumnName(),
-                                    columnName));
-                        }
-                    } else {
-                        selectListString.add(visit(expr) + " AS `" + columnName + "`");
-                    }
-                }
-            } else {
-                for (SelectListItem item : stmt.getSelectList().getItems()) {
-                    if (item.isStar()) {
-                        if (item.getTblName() != null) {
-                            selectListString.add(item.getTblName() + ".*");
-                        } else {
-                            selectListString.add("*");
-                        }
-                    } else if (item.getExpr() != null) {
-                        Expr expr = item.getExpr();
-                        String str = visit(expr);
-                        if (StringUtils.isNotEmpty(item.getAlias())) {
-                            str += " AS " + ParseUtil.backquote(item.getAlias());
-                        }
-                        selectListString.add(str);
-                    }
-                }
-            }
-
-            sqlBuilder.append(Joiner.on(", ").join(selectListString));
+            sqlBuilder.append(Joiner.on(", ").join(visitSelectItemList(stmt)));
 
             String fromClause = visit(stmt.getRelation());
             if (fromClause != null) {
@@ -236,6 +196,52 @@ public class AstToSQLBuilder {
             }
 
             return sqlBuilder.toString();
+        }
+
+        protected List<String> visitSelectItemList(SelectRelation stmt) {
+            if (CollectionUtils.isNotEmpty(stmt.getOutputExpression())) {
+                List<String> selectListString = new ArrayList<>();
+                for (int i = 0; i < stmt.getOutputExpression().size(); ++i) {
+                    Expr expr = stmt.getOutputExpression().get(i);
+                    String columnName = stmt.getColumnOutputNames().get(i);
+
+                    if (expr instanceof FieldReference) {
+                        Field field = stmt.getScope().getRelationFields().getFieldByIndex(i);
+                        selectListString.add(buildColumnName(field.getRelationAlias(), field.getName(), columnName));
+                    } else if (expr instanceof SlotRef) {
+                        SlotRef slot = (SlotRef) expr;
+                        if (slot.getOriginType().isStructType()) {
+                            selectListString.add(buildStructColumnName(slot.getTblNameWithoutAnalyzed(),
+                                    slot.getColumnName(), columnName));
+                        } else {
+                            selectListString.add(buildColumnName(slot.getTblNameWithoutAnalyzed(), slot.getColumnName(),
+                                    columnName));
+                        }
+                    } else {
+                        selectListString.add(visit(expr) + " AS `" + columnName + "`");
+                    }
+                }
+                return selectListString;
+            } else {
+                List<String> selectListString = new ArrayList<>();
+                for (SelectListItem item : stmt.getSelectList().getItems()) {
+                    if (item.isStar()) {
+                        if (item.getTblName() != null) {
+                            selectListString.add(item.getTblName() + ".*");
+                        } else {
+                            selectListString.add("*");
+                        }
+                    } else if (item.getExpr() != null) {
+                        Expr expr = item.getExpr();
+                        String str = visit(expr);
+                        if (StringUtils.isNotEmpty(item.getAlias())) {
+                            str += " AS " + ParseUtil.backquote(item.getAlias());
+                        }
+                        selectListString.add(str);
+                    }
+                }
+                return selectListString;
+            }
         }
 
         @Override

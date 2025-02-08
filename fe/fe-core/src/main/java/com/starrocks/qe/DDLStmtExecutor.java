@@ -140,11 +140,14 @@ import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
+import com.starrocks.sql.ast.spm.CreateBaselinePlanStmt;
+import com.starrocks.sql.ast.spm.DropBaselinePlanStmt;
 import com.starrocks.sql.ast.warehouse.AlterWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
+import com.starrocks.sql.spm.SPMStmtExecutor;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeJob;
@@ -1203,6 +1206,23 @@ public class DDLStmtExecutor {
                                                                         ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getClusterSnapshotMgr().setAutomatedSnapshotOff(stmt);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitCreateBaselinePlanStatement(CreateBaselinePlanStmt statement,
+                                                              ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                SPMStmtExecutor.execute(context, statement);
+            });
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropBaselinePlanStatement(DropBaselinePlanStmt statement, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                SPMStmtExecutor.execute(context, statement);
             });
             return null;
         }
