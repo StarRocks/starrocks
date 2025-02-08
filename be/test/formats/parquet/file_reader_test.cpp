@@ -3420,7 +3420,7 @@ TEST_F(FileReaderTest, low_card_reader) {
     ColumnIdToGlobalDictMap dict_map;
     GlobalDictMap g_dict;
     for (int i = 0; i < 100; ++i) {
-        g_dict[Slice(values[i])] = i;
+        g_dict[Slice(values[i])] = i + 1;
     }
     dict_map[1] = &g_dict;
 
@@ -3475,7 +3475,7 @@ TEST_F(FileReaderTest, low_card_reader_filter_group) {
     ColumnIdToGlobalDictMap dict_map;
     GlobalDictMap g_dict;
     for (int i = 0; i < 100; ++i) {
-        g_dict[Slice(values[i])] = i;
+        g_dict[Slice(values[i])] = i + 1;
     }
     dict_map[1] = &g_dict;
 
@@ -3515,7 +3515,7 @@ TEST_F(FileReaderTest, low_card_reader_dict_not_match) {
     ColumnIdToGlobalDictMap dict_map;
     GlobalDictMap g_dict;
     for (int i = 0; i < 90; ++i) {
-        g_dict[Slice(values[i])] = i;
+        g_dict[Slice(values[i])] = i + 1;
     }
     dict_map[1] = &g_dict;
 
@@ -3555,7 +3555,7 @@ TEST_F(FileReaderTest, no_matched_reader) {
     ColumnIdToGlobalDictMap dict_map;
     GlobalDictMap g_dict;
     for (int i = 0; i < 100; ++i) {
-        g_dict[Slice(values[i])] = i;
+        g_dict[Slice(values[i])] = i + 1;
     }
     dict_map[1] = &g_dict;
 
@@ -3589,7 +3589,7 @@ TEST_F(FileReaderTest, low_rows_reader) {
     ColumnIdToGlobalDictMap dict_map;
     GlobalDictMap g_dict;
     for (int i = 0; i < 100; ++i) {
-        g_dict[Slice(values[i])] = i;
+        g_dict[Slice(values[i])] = i + 1;
     }
     dict_map[2] = &g_dict;
     dict_map[3] = &g_dict;
@@ -3636,6 +3636,118 @@ TEST_F(FileReaderTest, low_rows_reader) {
     EXPECT_EQ(100, total_row_nums);
 }
 
+TEST_F(FileReaderTest, low_rows_reader_empty_not_null_not_match) {
+    auto chunk = std::make_shared<Chunk>();
+
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_ARRAY_DESC, true), chunk->num_columns());
+
+    const std::string low_rows_file = "./be/test/formats/parquet/test_data/low_rows_non_dict_empty.parquet";
+
+    Utils::SlotDesc slot_descs[] = {
+            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_INT_DESC}, {"c3", TYPE_INT_ARRAY_DESC}, {""}};
+    auto ctx = _create_file_random_read_context(low_rows_file, slot_descs);
+
+    std::vector<std::string> values;
+    for (int i = 0; i < 100; ++i) {
+        values.push_back(std::to_string(i));
+    }
+    std::sort(values.begin(), values.end());
+
+    ColumnIdToGlobalDictMap dict_map;
+    GlobalDictMap g_dict;
+    for (int i = 0; i < 100; ++i) {
+        g_dict[Slice(values[i])] = i + 1;
+    }
+    dict_map[2] = &g_dict;
+    dict_map[3] = &g_dict;
+
+    ctx->global_dictmaps = &dict_map;
+
+    auto file_reader = _create_file_reader(low_rows_file);
+    Status status = file_reader->init(ctx);
+
+    ASSERT_TRUE(status.ok());
+    chunk->reset();
+    status = file_reader->get_next(&chunk);
+    ASSERT_EQ("Global dictionary not match", status.code_as_string());
+}
+
+TEST_F(FileReaderTest, low_rows_reader_empty_not_null) {
+    auto chunk = std::make_shared<Chunk>();
+
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_ARRAY_DESC, true), chunk->num_columns());
+
+    const std::string low_rows_file = "./be/test/formats/parquet/test_data/low_rows_non_dict_empty.parquet";
+
+    Utils::SlotDesc slot_descs[] = {
+            {"c0", TYPE_INT_DESC}, {"c1", TYPE_INT_DESC}, {"c2", TYPE_INT_DESC}, {"c3", TYPE_INT_ARRAY_DESC}, {""}};
+    auto ctx = _create_file_random_read_context(low_rows_file, slot_descs);
+
+    std::vector<std::string> values;
+    for (int i = 0; i < 100; ++i) {
+        values.push_back(std::to_string(i));
+    }
+    values.push_back("");
+    std::sort(values.begin(), values.end());
+
+    ColumnIdToGlobalDictMap dict_map;
+    GlobalDictMap g_dict;
+    for (int i = 0; i < 101; ++i) {
+        g_dict[Slice(values[i])] = i + 1;
+    }
+    dict_map[2] = &g_dict;
+    dict_map[3] = &g_dict;
+
+    ctx->global_dictmaps = &dict_map;
+
+    auto file_reader = _create_file_reader(low_rows_file);
+    Status status = file_reader->init(ctx);
+
+    ASSERT_TRUE(status.ok());
+
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        ColumnPtr c0 = chunk->get_column_by_index(0);
+        ColumnPtr c1 = chunk->get_column_by_index(1);
+        ColumnPtr c2 = chunk->get_column_by_index(2);
+        ColumnPtr c3 = chunk->get_column_by_index(3);
+        for (size_t row_index = 0; row_index < chunk->num_rows(); row_index++) {
+            int32_t c0_value = c0->get(row_index).get_int32();
+            EXPECT_FALSE(c2->is_null(row_index));
+            EXPECT_FALSE(c3->is_null(row_index));
+            int32_t c1_value = c1->get(row_index).get_int32();
+            std::string expected_c0_string = std::to_string(c0_value % 100);
+            std::string expected_c1_string = std::to_string(c1_value % 100);
+            int32_t c0_global_code = g_dict.at(Slice(expected_c0_string));
+            int32_t c1_global_code = g_dict.at(Slice(expected_c1_string));
+            int32_t empty_global_code = g_dict.at(Slice(""));
+            DatumArray c3_value = c3->get(row_index).get_array();
+            if (c0_value % 10 == 0) {
+                EXPECT_EQ(empty_global_code, c2->get(row_index).get_int32());
+                EXPECT_EQ(0, c3_value.size());
+            } else {
+                EXPECT_EQ(c0_global_code, c2->get(row_index).get_int32());
+                EXPECT_EQ(3, c3_value.size());
+                EXPECT_EQ(c0_global_code, c3_value[0].get_int32());
+                EXPECT_EQ(empty_global_code, c3_value[1].get_int32());
+                EXPECT_EQ(c1_global_code, c3_value[2].get_int32());
+            }
+        }
+    }
+
+    EXPECT_EQ(100, total_row_nums);
+}
+
 TEST_F(FileReaderTest, low_rows_reader_filter_group) {
     const std::string small_page_file = "./be/test/formats/parquet/test_data/low_rows_non_dict.parquet";
 
@@ -3650,7 +3762,7 @@ TEST_F(FileReaderTest, low_rows_reader_filter_group) {
     ColumnIdToGlobalDictMap dict_map;
     GlobalDictMap g_dict;
     for (int i = 0; i < 100; ++i) {
-        g_dict[Slice(values[i])] = i;
+        g_dict[Slice(values[i])] = i + 1;
     }
     dict_map[1] = &g_dict;
 
