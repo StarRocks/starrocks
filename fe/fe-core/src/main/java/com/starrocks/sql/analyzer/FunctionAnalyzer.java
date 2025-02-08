@@ -55,6 +55,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.spm.SPMFunctions;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -690,7 +691,12 @@ public class FunctionAnalyzer {
         }
 
         // get fn from meta functions
-        return ScalarOperatorEvaluator.INSTANCE.getMetaFunction(node.getFnName(), argumentTypes);
+        fn = ScalarOperatorEvaluator.INSTANCE.getMetaFunction(node.getFnName(), argumentTypes);
+
+        if (fn != null) {
+            return fn;
+        }
+        return SPMFunctions.getSPMFunction(node.getFnName().getFunction());
     }
 
     /**
