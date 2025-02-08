@@ -71,6 +71,7 @@ public class ShowDataDistributionStmtTest {
             //2.1 check value: partition table
             stmt.execute("select count(*) from partition_table;");
             if (stmt.getResultSet().next()) {
+                System.out.println("ShowDataDistributionStmtTest: begin check value: partition table");
                 //check insert data success and wait table meta update
                 int count = stmt.getResultSet().getInt(1);
                 System.out.println("ShowDataDistributionStmtTest: partition_table row count = " + count);
@@ -92,6 +93,7 @@ public class ShowDataDistributionStmtTest {
             //2.2 check value: unpartition table
             stmt.execute("select count(*) from unpartition_table;");
             if (stmt.getResultSet().next()) {
+                System.out.println("ShowDataDistributionStmtTest: begin check value: unpartition table");
                 //check insert data success and wait table meta update
                 int count = stmt.getResultSet().getInt(1);
                 System.out.println("ShowDataDistributionStmtTest: unpartition_table row count = " + count);
