@@ -179,6 +179,11 @@ public class LogicalPlanPrinter {
         }
 
         @Override
+        public OperatorStr visitLogicalTableFunction(OptExpression optExpression, Integer step) {
+            return visitDefault(optExpression, step);
+        }
+
+        @Override
         public OperatorStr visitLogicalRepeat(OptExpression optExpression, Integer step) {
             int nextStep = step + 1;
             List<OperatorStr> children =
