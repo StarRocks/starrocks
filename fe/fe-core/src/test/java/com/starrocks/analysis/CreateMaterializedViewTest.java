@@ -4842,8 +4842,8 @@ public class CreateMaterializedViewTest extends MVTestBase {
                         "as select dt, province, sum(age) from t3 group by dt, province;");
                 Assert.fail();
             } catch (Exception e) {
-                Assert.assertTrue(e.getMessage().contains("List partition expression can only be ref-base-table's partition " +
-                        "expression but contains"));
+                Assert.assertTrue(e.getMessage().contains("List materialized view's partition expression can only refer " +
+                        "ref-base-table's partition expression without transforms but contains"));
             }
         }
         starRocksAssert.dropTable("t3");
@@ -5324,5 +5324,55 @@ public class CreateMaterializedViewTest extends MVTestBase {
         Assert.assertEquals("date_trunc('day', k1) > current_date() - interval 2 month", retentionCondition);
         starRocksAssert.dropMaterializedView("mv1");
         starRocksAssert.dropTable("tt1");
+    }
+
+    @Test
+    public void testDisableCreateListMVWithDateTimeRollup1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS test_tbl_A (\n" +
+                "  hour DATETIME,\n" +
+                "  partner_id BIGINT,\n" +
+                "  impressions BIGINT\n" +
+                ")PARTITION BY (hour);");
+        try {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test.test_mv_A\n" +
+                    "PARTITION BY day\n" +
+                    "REFRESH ASYNC\n" +
+                    "AS\n" +
+                    "select\n" +
+                    "    date_trunc('day', hour) as day,\n" +
+                    "    partner_id,\n" +
+                    "    sum(impressions) as impressions\n" +
+                    "from test_tbl_A\n" +
+                    "group by 1,2");
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("List materialized view's partition expression can only refer " +
+                    "ref-base-table's partition expression without transforms but contains"));
+        }
+    }
+
+    @Test
+    public void testDisableCreateListMVWithDateTimeRollup2() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS test_tbl_A (\n" +
+                "  hour DATETIME,\n" +
+                "  partner_id BIGINT,\n" +
+                "  impressions BIGINT\n" +
+                ")PARTITION BY (partner_id, hour);");
+        try {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test.test_mv_A\n" +
+                    "PARTITION BY (day, partner_id)\n" +
+                    "REFRESH ASYNC\n" +
+                    "AS\n" +
+                    "select\n" +
+                    "    date_trunc('day', hour) as day,\n" +
+                    "    partner_id,\n" +
+                    "    sum(impressions) as impressions\n" +
+                    "from test_tbl_A\n" +
+                    "group by 1,2");
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("List materialized view's partition expression can only refer " +
+                    "ref-base-table's partition expression without transforms but contains"));
+        }
     }
 }
