@@ -55,7 +55,7 @@ public class ShowDataDistributionStmtTest {
                     "values('c','c','2024-09-21'),('c','c','2024-09-21'),('d','d','2024-09-21')");
 
             //2.check
-            //2.0 check: vaild sql
+            //2.0 check: vaild sql 
             List<String> vaildSql = Arrays.asList(
                     "show data distribution from partition_table;",
                     "show data distribution from partition_table partition(p20240920);",
