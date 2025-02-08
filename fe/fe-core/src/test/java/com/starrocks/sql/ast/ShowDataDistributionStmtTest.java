@@ -107,7 +107,7 @@ public class ShowDataDistributionStmtTest {
             }
             System.out.println("ShowDataDistributionStmtTest: 2.2check unpartition table done!");
 
-            //2.3 check: db not exist 
+            //2.3 check: db not exist
             try {
                 stmt.execute("show data distribution from no_exist_db.unpartition_table;");
             } catch (Exception e) {
