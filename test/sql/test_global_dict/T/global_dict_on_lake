@@ -28,6 +28,10 @@ function: wait_global_dict_ready('c2', 'low_card_test')
 select count(c2) from low_card_test;
 select count(c2) from low_card_test where c2 = '7';
 select count(c1) from low_card_test where c2 = '1';
+insert into low_card_test values (8, '');
+select count(c2) from low_card_test;
+function: wait_global_dict_ready('c2', 'low_card_test')
+select count(c2) from low_card_test;
 
 drop table low_card_test force;
 
