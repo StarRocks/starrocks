@@ -313,9 +313,9 @@ public class GroupingSetTest extends PlanTestBase {
                 "    ) tev,unnest(x2) \n" +
                 ") tev group by GROUPING SETS((u2, r1)) ";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "8:Project\n" +
+        assertContains(plan, "  8:Project\n" +
                 "  |  <slot 10> : 10: unnest\n" +
-                "  |  <slot 11> : datediff(CAST(split(9: array_join, ',')[2] AS DATETIME), CAST(10: unnest AS DATETIME))\n" +
+                "  |  <slot 11> : datediff(CAST(13: expr AS DATETIME), CAST(10: unnest AS DATETIME))\n" +
                 "  |  \n" +
                 "  7:TableValueFunction\n" +
                 "  |  tableFunctionName: unnest\n" +
@@ -324,7 +324,7 @@ public class GroupingSetTest extends PlanTestBase {
                 "  |  \n" +
                 "  6:Project\n" +
                 "  |  <slot 6> : 6: array_agg\n" +
-                "  |  <slot 9> : array_join(7: array_agg, ',')");
+                "  |  <slot 13> : split(array_join(7: array_agg, ','), ',')[2]");
     }
 
     @Test
