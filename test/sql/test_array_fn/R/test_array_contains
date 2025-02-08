@@ -2110,3 +2110,244 @@ SELECT id FROM test_array_contains WHERE array_contains_all(array_varchar, ['a',
 SELECT id FROM test_array_contains WHERE array_contains_seq(array_varchar, ['a', 'b', 'c', 'd', 'e']) ORDER BY id;
 -- result:
 -- !result
+-- name: test_array_contains_complex_type
+CREATE TABLE test_array_contains_complex_type (
+    id INT,
+    array_map ARRAY<MAP<STRING, INT>>,
+    array_json ARRAY<JSON>,
+    array_struct ARRAY<STRUCT<f1 INT, f2 STRING>>
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO test_array_contains_complex_type VALUES
+(1, [map{'a': 1, 'b': 2}, map{'c': 3, 'd': 4}], ['{"key1": 100, "key2": 200}', '{"key3": 300}'], [row(10, 'hello'), row(20, 'world')]),
+(2, [map{'x': 5, 'y': 6}], ['{"key4": 400}', '{"key5": 500, "key6": 600}'], [row(30,'starrocks'), row(40, 'database')]),
+(3, NULL, NULL, NULL),
+(4, [], [], []);
+-- result:
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_all([map{'a': 1, 'b': 2}], array_map) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq([map{'c': 3, 'd': 4}], array_map) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_all([NULL], array_map) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq([], array_map) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_all(['{"key1": 100}'], array_json) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq(['{"key3": 300}'], array_json) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_all(['{"key5": 500, "key6": 600}'], array_json) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq([NULL], array_json) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_all([], array_json) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_all([row(10,'hello')], array_struct) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq([row(20,''world')], array_struct) ORDER BY id;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 77. Detail message: Unexpected input '(', the most similar input is {']'}.")
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_all([row(40,'database')], array_struct) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq([NULL], array_struct) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_all([], array_struct) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_all(array_map, [map{'a': 1}]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq(array_json, ['{"key3": 300}']) ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_all(array_struct, [row(10, 'hello')]) ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq(array_map, []) ORDER BY id;
+-- result:
+1
+2
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_map, map{'a': 1, 'b': 2}) ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_map, map{'c': 3, 'd': 4}) ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_map, map{'x': 5, 'y': 6}) ORDER BY id;
+-- result:
+2
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_map, NULL) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_map, map{}) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_json, '{"key1": 100, "key2": 200}') ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_json, '{"key3": 300}') ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_json, '{"key5": 500, "key6": 600}') ORDER BY id;
+-- result:
+2
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_json, NULL) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_json, '{}') ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_struct, row(10, 'hello')) ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_struct, row(20, 'world')) ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_struct, row(40, 'database')) ORDER BY id;
+-- result:
+2
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_struct, NULL) ORDER BY id;
+-- result:
+-- !result
+SELECT id, array_position(array_map, map{'a': 1, 'b': 2}) FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	1
+2	0
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_map, map{'c': 3, 'd': 4}) FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	2
+2	0
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_map, map{'x': 5, 'y': 6}) FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	0
+2	1
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_map, NULL) FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	0
+2	0
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_map, map{}) FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	0
+2	0
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_json, '{"key1": 100, "key2": 200}') FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	1
+2	0
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_json, '{"key3": 300}') FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	2
+2	0
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_json, '{"key5": 500, "key6": 600}') FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	0
+2	2
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_json, NULL) FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	0
+2	0
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_json, '{}') FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	0
+2	0
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_struct, row(10, 'hello')) FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	1
+2	0
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_struct, row(20, 'world')) FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	2
+2	0
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_struct, row(40, 'database')) FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	0
+2	2
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_struct, NULL) FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	0
+2	0
+3	None
+4	0
+-- !result
