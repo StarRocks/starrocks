@@ -42,9 +42,9 @@ import java.util.Set;
  * SPM need special spm function to serialize/deserialize digest
  */
 public class SPMAst2SQLBuilder {
-    private boolean enableHints = false;
+    private final boolean enableHints;
 
-    private boolean enableDigest = false;
+    private final boolean enableDigest;
 
     private final Builder builder = new Builder();
 

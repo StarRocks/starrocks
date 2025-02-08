@@ -14,6 +14,8 @@
 
 package com.starrocks.sql.spm;
 
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.ast.QueryRelation;
@@ -31,15 +33,16 @@ public class SPMPlaceholderBuilder {
     }
 
     private class PlaceholderBuilder extends SPMUpdateExprVisitor<Void> {
-        //        @Override
-        //        public ParseNode visitInPredicate(InPredicate node, Void context) {
-        //            if (!node.isLiteralChildren()) {
-        //                return node;
-        //            }
-        //            return new InPredicate(node.getChild(0),
-        //                    List.of(SPMFunctions.newFunc(SPMFunctions.CONST_LIST_FUNC, placeholderID++, node.getChildren())),
-        //                    node.isNotIn(), node.getPos());
-        //        }
+        @Override
+        public ParseNode visitInPredicate(InPredicate node, Void context) {
+            if (!node.isLiteralChildren()) {
+                return node;
+            }
+            List<Expr> v = node.getChildren().stream().skip(1).toList();
+            return new InPredicate(node.getChild(0),
+                    List.of(SPMFunctions.newFunc(SPMFunctions.CONST_LIST_FUNC, placeholderID++, v)),
+                    node.isNotIn(), node.getPos());
+        }
 
         @Override
         public ParseNode visitLiteral(LiteralExpr node, Void context) {

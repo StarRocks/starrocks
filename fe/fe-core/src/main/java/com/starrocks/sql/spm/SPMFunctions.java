@@ -24,6 +24,7 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import org.apache.commons.lang3.StringUtils;
@@ -39,6 +40,9 @@ public class SPMFunctions {
     static final String CONST_LIST_FUNC = "_spm_const_list";
     // NULL_TYPE _spm_const_var(placeholderID)
     static final String CONST_VAR_FUNC = "_spm_const_var";
+
+    // for ut test
+    public static boolean enableSPMParamsPrint = false;
 
     private static final Set<String> SPM_FUNCTIONS = Set.of(CONST_LIST_FUNC, CONST_VAR_FUNC);
 
@@ -82,16 +86,20 @@ public class SPMFunctions {
                 .getFunctionName().getFunction().toLowerCase());
     }
 
-
-
     public static ScalarOperator castSPMFunctions(ScalarOperator operator, Type type) {
         CallOperator call = (CallOperator) operator;
         call.setType(type);
         call.setFunction(getSPMFunction(call.getFunction().functionName(), type));
+        for (int i = 1; i < call.getChildren().size(); i++) {
+            call.setChild(i, new CastOperator(type, call.getChild(i)));
+        }
         return call;
     }
 
     public static String toSQL(String function, List<String> children) {
+        if (enableSPMParamsPrint) {
+            return function + "(" + String.join(", ", children) + ")";
+        }
         return function + "(" + children.get(0) + ")";
     }
 
