@@ -154,7 +154,7 @@ mysql> select sum(cast(j->'a' as int)) from tj where cast(j->'b' as boolean);
 
 ```Plain Text
 mysql> select * from tj
-       where j->'a' <= parse_json('3')
+       where j->'a' <= 3
        order by cast(j->'a' as int);
 +------+----------------------+
 | id   | j                    |
