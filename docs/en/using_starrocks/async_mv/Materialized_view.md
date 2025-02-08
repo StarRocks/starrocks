@@ -45,7 +45,7 @@ The following table compares the asynchronous materialized views (ASYNC MV) and 
 
   Currently, StarRocks supports two generic refreshing strategies:
 
-  - ASYNC: Asynchronous refresh mode. Each time the base table data changes, the materialized view is automatically refreshed according to the pre-defined refresh interval.
+  - ASYNC: Asynchronous refresh mode. Materialized views can be refreshed automatically when the data in the base table changes, or at regular intervals based on specified intervals.
   - MANUAL: Manual refresh mode. The materialized view will not be automatically refreshed. The refresh tasks can only be triggered manually by users.
 
 - **Query rewrite**
