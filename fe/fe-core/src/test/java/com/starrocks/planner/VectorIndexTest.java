@@ -114,20 +114,27 @@ public class VectorIndexTest extends PlanTestBase {
                 "  1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  2 <-> [2: c1, ARRAY<FLOAT>, false]\n" +
-                "  |  5 <-> [7: __vector_approx_cosine_similarity, FLOAT, false]\n" +
+                "  |  5 <-> [6: __vector_approx_cosine_similarity, FLOAT, false]\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     table: test_cosine, rollup: test_cosine\n" +
                 "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <7:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
-                "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0");
+                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0\n" +
+                "     preAggregation: on\n" +
+                "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     actualRows=0, avgRowSize=3.0\n" +
+                "     Pruned type: 2 <-> [ARRAY<FLOAT>]\n" +
+                "     cardinality: 1\n" +
+                "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (6: __vector_approx_cosine_similarity)");
 
         sql = "select c1 from test_l2 " +
                 "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
+                "          IVFPQ: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0");
 
         // Constant vector with cast.
@@ -137,7 +144,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <7:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
+                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
                 "Query Vector: [1.1, 2.1, 3.1, 4.1, 5.1], Predicate Range: -1.0");
 
         sql = "select c1 from test_cosine " +
@@ -146,7 +153,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <7:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
+                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
                 "Query Vector: [1.1, 2.1, 3.1, 4.1, 5.1], Predicate Range: -1.0");
 
         sql = "select c1 from test_cosine " +
@@ -155,7 +162,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <7:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
+                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
                 "Query Vector: [1.1, 2.1, 3.1, 4.1, 5.1], Predicate Range: -1.0");
     }
 
@@ -221,7 +228,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) desc limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <7:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
+                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
 
         sql = "select c1 from test_l2 " +
@@ -229,7 +236,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
+                "          IVFPQ: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
 
         sql = "select c1 from test_cosine " +
@@ -237,7 +244,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) desc limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <7:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
+                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
 
         sql = "select c1 from test_l2 " +
@@ -245,7 +252,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
+                "          IVFPQ: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
 
         // Cast
@@ -254,7 +261,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
+                "          IVFPQ: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
 
         sql = "select c1 from test_l2 " +
@@ -262,7 +269,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
+                "          IVFPQ: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
 
         sql = "select c1 from test_l2 " +
@@ -270,7 +277,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
+                "          IVFPQ: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
 
         // AND
@@ -280,7 +287,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) desc limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <7:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
+                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 1000.0");
 
         sql = "select c1 from test_l2 " +
@@ -288,7 +295,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
+                "          IVFPQ: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
     }
 
@@ -383,21 +390,28 @@ public class VectorIndexTest extends PlanTestBase {
                 "  1:Project\n" +
                 "  |  output columns:\n" +
                 "  |  2 <-> [2: c1, ARRAY<FLOAT>, false]\n" +
-                "  |  5 <-> [13: cast, DOUBLE, true] + 1.0\n" +
-                "  |  6 <-> [13: cast, DOUBLE, true] + 2.0\n" +
-                "  |  7 <-> cast([12: __vector_approx_cosine_similarity, FLOAT, false] as VARCHAR(65533))\n" +
-                "  |  8 <-> cast(approx_cosine_similarity[(cast([1.1,2.2,3.3,4.4,5.5] as ARRAY<FLOAT>), [3: c2, ARRAY<FLOAT>, true]); " +
-                "args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true] as DOUBLE) + 2.0\n" +
-                "  |  9 <-> [12: __vector_approx_cosine_similarity, FLOAT, false]\n" +
+                "  |  5 <-> [11: cast, DOUBLE, true] + 1.0\n" +
+                "  |  6 <-> [11: cast, DOUBLE, true] + 2.0\n" +
+                "  |  7 <-> cast([10: __vector_approx_cosine_similarity, FLOAT, false] as VARCHAR(65533))\n" +
+                "  |  8 <-> cast(approx_cosine_similarity[(cast([1.1,2.2,3.3,4.4,5.5] as ARRAY<FLOAT>), [3: c2, ARRAY<FLOAT>, true]); args: INVALID_TYPE,INVALID_TYPE; result: FLOAT; args nullable: true; result nullable: true] as DOUBLE) + 2.0\n" +
+                "  |  9 <-> [10: __vector_approx_cosine_similarity, FLOAT, false]\n" +
                 "  |  common expressions:\n" +
-                "  |  13 <-> cast([12: __vector_approx_cosine_similarity, FLOAT, false] as DOUBLE)\n" +
+                "  |  11 <-> cast([10: __vector_approx_cosine_similarity, FLOAT, false] as DOUBLE)\n" +
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
                 "     table: test_cosine, rollup: test_cosine\n" +
                 "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <12:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
-                "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0");
+                "          IVFPQ: OFF, Distance Column: <10:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0\n" +
+                "     preAggregation: on\n" +
+                "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
+                "     tabletList=\n" +
+                "     actualRows=0, avgRowSize=8.0\n" +
+                "     Pruned type: 2 <-> [ARRAY<FLOAT>]\n" +
+                "     Pruned type: 3 <-> [ARRAY<FLOAT>]\n" +
+                "     cardinality: 1\n" +
+                "     probe runtime filters:\n" +
+                "     - filter_id = 0, probe_expr = (10: __vector_approx_cosine_similarity)");
     }
 
     @Test
@@ -410,14 +424,14 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_cosine_similarity(c1, [1.1,2.2,3.3,4.4,5.5]) desc limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <7:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
+                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0");
 
         sql = "select c1 from test_l2 " +
                 "order by approx_l2_distance(c1, [1.1,2.2,3.3,4.4,5.5]) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
+                "          IVFPQ: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: -1.0");
 
         // Predicate argument order doesn't matter.
@@ -426,7 +440,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_cosine_similarity([1.1,2.2,3.3,4.4,5.5], c1) desc limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <7:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
+                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_cosine_similarity>, LimitK: 10, Order: DESC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
 
         sql = "select c1 from test_l2 " +
@@ -434,7 +448,7 @@ public class VectorIndexTest extends PlanTestBase {
                 "order by approx_l2_distance([1.1,2.2,3.3,4.4,5.5], c1) limit 10";
         plan = getVerboseExplain(sql);
         assertContains(plan, "     VECTORINDEX: ON\n" +
-                "          IVFPQ: OFF, Distance Column: <6:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
+                "          IVFPQ: OFF, Distance Column: <5:__vector_approx_l2_distance>, LimitK: 10, Order: ASC, " +
                 "Query Vector: [1.1, 2.2, 3.3, 4.4, 5.5], Predicate Range: 100.0");
     }
 

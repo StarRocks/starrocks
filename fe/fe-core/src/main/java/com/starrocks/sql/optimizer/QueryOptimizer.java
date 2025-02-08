@@ -790,7 +790,7 @@ public class QueryOptimizer extends Optimizer {
             scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PRUNE_COLUMNS_RULES);
         }
         scheduler.rewriteOnce(tree, rootTaskContext, new PruneSubfieldRule());
-
+        deriveLogicalProperty(tree);
         return tree;
     }
 
