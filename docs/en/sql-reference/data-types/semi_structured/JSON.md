@@ -155,7 +155,7 @@ Example 5: Sort the data of the table by using the JSON column as a sort key.
 
 ```plaintext
 mysql> select * from tj
-    ->        where j->'a' <= parse_json('3')
+    ->        where j->'a' <= 3
     ->        order by cast(j->'a' as int);
 +------+----------------------+
 | id   | j                    |
