@@ -19,7 +19,6 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
@@ -182,22 +181,6 @@ public class SPMAst2SQLBuilder {
                 return "?";
             }
             return super.visitLiteral(expr, context);
-        }
-
-        @Override
-        public String visitLimitElement(LimitElement node, Void context) {
-            if (!enableDigest) {
-                return visitLimitElement(node, context);
-            }
-            if (node.hasLimit()) {
-                StringBuilder sb = new StringBuilder(" LIMIT ");
-                if (node.hasOffset()) {
-                    sb.append(" ?, ");
-                }
-                sb.append(" ? ");
-                return sb.toString();
-            }
-            return "";
         }
     }
 }

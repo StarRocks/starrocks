@@ -106,19 +106,17 @@ public class SPMPlanner {
     private boolean bind(BaselinePlan baseline, StatementBase query) {
         List<StatementBase> binder = SqlParser.parse(baseline.bindSql, session.getSessionVariable());
         Preconditions.checkState(binder.size() == 1);
-
         // remove when support cache
         analyze(binder.get(0));
-
-        if (!this.binder.bind(binder.get(0), query)) {
-            return false;
-        }
-        return !placeholderValues.isEmpty();
+        return this.binder.bind(binder.get(0), query);
     }
 
     private StatementBase replacePlan(BaselinePlan baseline) {
         List<StatementBase> plan = SqlParser.parse(baseline.planSql, session.getSessionVariable());
         Preconditions.checkState(plan.size() == 1);
+        if (placeholderValues.isEmpty()) {
+            return plan.get(0);
+        }
         return (StatementBase) replacer.visit(plan.get(0));
     }
 
