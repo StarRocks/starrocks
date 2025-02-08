@@ -41,6 +41,7 @@ public class SPMStmtExecutor {
         for (BaselinePlan baseline : baselines) {
             List<String> row = Lists.newArrayList();
             row.add(String.valueOf(baseline.getId()));
+            row.add(baseline.isEnable ? "Enable" : "Disable");
             row.add(baseline.bindSqlDigest);
             row.add(String.valueOf(baseline.bindSqlHash));
             row.add(baseline.planSql);

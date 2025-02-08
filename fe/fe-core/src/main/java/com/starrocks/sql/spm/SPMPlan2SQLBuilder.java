@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.ExpressionPrinter;
+import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
@@ -300,7 +301,7 @@ public class SPMPlan2SQLBuilder {
     private static class ExprSQLBuilder extends ExpressionPrinter<PlanToSQLContext> {
         @Override
         public String print(ScalarOperator scalarOperator) {
-            Preconditions.checkState(false);
+            UnsupportedException.unsupportedException("SQLPlanManager doesn't support: " + scalarOperator);
             return null;
         }
 

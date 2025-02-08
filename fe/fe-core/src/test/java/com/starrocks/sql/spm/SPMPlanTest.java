@@ -146,4 +146,32 @@ public class SPMPlanTest extends SPMTestBase {
                 "FROM `t1`\n" +
                 "WHERE `v6` IS NOT NULL) `t_1` ON `v3` = `v6`");
     }
+
+    @Test
+    public void testBindInPredicate() {
+        SPMFunctions.enableSPMParamsPrint = true;
+        CreateBaselinePlanStmt stmt = createBaselinePlanStmt(
+                "select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 where t0.v2 in (1,2,3,4)");
+        SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
+
+        generator.analyze();
+        generator.formatStmt();
+        generator.generatePlan();
+        SPMFunctions.enableSPMParamsPrint = false;
+
+        assertContains(generator.getBindSqlDigest(), "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2`\n" +
+                "FROM `test`.`t0` INNER JOIN `test`.`t1` ON `test`.`t0`.`v3` = `test`.`t1`.`v6`\n" +
+                "WHERE `test`.`t0`.`v2` IN (?)");
+
+        assertContains(generator.getBindSql(), "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2`\n" +
+                "FROM `test`.`t0` INNER JOIN `test`.`t1` ON `test`.`t0`.`v3` = `test`.`t1`.`v6`\n" +
+                "WHERE `test`.`t0`.`v2` IN (_spm_const_list(0, 1, 2, 3, 4))");
+
+        assertContains(generator.getPlanStmtSQL(),
+                "SELECT v2, v4 FROM " +
+                        "(SELECT * FROM t0 WHERE v2 IN (_spm_const_list(0, 1, 2, 3, 4))) t_0 " +
+                        "INNER JOIN[SHUFFLE] " +
+                        "(SELECT * FROM t1 WHERE v6 IS NOT NULL) t_1 ON v3 = v6");
+    }
+
 }
