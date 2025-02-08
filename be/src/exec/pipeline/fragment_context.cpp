@@ -181,13 +181,14 @@ void FragmentContext::set_final_status(const Status& status) {
 
         if (_s_status.is_cancelled()) {
             auto detailed_message = _s_status.detailed_message();
-            std::stringstream ss;
-            ss << "[Driver] Canceled, query_id=" << print_id(_query_id)
-               << ", instance_id=" << print_id(_fragment_instance_id) << ", reason=" << detailed_message;
-            if (detailed_message == "LimitReach" || detailed_message == "UserCancel" || detailed_message == "TimeOut") {
-                LOG(INFO) << ss.str();
+            std::string cancel_msg =
+                    fmt::format("[Driver] Canceled, query_id={}, instance_id={}, reason={}", print_id(_query_id),
+                                print_id(_fragment_instance_id), detailed_message);
+            if (detailed_message == "QueryFinished" || detailed_message == "LimitReach" ||
+                detailed_message == "UserCancel" || detailed_message == "TimeOut") {
+                LOG(INFO) << cancel_msg;
             } else {
-                LOG(WARNING) << ss.str();
+                LOG(WARNING) << cancel_msg;
             }
 
             const auto* executors = _workgroup != nullptr

@@ -389,6 +389,7 @@ enum PPlanFragmentCancelReason {
     USER_CANCEL = 2;
     INTERNAL_ERROR = 3;
     TIMEOUT = 4;
+    QUERY_FINISHED = 5;
 };
 
 message PCancelPlanFragmentRequest {
