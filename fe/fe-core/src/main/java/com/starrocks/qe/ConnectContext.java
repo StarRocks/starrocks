@@ -404,17 +404,10 @@ public class ConnectContext {
         this.useConnectorMetadataCache = useConnectorMetadataCache;
     }
 
-    /**
-     * Set this connect to thread-local if not exists
-     *
-     * @return set or not
-     */
-    public boolean setThreadLocalInfoIfNotExists() {
-        if (threadLocalInfo.get() == null) {
-            threadLocalInfo.set(this);
-            return true;
-        }
-        return false;
+    public static ConnectContext exchangeThreadLocalInfo(ConnectContext ctx) {
+        ConnectContext prev = threadLocalInfo.get();
+        threadLocalInfo.set(ctx);
+        return prev;
     }
 
     public void setGlobalStateMgr(GlobalStateMgr globalStateMgr) {
@@ -1117,8 +1110,15 @@ public class ConnectContext {
         return executor;
     }
 
+    /**
+     * Bind the context to current scope, exchange the context if it's already existed
+     * Sample usage:
+     * try (var guard = context.bindScope()) {
+     * ......
+     * }
+     */
     public ScopeGuard bindScope() {
-        return ScopeGuard.setIfNotExists(this);
+        return ScopeGuard.exchange(this);
     }
 
     // Change current catalog of this session, and reset current database.
@@ -1269,13 +1269,15 @@ public class ConnectContext {
     public static class ScopeGuard implements AutoCloseable {
 
         private boolean set = false;
+        private ConnectContext prev;
 
         private ScopeGuard() {
         }
 
-        public static ScopeGuard setIfNotExists(ConnectContext session) {
+        private static ScopeGuard exchange(ConnectContext session) {
             ScopeGuard res = new ScopeGuard();
-            res.set = session.setThreadLocalInfoIfNotExists();
+            res.prev = exchangeThreadLocalInfo(session);
+            res.set = true;
             return res;
         }
 
@@ -1283,6 +1285,9 @@ public class ConnectContext {
         public void close() {
             if (set) {
                 ConnectContext.remove();
+            }
+            if (prev != null) {
+                prev.setThreadLocalInfo();
             }
         }
     }
