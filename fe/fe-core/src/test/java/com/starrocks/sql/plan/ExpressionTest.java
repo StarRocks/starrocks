@@ -700,22 +700,22 @@ public class ExpressionTest extends PlanTestBase {
                 "AS actions FROM action1 GROUP BY uid) AS t ) AS t1) AS t2;";
         plan = getFragmentPlan(sql);
         assertContains(plan, "  |  common expressions:\n" +
-                "  |  <slot 32> : minutes_add(31: expr, 90)\n" +
-                "  |  <slot 33> : 31: expr != '2020-01-01 00:00:00'\n" +
-                "  |  <slot 22> : array_sort(4: array_agg)\n" +
-                "  |  <slot 23> : array_sortby(5: array_agg, 4: array_agg)\n" +
-                "  |  <slot 24> : array_map((<slot 8>, <slot 9>) -> (<slot 9> = '浏览') " +
-                "AND ((<slot 8> >= '2020-01-02 00:00:00') " +
-                "AND (<slot 8> <= '2020-01-02 23:59:59')), 22: array_sort, 23: array_sortby)\n" +
-                "  |  <slot 25> : array_filter(22: array_sort, 24: array_map)\n" +
-                "  |  <slot 26> : 25: array_filter[1]\n" +
-                "  |  <slot 27> : minutes_add(26: expr, 90)\n" +
-                "  |  <slot 28> : 26: expr != '2020-01-01 00:00:00'\n" +
-                "  |  <slot 29> : array_map((<slot 11>, <slot 12>) -> ((<slot 12> = '下单') " +
-                "AND ((<slot 11> >= 26: expr) AND (<slot 11> <= 27: minutes_add))) " +
-                "AND (28: expr), 22: array_sort, 23: array_sortby)\n" +
-                "  |  <slot 30> : array_filter(22: array_sort, 29: array_map)\n" +
-                "  |  <slot 31> : 30: array_filter[1]");
+                "  |  <slot 20> : array_sort(4: array_agg)\n" +
+                "  |  <slot 21> : array_sortby(5: array_agg, 4: array_agg)\n" +
+                "  |  <slot 22> : array_map((<slot 8>, <slot 9>) -> (<slot 9> = '浏览') " +
+                "AND ((<slot 8> >= '2020-01-02 00:00:00') AND (<slot 8> <= '2020-01-02 23:59:59')), " +
+                "20: array_sort, 21: array_sortby)\n" +
+                "  |  <slot 23> : array_filter(20: array_sort, 22: array_map)\n" +
+                "  |  <slot 24> : 23: array_filter[1]\n" +
+                "  |  <slot 25> : minutes_add(24: expr, 90)\n" +
+                "  |  <slot 26> : 24: expr != '2020-01-01 00:00:00'\n" +
+                "  |  <slot 27> : array_map((<slot 11>, <slot 12>) -> ((<slot 12> = '下单') " +
+                "AND ((<slot 11> >= 24: expr) AND (<slot 11> <= 25: minutes_add))) " +
+                "AND (26: expr), 20: array_sort, 21: array_sortby)\n" +
+                "  |  <slot 28> : array_filter(20: array_sort, 27: array_map)\n" +
+                "  |  <slot 29> : 28: array_filter[1]\n" +
+                "  |  <slot 30> : minutes_add(29: expr, 90)\n" +
+                "  |  <slot 31> : 29: expr != '2020-01-01 00:00:00'");
     }
 
     @Test
