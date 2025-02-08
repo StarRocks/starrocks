@@ -120,6 +120,42 @@ public class LogicalPlanPrinter {
         }
 
         @Override
+<<<<<<< HEAD
+=======
+        public OperatorStr visitLogicalUnion(OptExpression optExpression, Integer step) {
+            int nextStep = step + 1;
+            List<OperatorStr> children =
+                    optExpression.getInputs().stream().map(input -> visit(input, nextStep)).collect(
+                            Collectors.toList());
+            return new OperatorStr("logical union", step, children);
+        }
+
+        @Override
+        public OperatorStr visitLogicalExcept(OptExpression optExpression, Integer step) {
+            return visitDefault(optExpression, step);
+        }
+
+        @Override
+        public OperatorStr visitLogicalTableFunction(OptExpression optExpression, Integer step) {
+            return visitDefault(optExpression, step);
+        }
+
+        @Override
+        public OperatorStr visitLogicalRepeat(OptExpression optExpression, Integer step) {
+            int nextStep = step + 1;
+            List<OperatorStr> children =
+                    optExpression.getInputs().stream().map(input -> visit(input, nextStep)).collect(
+                            Collectors.toList());
+            return new OperatorStr("logical repeat", step, children);
+        }
+
+        @Override
+        public OperatorStr visitLogicalIntersect(OptExpression optExpression, Integer step) {
+            return visitDefault(optExpression, step);
+        }
+
+        @Override
+>>>>>>> ec700ef067 ([Enhancement] subfield pushdown through table function (#55425))
         public OperatorStr visitLogicalCTEAnchor(OptExpression optExpression, Integer step) {
             OperatorStr leftChild = visit(optExpression.getInputs().get(0), step + 1);
             OperatorStr rightChild = visit(optExpression.getInputs().get(1), step + 1);

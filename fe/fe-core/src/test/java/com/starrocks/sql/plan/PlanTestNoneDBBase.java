@@ -392,6 +392,105 @@ public class PlanTestNoneDBBase {
         runFileUnitTest(filename, false);
     }
 
+<<<<<<< HEAD
+=======
+    public void runFileUnitTest(String sql, String resultFile) {
+        runFileUnitTest(sql, resultFile, false);
+    }
+
+    private boolean executeSqlByMode(StringBuilder sql, int nth, StringBuilder comment,
+                                     StringBuilder exceptString,
+                                     boolean hasResult, StringBuilder result,
+                                     boolean hasFragment, StringBuilder fragment,
+                                     boolean hasFragmentStatistics, StringBuilder fragmentStatistics,
+                                     boolean isDump, StringBuilder dumpInfoString,
+                                     boolean hasScheduler, StringBuilder schedulerString,
+                                     boolean isEnumerate, int planCount, StringBuilder planEnumerate,
+                                     boolean isDebug, BufferedWriter debugWriter,
+                                     List<Throwable> errorCollector) throws Exception {
+        Pair<String, Pair<ExecPlan, String>> pair = null;
+        QueryDebugOptions debugOptions = connectContext.getSessionVariable().getQueryDebugOptions();
+        String logModule = debugOptions.isEnableQueryTraceLog() ? "MV" : "";
+        try {
+            pair = UtFrameUtils.getFragmentPlanWithTrace(connectContext, sql.toString(), logModule);
+        } catch (Exception ex) {
+            if (!exceptString.toString().isEmpty()) {
+                Assert.assertEquals(exceptString.toString(), ex.getMessage());
+                return true;
+            }
+            ex.printStackTrace();
+            Assert.fail("Planning failed, message: " + ex.getMessage() + ", sql: " + sql);
+        }
+
+        try {
+            String fra = null;
+            String statistic = null;
+            String dumpStr = null;
+            String actualSchedulerPlan = null;
+
+            ExecPlan execPlan = pair.second.first;
+            if (debugOptions.isEnableQueryTraceLog()) {
+                System.out.println(pair.second.second);
+            }
+            if (hasResult && !isDebug) {
+                checkWithIgnoreTabletList(result.toString().trim(), pair.first.trim());
+            }
+            if (hasFragment) {
+                fra = execPlan.getExplainString(TExplainLevel.NORMAL);
+                if (!isDebug) {
+                    fra = format(fra);
+                    checkWithIgnoreTabletList(fragment.toString().trim(), fra.trim());
+                }
+            }
+            if (hasFragmentStatistics) {
+                statistic = format(execPlan.getExplainString(TExplainLevel.COSTS));
+                if (!isDebug) {
+                    checkWithIgnoreTabletList(fragmentStatistics.toString().trim(), statistic.trim());
+                }
+            }
+            if (isDump) {
+                dumpStr = Stream.of(toPrettyFormat(getDumpString(sql.toString())).split("\n"))
+                        .filter(s -> !s.contains("\"session_variables\""))
+                        .collect(Collectors.joining("\n"));
+                if (!isDebug) {
+                    Assert.assertEquals(dumpInfoString.toString().trim(), dumpStr.trim());
+                }
+            }
+            if (hasScheduler) {
+                try {
+                    actualSchedulerPlan =
+                            UtFrameUtils.getPlanAndStartScheduling(connectContext, sql.toString()).first;
+                } catch (Exception ex) {
+                    if (!exceptString.toString().isEmpty()) {
+                        Assert.assertEquals(exceptString.toString(), ex.getMessage());
+                        return true;
+                    }
+                    Assert.fail("Scheduling failed, message: " + ex.getMessage() + ", sql: " + sql);
+                }
+
+                if (!isDebug) {
+                    checkSchedulerPlan(schedulerString.toString(), actualSchedulerPlan);
+                }
+            }
+            if (isDebug) {
+                debugSQL(debugWriter, hasResult, hasFragment, isDump, hasFragmentStatistics, hasScheduler, nth,
+                        sql.toString(), pair.first, fra, dumpStr, statistic, comment.toString(),
+                        actualSchedulerPlan);
+            }
+            if (isEnumerate) {
+                Assert.assertEquals("plan count mismatch", planCount, execPlan.getPlanCount());
+                checkWithIgnoreTabletList(planEnumerate.toString().trim(), pair.first.trim());
+                connectContext.getSessionVariable().setUseNthExecPlan(0);
+            }
+        } catch (Error error) {
+            StringBuilder message = new StringBuilder();
+            message.append(nth).append(" plan ").append("\n").append(sql).append("\n").append(error.getMessage());
+            errorCollector.add(new Throwable(message.toString(), error));
+        }
+        return false;
+    }
+
+>>>>>>> ec700ef067 ([Enhancement] subfield pushdown through table function (#55425))
     public static String format(String result) {
         StringBuilder sb = new StringBuilder();
         Arrays.stream(result.split("\n")).forEach(d -> sb.append(d.trim()).append("\n"));
