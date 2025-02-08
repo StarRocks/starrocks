@@ -238,7 +238,7 @@ public:
     Status update(RuntimeState* state, const ChunkPtr& chunk) override;
     Status do_done(RuntimeState* state) override;
     Status get_next(ChunkPtr* chunk, bool* eos) override;
-    std::vector<JoinRuntimeFilter*>* runtime_filters(ObjectPool* pool) override;
+    std::vector<RuntimeFilter*>* runtime_filters(ObjectPool* pool) override;
     int64_t mem_usage() const override {
         if (_sort_heap == nullptr || _sort_heap->empty()) {
             return 0;
@@ -261,7 +261,7 @@ private:
     template <LogicalType TYPE>
     void _do_filter_data_for_type(detail::ChunkHolder* chunk_holder, Filter* filter, int row_sz);
 
-    std::vector<JoinRuntimeFilter*> _runtime_filter;
+    std::vector<RuntimeFilter*> _runtime_filter;
 
     using CursorContainer = std::vector<detail::ChunkRowCursor>;
     using CommonCursorSortHeap =

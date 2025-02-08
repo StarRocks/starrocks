@@ -40,13 +40,13 @@ namespace starrocks {
 
 struct FilterBuilder {
     template <LogicalType ltype>
-    JoinRuntimeFilter* operator()() {
+    RuntimeFilter* operator()() {
         return new RuntimeBloomFilter<ltype>();
     }
 };
 
-JoinRuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool, LogicalType type) {
-    JoinRuntimeFilter* filter = type_dispatch_filter(type, (JoinRuntimeFilter*)nullptr, FilterBuilder());
+RuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool, LogicalType type) {
+    RuntimeFilter* filter = type_dispatch_filter(type, (RuntimeFilter*)nullptr, FilterBuilder());
     if (pool != nullptr && filter != nullptr) {
         return pool->add(filter);
     } else {
@@ -54,13 +54,13 @@ JoinRuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* p
     }
 }
 
-size_t RuntimeFilterHelper::max_runtime_filter_serialized_size(const JoinRuntimeFilter* rf) {
+size_t RuntimeFilterHelper::max_runtime_filter_serialized_size(const RuntimeFilter* rf) {
     size_t size = RF_VERSION_SZ;
     size += rf->max_serialized_size();
     return size;
 }
 
-size_t RuntimeFilterHelper::serialize_runtime_filter(int rf_version, const JoinRuntimeFilter* rf, uint8_t* data) {
+size_t RuntimeFilterHelper::serialize_runtime_filter(int rf_version, const RuntimeFilter* rf, uint8_t* data) {
     size_t offset = 0;
     // put version at the head.
     memcpy(data + offset, &rf_version, RF_VERSION_SZ);
@@ -69,7 +69,7 @@ size_t RuntimeFilterHelper::serialize_runtime_filter(int rf_version, const JoinR
     return offset;
 }
 
-size_t RuntimeFilterHelper::serialize_runtime_filter(RuntimeState* state, const JoinRuntimeFilter* rf, uint8_t* data) {
+size_t RuntimeFilterHelper::serialize_runtime_filter(RuntimeState* state, const RuntimeFilter* rf, uint8_t* data) {
     int32_t rf_version = RF_VERSION;
     if (state->func_version() >= TFunctionVersion::RUNTIME_FILTER_SERIALIZE_VERSION_2) {
         rf_version = RF_VERSION_V2;
@@ -77,7 +77,7 @@ size_t RuntimeFilterHelper::serialize_runtime_filter(RuntimeState* state, const 
     return serialize_runtime_filter(rf_version, rf, data);
 }
 
-int RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, JoinRuntimeFilter** rf, const uint8_t* data,
+int RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, RuntimeFilter** rf, const uint8_t* data,
                                                     size_t size) {
     *rf = nullptr;
 
@@ -98,7 +98,7 @@ int RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, JoinRuntim
     memcpy(&type, data + offset, sizeof(type));
     LogicalType ltype = thrift_to_type(type);
 
-    JoinRuntimeFilter* filter = create_join_runtime_filter(pool, ltype);
+    RuntimeFilter* filter = create_join_runtime_filter(pool, ltype);
     DCHECK(filter != nullptr);
     if (filter != nullptr) {
         offset += filter->deserialize(version, data + offset);
@@ -108,14 +108,14 @@ int RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, JoinRuntim
     return version;
 }
 
-JoinRuntimeFilter* RuntimeFilterHelper::create_runtime_bloom_filter(ObjectPool* pool, LogicalType type) {
-    JoinRuntimeFilter* filter = create_join_runtime_filter(pool, type);
+RuntimeFilter* RuntimeFilterHelper::create_runtime_bloom_filter(ObjectPool* pool, LogicalType type) {
+    RuntimeFilter* filter = create_join_runtime_filter(pool, type);
     return filter;
 }
 
 struct FilterIniter {
     template <LogicalType ltype>
-    auto operator()(const ColumnPtr& column, size_t column_offset, JoinRuntimeFilter* expr, bool eq_null) {
+    auto operator()(const ColumnPtr& column, size_t column_offset, RuntimeFilter* expr, bool eq_null) {
         using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;
         auto* filter = (RuntimeBloomFilter<ltype>*)(expr);
 
@@ -141,8 +141,8 @@ struct FilterIniter {
     }
 };
 
-Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, LogicalType type,
-                                                      JoinRuntimeFilter* filter, size_t column_offset, bool eq_null) {
+Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, LogicalType type, RuntimeFilter* filter,
+                                                      size_t column_offset, bool eq_null) {
     if (column->has_large_column()) {
         return Status::NotSupported("unsupported build runtime filter for large binary column");
     }
@@ -151,7 +151,7 @@ Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, L
 }
 
 Status RuntimeFilterHelper::fill_runtime_bloom_filter(const std::vector<ColumnPtr>& columns, LogicalType type,
-                                                      JoinRuntimeFilter* filter, size_t column_offset, bool eq_null) {
+                                                      RuntimeFilter* filter, size_t column_offset, bool eq_null) {
     for (const auto& column : columns) {
         RETURN_IF_ERROR(fill_runtime_bloom_filter(column, type, filter, column_offset, eq_null));
     }
@@ -159,8 +159,7 @@ Status RuntimeFilterHelper::fill_runtime_bloom_filter(const std::vector<ColumnPt
 }
 
 Status RuntimeFilterHelper::fill_runtime_bloom_filter(const starrocks::pipeline::RuntimeBloomFilterBuildParam& param,
-                                                      LogicalType type, JoinRuntimeFilter* filter,
-                                                      size_t column_offset) {
+                                                      LogicalType type, RuntimeFilter* filter, size_t column_offset) {
     return fill_runtime_bloom_filter(param.columns, type, filter, column_offset, param.eq_null);
 }
 
@@ -199,7 +198,7 @@ StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join
 
 struct FilterZoneMapWithMinMaxOp {
     template <LogicalType ltype>
-    bool operator()(const JoinRuntimeFilter* expr, const Column* min_column, const Column* max_column) {
+    bool operator()(const RuntimeFilter* expr, const Column* min_column, const Column* max_column) {
         using CppType = RunTimeCppType<ltype>;
         auto* filter = (RuntimeBloomFilter<ltype>*)(expr);
         const CppType* min_value = ColumnHelper::unpack_cpp_data_one_value<ltype>(min_column);
@@ -208,7 +207,7 @@ struct FilterZoneMapWithMinMaxOp {
     }
 };
 
-bool RuntimeFilterHelper::filter_zonemap_with_min_max(LogicalType type, const JoinRuntimeFilter* filter,
+bool RuntimeFilterHelper::filter_zonemap_with_min_max(LogicalType type, const RuntimeFilter* filter,
                                                       const Column* min_column, const Column* max_column) {
     return type_dispatch_filter(type, false, FilterZoneMapWithMinMaxOp(), filter, min_column, max_column);
 }
@@ -339,7 +338,7 @@ std::string RuntimeFilterProbeDescriptor::debug_string() const {
         ss << "nullptr";
     }
     ss << ", rf=";
-    const JoinRuntimeFilter* rf = _runtime_filter.load();
+    const RuntimeFilter* rf = _runtime_filter.load();
     if (rf != nullptr) {
         ss << rf->debug_string();
     } else {
@@ -409,7 +408,7 @@ void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeBloomFilterEv
 
     for (auto& kv : seletivity_map) {
         RuntimeFilterProbeDescriptor* rf_desc = kv.second;
-        const JoinRuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
+        const RuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
         if (filter == nullptr || filter->always_true()) {
             continue;
         }
@@ -442,7 +441,7 @@ void RuntimeFilterProbeCollector::do_evaluate_partial_chunk(Chunk* partial_chunk
     // without computing each rf's selectivity
     for (auto kv : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = kv.second;
-        const JoinRuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
+        const RuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
         if (filter == nullptr || filter->always_true()) {
             continue;
         }
@@ -553,7 +552,7 @@ void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, Column* colu
                                                       RuntimeBloomFilterEvalContext& eval_context) {
     // TODO: Hash values will be computed multi times for runtime filters with the same partition_by_exprs.
     SCOPED_TIMER(eval_context.join_runtime_filter_hash_timer);
-    const JoinRuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
+    const RuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
     DCHECK(filter);
     if (filter->num_hash_partitions() == 0) {
         return;
@@ -586,7 +585,7 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeBloomF
     seletivity_map.clear();
     for (auto& kv : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = kv.second;
-        const JoinRuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
+        const RuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
         if (filter == nullptr || filter->always_true()) {
             continue;
         }
@@ -723,8 +722,8 @@ void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
             auto* rf = (*it)->runtime_filter(-1);
             // find runtime filter in cache.
             if (rf == nullptr) {
-                JoinRuntimeFilterPtr t = _runtime_state->exec_env()->runtime_filter_cache()->get(
-                        _runtime_state->query_id(), (*it)->filter_id());
+                RuntimeFilterPtr t = _runtime_state->exec_env()->runtime_filter_cache()->get(_runtime_state->query_id(),
+                                                                                             (*it)->filter_id());
                 if (t != nullptr) {
                     VLOG_FILE << "RuntimeFilterCollector::wait: rf found in cache. filter_id = " << (*it)->filter_id()
                               << ", plan_node_id = " << _plan_node_id
@@ -757,9 +756,9 @@ void RuntimeFilterProbeCollector::wait(bool on_scan_node) {
     }
 }
 
-void RuntimeFilterProbeDescriptor::set_runtime_filter(const JoinRuntimeFilter* rf) {
+void RuntimeFilterProbeDescriptor::set_runtime_filter(const RuntimeFilter* rf) {
     auto notify = DeferOp([this]() { _observable.notify_source_observers(); });
-    const JoinRuntimeFilter* expected = nullptr;
+    const RuntimeFilter* expected = nullptr;
     _runtime_filter.compare_exchange_strong(expected, rf, std::memory_order_seq_cst, std::memory_order_seq_cst);
     if (_ready_timestamp == 0 && rf != nullptr && _latency_timer != nullptr) {
         _ready_timestamp = UnixMillis();
@@ -767,15 +766,15 @@ void RuntimeFilterProbeDescriptor::set_runtime_filter(const JoinRuntimeFilter* r
     }
 }
 
-void RuntimeFilterProbeDescriptor::set_shared_runtime_filter(const std::shared_ptr<const JoinRuntimeFilter>& rf) {
-    std::shared_ptr<const JoinRuntimeFilter> old_value = nullptr;
+void RuntimeFilterProbeDescriptor::set_shared_runtime_filter(const std::shared_ptr<const RuntimeFilter>& rf) {
+    std::shared_ptr<const RuntimeFilter> old_value = nullptr;
     if (std::atomic_compare_exchange_strong(&_shared_runtime_filter, &old_value, rf)) {
         set_runtime_filter(_shared_runtime_filter.get());
     }
 }
 
 void RuntimeFilterHelper::create_min_max_value_predicate(ObjectPool* pool, SlotId slot_id, LogicalType slot_type,
-                                                         const JoinRuntimeFilter* filter, Expr** min_max_predicate) {
+                                                         const RuntimeFilter* filter, Expr** min_max_predicate) {
     *min_max_predicate = nullptr;
     if (filter == nullptr) return;
     // TODO, if you want to enable it for string, pls adapt for low-cardinality string

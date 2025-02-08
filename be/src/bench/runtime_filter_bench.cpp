@@ -54,7 +54,7 @@ static void do_benchmark_hash_partitioned(benchmark::State& state, TRuntimeFilte
         ++num_rows_per_partitions[hash_values[i]];
     }
 
-    JoinRuntimeFilter::RunningContext running_ctx;
+    RuntimeFilter::RunningContext running_ctx;
     running_ctx.selection.assign(num_rows, 2);
     running_ctx.use_merged_selection = false;
     running_ctx.compatibility = true;
