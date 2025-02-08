@@ -148,7 +148,7 @@ public class ShowDataDistributionStmtTest {
             }
             System.out.println("ShowDataDistributionStmtTest: 2.6check privilege done!");
 
-            //2.7 check: invaild sql
+            //2.7 check: invaild sql 
             List<String> invaildSql = Arrays.asList(
                     "show data distribution unpartition_table;",
                     "show data distribution1 from unpartition_table;",
