@@ -36,6 +36,6 @@ public class RewriteDownTopTask extends RewriteTreeTask {
         for (int i = root.getInputs().size() - 1; i >= 0; i--) {
             rewrite(root, i, root.getInputs().get(i));
         }
-        applyRules(parent, childIndex, root);
+        applyRules(parent, childIndex, root, rules);
     }
 }

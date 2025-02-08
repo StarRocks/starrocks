@@ -27,7 +27,6 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSet;
-import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
 import java.util.BitSet;
@@ -70,7 +69,7 @@ public class GroupExpression {
 
     private Optional<Boolean> isAppliedMVRules = Optional.empty();
     // all mv rewrite rules
-    private static final List<Rule> ALL_MV_REWRITE_RULES = RuleSet.getRewriteRulesByType(RuleSetType.ALL_MV_REWRITE);
+    private static final List<Rule> ALL_MV_REWRITE_RULES = RuleSet.ALL_MV_REWRITE_RULES.predecessorRules();
 
     public GroupExpression(Operator op, List<Group> inputs) {
         this.op = op;
@@ -350,7 +349,7 @@ public class GroupExpression {
 
     public boolean hasAppliedMVRules() {
         if (isAppliedMVRules.isEmpty()) {
-            isAppliedMVRules = Optional.of(ALL_MV_REWRITE_RULES.stream().anyMatch(rule -> hasRuleApplied(rule)));
+            isAppliedMVRules = Optional.of(ALL_MV_REWRITE_RULES.stream().anyMatch(this::hasRuleApplied));
         }
         return isAppliedMVRules.get();
     }

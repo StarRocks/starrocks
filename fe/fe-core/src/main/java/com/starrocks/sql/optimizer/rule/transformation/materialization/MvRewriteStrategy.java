@@ -21,7 +21,7 @@ import com.starrocks.sql.optimizer.MaterializationContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerConfig;
 import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.rule.RuleSetType;
+import com.starrocks.sql.optimizer.rule.RuleType;
 
 public class MvRewriteStrategy {
     public static final MvRewriteStrategy DEFAULT = new MvRewriteStrategy();
@@ -84,8 +84,8 @@ public class MvRewriteStrategy {
                     optimizerContext.getCandidateMvs().isEmpty()) {
                 return false;
             }
-            if (optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE) &&
-                    optimizerConfig.isRuleSetTypeDisable(RuleSetType.MULTI_TABLE_MV_REWRITE)) {
+            if (optimizerConfig.isRuleDisable(RuleType.GP_SINGLE_TABLE_MV_REWRITE) &&
+                    optimizerConfig.isRuleDisable(RuleType.GP_MULTI_TABLE_MV_REWRITE)) {
                 return false;
             }
             return true;
@@ -100,7 +100,7 @@ public class MvRewriteStrategy {
 
         private boolean isEnableRBOSingleTableRewrite(OptExpression queryPlan) {
             // if disable single mv rewrite, return false.
-            if (optimizerConfig.isRuleSetTypeDisable(RuleSetType.SINGLE_TABLE_MV_REWRITE)) {
+            if (optimizerConfig.isRuleDisable(RuleType.GP_SINGLE_TABLE_MV_REWRITE)) {
                 return false;
             }
             // If query only has one table use single table rewrite, view delta only rewrites multi-tables query.

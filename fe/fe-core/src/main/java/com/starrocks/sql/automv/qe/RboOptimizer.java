@@ -56,7 +56,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSet;
-import com.starrocks.sql.optimizer.rule.RuleSetType;
 import com.starrocks.sql.optimizer.rule.join.JoinReorderFactory;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
@@ -282,19 +281,17 @@ public class RboOptimizer {
         return taskContext;
     }
 
-    public RboOptimizer applyRules(RuleSetType ruleSet) {
-        List<Rule> rules = RuleSet.getRewriteRulesByType(ruleSet);
+    public RboOptimizer applyRules(Rule rules) {
         optimizerContext.getTaskScheduler()
-                .pushTask(new RewriteTreeTask(taskContext, tree, rules, false));
+                .pushTask(new RewriteTreeTask(taskContext, tree, List.of(rules), false));
         optimizerContext.getTaskScheduler().executeTasks(taskContext);
         deriveLogicalProperty(tree);
         return this;
     }
 
-    public RboOptimizer applyRulesOnlyOnce(RuleSetType ruleSet) {
-        List<Rule> rules = RuleSet.getRewriteRulesByType(ruleSet);
+    public RboOptimizer applyRulesOnlyOnce(Rule rules) {
         optimizerContext.getTaskScheduler()
-                .pushTask(new RewriteTreeTask(taskContext, tree, rules, true));
+                .pushTask(new RewriteTreeTask(taskContext, tree, List.of(rules), true));
         optimizerContext.getTaskScheduler().executeTasks(taskContext);
         deriveLogicalProperty(tree);
         return this;
@@ -322,14 +319,14 @@ public class RboOptimizer {
 
     public OptExpression optimize() {
 
-        applyRules(RuleSetType.INLINE_CTE);
-        applyRules(RuleSetType.PUSH_DOWN_SUBQUERY);
-        applyRules(RuleSetType.SUBQUERY_REWRITE_COMMON);
-        applyRules(RuleSetType.SUBQUERY_REWRITE_TO_WINDOW);
-        applyRules(RuleSetType.SUBQUERY_REWRITE_TO_JOIN);
-        applyRules(RuleSetType.PUSH_DOWN_PREDICATE);
+        applyRules(RuleSet.INLINE_CTE_RULES);
+        applyRules(RuleSet.PUSH_DOWN_SUBQUERY_RULES);
+        applyRules(RuleSet.SUBQUERY_REWRITE_COMMON_RULES);
+        applyRules(RuleSet.SUBQUERY_REWRITE_TO_WINDOW_RULES);
+        applyRules(RuleSet.SUBQUERY_REWRITE_TO_JOIN_RULES);
+        applyRules(RuleSet.PUSH_DOWN_PREDICATE_RULES);
 
-        applyRulesOnlyOnce(RuleSetType.PRUNE_COLUMNS);
+        applyRulesOnlyOnce(RuleSet.PRUNE_COLUMNS_RULES);
         applyRules(new MergeTwoProjectRule());
         applyRules(new MergeProjectWithChildRule());
         deriveLogicalProperty(tree);
