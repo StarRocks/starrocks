@@ -1281,6 +1281,10 @@ public class ConnectContext {
             return res;
         }
 
+        public ConnectContext prev() {
+            return prev;
+        }
+
         @Override
         public void close() {
             if (set) {
