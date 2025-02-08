@@ -155,4 +155,67 @@ TEST_F(CompactionTaskContextTest, test_to_json_stats) {
     EXPECT_THAT(json_stats, testing::HasSubstr(R"("in_queue_sec":5)"));
     EXPECT_THAT(json_stats, testing::HasSubstr(R"("pk_sst_merge_sec":5)"));
 }
+
+TEST_F(CompactionTaskContextTest, test_to_string) {
+    int64_t txn_id = 12345;
+    int64_t tablet_id = 67890;
+    int64_t version = 1;
+    bool force_base_compaction = true;
+
+    // Case 1: Status is explicitly set to OK
+    {
+        CompactionTaskContext context(txn_id, tablet_id, version, force_base_compaction, false, callback);
+
+        context.start_time.store(1633072800);
+        context.finish_time.store(1633076400);
+        context.skipped.store(false);
+        context.runs.store(5);
+        context.status = Status::OK();
+        context.enqueue_time_sec = 1633072800;
+
+        std::string expected =
+                "txn_id: 12345, tablet_id: 67890, version: 1, "
+                "start_time: 1633072800, finish_time: 1633076400, "
+                "skipped: false, runs: 5, enqueue_time_sec: 1633072800, status: OK";
+
+        EXPECT_EQ(context.to_string(), expected);
+    }
+
+    // Case 2: Status is not explicitly set (assuming default constructor sets it to OK)
+    {
+        CompactionTaskContext context(txn_id, tablet_id, version, force_base_compaction, false, callback);
+
+        context.start_time.store(1633072800);
+        context.finish_time.store(1633076400);
+        context.skipped.store(false);
+        context.runs.store(5);
+        context.enqueue_time_sec = 1633072800;
+
+        std::string expected =
+                "txn_id: 12345, tablet_id: 67890, version: 1, "
+                "start_time: 1633072800, finish_time: 1633076400, "
+                "skipped: false, runs: 5, enqueue_time_sec: 1633072800, status: OK";
+
+        EXPECT_EQ(context.to_string(), expected);
+    }
+
+    // Case 3: Status is explicitly set to an error status
+    {
+        CompactionTaskContext context(txn_id, tablet_id, version, force_base_compaction, false, callback);
+
+        context.start_time.store(1633072800);
+        context.finish_time.store(1633076400);
+        context.skipped.store(false);
+        context.runs.store(5);
+        context.status = Status::MemoryLimitExceeded("memory limit exceeded");
+        context.enqueue_time_sec = 1633072800;
+
+        std::string expected =
+                "txn_id: 12345, tablet_id: 67890, version: 1, start_time: 1633072800, finish_time: 1633076400, "
+                "skipped: false, runs: 5, enqueue_time_sec: 1633072800, "
+                "status: Memory limit exceeded: memory limit exceeded";
+
+        EXPECT_EQ(context.to_string(), expected);
+    }
+}
 } // namespace starrocks::lake

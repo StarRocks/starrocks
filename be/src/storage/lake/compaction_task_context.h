@@ -93,6 +93,15 @@ struct CompactionTaskContext : public butil::LinkNode<CompactionTaskContext> {
     int64_t enqueue_time_sec; // time point when put into queue
     std::shared_ptr<CompactionTaskCallback> callback;
     std::unique_ptr<CompactionTaskStats> stats = std::make_unique<CompactionTaskStats>();
+
+    std::string to_string() const {
+        std::ostringstream out;
+        out << "txn_id: " << txn_id << ", tablet_id: " << tablet_id << ", version: " << version
+            << ", start_time: " << start_time.load() << ", finish_time: " << finish_time.load()
+            << ", skipped: " << (skipped.load() ? "true" : "false") << ", runs: " << runs.load()
+            << ", enqueue_time_sec: " << enqueue_time_sec << ", status: " << status.to_string();
+        return out.str();
+    }
 };
 
 } // namespace starrocks::lake

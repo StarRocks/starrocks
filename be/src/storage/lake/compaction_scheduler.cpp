@@ -130,6 +130,7 @@ void CompactionTaskCallback::finish_task(std::unique_ptr<CompactionTaskContext>&
 
     DCHECK(_request != nullptr);
     _status.update(context->status);
+    LOG(INFO) << "Compaction task finished, " << context->to_string();
 
     // Keep the context for a while until the RPC request is finished processing so that we can see the detailed
     // and complete progress of the RPC request by calling `CompactionScheduler::list_tasks()`.
