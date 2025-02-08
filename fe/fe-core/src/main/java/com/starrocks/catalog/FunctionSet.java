@@ -218,6 +218,7 @@ public class FunctionSet {
     public static final String TRIM = "trim";
     public static final String UPPER = "upper";
     public static final String SUBSTRING_INDEX = "substring_index";
+    public static final String FIELD = "field";
 
     // Json functions:
     public static final String JSON_ARRAY = "json_array";
@@ -632,6 +633,7 @@ public class FunctionSet {
                     .add(FunctionSet.HLL_EMPTY)
                     .add(FunctionSet.EXCHANGE_BYTES)
                     .add(FunctionSet.EXCHANGE_SPEED)
+                    .add(FunctionSet.FIELD)
                     .build();
 
     public static final Set<String> DECIMAL_ROUND_FUNCTIONS =

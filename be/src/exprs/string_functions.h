@@ -51,6 +51,13 @@ struct ConcatState {
     std::string tail;
 };
 
+template <LogicalType T>
+struct FieldFuncState {
+    bool all_const = false;
+    bool list_all_const = false;
+    std::map<RunTimeCppType<T>, int> mp;
+};
+
 struct StringFunctionsState {
     using DriverMap = phmap::parallel_flat_hash_map<int32_t, std::unique_ptr<re2::RE2>, phmap::Hash<int32_t>,
                                                     phmap::EqualTo<int32_t>, phmap::Allocator<int32_t>,
@@ -572,6 +579,13 @@ public:
     DEFINE_VECTORIZED_FN(ngram_search);
 
     DEFINE_VECTORIZED_FN(ngram_search_case_insensitive);
+
+    DEFINE_VECTORIZED_FN_TEMPLATE(field);
+    template <LogicalType Type>
+    static Status field_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    template <LogicalType Type>
+    static Status field_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+
     static Status ngram_search_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
     static Status ngram_search_case_insensitive_prepare(FunctionContext* context,
                                                         FunctionContext::FunctionStateScope scope);
@@ -678,6 +692,110 @@ StatusOr<ColumnPtr> StringFunctions::money_format_decimal(FunctionContext* conte
         // scale up
         money_format_decimal_impl<Type, true, true>(context, money_viewer, num_rows, 2 - scale, &result);
     }
+    return result.build(ColumnHelper::is_all_const(columns));
+}
+
+template <LogicalType Type>
+Status StringFunctions::field_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* state = new FieldFuncState<Type>();
+    context->set_function_state(scope, state);
+    state->list_all_const = true;
+    for (int i = 1; i < context->get_num_constant_columns(); i++) {
+        if (!context->is_constant_column(i)) {
+            state->list_all_const = false;
+            break;
+        }
+    }
+
+    if (state->list_all_const) {
+        if (context->is_constant_column(0)) {
+            state->all_const = true;
+        }
+        for (int i = 1; i < context->get_num_args(); i++) {
+            const auto list_col = context->get_constant_column(i);
+            if (list_col->only_null()) {
+                continue;
+            } else {
+                const auto list_val = ColumnHelper::get_const_value<Type>(list_col);
+                state->mp.emplace(list_val, i);
+            }
+        }
+    }
+
+    return Status::OK();
+}
+
+template <LogicalType Type>
+Status StringFunctions::field_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+
+    auto* state = reinterpret_cast<FieldFuncState<Type>*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    delete state;
+
+    return Status::OK();
+}
+
+template <LogicalType Type>
+StatusOr<ColumnPtr> StringFunctions::field(FunctionContext* context, const Columns& columns) {
+    auto size = columns[0]->size();
+    ColumnBuilder<TYPE_INT> result(size);
+    const FieldFuncState<Type>* state =
+            reinterpret_cast<const FieldFuncState<Type>*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    if (columns[0]->only_null()) {
+        result.append(0);
+        return result.build(true);
+    } else if (state != nullptr) {
+        if (state->all_const) {
+            const auto list_col = context->get_constant_column(0);
+            const auto list_val = ColumnHelper::get_const_value<Type>(list_col);
+            auto it = state->mp.find(list_val);
+            if (it != state->mp.end()) {
+                result.append(it->second);
+            } else {
+                result.append(0);
+            }
+            return result.build(true);
+        } else if (state->list_all_const) {
+            const auto viewer = ColumnViewer<Type>(columns[0]);
+            for (int i = 0; i < size; i++) {
+                const auto& list_val = viewer.value(i);
+                auto it = state->mp.find(list_val);
+                if (it != state->mp.end()) {
+                    result.append(it->second);
+                } else {
+                    result.append(0);
+                }
+            }
+            return result.build(false);
+        }
+    }
+
+    std::vector<ColumnViewer<Type>> list;
+    list.reserve(columns.size());
+    for (const ColumnPtr& col : columns) {
+        list.emplace_back(ColumnViewer<Type>(col));
+    }
+
+    for (int row = 0; row < size; row++) {
+        auto value = list[0].value(row);
+        int res = 0, id = 1;
+        for (auto it = std::next(list.begin()); it != list.end(); it++) {
+            if (!it->is_null(row) && value == it->value(row)) {
+                res = id;
+                break;
+            }
+            id++;
+        }
+
+        result.append(res);
+    }
+
     return result.build(ColumnHelper::is_all_const(columns));
 }
 

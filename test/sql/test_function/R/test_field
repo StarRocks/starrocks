@@ -1,0 +1,130 @@
+-- name: test_field
+create table t1 (c1 int, c2 varchar(100), c3 double) PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1(c1, c2, c3) values (0, "hello",  5.5), (1, "world", 6.01), (2, "star", 5.0), (3, "rocks", 1.1111);
+-- result:
+-- !result
+select field(1, 1, 1);
+-- result:
+1
+-- !result
+select field(1.0, 1.0, 1.0);
+-- result:
+1
+-- !result
+select field(01.0, 001.0, 0001.0);
+-- result:
+1
+-- !result
+select field('01.0', 001.0, 0001.0);
+-- result:
+1
+-- !result
+select field('01', '1');
+-- result:
+0
+-- !result
+select field('01', '1', 1);
+-- result:
+1
+-- !result
+select field('a', 'b');
+-- result:
+0
+-- !result
+select field('a', 'b', 1);
+-- result:
+0
+-- !result
+select field(NULL, NULL, 1);
+-- result:
+0
+-- !result
+select field(NULL, NULL);
+-- result:
+0
+-- !result
+select *, c1, field(c1, 3, 2, 1, 0) from t1 order by field(c1, 3, 2, 1, 0);
+-- result:
+3	rocks	1.1111	3	1
+2	star	5.0	2	2
+1	world	6.01	1	3
+0	hello	5.5	0	4
+-- !result
+select *, c1, field(c1, 2, 1, 3, 0) from t1 order by field(c1, 2, 1, 3, 0);
+-- result:
+2	star	5.0	2	1
+1	world	6.01	1	2
+3	rocks	1.1111	3	3
+0	hello	5.5	0	4
+-- !result
+select *, c1, field(c1, 1, 1, 1, 1) from t1 order by field(c1, 1, 1, 1, 1);
+-- result:
+0	hello	5.5	0	0
+2	star	5.0	2	0
+3	rocks	1.1111	3	0
+1	world	6.01	1	1
+-- !result
+select * from t1 order by field(c2, "star", "rocks", "hello", "world") asc;
+-- result:
+2	star	5.0
+3	rocks	1.1111
+0	hello	5.5
+1	world	6.01
+-- !result
+select * from t1 order by field(c2, "star", "rocks", "hello", "world") desc;
+-- result:
+1	world	6.01
+0	hello	5.5
+3	rocks	1.1111
+2	star	5.0
+-- !result
+select * from t1 order by field(c3, 1.1111, 6 - 1, 6.01, 5 + 0.5);
+-- result:
+3	rocks	1.1111
+2	star	5.0
+1	world	6.01
+0	hello	5.5
+-- !result
+create view vvv as select cast(1 as double) as c1;
+-- result:
+-- !result
+create view vv as select cast(1 as float) as c1;
+-- result:
+-- !result
+create view v as select cast(1 as boolean) as c1;
+-- result:
+-- !result
+select field(vv.c1, vvv.c1) from vv,vvv;
+-- result:
+1
+-- !result
+select field(v.c1, v.c1) from vv,v,vvv;
+-- result:
+1
+-- !result
+select field(v.c1, vv.c1) from vv,v,vvv;
+-- result:
+1
+-- !result
+create view dv as select cast('2022-02-02' as date) c1;
+-- result:
+-- !result
+create view dvv as select cast('2022-02-02' as datetime) c1;
+-- result:
+-- !result
+select field(dv.c1, dvv.c1) from dv, dvv;
+-- result:
+0
+-- !result
+select field(dv.c1, dv.c1) from dv, dvv;
+-- result:
+1
+-- !result
+select field(dv.c1, vv.c1, dvv.c1) from dv, dvv, vv;
+-- result:
+0
+-- !result
