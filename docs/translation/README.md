@@ -2,6 +2,14 @@
 
 This README describes using GPT-4o to translate from Chinese to English, or from English to Chinese. The system used is specific to Docusaurus Markdown and MDX. We are using code provided by Weights and Biases, as they also use Docusaurus and have expertise with LLMs.
 
+> Note:
+>
+> Known issues:
+>
+>Frontmatter `keywords` entries are not allowed. I will submit a PR to allow them and any other frontmatter entries that we use. For now, just remove them from the source document and then add them by hand to both the source and translated doc after translation.
+>
+> Pydantic error about serialization: There is an error coming up after the translation is complete. I have not debugged this yet, I will see if the author of the tranlation package can help, he knows way more about Python than I do.
+
 To translate an English doc:
 
 ## Set up the environment
@@ -47,7 +55,7 @@ The entries in the file should be relative to the `starrocks/docs/translation/` 
 `starrocks/docs/translation/files.txt`
 
 ```bash
-../en/quick_start/quick_start.md
+../en/quick_start/routine-load.md
 ../en/deployment/helm.md
 ```
 
@@ -59,7 +67,7 @@ The entries in the file should be relative to the `starrocks/docs/translation/` 
 `starrocks/docs/translation/files.txt`
 
 ```bash
-../en/quick_start/quick_start.md
+../en/quick_start/routine-load.md
 ../en/deployment/helm.md
 ```
 
@@ -71,7 +79,7 @@ The entries in the file should be relative to the `starrocks/docs/translation/` 
 `starrocks/docs/translation/files.txt`
 
 ```bash
-../zh/quick_start/quick_start.md
+../zh/quick_start/routine-load.md
 ../zh/deployment/helm.md
 ```
 
