@@ -54,6 +54,18 @@ The entries in the file should be relative to the `starrocks/docs/translation/` 
 </td>
 <td>
 
+### From English to Japanese
+
+`starrocks/docs/translation/files.txt`
+
+```bash
+../en/quick_start/quick_start.md
+../en/deployment/helm.md
+```
+
+</td>
+<td>
+
 ### From Chinese to English
 
 `starrocks/docs/translation/files.txt`
@@ -97,6 +109,18 @@ docker run -v ./docs:/docs \
   --env-file ./docs/translation/.env \
   translate \
   bash /docs/translation/scripts/en-to-zh.translate.sh
+```
+
+</td>
+<td>
+
+### From English to Japanese
+
+```bash
+docker run -v ./docs:/docs \
+  --env-file ./docs/translation/.env \
+  translate \
+  bash /docs/translation/scripts/en-to-ja.translate.sh
 ```
 
 </td>
