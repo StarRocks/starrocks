@@ -59,6 +59,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.rule.transformation.OnPredicateMoveAroundRule;
+import com.starrocks.sql.optimizer.rule.transformation.OrToUnionAllJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnMinMaxRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.PartitionColumnValueOnlyOnScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneEmptyWindowRule;
@@ -651,6 +652,8 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, UnionToValuesRule.getInstance());
 
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.VECTOR_REWRITE_RULES);
+
+        scheduler.rewriteOnce(tree, rootTaskContext, OrToUnionAllJoinRule.getInstance());
         // this rule should be after mv
         // @TODO: it can also be applied to other table scan operator
         if (context.getSessionVariable().isEnableScanPredicateExprReuse()) {

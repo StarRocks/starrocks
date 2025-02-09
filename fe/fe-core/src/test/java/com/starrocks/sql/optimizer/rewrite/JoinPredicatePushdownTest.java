@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.starrocks.sql.plan.PlanTestBase;
+import org.apache.hadoop.yarn.webapp.hamlet2.Hamlet;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -22,6 +23,17 @@ public class JoinPredicatePushdownTest extends PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
+    }
+
+    @Test
+    public void testOrToUnionAllJoinRule() throws Exception {
+        String sql = "select v1, v2, v3 from t0 join t1 where t0.v1= t1.v4 or t0.v2 = t1.v5";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
+//        String sql = "select v1, v2, v3 from t0 join t1 on t0.v1 = t1.v4 union all select v1, v2, v3 from t0 join t1 on t0.v2 = t1.v5 where t0.v1 != t1.v4";
+//        getFragmentPlan(sql);
+
+        //System.out.println(plan);
     }
 
     @Test
