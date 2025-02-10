@@ -41,6 +41,16 @@
 
 namespace starrocks::lake {
 
+namespace {
+static void reject_request(::google::protobuf::RpcController* controller, const CompactRequest* request,
+                           CompactResponse* response) {
+    auto st = Status::Aborted("Compaction request rejected due to BE/CN shutdown in progress!");
+    LOG(WARNING) << "Fail to compact num_of_tablets= " << request->tablet_ids().size()
+                 << ". version=" << request->version() << " txn_id=" << request->txn_id() << " : " << st;
+    st.to_protobuf(response->mutable_status());
+}
+} // namespace
+
 CompactionTaskCallback::~CompactionTaskCallback() = default;
 
 CompactionTaskCallback::CompactionTaskCallback(CompactionScheduler* scheduler, const CompactRequest* request,
@@ -161,13 +171,21 @@ CompactionScheduler::~CompactionScheduler() {
 
 void CompactionScheduler::stop() {
     bool expected = false;
-    if (_stopped.compare_exchange_strong(expected, true)) {
+    auto changed = false;
+    {
+        // hold the lock to exclude new tasks entering the task queue in compact() interface
+        std::unique_lock lock(_mutex);
+        changed = _stopped.compare_exchange_strong(expected, true);
+    }
+    if (changed) {
         _threads->shutdown();
+        abort_all();
     }
 }
 
 void CompactionScheduler::compact(::google::protobuf::RpcController* controller, const CompactRequest* request,
                                   CompactResponse* response, ::google::protobuf::Closure* done) {
+    brpc::ClosureGuard guard(done);
     // By default, all the tablet compaction tasks with the same txn id will be executed in the same
     // thread to avoid blocking other transactions, but if there are idle threads, they will steal
     // tasks from busy threads to execute.
@@ -177,18 +195,31 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
     for (auto tablet_id : request->tablet_ids()) {
         auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(),
                                                                is_checker, cb);
-        {
-            std::lock_guard l(_contexts_lock);
-            _contexts.Append(context.get());
-        }
         contexts_vec.push_back(std::move(context));
         // DO NOT touch `context` from here!
         is_checker = false;
     }
     // initialize last check time, compact request is received right after FE sends it, so consider it valid now
     cb->set_last_check_time(time(nullptr));
+
+    std::unique_lock lock(_mutex);
+    // make changes under lock
+    // perform the check again under lock, so the _stopped and _task_queues operation is atomic
+    if (_stopped) {
+        reject_request(controller, request, response);
+        return;
+    }
+    {
+        std::lock_guard l(_contexts_lock);
+        for (auto& ctx : contexts_vec) {
+            _contexts.Append(ctx.get());
+        }
+    }
     _task_queues.put_by_txn_id(request->txn_id(), contexts_vec);
     // DO NOT touch `contexts_vec` from here!
+    // release the done guard, let CompactionTaskCallback take charge.
+    guard.release();
+
     TEST_SYNC_POINT("CompactionScheduler::compact:return");
 }
 
@@ -404,6 +435,21 @@ Status CompactionScheduler::do_compaction(std::unique_ptr<CompactionTaskContext>
     return status;
 }
 
+void CompactionScheduler::abort_compaction(std::unique_ptr<CompactionTaskContext> context) {
+    const auto start_time = ::time(nullptr);
+    const auto tablet_id = context->tablet_id;
+    const auto txn_id = context->txn_id;
+    const auto version = context->version;
+
+    int64_t in_queue_time_sec = start_time > context->enqueue_time_sec ? (start_time - context->enqueue_time_sec) : 0;
+    context->stats->in_queue_time_sec += in_queue_time_sec;
+    context->status = Status::Aborted("Compaction task aborted due to BE/CN shutdown!");
+    LOG(WARNING) << "Fail to compact tablet " << tablet_id << ". version=" << version << " txn_id=" << txn_id << " : "
+                 << context->status;
+    // make sure every task can be finished no matter it is succeeded or failed.
+    context->callback->finish_task(std::move(context));
+}
+
 Status CompactionScheduler::abort(int64_t txn_id) {
     std::unique_lock l(_contexts_lock);
     for (butil::LinkNode<CompactionTaskContext>* node = _contexts.head(); node != _contexts.end();
@@ -420,6 +466,21 @@ Status CompactionScheduler::abort(int64_t txn_id) {
         }
     }
     return Status::NotFound(fmt::format("no compaction task with txn id {}", txn_id));
+}
+
+void CompactionScheduler::abort_all() {
+    for (int i = 0; i < _task_queues.task_queue_size(); ++i) {
+        // drain _task_queues, ensure every tasks in queue are properly aborted
+        bool done = false;
+        while (!done) {
+            CompactionContextPtr context;
+            if (_task_queues.try_get(i, &context)) {
+                abort_compaction(std::move(context));
+            } else {
+                done = true;
+            }
+        }
+    }
 }
 
 // If `lake_compaction_max_concurrency` is reduced during runtime, `id` may exceed it.

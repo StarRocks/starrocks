@@ -227,11 +227,16 @@ public:
 private:
     friend class CompactionTaskCallback;
 
+    // abort all the compaction tasks in the task queue. Only expected to be invoked during stop()
+    void abort_all();
+
     void remove_states(const std::vector<std::unique_ptr<CompactionTaskContext>>& contexes);
 
     void thread_task(int id);
 
     Status do_compaction(std::unique_ptr<CompactionTaskContext> context);
+
+    void abort_compaction(std::unique_ptr<CompactionTaskContext> context);
 
     bool reschedule_task_if_needed(int id);
 
@@ -241,6 +246,7 @@ private:
     butil::LinkedList<CompactionTaskContext> _contexts;
     std::unique_ptr<ThreadPool> _threads;
     std::atomic<bool> _stopped{false};
+    std::mutex _mutex;
     WrapTaskQueues _task_queues;
 };
 
