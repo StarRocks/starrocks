@@ -83,12 +83,15 @@ public:
     uint64_t id() const { return _id; }
 
     bool pre_allocate(size_t allocate_size) {
-        if (_dir->inc_size(allocate_size)) {
-            _acquired_data_size += allocate_size;
+        if (_data_size + allocate_size <= _acquired_data_size) {
             return true;
-        } else {
-            return false;
         }
+        size_t extra_size = _data_size + allocate_size - _acquired_data_size;
+        if (_dir->inc_size(extra_size)) {
+            _acquired_data_size += extra_size;
+            return true;
+        }
+        return false;
     }
 
     Status append_data(const std::vector<Slice>& data, size_t total_size);
@@ -334,5 +337,4 @@ StatusOr<LogBlockContainerPtr> LogBlockManager::get_or_create_container(
     RETURN_IF_ERROR(block_container->open());
     return block_container;
 }
-
 } // namespace starrocks::spill
