@@ -20,10 +20,7 @@ import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.HudiTable;
 import com.starrocks.catalog.IcebergTable;
-import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
-import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -35,6 +32,8 @@ import com.starrocks.sql.optimizer.base.HashDistributionSpec;
 import com.starrocks.sql.optimizer.base.Ordering;
 import com.starrocks.sql.optimizer.cost.CostEstimate;
 import com.starrocks.sql.optimizer.cost.CostModel;
+import com.starrocks.sql.optimizer.cost.feature.FeatureExtractor;
+import com.starrocks.sql.optimizer.cost.feature.PlanFeatures;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.SortPhase;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
@@ -104,6 +103,10 @@ public class Explain {
             totalCost = CostEstimate.addCost(totalCost, curCost);
         }
         return totalCost;
+    }
+
+    public static PlanFeatures buildFeatures(OptExpression optExpr) {
+        return FeatureExtractor.extractFeatures(optExpr);
     }
 
     private static class OperatorStr {
@@ -183,14 +186,7 @@ public class Explain {
             }
             buildCostEstimate(sb, optExpression, context.step);
 
-            int totalTabletsNum = 0;
-            for (Long partitionId : scan.getSelectedPartitionId()) {
-                final Partition partition = ((OlapTable) scan.getTable()).getPartition(partitionId);
-                for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-                    final MaterializedIndex selectedTable = subPartition.getIndex(scan.getSelectedIndexId());
-                    totalTabletsNum += selectedTable.getTablets().size();
-                }
-            }
+            long totalTabletsNum = scan.getNumTabletsInSelectedPartitions();
             String partitionAndBucketInfo = "partitionRatio: " +
                     scan.getSelectedPartitionId().size() +
                     "/" +

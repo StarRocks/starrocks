@@ -17,6 +17,10 @@ package com.starrocks.sql.optimizer.operator.physical;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Partition;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.VectorSearchOptions;
@@ -133,6 +137,21 @@ public class PhysicalOlapScanOperator extends PhysicalScanOperator {
 
     public List<Long> getSelectedTabletId() {
         return selectedTabletId;
+    }
+
+    /**
+     * Get total number of tablets(before tablet pruning) in selected partitions
+     */
+    public long getNumTabletsInSelectedPartitions() {
+        int totalTabletsNum = 0;
+        for (Long partitionId : getSelectedPartitionId()) {
+            final Partition partition = ((OlapTable) getTable()).getPartition(partitionId);
+            for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                final MaterializedIndex selectedTable = subPartition.getIndex(getSelectedIndexId());
+                totalTabletsNum += selectedTable.getTablets().size();
+            }
+        }
+        return totalTabletsNum;
     }
 
     public List<Long> getHintsReplicaId() {
