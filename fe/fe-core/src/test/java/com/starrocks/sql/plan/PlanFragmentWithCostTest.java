@@ -2237,11 +2237,11 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
             System.out.println(plan);
             assertContains(plan, "PLAN COST\n" +
                     "  CPU: 4.80001312001E11\n" +
-                    "  Memory: 320241.0");
+                    "  Memory: 320201.0");
 
             assertContains(getCostExplain(sql), "PLAN COST\n" +
                     "  CPU: 4.80001312001E11\n" +
-                    "  Memory: 320241.0");
+                    "  Memory: 320201.0");
 
             AuditEvent event = connectContext.getAuditEventBuilder().build();
             Assert.assertTrue("planMemCosts should be > 1, but: " + event.planMemCosts, event.planMemCosts > 1);

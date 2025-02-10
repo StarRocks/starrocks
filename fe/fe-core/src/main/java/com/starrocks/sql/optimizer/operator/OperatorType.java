@@ -15,6 +15,10 @@
 
 package com.starrocks.sql.optimizer.operator;
 
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 public enum OperatorType {
     /**
      * Logical operator
@@ -154,7 +158,12 @@ public enum OperatorType {
     // table table
     PATTERN_MULTIJOIN;
 
+    private static final Set<OperatorType> PHYSICAL_SCANS =
+            Arrays.stream(OperatorType.values())
+                    .filter(x -> x.name().startsWith("PHYSICAL") && x.name().endsWith("SCAN"))
+                    .collect(Collectors.toUnmodifiableSet());
+
     public boolean isPhysicalScan() {
-        return name().startsWith("PHYSICAL") && name().endsWith("SCAN");
+        return PHYSICAL_SCANS.contains(this);
     }
 }

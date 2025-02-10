@@ -31,16 +31,16 @@ class PlanFeaturesTest extends PlanTestBase {
     @CsvSource(delimiter = '|', value = {
             "select count(*) from t0 where v1 < 100 limit 100 " +
                     "| tables=[0,0,10003] " +
-                    "| 39,1,0,8,0,2,0,3;40,1,0,8,2,2,100,0,0,1,1;44,1,0,9,2,2,0,100,50,1,1",
+                    "| 39,1,0,8,0,2,0,3;40,1,0,8,2,2,4,0,0,1,1;44,1,0,9,0,2,0,0,0,1,1",
             "select max(v1) from t0 where v1 < 100 limit 100" +
                     "|tables=[0,0,10003] " +
-                    "| [39,1,0,8,0,2,0,3;40,1,0,8,2,2,100,0,0,1,1;44,1,0,8,2,2,0,100,50,1,1",
+                    "| [39,1,0,8,0,2,0,3;40,1,0,8,2,2,4,0,0,1,1;44,1,0,8,0,2,0,0,0,1,1",
             "select v1, count(*) from t0 group by v1 " +
                     "| tables=[0,0,10003] " +
-                    "| 40,1,0,16,2,2,0,0,1,1,1;44,1,0,8,2,2,0,100,50,0,0",
+                    "| 40,1,0,16,2,2,0,0,1,1,1;44,1,0,8,0,2,0,0,0,0,0",
             "select count(*) from t0 a join t0 b on a.v1 = b.v2" +
                     "| tables=[0,0,10003] " +
-                    "| 39,2,0,16,2,4,0,4;40,2,0,16,2,2,0,0,0,2,2;44,2,0,16,4,4,0,200,100,2,0",
+                    "| 39,2,0,16,2,4,0,4;40,2,0,16,2,2,0,0,0,2,2;44,2,0,16,0,4,0,0,0,2,0",
 
     })
     public void testBasic(String query, String expectedTables, String expected) throws Exception {
@@ -53,7 +53,7 @@ class PlanFeaturesTest extends PlanTestBase {
         String string = planFeatures.toFeatureString();
         Assertions.assertTrue(string.startsWith(expectedTables), string);
         Splitter.on(";").splitToList(expected).forEach(slice -> {
-            Assertions.assertTrue(string.contains(slice), string);
+            Assertions.assertTrue(string.contains(slice), "slice is " + slice + ", feature is " + string);
         });
     }
 

@@ -68,7 +68,7 @@ public class OperatorFeatures extends TreeNode<OperatorFeatures> {
         // LIMIT
         long limit = this.optExpression.getOp().getLimit();
         if (limit != Operator.DEFAULT_LIMIT) {
-            res.add(limit);
+            res.add(encodeLargeSize(limit));
         } else {
             res.add(0L);
         }
@@ -104,8 +104,8 @@ public class OperatorFeatures extends TreeNode<OperatorFeatures> {
         public static final int VECTOR_LENGTH = OperatorFeatures.VECTOR_LENGTH + 4;
 
         protected final Table table;
-        protected final double tabletRatio;
-        protected final double partitionRatio;
+        protected final long numTablets;
+        protected final long numPartitions;
         protected final int numBinaryPredicates;
         protected final int numPredicateColumns;
 
@@ -119,16 +119,14 @@ public class OperatorFeatures extends TreeNode<OperatorFeatures> {
             if (scanOperator instanceof PhysicalOlapScanOperator olapScanOperator) {
                 OlapTable olapTable = (OlapTable) scanOperator.getTable();
                 long selectedTablets = olapScanOperator.getSelectedTabletId().size();
-                long totalTablets = olapScanOperator.getNumTabletsInSelectedPartitions();
                 long selectedPartitions = olapScanOperator.getSelectedPartitionId().size();
-                long totalPartitions = olapTable.getVisiblePartitions().size();
                 this.table = olapTable;
-                this.tabletRatio = (double) (selectedTablets + 1) / (totalTablets + 1);
-                this.partitionRatio = (double) (selectedPartitions + 1) / (totalPartitions + 1);
+                this.numTablets = selectedTablets;
+                this.numPartitions = selectedPartitions;
             } else {
                 this.table = scanOperator.getTable();
-                this.tabletRatio = 0.0;
-                this.partitionRatio = 0.0;
+                this.numTablets = 0;
+                this.numPartitions = 0;
             }
 
             ScalarOperator predicate = scanOperator.getPredicate();
@@ -145,8 +143,8 @@ public class OperatorFeatures extends TreeNode<OperatorFeatures> {
         @Override
         public List<Long> toVector() {
             List<Long> res = super.toVector();
-            res.add((long) (tabletRatio * 100));
-            res.add((long) (partitionRatio * 100));
+            res.add(numTablets);
+            res.add(numPartitions);
             res.add((long) numPredicateColumns);
             res.add((long) numBinaryPredicates);
 
