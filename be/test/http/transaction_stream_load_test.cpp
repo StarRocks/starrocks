@@ -29,6 +29,7 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/transaction_mgr.h"
 #include "testutil/assert.h"
+#include "testutil/sync_point.h"
 #include "util/brpc_stub_cache.h"
 #include "util/cpu_info.h"
 #include "util/defer_op.h"
