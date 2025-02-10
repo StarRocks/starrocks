@@ -2497,6 +2497,21 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean enable_collect_query_detail_info = false;
 
+    //============================== Plan Feature Extraction BEGIN ========================================//
+    @ConfField(mutable = true, comment = "Collect features of query plan into a log file")
+    public static boolean enable_plan_feature_collection = false;
+    @ConfField
+    public static String feature_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
+    @ConfField
+    public static String feature_log_roll_interval = "DAY";
+    @ConfField
+    public static String feature_log_delete_age = "3d";
+    @ConfField
+    public static int feature_log_roll_num = 5;
+    @ConfField
+    public static int feature_log_roll_size_mb = 1024; // 1 GB in MB
+    //============================== Plan Feature Extraction END ========================================//
+
     @ConfField(mutable = true,
             comment = "Enable the sql digest feature, building a parameterized digest for each sql in the query detail")
     public static boolean enable_sql_digest = false;
