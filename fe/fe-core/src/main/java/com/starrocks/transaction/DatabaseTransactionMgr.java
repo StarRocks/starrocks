@@ -1883,6 +1883,7 @@ public class DatabaseTransactionMgr {
         writeLock();
         try {
             LOG.debug("replay a transaction state batch{}", transactionStateBatch);
+            transactionStateBatch.replaySetTransactionStatus();
             Database db = globalStateMgr.getLocalMetastore().getDb(transactionStateBatch.getDbId());
             updateCatalogAfterVisibleBatch(transactionStateBatch, db);
 
