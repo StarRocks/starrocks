@@ -103,7 +103,6 @@ public class ConfigTest {
         configs2 = Config.getConfigInfo(matcher2);
         Assert.assertEquals("999", configs2.get(0).get(2));
         Assert.assertEquals(999, Config.agent_task_resend_wait_time_ms);
-
         // Write config twice
         Config.setMutableConfig("agent_task_resend_wait_time_ms", "1000", true, "root");
         configs2 = Config.getConfigInfo(matcher2);
