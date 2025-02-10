@@ -42,6 +42,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.RemoteFilesSampleStrategy;
+import com.starrocks.catalog.Table;
 import com.starrocks.datacache.DataCacheOptions;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.ScanOptimzeOption;
@@ -119,6 +120,10 @@ public abstract class ScanNode extends PlanNode {
 
     public String getTableName() {
         return desc.getTable().getName();
+    }
+
+    public Table getTable() {
+        return desc.getTable();
     }
 
     public boolean isLocalNativeTable() {
