@@ -175,25 +175,24 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.connector_max_split_size = _scanner_params.connector_max_split_size;
     ctx.global_dictmaps = _scanner_params.global_dictmaps;
 
-    if (config::parquet_advance_zonemap_filter) {
-        ScanConjunctsManagerOptions opts;
-        opts.conjunct_ctxs_ptr = &_scanner_params.all_conjunct_ctxs;
-        opts.tuple_desc = _scanner_params.tuple_desc;
-        opts.obj_pool = _runtime_state->obj_pool();
-        opts.runtime_filters = _scanner_params.runtime_filter_collector;
-        opts.runtime_state = _runtime_state;
-        opts.enable_column_expr_predicate = true;
-        opts.is_olap_scan = false;
-        opts.pred_tree_params = _runtime_state->fragment_ctx()->pred_tree_params();
-        ctx.conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
-        RETURN_IF_ERROR(ctx.conjuncts_manager->parse_conjuncts());
-        auto* predicate_parser =
-                opts.obj_pool->add(new ConnectorPredicateParser(&_scanner_params.tuple_desc->decoded_slots()));
-        ASSIGN_OR_RETURN(ctx.predicate_tree,
-                         ctx.conjuncts_manager->get_predicate_tree(predicate_parser, ctx.predicate_free_pool));
-        ctx.rf_scan_range_pruner = opts.obj_pool->add(
-                new RuntimeScanRangePruner(predicate_parser, ctx.conjuncts_manager->unarrived_runtime_filters()));
-    }
+    ScanConjunctsManagerOptions opts;
+    opts.conjunct_ctxs_ptr = &_scanner_params.all_conjunct_ctxs;
+    opts.tuple_desc = _scanner_params.tuple_desc;
+    opts.obj_pool = _runtime_state->obj_pool();
+    opts.runtime_filters = _scanner_params.runtime_filter_collector;
+    opts.runtime_state = _runtime_state;
+    opts.enable_column_expr_predicate = true;
+    opts.is_olap_scan = false;
+    opts.pred_tree_params = _runtime_state->fragment_ctx()->pred_tree_params();
+    ctx.conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
+    RETURN_IF_ERROR(ctx.conjuncts_manager->parse_conjuncts());
+    auto* predicate_parser =
+            opts.obj_pool->add(new ConnectorPredicateParser(&_scanner_params.tuple_desc->decoded_slots()));
+    ASSIGN_OR_RETURN(ctx.predicate_tree,
+                     ctx.conjuncts_manager->get_predicate_tree(predicate_parser, ctx.predicate_free_pool));
+    ctx.rf_scan_range_pruner = opts.obj_pool->add(
+            new RuntimeScanRangePruner(predicate_parser, ctx.conjuncts_manager->unarrived_runtime_filters()));
+
     return Status::OK();
 }
 

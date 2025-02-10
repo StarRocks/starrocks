@@ -23,7 +23,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
-#include "formats/parquet/page_index_reader.h"
+#include "formats/parquet/column_reader.h"
 #include "formats/parquet/stored_column_reader.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"

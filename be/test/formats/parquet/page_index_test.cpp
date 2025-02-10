@@ -338,8 +338,7 @@ TEST_F(PageIndexTest, TestRandomReadWith2PageSize) {
 }
 
 TEST_F(PageIndexTest, TestCollectIORangeWithPageIndex) {
-    auto test = [&](bool enable_advanced_zone_map) {
-        config::parquet_advance_zonemap_filter = enable_advanced_zone_map;
+    auto test = [&]() {
         auto chunk = std::make_shared<Chunk>();
         chunk->append_column(
                 ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
@@ -378,7 +377,7 @@ TEST_F(PageIndexTest, TestCollectIORangeWithPageIndex) {
         for (auto* expr : ctx->conjunct_ctxs_by_slot[0]) {
             all_conjuncts.push_back(expr);
         }
-        ParquetUTBase::setup_conjuncts_manager(all_conjuncts, tuple_desc, _runtime_state, ctx);
+        ParquetUTBase::setup_conjuncts_manager(all_conjuncts, nullptr, tuple_desc, _runtime_state, ctx);
 
         auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                         std::filesystem::file_size(small_page_file));
@@ -419,15 +418,11 @@ TEST_F(PageIndexTest, TestCollectIORangeWithPageIndex) {
         EXPECT_EQ(total_row_nums, 1999);
     };
 
-    bool origin_value = config::parquet_advance_zonemap_filter;
-    test(true);
-    test(false);
-    config::parquet_advance_zonemap_filter = origin_value;
+    test();
 }
 
 TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
-    auto test = [&](bool enable_advanced_zone_map) {
-        config::parquet_advance_zonemap_filter = enable_advanced_zone_map;
+    auto test = [&]() {
         auto chunk = std::make_shared<Chunk>();
         chunk->append_column(
                 ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
@@ -486,7 +481,7 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
         for (auto* expr : ctx->conjunct_ctxs_by_slot[1]) {
             all_conjuncts.push_back(expr);
         }
-        ParquetUTBase::setup_conjuncts_manager(all_conjuncts, tuple_desc, _runtime_state, ctx);
+        ParquetUTBase::setup_conjuncts_manager(all_conjuncts, nullptr, tuple_desc, _runtime_state, ctx);
 
         auto shared_buffer = std::make_shared<io::SharedBufferedInputStream>(
                 file->stream(), small_page_file, std::filesystem::file_size(small_page_file));
@@ -533,10 +528,7 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
         EXPECT_EQ(total_row_nums, 10000);
     };
 
-    bool origin_value = config::parquet_advance_zonemap_filter;
-    test(true);
-    test(false);
-    config::parquet_advance_zonemap_filter = origin_value;
+    test();
 }
 
 TEST_F(PageIndexTest, TestPageIndexNoPageFiltered) {
