@@ -39,16 +39,21 @@ public class JoinPredicatePushdownTest extends PlanTestBase {
     public void testJoinPushdownCTE() throws Exception {
         // enable cte reuse to trigger calling PUSH_DOWN_PREDICATE rule set twice
         connectContext.getSessionVariable().setCboCteReuse(true);
-        String query = "with xxx1 as (\n" + "with x as (select * from t1 join t2 where t1.v4 = t2.v7 )\n" +
-                "select x1.v6, x2.v7 \n" + "from (select * from x where x.v5 = 1 ) x1 left outer join" +
-                " (select * from x where x.v8 = 2) x2 on x1.v4 = x2.v7)\n" + "select * from xxx1 where xxx1.v6 = 2\n" +
-                "union \n" + "select * from xxx1 where xxx1.v7 = 3";
+        String query = "with xxx1 as (\n" +
+                "with x as (select * from t1 join t2 where t1.v4 = t2.v7 )\n" +
+                "select x1.v6, x2.v7 \n" +
+                "from (select * from x where x.v5 = 1 ) x1 left outer join" +
+                " (select * from x where x.v8 = 2) x2 on x1.v4 = x2.v7)\n" +
+                "select * from xxx1 where xxx1.v6 = 2\n" +
+                "union \n" +
+                "select * from xxx1 where xxx1.v7 = 3";
         String plan = getFragmentPlan(query);
         // must has left outer join
-        PlanTestBase.assertContains(plan,
-                "13:HASH JOIN\n" + "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" + "  |  colocate: false, reason: \n" +
-                        "  |  equal join conjunct: 7: v4 = 16: v7\n" +
-                        "  |  other predicates: (16: v7 = 3) OR (9: v6 = 2)");
+        PlanTestBase.assertContains(plan, "13:HASH JOIN\n" +
+                "  |  join op: LEFT OUTER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 7: v4 = 16: v7\n" +
+                "  |  other predicates: (16: v7 = 3) OR (9: v6 = 2)");
     }
 
     @Test
@@ -56,56 +61,69 @@ public class JoinPredicatePushdownTest extends PlanTestBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(3000000);
         connectContext.getSessionVariable().disableJoinReorder();
         String query = "select x.v1 v11, x.v2 v21, x.v3 v31, sub2.v1 v12, sub2.v2 v22 from test.t0 x inner join" +
-                " (select v1, v2, v3, v4, v5, v8 " + "from test.t0 left outer join (select * from test.t1 " +
+                " (select v1, v2, v3, v4, v5, v8 " +
+                "from test.t0 left outer join (select * from test.t1 " +
                 "inner join test.t2 on v5 = v7) sub on v1 = v4) sub2 on x.v1 = sub2.v1";
         String plan = getFragmentPlan(query);
     }
 
     @Test
     public void testMultiLeftOuterJoin() throws Exception {
-        String query = "select v1, v2, v5, v8 " + "from test.t0 left outer join test.t1 on v1 = v4 " +
+        String query = "select v1, v2, v5, v8 " +
+                "from test.t0 left outer join test.t1 on v1 = v4 " +
                 "left outer join test.t2 on v5 = v7 where v9 = 10";
         String plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan,
-                "3:HASH JOIN\n" + "  |  join op: INNER JOIN (BROADCAST)\n" + "  |  colocate: false, reason: \n" +
-                        "  |  equal join conjunct: 1: v1 = 4: v4");
-        PlanTestBase.assertContains(plan,
-                "8:HASH JOIN\n" + "  |  join op: INNER JOIN (BROADCAST)\n" + "  |  colocate: false, reason: \n" +
-                        "  |  equal join conjunct: 5: v5 = 7: v7");
+        PlanTestBase.assertContains(plan, "3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4");
+        PlanTestBase.assertContains(plan, "8:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 5: v5 = 7: v7");
 
-        String query2 = "select v1, v2, v5, v8 " + "from test.t0 left outer join test.t1 on v1 = v4 " +
+        String query2 = "select v1, v2, v5, v8 " +
+                "from test.t0 left outer join test.t1 on v1 = v4 " +
                 "left outer join test.t2 on v5 = v7 where v9 = 10 and v3 = 1";
         String plan2 = getFragmentPlan(query2);
-        PlanTestBase.assertContains(plan2,
-                "9:HASH JOIN\n" + "  |  join op: INNER JOIN (BROADCAST)\n" + "  |  colocate: false, reason: \n" +
-                        "  |  equal join conjunct: 5: v5 = 7: v7");
-        PlanTestBase.assertContains(plan2,
-                "4:HASH JOIN\n" + "  |  join op: INNER JOIN (BROADCAST)\n" + "  |  colocate: false, reason: \n" +
-                        "  |  equal join conjunct: 1: v1 = 4: v4");
+        PlanTestBase.assertContains(plan2, "9:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 5: v5 = 7: v7");
+        PlanTestBase.assertContains(plan2, "4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4");
         PlanTestBase.assertNotContains(plan2, "LEFT OUTER JOIN");
     }
 
     @Test
     public void testMultiRightOuterJoin() throws Exception {
-        String query = "select v1, v2, v5, v8 " + "from test.t0 right outer join test.t1 on v1 = v4 " +
+        String query = "select v1, v2, v5, v8 " +
+                "from test.t0 right outer join test.t1 on v1 = v4 " +
                 "right outer join test.t2 on v2 = v7 where v3 = 10";
         String plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan,
-                "4:HASH JOIN\n" + "  |  join op: INNER JOIN (BROADCAST)\n" + "  |  colocate: false, reason: \n" +
-                        "  |  equal join conjunct: 1: v1 = 4: v4");
-        PlanTestBase.assertContains(plan,
-                "8:HASH JOIN\n" + "  |  join op: INNER JOIN (BROADCAST)\n" + "  |  colocate: false, reason: \n" +
-                        "  |  equal join conjunct: 2: v2 = 7: v7");
+        PlanTestBase.assertContains(plan, "4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4");
+        PlanTestBase.assertContains(plan, "8:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v2 = 7: v7");
 
-        String query2 = "select v1, v2, v5, v8 " + "from test.t0 right outer join test.t1 on v1 = v4 " +
+        String query2 = "select v1, v2, v5, v8 " +
+                "from test.t0 right outer join test.t1 on v1 = v4 " +
                 "right outer join test.t2 on v2 = v7 where v5 = 10";
         String plan2 = getFragmentPlan(query2);
-        PlanTestBase.assertContains(plan2,
-                "7:HASH JOIN\n" + "  |  join op: INNER JOIN (BROADCAST)\n" + "  |  colocate: false, reason: \n" +
-                        "  |  equal join conjunct: 2: v2 = 7: v7");
-        PlanTestBase.assertContains(plan2,
-                "3:HASH JOIN\n" + "  |  join op: INNER JOIN (BROADCAST)\n" + "  |  colocate: false, reason: \n" +
-                        "  |  equal join conjunct: 1: v1 = 4: v4");
+        PlanTestBase.assertContains(plan2, "7:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v2 = 7: v7");
+        PlanTestBase.assertContains(plan2, "3:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4");
         PlanTestBase.assertNotContains(plan2, "LEFT OUTER JOIN");
     }
 
@@ -113,10 +131,13 @@ public class JoinPredicatePushdownTest extends PlanTestBase {
     public void testFunctionDerived() throws Exception {
         String sql = "select * from t0 join t1 on v1 = v4 where all_match(x -> x > 1, [v1]) and v1 > 2";
         String plan = getFragmentPlan(sql);
-        assertContains(plan,
-                "  3:SELECT\n" + "  |  predicates: all_match(array_map(<slot 7> -> <slot 7> > 1, [4: v4]))\n" +
-                        "  |  \n" + "  2:OlapScanNode\n" + "     TABLE: t1\n" + "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 4: v4 > 2");
+        assertContains(plan, "  3:SELECT\n" +
+                "  |  predicates: all_match(array_map(<slot 7> -> <slot 7> > 1, [4: v4]))\n" +
+                "  |  \n" +
+                "  2:OlapScanNode\n" +
+                "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 4: v4 > 2");
 
         sql = "select * from t0 join t1 on v1 <=> v4 where all_match(x -> x > 1, [v1]) and v1 > 2";
         plan = getFragmentPlan(sql);
@@ -124,9 +145,12 @@ public class JoinPredicatePushdownTest extends PlanTestBase {
 
         sql = "select * from t0 join t1 on v1 = v4 join t2 on v4 = v7 where all_match(x -> x > 1, [v1]) and v7 > 2";
         plan = getFragmentPlan(sql);
-        assertContains(plan,
-                "  4:SELECT\n" + "  |  predicates: all_match(array_map(<slot 10> -> <slot 10> > 1, [4: v4]))\n" +
-                        "  |  \n" + "  3:OlapScanNode\n" + "     TABLE: t1\n" + "     PREAGGREGATION: ON\n" +
-                        "     PREDICATES: 4: v4 > 2");
+        assertContains(plan, "  4:SELECT\n" +
+                "  |  predicates: all_match(array_map(<slot 10> -> <slot 10> > 1, [4: v4]))\n" +
+                "  |  \n" +
+                "  3:OlapScanNode\n" +
+                "     TABLE: t1\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: 4: v4 > 2");
     }
 }
