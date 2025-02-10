@@ -125,7 +125,12 @@ public class HdfsScanNode extends ScanNode {
     protected String getNodeExplainString(String prefix, TExplainLevel detailLevel) {
         StringBuilder output = new StringBuilder();
 
-        output.append(prefix).append("TABLE: ").append(hiveTable.getName()).append("\n");
+        output.append(prefix)
+            .append("TABLE: ")
+            .append(hiveTable.getCatalogDBName())
+            .append(".")
+            .append(hiveTable.getName())
+            .append("\n");
 
         if (null != sortColumn) {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
