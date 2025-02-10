@@ -109,7 +109,7 @@ public class OrToUnionAllJoinRule extends TransformationRule {
 
     @Override
     public boolean check(OptExpression input, OptimizerContext context) {
-        if (!context.getSessionVariable().isEnabledOrToUnionAllJoinEnabled()) {
+        if (!context.getSessionVariable().isEnabledOrToUnionAllJoin()) {
             return false;
         }
 

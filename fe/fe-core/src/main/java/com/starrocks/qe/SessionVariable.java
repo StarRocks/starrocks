@@ -2505,7 +2505,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private boolean enableRewriteUnnestBitmapToArray = true;
 
     @VarAttr(name = ENABLE_REWRITE_OR_TO_UNION_ALL_JOIN)
-    private boolean enabledOrToUnionAllJoinEnabled = false;
+    private boolean enabledOrToUnionAllJoin = false;
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
@@ -4576,12 +4576,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableRewriteUnnestBitmapToArray;
     }
 
-    public boolean isEnabledOrToUnionAllJoinEnabled() {
-        return enabledOrToUnionAllJoinEnabled;
+    public boolean isEnabledOrToUnionAllJoin() {
+        return enabledOrToUnionAllJoin;
     }
 
-    public void setEnabledOrToUnionAllJoinEnabled(boolean enabledOrToUnionAllJoinEnabled) {
-        this.enabledOrToUnionAllJoinEnabled = enabledOrToUnionAllJoinEnabled;
+    public void setEnabledOrToUnionAllJoin(boolean enabledOrToUnionAllJoin) {
+        this.enabledOrToUnionAllJoin = enabledOrToUnionAllJoin;
     }
 
     // Serialize to thrift object
