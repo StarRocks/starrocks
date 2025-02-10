@@ -257,7 +257,7 @@ Status PartitionedHashJoinProberImpl::push_probe_chunk(RuntimeState* state, Chun
             _partition_input_channels[i].push(chunk->clone_empty());
         }
 
-        if (_partition_input_channels[i].back()->num_rows() + size <= 4096) {
+        if (_partition_input_channels[i].back()->num_rows() + size <= state->chunk_size()) {
             _partition_input_channels[i].back()->append_selective(*chunk, selection.data(), from, size);
         } else {
             _partition_input_channels[i].push(chunk->clone_empty());
