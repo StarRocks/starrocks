@@ -1627,6 +1627,7 @@ displayed_sidebar: docs
   starrocks_fe_routine_load_jobs{state="PAUSED"} 0
   starrocks_fe_routine_load_jobs{state="STOPPED"} 0
   starrocks_fe_routine_load_jobs{state="CANCELLED"} 1
+  starrocks_fe_routine_load_jobs{state="UNSTABLE"} 0
   ```
 
 ### starrocks_fe_routine_load_paused
