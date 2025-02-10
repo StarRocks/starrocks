@@ -495,7 +495,7 @@ SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq([NULL],
 SELECT id FROM test_array_contains_complex_type WHERE array_contains_all([], array_json) ORDER BY id;
 
 SELECT id FROM test_array_contains_complex_type WHERE array_contains_all([row(10,'hello')], array_struct) ORDER BY id;
-SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq([row(20,''world')], array_struct) ORDER BY id;
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq([row(20,'world')], array_struct) ORDER BY id;
 SELECT id FROM test_array_contains_complex_type WHERE array_contains_all([row(40,'database')], array_struct) ORDER BY id;
 SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq([NULL], array_struct) ORDER BY id;
 SELECT id FROM test_array_contains_complex_type WHERE array_contains_all([], array_struct) ORDER BY id;

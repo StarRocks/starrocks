@@ -2169,9 +2169,9 @@ SELECT id FROM test_array_contains_complex_type WHERE array_contains_all([row(10
 -- result:
 4
 -- !result
-SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq([row(20,''world')], array_struct) ORDER BY id;
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq([row(20,'world')], array_struct) ORDER BY id;
 -- result:
-E: (1064, "Getting syntax error at line 1, column 77. Detail message: Unexpected input '(', the most similar input is {']'}.")
+4
 -- !result
 SELECT id FROM test_array_contains_complex_type WHERE array_contains_all([row(40,'database')], array_struct) ORDER BY id;
 -- result:
