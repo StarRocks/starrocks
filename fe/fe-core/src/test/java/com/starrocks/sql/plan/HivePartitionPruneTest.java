@@ -39,14 +39,14 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
         String sql = "select * from t1 where par_col = 0;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "0:HdfsScanNode\n" +
-                "     TABLE: t1\n" +
+                "     TABLE: partitioned_db.t1\n" +
                 "     PARTITION PREDICATES: 4: par_col = 0\n" +
                 "     partitions=1/3");
 
         sql = "select * from t1 where par_col = 1 and c1 = 2";
         plan = getFragmentPlan(sql);
         assertContains(plan, "0:HdfsScanNode\n" +
-                "     TABLE: t1\n" +
+                "     TABLE: partitioned_db.t1\n" +
                 "     PARTITION PREDICATES: 4: par_col = 1\n" +
                 "     NON-PARTITION PREDICATES: 1: c1 = 2\n" +
                 "     MIN/MAX PREDICATES: 1: c1 <= 2, 1: c1 >= 2\n" +
@@ -55,7 +55,7 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
         sql = "select * from t1 where par_col = abs(-1) and c1 = 2";
         plan = getFragmentPlan(sql);
         assertContains(plan, "0:HdfsScanNode\n" +
-                "     TABLE: t1\n" +
+                "     TABLE: partitioned_db.t1\n" +
                 "     PARTITION PREDICATES: 4: par_col = CAST(abs(-1) AS INT)\n" +
                 "     NON-PARTITION PREDICATES: 1: c1 = 2\n" +
                 "     NO EVAL-PARTITION PREDICATES: 4: par_col = CAST(abs(-1) AS INT)\n" +
@@ -65,7 +65,7 @@ public class HivePartitionPruneTest extends ConnectorPlanTestBase {
         sql = "select * from t1 where par_col = 1+1 and c1 = 2";
         plan = getFragmentPlan(sql);
         assertContains(plan, "0:HdfsScanNode\n" +
-                "     TABLE: t1\n" +
+                "     TABLE: partitioned_db.t1\n" +
                 "     PARTITION PREDICATES: 4: par_col = 2\n" +
                 "     NON-PARTITION PREDICATES: 1: c1 = 2\n" +
                 "     MIN/MAX PREDICATES: 1: c1 <= 2, 1: c1 >= 2\n" +

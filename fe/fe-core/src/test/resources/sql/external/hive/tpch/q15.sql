@@ -68,7 +68,7 @@ OutPut Exchange Id: 22
 |       cardinality: 1
 |
 0:HdfsScanNode
-TABLE: supplier
+TABLE: tpch.supplier
 NON-PARTITION PREDICATES: 1: s_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=84.0
@@ -203,7 +203,7 @@ OutPut Exchange Id: 09
 |  * expr-->[810.9, 104949.5, 0.0, 16.0, 3736520.0] ESTIMATE
 |
 6:HdfsScanNode
-TABLE: lineitem
+TABLE: tpch.lineitem
 NON-PARTITION PREDICATES: 36: l_shipdate >= '1995-07-01', 36: l_shipdate < '1995-10-01'
 MIN/MAX PREDICATES: 36: l_shipdate >= '1995-07-01', 36: l_shipdate < '1995-10-01'
 partitions=1/1
@@ -242,7 +242,7 @@ OutPut Exchange Id: 04
 |  * expr-->[810.9, 104949.5, 0.0, 16.0, 3736520.0] ESTIMATE
 |
 1:HdfsScanNode
-TABLE: lineitem
+TABLE: tpch.lineitem
 NON-PARTITION PREDICATES: 18: l_shipdate >= '1995-07-01', 18: l_shipdate < '1995-10-01'
 MIN/MAX PREDICATES: 18: l_shipdate >= '1995-07-01', 18: l_shipdate < '1995-10-01'
 partitions=1/1

@@ -223,7 +223,7 @@ OutPut Exchange Id: 17
 |       cardinality: 100000
 |
 11:HdfsScanNode
-TABLE: partsupp
+TABLE: tpch.partsupp
 NON-PARTITION PREDICATES: 17: ps_partkey IS NOT NULL, 18: ps_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=24.0
@@ -252,7 +252,7 @@ OutPut Exchange Id: 14
 |  * p_mfgr-->[-Infinity, Infinity, 0.0, 25.0, 5.0] ESTIMATE
 |
 12:HdfsScanNode
-TABLE: part
+TABLE: tpch.part
 NON-PARTITION PREDICATES: 6: p_size = 12, 5: p_type LIKE '%COPPER'
 MIN/MAX PREDICATES: 6: p_size <= 12, 6: p_size >= 12
 partitions=1/1
@@ -313,7 +313,7 @@ OutPut Exchange Id: 10
 |       cardinality: 5
 |
 0:HdfsScanNode
-TABLE: supplier
+TABLE: tpch.supplier
 partitions=1/1
 avgRowSize=197.0
 dataCacheOptions={populate: false}
@@ -363,7 +363,7 @@ OutPut Exchange Id: 07
 |       cardinality: 1
 |
 1:HdfsScanNode
-TABLE: nation
+TABLE: tpch.nation
 NON-PARTITION PREDICATES: 22: n_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=33.0
@@ -390,7 +390,7 @@ OutPut Exchange Id: 04
 |  * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 2:HdfsScanNode
-TABLE: region
+TABLE: tpch.region
 NON-PARTITION PREDICATES: 27: r_name = 'AMERICA'
 MIN/MAX PREDICATES: 27: r_name <= 'AMERICA', 27: r_name >= 'AMERICA'
 partitions=1/1

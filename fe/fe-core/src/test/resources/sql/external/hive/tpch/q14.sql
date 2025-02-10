@@ -96,7 +96,7 @@ OutPut Exchange Id: 04
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |
 2:HdfsScanNode
-TABLE: lineitem
+TABLE: tpch.lineitem
 NON-PARTITION PREDICATES: 11: l_shipdate >= '1997-02-01', 11: l_shipdate < '1997-03-01'
 MIN/MAX PREDICATES: 11: l_shipdate >= '1997-02-01', 11: l_shipdate < '1997-03-01'
 partitions=1/1
@@ -116,7 +116,7 @@ OutPut Partition: HASH_PARTITIONED: 17: p_partkey
 OutPut Exchange Id: 01
 
 0:HdfsScanNode
-TABLE: part
+TABLE: tpch.part
 NON-PARTITION PREDICATES: 17: p_partkey IS NOT NULL
 partitions=1/1
 avgRowSize=33.0

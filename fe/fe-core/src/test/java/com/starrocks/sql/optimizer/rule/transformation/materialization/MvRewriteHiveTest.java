@@ -165,7 +165,7 @@ public class MvRewriteHiveTest extends MVTestBase {
         String plan1 = getFragmentPlan(query1);
         PlanTestBase.assertContains(plan1, "0:UNION");
         PlanTestBase.assertContains(plan1, "hive_union_mv_1");
-        PlanTestBase.assertContains(plan1, "     TABLE: supplier\n" +
+        PlanTestBase.assertContains(plan1, "     TABLE: tpch.supplier\n" +
                 "     NON-PARTITION PREDICATES: 12: s_suppkey < 10, (12: s_suppkey >= 5) OR (12: s_suppkey IS NULL)\n" +
                 "     MIN/MAX PREDICATES: 12: s_suppkey < 10");
         dropMv("test", "hive_union_mv_1");
@@ -188,7 +188,7 @@ public class MvRewriteHiveTest extends MVTestBase {
 
         String query1 = "select s_suppkey, s_name, s_address, s_acctbal from hive0.tpch.supplier where s_suppkey < 10";
         String plan = getFragmentPlan(query1);
-        PlanTestBase.assertContains(plan, "     TABLE: supplier\n" +
+        PlanTestBase.assertContains(plan, "     TABLE: tpch.supplier\n" +
                 "     NON-PARTITION PREDICATES: 12: s_suppkey < 10, (12: s_suppkey >= 5) OR (12: s_suppkey IS NULL)\n" +
                 "     MIN/MAX PREDICATES: 12: s_suppkey < 10");
         connectContext.getSessionVariable().setUseNthExecPlan(0);
@@ -823,10 +823,10 @@ public class MvRewriteHiveTest extends MVTestBase {
                             "  |  equal join conjunct: 1: l_orderkey = 17: o_orderkey\n" +
                             "  |  other join predicates: 16: l_shipdate = '1998-01-01'");
                     PlanTestBase.assertContains(plan, "  2:HdfsScanNode\n" +
-                            "     TABLE: orders\n" +
+                            "     TABLE: partitioned_db.orders\n" +
                             "     partitions=1095/1095");
                     PlanTestBase.assertContains(plan, "  0:HdfsScanNode\n" +
-                            "     TABLE: lineitem_par\n" +
+                            "     TABLE: partitioned_db.lineitem_par\n" +
                             "     partitions=6/6");
                 }
                 {
@@ -836,10 +836,10 @@ public class MvRewriteHiveTest extends MVTestBase {
                             "and b.o_orderdate='1998-01-01';";
                     String plan = getFragmentPlan(query);
                     PlanTestBase.assertContains(plan, "  0:HdfsScanNode\n" +
-                            "     TABLE: lineitem_par\n" +
+                            "     TABLE: partitioned_db.lineitem_par\n" +
                             "     partitions=6/6");
                     PlanTestBase.assertContains(plan, "  1:HdfsScanNode\n" +
-                            "     TABLE: orders\n" +
+                            "     TABLE: partitioned_db.orders\n" +
                             "     PARTITION PREDICATES: 25: o_orderdate = '1998-01-01'\n" +
                             "     partitions=0/1095");
 
@@ -930,7 +930,7 @@ public class MvRewriteHiveTest extends MVTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=1/2");
         // non -refresh part cannot be rewritten
-        PlanTestBase.assertContains(plan, "     TABLE: lineitem_par\n" +
+        PlanTestBase.assertContains(plan, "     TABLE: partitioned_db.lineitem_par\n" +
                         "     PARTITION PREDICATES: 45: l_shipdate = '1998-01-05'," +
                 " (45: l_shipdate IN ('1998-01-01', '1998-01-04', '1998-01-05')) OR (45: l_shipdate IS NULL)\n" +
                         "     partitions=1/6");

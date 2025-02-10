@@ -116,7 +116,7 @@ OutPut Exchange Id: 09
 |       cardinality: 3000000
 |
 3:HdfsScanNode
-TABLE: orders
+TABLE: tpch.orders
 NON-PARTITION PREDICATES: 13: o_orderdate < '1995-03-11'
 MIN/MAX PREDICATES: 13: o_orderdate < '1995-03-11'
 partitions=1/1
@@ -145,7 +145,7 @@ OutPut Exchange Id: 06
 |  * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 3000000.0] ESTIMATE
 |
 4:HdfsScanNode
-TABLE: customer
+TABLE: tpch.customer
 NON-PARTITION PREDICATES: 7: c_mktsegment = 'HOUSEHOLD'
 MIN/MAX PREDICATES: 7: c_mktsegment <= 'HOUSEHOLD', 7: c_mktsegment >= 'HOUSEHOLD'
 partitions=1/1
@@ -174,7 +174,7 @@ OutPut Exchange Id: 02
 |  * l_discount-->[0.0, 0.1, 0.0, 8.0, 11.0] ESTIMATE
 |
 0:HdfsScanNode
-TABLE: lineitem
+TABLE: tpch.lineitem
 NON-PARTITION PREDICATES: 28: l_shipdate > '1995-03-11'
 MIN/MAX PREDICATES: 28: l_shipdate > '1995-03-11'
 partitions=1/1

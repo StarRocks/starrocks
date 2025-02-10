@@ -155,7 +155,7 @@ OutPut Partition: UNPARTITIONED
 OutPut Exchange Id: 30
 
 29:HdfsScanNode
-TABLE: nation
+TABLE: tpch.nation
 NON-PARTITION PREDICATES: 54: n_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=29.0
@@ -248,7 +248,7 @@ OutPut Exchange Id: 23
 |       cardinality: 133333
 |
 17:HdfsScanNode
-TABLE: lineitem
+TABLE: tpch.lineitem
 NON-PARTITION PREDICATES: 18: l_partkey IS NOT NULL, 19: l_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=36.0
@@ -277,7 +277,7 @@ OutPut Exchange Id: 20
 |  * p_partkey-->[1.0, 2.0E7, 0.0, 8.0, 133333.33333333334] ESTIMATE
 |
 18:HdfsScanNode
-TABLE: part
+TABLE: tpch.part
 NON-PARTITION PREDICATES: 5: p_type = 'ECONOMY ANODIZED STEEL'
 MIN/MAX PREDICATES: 5: p_type <= 'ECONOMY ANODIZED STEEL', 5: p_type >= 'ECONOMY ANODIZED STEEL'
 partitions=1/1
@@ -321,7 +321,7 @@ OutPut Exchange Id: 16
 |       cardinality: 3000000
 |
 2:HdfsScanNode
-TABLE: orders
+TABLE: tpch.orders
 NON-PARTITION PREDICATES: 37: o_orderdate >= '1995-01-01', 37: o_orderdate <= '1996-12-31'
 MIN/MAX PREDICATES: 37: o_orderdate >= '1995-01-01', 37: o_orderdate <= '1996-12-31'
 partitions=1/1
@@ -366,7 +366,7 @@ OutPut Exchange Id: 13
 |       cardinality: 5
 |
 3:HdfsScanNode
-TABLE: customer
+TABLE: tpch.customer
 NON-PARTITION PREDICATES: 42: c_custkey IS NOT NULL
 partitions=1/1
 avgRowSize=12.0
@@ -408,7 +408,7 @@ OutPut Exchange Id: 10
 |       cardinality: 1
 |
 4:HdfsScanNode
-TABLE: nation
+TABLE: tpch.nation
 NON-PARTITION PREDICATES: 50: n_nationkey IS NOT NULL
 partitions=1/1
 avgRowSize=8.0
@@ -434,7 +434,7 @@ OutPut Exchange Id: 07
 |  * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |
 5:HdfsScanNode
-TABLE: region
+TABLE: tpch.region
 NON-PARTITION PREDICATES: 59: r_name = 'MIDDLE EAST'
 MIN/MAX PREDICATES: 59: r_name <= 'MIDDLE EAST', 59: r_name >= 'MIDDLE EAST'
 partitions=1/1
@@ -452,7 +452,7 @@ OutPut Partition: HASH_PARTITIONED: 10: s_suppkey
 OutPut Exchange Id: 01
 
 0:HdfsScanNode
-TABLE: supplier
+TABLE: tpch.supplier
 partitions=1/1
 avgRowSize=8.0
 dataCacheOptions={populate: false}

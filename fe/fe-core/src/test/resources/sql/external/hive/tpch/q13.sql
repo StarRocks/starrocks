@@ -112,7 +112,7 @@ OutPut Partition: HASH_PARTITIONED: 1: c_custkey
 OutPut Exchange Id: 04
 
 3:HdfsScanNode
-TABLE: customer
+TABLE: tpch.customer
 partitions=1/1
 avgRowSize=8.0
 dataCacheOptions={populate: false}
@@ -136,7 +136,7 @@ OutPut Exchange Id: 02
 |  * o_custkey-->[1.0, 1.5E8, 0.0, 8.0, 1.0031873E7] ESTIMATE
 |
 0:HdfsScanNode
-TABLE: orders
+TABLE: tpch.orders
 NON-PARTITION PREDICATES: NOT (17: o_comment LIKE '%unusual%deposits%')
 partitions=1/1
 avgRowSize=95.0

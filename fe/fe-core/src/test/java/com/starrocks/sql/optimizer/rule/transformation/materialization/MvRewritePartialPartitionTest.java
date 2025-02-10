@@ -447,7 +447,7 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
                 "     PREAGGREGATION: ON\n" +
                 "     partitions=5/6\n" +
                 "     rollup: hive_parttbl_mv_2");
-        PlanTestBase.assertContains(plan, "     TABLE: lineitem_par\n" +
+        PlanTestBase.assertContains(plan, "     TABLE: partitioned_db.lineitem_par\n" +
                 "     PARTITION PREDICATES: 25: l_shipdate IN ('1998-01-02')\n" +
                 "     NON-PARTITION PREDICATES: 23: l_orderkey > 100\n" +
                 "     MIN/MAX PREDICATES: 23: l_orderkey > 100\n" +
@@ -481,7 +481,7 @@ public class MvRewritePartialPartitionTest extends MVTestBase {
                         "where l_shipdate < '1998-01-02' and l_orderkey = 100;");
         String query = "SELECT `l_orderkey`, `l_suppkey`, `l_shipdate`  FROM `hive0`.`partitioned_db`.`lineitem_par` ";
         String plan = getFragmentPlan(query);
-        PlanTestBase.assertContains(plan, "     TABLE: lineitem_par\n" +
+        PlanTestBase.assertContains(plan, "     TABLE: partitioned_db.lineitem_par\n" +
                         "     NON-PARTITION PREDICATES: (((22: l_shipdate < '1998-01-02') AND (20: l_orderkey = 100) IS NULL) " +
                         "OR (22: l_shipdate >= '1998-01-02')) OR ((22: l_shipdate IS NULL) OR (20: l_orderkey != 100))\n" +
                         "     partitions=6/6",
