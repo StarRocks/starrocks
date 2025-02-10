@@ -160,6 +160,11 @@ public class TransactionStateBatch implements Writable {
         }
     }
 
+    public void replaySetTransactionStatus() {
+        for (TransactionState transactionState : transactionStates) {
+            transactionState.replaySetTransactionStatus();
+        }
+    }
 
 
     public static TransactionStateBatch read(DataInput in) throws IOException {
