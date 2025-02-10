@@ -389,7 +389,8 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         AsyncFileDeleter datafile_deleter(config::lake_vacuum_min_batch_delete_size);
         AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
         RETURN_IF_ERROR(collect_files_to_vacuum(tablet_mgr, root_dir, tablet_id, grace_timestamp, min_retain_version,
-                                                &datafile_deleter, &metafile_deleter, vacuumed_file_size, &tablet_vacuumed_version));
+                                                &datafile_deleter, &metafile_deleter, vacuumed_file_size,
+                                                &tablet_vacuumed_version));
         if (*vacuumed_version == 0 || *vacuumed_version > tablet_vacuumed_version) {
             // set partition vacuumed_version to min tablet vacuumed version
             *vacuumed_version = tablet_vacuumed_version;
