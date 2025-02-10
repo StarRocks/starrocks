@@ -602,6 +602,10 @@ public class RoutineLoadMgr implements Writable, MemoryTrackable {
                 .collect(Collectors.toList());
     }
 
+    public long numUnstableJobs() {
+        return idToRoutineLoadJob.values().stream().filter(RoutineLoadJob::isUnstable).count();
+    }
+
     // RoutineLoadScheduler will run this method at fixed interval, and renew the timeout tasks
     public void processTimeoutTasks() {
         readLock();

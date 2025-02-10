@@ -320,6 +320,7 @@ public class RoutineLoadJobTest {
             routineLoadJob.updateState(RoutineLoadJob.JobState.RUNNING, null, false);
             // The job is set unstable due to the progress is too slow.
             routineLoadJob.updateSubstate();
+            Assert.assertTrue(routineLoadJob.isUnstable());
 
             List<String> showInfo = routineLoadJob.getShowInfo();
             Assert.assertEquals("UNSTABLE", showInfo.get(7));
