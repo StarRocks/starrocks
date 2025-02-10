@@ -37,12 +37,7 @@ package com.starrocks.qe;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-<<<<<<< HEAD
-=======
-import com.starrocks.authorization.AccessDeniedException;
-import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.CloseableLock;
->>>>>>> b5db7fe760 ([BugFix] fix the issue that TemporaryTableCleaner incorrectly cleaned up sessions (#55353))
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.ThreadPoolManager;
@@ -265,17 +260,11 @@ public class ConnectScheduler {
 
     public Set<UUID> listAllSessionsId() {
         Set<UUID> sessionIds = new HashSet<>();
-<<<<<<< HEAD
-        connectionMap.values().forEach(ctx -> {
-            sessionIds.add(ctx.getSessionId());
-        });
-=======
         try (CloseableLock ignored = CloseableLock.lock(this.connStatsLock)) {
             connectionMap.values().forEach(ctx -> {
                 sessionIds.add(ctx.getSessionId());
             });
         }
->>>>>>> b5db7fe760 ([BugFix] fix the issue that TemporaryTableCleaner incorrectly cleaned up sessions (#55353))
         return sessionIds;
     }
 
