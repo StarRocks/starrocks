@@ -428,6 +428,7 @@ rate(starrocks_fe_txn_failed{job="$job_name",instance="$fe_master"}[5m]) * 100 >
 (sum by (job_name)(starrocks_fe_routine_load_max_lag_of_partition{job="$job_name",instance="$fe_mater"})) > 300000
 starrocks_fe_routine_load_jobs{job="$job_name",host="$fe_mater",state="NEED_SCHEDULE"} > 3
 starrocks_fe_routine_load_jobs{job="$job_name",host="$fe_mater",state="PAUSED"} > 0
+starrocks_fe_routine_load_jobs{job="$job_name",host="$fe_mater",state="UNSTABLE"} > 0
 ```
 
 **报警描述**
@@ -435,6 +436,7 @@ starrocks_fe_routine_load_jobs{job="$job_name",host="$fe_mater",state="PAUSED"} 
 - 当消费延迟超过 300000 条时发送报警。
 - 当待调度的 Routine Load 任务个数超过 3 时发送报警。
 - 当有状态为 PAUSED 的任务时发送报警。
+- 当有状态为 UNSTABLE 的任务时发送报警。
 
 **处理办法**
 

@@ -556,6 +556,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         return state;
     }
 
+    public boolean isUnstable() {
+        return state == JobState.RUNNING && substate == JobSubstate.UNSTABLE;
+    }
+
     public long getAuthCode() {
         return authCode;
     }
