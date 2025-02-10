@@ -547,11 +547,9 @@ public class WarehouseActionTest extends StarRocksHttpTestCase {
                     0, "", "",
                     EtlJobType.INSERT,
                     System.currentTimeMillis(),
-                    0L,
+                    new LoadMgr.EstimateStats(0, 0, 0),
                     0,
                     0L,
-                    0L,
-                    whId,
                     isStatisticsJob,
                     null);
             if (isFinished) {

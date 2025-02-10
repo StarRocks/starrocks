@@ -234,10 +234,26 @@ public class LoadMgr implements MemoryTrackable {
         }
     }
 
-    public InsertLoadJob registerInsertLoadJob(String label, String dbName, long tableId, long txnId, String loadId, String user,
-                                               EtlJobType jobType, long createTimestamp, long estimateScanRows,
-                                               int estimateFileNum, long estimateFileSize, long timeout,
-                                               long warehouseId, boolean isStatisticsJob,
+    public static class EstimateStats {
+        long estimateScanRows;
+        int estimateFileNum;
+        long estimateFileSize;
+
+        public EstimateStats(long estimateScanRows, int estimateFileNum, long estimateFileSize) {
+            this.estimateScanRows = estimateScanRows;
+            this.estimateFileNum = estimateFileNum;
+            this.estimateFileSize = estimateFileSize;
+        }
+    }
+
+    public InsertLoadJob registerInsertLoadJob(String label, String dbName, long tableId, long txnId, String loadId,
+                                               String user,
+                                               EtlJobType jobType,
+                                               long createTimestamp,
+                                               EstimateStats estimateStats,
+                                               long timeout,
+                                               long warehouseId,
+                                               boolean isStatisticsJob,
                                                Coordinator coordinator) throws StarRocksException {
         // get db id
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
@@ -247,11 +263,10 @@ public class LoadMgr implements MemoryTrackable {
 
         InsertLoadJob loadJob;
         if (Objects.requireNonNull(jobType) == EtlJobType.INSERT) {
-            loadJob = new InsertLoadJob(
-                    label, db.getId(), tableId, txnId, loadId, user, createTimestamp, timeout, warehouseId,
-                    isStatisticsJob, coordinator);
-            loadJob.setLoadFileInfo(estimateFileNum, estimateFileSize);
-            loadJob.setEstimateScanRow(estimateScanRows);
+            loadJob = new InsertLoadJob(label, db.getId(), tableId, txnId, loadId, user,
+                    createTimestamp, timeout, warehouseId, isStatisticsJob, coordinator);
+            loadJob.setLoadFileInfo(estimateStats.estimateFileNum, estimateStats.estimateFileSize);
+            loadJob.setEstimateScanRow(estimateStats.estimateScanRows);
             loadJob.setTransactionId(txnId);
         } else {
             throw new LoadException("Unknown job type [" + jobType.name() + "]");

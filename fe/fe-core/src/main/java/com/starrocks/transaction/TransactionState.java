@@ -52,6 +52,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.TraceManager;
 import com.starrocks.common.io.Writable;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.persist.gson.GsonPreProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
@@ -83,7 +84,7 @@ import java.util.stream.Collectors;
 import javax.annotation.Nullable;
 import javax.validation.constraints.NotNull;
 
-public class TransactionState implements Writable {
+public class TransactionState implements Writable, GsonPreProcessable {
     private static final Logger LOG = LogManager.getLogger(TransactionState.class);
 
     // compare the TransactionState by txn id, desc
@@ -304,8 +305,14 @@ public class TransactionState implements Writable {
     // NOTE: This field is only used in shared data mode.
     private long allowCommitTimeMs = -1;
 
+    //This is for compatibility and is not deleted. callbackIdList will be used later. can be deleted at 3.6
+    @Deprecated
     @SerializedName("cb")
     private long callbackId = -1;
+
+    @SerializedName("cbl")
+    private List<Long> callbackIdList;
+
     @SerializedName("to")
     private long timeoutMs = Config.stream_load_default_timeout_second * 1000L;
 
@@ -334,6 +341,7 @@ public class TransactionState implements Writable {
 
     private Span txnSpan = null;
     private String traceParent = null;
+
     private Set<TabletCommitInfo> tabletCommitInfos = null;
 
     // For a transaction, we need to ensure that different clients obtain consistent partition information,
@@ -373,6 +381,8 @@ public class TransactionState implements Writable {
         this.latch = new CountDownLatch(1);
         this.txnSpan = TraceManager.startNoopSpan();
         this.traceParent = TraceManager.toTraceParent(txnSpan.getSpanContext());
+
+        this.callbackIdList = Lists.newArrayList();
     }
 
     public TransactionState(long dbId, List<Long> tableIdList, long transactionId, String label, TUniqueId requestId,
@@ -395,7 +405,8 @@ public class TransactionState implements Writable {
         this.publishVersionTasks = Maps.newHashMap();
         this.hasSendTask = false;
         this.latch = new CountDownLatch(1);
-        this.callbackId = callbackId;
+        this.callbackIdList = Lists.newArrayList(callbackId);
+
         this.timeoutMs = timeoutMs;
         this.txnSpan = TraceManager.startSpan("txn");
         txnSpan.setAttribute("txn_id", transactionId);
@@ -403,8 +414,39 @@ public class TransactionState implements Writable {
         this.traceParent = TraceManager.toTraceParent(txnSpan.getSpanContext());
     }
 
-    public void setCallbackId(long callbackId) {
-        this.callbackId = callbackId;
+    public TransactionState(long transactionId,
+                            String label,
+                            TUniqueId requestId,
+                            LoadJobSourceType sourceType,
+                            TxnCoordinator txnCoordinator,
+                            long timeoutMs) {
+        this.tableIdList = Lists.newArrayList();
+        this.transactionId = transactionId;
+        this.label = label;
+        this.requestId = requestId;
+        this.idToTableCommitInfos = Maps.newHashMap();
+        this.txnCoordinator = txnCoordinator;
+        this.transactionStatus = TransactionStatus.PREPARE;
+        this.sourceType = sourceType;
+        this.prepareTime = -1;
+        this.commitTime = -1;
+        this.finishTime = -1;
+        this.reason = "";
+        this.errorReplicas = Sets.newHashSet();
+        this.publishVersionTasks = Maps.newHashMap();
+        this.hasSendTask = false;
+        this.latch = new CountDownLatch(1);
+        this.callbackIdList = Lists.newArrayList();
+
+        this.timeoutMs = timeoutMs;
+        this.txnSpan = TraceManager.startSpan("txn");
+        txnSpan.setAttribute("txn_id", transactionId);
+        txnSpan.setAttribute("label", label);
+        this.traceParent = TraceManager.toTraceParent(txnSpan.getSpanContext());
+    }
+
+    public void addCallbackId(long callbackId) {
+        this.callbackIdList.add(callbackId);
     }
 
     public void setErrorReplicas(Set<Long> newErrorReplicas) {
@@ -421,10 +463,12 @@ public class TransactionState implements Writable {
     }
 
     public void setTabletCommitInfos(List<TabletCommitInfo> infos) {
-        this.tabletCommitInfos = Sets.newHashSet();
+        if (this.tabletCommitInfos == null) {
+            this.tabletCommitInfos = Sets.newHashSet();
+        }
+
         this.tabletCommitInfos.addAll(infos);
     }
-
 
     public boolean checkReplicaNeedSkip(Tablet tablet, Replica replica, PartitionCommitInfo partitionCommitInfo) {
         boolean isContain = tabletCommitInfosContainsReplica(tablet.getId(), replica.getBackendId(), replica.getState());
@@ -447,7 +491,7 @@ public class TransactionState implements Writable {
 
         return true;
     }
-  
+
     public void resetTabletCommitInfos() {
         // With a high streamload frequency and too many tablets involved,
         // TabletCommitInfos will take up too much memory.
@@ -548,8 +592,12 @@ public class TransactionState implements Writable {
         return txnCommitAttachment;
     }
 
-    public long getCallbackId() {
-        return callbackId;
+    public List<Long> getCallbackId() {
+        if (callbackId != -1) {
+            return Lists.newArrayList(callbackId);
+        } else {
+            return new ArrayList<>(callbackIdList);
+        }
     }
 
     public long getTimeoutMs() {
@@ -597,84 +645,82 @@ public class TransactionState implements Writable {
         }
     }
 
-    public TxnStateChangeCallback beforeStateTransform(TransactionStatus transactionStatus)
+    public void beforeStateTransform(TransactionStatus transactionStatus)
             throws TransactionException {
-        // callback will pass to afterStateTransform since it may be deleted from
-        // GlobalTransactionMgr between beforeStateTransform and afterStateTransform
-        TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                .getCallbackFactory().getCallback(callbackId);
-        // before status changed
-        if (callback != null) {
-            switch (transactionStatus) {
-                case ABORTED:
-                    callback.beforeAborted(this);
-                    break;
-                case COMMITTED:
-                    callback.beforeCommitted(this);
-                    break;
-                case PREPARED:
-                    callback.beforePrepared(this);
-                    break;
-                default:
-                    break;
-            }
-        } else if (callbackId > 0) {
-            if (Objects.requireNonNull(transactionStatus) == TransactionStatus.COMMITTED) {
-                // Maybe listener has been deleted. The txn need to be aborted later.
-                throw new TransactionException(
-                        "Failed to commit txn when callback " + callbackId + "could not be found");
-            }
-        }
-
-        return callback;
-    }
-
-    public void afterStateTransform(TransactionStatus transactionStatus, boolean txnOperated) {
-        // after status changed
-        TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                .getCallbackFactory().getCallback(callbackId);
-        if (callback != null) {
-            if (Objects.requireNonNull(transactionStatus) == TransactionStatus.VISIBLE) {
-                callback.afterVisible(this, txnOperated);
+        for (Long callbackId : getCallbackId()) {
+            // callback will pass to afterStateTransform since it may be deleted from
+            // GlobalTransactionMgr between beforeStateTransform and afterStateTransform
+            TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getCallbackFactory().getCallback(callbackId);
+            // before status changed
+            if (callback != null) {
+                switch (transactionStatus) {
+                    case ABORTED:
+                        callback.beforeAborted(this);
+                        break;
+                    case COMMITTED:
+                        callback.beforeCommitted(this);
+                        break;
+                    case PREPARED:
+                        callback.beforePrepared(this);
+                        break;
+                    default:
+                        break;
+                }
+            } else if (callbackId > 0) {
+                if (Objects.requireNonNull(transactionStatus) == TransactionStatus.COMMITTED) {
+                    // Maybe listener has been deleted. The txn need to be aborted later.
+                    throw new TransactionException(
+                            "Failed to commit txn when callback " + callbackId + "could not be found");
+                }
             }
         }
     }
 
     public void afterStateTransform(TransactionStatus transactionStatus, boolean txnOperated,
-                                    TxnStateChangeCallback callback,
                                     String txnStatusChangeReason)
             throws StarRocksException {
-        // after status changed
-        if (callback != null) {
-            switch (transactionStatus) {
-                case ABORTED:
-                    callback.afterAborted(this, txnOperated, txnStatusChangeReason);
-                    break;
-                case COMMITTED:
-                    callback.afterCommitted(this, txnOperated);
-                    break;
-                case PREPARED:
-                    callback.afterPrepared(this, txnOperated);
-                    break;
-                default:
-                    break;
+        for (Long callbackId : getCallbackId()) {
+
+            TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                    .getCallbackFactory().getCallback(callbackId);
+
+            // after status changed
+            if (callback != null) {
+                switch (transactionStatus) {
+                    case ABORTED:
+                        callback.afterAborted(this, txnOperated, txnStatusChangeReason);
+                        break;
+                    case COMMITTED:
+                        callback.afterCommitted(this, txnOperated);
+                        break;
+                    case PREPARED:
+                        callback.afterPrepared(this, txnOperated);
+                        break;
+                    case VISIBLE:
+                        callback.afterVisible(this, txnOperated);
+                        break;
+                    default:
+                        break;
+                }
             }
         }
     }
 
     public void replaySetTransactionStatus() {
-        TxnStateChangeCallback callback =
-                GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().getCallback(
-                        callbackId);
-        if (callback != null) {
-            if (transactionStatus == TransactionStatus.ABORTED) {
-                callback.replayOnAborted(this);
-            } else if (transactionStatus == TransactionStatus.COMMITTED) {
-                callback.replayOnCommitted(this);
-            } else if (transactionStatus == TransactionStatus.VISIBLE) {
-                callback.replayOnVisible(this);
-            } else if (transactionStatus == TransactionStatus.PREPARED) {
-                callback.replayOnPrepared(this);
+        for (Long callbackId : getCallbackId()) {
+            TxnStateChangeCallback callback =
+                    GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().getCallback(callbackId);
+            if (callback != null) {
+                if (transactionStatus == TransactionStatus.ABORTED) {
+                    callback.replayOnAborted(this);
+                } else if (transactionStatus == TransactionStatus.COMMITTED) {
+                    callback.replayOnCommitted(this);
+                } else if (transactionStatus == TransactionStatus.VISIBLE) {
+                    callback.replayOnVisible(this);
+                } else if (transactionStatus == TransactionStatus.PREPARED) {
+                    callback.replayOnPrepared(this);
+                }
             }
         }
     }
@@ -719,8 +765,16 @@ public class TransactionState implements Writable {
         return dbId;
     }
 
+    public void setDbId(long dbId) {
+        this.dbId = dbId;
+    }
+
     public List<Long> getTableIdList() {
         return tableIdList;
+    }
+
+    public void addTableIdList(Long tableId) {
+        this.tableIdList.add(tableId);
     }
 
     public Map<Long, TableCommitInfo> getIdToTableCommitInfos() {
@@ -796,7 +850,7 @@ public class TransactionState implements Writable {
         sb.append(", label: ").append(label);
         sb.append(", db id: ").append(dbId);
         sb.append(", table id list: ").append(StringUtils.join(tableIdList, ","));
-        sb.append(", callback id: ").append(callbackId);
+        sb.append(", callback id: ").append(getCallbackId());
         sb.append(", coordinator: ").append(txnCoordinator.toString());
         sb.append(", transaction status: ").append(transactionStatus);
         sb.append(", error replicas num: ").append(errorReplicas.size());
@@ -1089,5 +1143,13 @@ public class TransactionState implements Writable {
     @Override
     public void write(DataOutput out) throws IOException {
 
+    }
+
+    @Override
+    public void gsonPreProcess() throws IOException {
+        //For compatibility, if the implicit transaction can be rolled back, duplicates will be removed in getCallbackId.
+        if (callbackId == -1 && !callbackIdList.isEmpty()) {
+            callbackId = callbackIdList.get(0);
+        }
     }
 }

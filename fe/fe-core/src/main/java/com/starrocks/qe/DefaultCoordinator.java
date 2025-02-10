@@ -182,7 +182,7 @@ public class DefaultCoordinator extends Coordinator {
         @Override
         public DefaultCoordinator createInsertScheduler(ConnectContext context, List<PlanFragment> fragments,
                                                         List<ScanNode> scanNodes,
-                                                        TDescriptorTable descTable) throws StarRocksException {
+                                                        TDescriptorTable descTable) {
             JobSpec jobSpec = JobSpec.Factory.fromQuerySpec(context, fragments, scanNodes, descTable, TQueryType.LOAD);
             return new DefaultCoordinator(context, jobSpec);
         }
