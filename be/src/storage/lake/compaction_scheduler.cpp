@@ -185,18 +185,7 @@ void CompactionScheduler::stop() {
 
 void CompactionScheduler::compact(::google::protobuf::RpcController* controller, const CompactRequest* request,
                                   CompactResponse* response, ::google::protobuf::Closure* done) {
-<<<<<<< HEAD
-=======
     brpc::ClosureGuard guard(done);
-    // when FE request a compaction, CN may not have any key cached yet, so pass an encryption_meta to refresh cache
-    if (!request->encryption_meta().empty()) {
-        Status st = KeyCache::instance().refresh_keys(request->encryption_meta());
-        if (!st.ok()) {
-            LOG(WARNING) << fmt::format("refresh keys using encryption_meta in PTabletWriterOpenRequest failed {}",
-                                        st.detailed_message());
-        }
-    }
->>>>>>> d8c5ca52d8 ([BugFix] abort compaction task properly during shutdown (#55503))
     // By default, all the tablet compaction tasks with the same txn id will be executed in the same
     // thread to avoid blocking other transactions, but if there are idle threads, they will steal
     // tasks from busy threads to execute.
@@ -205,15 +194,7 @@ void CompactionScheduler::compact(::google::protobuf::RpcController* controller,
     std::vector<std::unique_ptr<CompactionTaskContext>> contexts_vec;
     for (auto tablet_id : request->tablet_ids()) {
         auto context = std::make_unique<CompactionTaskContext>(request->txn_id(), tablet_id, request->version(),
-<<<<<<< HEAD
                                                                is_checker, cb);
-        {
-            std::lock_guard l(_contexts_lock);
-            _contexts.Append(context.get());
-        }
-=======
-                                                               request->force_base_compaction(), cb);
->>>>>>> d8c5ca52d8 ([BugFix] abort compaction task properly during shutdown (#55503))
         contexts_vec.push_back(std::move(context));
         // DO NOT touch `context` from here!
         is_checker = false;
