@@ -159,6 +159,12 @@ public class TransactionStateBatch implements Writable {
         }
     }
 
+    public void replaySetTransactionStatus() {
+        for (TransactionState transactionState : transactionStates) {
+            transactionState.replaySetTransactionStatus();
+        }
+    }
+
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
