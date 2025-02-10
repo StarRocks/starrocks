@@ -8,7 +8,7 @@ keywords: ['materialized', 'view', 'views']
 
 This topic describes how to understand, create, use, and manage an asynchronous materialized view. Asynchronous materialized views are supported from StarRocks v2.4 onwards.
 
-Compared with synchronous materialized views, asynchronous materialized views support multi-table join and more aggregate functions. The refresh of asynchronous materialized views can be triggered manually or by scheduled tasks. You can also refresh some of the partitions instead of the whole materialized view, greatly reducing the cost of refresh. In addition, asynchronous materialized views support a variety of query rewrite scenarios, allowing automatic, transparent query acceleration.
+Compared with synchronous materialized views, asynchronous materialized views support multi-table join and more aggregate functions. The refresh of asynchronous materialized views can be triggered manually, regualrly at pre-specified intervals, or automatically at data changes in the base table. You can also refresh some of the partitions instead of the whole materialized view, greatly reducing the cost of refresh. In addition, asynchronous materialized views support a variety of query rewrite scenarios, allowing automatic, transparent query acceleration.
 
 For the scenario and usage of the synchronous materialized views (Rollup), see [Synchronous materialized view (Rollup)](../Materialized_view-single_table.md).
 
@@ -45,7 +45,7 @@ The following table compares the asynchronous materialized views (ASYNC MV) and 
 
   Currently, StarRocks supports two generic refreshing strategies:
 
-  - ASYNC: Asynchronous refresh mode. Each time the base table data changes, the materialized view is automatically refreshed according to the pre-defined refresh interval.
+  - ASYNC: Asynchronous refresh mode. Materialized views can be refreshed automatically when the data in the base table changes, or at regular intervals based on specified intervals.
   - MANUAL: Manual refresh mode. The materialized view will not be automatically refreshed. The refresh tasks can only be triggered manually by users.
 
 - **Query rewrite**
