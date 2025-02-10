@@ -16,6 +16,7 @@ package com.starrocks.qe.scheduler.slot;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.common.Config;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
@@ -50,8 +51,12 @@ public class SlotEstimatorFactory {
     public static class MemoryBasedSlotsEstimator implements SlotEstimator {
         @Override
         public int estimateSlots(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord) {
-            //            final long planMemCosts = (long) context.getAuditEventBuilder().build().planMemCosts;
-            long memCost = coord.getPredictedCost();
+            long memCost;
+            if (Config.enable_query_cost_prediction && coord.getPredictedCost() > 0) {
+                memCost = coord.getPredictedCost();
+            } else {
+                memCost = (long) context.getAuditEventBuilder().build().planMemCosts;
+            }
             long numSlotsPerWorker = memCost / opts.v2().getMemBytesPerSlot();
             numSlotsPerWorker = Math.max(numSlotsPerWorker, 0);
             numSlotsPerWorker = computeMinGEPower2((int) numSlotsPerWorker);

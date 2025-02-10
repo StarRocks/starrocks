@@ -24,26 +24,32 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
 
+import java.io.Closeable;
 import java.io.IOException;
 
 public interface CostPredictor {
 
     long predictMemoryBytes(ExecPlan plan);
 
-    class DefaultCostPredictor implements CostPredictor {
-
-        @Override
-        public long predictMemoryBytes(ExecPlan plan) {
-            return 1;
-        }
-    }
-
     /**
      * Use a remote HTTP service to predict the query cost
      */
-    class ServiceBasedCostPredictor implements CostPredictor {
+    class ServiceBasedCostPredictor implements CostPredictor, Closeable {
 
         private static final String memCostUrl = "/predict_csv";
+        private static final ServiceBasedCostPredictor INSTANCE = new ServiceBasedCostPredictor();
+
+        private final CloseableHttpClient httpClient = HttpClients.createDefault();
+
+        /**
+         * Return the singleton instance of predictor, which is thread-safe to be shared among threads
+         */
+        public static ServiceBasedCostPredictor getInstance() {
+            return INSTANCE;
+        }
+
+        private ServiceBasedCostPredictor() {
+        }
 
         @Override
         public long predictMemoryBytes(ExecPlan plan) {
@@ -51,7 +57,7 @@ public interface CostPredictor {
             String header = PlanFeatures.featuresHeader();
             String featureString = planFeatures.toFeatureCsv();
 
-            try (CloseableHttpClient httpClient = HttpClients.createDefault()) {
+            try {
                 // Use Apache HttpClient to send the HTTP request
                 HttpPost httpPost = new HttpPost(Config.query_cost_prediction_service_address + memCostUrl);
 
@@ -75,6 +81,11 @@ public interface CostPredictor {
                 // Log the error or handle it appropriately
                 throw new RuntimeException("Failed to predict memory bytes", e);
             }
+        }
+
+        @Override
+        public void close() throws IOException {
+            httpClient.close();
         }
     }
 }
