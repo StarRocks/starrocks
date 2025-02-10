@@ -106,7 +106,9 @@ public class SPMFunctions {
     public static List<ColumnStatistic> getSPMFunctionStatistics(CallOperator operator,
                                                                  List<ColumnStatistic> children) {
         Preconditions.checkState(CONST_VAR_FUNC.equals(operator.getFnName()));
-        Preconditions.checkState(children.size() > 1);
-        return children;
+        if (children.size() <= 1) {
+            return List.of(ColumnStatistic.unknown());
+        }
+        return List.of(children.get(1));
     }
 }

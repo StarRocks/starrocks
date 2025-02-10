@@ -15,7 +15,6 @@
 package com.starrocks.sql.spm;
 
 import com.google.common.base.Preconditions;
-import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.spm.CreateBaselinePlanStmt;
 import com.starrocks.sql.parser.SqlParser;
@@ -32,10 +31,10 @@ public class SPMTestBase extends PlanTestBase {
     }
 
     public CreateBaselinePlanStmt createBaselinePlanStmt(String sql) {
-        List<StatementBase> statements = SqlParser.parse(sql, connectContext.getSessionVariable());
+        String createSql = "create baseline using " + sql;
+        List<StatementBase> statements = SqlParser.parse(createSql, connectContext.getSessionVariable());
         Preconditions.checkState(statements.size() == 1);
-        Preconditions.checkState(statements.get(0) instanceof QueryStatement);
-        QueryStatement qs = (QueryStatement) statements.get(0);
-        return new CreateBaselinePlanStmt(false, null, qs.getQueryRelation(), null);
+        Preconditions.checkState(statements.get(0) instanceof CreateBaselinePlanStmt);
+        return (CreateBaselinePlanStmt) statements.get(0);
     }
 }

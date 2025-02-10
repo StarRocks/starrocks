@@ -174,4 +174,24 @@ public class SPMPlanTest extends SPMTestBase {
                         "(SELECT * FROM t1 WHERE v6 IS NOT NULL) t_1 ON v3 = v6");
     }
 
+    @Test
+    public void testPlanHints() {
+        SPMFunctions.enableSPMParamsPrint = true;
+        CreateBaselinePlanStmt stmt = createBaselinePlanStmt(
+                "select /*+SET_VAR(cbo_cte_reuse=false,cbo_push_down_aggregate=false)*/ * from t0");
+        SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
+        generator.analyze();
+        generator.formatStmt();
+        generator.generatePlan();
+        SPMFunctions.enableSPMParamsPrint = false;
+
+        assertContains(generator.getBindSqlDigest(), "SELECT *\n" +
+                "FROM `test`.`t0`");
+
+        assertContains(generator.getBindSql(), "SELECT *\n" +
+                "FROM `test`.`t0`");
+
+        assertContains(generator.getPlanStmtSQL(),
+                "SELECT /*+SET_VAR(cbo_cte_reuse=false,cbo_push_down_aggregate=false)*/* FROM t0");
+    }
 }

@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ParseNode;
@@ -125,7 +126,13 @@ public class SPMAst2SQLBuilder {
                 aggCount++;
             }
 
-            return super.visitSelect(stmt, context);
+            List<HintNode> hints = stmt.getSelectList().getHintNodes();
+            if (!enableHints) {
+                stmt.getSelectList().setHintNodes(null);
+            }
+            String s = super.visitSelect(stmt, context);
+            stmt.getSelectList().setHintNodes(hints);
+            return s;
         }
 
         @Override
