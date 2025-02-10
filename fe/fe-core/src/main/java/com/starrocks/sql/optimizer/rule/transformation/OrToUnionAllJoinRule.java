@@ -33,6 +33,68 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+
+/*
+ * Rule Objective:
+ *
+ * Transform the following SQL:
+ *   SELECT *
+ *   FROM left_table l
+ *   JOIN right_table r
+ *     ON l.k1 = r.v1 OR l.k1 = r.v2
+ *
+ * Into:
+ *   SELECT *
+ *   FROM left_table l
+ *   JOIN right_table r
+ *     ON l.k1 = r.v1
+ *   UNION ALL
+ *   SELECT *
+ *   FROM left_table l
+ *   JOIN right_table r
+ *     ON l.k1 = r.v2
+ *   WHERE l.k1 != r.v1;
+ *
+ *
+ *                                  +------+
+ *                                  | JOIN |
+ *                                  +------+
+ *                                     |
+ *                                     v
+ *                         +-------------------------+
+ *                         | CompoundPredicate(OR)   |
+ *                         +-------------------------+
+ *                              /         \
+ *                             /           \
+ *         +-------------------------+    +-------------------------+
+ *         | BinaryPredicateOperator |    | BinaryPredicateOperator |
+ *         | (t0.v1 = t1.v4)         |    | (t0.v2 = t1.v5)         |
+ *         +-------------------------+    +-------------------------+
+ *
+ *                                       |
+ *                                       v
+ *
+ *                                   +--------+
+ *                                   | UNION  |
+ *                                   +--------+
+ *                                      /   \
+ *                                     /     \
+ *                            +------+       +------+
+ *                            | JOIN |       | JOIN |
+ *                            +------+       +------+
+ *                               /                  \
+ *                              /               +-------------------------+
+ *                             /                | CompoundPredicate(AND)  |
+ *                            /                 +-------------------------+
+ *                           /                      /                    \
+ *       +-------------------------+   +------------------------+  +------------------------+
+ *       | BinaryPredicateOperator |   | BinaryPredicateOperator|  | BinaryPredicateOperator|
+ *       | (t0.v1 = t1.v4)         |   | (t0.v2 = t1.v5)        |  | (t0.v1 != t1.v4)       |
+ *       +-------------------------+   +------------------------+  +------------------------+
+ *
+ *
+ */
+
 public class OrToUnionAllJoinRule extends TransformationRule {
 
     private static final OrToUnionAllJoinRule INSTANCE = new OrToUnionAllJoinRule();
