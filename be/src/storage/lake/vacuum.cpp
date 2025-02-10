@@ -348,7 +348,7 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     auto t1 = butil::gettimeofday_ms();
     g_metadata_travel_latency << (t1 - t0);
 
-    *vacuumed_version = final_retain_version - 1;
+    *vacuumed_version = final_retain_version;
     if (!skip_check_grace_timestamp) {
         // All tablet metadata files encountered were created after the grace timestamp, there were no files to delete
         return Status::OK();
