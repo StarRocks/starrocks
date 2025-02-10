@@ -15,7 +15,6 @@
 package com.starrocks.sql.optimizer.rewrite;
 
 import com.starrocks.sql.plan.PlanTestBase;
-import org.apache.hadoop.yarn.webapp.hamlet2.Hamlet;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
