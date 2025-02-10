@@ -159,10 +159,19 @@ public class TransactionStateBatch implements Writable {
         }
     }
 
+<<<<<<< HEAD
     @Override
     public void write(DataOutput out) throws IOException {
         Text.writeString(out, GsonUtils.GSON.toJson(this));
     }
+=======
+    public void replaySetTransactionStatus() {
+        for (TransactionState transactionState : transactionStates) {
+            transactionState.replaySetTransactionStatus();
+        }
+    }
+
+>>>>>>> f74f1916c4 ([BugFix] Fix the issue where the FE follower cannot update the load status. (#55758))
 
     public static TransactionStateBatch read(DataInput in) throws IOException {
         return GsonUtils.GSON.fromJson(Text.readString(in), TransactionStateBatch.class);
