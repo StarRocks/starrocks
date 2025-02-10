@@ -25,6 +25,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.common.MetaUtils;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -110,6 +111,9 @@ public class UniqueConstraint extends Constraint {
     }
 
     public static String getShowCreateTableConstraintDesc(List<UniqueConstraint> constraints, Table selfTable) {
+        if (CollectionUtils.isEmpty(constraints)) {
+            return "";
+        }
         List<String> constraintStrs = Lists.newArrayList();
         for (UniqueConstraint constraint : constraints) {
             StringBuilder constraintSb = new StringBuilder();
