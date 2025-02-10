@@ -2056,6 +2056,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static int dict_collect_thread_pool_size = 16;
 
+    @ConfField
+    public static int dict_collect_thread_pool_for_lake_size = 4;
+
     /**
      * The column statistic cache update interval
      */
@@ -2585,7 +2588,7 @@ public class Config extends ConfigBase {
      * Whether volume can be created from conf. If it is enabled, a builtin storage volume may be created.
      */
     @ConfField
-    public static boolean enable_load_volume_from_conf = true;
+    public static boolean enable_load_volume_from_conf = false;
     // remote storage related configuration
     @ConfField(comment = "storage type for cloud native table. Available options: " +
             "\"S3\", \"HDFS\", \"AZBLOB\", \"ADLS2\". case-insensitive")
@@ -2784,6 +2787,12 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int lake_compaction_history_size = 20;
+
+    @ConfField(mutable = true)
+    public static long lake_min_compaction_interval_ms_on_success = 10000;
+
+    @ConfField(mutable = true)
+    public static long lake_min_compaction_interval_ms_on_failure = 60000;
 
     @ConfField(mutable = true)
     public static String lake_compaction_warehouse = "default_warehouse";

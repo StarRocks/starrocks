@@ -1347,10 +1347,10 @@ public class DatabaseTransactionMgr {
                             (ReplicationTxnCommitAttachment) transactionState
                                     .getTxnCommitAttachment();
                     Map<Long, Long> partitionVersions = replicationTxnAttachment.getPartitionVersions();
-                    long newVersion = partitionVersions.get(partitionCommitInfo.getPhysicalPartitionId());
-                    long versionDiff = newVersion - partition.getVisibleVersion();
-                    partitionCommitInfo.setVersion(newVersion);
-                    partitionCommitInfo.setDataVersion(partition.getDataVersion() + versionDiff);
+                    long newDataVersion = partitionVersions.get(partitionCommitInfo.getPhysicalPartitionId());
+                    long dataVersionDiff = newDataVersion - partition.getDataVersion();
+                    partitionCommitInfo.setVersion(partition.getCommittedVersion() + dataVersionDiff);
+                    partitionCommitInfo.setDataVersion(newDataVersion);
                     Map<Long, Long> partitionVersionEpochs = replicationTxnAttachment.getPartitionVersionEpochs();
                     if (partitionVersionEpochs != null) {
                         long newVersionEpoch = partitionVersionEpochs.get(partitionCommitInfo.getPhysicalPartitionId());
@@ -2104,7 +2104,7 @@ public class DatabaseTransactionMgr {
         }
 
         if (usedQuotaDataBytes == -1) {
-            usedQuotaDataBytes = db.getUsedDataQuotaWithLock();
+            usedQuotaDataBytes = globalStateMgr.getLocalMetastore().getUsedDataQuotaWithLock(db);
         }
 
         long dataQuotaBytes = db.getDataQuota();

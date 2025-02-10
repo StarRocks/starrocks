@@ -127,9 +127,6 @@ public class OlapScanNode extends ScanNode {
     private final List<String> selectedPartitionNames = Lists.newArrayList();
     private List<Long> selectedPartitionVersions = Lists.newArrayList();
     private final HashSet<Long> scanBackendIds = new HashSet<>();
-    // The column names applied dict optimization
-    // used for explain
-    private final List<String> appliedDictStringColumns = new ArrayList<>();
     private final List<String> unUsedOutputStringColumns = new ArrayList<>();
     // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
     public ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
@@ -307,14 +304,6 @@ public class OlapScanNode extends ScanNode {
 
     public void setBucketExprs(List<Expr> bucketExprs) {
         this.bucketExprs = bucketExprs;
-    }
-
-    public void updateAppliedDictStringColumns(Set<Integer> appliedColumnIds) {
-        for (SlotDescriptor slot : desc.getSlots()) {
-            if (appliedColumnIds.contains(slot.getId().asInt())) {
-                appliedDictStringColumns.add(slot.getColumn().getName());
-            }
-        }
     }
 
     public List<SlotDescriptor> getSlots() {
@@ -858,16 +847,7 @@ public class OlapScanNode extends ScanNode {
                 output.append("\n");
             }
 
-            if (!appliedDictStringColumns.isEmpty()) {
-                int maxSize = Math.min(appliedDictStringColumns.size(), 5);
-                List<String> printList = appliedDictStringColumns.subList(0, maxSize);
-                String format_template = "dict_col=%s";
-                if (dictStringIdToIntIds.size() > 5) {
-                    format_template = format_template + "...";
-                }
-                output.append(prefix).append(String.format(format_template, Joiner.on(",").join(printList)));
-                output.append("\n");
-            }
+            output.append(explainColumnDict(prefix));
         }
 
         if (detailLevel != TExplainLevel.VERBOSE) {

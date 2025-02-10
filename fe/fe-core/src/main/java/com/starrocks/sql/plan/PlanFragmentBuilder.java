@@ -1094,6 +1094,11 @@ public class PlanFragmentBuilder {
                             context.getDescTbl()
                                     .addSlotDescriptor(minMaxTuple, new SlotId(columnRefOperator.getId()));
                     Column column = predicates.getMinMaxColumnRefMap().get(columnRefOperator);
+                    // because extractColumnRef both get dict ref and original ref
+                    if (column == null) {
+                        continue;
+                    }
+                    slotDescriptor.setType(column.getType());
                     slotDescriptor.setColumn(column);
                     slotDescriptor.setIsNullable(column.isAllowNull());
                     slotDescriptor.setIsMaterialized(true);
@@ -1187,12 +1192,16 @@ public class PlanFragmentBuilder {
 
             hdfsScanNode.setLimit(node.getLimit());
             hdfsScanNode.setDataCacheOptions(node.getDataCacheOptions());
+            hdfsScanNode.updateAppliedDictStringColumns(node.getGlobalDicts().stream().
+                    map(entry -> entry.first).collect(Collectors.toSet()));
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(hdfsScanNode);
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), hdfsScanNode, DataPartition.RANDOM);
+            fragment.setQueryGlobalDicts(node.getGlobalDicts());
+            fragment.setQueryGlobalDictExprs(getGlobalDictsExprs(node.getGlobalDictsExpr(), context));
             context.getFragments().add(fragment);
             return fragment;
         }
@@ -2211,6 +2220,7 @@ public class PlanFragmentBuilder {
                         hasColocateOlapScanChildInFragment(aggregationNode)) {
                     aggregationNode.setColocate(!node.isWithoutColocateRequirement());
                 }
+                aggregationNode.setLimit(node.getLimit());
             } else if (node.getType().isGlobal() || (node.getType().isLocal() && !node.isSplit())) {
                 // Local && un-split aggregate meanings only execute local pre-aggregation, we need promise
                 // output type match other node, so must use `update finalized` phase
@@ -3350,6 +3360,12 @@ public class PlanFragmentBuilder {
             }
             udtfOutputTuple.computeMemLayout();
 
+            ColumnRefSet fnResultsRequired = ColumnRefSet.of();
+            optExpression.getRowOutputInfo().getColumnRefMap().values()
+                    .forEach(expr -> fnResultsRequired.union(expr.getUsedColumns()));
+            Optional.ofNullable(physicalTableFunction.getPredicate())
+                    .ifPresent(pred -> fnResultsRequired.union(pred.getUsedColumns()));
+            fnResultsRequired.intersect(physicalTableFunction.getFnResultColRefs());
             TableFunctionNode tableFunctionNode = new TableFunctionNode(context.getNextNodeId(),
                     inputFragment.getPlanRoot(),
                     udtfOutputTuple,
@@ -3359,8 +3375,10 @@ public class PlanFragmentBuilder {
                     physicalTableFunction.getOuterColRefs().stream().map(ColumnRefOperator::getId)
                             .collect(Collectors.toList()),
                     physicalTableFunction.getFnResultColRefs().stream().map(ColumnRefOperator::getId)
-                            .collect(Collectors.toList())
+                            .collect(Collectors.toList()),
+                    !fnResultsRequired.isEmpty() || physicalTableFunction.getOuterColRefs().isEmpty()
             );
+
             tableFunctionNode.computeStatistics(optExpression.getStatistics());
             tableFunctionNode.setLimit(physicalTableFunction.getLimit());
             currentExecGroup.add(tableFunctionNode);

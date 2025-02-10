@@ -99,6 +99,7 @@ import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.Explain;
 import com.starrocks.sql.InsertPlanner;
 import com.starrocks.sql.StatementPlanner;
@@ -290,6 +291,15 @@ public class UtFrameUtils {
         feConfMap.put("tablet_create_timeout_second", "10");
         frontend.init(starRocksHome + "/" + runningDir, feConfMap);
         frontend.start(startBDB, runMode, new String[0]);
+    }
+
+    public static void mockInitWarehouseEnv() {
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return new MockedWarehouseManager();
+            }
+        };
     }
 
     public static synchronized void createMinStarRocksCluster(boolean startBDB, RunMode runMode) {

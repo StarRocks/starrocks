@@ -447,31 +447,10 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     config::enable_resource_group_bind_cpus = enable_bind_cpus;
     workgroup::PipelineExecutorSetConfig executors_manager_opts(
             CpuInfo::num_cores(), _max_executor_threads, num_io_threads, connector_num_io_threads,
-            CpuInfo::get_core_ids(), enable_bind_cpus, config::enable_resource_group_cpu_borrowing);
+            CpuInfo::get_core_ids(), enable_bind_cpus, config::enable_resource_group_cpu_borrowing,
+            StarRocksMetrics::instance()->get_pipeline_executor_metrics());
     _workgroup_manager = std::make_unique<workgroup::WorkGroupManager>(std::move(executors_manager_opts));
     RETURN_IF_ERROR(_workgroup_manager->start());
-
-    StarRocksMetrics::instance()->metrics()->register_hook("pipe_execution_hook", [this] {
-        int64_t driver_schedule_count = 0;
-        int64_t driver_execution_ns = 0;
-        int64_t driver_queue_len = 0;
-        int64_t driver_poller_block_queue_len = 0;
-        int64_t scan_executor_queuing = 0;
-        _workgroup_manager->for_each_executors([&](const workgroup::PipelineExecutorSet& executors) {
-            const auto metrics = executors.driver_executor()->metrics();
-            driver_schedule_count += metrics.schedule_count;
-            driver_execution_ns += metrics.driver_execution_ns;
-            driver_queue_len += metrics.driver_queue_len;
-            driver_poller_block_queue_len += metrics.driver_poller_block_queue_len;
-            scan_executor_queuing += executors.scan_executor()->num_tasks();
-        });
-        StarRocksMetrics::instance()->pipe_driver_schedule_count.set_value(driver_schedule_count);
-        StarRocksMetrics::instance()->pipe_driver_execution_time.set_value(driver_execution_ns);
-        StarRocksMetrics::instance()->pipe_driver_queue_len.set_value(driver_queue_len);
-        StarRocksMetrics::instance()->pipe_poller_block_queue_len.set_value(driver_poller_block_queue_len);
-        StarRocksMetrics::instance()->pipe_scan_executor_queuing.set_value(scan_executor_queuing);
-    });
-
     workgroup::DefaultWorkGroupInitialization default_workgroup_init;
 
     if (store_paths.empty() && as_cn) {
@@ -482,6 +461,7 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
 
     std::unique_ptr<ThreadPool> load_rowset_pool;
     std::unique_ptr<ThreadPool> load_segment_pool;
+    std::unique_ptr<ThreadPool> put_combined_txn_log_thread_pool;
     RETURN_IF_ERROR(
             ThreadPoolBuilder("load_rowset_pool")
                     .set_min_threads(0)
@@ -501,6 +481,14 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     _load_segment_thread_pool = load_segment_pool.release();
 
     _broker_mgr = new BrokerMgr(this);
+
+    RETURN_IF_ERROR(ThreadPoolBuilder("put_combined_txn_log_thread_pool")
+                            .set_min_threads(0)
+                            .set_max_threads(config::put_combined_txn_log_thread_pool_num_max)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(500))
+                            .build(&put_combined_txn_log_thread_pool));
+    _put_combined_txn_log_thread_pool = put_combined_txn_log_thread_pool.release();
+
 #ifndef BE_TEST
     _bfd_parser = BfdParser::create();
 #endif
@@ -752,6 +740,7 @@ void ExecEnv::destroy() {
     SAFE_DELETE(_lake_update_manager);
     SAFE_DELETE(_lake_replication_txn_manager);
     SAFE_DELETE(_cache_mgr);
+    SAFE_DELETE(_put_combined_txn_log_thread_pool);
     _dictionary_cache_pool.reset();
     _automatic_partition_pool.reset();
     _metrics = nullptr;

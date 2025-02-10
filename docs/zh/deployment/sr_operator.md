@@ -206,7 +206,7 @@ kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merg
 
 ### 扩缩容 StarRocks 集群
 
-本文以扩容 BE 集群和 FE 集群为例。
+以扩缩容 BE 集群和 FE 集群为例。
 
 **扩容 BE 集群**
 
@@ -215,6 +215,19 @@ kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merg
 ```Bash
 kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"replicas":9}}}'
 ```
+
+**缩容 BE 集群**
+
+BE 缩容时需要逐个缩容，每次缩容一个 BE 节点， 等待 BE 的 Tablet 在剩余 BE 节点上补齐后再继续扩容。如果存在单副本的表，BE 下线有可能造成数据丢失。
+执行如下命令，将有 10 个 BE 节点的集群，缩容至 9 个节点。
+
+```Bash
+kubectl -n starrocks patch starrockscluster starrockscluster-sample --type='merge' -p '{"spec":{"starRocksBeSpec":{"replicas":9}}}'
+```
+
+节点缩容后需要通过 SQL 命令手动 DROP alive 状态为 false 的节点。
+
+下线的 BE 节点的 Tablet 自动补齐需要一些时间，可以通过执行 `show proc '/statistic';` 命令查询副本修复进度。
 
 **扩容 FE 集群**
 

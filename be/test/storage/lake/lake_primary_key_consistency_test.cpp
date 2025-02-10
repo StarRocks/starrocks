@@ -390,6 +390,7 @@ public:
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         RETURN_IF_ERROR(delta_writer->open());
         size_t upsert_size = _random_generator->random() % MaxUpsert;
@@ -425,6 +426,7 @@ public:
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_partial_slot_pointers)
                                                    .set_partial_update_mode(mode)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         RETURN_IF_ERROR(delta_writer->open());
         size_t upsert_size = _random_generator->random() % MaxUpsert;
@@ -461,6 +463,7 @@ public:
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
                                                    .set_merge_condition(merge_condition)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         RETURN_IF_ERROR(delta_writer->open());
         size_t upsert_size = _random_generator->random() % MaxUpsert;
@@ -492,6 +495,7 @@ public:
                                                        .set_mem_tracker(_mem_tracker.get())
                                                        .set_schema_id(_tablet_schema->id())
                                                        .set_slot_descriptors(&_slot_pointers)
+                                                       .set_profile(&_dummy_runtime_profile)
                                                        .build());
             RETURN_IF_ERROR(delta_writer->open());
             size_t upsert_size = _random_generator->random() % MaxUpsert;
@@ -529,6 +533,7 @@ public:
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         RETURN_IF_ERROR(delta_writer->open());
         RETURN_IF_ERROR(
@@ -544,8 +549,8 @@ public:
 
     Status compact_op() {
         auto txn_id = next_id();
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, _tablet_metadata->id(), _version, false,
-                                                                    false, nullptr);
+        auto task_context =
+                std::make_unique<CompactionTaskContext>(txn_id, _tablet_metadata->id(), _version, false, nullptr);
         ASSIGN_OR_RETURN(auto task, _tablet_mgr->compact(task_context.get()));
         RETURN_IF_ERROR(task->execute(CompactionTask::kNoCancelFn));
         RETURN_IF_ERROR(publish_single_version(_tablet_metadata->id(), _version + 1, txn_id));
@@ -639,6 +644,7 @@ protected:
     std::vector<SlotDescriptor*> _partial_slot_pointers;
     Chunk::SlotHashMap _slot_cid_map;
     int64_t _version = 0;
+    RuntimeProfile _dummy_runtime_profile{"dummy"};
 
     int _seed = 0;
     int _run_second = 0;

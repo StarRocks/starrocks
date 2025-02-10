@@ -34,6 +34,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
@@ -805,6 +806,44 @@ public class FunctionAnalyzer {
                                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                         break;
                 }
+            }
+        } else if (FunctionSet.FIELD.equalsIgnoreCase(fnName)) {
+            Type targetType = argumentTypes[0];
+            Type returnType = Type.INT;
+            if (targetType.isNull()) {
+                targetType = Type.INT;
+            } else {      
+                for (int i = 1; i < argumentTypes.length; i++) {
+                    if (argumentTypes[i].isNull()) {
+                        //do nothing
+                    } else if ((targetType.isNumericType() && argumentTypes[i].isNumericType()) ||
+                                (targetType.isStringType() && argumentTypes[i].isStringType())) {
+                        targetType = Type.getAssignmentCompatibleType(targetType, argumentTypes[i], false);
+                        if (targetType.isInvalid()) {
+                            throw new SemanticException("Parameter's type is invalid");
+                        }
+                    } else {
+                        targetType = Type.DOUBLE;
+                    }
+                }
+            }
+            Type[] argsTypes = new Type[1];
+            argsTypes[0] = targetType;
+            fn = Expr.getBuiltinFunction(fnName, argsTypes, true, returnType, Function.CompareMode.IS_IDENTICAL);
+            // correct decimal's precision and scale
+            if (targetType.isDecimalV3()) {
+                List<Type> argTypes = Arrays.asList(targetType);
+                ScalarFunction newFn = new ScalarFunction(fn.getFunctionName(), argTypes, returnType,
+                        fn.getLocation(), ((ScalarFunction) fn).getSymbolName(),
+                        ((ScalarFunction) fn).getPrepareFnSymbol(),
+                        ((ScalarFunction) fn).getCloseFnSymbol());
+                newFn.setFunctionId(fn.getFunctionId());
+                newFn.setChecksum(fn.getChecksum());
+                newFn.setBinaryType(fn.getBinaryType());
+                newFn.setHasVarArgs(fn.hasVarArgs());
+                newFn.setId(fn.getId());
+                newFn.setUserVisible(fn.isUserVisible());
+                fn = newFn;
             }
         }
         // add new argument types

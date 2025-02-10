@@ -1435,8 +1435,6 @@ public class GlobalStateMgr {
         }
         temporaryTableCleaner.start();
 
-        connectorTableTriggerAnalyzeMgr.start();
-
         if (RunMode.isSharedDataMode()) {
             clusterSnapshotMgr.startCheckpointScheduler(checkpointController,
                                                         StarMgrServer.getCurrentState().getCheckpointController());
@@ -1490,6 +1488,8 @@ public class GlobalStateMgr {
 
         // The memory tracker should be placed at the end
         memoryUsageTracker.start();
+
+        connectorTableTriggerAnalyzeMgr.start();
 
         PredicateColumnsMgr.getInstance().startDaemon();
     }

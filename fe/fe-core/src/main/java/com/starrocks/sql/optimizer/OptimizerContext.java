@@ -26,7 +26,6 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
-import com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.task.TaskContext;
@@ -66,9 +65,10 @@ public class OptimizerContext {
     private final Map<RuleType, Stopwatch> ruleWatchMap = Maps.newHashMap();
 
     // ============================ Task Variables ============================
-    // The context for join predicate pushdown rule
-    private final JoinPredicatePushdown.JoinPredicatePushDownContext joinPredicatePushDownContext =
-            new JoinPredicatePushdown.JoinPredicatePushDownContext();
+    // The options for join predicate pushdown rule
+    private boolean enableJoinEquivalenceDerive = true;
+    private boolean enableJoinPredicatePushDown = true;
+
     // QueryMaterializationContext is different from MaterializationContext that it keeps the context during the query
     // lifecycle instead of per materialized view.
 
@@ -198,8 +198,20 @@ public class OptimizerContext {
     }
 
     // ============================ Task Variables ============================
-    public JoinPredicatePushdown.JoinPredicatePushDownContext getJoinPushDownParams() {
-        return joinPredicatePushDownContext;
+    public boolean isEnableJoinEquivalenceDerive() {
+        return enableJoinEquivalenceDerive;
+    }
+
+    public void setEnableJoinEquivalenceDerive(boolean enableJoinEquivalenceDerive) {
+        this.enableJoinEquivalenceDerive = enableJoinEquivalenceDerive;
+    }
+
+    public boolean isEnableJoinPredicatePushDown() {
+        return enableJoinPredicatePushDown;
+    }
+
+    public void setEnableJoinPredicatePushDown(boolean enableJoinPredicatePushDown) {
+        this.enableJoinPredicatePushDown = enableJoinPredicatePushDown;
     }
 
     public boolean isObtainedFromInternalStatistics() {

@@ -170,6 +170,7 @@ protected:
     std::shared_ptr<TabletSchema> _tablet_schema;
     std::shared_ptr<Schema> _schema;
     int64_t _partition_id;
+    RuntimeProfile _dummy_runtime_profile{"dummy"};
 };
 
 // each time overwrite last rows
@@ -192,6 +193,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -218,7 +220,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test1) {
     }
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -264,6 +266,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test2) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
@@ -276,7 +279,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test2) {
     ASSERT_EQ(kChunkSize * 3, read(version));
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -327,6 +330,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test3) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         if (i == 1) {
@@ -343,7 +347,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test3) {
     ASSERT_EQ(kChunkSize * 2, read(version));
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -388,6 +392,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
@@ -439,6 +444,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy2) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes_list[i].data(), indexes_list[i].size()));
@@ -457,6 +463,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy2) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[0], indexes_list[0].data(), indexes_list[0].size()));
@@ -511,6 +518,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         for (int seg_cnt = 0; seg_cnt <= i; seg_cnt++) {
@@ -533,6 +541,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[0], indexes_list[0].data(), indexes_list[0].size()));
@@ -553,15 +562,15 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy3) {
     EXPECT_EQ(4, input_rowsets.size());
     EXPECT_EQ(1, input_rowsets[0]->num_segments());
     EXPECT_EQ(1, input_rowsets[1]->num_segments());
-    EXPECT_EQ(2, input_rowsets[2]->num_segments());
-    EXPECT_EQ(3, input_rowsets[3]->num_segments());
+    EXPECT_EQ(1, input_rowsets[2]->num_segments());
+    EXPECT_EQ(1, input_rowsets[3]->num_segments());
 
     // check the rowset order, pick rowset#1 first, because it is empty.
     // Next order is rowset#7#2#4, by their segment count.
     EXPECT_EQ(input_rowsets[0]->id(), 1);
-    EXPECT_EQ(input_rowsets[1]->id(), 7);
+    EXPECT_EQ(input_rowsets[1]->id(), 4);
     EXPECT_EQ(input_rowsets[2]->id(), 2);
-    EXPECT_EQ(input_rowsets[3]->id(), 4);
+    EXPECT_EQ(input_rowsets[3]->id(), 3);
     config::lake_pk_compaction_max_input_rowsets = 1000;
 }
 
@@ -587,6 +596,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy_min_input) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
@@ -618,7 +628,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_policy_min_input) {
     {
         // do compaction without input rowsets
         auto txn_id = next_id();
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
         EXPECT_EQ(100, task_context->progress.value());
@@ -658,6 +668,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_score_by_policy) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
@@ -713,6 +724,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[chunk_write_without_order[i]], indexes.data(), indexes.size()));
@@ -725,7 +737,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_sorted) {
     ASSERT_EQ(kChunkSize * 3, read(version));
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -790,6 +802,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_remove_compaction_state) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -813,7 +826,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_remove_compaction_state) {
     }
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -835,6 +848,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_remove_compaction_state) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -872,6 +886,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_abort_txn) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
@@ -896,7 +911,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_abort_txn) {
 
     auto txn_id = next_id();
     std::thread t1([&]() {
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         check_task(task);
         ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -942,6 +957,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_multi_output_seg) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
@@ -957,7 +973,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_multi_output_seg) {
     // make sure compact can generate more than one segment in output rowset
     config::max_segment_file_size = 50;
     config::vector_chunk_size = 10;
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -1006,6 +1022,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pk_recover_rowset_order_after_compact)
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
@@ -1024,7 +1041,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_pk_recover_rowset_order_after_compact)
 
     config::lake_pk_compaction_max_input_rowsets = 2;
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -1202,6 +1219,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_rows_mapper) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
@@ -1216,7 +1234,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_rows_mapper) {
     ExecEnv::GetInstance()->delete_file_thread_pool()->wait();
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -1275,6 +1293,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_data_load_conc) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
@@ -1298,6 +1317,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_data_load_conc) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[0], indexes.data(), indexes.size()));
@@ -1308,8 +1328,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_compaction_data_load_conc) {
     // compact rowset 1 & 2 without publish
     auto compact_txn_id = next_id();
     {
-        auto task_context =
-                std::make_unique<CompactionTaskContext>(compact_txn_id, tablet_id, version, false, false, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(compact_txn_id, tablet_id, version, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         check_task(task);
         ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -1364,6 +1383,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
@@ -1378,7 +1398,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction) {
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), N);
 
     auto txn_id = next_id();
-    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+    auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
     ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
     check_task(task);
     ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -1424,6 +1444,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction_thread_safe) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
@@ -1441,8 +1462,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction_thread_safe) {
     workers.emplace_back([&]() {
         for (int i = 0; i < N; i++) {
             auto txn_id = next_id() + N * 10;
-            auto task_context =
-                    std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+            auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
             ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
             check_task(task);
             ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
@@ -1460,6 +1480,7 @@ TEST_P(LakePrimaryKeyCompactionTest, test_major_compaction_thread_safe) {
                                                        .set_partition_id(_partition_id)
                                                        .set_mem_tracker(_mem_tracker.get())
                                                        .set_schema_id(_tablet_schema->id())
+                                                       .set_profile(&_dummy_runtime_profile)
                                                        .build());
             ASSERT_OK(delta_writer->open());
             ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));

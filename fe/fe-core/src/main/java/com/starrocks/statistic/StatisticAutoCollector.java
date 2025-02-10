@@ -59,7 +59,7 @@ public class StatisticAutoCollector extends FrontendDaemon {
             return;
         }
 
-        if (!checkoutAnalyzeTime(LocalTime.now(TimeUtils.getTimeZone().toZoneId()))) {
+        if (!checkoutAnalyzeTime()) {
             return;
         }
 
@@ -106,6 +106,9 @@ public class StatisticAutoCollector extends FrontendDaemon {
             List<StatisticsCollectJob> allJobs =
                     StatisticsCollectJobFactory.buildStatisticsCollectJob(createDefaultJobAnalyzeAll());
             for (StatisticsCollectJob statsJob : allJobs) {
+                if (!checkoutAnalyzeTime()) {
+                    break;
+                }
                 // user-created analyze job has a higher priority
                 if (statsJob.isAnalyzeTable() && analyzeTableSet.contains(statsJob.getTable().getId())) {
                     continue;
@@ -170,7 +173,17 @@ public class StatisticAutoCollector extends FrontendDaemon {
                 Maps.newHashMap(), ScheduleStatus.PENDING, LocalDateTime.MIN);
     }
 
-    private boolean checkoutAnalyzeTime(LocalTime now) {
+    /**
+     * Check if it's a proper time to run auto analyze
+     *
+     * @return true if it's a good time
+     */
+    public static boolean checkoutAnalyzeTime() {
+        LocalTime now = LocalTime.now(TimeUtils.getTimeZone().toZoneId());
+        return checkoutAnalyzeTime(now);
+    }
+
+    private static boolean checkoutAnalyzeTime(LocalTime now) {
         try {
             LocalTime start = LocalTime.parse(Config.statistic_auto_analyze_start_time, DateUtils.TIME_FORMATTER);
             LocalTime end = LocalTime.parse(Config.statistic_auto_analyze_end_time, DateUtils.TIME_FORMATTER);

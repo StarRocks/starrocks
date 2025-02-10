@@ -52,29 +52,29 @@ class RuntimeFilterHelper {
 public:
     // ==================================
     // serialization and deserialization.
-    static size_t max_runtime_filter_serialized_size(const JoinRuntimeFilter* rf);
-    static size_t serialize_runtime_filter(RuntimeState* state, const JoinRuntimeFilter* rf, uint8_t* data);
-    static size_t serialize_runtime_filter(int serialize_version, const JoinRuntimeFilter* rf, uint8_t* data);
-    static int deserialize_runtime_filter(ObjectPool* pool, JoinRuntimeFilter** rf, const uint8_t* data, size_t size);
-    static JoinRuntimeFilter* create_join_runtime_filter(ObjectPool* pool, LogicalType type);
+    static size_t max_runtime_filter_serialized_size(const RuntimeFilter* rf);
+    static size_t serialize_runtime_filter(RuntimeState* state, const RuntimeFilter* rf, uint8_t* data);
+    static size_t serialize_runtime_filter(int serialize_version, const RuntimeFilter* rf, uint8_t* data);
+    static int deserialize_runtime_filter(ObjectPool* pool, RuntimeFilter** rf, const uint8_t* data, size_t size);
+    static RuntimeFilter* create_join_runtime_filter(ObjectPool* pool, LogicalType type);
 
     // ====================================
-    static JoinRuntimeFilter* create_runtime_bloom_filter(ObjectPool* pool, LogicalType type);
-    static Status fill_runtime_bloom_filter(const ColumnPtr& column, LogicalType type, JoinRuntimeFilter* filter,
+    static RuntimeFilter* create_runtime_bloom_filter(ObjectPool* pool, LogicalType type);
+    static Status fill_runtime_bloom_filter(const ColumnPtr& column, LogicalType type, RuntimeFilter* filter,
                                             size_t column_offset, bool eq_null);
     static Status fill_runtime_bloom_filter(const std::vector<ColumnPtr>& column, LogicalType type,
-                                            JoinRuntimeFilter* filter, size_t column_offset, bool eq_null);
+                                            RuntimeFilter* filter, size_t column_offset, bool eq_null);
     static Status fill_runtime_bloom_filter(const starrocks::pipeline::RuntimeBloomFilterBuildParam& param,
-                                            LogicalType type, JoinRuntimeFilter* filter, size_t column_offset);
+                                            LogicalType type, RuntimeFilter* filter, size_t column_offset);
     static StatusOr<ExprContext*> rewrite_runtime_filter_in_cross_join_node(ObjectPool* pool, ExprContext* conjunct,
                                                                             Chunk* chunk);
 
-    static bool filter_zonemap_with_min_max(LogicalType type, const JoinRuntimeFilter* filter, const Column* min_column,
+    static bool filter_zonemap_with_min_max(LogicalType type, const RuntimeFilter* filter, const Column* min_column,
                                             const Column* max_column);
 
     // create min/max predicate from filter.
     static void create_min_max_value_predicate(ObjectPool* pool, SlotId slot_id, LogicalType slot_type,
-                                               const JoinRuntimeFilter* filter, Expr** min_max_predicate);
+                                               const RuntimeFilter* filter, Expr** min_max_predicate);
 };
 
 // how to generate & publish this runtime filter
@@ -96,9 +96,9 @@ public:
     bool has_remote_targets() const { return _has_remote_targets; }
     bool has_consumer() const { return _has_consumer; }
     const std::vector<TNetworkAddress>& merge_nodes() const { return _merge_nodes; }
-    void set_runtime_filter(JoinRuntimeFilter* rf) { _runtime_filter = rf; }
+    void set_runtime_filter(RuntimeFilter* rf) { _runtime_filter = rf; }
     // used in TopN filter to intersect with other runtime filters.
-    void set_or_intersect_filter(JoinRuntimeFilter* rf) {
+    void set_or_intersect_filter(RuntimeFilter* rf) {
         std::lock_guard guard(_mutex);
         if (_runtime_filter) {
             _runtime_filter->intersect(rf);
@@ -108,7 +108,7 @@ public:
     }
 
     // used in local group colocate runtime filter
-    void set_or_concat(JoinRuntimeFilter* rf, int32_t driver_sequence) {
+    void set_or_concat(RuntimeFilter* rf, int32_t driver_sequence) {
         std::lock_guard guard(_mutex);
         if (_runtime_filter == nullptr) {
             _runtime_filter = rf;
@@ -117,7 +117,7 @@ public:
         _runtime_filter->group_colocate_filter()[driver_sequence] = rf;
     }
 
-    JoinRuntimeFilter* runtime_filter() { return _runtime_filter; }
+    RuntimeFilter* runtime_filter() { return _runtime_filter; }
     void set_is_pipeline(bool flag) { _is_pipeline = flag; }
     bool is_pipeline() const { return _is_pipeline; }
     // TRuntimeFilterBuildJoinMode
@@ -140,7 +140,7 @@ private:
     std::unordered_set<TUniqueId> _broadcast_grf_senders;
     std::vector<TRuntimeFilterDestination> _broadcast_grf_destinations;
     std::vector<TNetworkAddress> _merge_nodes;
-    JoinRuntimeFilter* _runtime_filter = nullptr;
+    RuntimeFilter* _runtime_filter = nullptr;
     bool _is_pipeline = false;
     size_t _num_colocate_partition = 0;
 
@@ -185,7 +185,7 @@ public:
     int8_t join_mode() const { return _join_mode; };
     const std::vector<ExprContext*>* partition_by_expr_contexts() const { return &_partition_by_exprs_contexts; }
 
-    const JoinRuntimeFilter* runtime_filter(int32_t driver_sequence) const {
+    const RuntimeFilter* runtime_filter(int32_t driver_sequence) const {
         auto runtime_filter = _runtime_filter.load();
         if (runtime_filter != nullptr && runtime_filter->is_group_colocate_filter()) {
             DCHECK(_is_group_colocate_rf);
@@ -195,8 +195,8 @@ public:
         }
         return runtime_filter;
     }
-    void set_runtime_filter(const JoinRuntimeFilter* rf);
-    void set_shared_runtime_filter(const std::shared_ptr<const JoinRuntimeFilter>& rf);
+    void set_runtime_filter(const RuntimeFilter* rf);
+    void set_shared_runtime_filter(const std::shared_ptr<const RuntimeFilter>& rf);
     void add_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
         _observable.add_observer(state, observer);
     }
@@ -221,8 +221,8 @@ private:
     bool _is_group_colocate_rf = false;
     std::vector<ExprContext*> _partition_by_exprs_contexts;
 
-    std::atomic<const JoinRuntimeFilter*> _runtime_filter = nullptr;
-    std::shared_ptr<const JoinRuntimeFilter> _shared_runtime_filter = nullptr;
+    std::atomic<const RuntimeFilter*> _runtime_filter = nullptr;
+    std::shared_ptr<const RuntimeFilter> _shared_runtime_filter = nullptr;
     pipeline::Observable _observable;
 };
 
@@ -238,7 +238,7 @@ struct RuntimeBloomFilterEvalContext {
     // driver sequence, used in colocate local runtime filter
     // It represents the ith driver to call this runtime filter.
     int32_t driver_sequence = -1;
-    JoinRuntimeFilter::RunningContext running_context;
+    RuntimeFilter::RunningContext running_context;
     RuntimeProfile::Counter* join_runtime_filter_timer = nullptr;
     RuntimeProfile::Counter* join_runtime_filter_hash_timer = nullptr;
     RuntimeProfile::Counter* join_runtime_filter_input_counter = nullptr;

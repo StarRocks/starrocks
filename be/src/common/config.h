@@ -928,7 +928,6 @@ CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_Bool(parquet_late_materialization_enable, "true");
 CONF_Bool(parquet_page_index_enable, "true");
 CONF_mBool(parquet_statistics_process_more_filter_enable, "true");
-CONF_mBool(parquet_advance_zonemap_filter, "true");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
@@ -1057,7 +1056,7 @@ CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 CONF_mBool(lake_print_delete_log, "false");
 CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 // The interval to check whether lake compaction is valid. Set to <= 0 to disable the check.
-CONF_mInt32(lake_compaction_check_valid_interval_minutes, "30"); // 30 minutes
+CONF_mInt32(lake_compaction_check_valid_interval_minutes, "10"); // 10 minutes
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
@@ -1547,7 +1546,7 @@ CONF_mInt32(merge_commit_txn_state_expire_time_sec, "1800");
 CONF_mInt32(merge_commit_txn_state_poll_interval_ms, "2000");
 CONF_mInt32(merge_commit_txn_state_poll_max_fail_times, "2");
 
-CONF_mBool(enable_load_spill, "false");
+CONF_mBool(enable_load_spill, "true");
 // Max chunk bytes which allow to spill per flush. Default is 10MB.
 CONF_mInt64(load_spill_max_chunk_bytes, "10485760");
 // Max merge input bytes during spill merge. Default is 1024MB.
@@ -1565,4 +1564,6 @@ CONF_mBool(avro_ignore_union_type_tag, "false");
 // default batch size for simdjson lib
 CONF_mInt32(json_parse_many_batch_size, "1000000");
 CONF_mBool(enable_dynamic_batch_size_for_json_parse_many, "true");
+CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
+CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
 } // namespace starrocks::config

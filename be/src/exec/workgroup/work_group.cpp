@@ -190,7 +190,8 @@ void WorkGroup::init() {
                                                 GlobalEnv::GetInstance()->query_pool_mem_tracker());
     _mem_tracker->set_reserve_limit(_spill_mem_limit_bytes);
 
-    _driver_sched_entity.set_queue(std::make_unique<pipeline::QuerySharedDriverQueue>());
+    _driver_sched_entity.set_queue(std::make_unique<pipeline::QuerySharedDriverQueue>(
+            StarRocksMetrics::instance()->get_pipeline_executor_metrics()->get_driver_queue_metrics()));
     _scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
     _connector_scan_sched_entity.set_queue(workgroup::create_scan_task_queue());
 

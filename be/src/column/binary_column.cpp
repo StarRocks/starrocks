@@ -320,10 +320,10 @@ void BinaryColumnBase<T>::_build_slices() const {
     _slices_cache = false;
     _slices.clear();
 
-    _slices.reserve(_offsets.size() - 1);
+    _slices.resize(_offsets.size() - 1);
 
     for (size_t i = 0; i < _offsets.size() - 1; ++i) {
-        _slices.emplace_back(_bytes.data() + _offsets[i], _offsets[i + 1] - _offsets[i]);
+        _slices[i] = {_bytes.data() + _offsets[i], _offsets[i + 1] - _offsets[i]};
     }
 
     _slices_cache = true;
@@ -528,27 +528,14 @@ int BinaryColumnBase<T>::compare_at(size_t left, size_t right, const Column& rhs
 template <typename T>
 uint32_t BinaryColumnBase<T>::max_one_element_serialize_size() const {
     uint32_t max_size = 0;
-    T prev_offset = _offsets[0];
-    for (size_t i = 0; i < _offsets.size() - 1; ++i) {
-        T curr_offset = _offsets[i + 1];
+    size_t length = _offsets.size() - 1;
+    for (size_t i = 0; i < length; ++i) {
         // it's safe to cast, because max size of one string is 2^32
-        max_size = std::max(max_size, static_cast<uint32_t>(curr_offset - prev_offset));
-        prev_offset = curr_offset;
+        uint32_t curr_length = _offsets[i + 1] - _offsets[i];
+        max_size = std::max(max_size, curr_length);
     }
     // TODO: may be overflow here, i will solve it later
     return max_size + sizeof(uint32_t);
-}
-
-template <typename T>
-uint32_t BinaryColumnBase<T>::serialize(size_t idx, uint8_t* pos) {
-    // max size of one string is 2^32, so use uint32_t not T
-    auto binary_size = static_cast<uint32_t>(_offsets[idx + 1] - _offsets[idx]);
-    T offset = _offsets[idx];
-
-    strings::memcpy_inlined(pos, &binary_size, sizeof(uint32_t));
-    strings::memcpy_inlined(pos + sizeof(uint32_t), &_bytes[offset], binary_size);
-
-    return sizeof(uint32_t) + binary_size;
 }
 
 template <typename T>
@@ -589,6 +576,41 @@ void BinaryColumnBase<T>::deserialize_and_append_batch(Buffer<Slice>& srcs, size
     for (size_t i = 0; i < chunk_size; ++i) {
         srcs[i].data = (char*)deserialize_and_append((uint8_t*)srcs[i].data);
     }
+}
+
+template <typename T>
+void BinaryColumnBase<T>::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes,
+                                                          size_t chunk_size, uint32_t max_one_row_size,
+                                                          uint8_t* null_masks, bool has_null) {
+    uint32_t* sizes = slice_sizes.data();
+
+    if (!has_null) {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            memcpy(dst + i * max_one_row_size + sizes[i], &has_null, sizeof(bool));
+            sizes[i] += static_cast<uint32_t>(sizeof(bool)) +
+                        serialize(i, dst + i * max_one_row_size + sizes[i] + sizeof(bool));
+        }
+    } else {
+        for (size_t i = 0; i < chunk_size; ++i) {
+            memcpy(dst + i * max_one_row_size + sizes[i], null_masks + i, sizeof(bool));
+            sizes[i] += sizeof(bool);
+
+            if (!null_masks[i]) {
+                sizes[i] += serialize(i, dst + i * max_one_row_size + sizes[i]);
+            }
+        }
+    }
+}
+
+template <typename T>
+void BinaryColumnBase<T>::deserialize_and_append_batch_nullable(Buffer<Slice>& srcs, size_t chunk_size,
+                                                                Buffer<uint8_t>& is_nulls, bool& has_null) {
+    const uint32_t string_size = *((bool*)srcs[0].data) // is null
+                                         ? 4
+                                         : *((uint32_t*)(srcs[0].data + sizeof(bool))); // first string size
+    _bytes.reserve(chunk_size * string_size * 2);
+    ColumnFactory<Column, BinaryColumnBase<T>>::deserialize_and_append_batch_nullable(srcs, chunk_size, is_nulls,
+                                                                                      has_null);
 }
 
 template <typename T>

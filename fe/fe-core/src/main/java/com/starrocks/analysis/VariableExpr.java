@@ -110,10 +110,10 @@ public class VariableExpr extends Expr {
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        if (!super.equals(o)) return false;
+    public boolean equalsWithoutChild(Object o) {
+        if (!super.equalsWithoutChild(o)) {
+            return false;
+        }
         VariableExpr that = (VariableExpr) o;
         return setType == that.setType && Objects.equals(name, that.name) && Objects.equals(value, that.value);
     }

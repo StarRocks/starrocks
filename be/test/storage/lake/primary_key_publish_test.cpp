@@ -168,6 +168,7 @@ protected:
     std::vector<SlotDescriptor> _slots;
     std::vector<SlotDescriptor*> _slot_pointers;
     Chunk::SlotHashMap _slot_cid_map;
+    RuntimeProfile _dummy_runtime_profile{"dummy"};
 };
 
 TEST_P(LakePrimaryKeyPublishTest, test_write_read_success) {
@@ -247,6 +248,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_multitime_check_result) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -298,6 +300,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunks[i], indexes.data(), indexes.size()));
@@ -327,6 +330,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunks[i], indexes.data(), indexes.size()));
@@ -346,6 +350,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_fail_retry) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunks[i], indexes.data(), indexes.size()));
@@ -386,6 +391,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_segments) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -420,6 +426,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_multi_times) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -469,6 +476,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_with_oom) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -495,6 +503,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_concurrent) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -534,6 +543,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_resolve_conflict) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -558,6 +568,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_resolve_conflict) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -614,6 +625,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_read_success_multiple_tablet) {
                                             .set_partition_id(_partition_id)
                                             .set_mem_tracker(_mem_tracker.get())
                                             .set_schema_id(_tablet_schema->id())
+                                            .set_profile(&_dummy_runtime_profile)
                                             .build());
             ASSERT_OK(w->open());
             ASSERT_OK(w->write(*chunk_ptr, indexes, indexes_size));
@@ -653,6 +665,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_largedata) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -700,6 +713,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -752,6 +766,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_multi_reason) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -804,6 +819,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels) {
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         if (i % 2 == 0) {
@@ -864,6 +880,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_recover_with_dels2) {
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         // upsert
@@ -927,6 +944,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_load_failure) {
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         // upsert
@@ -972,6 +990,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_rebuild_persistent_index) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -1017,6 +1036,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_abort_txn) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -1056,6 +1076,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_batch_publish) {
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_schema_id(_tablet_schema->id())
                                                .set_slot_descriptors(&_slot_pointers)
+                                               .set_profile(&_dummy_runtime_profile)
                                                .build());
     ASSERT_OK(delta_writer->open());
     ASSERT_OK(delta_writer->write(*chunk0, indexes0.data(), indexes0.size()));
@@ -1072,6 +1093,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_batch_publish) {
                                           .set_mem_tracker(_mem_tracker.get())
                                           .set_schema_id(_tablet_schema->id())
                                           .set_slot_descriptors(&_slot_pointers)
+                                          .set_profile(&_dummy_runtime_profile)
                                           .build());
     ASSERT_OK(delta_writer->open());
     ASSERT_OK(delta_writer->write(*chunk1, indexes1.data(), indexes1.size()));
@@ -1117,6 +1139,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_batch_publish_1) {
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_schema_id(_tablet_schema->id())
                                                .set_slot_descriptors(&_slot_pointers)
+                                               .set_profile(&_dummy_runtime_profile)
                                                .build());
     ASSERT_OK(delta_writer->open());
     ASSERT_OK(delta_writer->write(*chunk0, indexes0.data(), indexes0.size()));
@@ -1133,6 +1156,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_batch_publish_1) {
                                           .set_mem_tracker(_mem_tracker.get())
                                           .set_schema_id(_tablet_schema->id())
                                           .set_slot_descriptors(&_slot_pointers)
+                                          .set_profile(&_dummy_runtime_profile)
                                           .build());
     ASSERT_OK(delta_writer->open());
     ASSERT_OK(delta_writer->write(*chunk1, indexes1.data(), indexes1.size()));
@@ -1157,6 +1181,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_batch_publish_1) {
                                           .set_mem_tracker(_mem_tracker.get())
                                           .set_schema_id(_tablet_schema->id())
                                           .set_slot_descriptors(&_slot_pointers)
+                                          .set_profile(&_dummy_runtime_profile)
                                           .build());
     ASSERT_OK(delta_writer->open());
     ASSERT_OK(delta_writer->write(*chunk2, indexes2.data(), indexes2.size()));
@@ -1189,6 +1214,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_transform_batch_to_single) {
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_schema_id(_tablet_schema->id())
                                                .set_slot_descriptors(&_slot_pointers)
+                                               .set_profile(&_dummy_runtime_profile)
                                                .build());
     ASSERT_OK(delta_writer->open());
     ASSERT_OK(delta_writer->write(*chunk0, indexes0.data(), indexes0.size()));
@@ -1205,6 +1231,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_transform_batch_to_single) {
                                           .set_mem_tracker(_mem_tracker.get())
                                           .set_schema_id(_tablet_schema->id())
                                           .set_slot_descriptors(&_slot_pointers)
+                                          .set_profile(&_dummy_runtime_profile)
                                           .build());
     ASSERT_OK(delta_writer->open());
     ASSERT_OK(delta_writer->write(*chunk1, indexes1.data(), indexes1.size()));
@@ -1257,6 +1284,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_with_clear_txnlog) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -1305,6 +1333,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_write_with_cloud_native_index_rebuild) {
                                                        .set_partition_id(_partition_id)
                                                        .set_mem_tracker(_mem_tracker.get())
                                                        .set_schema_id(_tablet_schema->id())
+                                                       .set_profile(&_dummy_runtime_profile)
                                                        .build());
             ASSERT_OK(delta_writer->open());
             ASSERT_OK(delta_writer->write(*chunk_vec[i], indexes_vec[i].data(), indexes_vec[i].size()));
@@ -1350,6 +1379,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*(chunks[0].first), chunks[0].second.data(), chunks[0].second.size()));
@@ -1368,6 +1398,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*(chunks[2].first), chunks[2].second.data(), chunks[2].second.size()));
@@ -1387,6 +1418,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*(chunks[1].first), chunks[1].second.data(), chunks[1].second.size()));
@@ -1424,6 +1456,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*(chunks[0].first), chunks[0].second.data(), chunks[0].second.size() / 2));
@@ -1444,7 +1477,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {
         auto old_val = config::lake_pk_compaction_min_input_segments;
         config::lake_pk_compaction_min_input_segments = 1;
         int64_t txn_id = next_id();
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
         EXPECT_EQ(100, task_context->progress.value());
@@ -1468,6 +1501,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels) {
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*(chunks[0].first), chunks[0].second.data(), chunks[0].second.size()));
@@ -1503,6 +1537,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels2) {
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*(chunks[0].first), chunks[0].second.data(), chunks[0].second.size()));
@@ -1517,7 +1552,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels2) {
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
-    EXPECT_EQ(new_tablet_metadata->rowsets(0).segments_size(), 2);
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).segments_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_rows(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).del_files_size(), 1);
@@ -1535,6 +1570,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels2) {
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*(chunks[0].first), chunks[0].second.data(), chunks[0].second.size()));
@@ -1545,7 +1581,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels2) {
     }
     ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 2);
-    EXPECT_EQ(new_tablet_metadata->rowsets(0).segments_size(), 2);
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).segments_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_dels(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).num_rows(), kChunkSize);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).del_files_size(), 1);
@@ -1578,6 +1614,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels3) {
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*(chunks[0].first), chunks[0].second.data(), chunks[0].second.size()));
@@ -1596,6 +1633,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels3) {
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*(chunks[1].first), chunks[1].second.data(), chunks[1].second.size()));
@@ -1610,7 +1648,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels3) {
         auto old_val = config::lake_pk_compaction_min_input_segments;
         config::lake_pk_compaction_min_input_segments = 1;
         int64_t txn_id = next_id();
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
         EXPECT_EQ(100, task_context->progress.value());
@@ -1646,6 +1684,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels4) {
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*(chunks[0].first), chunks[0].second.data(), chunks[0].second.size()));
@@ -1663,7 +1702,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels4) {
 
     ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
     EXPECT_EQ(new_tablet_metadata->rowsets_size(), 1);
-    EXPECT_EQ(new_tablet_metadata->rowsets(0).segments_size(), 5);
+    EXPECT_EQ(new_tablet_metadata->rowsets(0).segments_size(), 1);
     EXPECT_EQ(new_tablet_metadata->rowsets(0).del_files_size(), 1);
     EXPECT_EQ(0, read_rows(tablet_id, version));
 
@@ -1672,7 +1711,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels4) {
         auto old_val = config::lake_pk_compaction_min_input_segments;
         config::lake_pk_compaction_min_input_segments = 1;
         int64_t txn_id = next_id();
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
         EXPECT_EQ(100, task_context->progress.value());
@@ -1693,6 +1732,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_index_rebuild_with_dels4) {
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*(chunks[0].first), chunks[0].second.data(), chunks[0].second.size()));
@@ -1722,6 +1762,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_cloud_native_index_minor_compact_because_
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -1764,6 +1805,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_cloud_native_index_minor_compact_because_
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -1806,6 +1848,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -1833,6 +1876,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
                                                    .set_slot_descriptors(&_slot_pointers)
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));
@@ -1856,7 +1900,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
         config::lake_pk_compaction_min_input_segments = 1;
         config::lake_pk_index_sst_max_compaction_versions = 1;
         int64_t txn_id = next_id();
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
         EXPECT_EQ(100, task_context->progress.value());
@@ -1874,7 +1918,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_individual_index_compaction) {
     // 4. compaction with sst
     {
         int64_t txn_id = next_id();
-        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, false, nullptr);
+        auto task_context = std::make_unique<CompactionTaskContext>(txn_id, tablet_id, version, false, nullptr);
         ASSIGN_OR_ABORT(auto task, _tablet_mgr->compact(task_context.get()));
         ASSERT_OK(task->execute(CompactionTask::kNoCancelFn));
         EXPECT_EQ(100, task_context->progress.value());
@@ -1906,6 +1950,7 @@ TEST_P(LakePrimaryKeyPublishTest, test_publish_with_lazy_load) {
                                                    .set_partition_id(_partition_id)
                                                    .set_mem_tracker(_mem_tracker.get())
                                                    .set_schema_id(_tablet_schema->id())
+                                                   .set_profile(&_dummy_runtime_profile)
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(*chunk0, indexes.data(), indexes.size()));

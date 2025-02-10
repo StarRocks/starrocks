@@ -65,6 +65,7 @@
 #include "util/compression/compression_utils.h"
 #include "util/defer_op.h"
 #include "util/stack_util.h"
+#include "util/starrocks_metrics.h"
 #include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/uid_util.h"
@@ -163,7 +164,6 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
         _load_channel_profile_config.set_runtime_profile_report_interval_ns(
                 query_ctx->get_runtime_profile_report_interval_ns());
     }
-
     return Status::OK();
 }
 

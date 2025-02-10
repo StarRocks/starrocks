@@ -137,6 +137,7 @@ set(EXEC_FILES
         ./exprs/null_if_expr_test.cpp
         ./exprs/percentile_functions_test.cpp
         ./exprs/string_fn_concat_test.cpp
+        ./exprs/string_fn_field.cpp
         ./exprs/string_fn_locate_test.cpp
         ./exprs/string_fn_pad_test.cpp
         ./exprs/string_fn_regexp_replace_test.cpp
@@ -497,6 +498,7 @@ set(EXEC_FILES
         ./storage/lake/lake_persistent_index_test.cpp
         ./storage/lake/replication_txn_manager_test.cpp
         ./storage/lake/persistent_index_sstable_test.cpp
+        ./storage/lake/write_combined_txn_log_test.cpp
         ./block_cache/datacache_utils_test.cpp
         ./block_cache/block_cache_hit_rate_counter_test.cpp
         ./util/thrift_rpc_helper_test.cpp

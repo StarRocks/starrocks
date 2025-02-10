@@ -180,6 +180,8 @@ public class StatisticsCollectionTrigger {
             future = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool()
                     .submit(() -> {
                         isRunning.set(true);
+                        // reset the start time after pending, so [end-start] can represent execution period
+                        analyzeStatus.setStartTime(LocalDateTime.now());
                         StatisticExecutor statisticExecutor = new StatisticExecutor();
                         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                         // set session id for temporary table

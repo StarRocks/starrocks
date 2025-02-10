@@ -14,6 +14,7 @@
 
 #include "formats/parquet/scalar_column_reader.h"
 
+#include "formats/parquet/column_reader.h"
 #include "formats/parquet/stored_column_reader_with_index.h"
 #include "formats/parquet/utils.h"
 #include "formats/parquet/zone_map_filter_evaluator.h"
@@ -525,12 +526,9 @@ Status LowCardColumnReader::_check_current_dict() {
         auto slice = viewer.value(i);
         auto res = _dict->find(slice);
         if (res == _dict->end()) {
-            if (slice.size > 0) {
-                // error message format used to extract info, carefully
-                return Status::GlobalDictNotMatch(
-                        fmt::format("SlotId: {}, FileName: {} , file doesn't match global dict. ", _slot_id,
-                                    _opts.file->filename()));
-            }
+            // error message format used to extract info, carefully
+            return Status::GlobalDictNotMatch(fmt::format("SlotId: {}, FileName: {} , file doesn't match global dict. ",
+                                                          _slot_id, _opts.file->filename()));
         } else {
             local_to_global[i] = res->second;
         }
@@ -577,15 +575,16 @@ Status LowRowsColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
     auto* binary_column = ColumnHelper::as_raw_column<BinaryColumn>(nullable_string_column->data_column());
     auto* dst_data_column = down_cast<LowCardDictColumn*>(ColumnHelper::get_data_column(dst.get()));
     for (size_t i = 0; i < src->size(); i++) {
+        if (src->is_null(i)) {
+            dst_data_column->get_data()[i] = 1;
+            continue;
+        }
         const auto& slice = binary_column->get_slice(i);
         auto res = _dict->find(slice);
         if (res == _dict->end()) {
-            if (slice.size > 0) {
-                // error message format used to extract info, carefully
-                return Status::GlobalDictNotMatch(
-                        fmt::format("SlotId: {}, FileName: {} , file doesn't match global dict. ", _slot_id,
-                                    _opts.file->filename()));
-            }
+            // error message format used to extract info, carefully
+            return Status::GlobalDictNotMatch(fmt::format("SlotId: {}, FileName: {} , file doesn't match global dict. ",
+                                                          _slot_id, _opts.file->filename()));
         } else {
             dst_data_column->get_data()[i] = res->second;
         }

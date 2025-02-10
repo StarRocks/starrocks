@@ -1,0 +1,40 @@
+-- name: test_global_dict_on_lake
+
+create external catalog hive_sql_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+
+use hive_sql_test_${uuid0}.hive_oss_db;
+
+create table low_card_test (
+c1 int,
+c2 string
+);
+
+insert into low_card_test values (1, '1');
+insert into low_card_test values (2, '2');
+insert into low_card_test values (3, '3');
+insert into low_card_test values (4, '4');
+insert into low_card_test values (5, '5');
+insert into low_card_test values (6, '6');
+
+select count(c2) from low_card_test;
+function: wait_global_dict_ready('c2', 'low_card_test')
+select count(c2) from low_card_test;
+function: wait_global_dict_ready('c2', 'low_card_test')
+select count(c2) from low_card_test;
+
+insert into low_card_test values (7, '7');
+select count(c2) from low_card_test;
+function: wait_global_dict_ready('c2', 'low_card_test')
+select count(c2) from low_card_test;
+select count(c2) from low_card_test where c2 = '7';
+select count(c1) from low_card_test where c2 = '1';
+insert into low_card_test values (8, '');
+select count(c2) from low_card_test;
+function: wait_global_dict_ready('c2', 'low_card_test')
+select count(c2) from low_card_test;
+
+drop table low_card_test force;
+
+drop catalog hive_sql_test_${uuid0};
+
+set catalog default_catalog;

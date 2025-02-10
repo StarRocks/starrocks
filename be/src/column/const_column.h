@@ -161,8 +161,17 @@ public:
 
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                          uint32_t max_one_row_size) override {
-        for (size_t i = 0; i < chunk_size; ++i) {
-            slice_sizes[i] += _data->serialize(0, dst + i * max_one_row_size + slice_sizes[i]);
+        if (chunk_size <= 0) {
+            return;
+        }
+
+        auto* first_row_buf = dst + slice_sizes[0];
+        const size_t first_row_bytes = _data->serialize(0, first_row_buf);
+        slice_sizes[0] += first_row_bytes;
+
+        for (size_t i = 1; i < chunk_size; ++i) {
+            strings::memcpy_inlined(dst + i * max_one_row_size + slice_sizes[i], first_row_buf, first_row_bytes);
+            slice_sizes[i] += first_row_bytes;
         }
     }
 

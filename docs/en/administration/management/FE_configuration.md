@@ -2933,16 +2933,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: FE cloud-native metadata server RPC listen port.
 - Introduced in: -
 
-<!--
+
 ##### enable_load_volume_from_conf
 
-- Default: true
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description:
-- Introduced in: -
--->
+- Description: Whether to allow StarRocks to create the built-in storage volume by using the object storage-related properties specified in the FE configuration file. The default value is changed from `true` to `false` from v3.4.1 onwards.
+- Introduced in: v3.1.0
+
 
 ##### cloud_native_storage_type
 

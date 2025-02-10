@@ -35,7 +35,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
-import com.starrocks.sql.optimizer.rewrite.JoinPredicatePushdown;
 import com.starrocks.sql.optimizer.rule.RuleSet;
 import com.starrocks.sql.optimizer.rule.join.JoinReorderFactory;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
@@ -50,6 +49,7 @@ import com.starrocks.sql.optimizer.rule.transformation.EliminateConstantCTERule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateSortColumnWithEqualityPredicateRule;
 import com.starrocks.sql.optimizer.rule.transformation.ForceCTEReuseRule;
 import com.starrocks.sql.optimizer.rule.transformation.GroupByCountDistinctRewriteRule;
+import com.starrocks.sql.optimizer.rule.transformation.HoistHeavyCostExprsUponTopnRule;
 import com.starrocks.sql.optimizer.rule.transformation.IcebergEqualityDeleteRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.IcebergPartitionsTableRewriteRule;
 import com.starrocks.sql.optimizer.rule.transformation.JoinLeftAsscomRule;
@@ -464,9 +464,13 @@ public class QueryOptimizer extends Optimizer {
         CTEUtils.collectCteOperators(tree, context);
 
         // see JoinPredicatePushdown
-        JoinPredicatePushdown.JoinPredicatePushDownContext joinPredicatePushDownContext =
-                context.getJoinPushDownParams();
-        joinPredicatePushDownContext.prepare(context, sessionVariable, mvRewriteStrategy);
+        if (sessionVariable.isEnableRboTablePrune()) {
+            context.setEnableJoinEquivalenceDerive(false);
+        }
+        if (mvRewriteStrategy.mvStrategy.isMultiStages()) {
+            context.setEnableJoinEquivalenceDerive(false);
+            context.setEnableJoinPredicatePushDown(false);
+        }
 
         // inline CTE if consume use once
         while (cteContext.hasInlineCTE()) {
@@ -527,12 +531,14 @@ public class QueryOptimizer extends Optimizer {
 
         // rule-based materialized view rewrite: early stage
         doMVRewriteWithMultiStages(tree, rootTaskContext);
-        joinPredicatePushDownContext.reset();
+        context.setEnableJoinEquivalenceDerive(true);
+        context.setEnableJoinPredicatePushDown(true);
 
         // Limit push must be after the column prune,
         // otherwise the Node containing limit may be prune
         scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.MERGE_LIMIT_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, new PushDownProjectLimitRule());
+        scheduler.rewriteIterative(tree, rootTaskContext, new HoistHeavyCostExprsUponTopnRule());
 
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownLimitRankingWindowRule());
         rewriteGroupingSets(tree, rootTaskContext, sessionVariable);
@@ -784,7 +790,7 @@ public class QueryOptimizer extends Optimizer {
             scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PRUNE_COLUMNS_RULES);
         }
         scheduler.rewriteOnce(tree, rootTaskContext, new PruneSubfieldRule());
-
+        deriveLogicalProperty(tree);
         return tree;
     }
 

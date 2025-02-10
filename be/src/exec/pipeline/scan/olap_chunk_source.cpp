@@ -44,6 +44,7 @@
 #include "storage/tablet_index.h"
 #include "types/logical_type.h"
 #include "util/runtime_profile.h"
+#include "util/table_metrics.h"
 
 namespace starrocks::pipeline {
 
@@ -463,6 +464,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     std::vector<uint32_t> reader_columns;
 
     RETURN_IF_ERROR(_get_tablet(_scan_range));
+    _table_metrics =
+            StarRocksMetrics::instance()->table_metrics_mgr()->get_table_metrics(_tablet->tablet_meta()->table_id());
 
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _scan_range->tablet_id);
 
@@ -701,6 +704,8 @@ void OlapChunkSource::_update_counter() {
 
     StarRocksMetrics::instance()->query_scan_bytes.increment(_scan_bytes);
     StarRocksMetrics::instance()->query_scan_rows.increment(_scan_rows_num);
+    _table_metrics->scan_read_bytes.increment(_scan_bytes);
+    _table_metrics->scan_read_rows.increment(_scan_rows_num);
 
     if (_reader->stats().decode_dict_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "DictDecode", IO_TASK_EXEC_TIMER_NAME);

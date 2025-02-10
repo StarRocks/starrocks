@@ -83,9 +83,9 @@ import java.util.List;
 import java.util.Map;
 
 import static org.apache.paimon.io.DataFileMeta.DUMMY_LEVEL;
-import static org.apache.paimon.io.DataFileMeta.EMPTY_KEY_STATS;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
+import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
 import static org.junit.Assert.assertEquals;
 
 public class PaimonMetadataTest {
@@ -112,14 +112,14 @@ public class PaimonMetadataTest {
         writer.complete();
 
         List<DataFileMeta> meta1 = new ArrayList<>();
-        meta1.add(new DataFileMeta("file1", 100, 200, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_KEY_STATS, null,
-                1, 1, 1, DUMMY_LEVEL, 0L, null));
-        meta1.add(new DataFileMeta("file2", 100, 300, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_KEY_STATS, null,
-                1, 1, 1, DUMMY_LEVEL, 0L, null));
+        meta1.add(new DataFileMeta("file1", 100, 200, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
+                1, 1, 1, DUMMY_LEVEL, 0L, null, null, null));
+        meta1.add(new DataFileMeta("file2", 100, 300, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
+                1, 1, 1, DUMMY_LEVEL, 0L, null, null, null));
 
         List<DataFileMeta> meta2 = new ArrayList<>();
-        meta2.add(new DataFileMeta("file3", 100, 400, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_KEY_STATS, null,
-                1, 1, 1, DUMMY_LEVEL, 0L, null));
+        meta2.add(new DataFileMeta("file3", 100, 400, EMPTY_MIN_KEY, EMPTY_MAX_KEY, EMPTY_STATS, EMPTY_STATS,
+                1, 1, 1, DUMMY_LEVEL, 0L, null, null, null));
         this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row1).withBucket(1)
                 .withBucketPath("not used").withDataFiles(meta1).isStreaming(false).build());
         this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row2).withBucket(1)
@@ -157,6 +157,7 @@ public class PaimonMetadataTest {
         };
         com.starrocks.catalog.Table table = metadata.getTable("db1", "tbl1");
         PaimonTable paimonTable = (PaimonTable) table;
+        Assert.assertTrue(metadata.tableExists("db1", "tbl1"));
         Assert.assertEquals("db1", paimonTable.getCatalogDBName());
         Assert.assertEquals("tbl1", paimonTable.getCatalogTableName());
         Assert.assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
@@ -170,14 +171,28 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testTableExists(@Mocked FileStoreTable paimonNativeTable) {
+    public void testGetDatabaseDoesNotExist() throws Exception {
+        String dbName = "nonexistentDb";
         new Expectations() {
             {
-                paimonNativeCatalog.tableExists((Identifier) any);
-                result = true;
+                paimonNativeCatalog.getDatabase(dbName);
+                result = new Catalog.DatabaseNotExistException("Database does not exist");
             }
         };
-        Assert.assertTrue(metadata.tableExists("db1", "tbl1"));
+        Assert.assertNull(metadata.getDb("nonexistentDb"));
+    }
+
+    @Test
+    public void testGetTableDoesNotExist() throws Exception {
+        Identifier identifier = new Identifier("nonexistentDb", "nonexistentTbl");
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable(identifier);
+                result = new Catalog.TableNotExistException(identifier);
+            }
+        };
+        Assert.assertFalse(metadata.tableExists("nonexistentDb", "nonexistentTbl"));
+        Assert.assertNull(metadata.getTable("nonexistentDb", "nonexistentTbl"));
     }
 
     @Test

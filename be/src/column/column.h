@@ -25,6 +25,7 @@
 #include "common/statusor.h"
 #include "gutil/casts.h"
 #include "storage/delete_condition.h" // for DelCondSatisfied
+#include "util/slice.h"
 
 namespace starrocks {
 
@@ -316,6 +317,9 @@ public:
     virtual void serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                                                  uint32_t max_one_row_size, uint8_t* null_masks, bool has_null);
 
+    virtual void deserialize_and_append_batch_nullable(Buffer<Slice>& srcs, size_t chunk_size,
+                                                       Buffer<uint8_t>& is_nulls, bool& has_null) = 0;
+
     // deserialize one data and append to this column
     virtual const uint8_t* deserialize_and_append(const uint8_t* pos) = 0;
 
@@ -496,6 +500,24 @@ public:
 
     Status accept_mutable(ColumnVisitorMutable* visitor) override {
         return visitor->visit(static_cast<Derived*>(this));
+    }
+
+    void deserialize_and_append_batch_nullable(Buffer<Slice>& srcs, size_t chunk_size, Buffer<uint8_t>& is_nulls,
+                                               bool& has_null) override {
+        is_nulls.reserve(is_nulls.size() + chunk_size);
+        for (size_t i = 0; i < chunk_size; ++i) {
+            bool null;
+            memcpy(&null, srcs[i].data, sizeof(bool));
+            srcs[i].data += sizeof(bool);
+            is_nulls.emplace_back(null);
+
+            if (null == 0) {
+                srcs[i].data = (char*)mutable_derived()->deserialize_and_append((uint8_t*)srcs[i].data);
+            } else {
+                has_null = true;
+                mutable_derived()->append_default();
+            }
+        }
     }
 };
 

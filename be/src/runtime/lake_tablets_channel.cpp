@@ -45,6 +45,7 @@
 #include "util/countdown_latch.h"
 #include "util/runtime_profile.h"
 #include "util/stack_trace_mutex.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -239,7 +240,7 @@ private:
     bool _is_incremental_channel{false};
     lake::DeltaWriterFinishMode _finish_mode{lake::DeltaWriterFinishMode::kWriteTxnLog};
     TxnLogCollector _txn_log_collector;
-    std::set<int64_t> _immutable_partition_ids;
+
     std::map<string, string> _column_to_expr_value;
 
     // Profile counters
@@ -301,6 +302,9 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
     _txn_id = params.txn_id();
     _index_id = params.index_id();
     _schema = schema;
+#ifndef BE_TEST
+    _table_metrics = StarRocksMetrics::instance()->table_metrics(_schema->table_id());
+#endif
     _is_incremental_channel = is_incremental;
     if (params.has_lake_tablet_params() && params.lake_tablet_params().has_write_txn_log()) {
         _finish_mode = params.lake_tablet_params().write_txn_log() ? lake::DeltaWriterFinishMode::kWriteTxnLog
@@ -391,6 +395,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         response->mutable_status()->add_error_msgs("out-of-order packet");
         return;
     }
+    size_t chunk_size = chunk != nullptr ? chunk->bytes_usage() : 0;
 
     auto res = _create_write_context(chunk, request, response);
     if (!res.ok()) {
@@ -530,7 +535,8 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
             response->add_immutable_tablet_ids(tablet_id);
             response->add_immutable_partition_ids(writer->partition_id());
             immutable_tablet_ids.insert(tablet_id);
-            _immutable_partition_ids.insert(writer->partition_id());
+
+            _insert_immutable_partition(writer->partition_id());
         }
     }
 
@@ -558,6 +564,10 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     }
 
     auto wait_writer_ns = finish_wait_writer_ts - start_wait_writer_ts;
+#ifndef BE_TEST
+    _table_metrics->load_rows.increment(total_row_num);
+    _table_metrics->load_bytes.increment(chunk_size);
+#endif
     COUNTER_UPDATE(_add_chunk_counter, 1);
     COUNTER_UPDATE(_add_chunk_timer, watch.elapsed_time());
     COUNTER_UPDATE(_add_row_num, total_row_num);
@@ -602,7 +612,7 @@ static void null_callback(const Status& status) {
 }
 
 void LakeTabletsChannel::_flush_stale_memtables() {
-    if (_immutable_partition_ids.empty() && config::stale_memtable_flush_time_sec <= 0) {
+    if (_is_immutable_partition_empty() && config::stale_memtable_flush_time_sec <= 0) {
         return;
     }
     bool high_mem_usage = false;
@@ -616,7 +626,7 @@ void LakeTabletsChannel::_flush_stale_memtables() {
         bool log_flushed = false;
         auto last_write_ts = writer->last_write_ts();
         if (last_write_ts > 0) {
-            if (_immutable_partition_ids.count(writer->partition_id()) > 0) {
+            if (_has_immutable_partition(writer->partition_id())) {
                 if (high_mem_usage) {
                     log_flushed = true;
                     writer->flush(null_callback);
