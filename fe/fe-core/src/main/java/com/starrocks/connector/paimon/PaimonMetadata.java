@@ -200,28 +200,6 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
     }
 
-    private String getPartitionName(List<String> partitionColumnNames,
-                                    List<DataType> partitionColumnTypes,
-                                    String[] partitionValues) {
-        if (partitionValues.length != partitionColumnNames.size()) {
-            String errorMsg = String.format("The length of partitionValues %s is not equal to " +
-                    "the partitionColumnNames %s.", partitionValues.length, partitionColumnNames.size());
-            throw new IllegalArgumentException(errorMsg);
-        }
-
-        StringBuilder sb = new StringBuilder();
-        for (int i = 0; i < partitionValues.length; i++) {
-            String column = partitionColumnNames.get(i);
-            String value = partitionValues[i].trim();
-            if (partitionColumnTypes.get(i) instanceof DateType) {
-                value = DateTimeUtils.formatDate(Integer.parseInt(value));
-            }
-            sb.append(column).append("=").append(value);
-            sb.append("/");
-        }
-
-        return sb.substring(0, sb.length() - 1);
-    }
 
     private Long convertToSystemDefaultTime(Timestamp lastUpdateTime) {
         LocalDateTime localDateTime = lastUpdateTime.toLocalDateTime();
