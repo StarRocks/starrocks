@@ -98,6 +98,9 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                         af.value().equals("BigQueryLogScanRowsThreshold")) {
                     continue;
                 }
+                if (af.value().equalsIgnoreCase("features")) {
+                    continue;
+                }
 
                 if (af.value().equals("Time")) {
                     queryTime = (long) f.get(event);
@@ -179,8 +182,6 @@ public class AuditLogBuilder extends Plugin implements AuditPlugin {
                     execution.append("|database=").append(event.db);
                     execution.append("|").append(event.features);
                     AuditLog.getFeaturesAudit().info(execution.toString());
-                    // reset the features to avoid be recorded into audit log again
-                    event.features = null;
                 }
                 event.features = null;
                 if (Config.audit_log_json_format) {
