@@ -36,7 +36,7 @@ public interface CostPredictor {
      */
     class ServiceBasedCostPredictor implements CostPredictor, Closeable {
 
-        private static final String memCostUrl = "/predict_csv";
+        private static final String PREDICT_URL = "/predict_csv";
         private static final ServiceBasedCostPredictor INSTANCE = new ServiceBasedCostPredictor();
 
         private final CloseableHttpClient httpClient = HttpClients.createDefault();
@@ -59,7 +59,7 @@ public interface CostPredictor {
 
             try {
                 // Use Apache HttpClient to send the HTTP request
-                HttpPost httpPost = new HttpPost(Config.query_cost_prediction_service_address + memCostUrl);
+                HttpPost httpPost = new HttpPost(Config.query_cost_prediction_service_address + PREDICT_URL);
 
                 // Encode the request in CSV format
                 String csvData = header + "\n" + featureString;
