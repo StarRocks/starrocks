@@ -22,6 +22,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -68,6 +69,9 @@ public class AutovacuumDaemon extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
+        if (FeConstants.runningUnitTest) {
+            return;
+        }
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
@@ -139,6 +143,12 @@ public class AutovacuumDaemon extends FrontendDaemon {
             if (minRetainVersion <= 0) {
                 minRetainVersion = Math.max(1, visibleVersion - Config.lake_autovacuum_max_previous_versions);
             }
+            if (Config.lake_autovacuum_by_version && partition.getLastSuccVacuumVersion() >= minRetainVersion) {
+                LOG.info("Vacuumed {}.{}.{} version:{} already vacuum successfully", db.getFullName(), table.getName(), 
+                          partition.getId(), minRetainVersion);
+                partition.setLastVacuumTime(startTime);
+                return;
+            }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
@@ -157,6 +167,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         boolean hasError = false;
         long vacuumedFiles = 0;
         long vacuumedFileSize = 0;
+        long vacuumedVersion = Long.MAX_VALUE;
         boolean needDeleteTxnLog = true;
         List<Future<VacuumResponse>> responseFutures = Lists.newArrayListWithCapacity(nodeToTablets.size());
         for (Map.Entry<ComputeNode, List<Long>> entry : nodeToTablets.entrySet()) {
@@ -195,6 +206,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
                 } else {
                     vacuumedFiles += response.vacuumedFiles;
                     vacuumedFileSize += response.vacuumedFileSize;
+                    vacuumedVersion = Math.min(vacuumedVersion, response.vacuumedVersion);
                 }
             } catch (InterruptedException e) {
                 LOG.warn("thread interrupted");
@@ -208,6 +220,9 @@ public class AutovacuumDaemon extends FrontendDaemon {
         }
 
         partition.setLastVacuumTime(startTime);
+        if (!hasError && vacuumedVersion > partition.getLastSuccVacuumVersion()) {
+            partition.setLastSuccVacuumVersion(minRetainVersion);
+        }
         LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} " +
                         "visibleVersion={} minRetainVersion={} minActiveTxnId={} cost={}ms",
                 db.getFullName(), table.getName(), partition.getId(), hasError, vacuumedFiles, vacuumedFileSize,
@@ -219,5 +234,9 @@ public class AutovacuumDaemon extends FrontendDaemon {
         Optional<Long> b =
                 GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getActiveTxnIdOfTable(table.getId());
         return Math.min(a, b.orElse(Long.MAX_VALUE));
+    }
+
+    public void testVacuumPartitionImpl(Database db, OlapTable table, PhysicalPartition partition) {
+        vacuumPartitionImpl(db, table, partition);
     }
 }

@@ -277,7 +277,7 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
 static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_view root_dir, int64_t tablet_id,
                                       int64_t grace_timestamp, int64_t min_retain_version,
                                       AsyncFileDeleter* datafile_deleter, AsyncFileDeleter* metafile_deleter,
-                                      int64_t* total_datafile_size) {
+                                      int64_t* total_datafile_size, int64_t* vacuumed_version) {
     auto t0 = butil::gettimeofday_ms();
     auto meta_dir = join_path(root_dir, kMetadataDirectoryName);
     auto data_dir = join_path(root_dir, kSegmentDirectoryName);
@@ -348,6 +348,7 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     auto t1 = butil::gettimeofday_ms();
     g_metadata_travel_latency << (t1 - t0);
 
+    *vacuumed_version = final_retain_version - 1;
     if (!skip_check_grace_timestamp) {
         // All tablet metadata files encountered were created after the grace timestamp, there were no files to delete
         return Status::OK();
@@ -371,7 +372,8 @@ static void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, cons
 
 static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_dir,
                                      const std::vector<int64_t>& tablet_ids, int64_t min_retain_version,
-                                     int64_t grace_timestamp, int64_t* vacuumed_files, int64_t* vacuumed_file_size) {
+                                     int64_t grace_timestamp, int64_t* vacuumed_files, int64_t* vacuumed_file_size,
+                                     int64_t* vacuumed_version) {
     DCHECK(tablet_mgr != nullptr);
     DCHECK(std::is_sorted(tablet_ids.begin(), tablet_ids.end()));
     DCHECK(min_retain_version >= 0);
@@ -382,12 +384,16 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     auto metafile_delete_cb = [=](const std::vector<std::string>& files) {
         erase_tablet_metadata_from_metacache(tablet_mgr, files);
     };
-
     for (auto tablet_id : tablet_ids) {
+        int64_t tablet_vacuumed_version = 0;
         AsyncFileDeleter datafile_deleter(config::lake_vacuum_min_batch_delete_size);
         AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
         RETURN_IF_ERROR(collect_files_to_vacuum(tablet_mgr, root_dir, tablet_id, grace_timestamp, min_retain_version,
-                                                &datafile_deleter, &metafile_deleter, vacuumed_file_size));
+                                                &datafile_deleter, &metafile_deleter, vacuumed_file_size, &tablet_vacuumed_version));
+        if (*vacuumed_version == 0 || *vacuumed_version > tablet_vacuumed_version) {
+            // set partition vacuumed_version to min tablet vacuumed version
+            *vacuumed_version = tablet_vacuumed_version;
+        }
         RETURN_IF_ERROR(datafile_deleter.finish());
         RETURN_IF_ERROR(metafile_deleter.finish());
         (*vacuumed_files) += datafile_deleter.delete_count();
@@ -466,16 +472,18 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
 
     int64_t vacuumed_files = 0;
     int64_t vacuumed_file_size = 0;
+    int64_t vacuumed_version = 0;
 
     std::sort(tablet_ids.begin(), tablet_ids.end());
 
     RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, root_loc, tablet_ids, min_retain_version, grace_timestamp,
-                                           &vacuumed_files, &vacuumed_file_size));
+                                           &vacuumed_files, &vacuumed_file_size, &vacuumed_version));
     if (request.delete_txn_log()) {
         RETURN_IF_ERROR(vacuum_txn_log(root_loc, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
     }
     response->set_vacuumed_files(vacuumed_files);
     response->set_vacuumed_file_size(vacuumed_file_size);
+    response->set_vacuumed_version(vacuumed_version);
     return Status::OK();
 }
 
