@@ -631,6 +631,10 @@ public class StarRocksAssert {
         return withMTableNames(null, List.of(table), null);
     }
 
+    public Database getDb(String dbName) {
+        return ctx.getGlobalStateMgr().getLocalMetastore().getDb(dbName);
+    }
+
     public Table getTable(String dbName, String tableName) {
         return ctx.getGlobalStateMgr().getLocalMetastore().mayGetDb(dbName)
                     .map(db -> GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName))
