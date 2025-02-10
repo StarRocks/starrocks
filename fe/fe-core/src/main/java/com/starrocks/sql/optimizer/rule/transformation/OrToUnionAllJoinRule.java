@@ -127,6 +127,10 @@ public class OrToUnionAllJoinRule extends TransformationRule {
             if (!(child instanceof BinaryPredicateOperator)) {
                 return false;
             }
+            BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) child;
+            if (binaryPredicate.getBinaryType() != BinaryType.EQ) {
+                return false;
+            }
         }
         return true;
     }
