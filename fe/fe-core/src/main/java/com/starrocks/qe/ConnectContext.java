@@ -221,6 +221,9 @@ public class ConnectContext {
     protected boolean isMetadataContext = false;
     protected boolean needQueued = true;
 
+    // Bypass the authorizer check for certain cases
+    protected boolean bypassAuthorizerCheck = false;
+
     protected DumpInfo dumpInfo;
 
     // The related db ids for current sql
@@ -921,6 +924,14 @@ public class ConnectContext {
 
     public void setNeedQueued(boolean needQueued) {
         this.needQueued = needQueued;
+    }
+
+    public boolean isBypassAuthorizerCheck() {
+        return bypassAuthorizerCheck;
+    }
+
+    public void setBypassAuthorizerCheck(boolean value) {
+        this.bypassAuthorizerCheck = value;
     }
 
     public ConnectContext getParent() {

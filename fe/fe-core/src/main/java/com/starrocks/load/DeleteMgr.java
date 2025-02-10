@@ -99,7 +99,6 @@ import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
-import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
@@ -311,11 +310,10 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         String predicate = stmt.getWherePredicate().toSql();
         String fakeSql = String.format("SELECT * FROM %s WHERE %s", tableName, predicate);
         PhysicalOlapScanOperator physicalOlapScanOperator;
-        // Switch to ROOT user to avoid privilege issue, current user may have only DELETE privilege but not SELECT
         ConnectContext currentSession = ConnectContext.get();
-        ConnectContext rootContext = StatisticUtils.buildConnectContext();
-        rootContext.setDatabase(currentSession.getDatabase());
-        try (var guard = rootContext.bindScope()) {
+        try {
+            // Bypass the privilege check, as current user may have only the DELETE privilege but not SELECT
+            currentSession.setBypassAuthorizerCheck(true);
             List<StatementBase> parse = SqlParser.parse(fakeSql, currentSession.getSessionVariable());
             StatementBase selectStmt = parse.get(0);
             Analyzer.analyze(selectStmt, ConnectContext.get());
@@ -330,6 +328,8 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         } catch (Exception e) {
             LOG.warn("failed to do partition pruning for delete {}", stmt.toString(), e);
             return Lists.newArrayList(table.getVisiblePartitionNames());
+        } finally {
+            currentSession.setBypassAuthorizerCheck(false);
         }
         List<Long> selectedPartitionId = physicalOlapScanOperator.getSelectedPartitionId();
         return ListUtils.emptyIfNull(selectedPartitionId)
