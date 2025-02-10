@@ -287,6 +287,19 @@ public final class MetricRepo {
             STARROCKS_METRIC_REGISTER.addMetric(gauge);
         }
 
+        GaugeMetric<Long> routineLoadUnstableJobsGauge = new GaugeMetric<Long>("routine_load_jobs",
+                MetricUnit.NOUNIT, "routine load jobs") {
+            @Override
+            public Long getValue() {
+                if (null == routineLoadManger) {
+                    return 0L;
+                }
+                return routineLoadManger.numUnstableJobs();
+            }
+        };
+        routineLoadUnstableJobsGauge.addLabel(new MetricLabel("state", "UNSTABLE"));
+        STARROCKS_METRIC_REGISTER.addMetric(routineLoadUnstableJobsGauge);
+
         // qps, rps, error rate and query latency
         // these metrics should be set an init value, in case that metric calculator is not running
         GAUGE_QUERY_PER_SECOND = new GaugeMetricImpl<>("qps", MetricUnit.NOUNIT, "query per second");
