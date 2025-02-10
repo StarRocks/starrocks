@@ -1816,12 +1816,8 @@ public class DatabaseTransactionMgr {
         writeLock();
         try {
             LOG.debug("replay a transaction state batch{}", transactionStateBatch);
-<<<<<<< HEAD
-            Database db = globalStateMgr.getDb(transactionStateBatch.getDbId());
-=======
             transactionStateBatch.replaySetTransactionStatus();
-            Database db = globalStateMgr.getLocalMetastore().getDb(transactionStateBatch.getDbId());
->>>>>>> f74f1916c4 ([BugFix] Fix the issue where the FE follower cannot update the load status. (#55758))
+            Database db = globalStateMgr.getDb(transactionStateBatch.getDbId());
             updateCatalogAfterVisibleBatch(transactionStateBatch, db);
 
             unprotectSetTransactionStateBatch(transactionStateBatch, true);
