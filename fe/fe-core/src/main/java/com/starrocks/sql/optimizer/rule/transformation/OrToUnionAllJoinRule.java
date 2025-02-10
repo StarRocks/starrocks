@@ -68,7 +68,7 @@ import java.util.Map;
  *                             /           \
  *         +-------------------------+    +-------------------------+
  *         | BinaryPredicateOperator |    | BinaryPredicateOperator |
- *         | (t0.v1 = t1.v4)         |    | (t0.v2 = t1.v5)         |
+ *         | (l.k1 = r.v1)           |    | (l.k1 = r.v2)           |
  *         +-------------------------+    +-------------------------+
  *
  *                                       |
@@ -89,7 +89,7 @@ import java.util.Map;
  *                           /                      /                    \
  *       +-------------------------+   +------------------------+  +------------------------+
  *       | BinaryPredicateOperator |   | BinaryPredicateOperator|  | BinaryPredicateOperator|
- *       | (t0.v1 = t1.v4)         |   | (t0.v2 = t1.v5)        |  | (t0.v1 != t1.v4)       |
+ *       | (l.k1 = r.v1)           |   | (l.k1 = r.v2)          |  | (l.k1 != r.v1)         |
  *       +-------------------------+   +------------------------+  +------------------------+
  *
  *
