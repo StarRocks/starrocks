@@ -588,7 +588,8 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public String getSchedulerExplain() {
-        String predict = "predicted memory cost: " + getPredictedCost() + "\n";
+        String predict = Config.enable_query_cost_prediction ?
+                "predicted memory cost: " + getPredictedCost() + "\n" : "";
         return predict +
                 executionDAG.getFragmentsInPreorder().stream()
                 .map(ExecutionFragment::getExplainString)
