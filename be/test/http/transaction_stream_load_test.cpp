@@ -791,7 +791,9 @@ TEST_F(TransactionStreamLoadActionTest, release_resource_for_success_request) {
         auto evb = evbuffer_new();
         evbuffer_add(evb, content.data(), content.size());
         DeferOp free_evb([&]() { evbuffer_free(evb); });
-        struct evhttp_request ev_req{.remote_host = nullptr, .input_buffer = evb};
+        struct evhttp_request ev_req {
+            .remote_host = nullptr, .input_buffer = evb
+        };
         request._ev_req = &ev_req;
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, std::to_string(content.length()));
@@ -856,7 +858,9 @@ TEST_F(TransactionStreamLoadActionTest, release_resource_for_on_header_failure) 
         auto evb = evbuffer_new();
         evbuffer_add(evb, content.data(), content.size());
         DeferOp free_evb([&]() { evbuffer_free(evb); });
-        struct evhttp_request ev_req{.remote_host = nullptr, .input_buffer = evb};
+        struct evhttp_request ev_req {
+            .remote_host = nullptr, .input_buffer = evb
+        };
         request._ev_req = &ev_req;
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, std::to_string(content.length()));
@@ -916,7 +920,9 @@ TEST_F(TransactionStreamLoadActionTest, release_resource_for_not_handle) {
         auto evb = evbuffer_new();
         evbuffer_add(evb, content.data(), content.size());
         DeferOp free_evb([&]() { evbuffer_free(evb); });
-        struct evhttp_request ev_req{.remote_host = nullptr, .input_buffer = evb};
+        struct evhttp_request ev_req {
+            .remote_host = nullptr, .input_buffer = evb
+        };
         request._ev_req = &ev_req;
         request._headers.emplace(HttpHeaders::AUTHORIZATION, "Basic cm9vdDo=");
         request._headers.emplace(HttpHeaders::CONTENT_LENGTH, std::to_string(content.length()));
