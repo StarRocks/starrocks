@@ -31,18 +31,13 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
-import com.starrocks.persist.CreateTableInfo;
-import com.starrocks.persist.OperationType;
-import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.TaskBuilder;
@@ -50,8 +45,6 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.schema.MTable;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
-import com.starrocks.sql.analyzer.AlterSystemStmtAnalyzer;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
@@ -60,7 +53,6 @@ import com.starrocks.sql.ast.CreateMaterializedViewStmt;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.RefreshSchemeClause;
 import com.starrocks.sql.ast.StatementBase;
-import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.parser.SqlParser;
@@ -68,8 +60,6 @@ import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
-import com.starrocks.system.Backend;
-import com.starrocks.system.SystemInfoService;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
@@ -4600,237 +4590,27 @@ public class CreateMaterializedViewTest {
     }
 
     @Test
-    public void testEnableTransparentMVRewrite() throws Exception {
-        // disable
-        starRocksAssert.withMaterializedView("create materialized view mv_invalid " +
-                "refresh async " +
-                "properties('transparent_mv_rewrite_mode' = 'false') " +
-                "as select * from t1 limit 10");
-        String sql = starRocksAssert.showCreateTable("show create table mv_invalid");
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv_invalid` " +
-                "(`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, `c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, " +
-                "`c_1_10`, `c_1_11`, `c_1_12`)\n" +
-                "DISTRIBUTED BY RANDOM\n" +
-                "REFRESH ASYNC\n" +
-                "PROPERTIES (\n" +
-                "\"replicated_storage\" = \"true\",\n" +
-                "\"transparent_mv_rewrite_mode\" = \"false\",\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"storage_medium\" = \"HDD\"\n" +
-                ")\n" +
-                "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                "`t1`.`c_1_12`\n" +
-                "FROM `test`.`t1` LIMIT 10;", sql);
-        starRocksAssert.dropMaterializedView("mv_invalid");
-
-        // enable
-        starRocksAssert.withMaterializedView("create materialized view mv_enable " +
-                "refresh async " +
-                "properties('transparent_mv_rewrite_mode' = 'true') " +
-                "as select * from t1");
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
-                        "`c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
-                        "DISTRIBUTED BY RANDOM\n" +
-                        "REFRESH ASYNC\n" +
-                        "PROPERTIES (\n" +
-                        "\"replicated_storage\" = \"true\",\n" +
-                        "\"transparent_mv_rewrite_mode\" = \"true\",\n" +
-                        "\"replication_num\" = \"1\",\n" +
-                        "\"storage_medium\" = \"HDD\"\n" +
-                        ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1`;",
-                starRocksAssert.showCreateTable("show create table mv_enable"));
-        starRocksAssert.refreshMV("refresh materialized view mv_enable with sync mode");
-        MaterializedView mv = starRocksAssert.getMv("test", "mv_enable");
-        Assert.assertTrue(mv.isEnableTransparentRewrite());
-        Assert.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.TRUE));
-
-        starRocksAssert.ddl("alter materialized view mv_enable set('transparent_mv_rewrite_mode'='false') ");
-        sql = starRocksAssert.showCreateTable("show create table mv_enable");
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
-                        "`c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
-                        "DISTRIBUTED BY RANDOM\n" +
-                        "REFRESH ASYNC\n" +
-                        "PROPERTIES (\n" +
-                        "\"replicated_storage\" = \"true\",\n" +
-                        "\"transparent_mv_rewrite_mode\" = \"FALSE\",\n" +
-                        "\"replication_num\" = \"1\",\n" +
-                        "\"storage_medium\" = \"HDD\"\n" +
-                        ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1`;", sql);
-        Assert.assertTrue(!mv.isEnableTransparentRewrite());
-        Assert.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.FALSE));
-
-        starRocksAssert.ddl("alter materialized view mv_enable set('transparent_mv_rewrite_mode'='transparent_or_error') ");
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
-                        "`c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
-                        "DISTRIBUTED BY RANDOM\n" +
-                        "REFRESH ASYNC\n" +
-                        "PROPERTIES (\n" +
-                        "\"replicated_storage\" = \"true\",\n" +
-                        "\"transparent_mv_rewrite_mode\" = \"TRANSPARENT_OR_ERROR\",\n" +
-                        "\"replication_num\" = \"1\",\n" +
-                        "\"storage_medium\" = \"HDD\"\n" +
-                        ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1`;",
-                starRocksAssert.showCreateTable("show create table mv_enable"));
-        Assert.assertTrue(mv.isEnableTransparentRewrite());
-        Assert.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.TRANSPARENT_OR_ERROR));
-        starRocksAssert.ddl("alter materialized view mv_enable set('transparent_mv_rewrite_mode'='TRANSPARENT_OR_DEFAULT') ");
-        Assert.assertEquals("CREATE MATERIALIZED VIEW `mv_enable` (`c_1_0`, `c_1_1`, `c_1_2`, `c_1_3`, " +
-                        "`c_1_4`, `c_1_5`, `c_1_6`, `c_1_7`, `c_1_8`, `c_1_9`, `c_1_10`, `c_1_11`, `c_1_12`)\n" +
-                        "DISTRIBUTED BY RANDOM\n" +
-                        "REFRESH ASYNC\n" +
-                        "PROPERTIES (\n" +
-                        "\"replicated_storage\" = \"true\",\n" +
-                        "\"transparent_mv_rewrite_mode\" = \"TRANSPARENT_OR_DEFAULT\",\n" +
-                        "\"replication_num\" = \"1\",\n" +
-                        "\"storage_medium\" = \"HDD\"\n" +
-                        ")\n" +
-                        "AS SELECT `t1`.`c_1_0`, `t1`.`c_1_1`, `t1`.`c_1_2`, `t1`.`c_1_3`, `t1`.`c_1_4`, `t1`.`c_1_5`, " +
-                        "`t1`.`c_1_6`, `t1`.`c_1_7`, `t1`.`c_1_8`, `t1`.`c_1_9`, `t1`.`c_1_10`, `t1`.`c_1_11`, " +
-                        "`t1`.`c_1_12`\n" +
-                        "FROM `test`.`t1`;",
-                starRocksAssert.showCreateTable("show create table mv_enable"));
-        Assert.assertTrue(mv.isEnableTransparentRewrite());
-        Assert.assertTrue(mv.getTransparentRewriteMode().equals(TableProperty.MVTransparentRewriteMode.TRANSPARENT_OR_DEFAULT));
-        starRocksAssert.dropMaterializedView("mv_enable");
-    }
-
-    @Test
-    public void testCreateMVWithLocationAndPersist() throws Exception {
-        // add label to backend
-        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        System.out.println(systemInfoService.getBackends());
-        List<Long> backendIds = systemInfoService.getBackendIds();
-        Backend backend = systemInfoService.getBackend(backendIds.get(0));
-        String modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
-                ":" + backend.getHeartbeatPort() + "' set ('" +
-                AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = 'rack:rack1')";
-        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(modifyBackendPropSqlStr, connectContext),
-                connectContext);
-
-        // add a backend with no location
-        UtFrameUtils.addMockBackend(12011);
-
-        // init empty image
-        UtFrameUtils.PseudoJournalReplayer.resetFollowerJournalQueue();
-        UtFrameUtils.PseudoImage initialImage = new UtFrameUtils.PseudoImage();
-        GlobalStateMgr.getCurrentState().getLocalMetastore().save(initialImage.getImageWriter());
-
-        // Create a mv with specific location, we should expect the tablets of that mv will only distribute on
-        // that single labeled backend.
-        MaterializedView materializedView = getMaterializedViewChecked("create materialized view mv_with_location " +
-                "DISTRIBUTED BY HASH(`c_1_0`)\n" +
-                "buckets 15\n" +
-                "REFRESH MANUAL\n" +
-                "properties('labels.location' = 'rack:*') " +
-                "as select c_1_0 from t1 limit 10");
-
-        String result = starRocksAssert.showCreateTable("show create table mv_with_location");
-        System.out.println(result);
-        Assert.assertTrue(result.contains("rack:*"));
-        for (Tablet tablet : materializedView.getPartitions().iterator().next().getBaseIndex().getTablets()) {
-            Assert.assertEquals(backend.getId(), (long) tablet.getBackendIds().iterator().next());
+    public void testDisableCreateListMVWithDateTimeRollup1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS test_tbl_A (\n" +
+                "  hour DATETIME,\n" +
+                "  partner_id BIGINT,\n" +
+                "  impressions BIGINT\n" +
+                ")PARTITION BY (hour);");
+        try {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test.test_mv_A\n" +
+                    "PARTITION BY day\n" +
+                    "REFRESH ASYNC\n" +
+                    "AS\n" +
+                    "select\n" +
+                    "    date_trunc('day', hour) as day,\n" +
+                    "    partner_id,\n" +
+                    "    sum(impressions) as impressions\n" +
+                    "from test_tbl_A\n" +
+                    "group by 1,2");
+            Assert.fail();
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("List materialized view's partition expression can only refer " +
+                    "ref-base-table's partition expression without transforms but contains"));
         }
-
-        // make final image
-        UtFrameUtils.PseudoImage finalImage = new UtFrameUtils.PseudoImage();
-        GlobalStateMgr.getCurrentState().getLocalMetastore().save(finalImage.getImageWriter());
-
-        // test replay
-        LocalMetastore localMetastoreFollower = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
-        localMetastoreFollower.load(new SRMetaBlockReaderV2(initialImage.getJsonReader()));
-        CreateTableInfo info = (CreateTableInfo)
-                UtFrameUtils.PseudoJournalReplayer.replayNextJournal(OperationType.OP_CREATE_TABLE_V2);
-        localMetastoreFollower.replayCreateTable(info);
-        MaterializedView mv = (MaterializedView) localMetastoreFollower.getDb("test")
-                .getTable("mv_with_location");
-        System.out.println(mv.getLocation());
-        Assert.assertEquals(1, mv.getLocation().size());
-        Assert.assertTrue(mv.getLocation().containsKey("rack"));
-
-        // test restart
-        LocalMetastore localMetastoreLeader = new LocalMetastore(GlobalStateMgr.getCurrentState(), null, null);
-        localMetastoreLeader.load(new SRMetaBlockReaderV2(finalImage.getJsonReader()));
-        mv = (MaterializedView) localMetastoreLeader.getDb("test")
-                .getTable("mv_with_location");
-        System.out.println(mv.getLocation());
-        Assert.assertEquals(1, mv.getLocation().size());
-        Assert.assertTrue(mv.getLocation().containsKey("rack"));
-
-
-        // clean: remove backend 12011
-        modifyBackendPropSqlStr = "alter system modify backend '" + backend.getHost() +
-                ":" + backend.getHeartbeatPort() + "' set ('" +
-                AlterSystemStmtAnalyzer.PROP_KEY_LOCATION + "' = '')";
-        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(modifyBackendPropSqlStr, connectContext),
-                connectContext);
-        backend = systemInfoService.getBackend(12011);
-        systemInfoService.dropBackend(backend);
-    }
-
-    @Test
-    public void testCreateListPartitionedMVOfOlap() throws Exception {
-        String sql = "CREATE TABLE `s1` (\n" +
-                "   `id` varchar(36),\n" +
-                "   `location_id` varchar(36),\n" +
-                "   `location_id_hash` int,\n" +
-                "   `source_id` varchar(36),\n" +
-                "   `person_id` varchar(36)\n" +
-                ") ENGINE=OLAP\n" +
-                "PRIMARY KEY(`id`,`location_id`,`location_id_hash`)\n" +
-                "PARTITION BY (`location_id_hash`)\n" +
-                "DISTRIBUTED BY HASH(`id`) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "   \"replication_num\" = \"1\"\n" +
-                ");";
-        starRocksAssert.withTable(sql);
-        String mvSql = "create materialized view test_mv1\n" +
-                "PARTITION BY `location_id_hash`\n" +
-                "DISTRIBUTED BY HASH(`id`) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "    \"replication_num\" = \"1\"\n" +
-                ") \n" +
-                "as select `id`, `location_id`, `location_id_hash` from `s1`;";
-        starRocksAssert.withMaterializedView(mvSql, () -> {
-            MaterializedView mv = starRocksAssert.getMv("test", "test_mv1");
-            Assert.assertTrue(mv.getPartitionInfo().isListPartition());
-        });
-        starRocksAssert.dropTable("s1");
-    }
-
-    @Test
-    public void testCreateListPartitionedMVOfExternal() throws Exception {
-        String sql = "create materialized view mv1 " +
-                "partition by (d)" +
-                "distributed by hash(a) buckets 10 " +
-                "REFRESH DEFERRED MANUAL " +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\"\n" +
-                ") " +
-                "as select a, b, c, d from jdbc0.partitioned_db0.tbl1;";
-        CreateMaterializedViewStatement stmt =
-                (CreateMaterializedViewStatement) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        Expr partitionByExpr = stmt.getPartitionByExpr();
-        Assert.assertTrue(partitionByExpr instanceof SlotRef);
-        List<SlotRef> slotRefs = Lists.newArrayList();
-        partitionByExpr.collect(SlotRef.class, slotRefs);
-        Assert.assertEquals(partitionByExpr, slotRefs.get(0));
-        Assert.assertEquals("d", slotRefs.get(0).getColumnName());
-        starRocksAssert.withMaterializedView(sql, () -> {
-            MaterializedView mv = starRocksAssert.getMv("test", "mv1");
-            Assert.assertTrue(mv.getPartitionInfo().isListPartition());
-        });
     }
 }
