@@ -15,12 +15,22 @@
 package com.starrocks.sql.spm;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.HintNode;
+import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.SetVarHint;
+import com.starrocks.analysis.StringLiteral;
+import com.starrocks.common.DdlException;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.PlannerMetaLocker;
+import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.spm.CreateBaselinePlanStmt;
+import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -34,6 +44,7 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 // to build plan for bind sql
 public class SPMPlanBuilder {
@@ -69,6 +80,7 @@ public class SPMPlanBuilder {
         generatePlan();
 
         BaselinePlan baselinePlan = new BaselinePlan();
+        baselinePlan.isGlobal = stmt.isGlobal();
         baselinePlan.bindSqlDigest = bindSqlDigest;
         baselinePlan.bindSqlHash = bindSqlHash;
         baselinePlan.bindSql = bindSql;
@@ -81,29 +93,62 @@ public class SPMPlanBuilder {
 
     // don't need lock, because we don't need to modify table stats
     public void generatePlan() {
-        QueryRelation query = this.stmt.getPlanStmt();
+        List<HintNode> hints = this.stmt.getAllQueryScopeHints();
+        SessionVariable backupVariable = session.getSessionVariable();
+        SessionVariable cloneVariable = null;
+        if (hints != null && !hints.isEmpty()) {
+            cloneVariable = (SessionVariable) backupVariable.clone();
+            for (HintNode hint : hints) {
+                if (!(hint instanceof SetVarHint)) {
+                    UnsupportedException.unsupportedException(
+                            "sql pLan manager only supported session variables: " + hint.toSql());
+                }
 
-        ColumnRefFactory columnRefFactory = new ColumnRefFactory();
-        TransformerContext transformerContext = new TransformerContext(columnRefFactory, session, null);
-        LogicalPlan logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
+                try {
+                    for (var entry : hint.getValue().entrySet()) {
+                        session.getGlobalStateMgr().getVariableMgr()
+                                .setSystemVariable(cloneVariable, new SystemVariable(
+                                        entry.getKey(), new StringLiteral(entry.getValue())), true);
+                    }
+                } catch (DdlException e) {
+                    throw new SemanticException("set variable error", e);
+                }
+            }
+            session.setSessionVariable(cloneVariable);
+        }
 
-        OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
-        optimizerContext.setOptimizerOptions(new OptimizerOptions(OptimizerOptions.OptimizerStrategy.BASELINE_PLAN));
-        Optimizer optimizer = OptimizerFactory.create(optimizerContext);
+        try {
+            QueryRelation query = this.stmt.getPlanStmt();
+            ColumnRefFactory columnRefFactory = new ColumnRefFactory();
+            TransformerContext transformerContext = new TransformerContext(columnRefFactory, session, null);
+            LogicalPlan logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(query);
 
-        OptExpression optimizedPlan = optimizer.optimize(logicalPlan.getRoot(),
-                new PhysicalPropertySet(),
-                new ColumnRefSet(logicalPlan.getOutputColumn()));
+            OptimizerContext optimizerContext = OptimizerFactory.initContext(session, columnRefFactory);
+            optimizerContext.setOptimizerOptions(
+                    new OptimizerOptions(OptimizerOptions.OptimizerStrategy.BASELINE_PLAN));
+            Optimizer optimizer = OptimizerFactory.create(optimizerContext);
 
-        SPMPlan2SQLBuilder sqlBuilder = new SPMPlan2SQLBuilder();
-        planStmtSQL = sqlBuilder.toSQL(columnRefFactory, optimizedPlan);
-        costs = optimizedPlan.getCost();
+            OptExpression optimizedPlan = optimizer.optimize(logicalPlan.getRoot(),
+                    new PhysicalPropertySet(),
+                    new ColumnRefSet(logicalPlan.getOutputColumn()));
+
+            SPMPlan2SQLBuilder sqlBuilder = new SPMPlan2SQLBuilder();
+            planStmtSQL = sqlBuilder.toSQL(hints, optimizedPlan);
+            costs = optimizedPlan.getCost();
+        } finally {
+            if (cloneVariable != null) {
+                session.setSessionVariable(backupVariable);
+            }
+        }
     }
 
     protected void formatStmt() {
         if (this.stmt.getBindStmt() != null) {
             // pass
             // has bind and plan
+            SPMPlaceholderBuilder builder = new SPMPlaceholderBuilder();
+            QueryRelation bind = builder.build(this.stmt.getBindStmt());
+
         } else {
             // only plan
             SPMPlaceholderBuilder builder = new SPMPlaceholderBuilder();
@@ -133,4 +178,12 @@ public class SPMPlanBuilder {
             locker.unlock();
         }
     }
+
+    private class SQLRelationIgnoreExprChecker extends SPMAstCheckVisitor {
+        @Override
+        public Boolean visitExpression(Expr node, ParseNode node2) {
+            return true;
+        }
+    }
+
 }

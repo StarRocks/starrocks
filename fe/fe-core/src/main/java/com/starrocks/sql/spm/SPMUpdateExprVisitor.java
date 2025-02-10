@@ -30,16 +30,16 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 public class SPMUpdateExprVisitor<C> implements AstVisitor<ParseNode, C> {
-    private Expr visitExpr(Expr node) {
+    protected Expr visitExpr(Expr node, C context) {
         if (node != null) {
-            return (Expr) node.accept(this, null);
+            return (Expr) node.accept(this, context);
         }
         return null;
     }
 
-    private List<Expr> visitExprList(List<Expr> nodes) {
+    protected List<Expr> visitExprList(List<Expr> nodes, C context) {
         if (nodes != null && !nodes.isEmpty()) {
-            return nodes.stream().map(this::visitExpr).collect(Collectors.toList());
+            return nodes.stream().map(p -> visitExpr(p, context)).collect(Collectors.toList());
         }
         return nodes;
     }
@@ -54,18 +54,18 @@ public class SPMUpdateExprVisitor<C> implements AstVisitor<ParseNode, C> {
     public ParseNode visitSelect(SelectRelation stmt, C context) {
         stmt.getCteRelations().forEach(this::visit);
         visit(stmt.getRelation());
-        stmt.getSelectList().getItems().forEach(item -> item.setExpr(visitExpr(item.getExpr())));
-        stmt.setOutputExpr(visitExprList(stmt.getOutputExpression()));
-        stmt.setWhereClause(visitExpr(stmt.getWhereClause()));
-        stmt.setGroupBy(visitExprList(stmt.getGroupBy()));
-        stmt.setHaving(visitExpr(stmt.getHaving()));
+        stmt.getSelectList().getItems().forEach(item -> item.setExpr(visitExpr(item.getExpr(), context)));
+        stmt.setOutputExpr(visitExprList(stmt.getOutputExpression(), context));
+        stmt.setWhereClause(visitExpr(stmt.getWhereClause(), context));
+        stmt.setGroupBy(visitExprList(stmt.getGroupBy(), context));
+        stmt.setHaving(visitExpr(stmt.getHaving(), context));
         return stmt;
     }
 
     public ParseNode visitJoin(JoinRelation stmt, C context) {
         visit(stmt.getLeft());
         visit(stmt.getRight());
-        visitExpr(stmt.getOnPredicate());
+        visitExpr(stmt.getOnPredicate(), context);
         return stmt;
     }
 
@@ -86,7 +86,7 @@ public class SPMUpdateExprVisitor<C> implements AstVisitor<ParseNode, C> {
     public ParseNode visitValues(ValuesRelation stmt, C context) {
         for (int i = 0; i < stmt.getRows().size(); i++) {
             List<Expr> row = stmt.getRow(i);
-            stmt.getRows().set(i, visitExprList(row));
+            stmt.getRows().set(i, visitExprList(row, context));
         }
         return stmt;
     }
@@ -101,7 +101,7 @@ public class SPMUpdateExprVisitor<C> implements AstVisitor<ParseNode, C> {
     public ParseNode visitExpression(Expr node, C context) {
         if (node.getChildren() != null && !node.getChildren().isEmpty()) {
             for (int i = 0; i < node.getChildren().size(); i++) {
-                node.setChild(i, visitExpr(node.getChild(i)));
+                node.setChild(i, visitExpr(node.getChild(i), context));
             }
         }
         return node;

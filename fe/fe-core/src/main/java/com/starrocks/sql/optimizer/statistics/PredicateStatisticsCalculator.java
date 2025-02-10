@@ -110,6 +110,9 @@ public class PredicateStatisticsCalculator {
             List<ScalarOperator> otherChildrenList = predicate.getChildren().stream().skip(1).toList();
             if (children.size() == 2 && SPMFunctions.isSPMFunctions(children.get(1))) {
                 otherChildrenList = children.get(1).getChildren().stream().skip(1).collect(Collectors.toList());
+                if (otherChildrenList.isEmpty()) {
+                    return statistics;
+                }
             }
             otherChildrenList = otherChildrenList.stream().map(this::getChildForCastOperator).distinct().collect(
                     Collectors.toList());

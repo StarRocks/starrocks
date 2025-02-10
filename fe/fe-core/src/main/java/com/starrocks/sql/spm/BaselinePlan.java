@@ -20,6 +20,8 @@ public class BaselinePlan {
 
     public boolean isEnable;
 
+    public boolean isGlobal;
+
     // bind sql with spm function, for extract placeholder
     public String bindSql;
     // bind sql without spm function, for bind query

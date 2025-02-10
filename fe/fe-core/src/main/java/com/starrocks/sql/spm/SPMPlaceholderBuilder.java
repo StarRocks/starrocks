@@ -14,13 +14,16 @@
 
 package com.starrocks.sql.spm;
 
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.ast.QueryRelation;
 
 import java.util.List;
+import java.util.Map;
 
 // replace variables to SPMFunctions
 public class SPMPlaceholderBuilder {
@@ -28,25 +31,61 @@ public class SPMPlaceholderBuilder {
 
     private long placeholderID = 0;
 
+    // original expr -> placeholder expr
+    private Map<Expr, Expr> generatePlaceholderExprMap = Maps.newHashMap();
+
+    private Map<Expr, Expr> userDefinedPlaceholderMap = Maps.newHashMap();
+
+    public Map<Expr, Expr> getGeneratePlaceholderExprMap() {
+        return generatePlaceholderExprMap;
+    }
+
+    public Map<Expr, Expr> getUserDefinedPlaceholderMap() {
+        return userDefinedPlaceholderMap;
+    }
+
     public QueryRelation build(QueryRelation query) {
         return (QueryRelation) query.accept(builder, null);
     }
 
-    private class PlaceholderBuilder extends SPMUpdateExprVisitor<Void> {
+    private class PlaceholderBuilder extends SPMUpdateExprVisitor<Expr> {
         @Override
-        public ParseNode visitInPredicate(InPredicate node, Void context) {
+        public ParseNode visitInPredicate(InPredicate node, Expr parent) {
             if (!node.isLiteralChildren()) {
-                return node;
+                return super.visitInPredicate(node, parent);
             }
             List<Expr> v = node.getChildren().stream().skip(1).toList();
-            return new InPredicate(node.getChild(0),
-                    List.of(SPMFunctions.newFunc(SPMFunctions.CONST_LIST_FUNC, placeholderID++, v)),
-                    node.isNotIn(), node.getPos());
+            Expr spm = SPMFunctions.newFunc(SPMFunctions.CONST_LIST_FUNC, placeholderID++, v);
+            Expr in = new InPredicate(node.getChild(0), List.of(spm), node.isNotIn(), node.getPos());
+            generatePlaceholderExprMap.put(node, spm);
+            return in;
         }
 
         @Override
-        public ParseNode visitLiteral(LiteralExpr node, Void context) {
-            return SPMFunctions.newFunc(SPMFunctions.CONST_VAR_FUNC, placeholderID++, List.of(node));
+        public ParseNode visitLiteral(LiteralExpr node, Expr parent) {
+            Expr s = SPMFunctions.newFunc(SPMFunctions.CONST_VAR_FUNC, placeholderID++, List.of(node));
+            generatePlaceholderExprMap.put(parent.clone(), s);
+            return s;
+        }
+
+        @Override
+        public ParseNode visitFunctionCall(FunctionCallExpr node, Expr parent) {
+            if (SPMFunctions.isSPMFunctions(node)) {
+                userDefinedPlaceholderMap.put(parent.clone(), node);
+                return node;
+            }
+
+            return super.visitFunctionCall(node, parent);
+        }
+
+        @Override
+        public ParseNode visitExpression(Expr node, Expr parent) {
+            if (node.getChildren() != null && !node.getChildren().isEmpty()) {
+                for (int i = 0; i < node.getChildren().size(); i++) {
+                    node.setChild(i, visitExpr(node.getChild(i), node));
+                }
+            }
+            return node;
         }
     }
 }

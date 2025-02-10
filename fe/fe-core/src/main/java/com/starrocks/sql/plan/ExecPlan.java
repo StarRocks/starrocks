@@ -222,7 +222,7 @@ public class ExecPlan {
                 str.append("There are ").append(planCount).append(" plans in optimizer search space\n");
             }
             if (useBaseline > 0) {
-                str.append("Using baseline plan[").append(useBaseline).append("] to optimized\n");
+                str.append("Using baseline plan[").append(useBaseline).append("]\n\n");
             }
 
             for (int i = 0; i < fragments.size(); ++i) {

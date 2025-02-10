@@ -17,12 +17,12 @@ package com.starrocks.sql.spm;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.sql.ExpressionPrinter;
 import com.starrocks.sql.common.UnsupportedException;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.HashDistributionSpec;
@@ -40,6 +40,7 @@ import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 // translate physical tree plan to SQL
 public class SPMPlan2SQLBuilder {
@@ -49,15 +50,19 @@ public class SPMPlan2SQLBuilder {
 
     private final SQLBuilder planSQLBuilder = new SQLBuilder();
 
-    public String toSQL(ColumnRefFactory factory, OptExpression plan) {
+    public String toSQL(List<HintNode> hints, OptExpression plan) {
         PlanToSQLContext context = new PlanToSQLContext();
         SQLRelation relation = plan.getOp().accept(planSQLBuilder, plan, context);
+        if (hints != null && !hints.isEmpty()) {
+            relation.hints = hints.stream().map(HintNode::toSql).collect(Collectors.joining(", "));
+        }
         return relation.toSQL();
     }
 
     private static class SQLRelation {
         String cte = "";
         String select = "";
+        String hints = "";
         String from = "";
         String where = "";
         String groupBy = "";
@@ -80,6 +85,9 @@ public class SPMPlan2SQLBuilder {
         private String toSQL() {
             StringBuilder sql = new StringBuilder();
             sql.append("SELECT ");
+            if (!StringUtils.isBlank(hints)) {
+                sql.append(hints);
+            }
             sql.append(StringUtils.isBlank(select) ? "*" : select);
             sql.append(" FROM ");
             sql.append(from);
@@ -137,7 +145,8 @@ public class SPMPlan2SQLBuilder {
 
         @Override
         public SQLRelation visit(OptExpression optExpression, PlanToSQLContext context) {
-            Preconditions.checkState(false);
+            UnsupportedException.unsupportedException(
+                    "SQLPlanManager doesn't support: " + optExpression.getOp().getOpType());
             return null;
         }
 
