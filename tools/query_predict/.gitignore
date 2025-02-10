@@ -1,0 +1,4 @@
+*.log
+*.csv
+*.json
+app_process_id.txt
