@@ -1129,7 +1129,7 @@ public class ConnectContext {
      * }
      */
     public ScopeGuard bindScope() {
-        return ScopeGuard.exchange(this);
+        return ScopeGuard.bind(this);
     }
 
     // Change current catalog of this session, and reset current database.
@@ -1285,7 +1285,7 @@ public class ConnectContext {
         private ScopeGuard() {
         }
 
-        private static ScopeGuard exchange(ConnectContext session) {
+        private static ScopeGuard bind(ConnectContext session) {
             ScopeGuard res = new ScopeGuard();
             res.prev = exchangeThreadLocalInfo(session);
             res.set = true;
