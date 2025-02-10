@@ -349,14 +349,13 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
     public PhysicalPropertySet visitPhysicalRepeat(PhysicalRepeatOperator node, ExpressionContext context) {
         checkState(childrenOutputProperties.size() == 1);
         PhysicalPropertySet childPropertySet = childrenOutputProperties.get(0);
+
+        // calculate the Intersection of RepeatColumnRef
         List<ColumnRefOperator> subRefs = Lists.newArrayList(node.getRepeatColumnRef().get(0));
         node.getRepeatColumnRef().forEach(subRefs::retainAll);
-        Set<ColumnRefOperator> allGroupingRefs = Sets.newHashSet();
-
-        node.getRepeatColumnRef().forEach(allGroupingRefs::addAll);
-        subRefs.forEach(allGroupingRefs::remove);
 
         DistributionProperty childDistribution = childPropertySet.getDistributionProperty();
+<<<<<<< HEAD
         // update null distribution info to null relax for allGroupingRefs
         if (!allGroupingRefs.isEmpty() && childDistribution.isShuffle()) {
             HashDistributionSpec distributionSpec = (HashDistributionSpec) childDistribution.getSpec();
@@ -367,8 +366,34 @@ public class OutputPropertyDeriver extends PropertyDeriverBase<PhysicalPropertyS
                     .copyWithSpec(newDistributionSpec);
             return new PhysicalPropertySet(newDistributionProperty, childPropertySet.getSortProperty(),
                     childPropertySet.getCteProperty());
+=======
+        // only if the Intersection of RepeatColumnRef is the superset of the childrenOutputProperties
+        // we can use childrenOutputProperties as RepeatNode's output property
+        // such as RepeatColumnRef is (cola,colb),(cola), and childrenOutputProperties is hash(cola)
+        // since cola won't be inserted with null value, it's safe to use childrenOutputProperties
+        // if RepeatColumnRef is (cola,colb),(cola), and childrenOutputProperties is hash(cola,colb)
+        // since cola will be inserted with null value, it's unsafe to use hash(cola,colb)
+        DistributionProperty outputDistribution = EmptyDistributionProperty.INSTANCE;
+        if (childDistribution.isShuffle()) {
+            boolean canFollowChild = true;
+            HashDistributionSpec childDistributionSpec = (HashDistributionSpec) childDistribution.getSpec();
+            Set<Integer> commonRefs = subRefs.stream().map(ColumnRefOperator::getId).collect(Collectors.toSet());
+
+            for (DistributionCol col : childDistributionSpec.getHashDistributionDesc().getDistributionCols()) {
+                if (!commonRefs.contains(col.getColId())) {
+                    canFollowChild = false;
+                    break;
+                }
+            }
+
+            if (canFollowChild) {
+                outputDistribution = childDistribution;
+            }
+>>>>>>> 7984b9bda3 ([BugFix] correct repeatnode's output property (#55682))
         }
-        return childPropertySet;
+
+        return new PhysicalPropertySet(outputDistribution, childPropertySet.getSortProperty(),
+                childPropertySet.getCteProperty());
     }
 
     @Override
