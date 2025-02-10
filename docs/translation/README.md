@@ -6,7 +6,7 @@ This README describes using GPT-4o to translate from Chinese to English, or from
 >
 > Known issues:
 >
->Frontmatter `keywords` entries are not allowed. I will submit a PR to allow them and any other frontmatter entries that we use. For now, just remove them from the source document and then add them by hand to both the source and translated doc after translation.
+> Frontmatter `keywords` entries are not allowed. [This PR](https://github.com/tcapelle/gpt_translate/pull/16) adds `keywords`, `unlisted`, and `sidebar_label` to the frontmatter. For now, test with docs that do not include `keywords` or `sidebar_label` entries.
 >
 > Pydantic error about serialization: There is an error coming up after the translation is complete. I have not debugged this yet, I will see if the author of the tranlation package can help, he knows way more about Python than I do.
 
