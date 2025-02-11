@@ -82,6 +82,7 @@ Status FlatJsonColumnWriter::append(const Column& column) {
 Status FlatJsonColumnWriter::_flat_column(Columns& json_datas) {
     // all json datas must full json
     JsonPathDeriver deriver;
+    deriver.init_flat_json_config(*_json_meta);
     std::vector<const Column*> vc;
     for (const auto& js : json_datas) {
         vc.emplace_back(js.get());

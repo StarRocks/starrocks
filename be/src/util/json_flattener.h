@@ -112,9 +112,13 @@ public:
     // dervie paths
     void derived(const std::vector<const Column*>& json_datas);
 
+    StatusOr<size_t> check_null_factor(const std::vector<const Column*>& json_datas);
+
     void derived(const std::vector<const ColumnReader*>& json_readers);
 
     bool has_remain_json() const { return _has_remain; }
+
+    void init_flat_json_config(const ColumnMetaPB& column_meta_pb);
 
     void set_generate_filter(bool generate_filter) { _generate_filter = generate_filter; }
 
@@ -160,6 +164,9 @@ private:
     std::vector<LogicalType> _types;
 
     double _min_json_sparsity_factory = config::json_flat_sparsity_factor;
+    double _max_json_null_factor = config::json_flat_null_factor;
+    int _max_column = config::json_flat_column_max;
+
     size_t _total_rows;
     FlatJsonHashMap<JsonFlatPath*, JsonFlatDesc> _derived_maps;
     std::shared_ptr<JsonFlatPath> _path_root;

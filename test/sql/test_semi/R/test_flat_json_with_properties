@@ -1,19 +1,23 @@
--- name: test_normal_flat_json @system
+-- name: test_normal_flat_json_with_properties @system
 CREATE TABLE `js1` (
   `v1` bigint(20) NULL COMMENT "",
   `v2` int(11) NULL COMMENT "",
   `j1` json NULL COMMENT "",
   `j2` json NULL COMMENT ""
-) ENGINE=OLAP 
+) ENGINE=OLAP
 DUPLICATE KEY(`v1`)
 COMMENT "OLAP"
-DISTRIBUTED BY HASH(`v1`) BUCKETS 10 
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "true",
+"enable_persistent_index" = "false",
 "replicated_storage" = "false",
 "fast_schema_evolution" = "true",
-"compression" = "LZ4"
+"compression" = "LZ4",
+"flat_json.enable" = "true",
+"flat_json.null.factor" = "0.2",
+"flat_json.sparsity.factor" = "0.2",
+"flat_json.column.max" = "120"
 );
 -- result:
 -- !result

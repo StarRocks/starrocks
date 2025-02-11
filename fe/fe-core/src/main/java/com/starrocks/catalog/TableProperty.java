@@ -87,6 +87,7 @@ import java.util.stream.Collectors;
 public class TableProperty implements Writable, GsonPostProcessable {
     private static final Logger LOG = LogManager.getLogger(TableProperty.class);
     public static final String DYNAMIC_PARTITION_PROPERTY_PREFIX = "dynamic_partition";
+    public static final String FLAT_JSON_PROPERTY_PREFIX = "flat_json";
     public static final int INVALID = -1;
 
     public static final String BINLOG_PROPERTY_PREFIX = "binlog";
@@ -185,8 +186,11 @@ public class TableProperty implements Writable, GsonPostProcessable {
     @SerializedName(value = "properties")
     private Map<String, String> properties;
 
+    private FlatJsonConfig flatJsonConfig;
+
     private transient DynamicPartitionProperty dynamicPartitionProperty =
             new DynamicPartitionProperty(Maps.newHashMap());
+
     // table's default replication num
     private Short replicationNum = RunMode.defaultReplicationNum();
 
@@ -437,6 +441,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
     // just modify binlogConfig, not properties
     public void setBinlogConfig(BinlogConfig binlogConfig) {
         this.binlogConfig = binlogConfig;
+    }
+
+    public void setFlatJsonConfig(FlatJsonConfig flatJsonConfig) {
+        this.flatJsonConfig = flatJsonConfig;
     }
 
     public TableProperty buildDynamicProperty() {
@@ -1026,6 +1034,10 @@ public class TableProperty implements Writable, GsonPostProcessable {
 
     public BinlogConfig getBinlogConfig() {
         return binlogConfig;
+    }
+
+    public FlatJsonConfig getFlatJsonConfig() {
+        return flatJsonConfig;
     }
 
     public List<UniqueConstraint> getUniqueConstraints() {
