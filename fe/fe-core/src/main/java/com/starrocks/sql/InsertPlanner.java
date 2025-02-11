@@ -384,6 +384,15 @@ public class InsertPlanner {
                 if (olapTable.getAutomaticBucketSize() > 0) {
                     ((OlapTableSink) dataSink).setAutomaticBucketSize(olapTable.getAutomaticBucketSize());
                 }
+<<<<<<< HEAD
+=======
+                if (insertStmt.isDynamicOverwrite()) {
+                    ((OlapTableSink) dataSink).setDynamicOverwrite(true);
+                }
+                if (insertStmt.isFromOverwrite()) {
+                    ((OlapTableSink) dataSink).setIsFromOverwrite(true);
+                }
+>>>>>>> 64c83285c7 ([BugFix] Fix insert overwrite loss data since dynamic open partition (#55756))
 
                 // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
                 session.getSessionVariable().setPreferComputeNode(false);

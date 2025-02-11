@@ -143,6 +143,11 @@ public class OlapTableSink extends DataSink {
     private TPartialUpdateMode partialUpdateMode;
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
     private long automaticBucketSize = 0;
+<<<<<<< HEAD
+=======
+    private boolean enableDynamicOverwrite = false;
+    private boolean isFromOverwrite = false;
+>>>>>>> 64c83285c7 ([BugFix] Fix insert overwrite loss data since dynamic open partition (#55756))
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
@@ -229,7 +234,19 @@ public class OlapTableSink extends DataSink {
         this.partialUpdateMode = mode;
     }
 
+<<<<<<< HEAD
     public void complete(String mergeCondition) throws UserException {
+=======
+    public void setDynamicOverwrite(boolean enableDynamicOverwrite) {
+        this.enableDynamicOverwrite = enableDynamicOverwrite;
+    }
+
+    public void setIsFromOverwrite(boolean isFromOverwrite) {
+        this.isFromOverwrite = isFromOverwrite;
+    }
+
+    public void complete(String mergeCondition) throws StarRocksException {
+>>>>>>> 64c83285c7 ([BugFix] Fix insert overwrite loss data since dynamic open partition (#55756))
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
         if (mergeCondition != null && !mergeCondition.isEmpty()) {
             tSink.setMerge_condition(mergeCondition);
@@ -243,7 +260,15 @@ public class OlapTableSink extends DataSink {
         if (dstTable.getState() != OlapTable.OlapTableState.NORMAL) {
             return partitionIds;
         }
+<<<<<<< HEAD
         if (!enableAutomaticPartition || Config.max_load_initial_open_partition_number <= 0
+=======
+        if (enableAutomaticPartition && enableDynamicOverwrite) {
+            return new ArrayList<>(Collections.singletonList(
+                    dstTable.getPartition(ExpressionRangePartitionInfo.AUTOMATIC_SHADOW_PARTITION_NAME).getId()));
+        }
+        if (isFromOverwrite || !enableAutomaticPartition || Config.max_load_initial_open_partition_number <= 0
+>>>>>>> 64c83285c7 ([BugFix] Fix insert overwrite loss data since dynamic open partition (#55756))
                 || partitionIds.size() < Config.max_load_initial_open_partition_number) {
             return partitionIds;
         }
