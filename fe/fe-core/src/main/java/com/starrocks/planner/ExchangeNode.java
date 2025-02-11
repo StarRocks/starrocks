@@ -85,6 +85,7 @@ public class ExchangeNode extends PlanNode {
     private long offset;
     // partitionType is used for BE's exchange source node to specify the input partition type
     // exchange source then decide whether local shuffle is needed
+    // to be set in ExecutionDAG::connectXXXFragmentToDestFragments
     private TPartitionType partitionType;
     // this is the same as input fragment's output dataPartition, right now only used for explain
     private DataPartition dataPartition;

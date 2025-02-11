@@ -34,26 +34,18 @@
 
 package com.starrocks.planner;
 
-import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.common.LocalExchangerType;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 
-import java.util.List;
-
 public class UnionNode extends SetOperationNode {
     private LocalExchangerType localExchangeType;
     public UnionNode(PlanNodeId id, TupleId tupleId) {
         super(id, tupleId, "UNION");
-        // default is pass through
+        // default is pass through, which means round robin
         this.localExchangeType = LocalExchangerType.PASS_THROUGH;
-    }
-
-    protected UnionNode(PlanNodeId id, TupleId tupleId,
-                        List<Expr> setOpResultExprs, boolean isInSubplan) {
-        super(id, tupleId, "UNION", setOpResultExprs, isInSubplan);
     }
 
     public void setLocalExchangeType(LocalExchangerType localExchangeType) {

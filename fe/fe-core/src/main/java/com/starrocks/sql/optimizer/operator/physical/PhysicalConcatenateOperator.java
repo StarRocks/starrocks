@@ -64,7 +64,7 @@ public class PhysicalConcatenateOperator extends PhysicalSetOperation {
 
     @Override
     public <R, C> R accept(OptExpressionVisitor<R, C> visitor, OptExpression optExpression, C context) {
-        return visitor.visitPhysicalMerge(optExpression, context);
+        return visitor.visitPhysicalConcatenater(optExpression, context);
     }
 }
 

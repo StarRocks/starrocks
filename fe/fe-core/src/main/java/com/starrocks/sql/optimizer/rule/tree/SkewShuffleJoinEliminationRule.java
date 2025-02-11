@@ -52,7 +52,6 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -136,8 +135,10 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                 return opt;
             }
 
+            // rewrite plan
             OptExpression leftExchangeOptExp = opt.inputAt(0);
-            PhysicalDistributionOperator leftExchangeOp = (PhysicalDistributionOperator) leftExchangeOptExp.getOp();
+            PhysicalDistributionOperator leftExchangeOpOfOriginalShuffleJoin =
+                    (PhysicalDistributionOperator) leftExchangeOptExp.getOp();
 
             OptExpression rightExchangeOptExp = opt.inputAt(1);
             PhysicalDistributionOperator rightExchangeOpOfOriginalShuffleJoin =
@@ -166,31 +167,29 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             Pair<ScalarOperator, ScalarOperator> rightTablePredicates =
                     generateInAndNotInPredicate(rightSkewColumn, skewValues);
 
-            Map<ColumnRefOperator, ColumnRefOperator> leftSplitOutputColumnRefMap =
-                    generateOutputColumnRefMap(
-                            leftExchangeOptExp.getOutputColumns().getColumnRefOperators(columnRefFactory));
-            Map<ColumnRefOperator, ColumnRefOperator> rightSplitOutputColumnRefMap =
-                    generateOutputColumnRefMap(
-                            rightExchangeOptExp.getOutputColumns().getColumnRefOperators(columnRefFactory));
+            List<ColumnRefOperator> leftSplitOutputColumns =
+                    leftExchangeOptExp.getOutputColumns().getColumnRefOperators(columnRefFactory);
+            List<ColumnRefOperator> rightSplitOutputColumns =
+                    rightExchangeOptExp.getOutputColumns().getColumnRefOperators(columnRefFactory);
 
             PhysicalSplitConsumeOperator leftSplitConsumerOptForShuffleJoin =
                     new PhysicalSplitConsumeOperator(leftSplitProduceOperator.getSplitId(),
                             leftTablePredicates.second,
-                            leftExchangeOp.getDistributionSpec(), leftSplitOutputColumnRefMap);
+                            leftExchangeOpOfOriginalShuffleJoin.getDistributionSpec(), leftSplitOutputColumns);
 
             PhysicalSplitConsumeOperator leftSplitConsumerOptForBroadcastJoin =
                     new PhysicalSplitConsumeOperator(leftSplitProduceOperator.getSplitId(), leftTablePredicates.first,
-                            new RoundRobinDistributionSpec(), leftSplitOutputColumnRefMap);
+                            new RoundRobinDistributionSpec(), leftSplitOutputColumns);
 
             PhysicalSplitConsumeOperator rightSplitConsumerOptForShuffleJoin =
                     new PhysicalSplitConsumeOperator(rightSplitProduceOperator.getSplitId(),
                             rightTablePredicates.second,
-                            rightExchangeOpOfOriginalShuffleJoin.getDistributionSpec(), rightSplitOutputColumnRefMap);
+                            rightExchangeOpOfOriginalShuffleJoin.getDistributionSpec(), rightSplitOutputColumns);
 
             PhysicalSplitConsumeOperator rightSplitConsumerOptForBroadcastJoin =
                     new PhysicalSplitConsumeOperator(rightSplitProduceOperator.getSplitId(),
                             rightTablePredicates.first,
-                            DistributionSpec.createReplicatedDistributionSpec(), rightSplitOutputColumnRefMap);
+                            DistributionSpec.createReplicatedDistributionSpec(), rightSplitOutputColumns);
 
             Projection projectionOnJoin = originalShuffleJoinOperator.getProjection();
 
@@ -413,15 +412,6 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             }
 
             return new SkewColumnAndValues(skewValues, Pair.create(leftSkewColumn, rightSkewColumn));
-        }
-
-        private Map<ColumnRefOperator, ColumnRefOperator> generateOutputColumnRefMap(
-                List<ColumnRefOperator> outputColumns) {
-            Map<ColumnRefOperator, ColumnRefOperator> result = new HashMap<>();
-            for (ColumnRefOperator columnRefOperator : outputColumns) {
-                result.put(columnRefOperator, columnRefOperator);
-            }
-            return result;
         }
 
         private ScalarOperator replaceColumnRef(ScalarOperator scalarOperator,
