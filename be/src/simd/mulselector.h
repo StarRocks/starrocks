@@ -45,13 +45,13 @@ public:
         DCHECK_EQ(select_vec_size + 1, select_list_size);
 
         int processed_rows = 0;
-        SelectVec __restrict handle_select_vec[select_vec_size];
+        [[maybe_unused]] SelectVec __restrict handle_select_vec[select_vec_size];
         // copy select vector pointer
         for (int i = 0; i < select_vec_size; ++i) {
             handle_select_vec[i] = select_vec[i];
         }
 
-        const CppType* __restrict handle_select_data[select_list_size];
+        [[maybe_unused]] const CppType* __restrict handle_select_data[select_list_size];
         for (int i = 0; i < select_list_size; ++i) {
             handle_select_data[i] = select_list[i]->data();
         }
