@@ -96,17 +96,8 @@ private:
 
     static bool need_enable_cache(const ShardInfo& info);
 
-<<<<<<< HEAD
-=======
-    void on_add_shard_event(ShardId shardId) {
-        // NOTE: not thread-safe
-        if (_add_shard_listener) {
-            _add_shard_listener(shardId);
-        }
-    }
     uint64_t get_table_id(const ShardInfo& shared_info);
 
->>>>>>> 000cdd21b ([Enhancement] add more metrics to help locate hotspot issues (#53490))
     absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_on_demand(ShardId id, const Configuration& conf);
     absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_from_shard_info(const ShardInfo& info,
                                                                                  const Configuration& conf);

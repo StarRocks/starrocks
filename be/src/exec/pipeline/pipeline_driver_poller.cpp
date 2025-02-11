@@ -16,12 +16,9 @@
 
 #include <chrono>
 
-<<<<<<< HEAD
-=======
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/pipeline_metrics.h"
 #include "runtime/exec_env.h"
->>>>>>> 000cdd21b ([Enhancement] add more metrics to help locate hotspot issues (#53490))
 #include "util/time_guard.h"
 
 namespace starrocks::pipeline {
