@@ -49,17 +49,6 @@ struct DataSegment {
 
     void init(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk);
 
-    // There is two compares in the method,
-    // the first is:
-    //     compare every row in every DataSegment of data_segments with `rows_to_sort - 1` row of this DataSegment,
-    //     obtain every row compare result in compare_results_array, if <= 0, mark it with `INCLUDE_IN_SEGMENT`.
-    // the second is:
-    //     compare every row in compare_results_array that <= 0 (i.e. `INCLUDE_IN_SEGMENT` part) with the first row of this DataSegment,
-    //     if < 0, then mark it with `SMALLER_THAN_MIN_OF_SEGMENT`
-    Status get_filter_array(std::vector<DataSegment>& data_segments, size_t rows_to_sort,
-                            std::vector<std::vector<uint8_t>>& filter_array, const SortDescs& sort_order_flags,
-                            uint32_t& least_num, uint32_t& middle_num);
-
     void clear() {
         chunk.reset(std::make_unique<Chunk>().release());
         order_by_columns.clear();
@@ -133,8 +122,6 @@ public:
     // Return accurate output rows of this operator
     virtual size_t get_output_rows() const = 0;
 
-    size_t get_next_output_row() { return _next_output_row; }
-
     virtual int64_t mem_usage() const = 0;
 
     virtual bool is_full() { return false; }
@@ -162,8 +149,6 @@ protected:
     const SortDescs _sort_desc;
     const std::string _sort_keys;
     const bool _is_topn;
-
-    size_t _next_output_row = 0;
 
     RuntimeProfile::Counter* _build_timer = nullptr;
     RuntimeProfile::Counter* _sort_timer = nullptr;

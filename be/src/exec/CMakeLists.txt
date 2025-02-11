@@ -166,6 +166,7 @@ set(EXEC_FILES
     schema_scanner/schema_cluster_snapshot_jobs_scanner.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
+    sorting/merge.cpp
     sorting/merge_column.cpp
     sorting/merge_path.cpp
     sorting/merge_cascade.cpp
