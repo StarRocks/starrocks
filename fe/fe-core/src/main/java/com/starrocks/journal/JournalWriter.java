@@ -25,6 +25,7 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * An independent thread to write journals by batch asynchronously.
@@ -66,6 +67,9 @@ public class JournalWriter {
 
     private long lastSlowEditLogTimeNs = -1L;
 
+    private final AtomicBoolean stopped = new AtomicBoolean(false);
+    private final AtomicBoolean isLeaderTransferred = new AtomicBoolean(false);
+
     public JournalWriter(Journal journal, BlockingQueue<JournalTask> journalQueue) {
         this.journal = journal;
         this.journalQueue = journalQueue;
@@ -102,6 +106,15 @@ public class JournalWriter {
     protected void writeOneBatch() throws InterruptedException {
         // waiting if necessary until an element becomes available
         currentJournal = journalQueue.take();
+
+        if (currentJournal instanceof DrainingJournalTask) {
+            stopped.set(true);
+        }
+        if (stopped.get()) {
+            abortTaskForLeaderTransfer(currentJournal);
+            return;
+        }
+
         long nextJournalId = nextVisibleJournalId;
         initBatch();
 
@@ -118,6 +131,9 @@ public class JournalWriter {
                 }
 
                 currentJournal = journalQueue.take();
+                if (currentJournal instanceof DrainingJournalTask) {
+                    break;
+                }
             }
         } catch (JournalException e) {
             // abort current task
@@ -146,6 +162,10 @@ public class JournalWriter {
         rollJournalAfterBatch();
 
         updateBatchMetrics();
+
+        if (currentJournal instanceof DrainingJournalTask) {
+            stopped.set(true);
+        }
     }
 
     private void initBatch() {
@@ -280,5 +300,33 @@ public class JournalWriter {
             LOG.info("edit log rolled because {}", reason);
             rollJournalCounter = 0;
         }
+    }
+
+    // Stop and wait for the previous task of DrainingJournalTask to be written to BDB
+    public void stopAndWait() throws InterruptedException {
+        journalQueue.put(new DrainingJournalTask());
+        while (!stopped.get()) {
+            Thread.sleep(100L);
+        }
+    }
+
+    public void setLeaderTransferred() {
+        isLeaderTransferred.set(true);
+    }
+
+    public boolean isLeaderTransferred() {
+        return isLeaderTransferred.get();
+    }
+
+    private void abortTaskForLeaderTransfer(JournalTask journalTask) {
+        while (!isLeaderTransferred.get()) {
+            try {
+                Thread.sleep(100L);
+            } catch (InterruptedException e) {
+                LOG.warn("waiting for leader transfer failed, will retry", e);
+            }
+        }
+
+        journalTask.markAbort(new LeaderTransferException());
     }
 }
