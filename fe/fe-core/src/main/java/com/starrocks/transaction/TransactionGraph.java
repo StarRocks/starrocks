@@ -124,7 +124,7 @@ public class TransactionGraph {
             return;
         }
         if (node.ins != null && !node.ins.isEmpty()) {
-            LOG.warn("remove txn " + txnId + " with dependency: " + node.ins + " this may happen during FE upgrading");
+            LOG.debug("remove txn " + txnId + " with dependency: " + node.ins + " this may happen during FE upgrading");
             for (Node dep : node.ins) {
                 dep.outs.remove(node);
             }
