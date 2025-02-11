@@ -42,9 +42,7 @@ import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.MetaUtils;
-import com.starrocks.sql.optimizer.Memo;
-import com.starrocks.sql.optimizer.OptimizerConfig;
-import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.statistic.StatisticUtils;
@@ -381,8 +379,7 @@ public class AnalyzeStmtAnalyzer {
                     }
 
                     Statistics tableStats = session.getGlobalStateMgr().getMetadataMgr().
-                            getTableStatistics(new OptimizerContext(new Memo(), new ColumnRefFactory(), session,
-                                            OptimizerConfig.defaultConfig()),
+                            getTableStatistics(OptimizerFactory.initContext(session, new ColumnRefFactory()),
                                     tableName.getCatalog(), analyzeTable, Maps.newHashMap(), keys, null);
                     totalRows = tableStats.getOutputRowCount();
                 }

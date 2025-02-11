@@ -32,9 +32,8 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
 import com.starrocks.planner.PartitionColumnFilter;
-import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -197,7 +196,7 @@ public class DistributionPrunerRuleTest {
 
         assertEquals(0, operator.getSelectedTabletId().size());
         OptExpression optExpression =
-                rule.transform(new OptExpression(operator), new OptimizerContext(new Memo(), new ColumnRefFactory()))
+                rule.transform(new OptExpression(operator), OptimizerFactory.mockContext(new ColumnRefFactory()))
                         .get(0);
 
         assertEquals(20, ((LogicalOlapScanOperator) optExpression.getOp()).getSelectedTabletId().size());

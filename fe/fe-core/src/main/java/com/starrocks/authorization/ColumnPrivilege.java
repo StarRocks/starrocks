@@ -37,7 +37,8 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
-import com.starrocks.sql.optimizer.OptimizerConfig;
+import com.starrocks.sql.optimizer.OptimizerFactory;
+import com.starrocks.sql.optimizer.OptimizerOptions;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -110,13 +111,14 @@ public class ColumnPrivilege {
             TransformerContext transformerContext = new TransformerContext(columnRefFactory, context, mvTransformerContext);
             logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(stmt.getQueryRelation());
 
-            OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
-            optimizerConfig.disableRule(RuleType.GP_SINGLE_TABLE_MV_REWRITE);
-            optimizerConfig.disableRule(RuleType.GP_MULTI_TABLE_MV_REWRITE);
-            optimizerConfig.disableRule(RuleType.GP_PRUNE_EMPTY_OPERATOR);
-            Optimizer optimizer = new Optimizer(optimizerConfig);
-            optimizedPlan = optimizer.optimize(context, logicalPlan.getRoot(),
-                    new PhysicalPropertySet(), new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
+            OptimizerOptions optimizerOptions = new OptimizerOptions(OptimizerOptions.OptimizerStrategy.RULE_BASED);
+            optimizerOptions.disableRule(RuleType.GP_SINGLE_TABLE_MV_REWRITE);
+            optimizerOptions.disableRule(RuleType.GP_MULTI_TABLE_MV_REWRITE);
+            optimizerOptions.disableRule(RuleType.GP_PRUNE_EMPTY_OPERATOR);
+            Optimizer optimizer =
+                    OptimizerFactory.create(OptimizerFactory.initContext(context, columnRefFactory, optimizerOptions));
+            optimizedPlan = optimizer.optimize(logicalPlan.getRoot(),
+                    new PhysicalPropertySet(), new ColumnRefSet(logicalPlan.getOutputColumn()));
 
             optimizedPlan.getOp().accept(new ScanColumnCollector(tableObjectToTableName, scanColumns), optimizedPlan, null);
         }

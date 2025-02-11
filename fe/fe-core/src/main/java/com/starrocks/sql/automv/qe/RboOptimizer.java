@@ -46,8 +46,9 @@ import com.starrocks.sql.automv.util.Util;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.LogicalPlanPrinter;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.OptimizerConfig;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
+import com.starrocks.sql.optimizer.OptimizerOptions;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -83,14 +84,14 @@ import java.util.stream.Collectors;
 //    damage performance of multi-column cardinality estimation.
 // 4. {Project,Filter}Operator must be fold into its' child operator.
 public class RboOptimizer {
-    private final OptimizerConfig optimizerConfig;
+    private final OptimizerOptions optimizerOptions;
     private final OptimizerContext optimizerContext;
     private final TaskContext taskContext;
     private OptExpression tree;
 
     public RboOptimizer(LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory, ConnectContext connectContext) {
-        optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
-        optimizerContext = new OptimizerContext(null, columnRefFactory, connectContext, optimizerConfig);
+        optimizerOptions = OptimizerOptions.newRuleBaseOpt();
+        optimizerContext = OptimizerFactory.initContext(connectContext, columnRefFactory, optimizerOptions);
         // CTE must be inlined to extract sub-queries
         optimizerContext.getCteContext().setEnableCTE(false);
         taskContext =
@@ -269,8 +270,8 @@ public class RboOptimizer {
         return Pair.create(queryStmt.getFqTableMap(), subPlans);
     }
 
-    public OptimizerConfig getOptimizerConfig() {
-        return optimizerConfig;
+    public OptimizerOptions getOptimizerOptions() {
+        return optimizerOptions;
     }
 
     public OptimizerContext getOptimizerContext() {

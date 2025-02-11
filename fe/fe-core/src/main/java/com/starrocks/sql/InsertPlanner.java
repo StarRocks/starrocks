@@ -78,6 +78,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.common.TypeManager;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionProperty;
@@ -511,18 +512,16 @@ public class InsertPlanner {
     private ExecPlan buildExecPlan(InsertStmt insertStmt, ConnectContext session, List<ColumnRefOperator> outputColumns,
                                    LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory,
                                    QueryRelation queryRelation, Table targetTable) {
-        Optimizer optimizer = new Optimizer();
         PhysicalPropertySet requiredPropertySet = createPhysicalPropertySet(insertStmt, outputColumns,
                 session.getSessionVariable());
         OptExpression optimizedPlan;
 
         try (Timer ignore2 = Tracers.watchScope("Optimizer")) {
+            Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.initContext(session, columnRefFactory));
             optimizedPlan = optimizer.optimize(
-                    session,
                     logicalPlan.getRoot(),
                     requiredPropertySet,
-                    new ColumnRefSet(logicalPlan.getOutputColumn()),
-                    columnRefFactory);
+                    new ColumnRefSet(logicalPlan.getOutputColumn()));
         }
 
         //8. Build fragment exec plan

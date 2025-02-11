@@ -19,8 +19,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
-import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -251,7 +251,7 @@ public class PartitionPruneTest extends PlanTestBase {
     private void testRemovePredicate(String sql, String expected) throws Exception {
         Pair<ScalarOperator, LogicalScanOperator> pair = buildConjunctAndScan(sql);
         StatisticsCalculator calculator = new StatisticsCalculator();
-        OptimizerContext context = new OptimizerContext(new Memo(), new ColumnRefFactory());
+        OptimizerContext context = OptimizerFactory.mockContext(new ColumnRefFactory());
         ScalarOperator newPredicate = calculator.removePartitionPredicate(pair.first, pair.second, context);
         Assert.assertEquals(expected, newPredicate.toString());
     }

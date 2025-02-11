@@ -229,7 +229,8 @@ public class MvRewritePreprocessor {
             // use a new context rather than reuse the existed context to avoid cache conflict.
             try {
                 // 1. get related mvs for all input tables
-                Set<MaterializedView> relatedMVs = getRelatedMVs(queryTables, context.getOptimizerConfig().isRuleBased());
+                Set<MaterializedView> relatedMVs =
+                        getRelatedMVs(queryTables, context.getOptimizerOptions().isRuleBased());
                 if (relatedMVs.isEmpty()) {
                     return;
                 }

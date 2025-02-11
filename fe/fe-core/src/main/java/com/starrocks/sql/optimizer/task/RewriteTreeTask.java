@@ -79,7 +79,7 @@ public class RewriteTreeTask extends OptimizerTask {
 
     protected OptExpression applyRules(OptExpression parent, int childIndex, OptExpression root, List<Rule> rules) {
         for (Rule rule : rules) {
-            if (context.getOptimizerContext().getOptimizerConfig().isRuleDisable(rule.type())) {
+            if (context.getOptimizerContext().getOptimizerOptions().isRuleDisable(rule.type())) {
                 continue;
             }
             if (rule.exhausted(context.getOptimizerContext())) {

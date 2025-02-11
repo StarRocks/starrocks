@@ -20,9 +20,8 @@ import com.google.common.collect.Maps;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
-import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -77,7 +76,7 @@ public class PushDownAggRuleTest {
 
         PushDownPredicateAggRule rule = new PushDownPredicateAggRule();
 
-        List<OptExpression> list = rule.transform(filter, new OptimizerContext(new Memo(), new ColumnRefFactory()));
+        List<OptExpression> list = rule.transform(filter, OptimizerFactory.mockContext(new ColumnRefFactory()));
 
         assertEquals(OperatorType.LOGICAL_AGGR, list.get(0).getOp().getOpType());
         assertEquals(OperatorType.COMPOUND,

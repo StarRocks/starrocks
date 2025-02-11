@@ -51,8 +51,8 @@ import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -133,7 +133,7 @@ public class HiveMetadataTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         columnRefFactory = new ColumnRefFactory();
-        optimizerContext = new OptimizerContext(new Memo(), columnRefFactory, connectContext);
+        optimizerContext = OptimizerFactory.mockContext(connectContext, columnRefFactory);
         hiveMetadata = new HiveMetadata("hive_catalog", new HdfsEnvironment(), hmsOps, fileOps, statisticsProvider,
                 Optional.empty(), executorForHmsRefresh, executorForHmsRefresh,
                 new ConnectorProperties(ConnectorType.HIVE));
