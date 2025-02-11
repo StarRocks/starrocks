@@ -17,6 +17,6 @@ scan:
     - "**/hadoop-client-runtime-3.4.0.jar"
     - "**/commons-compress-1.24.0.jar"
     # paimon required, already latest
-    - "**/paimon-bundle-0.8.2.jar"
+    - "**/paimon-bundle-1.0.1.jar"
     # apache ranger required
     - "**/jackson-mapper-asl-1.9.13.jar"
