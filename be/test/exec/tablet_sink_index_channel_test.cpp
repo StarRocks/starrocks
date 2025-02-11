@@ -182,7 +182,6 @@ TEST_F(TabletSinkIndexChannelTest, non_pipeline_load_channel_profile) {
         query_options.__set_load_profile_collect_second(10);
         auto runtime_state = _build_runtime_state(query_options);
         PLoadChannelProfileConfig expect_config;
-        expect_config.set_enable_profile(true);
         expect_config.set_big_query_profile_threshold_ns(10 * 1e9);
         test_load_channel_profile_base(runtime_state.get(), expect_config);
     }
