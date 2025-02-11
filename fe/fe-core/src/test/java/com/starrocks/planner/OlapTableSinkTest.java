@@ -513,7 +513,7 @@ public class OlapTableSinkTest {
     }
 
     @Test
-    public void testSchemaChangeOpenPartition() throws StarRocksException {
+    public void testSchemaChangeOpenPartition() throws UserException {
         TupleDescriptor tuple = getTuple();
         SinglePartitionInfo partInfo = new SinglePartitionInfo();
         partInfo.setReplicationNum(2, (short) 3);
