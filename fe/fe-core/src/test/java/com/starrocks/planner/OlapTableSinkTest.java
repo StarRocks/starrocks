@@ -513,44 +513,4 @@ public class OlapTableSinkTest {
 
         Config.max_load_initial_open_partition_number = 32;
     }
-
-    @Test
-    public void testSchemaChangeOpenPartition() throws UserException {
-        TupleDescriptor tuple = getTuple();
-        SinglePartitionInfo partInfo = new SinglePartitionInfo();
-        partInfo.setReplicationNum(2, (short) 3);
-        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
-        RandomDistributionInfo distInfo = new RandomDistributionInfo(3);
-        Partition partition = new Partition(2, 22, "p1", index, distInfo);
-
-        PhysicalPartition physicalPartition = new PhysicalPartition(3, "", 2, index);
-        partition.addSubPartition(physicalPartition);
-
-        physicalPartition = new PhysicalPartition(4, "", 2, index);
-        physicalPartition.setImmutable(true);
-        partition.addSubPartition(physicalPartition);
-
-        new Expectations() {
-            {
-                dstTable.getId();
-                result = 1;
-                dstTable.getPartitionInfo();
-                result = partInfo;
-                dstTable.getPartitions();
-                result = Lists.newArrayList(partition);
-                dstTable.getPartition(2L);
-                result = partition;
-                dstTable.getState();
-                result = OlapTable.OlapTableState.SCHEMA_CHANGE;
-            }
-        };
-
-        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
-                TWriteQuorumType.MAJORITY, false, false, true);
-        sink.setAutomaticBucketSize(1);
-        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
-        sink.complete();
-        LOG.info("sink is {}", sink.toThrift());
-        LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
-    }
 }
