@@ -229,8 +229,7 @@ public class CTEPlanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=24.0\n" +
-                "     limit: 3");
+                "     avgRowSize=24.0\n");
     }
 
     @Test
@@ -916,5 +915,18 @@ public class CTEPlanTest extends PlanTestBase {
         assertContains(plan,
                 "1:Project\n" +
                         "  |  <slot 4> : 444");
+    }
+
+    @Test
+    public void testCTELimitSelect() throws Exception {
+        alwaysCTEReuse();
+        String sql = "with cte as (select * from t0)" +
+                " select case when not exists (select 1 from cte where v2 = 1) then 'A' else 'B' end," +
+                "        case when not exists (select 1 from cte where v3 = 1) then 'C' else 'D' end " +
+                " from t2;";
+        String plan = getFragmentPlan(sql);
+        defaultCTEReuse();
+        assertNotContains(plan, "1:EXCHANGE\n" +
+                "     limit: 1");
     }
 }
