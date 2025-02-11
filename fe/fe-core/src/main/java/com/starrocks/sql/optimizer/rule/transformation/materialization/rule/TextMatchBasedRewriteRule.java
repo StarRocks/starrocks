@@ -241,7 +241,7 @@ public class TextMatchBasedRewriteRule extends Rule {
                 OptimizerTraceUtil.logMVRewrite(context, this, "TEXT_BASED_REWRITE: text matched with {}",
                         mv.getName());
 
-                MvPlanContext mvPlanContext = MvUtils.getMVPlanContext(connectContext, mv, true);
+                MvPlanContext mvPlanContext = MvUtils.getMVPlanContext(connectContext, mv, true, true);
                 if (mvPlanContext == null) {
                     logMVRewrite(context, this, "MV {} plan context is invalid", mv.getName());
                     continue;
