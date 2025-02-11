@@ -1723,7 +1723,7 @@ public class AnalyzerUtils {
         @Override
         public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
             if (containsNonDeterministicFunction(expr)) {
-                nonDeterministicFunctionOpt = Optional.of(expr.getFn().functionName());
+                nonDeterministicFunctionOpt = Optional.ofNullable(expr.getFnName()).map(FunctionName::getFunction);
                 return null;
             }
             for (Expr param : expr.getChildren()) {

@@ -252,6 +252,8 @@ public class AlterMaterializedViewTest {
         // create the table and refresh
         starRocksAssert.dropTable("treload_1");
         starRocksAssert.withTable(createBaseTable);
+        checker.runForTest(true);
+        checker.runForTest(true);
         starRocksAssert.refreshMV("refresh materialized view mvreload_1");
         starRocksAssert.refreshMV("refresh materialized view mvreload_2");
         starRocksAssert.refreshMV("refresh materialized view mvreload_3");

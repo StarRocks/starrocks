@@ -38,7 +38,7 @@ public class MvPlanContextBuilder {
 
             // TODO: Only add context with view when view rewrite is set on.
             if (mv.getBaseTableTypes().stream().anyMatch(type -> type == TableType.VIEW)) {
-                MvPlanContext contextWithView = mvOptimizer.optimize(mv, connectContext, false);
+                MvPlanContext contextWithView = mvOptimizer.optimize(mv, connectContext, false, true);
                 results.add(contextWithView);
             }
         }

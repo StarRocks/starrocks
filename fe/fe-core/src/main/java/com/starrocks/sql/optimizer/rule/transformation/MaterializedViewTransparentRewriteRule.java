@@ -39,6 +39,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.OptConstFoldRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -104,8 +105,9 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                                       OptExpression input,
                                       MvId mvId) {
         OptExpression mvTransparentPlan = doGetMvTransparentPlan(connectContext, context, mvId, olapScanOperator, input);
-        Preconditions.checkState(mvTransparentPlan != null,
-                "Build mv transparent plan failed: %s", mvId);
+        if (mvTransparentPlan == null) {
+            throw new RuntimeException("Build mv transparent plan failed: " + mvId);
+        }
         // merge projection
         Map<ColumnRefOperator, ScalarOperator> originalProjectionMap =
                 olapScanOperator.getProjection() == null ? null : olapScanOperator.getProjection().getColumnRefMap();
@@ -142,10 +144,19 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
         Preconditions.checkState(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
-        MvPlanContext mvPlanContext = MvUtils.getMVPlanContext(connectContext, mv, true);
-        Preconditions.checkState(mvPlanContext != null, "MV plan context not found: %s", mv.getName());
-
+        final MvPlanContext mvPlanContext = MvUtils.getMVPlanContext(connectContext, mv, true, false);
+        if (mvPlanContext == null) {
+            throw new RuntimeException("Cannot get mv plan context: " + mv.getName());
+        }
         OptExpression mvPlan = mvPlanContext.getLogicalPlan();
+        if (mvPlan == null) {
+            throw new RuntimeException("Cannot get mv plan: " + mv.getName());
+        }
+        // do const fold if mv contains non-deterministic functions
+        if (mvPlanContext.isContainsNDFunctions()) {
+            mvPlan = OptConstFoldRewriter.rewrite(mvPlan);
+        }
+
         Set<Table> queryTables = MvUtils.getAllTables(mvPlan).stream().collect(Collectors.toSet());
 
         // mv's to refresh partition info
