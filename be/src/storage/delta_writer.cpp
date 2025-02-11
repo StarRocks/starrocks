@@ -572,7 +572,8 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
             if ((_mem_table != nullptr && _mem_table->get_result_chunk() != nullptr) || eos) {
                 auto replicate_token = _replicate_token.get();
                 return _flush_token->submit(
-                        std::move(_mem_table), eos, [replicate_token, this](std::unique_ptr<SegmentPB> seg, bool eos) {
+                        std::move(_mem_table), eos,
+                        [replicate_token, this](std::unique_ptr<SegmentPB> seg, bool eos, int64_t flush_data_size) {
                             if (seg) {
                                 _tablet->add_in_writing_data_size(_opt.txn_id, seg->data_size());
                             }
@@ -597,7 +598,8 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
         } else {
             if (_mem_table != nullptr && _mem_table->get_result_chunk() != nullptr) {
                 return _flush_token->submit(
-                        std::move(_mem_table), eos, [this](std::unique_ptr<SegmentPB> seg, bool eos) {
+                        std::move(_mem_table), eos,
+                        [this](std::unique_ptr<SegmentPB> seg, bool eos, int64_t flush_data_size) {
                             if (seg) {
                                 _tablet->add_in_writing_data_size(_opt.txn_id, seg->data_size());
                             }
@@ -616,21 +618,23 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
         }
     } else if (_replica_state == Peer) {
         if (_mem_table != nullptr && _mem_table->get_result_chunk() != nullptr) {
-            return _flush_token->submit(std::move(_mem_table), eos, [this](std::unique_ptr<SegmentPB> seg, bool eos) {
-                if (seg) {
-                    _tablet->add_in_writing_data_size(_opt.txn_id, seg->data_size());
-                }
-                if (_opt.immutable_tablet_size > 0 &&
-                    _tablet->data_size() + _tablet->in_writing_data_size() > _opt.immutable_tablet_size) {
-                    _is_immutable.store(true, std::memory_order_relaxed);
-                }
-                VLOG(2) << "flush memtable, tablet=" << _tablet->tablet_id() << ", txn=" << _opt.txn_id
-                        << " immutable_tablet_size=" << _opt.immutable_tablet_size
-                        << ", segment_size=" << (seg ? seg->data_size() : 0)
-                        << ", tablet_data_size=" << _tablet->data_size()
-                        << ", in_writing_data_size=" << _tablet->in_writing_data_size()
-                        << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
-            });
+            return _flush_token->submit(
+                    std::move(_mem_table), eos,
+                    [this](std::unique_ptr<SegmentPB> seg, bool eos, int64_t flush_data_size) {
+                        if (seg) {
+                            _tablet->add_in_writing_data_size(_opt.txn_id, seg->data_size());
+                        }
+                        if (_opt.immutable_tablet_size > 0 &&
+                            _tablet->data_size() + _tablet->in_writing_data_size() > _opt.immutable_tablet_size) {
+                            _is_immutable.store(true, std::memory_order_relaxed);
+                        }
+                        VLOG(2) << "flush memtable, tablet=" << _tablet->tablet_id() << ", txn=" << _opt.txn_id
+                                << " immutable_tablet_size=" << _opt.immutable_tablet_size
+                                << ", segment_size=" << (seg ? seg->data_size() : 0)
+                                << ", tablet_data_size=" << _tablet->data_size()
+                                << ", in_writing_data_size=" << _tablet->in_writing_data_size()
+                                << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
+                    });
         }
     }
     return Status::OK();

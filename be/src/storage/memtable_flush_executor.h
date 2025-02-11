@@ -76,7 +76,7 @@ public:
             : _flush_token(std::move(flush_pool_token)), _status() {}
 
     Status submit(std::unique_ptr<MemTable> mem_table, bool eos = false,
-                  std::function<void(std::unique_ptr<SegmentPB>, bool)> cb = nullptr);
+                  std::function<void(std::unique_ptr<SegmentPB>, bool, int64_t)> cb = nullptr);
 
     // error has happpens, so we cancel this token
     // And remove all tasks in the queue.
@@ -109,7 +109,7 @@ public:
 private:
     friend class MemtableFlushTask;
 
-    void _flush_memtable(MemTable* memtable, SegmentPB* segment, bool eos);
+    void _flush_memtable(MemTable* memtable, SegmentPB* segment, bool eos, int64_t* flush_data_size);
 
     std::unique_ptr<ThreadPoolToken> _flush_token;
 

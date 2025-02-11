@@ -28,12 +28,13 @@ public:
 
     DISALLOW_COPY(MemTableRowsetWriterSink);
 
-    Status flush_chunk(const Chunk& chunk, SegmentPB* seg_info = nullptr, bool eos = false) override {
+    Status flush_chunk(const Chunk& chunk, SegmentPB* seg_info = nullptr, bool eos = false,
+                       int64_t* flush_data_size = nullptr) override {
         return _rowset_writer->flush_chunk(chunk, seg_info);
     }
 
     Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes, SegmentPB* seg_info = nullptr,
-                                    bool eos = false) override {
+                                    bool eos = false, int64_t* flush_data_size = nullptr) override {
         return _rowset_writer->flush_chunk_with_deletes(upserts, deletes, seg_info);
     }
 
