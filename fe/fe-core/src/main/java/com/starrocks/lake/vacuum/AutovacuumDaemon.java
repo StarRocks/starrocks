@@ -103,7 +103,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         if (partition.getVisibleVersion() <= 1) {
             return false;
         }
-        // avoid parition too frequent
+        // prevent vacuum too frequent
         if (current < partition.getLastVacuumTime() + Config.lake_autovacuum_partition_naptime_seconds * 1000) {
             return false;
         }
@@ -111,7 +111,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         if (minRetainVersion <= 0) {
             minRetainVersion = Math.max(1, partition.getVisibleVersion() - Config.lake_autovacuum_max_previous_versions);
         }
-        // the file before minVersion vacuum success
+        // the file before minRetainVersion vacuum success
         if (Config.lake_autovacuum_by_version && partition.getLastSuccVacuumVersion() >= minRetainVersion) {
             return false;
         }
