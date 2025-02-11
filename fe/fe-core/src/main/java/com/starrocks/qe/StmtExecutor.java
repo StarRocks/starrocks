@@ -1528,12 +1528,9 @@ public class StmtExecutor {
         // from current session, may execute analyze stmt
         statsConnectCtx.getSessionVariable().setStatisticCollectParallelism(
                 context.getSessionVariable().getStatisticCollectParallelism());
-        statsConnectCtx.setThreadLocalInfo();
         statsConnectCtx.setStatisticsConnection(true);
-        try {
+        try (var guard = statsConnectCtx.bindScope()) {
             executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
-        } finally {
-            ConnectContext.remove();
         }
 
     }
