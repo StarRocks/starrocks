@@ -54,7 +54,7 @@ public:
     virtual ~MultiCastLocalExchanger() = default;
     virtual bool support_event_scheduler() const = 0;
 
-    virtual Status init_metrics(RuntimeProfile* profile) = 0;
+    virtual Status init_metrics(RuntimeProfile* profile, bool is_first_sink_driver) = 0;
 
     virtual bool can_pull_chunk(int32_t mcast_consumer_index) const = 0;
     virtual bool can_push_chunk() const = 0;
@@ -80,7 +80,7 @@ public:
     ~InMemoryMultiCastLocalExchanger() override;
     bool support_event_scheduler() const override { return true; }
 
-    Status init_metrics(RuntimeProfile* profile) override;
+    Status init_metrics(RuntimeProfile* profile, bool is_first_sink_driver) override;
     bool can_pull_chunk(int32_t mcast_consumer_index) const override;
     bool can_push_chunk() const override;
     Status push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
@@ -130,7 +130,7 @@ public:
     ~SpillableMultiCastLocalExchanger() override = default;
     bool support_event_scheduler() const override { return false; }
 
-    Status init_metrics(RuntimeProfile* profile) override;
+    Status init_metrics(RuntimeProfile* profile, bool is_first_sink_driver) override;
     bool can_pull_chunk(int32_t mcast_consumer_index) const override;
     bool can_push_chunk() const override;
     Status push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
