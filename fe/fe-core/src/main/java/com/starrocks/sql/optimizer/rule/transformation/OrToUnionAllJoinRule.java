@@ -18,6 +18,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
@@ -190,7 +191,17 @@ public class OrToUnionAllJoinRule extends TransformationRule {
         }
 
         List<OptExpression> unionChildren = new ArrayList<>();
-        List<ColumnRefOperator> outputColumns = joinOp.getProjection().getOutputColumns();
+        List<ColumnRefOperator> outputColumns = new ArrayList<>();
+        if (joinOp.getProjection() != null) {
+            outputColumns = joinOp.getProjection().getOutputColumns();
+        } else {
+            outputColumns = new ArrayList<>();
+            for (OptExpression child : input.getInputs()) {
+                ColumnRefSet childColumns = child.getOutputColumns();
+                childColumns.getColumnRefOperators(context.getColumnRefFactory()).forEach(outputColumns::add);
+            }
+        }
+
         List<List<ColumnRefOperator>> childOutputColumns = new ArrayList<>();
         for (LogicalJoinOperator branchJoin : joinBranchList) {
             unionChildren.add(OptExpression.create(branchJoin, input.getInputs()));
