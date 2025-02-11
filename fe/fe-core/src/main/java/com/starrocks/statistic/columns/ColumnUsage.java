@@ -21,6 +21,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.TimeUtils;
@@ -88,6 +89,11 @@ public class ColumnUsage implements GsonPostProcessable {
 
     public TableName getTableName() {
         return tableName;
+    }
+
+    public String getOlapColumnName(OlapTable olap) {
+        return Preconditions.checkNotNull(olap.getColumnByUniqueId(columnId.getColumnUniqueId()),
+                this + " not exists").getName();
     }
 
     public EnumSet<UseCase> getUseCases() {
