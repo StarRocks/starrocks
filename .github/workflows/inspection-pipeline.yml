@@ -571,7 +571,7 @@ jobs:
       - name: Result
         run: |
           cd ci-tool/scripts/feature_coverage
-          ./version_cov.sh --repository ${{ github.repository }} --commit ${{ needs.info.outputs.PR_NUMBER }} --head ${{ inputs.COV_BASE_COMMIT }  --redownload --in_runner
+          ./version_cov.sh --repository ${{ github.repository }} --commit ${{ needs.info.outputs.PR_NUMBER }} --head ${{ inputs.COV_BASE_COMMIT }}  --redownload --in_runner
           
 
   Teardown:
