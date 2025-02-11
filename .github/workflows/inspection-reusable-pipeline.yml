@@ -108,7 +108,8 @@ jobs:
         run: |
           cd ci-tool && source lib/init.sh
           echo ${TAR_PATH}
-          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${TAR_PATH} --with-coverage
+          [[ "${IS_ARM}" == "true" ]] && arm_arg="--arm"
+          ./bin/deploy-cluster.sh -c ${CLUSTER_NAME} --output ${TAR_PATH} --with-coverage ${arm_arg}
 
       - name: Clean ENV
         if: always()

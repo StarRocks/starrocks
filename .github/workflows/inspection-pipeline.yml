@@ -109,7 +109,7 @@ jobs:
               branch=main
               
               if [[ "${{ github.event.schedule }}" == "30 9 * * 1-5" ]]; then
-                IS_ARM=true
+                IS_ARM=false
               fi
             fi
           
@@ -553,13 +553,26 @@ jobs:
     runs-on: [ self-hosted, normal ]
     name: COV INFO
     needs:
+      - info
       - FE-COV-REPORT
       - BE-COV-REPORT
+    env:
+      GH_TOKEN: ${{ github.token }}
     steps:
-      - name: info
+      - name: Prepare Tools
+        run: |
+          rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull
+
+      - name: INFO
         run: |
           echo "FE_COV_RES_FILE: ${{ needs.FE-COV-REPORT.outputs.FE_COV_RES_FILE }}"
           echo "BE_COV_RES_FILE: ${{ needs.BE-COV-REPORT.outputs.BE_COV_RES_FILE }}"
+
+      - name: Result
+        run: |
+          cd ci-tool/scripts/feature_coverage
+          ./version_cov.sh --repository ${{ github.repository }} --commit ${{ needs.info.outputs.PR_NUMBER }} --head ${{ inputs.COV_BASE_COMMIT }  --redownload --in_runner
+          
 
   Teardown:
     runs-on: [self-hosted, normal]
