@@ -540,9 +540,8 @@ public class ShowStmtAnalyzer {
                 if (table != null) {
                     row.add(table.getCatalogName());
 
-                    if (table.isDeltalakeTable() || table.isHudiTable() || table.isHiveTable() || table.isIcebergTable() ||
-                            table.isJDBCTable() || table.isKuduTable() || table.isMySQLTable() || table.isOdpsTable() ||
-                            table.isPaimonTable()) {
+                    if (table.isExternalTableWithFileSystem() || table.isJDBCTable() || table.isMySQLTable() ||
+                            table.isOdpsTable()) {
                         row.add(table.getCatalogDBName());
                         row.add(table.getCatalogTableName());
                     } else {
