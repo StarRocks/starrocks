@@ -26,6 +26,10 @@ public class DdlException extends StarRocksException {
         super(msg, e);
     }
 
+    public DdlException(ErrorCode errorCode, Object... objs) {
+        super(errorCode, objs);
+    }
+
     public static void requireNotNull(String name, Object obj) throws DdlException {
         if (obj == null) {
             throw new DdlException(name + " not exists");

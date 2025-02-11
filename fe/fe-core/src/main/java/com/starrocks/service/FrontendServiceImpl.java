@@ -87,6 +87,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.AuthenticationException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Config;
+import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.IdGenerator;
@@ -1969,7 +1970,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
             }
 
-            GlobalStateMgr.getCurrentState().getNodeMgr().setFrontendConfig(configs);
+            ConfigBase.setFrontendConfig(configs);
             return new TSetConfigResponse(new TStatus(TStatusCode.OK));
         } catch (DdlException e) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
