@@ -1125,4 +1125,13 @@ Status UpdateManager::pk_index_major_compaction(int64_t tablet_id, DataDir* data
     return Status::OK();
 }
 
+bool UpdateManager::TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt) {
+    auto index_entry = _index_cache.get(tablet_id);
+    if (index_entry == nullptr) {
+        return expected_cnt == 0;
+    }
+    _index_cache.release(index_entry);
+    return index_entry->get_ref() == expected_cnt;
+}
+
 } // namespace starrocks::lake

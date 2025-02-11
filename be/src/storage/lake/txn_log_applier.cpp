@@ -176,8 +176,11 @@ public:
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
+        // local persistent index will update index version, so we need to load first
         // still need prepre primary index even there is an empty compaction
-        if (_index_entry == nullptr && _has_empty_compaction) {
+        if (_index_entry == nullptr &&
+            (_has_empty_compaction || (_metadata->enable_persistent_index() &&
+                                       _metadata->persistent_index_type() == PersistentIndexTypePB::LOCAL))) {
             // get lock to avoid gc
             _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
             DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
@@ -249,11 +252,11 @@ private:
         _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
         DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
 
-        RETURN_IF_ERROR(prepare_primary_index());
         if (op_write.dels_size() == 0 && op_write.rowset().num_rows() == 0 &&
             !op_write.rowset().has_delete_predicate()) {
             return Status::OK();
         }
+        RETURN_IF_ERROR(prepare_primary_index());
         if (is_column_mode_partial_update(op_write)) {
             return _tablet.update_mgr()->publish_column_mode_partial_update(op_write, txn_id, _metadata, &_tablet,
                                                                             &_builder, _base_version);
@@ -268,15 +271,19 @@ private:
         _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
         DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
 
-        RETURN_IF_ERROR(prepare_primary_index());
         if (op_compaction.input_rowsets().empty()) {
             DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
             // Apply the compaction operation to the cloud native pk index.
             // This ensures that the pk index is updated with the compaction changes.
             _builder.remove_compacted_sst(op_compaction);
+            if (op_compaction.input_sstables().empty() || !op_compaction.has_output_sstable()) {
+                return Status::OK();
+            }
+            RETURN_IF_ERROR(prepare_primary_index());
             RETURN_IF_ERROR(_index_entry->value().apply_opcompaction(*_metadata, op_compaction));
             return Status::OK();
         }
+        RETURN_IF_ERROR(prepare_primary_index());
         return _tablet.update_mgr()->publish_primary_compaction(op_compaction, txn_id, *_metadata, _tablet,
                                                                 _index_entry, &_builder, _base_version);
     }
