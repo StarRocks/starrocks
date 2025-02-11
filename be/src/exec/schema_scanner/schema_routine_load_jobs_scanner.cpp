@@ -45,9 +45,9 @@ SchemaScanner::ColumnDesc SchemaRoutineLoadJobsScanner::_s_tbls_columns[] = {
         {"ERROR_LOG_URLS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"TRACKING_SQL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"OTHER_MSG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"LATEST_SOURCE_POSITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"OFFSET_LAG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false}
-        };
+        {"LATEST_SOURCE_POSITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
+         false},
+        {"OFFSET_LAG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false}};
 
 SchemaRoutineLoadJobsScanner::SchemaRoutineLoadJobsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}

@@ -54,6 +54,5 @@ public class RoutineLoadJobsSystemTable {
                         .column("LATEST_SOURCE_POSITION", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("OFFSET_LAG", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_ROUTINE_LOAD_JOBS);
-
     }
 }
