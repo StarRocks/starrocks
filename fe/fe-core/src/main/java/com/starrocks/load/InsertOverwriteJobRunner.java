@@ -622,6 +622,7 @@ public class InsertOverwriteJobRunner {
                 insertStmt.setTargetPartitionIds(job.getTmpPartitionIds());
             }
             insertStmt.setOverwrite(false);
+            insertStmt.setIsFromOverwrite(true);
             insertStmt.setSystem(true);
 
         } catch (Exception e) {
