@@ -344,7 +344,15 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
             } catch (DateTimeParseException e) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, e.getMessage());
             }
-        } else {
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_ENABLE)) {
+            PropertyAnalyzer.analyzeFlatJsonEnabled(properties);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_NULL_FACTOR)) {
+            PropertyAnalyzer.analyzeFlatJsonNullFactor(properties);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_SPARSITY_FACTOR)) {
+            PropertyAnalyzer.analyzeFlatJsonSparsityFactor(properties);
+        } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_FLAT_JSON_COLUMN_MAX)) {
+            PropertyAnalyzer.analyzeFlatJsonColumnMax(properties);
+        }  else {
             ErrorReport.reportSemanticException(ErrorCode.ERR_COMMON_ERROR, "Unknown properties: " + properties);
         }
         return null;
