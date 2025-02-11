@@ -2141,6 +2141,7 @@ class StarrocksSQLApiLib(object):
                 break
             time.sleep(0.5)
         tools.assert_equal(expect_status, status, "wait alter table finish error")
+        time.sleep(0.5)
 
     def wait_global_dict_ready(self, column_name, table_name):
         """
