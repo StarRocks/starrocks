@@ -16,13 +16,8 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.clone.DynamicPartitionScheduler;
-<<<<<<< HEAD
-import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.StmtExecutor;
-=======
->>>>>>> 317e2e846 ([BugFix] Support non deterministic functions in transparent mv (#55662))
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
@@ -34,10 +29,8 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -146,50 +139,6 @@ public class DropPartitionWithExprListTest extends MVTestBase  {
     public static void afterClass() throws Exception {
     }
 
-<<<<<<< HEAD
-    @Before
-    public void before() {
-    }
-
-    @After
-    public void after() throws Exception {
-    }
-
-    public static void executeInsertSql(String sql) throws Exception {
-        connectContext.setQueryId(UUIDUtil.genUUID());
-        StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
-        new StmtExecutor(connectContext, statement).execute();
-    }
-
-    private String toPartitionVal(String val) {
-        return val == null ? "NULL" : String.format("'%s'", val);
-    }
-
-    private void addListPartition(String tbl, String pName, String pVal1, String pVal2) {
-        addListPartition(tbl, pName, pVal1, pVal2, false);
-    }
-
-    private void addListPartition(String tbl, String pName, String pVal1, String pVal2, boolean isInsertValues) {
-        String addPartitionSql = String.format("ALTER TABLE %s ADD PARTITION IF NOT EXISTS %s VALUES IN ((%s, %s))",
-                tbl, pName, toPartitionVal(pVal1), toPartitionVal(pVal2));
-        StatementBase stmt = SqlParser.parseSingleStatement(addPartitionSql, connectContext.getSessionVariable().getSqlMode());
-        try {
-            // add a new partition
-            new StmtExecutor(connectContext, stmt).execute();
-
-            // insert values
-            if (isInsertValues) {
-                String insertSql = String.format("insert into %s partition(%s) values(1, 1, '%s', '%s');",
-                        tbl, pName, pVal1, pVal2);
-                executeInsertSql(insertSql);
-            }
-        } catch (Exception e) {
-            Assert.fail("add partition failed:" + e);
-        }
-    }
-
-=======
->>>>>>> 317e2e846 ([BugFix] Support non deterministic functions in transparent mv (#55662))
     private void withTablePartitions(String tableName) {
         if (tableName.equalsIgnoreCase("t6")) {
             addListPartition(tableName, "p1", "2024-01-01", "2024-01-01");

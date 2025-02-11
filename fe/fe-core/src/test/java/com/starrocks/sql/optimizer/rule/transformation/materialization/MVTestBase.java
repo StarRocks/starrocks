@@ -55,12 +55,7 @@ import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
-<<<<<<< HEAD
-=======
-import com.starrocks.sql.optimizer.OptimizerContext;
-import com.starrocks.sql.optimizer.OptimizerFactory;
-import com.starrocks.sql.optimizer.OptimizerOptions;
->>>>>>> 317e2e846 ([BugFix] Support non deterministic functions in transparent mv (#55662))
+import com.starrocks.sql.optimizer.OptimizerConfig;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -229,15 +224,15 @@ public class MVTestBase extends StarRocksTestBase {
     }
 
     public static OptExpression getLogicalOptimizedPlan(String sql) {
-        return getOptimizedPlan(sql, connectContext, OptimizerOptions.newRuleBaseOpt());
+        return getOptimizedPlan(sql, connectContext, new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED));
     }
 
     public static OptExpression getOptimizedPlan(String sql, ConnectContext connectContext) {
-        return getOptimizedPlan(sql, connectContext, OptimizerOptions.defaultOpt());
+        return getOptimizedPlan(sql, connectContext, OptimizerConfig.defaultConfig());
     }
 
     public static OptExpression getOptimizedPlan(String sql, ConnectContext connectContext,
-                                                 OptimizerOptions optimizerOptions) {
+                                                 OptimizerConfig optimizerOptions) {
         StatementBase mvStmt;
         try {
             List<StatementBase> statementBases =
@@ -253,13 +248,7 @@ public class MVTestBase extends StarRocksTestBase {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan =
                 new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(query);
-<<<<<<< HEAD
-        Optimizer optimizer = new Optimizer();
-=======
-        OptimizerContext optimizerContext =
-                OptimizerFactory.initContext(connectContext, columnRefFactory, optimizerOptions);
-        Optimizer optimizer = OptimizerFactory.create(optimizerContext);
->>>>>>> 317e2e846 ([BugFix] Support non deterministic functions in transparent mv (#55662))
+        Optimizer optimizer = new Optimizer(optimizerOptions);
         return optimizer.optimize(
                 connectContext,
                 logicalPlan.getRoot(),
