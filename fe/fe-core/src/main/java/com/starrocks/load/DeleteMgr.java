@@ -303,8 +303,11 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         String predicate = stmt.getWherePredicate().toSql();
         String fakeSql = String.format("SELECT * FROM %s WHERE %s", tableName, predicate);
         PhysicalOlapScanOperator physicalOlapScanOperator;
+        ConnectContext currentSession = ConnectContext.get();
         try {
-            List<StatementBase> parse = SqlParser.parse(fakeSql, ConnectContext.get().getSessionVariable());
+            // Bypass the privilege check, as current user may have only the DELETE privilege but not SELECT
+            currentSession.setBypassAuthorizerCheck(true);
+            List<StatementBase> parse = SqlParser.parse(fakeSql, currentSession.getSessionVariable());
             StatementBase selectStmt = parse.get(0);
             Analyzer.analyze(selectStmt, ConnectContext.get());
             ExecPlan plan = StatementPlanner.plan(selectStmt, ConnectContext.get());
@@ -318,6 +321,8 @@ public class DeleteMgr implements Writable, MemoryTrackable {
         } catch (Exception e) {
             LOG.warn("failed to do partition pruning for delete {}", stmt.toString(), e);
             return Lists.newArrayList(table.getVisiblePartitionNames());
+        } finally {
+            currentSession.setBypassAuthorizerCheck(false);
         }
         List<Long> selectedPartitionId = physicalOlapScanOperator.getSelectedPartitionId();
         return ListUtils.emptyIfNull(selectedPartitionId)
