@@ -25,7 +25,6 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.MaterializationContext;
-import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.optimizer.MvRewritePreprocessor;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
@@ -656,7 +655,7 @@ public class MvRewritePreprocessorTest extends MVTestBase {
         starRocksAssert.withMaterializedView(sql, (obj) -> {
             String mvName = (String) obj;
             MaterializedView mv = getMv(DB_NAME, mvName);
-            MvPlanContext mvPlanContext = new MaterializedViewOptimizer().optimize(mv, connectContext, true);
+            MvPlanContext mvPlanContext = getOptimizedPlan(mv, true);
             Assert.assertTrue(!mvPlanContext.isValidMvPlan());
         });
     }
@@ -674,9 +673,9 @@ public class MvRewritePreprocessorTest extends MVTestBase {
         starRocksAssert.withMaterializedView(sql, (obj) -> {
             String mvName = (String) obj;
             MaterializedView mv = getMv(DB_NAME, mvName);
-            MvPlanContext mvPlanContext = new MaterializedViewOptimizer().optimize(mv, connectContext, true);
+            MvPlanContext mvPlanContext = getOptimizedPlan(mv, true);
             Assert.assertTrue(!mvPlanContext.isValidMvPlan());
-            mvPlanContext = new MaterializedViewOptimizer().optimize(mv, connectContext, false);
+            mvPlanContext = getOptimizedPlan(mv, false);
             Assert.assertTrue(mvPlanContext.isValidMvPlan());
 
 
