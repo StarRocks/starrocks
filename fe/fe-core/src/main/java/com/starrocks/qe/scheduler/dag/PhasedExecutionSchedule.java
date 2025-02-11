@@ -249,7 +249,7 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
         if (countDowns.decrementAndGet() != 0) {
             return;
         }
-        try (var guard = ConnectContext.ScopeGuard.setIfNotExists(connectContext)) {
+        try (var guard = connectContext.bindScope()) {
             final int oldTaskCnt = inputScheduleTaskNums.getAndIncrement();
             if (oldTaskCnt == 0) {
                 int dec = 0;

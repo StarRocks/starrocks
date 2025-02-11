@@ -122,7 +122,9 @@ public class StatementPlanner {
             analyzeStatement(stmt, session, plannerMetaLocker);
 
             // Authorization check
-            Authorizer.check(stmt, session);
+            if (!session.isBypassAuthorizerCheck()) {
+                Authorizer.check(stmt, session);
+            }
             if (stmt instanceof QueryStatement) {
                 OptimizerTraceUtil.logQueryStatement("after analyze:\n%s", (QueryStatement) stmt);
             }
