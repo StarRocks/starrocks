@@ -60,8 +60,6 @@ import java.util.List;
  * a single input tuple.
  */
 public class HashJoinNode extends JoinNode {
-    private boolean isSkewJoin = false;
-
     public HashJoinNode(PlanNodeId id, PlanNode outer, PlanNode inner, TableRef innerRef,
                         List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
         super("HASH JOIN", id, outer, inner, innerRef, eqJoinConjuncts, otherJoinConjuncts);
@@ -71,24 +69,7 @@ public class HashJoinNode extends JoinNode {
                         List<Expr> eqJoinConjuncts, List<Expr> otherJoinConjuncts) {
         super("HASH JOIN", id, outer, inner, joinOp, eqJoinConjuncts, otherJoinConjuncts);
     }
-
-    public boolean isSkewJoin() {
-        return isSkewJoin;
-    }
-
-    public void setSkewJoin(boolean skewJoin) {
-        isSkewJoin =
-                skewJoin && ConnectContext.get().getSessionVariable().isEnableOptimizerSkewJoinByBroadCastSkewValues();
-    }
-
-    public boolean isSkewShuffleJoin() {
-        return isSkewJoin() && distrMode == DistributionMode.PARTITIONED;
-    }
-
-    public boolean isSkewBroadJoin() {
-        return isSkewJoin() && distrMode == DistributionMode.BROADCAST;
-    }
-
+    
     @Override
     protected void toThrift(TPlanNode msg) {
         msg.node_type = TPlanNodeType.HASH_JOIN_NODE;
