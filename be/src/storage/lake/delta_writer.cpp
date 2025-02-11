@@ -321,7 +321,7 @@ inline Status DeltaWriterImpl::flush_async() {
             RETURN_IF_ERROR(fill_auto_increment_id(*_mem_table->get_result_chunk()));
         }
         st = _flush_token->submit(
-                std::move(_mem_table), _eos, [this](std::unique_ptr<SegmentPB> seg, bool eos, int64_t flush_data_size) {
+                std::move(_mem_table), _eos, [this](SegmentPBPtr seg, bool eos, int64_t flush_data_size) {
                     if (_immutable_tablet_size > 0 && !_is_immutable.load(std::memory_order_relaxed)) {
                         if (seg) {
                             _tablet_manager->add_in_writing_data_size(_tablet_id, seg->data_size());
@@ -334,7 +334,7 @@ inline Status DeltaWriterImpl::flush_async() {
                         }
                         VLOG(2) << "flush memtable, tablet=" << _tablet_id << ", txn=" << _txn_id
                                 << " _immutable_tablet_size=" << _immutable_tablet_size
-                                << ", segment_size=" << (seg ? seg->data_size() : 0)
+                                << ", flush data size=" << (seg ? seg->data_size() : flush_data_size)
                                 << ", in_writing_data_size=" << _tablet_manager->in_writing_data_size(_tablet_id)
                                 << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
                     }

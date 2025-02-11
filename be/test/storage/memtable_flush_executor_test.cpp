@@ -394,7 +394,7 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushStatusNotOk) {
     flush_token->set_status(Status::NotSupported("Not Suppoted"));
     ASSERT_FALSE(flush_token->status().ok());
 
-    flush_token->_flush_memtable(nullptr, nullptr, false);
+    flush_token->_flush_memtable(nullptr, nullptr, false, nullptr);
 
     ASSERT_TRUE(MemTableFlushExecutor::calc_max_threads_for_lake_table(data_dirs) > 0);
 }
