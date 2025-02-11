@@ -1,6 +1,6 @@
 {
   "version.label": {
-    "message": "Next",
+    "message": "次へ",
     "description": "The label for version current"
   },
   "sidebar.docs.category.StarRocks": {
@@ -8,7 +8,7 @@
     "description": "The label for category StarRocks in sidebar docs"
   },
   "sidebar.docs.category.Connectors": {
-    "message": "Connectors",
+    "message": "コネクタ",
     "description": "The label for category Connectors in sidebar docs"
   }
 }

@@ -1,27 +1,27 @@
 {
   "feedback.textarealabel.what-can-we-do": {
-    "message": "What can we do to improve it? Please be as detailed as you like."
+    "message": "どのように改善できますか？できるだけ詳しく教えてください。"
   },
   "feedback.humans": {
-    "message": "Real human beings read every single review."
+    "message": "すべてのレビューは本物の人間が読んでいます。"
   },
   "feedback.general": {
-    "message": "Any general feedback you'd like to add?"
+    "message": "追加したい一般的なフィードバックはありますか？"
   },
   "feedback.takeitall": {
-    "message": "We'll take it all... tell us how well we're doing or where we can improve."
+    "message": "すべて受け止めます… 私たちの良い点や改善すべき点を教えてください。"
   },
   "feedback.title": {
-    "message": "What did you think of this doc?"
+    "message": "このドキュメントについてどう思いましたか？"
   },
   "feedback.thanks": {
-    "message": "Thanks for your feedback."
+    "message": "フィードバックをありがとうございます。"
   },
   "feedback.community": {
-    "message": "Connect with the community and devs, links in the top nav!"
+    "message": "コミュニティや開発者とつながりましょう。リンクは上部のナビにあります！"
   },
   "feedback.send": {
-    "message": "Send your review!"
+    "message": "レビューを送信！"
   },
   "theme.NotFound.title": {
     "message": "ページが見つかりません",
@@ -219,19 +219,19 @@
     "description": "The title attribute for toggle word wrapping button of code block lines"
   },
   "theme.DocSidebarItem.expandCategoryAriaLabel": {
-    "message": "Expand sidebar category '{label}'",
+    "message": "サイドバーカテゴリ「{label}」を展開",
     "description": "The ARIA label to expand the sidebar category"
   },
   "theme.DocSidebarItem.collapseCategoryAriaLabel": {
-    "message": "Collapse sidebar category '{label}'",
+    "message": "サイドバーカテゴリ「{label}」を折りたたむ",
     "description": "The ARIA label to collapse the sidebar category"
   },
   "theme.NotFound.p2": {
-    "message": "このページにリンクしているサイトの所有者にリンクが壊れていることを伝えてください",
+    "message": "このページにリンクしているサイトの所有者に、リンクが壊れていることを知らせてください",
     "description": "The 2nd paragraph of the 404 page"
   },
   "theme.NavBar.navAriaLabel": {
-    "message": "Main",
+    "message": "メイン",
     "description": "The ARIA label for the main navigation"
   },
   "theme.navbar.mobileLanguageDropdown.label": {
@@ -247,7 +247,7 @@
     "description": "The label used in blog post item excerpts to link to full blog posts"
   },
   "theme.blog.post.readMoreLabel": {
-    "message": "{title}についてもっと見る",
+    "message": "「{title}」についてもっと見る",
     "description": "The ARIA label for the link to full blog posts from excerpts"
   },
   "theme.blog.post.readingTime.plurals": {
@@ -267,11 +267,11 @@
     "description": "The title attribute for collapse button of doc sidebar"
   },
   "theme.docs.sidebar.navAriaLabel": {
-    "message": "Docs sidebar",
+    "message": "ドキュメントのサイドバー",
     "description": "The ARIA label for the sidebar navigation"
   },
   "theme.docs.sidebar.closeSidebarButtonAriaLabel": {
-    "message": "Close navigation bar",
+    "message": "ナビゲーションバーを閉じる",
     "description": "The ARIA label for close button of mobile sidebar"
   },
   "theme.navbar.mobileSidebarSecondaryMenu.backButtonLabel": {
@@ -279,7 +279,7 @@
     "description": "The label of the back button to return to main menu, inside the mobile navbar sidebar secondary menu (notably used to display the docs sidebar)"
   },
   "theme.docs.sidebar.toggleSidebarButtonAriaLabel": {
-    "message": "Toggle navigation bar",
+    "message": "ナビゲーションバーを切り替え",
     "description": "The ARIA label for hamburger menu button of mobile navigation"
   },
   "theme.docs.sidebar.expandButtonTitle": {
@@ -295,7 +295,7 @@
     "description": "Pluralized label for \"{count} documents found\". Use as much plural forms (separated by \"|\") as your language support (see https://www.unicode.org/cldr/cldr-aux/charts/34/supplemental/language_plural_rules.html)"
   },
   "theme.SearchPage.existingResultsTitle": {
-    "message": "『{query}』の検索結果",
+    "message": "「{query}」の検索結果",
     "description": "The search page title for non-empty query"
   },
   "theme.SearchPage.emptyResultsTitle": {
