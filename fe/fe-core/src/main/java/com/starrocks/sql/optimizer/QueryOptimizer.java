@@ -925,11 +925,6 @@ public class QueryOptimizer extends Optimizer {
         result = new AddIndexOnlyPredicateRule().rewrite(result, rootTaskContext);
         result = new DataCachePopulateRewriteRule(connectContext).rewrite(result, rootTaskContext);
         result = new EliminateOveruseColumnAccessPathRule().rewrite(result, rootTaskContext);
-        if (rootTaskContext.getOptimizerContext().getSessionVariable()
-                .isEnableOptimizerSkewJoinByBroadCastSkewValues() &&
-                !rootTaskContext.getOptimizerContext().getSessionVariable().isEnableOptimizerSkewJoinByQueryRewrite()) {
-            result = new SkewShuffleJoinEliminationRule().rewrite(result, rootTaskContext);
-        }
         result.setPlanCount(planCount);
         return result;
     }
@@ -939,6 +934,14 @@ public class QueryOptimizer extends Optimizer {
         // update the existRequiredDistribution value in optExpression. The next rules need it to determine
         // if we can change the distribution to adjust the plan because of skew data, bad statistics or something else.
         result = new MarkParentRequiredDistributionRule().rewrite(result, rootTaskContext);
+
+        // this rule must be put after MarkParentRequiredDistributionRule
+        if (rootTaskContext.getOptimizerContext().getSessionVariable()
+                .isEnableOptimizerSkewJoinByBroadCastSkewValues() &&
+                !rootTaskContext.getOptimizerContext().getSessionVariable().isEnableOptimizerSkewJoinByQueryRewrite()) {
+            result = new SkewShuffleJoinEliminationRule().rewrite(result, rootTaskContext);
+        }
+
         result = new ApplyTuningGuideRule(connectContext).rewrite(result, rootTaskContext);
 
         OperatorTuningGuides.OptimizedRecord optimizedRecord = PlanTuningAdvisor.getInstance()

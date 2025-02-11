@@ -34,9 +34,7 @@ import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalConcatenateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashJoinOperator;
-import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSplitConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSplitProduceOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -63,7 +61,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /* rewrite the tree top down
  * if one shuffle join op is decided as skew, rewrite it as below and do not visit its children
- *        shuffle join                           union
+ *        shuffle join                       concatenate
  *       /         \     --->            /                   \
  *  exchange    exchange           shuffle join        broadcast join
  *     |            |                   /       \           /       \
@@ -98,11 +96,10 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
         handler = new SkewShuffleJoinEliminationVisitor(taskContext.getOptimizerContext().getColumnRefFactory());
-        // root's parentRequireEmpty = true
-        return root.getOp().accept(handler, root, true);
+        return root.getOp().accept(handler, root, null);
     }
 
-    private class SkewShuffleJoinEliminationVisitor extends OptExpressionVisitor<OptExpression, Boolean> {
+    private class SkewShuffleJoinEliminationVisitor extends OptExpressionVisitor<OptExpression, Void> {
         private ColumnRefFactory columnRefFactory;
 
         public SkewShuffleJoinEliminationVisitor(ColumnRefFactory columnRefFactory) {
@@ -110,39 +107,37 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
         }
 
         @Override
-        public OptExpression visit(OptExpression optExpr, Boolean parentRequireEmpty) {
-            // default: parent doesn't require empty
-            return visitChild(optExpr, false);
+        public OptExpression visit(OptExpression optExpr, Void Context) {
+            return visitChild(optExpr, Context);
         }
 
-        // visit all children of the given opt expression with the given parentRequireEmpty
-        private OptExpression visitChild(OptExpression opt, Boolean parentRequireEmpty) {
+        private OptExpression visitChild(OptExpression opt, Void Context) {
             for (int idx = 0; idx < opt.arity(); ++idx) {
                 OptExpression child = opt.inputAt(idx);
-                opt.setChild(idx, child.getOp().accept(this, child, parentRequireEmpty));
+                opt.setChild(idx, child.getOp().accept(this, child, null));
             }
             return opt;
         }
 
         @Override
-        public OptExpression visitPhysicalHashJoin(OptExpression opt, Boolean parentRequireEmpty) {
+        public OptExpression visitPhysicalHashJoin(OptExpression opt, Void Context) {
             PhysicalHashJoinOperator originalShuffleJoinOperator = (PhysicalHashJoinOperator) opt.getOp();
 
-            // broadcast and shuffle join doesn't rely on child's output distribution
-            boolean requireEmptyForChild = isBroadCastJoin(opt) || isShuffleJoin(opt);
-            // doesn't support cross join and right join
-            if (originalShuffleJoinOperator.getJoinType().isCrossJoin() ||
-                    originalShuffleJoinOperator.getJoinType().isRightJoin()) {
-                return visitChild(opt, requireEmptyForChild);
+            // currently only support inner join and left outer join
+            if (!originalShuffleJoinOperator.getJoinType().isInnerJoin() &&
+                    !originalShuffleJoinOperator.getJoinType().isLeftOuterJoin()) {
+                return visitChild(opt, null);
             }
 
             // right now only support shuffle join
             if (!isShuffleJoin(opt)) {
-                return visitChild(opt, requireEmptyForChild);
+                return visitChild(opt, null);
             }
 
+            // right now only support join hint with left skew table, since left table is bigger
+            // TODO(jerry): support MCV-based skew detection
             if (!isSkew(opt)) {
-                return visitChild(opt, requireEmptyForChild);
+                return visitChild(opt, null);
             }
 
             // find skew columns, rewrite skew values if needed
@@ -150,7 +145,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             ScalarOperator leftSkewColumn = skewColumnAndValues.skewColumns.first;
             ScalarOperator rightSkewColumn = skewColumnAndValues.skewColumns.second;
             List<ScalarOperator> skewValues = skewColumnAndValues.skewValues;
-            if (leftSkewColumn == null || rightSkewColumn == null) {
+            if (leftSkewColumn == null || rightSkewColumn == null || skewValues == null || skewValues.isEmpty()) {
                 return opt;
             }
 
@@ -224,10 +219,11 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     originalShuffleJoinOperator.getPredicate(), projectionOnJoin,
                     leftSkewColumn, skewValues);
 
+
             LocalExchangerType localExchangerType =
-                    parentRequireEmpty ? LocalExchangerType.DIRECT : LocalExchangerType.PASS_THROUGH;
-            PhysicalConcatenateOperator mergeOperator =
-                    buildMergeOperator(opt.getOutputColumns().getColumnRefOperators(columnRefFactory), 2,
+                    opt.isExistRequiredDistribution() ? LocalExchangerType.PASS_THROUGH : LocalExchangerType.DIRECT;
+            PhysicalConcatenateOperator concatenateOperator =
+                    buildConcatenateOperator(opt.getOutputColumns().getColumnRefOperators(columnRefFactory), 2,
                             localExchangerType, originalShuffleJoinOperator.getLimit());
 
             OptExpression leftSplitConsumerOptExpForShuffleJoin = OptExpression.builder()
@@ -279,8 +275,8 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     .setRequiredProperties(requiredPropertiesForBroadcastJoin)
                     .setCost(opt.getCost()).build();
 
-            OptExpression rightChildOfMerge = newBroadcastJoin;
-            if (!parentRequireEmpty) {
+            OptExpression rightChildOfConcatenate = newBroadcastJoin;
+            if (opt.isExistRequiredDistribution()) {
                 PhysicalDistributionOperator newExchangeForBroadcastJoin =
                         new PhysicalDistributionOperator(rightExchangeOpOfOriginalShuffleJoin.getDistributionSpec());
                 // we need add exchange node to make broadcast join's output distribution can be same as shuffle join's
@@ -290,7 +286,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                                 .setLogicalProperty(newBroadcastJoin.getLogicalProperty())
                                 .setStatistics(newBroadcastJoin.getStatistics())
                                 .setCost(newBroadcastJoin.getCost()).build();
-                rightChildOfMerge = exchangeOptExpForBroadcastJoin;
+                rightChildOfConcatenate = exchangeOptExpForBroadcastJoin;
                 if (projectionOnJoin != null) {
                     // broadcast join's projection should keep the columns used in exchange
                     Projection projectionForBroadcast = projectionOnJoin.deepClone();
@@ -308,15 +304,16 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                 }
             }
 
-            OptExpression mergeOptExp =
-                    OptExpression.builder().setOp(mergeOperator).setInputs(List.of(newShuffleJoin, rightChildOfMerge))
+            OptExpression concatenateOptExp =
+                    OptExpression.builder().setOp(concatenateOperator)
+                            .setInputs(List.of(newShuffleJoin, rightChildOfConcatenate))
                             .setLogicalProperty(opt.getLogicalProperty())
                             .setStatistics(opt.getStatistics())
                             .setCost(opt.getCost()).build();
 
             OptExpression cteAnchorOptExp1 =
                     OptExpression.builder().setOp(new PhysicalCTEAnchorOperator(uniqueSplitId.getAndIncrement()))
-                            .setInputs(List.of(rightSplitProduceOptExp, mergeOptExp))
+                            .setInputs(List.of(rightSplitProduceOptExp, concatenateOptExp))
                             .setLogicalProperty(opt.getLogicalProperty())
                             .setStatistics(opt.getStatistics())
                             .setCost(opt.getCost()).build();
@@ -332,12 +329,6 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             return cteAnchorOptExp2;
         }
 
-        @Override
-        public OptExpression visitPhysicalHashAggregate(OptExpression opt, Boolean parentRequireEmpty) {
-            PhysicalHashAggregateOperator aggOperator = (PhysicalHashAggregateOperator) opt.getOp();
-            boolean requireEmptyForChild = aggOperator.getType().isLocal();
-            return visitChild(opt, requireEmptyForChild);
-        }
 
         private boolean isShuffleJoin(OptExpression opt) {
             if (opt.getOp().getOpType() != OperatorType.PHYSICAL_HASH_JOIN) {
@@ -352,21 +343,20 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             return true;
         }
 
-        private boolean isBroadCastJoin(OptExpression opt) {
-            if (opt.getOp().getOpType() != OperatorType.PHYSICAL_HASH_JOIN) {
-                return false;
-            }
-            return isExchangeWithDistributionType(opt.getInputs().get(1).getOp(),
-                    DistributionSpec.DistributionType.BROADCAST);
-        }
 
         private boolean isSkew(OptExpression opt) {
-            PhysicalJoinOperator joinOperator = (PhysicalJoinOperator) opt.getOp();
+            PhysicalHashJoinOperator joinOperator = (PhysicalHashJoinOperator) opt.getOp();
+
+            if (joinOperator.getSkewColumn() == null || joinOperator.getSkewValues() == null ||
+                    joinOperator.getSkewValues().isEmpty()) {
+                return false;
+            }
+
             // respect join hint
             if (joinOperator.getJoinHint().equals(JoinOperator.HINT_SKEW)) {
                 return true;
             }
-            // right now only support join hint
+
             return false;
         }
 
@@ -398,7 +388,8 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             return Objects.equals(operator.getDistributionSpec().getType(), expectedType);
         }
 
-        private PhysicalConcatenateOperator buildMergeOperator(List<ColumnRefOperator> outputColumns, int childNum,
+        private PhysicalConcatenateOperator buildConcatenateOperator(List<ColumnRefOperator> outputColumns,
+                                                                     int childNum,
                                                                LocalExchangerType localExchangeType, long limit) {
             List<List<ColumnRefOperator>> childOutputColumns = new ArrayList<>();
             for (int i = 0; i < childNum; i++) {
@@ -412,9 +403,9 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             ColumnRefSet leftOutputColumns = input.inputAt(0).getOutputColumns();
             ColumnRefSet rightOutputColumns = input.inputAt(1).getOutputColumns();
 
-            // right now skew hint only support skew in left table, we will add new hint to replace it later
+            // right now skew hint only support skew in left table
             // originalSkewColumn is column in left table which is skew, and skew values have same type with originalSkewColumn
-            ScalarOperator originalSkewColumn = (ColumnRefOperator) oldJoinOperator.getSkewColumn();
+            ScalarOperator originalSkewColumn = oldJoinOperator.getSkewColumn();
             ScalarOperator leftSkewColumn = null;
             ScalarOperator rightSkewColumn = null;
             List<ScalarOperator> skewValues = oldJoinOperator.getSkewValues();
@@ -456,6 +447,8 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                         Map<ColumnRefOperator, ScalarOperator> leftColumnRefMap = leftProjection.getAllMaps();
                         if (leftColumnRefMap.keySet().contains(leftSkewColumn)) {
                             // this means leftSkewColumn is not a simple columnRef operator, so we need to rewrite skew values
+                            // for example: if leftSkewColumn is  cast(t1.c_tinyint as int), and skew values are (1,2,3)
+                            // then we need to rewrite skew values as (cast(1 as int), cast(2 as int), cast(3 as int))
                             skewValues = rewriteSkewValues(skewValues, leftSkewColumn);
                         }
                     }
@@ -487,6 +480,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
         private List<ScalarOperator> rewriteSkewValues(List<ScalarOperator> originalSkewValues,
                                                        ScalarOperator predicate) {
             List<ScalarOperator> result = new LinkedList<>();
+            // for each skew value, we replace the columnRef in left  with skew value
             originalSkewValues.forEach(value -> {
                 ColumnRefReplacer refReplacer = new ColumnRefReplacer(value);
                 ScalarOperator newSkewValue = predicate.accept(refReplacer, null);
