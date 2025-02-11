@@ -1,0 +1,18 @@
+-- name: test_insert_overwrite_loss_data
+create table t(k int) partition by (k);
+-- result:
+-- !result
+insert into t select * from TABLE(generate_series(0,63));
+-- result:
+-- !result
+select count(*) from t;
+-- result:
+64
+-- !result
+insert overwrite t select * from TABLE(generate_series(0,31));
+-- result:
+-- !result
+select count(*) from t;
+-- result:
+32
+-- !result
