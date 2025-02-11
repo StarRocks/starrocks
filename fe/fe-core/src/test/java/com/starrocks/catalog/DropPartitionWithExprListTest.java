@@ -16,15 +16,17 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.clone.DynamicPartitionScheduler;
+<<<<<<< HEAD
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.pseudocluster.PseudoCluster;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
+=======
+>>>>>>> 317e2e846 ([BugFix] Support non deterministic functions in transparent mv (#55662))
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
-import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
@@ -144,6 +146,7 @@ public class DropPartitionWithExprListTest extends MVTestBase  {
     public static void afterClass() throws Exception {
     }
 
+<<<<<<< HEAD
     @Before
     public void before() {
     }
@@ -185,6 +188,8 @@ public class DropPartitionWithExprListTest extends MVTestBase  {
         }
     }
 
+=======
+>>>>>>> 317e2e846 ([BugFix] Support non deterministic functions in transparent mv (#55662))
     private void withTablePartitions(String tableName) {
         if (tableName.equalsIgnoreCase("t6")) {
             addListPartition(tableName, "p1", "2024-01-01", "2024-01-01");

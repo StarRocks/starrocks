@@ -17,6 +17,9 @@ package com.starrocks.sql.optimizer.rule.transformation.materialization;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvPlanContext;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.common.FeConstants;
 import com.starrocks.schema.MTable;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
@@ -25,6 +28,8 @@ import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Set;
 
 public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
@@ -34,6 +39,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
     private static String t1;
     private static String t2;
     private static String t3;
+    private static String R2;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -128,6 +134,24 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                 "     PARTITION p4 VALUES IN ((\"guangdong\", \"2024-01-02\")) \n" +
                 ")\n" +
                 "DISTRIBUTED BY RANDOM\n";
+
+        // partition table by partition expression
+        R2 = "CREATE TABLE r2 \n" +
+                "(\n" +
+                "    dt datetime,\n" +
+                "    k2 int,\n" +
+                "    v1 int \n" +
+                ")\n" +
+                "PARTITION BY date_trunc('day', dt)\n" +
+                "DISTRIBUTED BY HASH(k2) BUCKETS 3\n" +
+                "PROPERTIES('replication_num' = '1');";
+    }
+
+    private void withTablePartitionsV2(String tableName) {
+        addRangePartition(tableName, "p1", "2024-01-29", "2024-01-30");
+        addRangePartition(tableName, "p2", "2024-01-30", "2024-01-31");
+        addRangePartition(tableName, "p3", "2024-01-31", "2024-02-01");
+        addRangePartition(tableName, "p4", "2024-02-01", "2024-02-02");
     }
 
     private void withPartialScanMv(StarRocksAssert.ExceptionRunnable runner) {
@@ -1313,6 +1337,84 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
                             PlanTestBase.assertContains(plan, ":UNION");
                             PlanTestBase.assertContains(plan, "mv0");
                             PlanTestBase.assertContains(plan, " OUTPUT EXPRS:1: v11 | 2: k2 | 3: k1");
+                        }
+                    });
+        });
+    }
+
+    @Test
+    public void testTransparentRewriteWithNonDeterministicFunctions() {
+        starRocksAssert.withTable(R2, (obj) -> {
+            String tableName = (String) obj;
+            withTablePartitionsV2(tableName);
+            OlapTable olapTable = (OlapTable) starRocksAssert.getTable("test", tableName);
+            Assert.assertEquals(4, olapTable.getVisiblePartitions().size());
+            cluster.runSql("test", String.format("insert into %s values ('2024-02-01', 1, 1);", tableName));
+
+            starRocksAssert.withMaterializedView(String.format("CREATE MATERIALIZED VIEW mv0 " +
+                            " PARTITION BY (dt) " +
+                            " REFRESH DEFERRED MANUAL " +
+                            " PROPERTIES (\n" +
+                            " 'transparent_mv_rewrite_mode' = 'true'" +
+                            " ) " +
+                            " AS SELECT dt, k2, sum(v1) as agg1 from %s where date_trunc('day', dt) < timestamp(curdate()) " +
+                            " group by dt, k2;", tableName),
+                    () -> {
+                        starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv0 \n"));
+                        MaterializedView mv = getMv("test", "mv0");
+                        Set<String> mvNames = mv.getPartitionNames();
+                        Assert.assertEquals(4, mvNames.size());
+
+                        // test mv get plan context
+                        {
+                            MvPlanContext mvPlanContext = getOptimizedPlan(mv, true, true);
+                            Assert.assertTrue(mvPlanContext != null);
+                            Assert.assertTrue(!mvPlanContext.isValidMvPlan());
+                            Assert.assertTrue(mvPlanContext.getLogicalPlan() == null);
+                            Assert.assertTrue(mvPlanContext.getInvalidReason().contains("non-deterministic function"));
+                        }
+                        {
+                            MvPlanContext mvPlanContext = getOptimizedPlan(mv, true, false);
+                            Assert.assertTrue(mvPlanContext != null);
+                            Assert.assertFalse(mvPlanContext.isValidMvPlan());
+                            Assert.assertTrue(mvPlanContext.getLogicalPlan() != null);
+                            // For transparent mv we cannot const fold non-deterministic function because it should be changed
+                            // for each time.
+                            Assert.assertTrue(hasNonDeterministicFunction(mvPlanContext.getLogicalPlan()));
+                        }
+
+                        {
+                            String query = "SELECT * from mv0;";
+                            String plan = getFragmentPlan(query);
+                            PlanTestBase.assertContains(plan, "mv0");
+                            PlanTestBase.assertNotContains(plan, tableName);
+                        }
+
+                        {
+                            // add new partitions
+                            LocalDateTime now = LocalDateTime.now();
+                            addRangePartition(tableName, "p5",
+                                    now.plusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
+                                    now.plusDays(2).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
+                                    true);
+                            String query = "SELECT * from mv0;";
+                            FeConstants.enablePruneEmptyOutputScan = true;
+                            String plan = getFragmentPlan(query);
+                            FeConstants.enablePruneEmptyOutputScan = false;
+                            PlanTestBase.assertContains(plan, "mv0");
+                            PlanTestBase.assertNotContains(plan, "UNION", tableName);
+                        }
+                        {
+                            // add new partitions
+                            LocalDateTime now = LocalDateTime.now();
+                            addRangePartition(tableName, "p6",
+                                    now.minusDays(2).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
+                                    now.minusDays(1).format(DateTimeFormatter.ofPattern("yyyy-MM-dd")),
+                                    true);
+                            String query = "SELECT * from mv0;";
+                            String plan = getFragmentPlan(query);
+                            PlanTestBase.assertContains(plan, "mv0");
+                            PlanTestBase.assertContains(plan, "UNION", tableName);
                         }
                     });
         });
