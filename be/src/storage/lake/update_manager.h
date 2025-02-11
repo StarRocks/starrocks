@@ -203,6 +203,8 @@ public:
 
     Status pk_index_major_compaction(int64_t tablet_id, DataDir* data_dir);
 
+    bool TEST_primary_index_refcnt(int64_t tablet_id, uint32_t expected_cnt);
+
 private:
     // print memory tracker state
     void _print_memory_stats();
