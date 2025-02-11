@@ -58,7 +58,8 @@ public class AlterTableStatementAnalyzer {
         if (alterClauseList.stream().map(AlterClause::getOpType).anyMatch(AlterOpType::needCheckCapacity)) {
             try {
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().checkClusterCapacity();
-                db.checkQuota();
+                GlobalStateMgr.getCurrentState().getLocalMetastore().checkDataSizeQuota(db);
+                GlobalStateMgr.getCurrentState().getLocalMetastore().checkReplicaQuota(db);
             } catch (DdlException e) {
                 throw new SemanticException(e.getMessage());
             }

@@ -26,6 +26,9 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.AlterMaterializedViewStmt;
+import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.InsertStmt;
@@ -199,6 +202,27 @@ public class PlannerMetaLocker {
             Pair<Database, Table> dbAndTable = resolveTable(session, node.getTableName());
             put(dbAndTable);
             return super.visitDeleteStatement(node, context);
+        }
+
+        @Override
+        public Void visitAlterTableStatement(AlterTableStmt statement, Void context) {
+            Pair<Database, Table> dbAndTable = resolveTable(session, statement.getTbl());
+            put(dbAndTable);
+            return super.visitAlterTableStatement(statement, context);
+        }
+
+        @Override
+        public Void visitAlterViewStatement(AlterViewStmt statement, Void context) {
+            Pair<Database, Table> dbAndTable = resolveTable(session, statement.getTableName());
+            put(dbAndTable);
+            return super.visitAlterViewStatement(statement, context);
+        }
+
+        @Override
+        public Void visitAlterMaterializedViewStatement(AlterMaterializedViewStmt statement, Void context) {
+            Pair<Database, Table> dbAndTable = resolveTable(session, statement.getMvName());
+            put(dbAndTable);
+            return super.visitAlterMaterializedViewStatement(statement, context);
         }
 
         @Override
