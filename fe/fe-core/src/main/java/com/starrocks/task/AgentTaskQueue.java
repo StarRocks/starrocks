@@ -341,4 +341,11 @@ public class AgentTaskQueue {
         }
         return result;
     }
+
+    public static synchronized void failForLeaderTransfer() {
+        Map<Long, Map<Long, AgentTask>> createTasks = tasks.column(TTaskType.CREATE);
+        createTasks.values()
+                .forEach(v -> v.values()
+                        .forEach(task -> ((CreateReplicaTask) task).failForLeaderTransfer()));
+    }
 }

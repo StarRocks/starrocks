@@ -93,6 +93,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.HttpConnectContext;
 import com.starrocks.http.HttpResultSender;
+import com.starrocks.journal.LeaderTransferException;
 import com.starrocks.load.EtlJobType;
 import com.starrocks.load.ExportJob;
 import com.starrocks.load.InsertOverwriteJob;
@@ -828,11 +829,19 @@ public class StmtExecutor {
                 // we should set such error type to internal error
                 context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
             }
+
+            if (context.isLeaderTransferred() && !isInternalStmt) {
+                forwardToLeader();
+            }
         } catch (Throwable e) {
-            String sql = originStmt != null ? originStmt.originStmt : "";
-            LOG.warn("execute Exception, sql " + sql, e);
-            context.getState().setError(e.getMessage());
-            context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
+            if (e instanceof LeaderTransferException && !isInternalStmt) {
+                forwardToLeader();
+            } else {
+                String sql = originStmt != null ? originStmt.originStmt : "";
+                LOG.warn("execute Exception, sql " + sql, e);
+                context.getState().setError(e.getMessage());
+                context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
+            }
         } finally {
             GlobalStateMgr.getCurrentState().getMetadataMgr().removeQueryMetadata();
             if (context.getState().isError() && coord != null) {

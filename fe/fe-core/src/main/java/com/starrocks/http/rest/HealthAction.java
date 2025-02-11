@@ -39,7 +39,9 @@ import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.GracefulExitFlag;
 import io.netty.handler.codec.http.HttpMethod;
+import io.netty.handler.codec.http.HttpResponseStatus;
 
 public class HealthAction extends RestBaseAction {
     public HealthAction(ActionController controller) {
@@ -53,13 +55,17 @@ public class HealthAction extends RestBaseAction {
 
     @Override
     public void execute(BaseRequest request, BaseResponse response) {
-        response.setContentType("application/json");
+        if (GracefulExitFlag.isGracefulExit()) {
+            sendResult(request, response, HttpResponseStatus.INTERNAL_SERVER_ERROR);
+        } else {
+            response.setContentType("application/json");
 
-        RestResult result = new RestResult();
-        result.addResultEntry("total_backend_num",
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber());
-        result.addResultEntry("online_backend_num",
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveBackendNumber());
-        sendResult(request, response, result);
+            RestResult result = new RestResult();
+            result.addResultEntry("total_backend_num",
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber());
+            result.addResultEntry("online_backend_num",
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAliveBackendNumber());
+            sendResult(request, response, result);
+        }
     }
 }
