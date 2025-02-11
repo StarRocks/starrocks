@@ -354,6 +354,7 @@ public:
     template <typename CppType>
     static void calc_bucket_nums(const Buffer<CppType>& data, uint32_t bucket_size, Buffer<uint32_t>* buckets,
                                  uint32_t start, uint32_t count) {
+        DCHECK(count <= buckets->size());
         for (size_t i = 0; i < count; i++) {
             (*buckets)[i] = calc_bucket_num<CppType>(data[start + i], bucket_size);
         }
