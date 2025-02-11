@@ -124,15 +124,15 @@ public class MysqlHandshakePacket extends MysqlPacket {
         }
     }
 
-    public boolean checkAuthPluginSameAsStarRocks(String pluginName) {
+    public static boolean checkAuthPluginSameAsStarRocks(String pluginName) {
         return SUPPORTED_PLUGINS.containsKey(pluginName) && SUPPORTED_PLUGINS.get(pluginName);
     }
 
     // If the auth default plugin in client is different from StarRocks
     // it will create a AuthSwitchRequest
-    public void buildAuthSwitchRequest(MysqlSerializer serializer) {
+    public void buildAuthSwitchRequest(MysqlSerializer serializer, String authPluginName) {
         serializer.writeInt1((byte) 0xfe);
-        serializer.writeNulTerminateString(NATIVE_AUTH_PLUGIN_NAME);
+        serializer.writeNulTerminateString(authPluginName);
         serializer.writeBytes(authPluginData);
         serializer.writeInt1(0);
     }
