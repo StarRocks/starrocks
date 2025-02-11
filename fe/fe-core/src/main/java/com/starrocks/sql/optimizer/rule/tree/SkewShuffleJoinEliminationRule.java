@@ -123,20 +123,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
         public OptExpression visitPhysicalHashJoin(OptExpression opt, Void Context) {
             PhysicalHashJoinOperator originalShuffleJoinOperator = (PhysicalHashJoinOperator) opt.getOp();
 
-            // currently only support inner join and left outer join
-            if (!originalShuffleJoinOperator.getJoinType().isInnerJoin() &&
-                    !originalShuffleJoinOperator.getJoinType().isLeftOuterJoin()) {
-                return visitChild(opt, null);
-            }
-
-            // right now only support shuffle join
-            if (!isShuffleJoin(opt)) {
-                return visitChild(opt, null);
-            }
-
-            // right now only support join hint with left skew table, since left table is bigger
-            // TODO(jerry): support MCV-based skew detection
-            if (!isSkew(opt)) {
+            if (!canOptimize(originalShuffleJoinOperator, opt)) {
                 return visitChild(opt, null);
             }
 
@@ -330,36 +317,6 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
         }
 
 
-        private boolean isShuffleJoin(OptExpression opt) {
-            if (opt.getOp().getOpType() != OperatorType.PHYSICAL_HASH_JOIN) {
-                return false;
-            }
-            if (!isExchangeWithDistributionType(opt.getInputs().get(0).getOp(),
-                    DistributionSpec.DistributionType.SHUFFLE) ||
-                    !isExchangeWithDistributionType(opt.getInputs().get(1).getOp(),
-                            DistributionSpec.DistributionType.SHUFFLE)) {
-                return false;
-            }
-            return true;
-        }
-
-
-        private boolean isSkew(OptExpression opt) {
-            PhysicalHashJoinOperator joinOperator = (PhysicalHashJoinOperator) opt.getOp();
-
-            if (joinOperator.getSkewColumn() == null || joinOperator.getSkewValues() == null ||
-                    joinOperator.getSkewValues().isEmpty()) {
-                return false;
-            }
-
-            // respect join hint
-            if (joinOperator.getJoinHint().equals(JoinOperator.HINT_SKEW)) {
-                return true;
-            }
-
-            return false;
-        }
-
         private Pair<ScalarOperator, ScalarOperator> generateInAndNotInPredicate(ScalarOperator skewColumn,
                                                                                  List<ScalarOperator> skewValues) {
             List<ScalarOperator> inPredicateParams = new ArrayList<>();
@@ -502,6 +459,49 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                 return scalarOperator;
             }
 
+        }
+
+        private boolean canOptimize(PhysicalHashJoinOperator joinOp, OptExpression opt) {
+            return isValidJoinType(joinOp) &&
+                    isShuffleJoin(opt) &&
+                    isSkew(opt);
+        }
+
+        // currently only support inner join and left outer join
+        private boolean isValidJoinType(PhysicalHashJoinOperator joinOp) {
+            return joinOp.getJoinType().isInnerJoin() ||
+                    joinOp.getJoinType().isLeftOuterJoin();
+        }
+
+        private boolean isShuffleJoin(OptExpression opt) {
+            if (opt.getOp().getOpType() != OperatorType.PHYSICAL_HASH_JOIN) {
+                return false;
+            }
+            if (!isExchangeWithDistributionType(opt.getInputs().get(0).getOp(),
+                    DistributionSpec.DistributionType.SHUFFLE) ||
+                    !isExchangeWithDistributionType(opt.getInputs().get(1).getOp(),
+                            DistributionSpec.DistributionType.SHUFFLE)) {
+                return false;
+            }
+            return true;
+        }
+
+        // right now only support join hint with left skew table, since left table is bigger
+        // TODO(jerry): support MCV-based skew detection
+        private boolean isSkew(OptExpression opt) {
+            PhysicalHashJoinOperator joinOperator = (PhysicalHashJoinOperator) opt.getOp();
+
+            if (joinOperator.getSkewColumn() == null || joinOperator.getSkewValues() == null ||
+                    joinOperator.getSkewValues().isEmpty()) {
+                return false;
+            }
+
+            // respect join hint
+            if (joinOperator.getJoinHint().equals(JoinOperator.HINT_SKEW)) {
+                return true;
+            }
+
+            return false;
         }
     }
 
