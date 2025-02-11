@@ -18,6 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.GlobalStateMgrTestUtil;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.proto.StatusPB;
@@ -162,5 +163,28 @@ public class VacuumTest {
         }
         
         Assert.assertEquals(4L, partition.getLastSuccVacuumVersion());
+    }
+
+    @Test
+    public void testVacuumCheck() throws Exception {
+        AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
+        long current = System.currentTimeMillis();
+        // static
+        partition.setVisibleVersion(1L, current - Config.lake_autovacuum_stale_partition_threshold * 3600 * 1000);
+        Assert.assertFalse(autovacuumDaemon.shouldVacuum(partition));
+        // empty
+        partition.setVisibleVersion(1L, current);
+        Assert.assertFalse(autovacuumDaemon.shouldVacuum(partition));
+        // too frequency
+        partition.setVisibleVersion(10L, current);
+        partition.setLastVacuumTime(current);
+        Assert.assertFalse(autovacuumDaemon.shouldVacuum(partition));
+        // already vacuum success
+        partition.setLastVacuumTime(current - Config.lake_autovacuum_partition_naptime_seconds * 1000 * 6);
+        partition.setLastSuccVacuumVersion(10L);
+        Assert.assertFalse(autovacuumDaemon.shouldVacuum(partition));
+        // disable
+        Config.lake_autovacuum_by_version = false;
+        Assert.assertTrue(autovacuumDaemon.shouldVacuum(partition));
     }
 }

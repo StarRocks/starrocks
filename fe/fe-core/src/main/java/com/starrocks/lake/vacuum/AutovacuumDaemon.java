@@ -92,20 +92,43 @@ public class AutovacuumDaemon extends FrontendDaemon {
         }
     }
 
+    public boolean shouldVacuum(PhysicalPartition partition) {
+        long current = System.currentTimeMillis();
+        long staleTime = current - Config.lake_autovacuum_stale_partition_threshold * MILLISECONDS_PER_HOUR;
+
+        if (partition.getVisibleVersionTime() <= staleTime) {
+            return false;
+        }
+        // empty parition
+        if (partition.getVisibleVersion() <= 1) {
+            return false;
+        }
+        // avoid parition too frequent
+        if (current < partition.getLastVacuumTime() + Config.lake_autovacuum_partition_naptime_seconds * 1000) {
+            return false;
+        }
+        long minRetainVersion = partition.getMinRetainVersion();
+        if (minRetainVersion <= 0) {
+            minRetainVersion = Math.max(1, partition.getVisibleVersion() - Config.lake_autovacuum_max_previous_versions);
+        }
+        // the file before minVersion vacuum success
+        if (Config.lake_autovacuum_by_version && partition.getLastSuccVacuumVersion() >= minRetainVersion) {
+            return false;
+        }
+        // TODO(zhangqiang)
+        // add partition data size and storage size on S3 to decide vacuum or not
+        return true;
+    }
+
     private void vacuumTable(Database db, Table baseTable) {
         OlapTable table = (OlapTable) baseTable;
         List<PhysicalPartition> partitions;
-        long current = System.currentTimeMillis();
-        long staleTime = current - Config.lake_autovacuum_stale_partition_threshold * MILLISECONDS_PER_HOUR;
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(baseTable.getId()), LockType.READ);
         try {
             partitions = table.getPhysicalPartitions().stream()
-                    .filter(p -> p.getVisibleVersionTime() > staleTime)
-                    .filter(p -> p.getVisibleVersion() > 1) // filter out empty partition
-                    .filter(p -> current >=
-                            p.getLastVacuumTime() + Config.lake_autovacuum_partition_naptime_seconds * 1000)
+                    .filter(p -> shouldVacuum(p))
                     .collect(Collectors.toList());
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(baseTable.getId()), LockType.READ);
@@ -142,12 +165,6 @@ public class AutovacuumDaemon extends FrontendDaemon {
             minRetainVersion = partition.getMinRetainVersion();
             if (minRetainVersion <= 0) {
                 minRetainVersion = Math.max(1, visibleVersion - Config.lake_autovacuum_max_previous_versions);
-            }
-            if (Config.lake_autovacuum_by_version && partition.getLastSuccVacuumVersion() >= minRetainVersion) {
-                LOG.info("Vacuumed {}.{}.{} version:{} already vacuum successfully", db.getFullName(), table.getName(), 
-                          partition.getId(), minRetainVersion);
-                partition.setLastVacuumTime(startTime);
-                return;
             }
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
