@@ -238,6 +238,18 @@ public class OlapTableSink extends DataSink {
     }
 
     public List<Long> getOpenPartitions() {
+<<<<<<< HEAD
+=======
+        // if load start after shema change, we should open all of the partitions to avoid different schema during schema change
+        // if load start before schema change, it will be finished in waiting_txn state
+        if (dstTable.getState() != OlapTable.OlapTableState.NORMAL) {
+            return partitionIds;
+        }
+        if (enableAutomaticPartition && enableDynamicOverwrite) {
+            return new ArrayList<>(Collections.singletonList(
+                    dstTable.getPartition(ExpressionRangePartitionInfo.AUTOMATIC_SHADOW_PARTITION_NAME).getId()));
+        }
+>>>>>>> 1e81126f70 ([BugFix] Fix stream load crash during schema change since open different schema in load job (#55773))
         if (!enableAutomaticPartition || Config.max_load_initial_open_partition_number <= 0
                 || partitionIds.size() < Config.max_load_initial_open_partition_number) {
             return partitionIds;
