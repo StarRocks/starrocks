@@ -171,10 +171,16 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
                 query_options.__isset.load_profile_collect_second ? query_options.load_profile_collect_second : -1;
         // when enable_profile and load_profile_collect_second are set, use big query threshold to control the profile
         if (enable_profile && load_profile_collect_second > 0) {
+            _load_channel_profile_config.set_enable_profile(false);
             _load_channel_profile_config.set_big_query_profile_threshold_ns(load_profile_collect_second * 1e9);
         } else if (enable_profile) {
             _load_channel_profile_config.set_enable_profile(true);
+            _load_channel_profile_config.set_big_query_profile_threshold_ns(-1);
+        } else {
+            _load_channel_profile_config.set_enable_profile(false);
+            _load_channel_profile_config.set_big_query_profile_threshold_ns(-1);
         }
+        _load_channel_profile_config.set_runtime_profile_report_interval_ns(std::numeric_limits<int64_t>::max());
     }
     return Status::OK();
 }

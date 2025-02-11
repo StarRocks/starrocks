@@ -153,6 +153,9 @@ TEST_F(TabletSinkIndexChannelTest, non_pipeline_load_channel_profile) {
         TQueryOptions query_options;
         auto runtime_state = _build_runtime_state(query_options);
         PLoadChannelProfileConfig expect_config;
+        expect_config.set_enable_profile(false);
+        expect_config.set_big_query_profile_threshold_ns(-1);
+        expect_config.set_runtime_profile_report_interval_ns(std::numeric_limits<int64_t>::max());
         test_load_channel_profile_base(runtime_state.get(), expect_config);
     }
 
@@ -162,6 +165,9 @@ TEST_F(TabletSinkIndexChannelTest, non_pipeline_load_channel_profile) {
         query_options.__set_load_profile_collect_second(10);
         auto runtime_state = _build_runtime_state(query_options);
         PLoadChannelProfileConfig expect_config;
+        expect_config.set_enable_profile(false);
+        expect_config.set_big_query_profile_threshold_ns(-1);
+        expect_config.set_runtime_profile_report_interval_ns(std::numeric_limits<int64_t>::max());
         test_load_channel_profile_base(runtime_state.get(), expect_config);
     }
 
@@ -172,6 +178,8 @@ TEST_F(TabletSinkIndexChannelTest, non_pipeline_load_channel_profile) {
         auto runtime_state = _build_runtime_state(query_options);
         PLoadChannelProfileConfig expect_config;
         expect_config.set_enable_profile(true);
+        expect_config.set_big_query_profile_threshold_ns(-1);
+        expect_config.set_runtime_profile_report_interval_ns(std::numeric_limits<int64_t>::max());
         test_load_channel_profile_base(runtime_state.get(), expect_config);
     }
 
@@ -182,7 +190,9 @@ TEST_F(TabletSinkIndexChannelTest, non_pipeline_load_channel_profile) {
         query_options.__set_load_profile_collect_second(10);
         auto runtime_state = _build_runtime_state(query_options);
         PLoadChannelProfileConfig expect_config;
+        expect_config.set_enable_profile(false);
         expect_config.set_big_query_profile_threshold_ns(10 * 1e9);
+        expect_config.set_runtime_profile_report_interval_ns(std::numeric_limits<int64_t>::max());
         test_load_channel_profile_base(runtime_state.get(), expect_config);
     }
 }
