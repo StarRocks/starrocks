@@ -16,17 +16,12 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.clone.DynamicPartitionScheduler;
-import com.starrocks.pseudocluster.PseudoCluster;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.statistic.StatisticsMetaManager;
-import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
@@ -40,26 +35,14 @@ import java.util.List;
 
 public class DropPartitionWithExprRangeTest extends MVTestBase {
     private static final Logger LOG = LogManager.getLogger(DropPartitionWithExprRangeTest.class);
-    protected static ConnectContext connectContext;
-    protected static PseudoCluster cluster;
-    protected static StarRocksAssert starRocksAssert;
     private static String R1;
     private static String R2;
     private static List<String> RANGE_TABLES;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
-        connectContext = UtFrameUtils.createDefaultCtx();
-        starRocksAssert = new StarRocksAssert(connectContext);
-        // set default config for async mvs
-        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
-        if (!starRocksAssert.databaseExist("_statistics_")) {
-            StatisticsMetaManager m = new StatisticsMetaManager();
-            m.createStatisticsTablesForTest();
-        }
-        starRocksAssert.withDatabase("test");
-        starRocksAssert.useDatabase("test");
+        MVTestBase.beforeClass();
+
         // range partition table
         R1 = "CREATE TABLE r1 \n" +
                 "(\n" +

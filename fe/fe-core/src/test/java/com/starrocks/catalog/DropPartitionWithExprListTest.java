@@ -16,17 +16,13 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.clone.DynamicPartitionScheduler;
-import com.starrocks.pseudocluster.PseudoCluster;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.AfterClass;
@@ -40,9 +36,6 @@ import java.util.List;
 
 public class DropPartitionWithExprListTest extends MVTestBase  {
     private static final Logger LOG = LogManager.getLogger(DropPartitionWithExprListTest.class);
-    protected static ConnectContext connectContext;
-    protected static PseudoCluster cluster;
-    protected static StarRocksAssert starRocksAssert;
     private static String T1;
     private static String T2;
     private static String T3;
@@ -54,19 +47,7 @@ public class DropPartitionWithExprListTest extends MVTestBase  {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
-        connectContext = UtFrameUtils.createDefaultCtx();
-        starRocksAssert = new StarRocksAssert(connectContext);
-
-        // set default config for async mvs
-        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
-
-        if (!starRocksAssert.databaseExist("_statistics_")) {
-            StatisticsMetaManager m = new StatisticsMetaManager();
-            m.createStatisticsTablesForTest();
-        }
-        starRocksAssert.withDatabase("test");
-        starRocksAssert.useDatabase("test");
+        MVTestBase.beforeClass();
 
         // table with partition expression whose partitions have multi columns
         T1 = "CREATE TABLE t1 (\n" +
