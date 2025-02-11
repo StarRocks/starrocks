@@ -207,14 +207,6 @@ public abstract class JoinNode extends PlanNode implements RuntimeFilterBuildNod
             }
         }
 
-        // todo: skew join support rf(will support later)
-        if (this instanceof HashJoinNode) {
-            HashJoinNode hashJoinNode = (HashJoinNode) this;
-            if (hashJoinNode.isSkewBroadJoin() || hashJoinNode.isSkewShuffleJoin()) {
-                return;
-            }
-        }
-
         for (int i = 0; i < eqJoinConjuncts.size(); ++i) {
             BinaryPredicate joinConjunct = eqJoinConjuncts.get(i);
             Preconditions.checkArgument(BinaryPredicate.IS_EQ_NULL_PREDICATE.apply(joinConjunct) ||

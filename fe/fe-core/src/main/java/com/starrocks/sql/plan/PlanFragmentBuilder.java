@@ -2850,10 +2850,6 @@ public class PlanFragmentBuilder {
                         joinNode.setUkfkProperty(joinProperty);
                     }
                 }
-
-                PhysicalHashJoinOperator physicalHashJoinOperator = (PhysicalHashJoinOperator) node;
-                HashJoinNode hashJoinNode = (HashJoinNode) joinNode;
-                hashJoinNode.setSkewJoin(physicalHashJoinOperator.getSkewColumn() != null);
             } else if (node instanceof PhysicalMergeJoinOperator) {
                 joinNode = new MergeJoinNode(
                         context.getNextNodeId(),
