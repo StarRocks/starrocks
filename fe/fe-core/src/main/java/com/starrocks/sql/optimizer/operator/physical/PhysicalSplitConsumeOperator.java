@@ -32,15 +32,15 @@ public class PhysicalSplitConsumeOperator extends PhysicalOperator {
 
     private ScalarOperator splitPredicate;
 
-    private final Map<ColumnRefOperator, ColumnRefOperator> outputColumnRefMap;
+    private final List<ColumnRefOperator> outputColumnRefOp;
 
     public PhysicalSplitConsumeOperator(int splitId, ScalarOperator splitPredicate, DistributionSpec distributionSpec,
-                                        Map<ColumnRefOperator, ColumnRefOperator> outputColumnRefMap) {
+                                        List<ColumnRefOperator> outputColumnRefOp) {
         // distributionSpec specifies the distribution of the input of this operator
         super(OperatorType.PHYSICAL_SPLIT_CONSUME, distributionSpec);
         this.splitId = splitId;
         this.splitPredicate = splitPredicate;
-        this.outputColumnRefMap = outputColumnRefMap;
+        this.outputColumnRefOp = outputColumnRefOp;
     }
 
     public int getSplitId() {
@@ -53,11 +53,9 @@ public class PhysicalSplitConsumeOperator extends PhysicalOperator {
 
     @Override
     public RowOutputInfo deriveRowOutputInfo(List<OptExpression> inputs) {
-        List<ColumnOutputInfo> entryList = Lists.newArrayList();
-        for (Map.Entry<ColumnRefOperator, ColumnRefOperator> entry : outputColumnRefMap.entrySet()) {
-            entryList.add(new ColumnOutputInfo(entry.getKey(), entry.getValue()));
-        }
-        return new RowOutputInfo(entryList);
+        List<ColumnOutputInfo> columnOutputInfoList = Lists.newArrayList();
+        outputColumnRefOp.stream().forEach(e -> columnOutputInfoList.add(new ColumnOutputInfo(e, e)));
+        return new RowOutputInfo(columnOutputInfoList, outputColumnRefOp);
     }
 
     @Override

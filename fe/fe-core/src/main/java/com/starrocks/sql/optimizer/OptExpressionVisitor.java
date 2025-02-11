@@ -298,7 +298,7 @@ public abstract class OptExpressionVisitor<R, C> {
         return visit(optExpression, context);
     }
 
-    public R visitPhysicalMerge(OptExpression optExpression, C context) {
+    public R visitPhysicalConcatenater(OptExpression optExpression, C context) {
         return visit(optExpression, context);
     }
 }

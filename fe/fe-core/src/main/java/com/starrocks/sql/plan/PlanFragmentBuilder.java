@@ -3981,7 +3981,7 @@ public class PlanFragmentBuilder {
         }
 
         @Override
-        public PlanFragment visitPhysicalMerge(OptExpression optExpr, ExecPlan context) {
+        public PlanFragment visitPhysicalConcatenater(OptExpression optExpr, ExecPlan context) {
             PlanFragment leftChild = visit(optExpr.inputAt(0), context);
             PlanFragment rightChild = visit(optExpr.inputAt(1), context);
 
@@ -4003,11 +4003,19 @@ public class PlanFragmentBuilder {
                 context.getColRefToExpr().put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDesc));
             }
 
+            // all use union pass through, wchch means just output the input-chunk
             setOperationNode.setFirstMaterializedChildIdx_(optExpr.arity());
 
             currentExecGroup.add(setOperationNode, true);
 
             List<Map<Integer, Integer>> outputSlotIdToChildSlotIdMaps = new ArrayList<>();
+
+            ScalarOperatorToExpr.FormatterContext formatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+            // materializedResultExprLists is actually useless, since all child is union-passthrough
+            // we add it just for pass check
+            List<List<Expr>> materializedResultExprLists = Lists.newArrayList();
+
             for (int childIdx = 0; childIdx < optExpr.arity(); ++childIdx) {
                 Map<Integer, Integer> slotIdMap = new HashMap<>();
                 List<ColumnRefOperator> childOutput = mergeOperator.getChildOutputColumns().get(childIdx);
@@ -4018,8 +4026,16 @@ public class PlanFragmentBuilder {
                 }
                 outputSlotIdToChildSlotIdMaps.add(slotIdMap);
                 Preconditions.checkState(slotIdMap.size() == mergeOperator.getOutputColumnRefOp().size());
+
+                List<Expr> materializedExpressions = Lists.newArrayList();
+                for (ColumnRefOperator ref : childOutput) {
+                    materializedExpressions.add(ScalarOperatorToExpr.buildExecExpression(ref, formatterContext));
+                }
+
+                materializedResultExprLists.add(materializedExpressions);
             }
             setOperationNode.setOutputSlotIdToChildSlotIdMaps(outputSlotIdToChildSlotIdMaps);
+            setOperationNode.setMaterializedResultExprLists_(materializedResultExprLists);
 
             Preconditions.checkState(optExpr.getInputs().size() == mergeOperator.getChildOutputColumns().size());
 

@@ -710,7 +710,7 @@ public class LogicalPlanPrinter {
         }
 
         @Override
-        public OperatorStr visitPhysicalMerge(OptExpression optExpression, Integer step) {
+        public OperatorStr visitPhysicalConcatenater(OptExpression optExpression, Integer step) {
             return visitPhysicalUnion(optExpression, step);
         }
 

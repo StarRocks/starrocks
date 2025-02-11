@@ -40,6 +40,9 @@ public class SkewJoinV2Test extends PlanTestBase {
                 "  RESULT SINK");
         // this is a normal union, which means its local exchanger is PASS_THROUGH
         assertCContains(sqlPlan, "10:UNION\n" +
+                "  |  child exprs:\n" +
+                "  |      [2: v2, BIGINT, true] | [5: v5, BIGINT, true]\n" +
+                "  |      [2: v2, BIGINT, true] | [5: v5, BIGINT, true]\n" +
                 "  |  pass-through-operands: all");
 
         // shuffle join is UNION's left child, with global runtime filter
@@ -151,6 +154,9 @@ public class SkewJoinV2Test extends PlanTestBase {
 
         // union's local exchange type is DIRECT
         assertCContains(sqlPlan, " 11:UNION\n" +
+                "  |  child exprs:\n" +
+                "  |      [4: v4, BIGINT, true]\n" +
+                "  |      [4: v4, BIGINT, true]\n" +
                 "  |  pass-through-operands: all\n" +
                 "  |  local exchange type: DIRECT");
 
@@ -181,7 +187,10 @@ public class SkewJoinV2Test extends PlanTestBase {
         assertNotContains(sqlPlan, "local exchange type");
 
         // union's right child is broadcast join instead of exchange node
-        assertCContains(sqlPlan, " 10:UNION\n" +
+        assertCContains(sqlPlan, "10:UNION\n" +
+                "  |  child exprs:\n" +
+                "  |      [3: v3, BIGINT, true]\n" +
+                "  |      [3: v3, BIGINT, true]\n" +
                 "  |  pass-through-operands: all");
         assertCContains(sqlPlan, "9:Project\n" +
                 "  |    |  output columns:\n" +
