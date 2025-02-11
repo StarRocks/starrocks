@@ -26,13 +26,18 @@ public class JoinPredicatePushdownTest extends PlanTestBase {
 
     @Test
     public void testOrToUnionAllJoinRule() throws Exception {
+        connectContext.getSessionVariable().setEnabledRewriteOrToUnionAllJoin(true);
         String sql = "select v1, v2, v3 from t0 join t1 where t0.v1= t1.v4 or t0.v2 = t1.v5";
         String plan = getFragmentPlan(sql);
-        System.out.println(plan);
-        //        String sql = "select v1, v2, v3 from t0 join t1 on t0.v1 = t1.v4 union all select v1, v2, v3 from t0 join t1 on t0.v2 = t1.v5 where t0.v1 != t1.v4";
-        //        getFragmentPlan(sql);
-
-        //System.out.println(plan);
+        PlanTestBase.assertContains(plan, "4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4");
+        PlanTestBase.assertContains(plan, "10:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v2 = 5: v5\n" +
+                "  |  other join predicates: 1: v1 != 4: v4");
     }
 
     @Test
