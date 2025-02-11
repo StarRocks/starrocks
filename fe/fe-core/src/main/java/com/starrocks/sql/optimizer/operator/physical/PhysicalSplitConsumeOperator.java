@@ -24,15 +24,12 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 public class PhysicalSplitConsumeOperator extends PhysicalOperator {
     private final int splitId;
-
-    private ScalarOperator splitPredicate;
-
     private final List<ColumnRefOperator> outputColumnRefOp;
+    private final ScalarOperator splitPredicate;
 
     public PhysicalSplitConsumeOperator(int splitId, ScalarOperator splitPredicate, DistributionSpec distributionSpec,
                                         List<ColumnRefOperator> outputColumnRefOp) {
@@ -74,8 +71,7 @@ public class PhysicalSplitConsumeOperator extends PhysicalOperator {
         }
 
         PhysicalSplitConsumeOperator that = (PhysicalSplitConsumeOperator) o;
-        return Objects.equals(splitId, that.splitId) &&
-                Objects.equals(splitPredicate, that.splitPredicate);
+        return Objects.equals(splitId, that.splitId) && Objects.equals(splitPredicate, that.splitPredicate);
     }
 
     @Override
@@ -85,10 +81,7 @@ public class PhysicalSplitConsumeOperator extends PhysicalOperator {
 
     @Override
     public String toString() {
-        return "PhysicalSplitConsumeOperator{" +
-                "splitId='" + splitId + '\'' +
-                ", predicate=" + splitPredicate +
-                '}';
+        return "PhysicalSplitConsumeOperator{" + "splitId='" + splitId + '\'' + ", predicate=" + splitPredicate + '}';
     }
 
 }
