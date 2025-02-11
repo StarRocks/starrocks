@@ -16,6 +16,7 @@ package com.starrocks.statistic;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
@@ -28,8 +29,11 @@ import com.starrocks.monitor.unit.ByteSizeUnit;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.statistic.columns.ColumnUsage;
+import com.starrocks.statistic.columns.PredicateColumnsMgr;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.iceberg.util.PropertyUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -42,6 +46,8 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+
+import static com.starrocks.statistic.StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL;
 
 public class StatisticsCollectJobFactory {
     private static final Logger LOG = LogManager.getLogger(StatisticsCollectJobFactory.class);
@@ -104,12 +110,12 @@ public class StatisticsCollectJobFactory {
                                                                  StatsConstants.AnalyzeType analyzeType,
                                                                  StatsConstants.ScheduleType scheduleType,
                                                                  Map<String, String> properties) {
-        if (columnNames == null || columnNames.isEmpty()) {
+        if (CollectionUtils.isEmpty(columnNames)) {
             columnNames = StatisticUtils.getCollectibleColumns(table);
             columnTypes = columnNames.stream().map(col -> table.getColumn(col).getType()).collect(Collectors.toList());
         }
         // for compatibility, if columnTypes is null, we will get column types from table
-        if (columnTypes == null || columnTypes.isEmpty()) {
+        if (CollectionUtils.isEmpty(columnTypes)) {
             columnTypes = columnNames.stream().map(col -> table.getColumn(col).getType()).collect(Collectors.toList());
         }
 
@@ -334,8 +340,8 @@ public class StatisticsCollectJobFactory {
                     Config.statistic_auto_collect_small_table_interval :
                     Config.statistic_auto_collect_large_table_interval;
 
-            long timeInterval = job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL) != null ?
-                    Long.parseLong(job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL)) :
+            long timeInterval = job.getProperties().get(STATISTIC_AUTO_COLLECT_INTERVAL) != null ?
+                    Long.parseLong(job.getProperties().get(STATISTIC_AUTO_COLLECT_INTERVAL)) :
                     defaultInterval;
 
             needCollectStatsColumns = needCollectStatsColumns(basicStatsMeta, table, columnNames,
@@ -405,7 +411,7 @@ public class StatisticsCollectJobFactory {
 
     private static void createJob(List<StatisticsCollectJob> allTableJobMap, NativeAnalyzeJob job,
                                   Database db, Table table, List<String> columnNames, List<Type> columnTypes) {
-        if (table == null || !(table.isOlapOrCloudNativeTable() || table.isMaterializedView())) {
+        if (table == null || !table.isNativeTableOrMaterializedView()) {
             return;
         }
 
@@ -414,6 +420,7 @@ public class StatisticsCollectJobFactory {
                 return;
             }
         }
+
         if (!Config.enable_temporary_table_statistic_collect && table.isTemporaryTable()) {
             LOG.debug("statistics job doesn't work on temporary table: {}", table.getName());
             return;
@@ -423,8 +430,9 @@ public class StatisticsCollectJobFactory {
             return;
         }
 
+        Map<String, String> jobProperties = job.getProperties();
         // check job exclude db.table
-        String regex = job.getProperties().getOrDefault(StatsConstants.STATISTIC_EXCLUDE_PATTERN, null);
+        String regex = jobProperties.getOrDefault(StatsConstants.STATISTIC_EXCLUDE_PATTERN, null);
         if (StringUtils.isNotBlank(regex)) {
             Pattern checkRegex = Pattern.compile(regex);
             String name = db.getFullName() + "." + table.getName();
@@ -434,9 +442,9 @@ public class StatisticsCollectJobFactory {
             }
         }
 
+        double healthy = 0;
         AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
         BasicStatsMeta basicStatsMeta = analyzeMgr.getTableBasicStatsMeta(table.getId());
-        double healthy = 0;
         List<HistogramStatsMeta> histogramStatsMetas = analyzeMgr.getHistogramMetaByTable(table.getId());
         boolean useBasicStats = job.getAnalyzeType() == StatsConstants.AnalyzeType.SAMPLE ||
                 job.getAnalyzeType() == StatsConstants.AnalyzeType.FULL;
@@ -449,9 +457,28 @@ public class StatisticsCollectJobFactory {
         } else if (!useBasicStats && CollectionUtils.isNotEmpty(histogramStatsMetas)) {
             statsUpdateTime =
                     histogramStatsMetas.stream().map(HistogramStatsMeta::getUpdateTime)
-                            .min(Comparator.naturalOrder())
-                            .get();
+                            .min(Comparator.naturalOrder()).get();
             isInitJob = histogramStatsMetas.stream().anyMatch(HistogramStatsMeta::isInitJobMeta);
+        }
+
+        // Use predicate columns if suitable
+        TableName tableName = new TableName(db.getOriginName(), table.getName());
+        int numColumns = table.getColumns().size();
+        List<String> predicateColumnNames = null;
+        boolean existsPredicateColumns = false;
+        boolean enablePredicateColumnStrategy = false;
+        if (basicStatsMeta != null && !basicStatsMeta.isInitJobMeta() && useBasicStats &&
+                Config.statistic_auto_collect_predicate_columns_threshold > 0 &&
+                CollectionUtils.isEmpty(columnNames) && table.isNativeTableOrMaterializedView()) {
+            List<ColumnUsage> predicateColumns = PredicateColumnsMgr.getInstance().queryPredicateColumns(tableName);
+            if (CollectionUtils.isNotEmpty(predicateColumns) && predicateColumns.size() < numColumns) {
+                OlapTable olap = (OlapTable) table;
+                predicateColumnNames = predicateColumns.stream().map(x -> x.getOlapColumnName(olap)).toList();
+                existsPredicateColumns = true;
+                if (numColumns > Config.statistic_auto_collect_predicate_columns_threshold) {
+                    enablePredicateColumnStrategy = true;
+                }
+            }
         }
 
         if (basicStatsMeta != null) {
@@ -466,7 +493,19 @@ public class StatisticsCollectJobFactory {
                 return;
             }
 
-            // 2. if the stats collection is too frequent
+            // 2. if the table stats is healthy enough (only a small portion has been updated)
+            double statisticAutoCollectRatio =
+                    PropertyUtil.propertyAsDouble(jobProperties, StatsConstants.STATISTIC_AUTO_COLLECT_RATIO,
+                            Config.statistic_auto_collect_ratio);
+
+            healthy = basicStatsMeta.getHealthy();
+            if (healthy > statisticAutoCollectRatio) {
+                LOG.debug("statistics job doesn't work on health table: {}, healthy: {}, collect healthy limit: <{}",
+                        table.getName(), healthy, statisticAutoCollectRatio);
+                return;
+            }
+
+            // 3. if the stats collection is too frequent
             long sumDataSize = 0;
             for (Partition partition : table.getPartitions()) {
                 if (!StatisticUtils.isPartitionStatsHealthy(table, partition, basicStatsMeta)) {
@@ -481,9 +520,7 @@ public class StatisticsCollectJobFactory {
                                     Config.statistic_auto_collect_large_table_interval :
                                     Config.statistic_auto_collect_small_table_interval);
 
-            long timeInterval = job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL) != null ?
-                    Long.parseLong(job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_INTERVAL)) :
-                    defaultInterval;
+            long timeInterval = PropertyUtil.propertyAsLong(jobProperties, STATISTIC_AUTO_COLLECT_INTERVAL, defaultInterval);
 
             if (!isInitJob && statsUpdateTime.plusSeconds(timeInterval).isAfter(LocalDateTime.now())) {
                 LOG.debug("statistics job doesn't work on the interval table: {}, " +
@@ -492,24 +529,11 @@ public class StatisticsCollectJobFactory {
                 return;
             }
 
-            // 3. if the table stats is healthy enough (only a small portion has been updated)
-            double statisticAutoCollectRatio =
-                    job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_RATIO) != null ?
-                            Double.parseDouble(job.getProperties().get(StatsConstants.STATISTIC_AUTO_COLLECT_RATIO)) :
-                            Config.statistic_auto_collect_ratio;
-
-            healthy = basicStatsMeta.getHealthy();
-            if (healthy > statisticAutoCollectRatio) {
-                LOG.debug("statistics job doesn't work on health table: {}, healthy: {}, collect healthy limit: <{}",
-                        table.getName(), healthy, statisticAutoCollectRatio);
-                return;
-            } else if (healthy < Config.statistic_auto_collect_sample_threshold) {
-                long autoCollectSmallTableSize = Config.statistic_auto_collect_small_table_size;
-                if (table.isPartitioned() && Config.statistic_use_meta_statistics) {
-                    autoCollectSmallTableSize *= 10;
-                }
-
-                if (job.getAnalyzeType() != StatsConstants.AnalyzeType.HISTOGRAM && sumDataSize > autoCollectSmallTableSize) {
+            // 4. frequent-update big table without predicate column, choose sample strategy to collect statistics
+            if (job.getAnalyzeType() != StatsConstants.AnalyzeType.HISTOGRAM &&
+                    healthy < Config.statistic_auto_collect_sample_threshold &&
+                    sumDataSize > Config.statistic_auto_collect_small_table_size) {
+                if (!(Config.statistic_auto_collect_use_full_predicate_column_for_sample && existsPredicateColumns)) {
                     LOG.debug("statistics job choose sample on real-time update table: {}" +
                                     ", last collect time: {}, current healthy: {}, full collect healthy limit: {}, " +
                                     ", update data size: {}MB, full collect healthy data size limit: <{}MB",
@@ -520,8 +544,15 @@ public class StatisticsCollectJobFactory {
                             new StatisticsCollectJob.Priority(tableUpdateTime, statsUpdateTime, healthy);
                     createSampleStatsJob(allTableJobMap, job, db, table, columnNames, columnTypes, priority);
                     return;
+                } else {
+                    enablePredicateColumnStrategy = true;
                 }
             }
+        }
+
+        if (enablePredicateColumnStrategy && CollectionUtils.isNotEmpty(predicateColumnNames)) {
+            columnNames = predicateColumnNames;
+            columnTypes = columnNames.stream().map(col -> table.getColumn(col).getType()).collect(Collectors.toList());
         }
 
         StatisticsCollectJob.Priority priority =
@@ -584,7 +615,7 @@ public class StatisticsCollectJobFactory {
                 .collect(Collectors.toList());
 
         long totalDataSize = partitionList.stream().mapToLong(Partition::getDataSize).sum();
-        if (totalDataSize > Config.statistic_max_full_collect_data_size) {
+        if (job.isDefaultJob() && totalDataSize > Config.statistic_max_full_collect_data_size) {
             analyzeType = StatsConstants.AnalyzeType.SAMPLE;
             LOG.debug("statistics job choose sample on table: {}, partition data size greater than config: {}",
                     table.getName(), Config.statistic_max_full_collect_data_size);

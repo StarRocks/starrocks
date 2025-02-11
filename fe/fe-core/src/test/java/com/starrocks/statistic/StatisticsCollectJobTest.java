@@ -78,7 +78,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         PlanTestNoneDBBase.beforeClass();
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
-
+        Config.statistic_auto_collect_predicate_columns_threshold = 0;
         String dbName = "test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
 
@@ -1379,7 +1379,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         new Expectations(execMeta2) {
             {
                 execMeta2.getHealthy();
-                times = 0;
+                times = 1;
             }
         };
 
