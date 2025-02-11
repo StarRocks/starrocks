@@ -18,9 +18,7 @@ namespace starrocks::pipeline {
 
 Status MultiCastLocalExchangeSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(Operator::prepare(state));
-    if (_driver_sequence == 0) {
-        RETURN_IF_ERROR(_exchanger->init_metrics(_unique_metrics.get()));
-    }
+    RETURN_IF_ERROR(_exchanger->init_metrics(_unique_metrics.get(), _driver_sequence == 0));
     _exchanger->open_sink_operator();
     _exchanger->observable().attach_sink_observer(state, observer());
     return Status::OK();

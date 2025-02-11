@@ -54,8 +54,12 @@ SpillableMultiCastLocalExchanger::SpillableMultiCastLocalExchanger(RuntimeState*
     _queue = std::make_shared<MemLimitedChunkQueue>(runtime_state, consumer_number, opts);
 }
 
-Status SpillableMultiCastLocalExchanger::init_metrics(RuntimeProfile* profile) {
-    return _queue->init_metrics(profile);
+Status SpillableMultiCastLocalExchanger::init_metrics(RuntimeProfile* profile, bool is_first_sink_driver) {
+    profile->add_info_string("IsSpill", "true");
+    if (is_first_sink_driver) {
+        return _queue->init_metrics(profile);
+    }
+    return Status::OK();
 }
 
 bool SpillableMultiCastLocalExchanger::can_pull_chunk(int32_t mcast_consumer_index) const {
