@@ -1,0 +1,14 @@
+{
+  "version.label": {
+    "message": "Next",
+    "description": "The label for version current"
+  },
+  "sidebar.docs.category.StarRocks": {
+    "message": "StarRocks",
+    "description": "The label for category StarRocks in sidebar docs"
+  },
+  "sidebar.docs.category.Connectors": {
+    "message": "Connectors",
+    "description": "The label for category Connectors in sidebar docs"
+  }
+}

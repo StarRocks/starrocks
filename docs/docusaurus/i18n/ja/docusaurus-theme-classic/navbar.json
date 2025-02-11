@@ -1,0 +1,46 @@
+{
+  "title": {
+    "message": "StarRocks",
+    "description": "The title in the navbar"
+  },
+  "logo.alt": {
+    "message": "StarRocks Logo",
+    "description": "The alt text of navbar logo"
+  },
+  "item.label.Docs": {
+    "message": "Docs",
+    "description": "Navbar item with label Docs"
+  },
+  "item.label.Release Notes": {
+    "message": "Release Notes",
+    "description": "Navbar item with label Release Notes"
+  },
+  "item.label.Community": {
+    "message": "Community",
+    "description": "Navbar item with label Community"
+  },
+  "item.label.社区群": {
+    "message": "社区群",
+    "description": "Navbar item with label 社区群"
+  },
+  "item.label.Privacy policy": {
+    "message": "Privacy policy",
+    "description": "Navbar item with label Privacy policy"
+  },
+  "item.label.Slack": {
+    "message": "Slack",
+    "description": "Navbar item with label Slack"
+  },
+  "item.label.Forum": {
+    "message": "Forum",
+    "description": "Navbar item with label Forum"
+  },
+  "item.label.StarRocks中文社区论坛": {
+    "message": "StarRocks中文社区论坛",
+    "description": "Navbar item with label StarRocks中文社区论坛"
+  },
+  "item.label.技术支持渠道": {
+    "message": "技术支持渠道",
+    "description": "Navbar item with label 技术支持渠道"
+  }
+}

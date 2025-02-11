@@ -1,0 +1,14 @@
+{
+  "link.item.label.StarRocks.io": {
+    "message": "StarRocks.io",
+    "description": "The label of footer link with label=StarRocks.io linking to https://www.starrocks.io/"
+  },
+  "link.item.label.Privacy policy": {
+    "message": "Privacy policy",
+    "description": "The label of footer link with label=Privacy policy linking to https://www.starrocks.io/product/privacy-policy"
+  },
+  "copyright": {
+    "message": "Docs built with Docusaurus.",
+    "description": "The footer copyright"
+  }
+}
