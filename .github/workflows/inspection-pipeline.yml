@@ -329,7 +329,7 @@ jobs:
     needs:
       - info
       - build
-    if: always() && needs.info.result == 'success'
+    if: always() && needs.info.result == 'success' && needs.build.result != 'cancelled'
     env:
       ALL_LINUX: needs.info.outputs.ALL_LINUX
     outputs:
