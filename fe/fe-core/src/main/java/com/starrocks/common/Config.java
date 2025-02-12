@@ -3430,4 +3430,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = false)
     public static int max_historical_automated_cluster_snapshot_jobs = 100;
+
+    @ConfField(mutable = true)
+    public static boolean transaction_state_print_partition_info = true;
 }
