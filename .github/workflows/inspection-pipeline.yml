@@ -91,28 +91,9 @@ jobs:
         run: |
           BE_UT_LINUX=ubuntu
           if [[ "${{ github.event_name }}" == "schedule" ]]; then
-            IS_ARM=false
-            if [[ "${{ github.event.schedule }}" == "0 11 * * 1,3,5" ]]; then
-              branch=branch-3.3
-              if [[ "$GITHUB_REPOSITORY" == 'StarRocks/starrocks' && `date +%u` -eq 1 ]]; then
-                all_linux=true
-              fi
-            elif [[ "${{ github.event.schedule }}" == "0 11 * * 2,4" ]]; then
-              branch=branch-3.2
-              all_linux=false
-            elif [[ "${{ github.event.schedule }}" == "0 0 * * 1-5" ]]; then
-              branch=main
-              if [[ `date +%u` -eq 1 || `date +%u` -eq 4 ]]; then
-                all_linux=true
-              fi
-            else
-              branch=main
-              
-              if [[ "${{ github.event.schedule }}" == "30 9 * * 1-5" ]]; then
-                IS_ARM=false
-              fi
-            fi
-          
+            rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull
+            read branch all_linux IS_ARM < <(python3 scripts/inspection_params.py "${{ github.event.schedule }}")
+            
             [[ $((`date +%e` % 2)) -eq 1 ]] && BE_UT_LINUX=centos7
             base_sha=$(gh api /repos/${REPO}/branches/${branch} | jq -r .commit.sha)
             echo "::notice::${branch}(${BE_UT_LINUX} ${base_sha})"
