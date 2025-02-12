@@ -23,10 +23,12 @@ import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
+import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -34,6 +36,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
@@ -52,9 +55,11 @@ import com.starrocks.sql.optimizer.operator.scalar.MatchExprOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.statistics.CacheDictManager;
+import com.starrocks.sql.optimizer.statistics.CacheRelaxDictManager;
 import com.starrocks.sql.optimizer.statistics.ColumnDict;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.IDictManager;
+import com.starrocks.sql.optimizer.statistics.IRelaxDictManager;
 import com.starrocks.thrift.TAccessPathType;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -130,7 +135,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     // operators which are the children of Match operator
     private final ColumnRefSet matchChildren = new ColumnRefSet();
 
-    private final ColumnRefSet physicalOlapScanColumns = new ColumnRefSet();
+    private final ColumnRefSet scanColumnRefSet = new ColumnRefSet();
 
     // check if there is a blocking node in plan
     private boolean canBlockingOutput = false;
@@ -150,7 +155,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             return true;
         }
 
-        return physicalOlapScanColumns.containsAll(matchChildren);
+        return scanColumnRefSet.containsAll(matchChildren);
     }
 
     private void fillDisableStringColumns() {
@@ -590,13 +595,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
                 continue;
             }
 
-            info.outputStringColumns.union(column);
-            info.inputStringColumns.union(column);
-            stringRefToDefineExprMap.put(column.getId(), column);
-            scanStringColumns.add(column.getId());
-            expressionStringRefCounter.put(column.getId(), 0);
-            globalDicts.put(column.getId(), dict.get());
-            physicalOlapScanColumns.union(column.getId());
+            markedAsGlobalDictOpt(info, column, dict.get());
         }
 
         if (info.outputStringColumns.isEmpty()) {
@@ -604,6 +603,86 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         }
 
         return info;
+    }
+
+    @Override
+    public DecodeInfo visitPhysicalHiveScan(OptExpression optExpression, DecodeInfo context) {
+        if (!canBlockingOutput || !sessionVariable.isUseLowCardinalityOptimizeOnLake()) {
+            return DecodeInfo.EMPTY;
+        }
+        PhysicalHiveScanOperator scan = optExpression.getOp().cast();
+        HiveTable table = (HiveTable) scan.getTable();
+
+        // only support parquet
+        if (table.getStorageFormat() == null || !table.getStorageFormat().equals(HiveStorageFormat.PARQUET)) {
+            return DecodeInfo.EMPTY;
+        }
+
+        // check dict column
+        DecodeInfo info = new DecodeInfo();
+        for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
+            // Condition 1:
+            if (!supportLowCardinality(column.getType())) {
+                continue;
+            }
+
+            if (!sessionVariable.isEnableArrayLowCardinalityOptimize() && column.getType().isArrayType()) {
+                continue;
+            }
+
+            // don't collect partition columns
+            if (table.getPartitionColumnNames().contains(column.getName())) {
+                continue;
+            }
+
+            // Condition 2: the varchar column is low cardinality string column
+            ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                    .getConnectorTableStatistics(table, List.of(column.getName())).get(0).getColumnStatistic();
+
+            if (!columnStatistic.isUnknown() &&
+                    columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD) {
+                LOG.debug("{} isn't low cardinality string column", column.getName());
+                continue;
+            }
+
+            boolean alwaysCollectDict = sessionVariable.isAlwaysCollectDictOnLake();
+            if (!alwaysCollectDict && !FeConstants.USE_MOCK_DICT_MANAGER && columnStatistic.isUnknown()) {
+                LOG.debug("{} isn't low cardinality string column", column.getName());
+                continue;
+            }
+
+            // Condition 3: the varchar column has collected global dict
+            if (!IRelaxDictManager.getInstance().hasGlobalDict(table.getUUID(), column.getName())) {
+                LOG.debug("{} doesn't have global dict", column.getName());
+                continue;
+            }
+
+            Optional<ColumnDict> dict = IRelaxDictManager.getInstance().getGlobalDict(table.getUUID(),
+                    column.getName());
+            // cache reaches capacity limit, randomly eliminate some keys
+            // then we will get an empty dictionary.
+            if (dict.isEmpty() || dict.get().getVersion() > CacheRelaxDictManager.PERIOD_VERSION_THRESHOLD) {
+                continue;
+            }
+
+            markedAsGlobalDictOpt(info, column, dict.get());
+        }
+
+        if (info.outputStringColumns.isEmpty()) {
+            return DecodeInfo.EMPTY;
+        }
+
+        return info;
+    }
+
+    private void markedAsGlobalDictOpt(DecodeInfo info, ColumnRefOperator column, ColumnDict dict) {
+        info.outputStringColumns.union(column);
+        info.inputStringColumns.union(column);
+        stringRefToDefineExprMap.put(column.getId(), column);
+        scanStringColumns.add(column.getId());
+        expressionStringRefCounter.put(column.getId(), 0);
+        globalDicts.put(column.getId(), dict);
+        scanColumnRefSet.union(column.getId());
     }
 
     // complex type may be support prune subfield, doesn't read data

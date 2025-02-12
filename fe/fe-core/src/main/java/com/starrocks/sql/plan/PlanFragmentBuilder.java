@@ -1094,6 +1094,11 @@ public class PlanFragmentBuilder {
                             context.getDescTbl()
                                     .addSlotDescriptor(minMaxTuple, new SlotId(columnRefOperator.getId()));
                     Column column = predicates.getMinMaxColumnRefMap().get(columnRefOperator);
+                    // because extractColumnRef both get dict ref and original ref
+                    if (column == null) {
+                        continue;
+                    }
+                    slotDescriptor.setType(column.getType());
                     slotDescriptor.setColumn(column);
                     slotDescriptor.setIsNullable(column.isAllowNull());
                     slotDescriptor.setIsMaterialized(true);
@@ -1187,12 +1192,16 @@ public class PlanFragmentBuilder {
 
             hdfsScanNode.setLimit(node.getLimit());
             hdfsScanNode.setDataCacheOptions(node.getDataCacheOptions());
+            hdfsScanNode.updateAppliedDictStringColumns(node.getGlobalDicts().stream().
+                    map(entry -> entry.first).collect(Collectors.toSet()));
 
             tupleDescriptor.computeMemLayout();
             context.getScanNodes().add(hdfsScanNode);
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), hdfsScanNode, DataPartition.RANDOM);
+            fragment.setQueryGlobalDicts(node.getGlobalDicts());
+            fragment.setQueryGlobalDictExprs(getGlobalDictsExprs(node.getGlobalDictsExpr(), context));
             context.getFragments().add(fragment);
             return fragment;
         }

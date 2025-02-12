@@ -84,12 +84,20 @@ public class ThreadPoolManager {
 
     private static final long KEEP_ALIVE_TIME = 60L;
 
-    private static final ThreadPoolExecutor DICT_CACHE_THREAD =
+    private static final ThreadPoolExecutor DICT_CACHE_THREAD_POOL =
             ThreadPoolManager.newDaemonCacheThreadPool(Config.dict_collect_thread_pool_size, "cache-dict",
             false);
 
+    private static final ThreadPoolExecutor DICT_CACHE_THREAD_POOL_FOR_LAKE =
+            ThreadPoolManager.newDaemonCacheThreadPool(Config.dict_collect_thread_pool_for_lake_size,
+                    "cache-dict-lake", false);
+
     public static ThreadPoolExecutor getDictCacheThread() {
-        return DICT_CACHE_THREAD;
+        return DICT_CACHE_THREAD_POOL;
+    }
+
+    public static ThreadPoolExecutor getDictCacheThreadPoolForLake() {
+        return DICT_CACHE_THREAD_POOL_FOR_LAKE;
     }
 
     public static void registerAllThreadPoolMetric() {

@@ -91,7 +91,7 @@ public class ConnectorAnalyzeTaskQueue {
         return runningTasks.size() >= Config.connector_table_query_trigger_analyze_max_running_task_num;
     }
 
-    public void scheduledPendingTask() {
+    public void schedulePendingTask() {
         // do not dispatch task if max running concurrency reached or no pending task
         if (isMaxRunningConcurrencyReached()) {
             LOG.info("Connector Analyze TaskQueue running task num reach limit: {}, current: {}",

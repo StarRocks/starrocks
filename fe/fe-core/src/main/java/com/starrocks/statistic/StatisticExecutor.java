@@ -44,6 +44,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.statistics.IRelaxDictManager;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.THdfsFileFormat;
@@ -67,6 +68,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -356,6 +358,26 @@ public class StatisticExecutor {
             throws TException {
         RemoteFilesSampleStrategy strategy = new RemoteFilesSampleStrategy(fileName);
         return queryDictSync(tableUUID, columnName, strategy);
+    }
+
+    public static void updateDictSync(String tableUUID, String columnName, Optional<String> fileName) {
+        try {
+            if (fileName.isEmpty()) {
+                IRelaxDictManager.getInstance().updateGlobalDict(tableUUID, columnName, Optional.empty());
+                return;
+            }
+            Pair<List<TStatisticData>, Status> result = queryDictSync(tableUUID, columnName, fileName.get());
+            if (result.second.isGlobalDictError()) {
+                IRelaxDictManager.getInstance().updateGlobalDict(tableUUID, columnName, Optional.empty());
+            } else if (result.second.ok()) {
+                IRelaxDictManager.getInstance()
+                        .updateGlobalDict(tableUUID, columnName, Optional.of(result.first.get(0)));
+            }
+        } catch (TException e) {
+            // ignore
+        } finally {
+            IRelaxDictManager.getInstance().removeTemporaryInvalid(tableUUID, columnName);
+        }
     }
 
     public List<TStatisticData> queryTableStats(ConnectContext context, Long tableId, List<Long> partitions) {
