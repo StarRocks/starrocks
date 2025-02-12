@@ -4028,7 +4028,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### datacache_tiered_cache_enable
 
-- Default: true
+- Default: false 
 - Type: Boolean
 - Unit: -
 - Is mutable: No

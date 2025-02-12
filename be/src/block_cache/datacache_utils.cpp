@@ -124,22 +124,6 @@ Status DataCacheUtils::parse_conf_datacache_disk_paths(const std::string& config
     return Status::OK();
 }
 
-Status DataCacheUtils::parse_conf_datacache_disk_spaces(const std::string& config_disk_path,
-                                                        const std::string& config_disk_size, bool ignore_broken_disk,
-                                                        std::vector<DirSpace>* disk_spaces) {
-    std::vector<std::string> paths;
-    RETURN_IF_ERROR(parse_conf_datacache_disk_paths(config_disk_path, &paths, ignore_broken_disk));
-    for (auto& p : paths) {
-        int64_t disk_size = parse_conf_datacache_disk_size(p, config_disk_size, -1);
-        if (disk_size < 0) {
-            LOG(ERROR) << "invalid disk size for datacache: " << disk_size;
-            return Status::InvalidArgument("invalid disk size for datacache");
-        }
-        disk_spaces->push_back({.path = p, .size = static_cast<size_t>(disk_size)});
-    }
-    return Status::OK();
-}
-
 void DataCacheUtils::clean_residual_datacache(const std::string& disk_path) {
     if (!FileSystem::Default()->path_exists(disk_path).ok()) {
         // ignore none existed disk path
