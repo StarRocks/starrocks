@@ -47,6 +47,7 @@ import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.JwkMgr;
 import com.starrocks.authorization.AccessControlProvider;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.DefaultAuthorizationProvider;
@@ -526,6 +527,8 @@ public class GlobalStateMgr {
     private final ReportHandler reportHandler;
     private final TabletCollector tabletCollector;
 
+    private JwkMgr jwkMgr;
+
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
@@ -834,6 +837,8 @@ public class GlobalStateMgr {
 
         this.reportHandler = new ReportHandler();
         this.tabletCollector = new TabletCollector();
+
+        this.jwkMgr = new JwkMgr();
     }
 
     public static void destroyCheckpoint() {
@@ -2722,5 +2727,13 @@ public class GlobalStateMgr {
 
     public ReportHandler getReportHandler() {
         return reportHandler;
+    }
+
+    public JwkMgr getJwkMgr() {
+        return jwkMgr;
+    }
+
+    public void setJwkMgr(JwkMgr jwkMgr) {
+        this.jwkMgr = jwkMgr;
     }
 }

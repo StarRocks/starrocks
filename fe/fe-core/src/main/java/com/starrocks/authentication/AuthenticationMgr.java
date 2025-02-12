@@ -122,6 +122,13 @@ public class AuthenticationMgr {
         AuthenticationProviderFactory.installPlugin(
                 KerberosAuthenticationProvider.PLUGIN_NAME, new KerberosAuthenticationProvider());
 
+        AuthenticationProviderFactory.installPlugin(OpenIdConnectAuthenticationProvider.PLUGIN_NAME,
+                new OpenIdConnectAuthenticationProvider(
+                        Config.oidc_jwks_url,
+                        Config.oidc_principal_field,
+                        Config.oidc_required_issuer,
+                        Config.oidc_required_audience));
+
         // default user
         userToAuthenticationInfo = new UserAuthInfoTreeMap();
         UserAuthenticationInfo info = new UserAuthenticationInfo();
