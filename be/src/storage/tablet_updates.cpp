@@ -902,12 +902,12 @@ void TabletUpdates::_check_for_apply() {
         return;
     }
     _apply_running_lock.lock();
-    if ((config::enable_retry_apply && _apply_schedule.load()) || _apply_running ||
+    if ((config::enable_retry_apply && _apply_schedule.load()) || _apply_submited ||
         _apply_version_idx + 1 == _edit_version_infos.size()) {
         _apply_running_lock.unlock();
         return;
     }
-    _apply_running = true;
+    _apply_submited = true;
     _apply_running_lock.unlock();
     std::shared_ptr<Runnable> task(
             std::make_shared<ApplyCommitTask>(std::static_pointer_cast<Tablet>(_tablet.shared_from_this())));
@@ -950,6 +950,12 @@ void TabletUpdates::do_apply() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
     SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
             config::enable_pk_strict_memcheck ? StorageEngine::instance()->update_manager()->mem_tracker() : nullptr);
+    {
+        DCHECK(_apply_submited) << "illegal state: _apply_submited should be true";
+        DCHECK(!_apply_running) << "illegal state: _apply_submited should be true";
+        std::lock_guard<std::mutex> lg(_apply_running_lock);
+        _apply_running = true;
+    }
     // only 1 thread at max is running this method
     bool first = true;
     while (!_apply_stopped) {
@@ -1015,22 +1021,36 @@ void TabletUpdates::do_apply() {
             }
         }
     }
-    std::lock_guard<std::mutex> lg(_apply_running_lock);
-    DCHECK(_apply_running) << "illegal state: _apply_running should be true";
-    _apply_running = false;
-    _apply_stopped_cond.notify_all();
+
+    {
+        std::lock_guard<std::mutex> lg(_apply_running_lock);
+        DCHECK(_apply_submited) << "illegal state: _apply_submited should be true";
+        DCHECK(_apply_running) << "illegal state: _apply_running should be true";
+        _apply_running = false;
+        _apply_submited = false;
+        _apply_stopped_cond.notify_all();
+    }
 }
 
-void TabletUpdates::_wait_apply_done() {
+// There are two purpose for this function potentially:
+// 1. wait until the apply task done if the task has been started.
+// 2. wait until the apply task done if the task has been submited.
+void TabletUpdates::_wait_apply_done(bool wait_for_submited) {
     std::unique_lock<std::mutex> ul(_apply_running_lock);
-    while (_apply_running) {
-        _apply_stopped_cond.wait(ul);
+    if (wait_for_submited) {
+        while (_apply_submited) {
+            _apply_stopped_cond.wait(ul);
+        }
+    } else {
+        while (_apply_running) {
+            _apply_stopped_cond.wait(ul);
+        }
     }
 }
 
 void TabletUpdates::_stop_and_wait_apply_done() {
     _apply_stopped = true;
-    _wait_apply_done();
+    _wait_apply_done(false);
 }
 
 Status TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_version) {

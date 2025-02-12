@@ -439,7 +439,7 @@ private:
     Status _commit_compaction(std::unique_ptr<CompactionInfo>* info, const RowsetSharedPtr& rowset,
                               EditVersion* commit_version);
 
-    void _wait_apply_done();
+    void _wait_apply_done(bool wait_for_submited);
     void _stop_and_wait_apply_done();
 
     Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo);
@@ -508,7 +508,7 @@ private:
             _last_compaction_time_ms = UnixMillis();
         }
     }
-    void wait_apply_done() { _wait_apply_done(); }
+    void wait_apply_done() { _wait_apply_done(true); }
     bool is_apply_stop() { return _apply_stopped.load(); }
 
     bool compaction_running() { return _compaction_running; }
@@ -549,12 +549,14 @@ private:
     // gtid -> version
     std::map<int64_t, int64_t> _gtid_to_version_map;
 
-    // used for async apply, make sure at most 1 thread is doing applying
+    // used for async apply, make sure at most 1 thread is submited or doing applying
     mutable std::mutex _apply_running_lock;
     // make sure at most 1 thread is read or write primary index
     mutable std::shared_timed_mutex _index_lock;
     // apply process is running currently
     bool _apply_running = false;
+    // apply process has been submited
+    bool _apply_submited = false;
 
     // used to stop apply thread when shutting-down this tablet
     std::atomic<bool> _apply_stopped = false;
