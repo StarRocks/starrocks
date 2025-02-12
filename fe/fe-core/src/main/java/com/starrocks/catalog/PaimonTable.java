@@ -212,8 +212,11 @@ public class PaimonTable extends Table {
                     properties.put("fs.dls.accessKeyId", dataToken.get(ALIYUN_OSS_ACCESS_KEY));
                     properties.put("fs.dls.accessKeySecret", dataToken.get(ALIYUN_OSS_SECRET_KEY));
                     properties.put("fs.dls.securityToken", dataToken.get(ALIYUN_OSS_STS_TOKEN));
-
-                    provider.init(properties, "fs.oss.", DlfDataToken.class);
+                    // DLF 2.3 version updated
+                    properties.put("dlf.tokenCache.data.accessKeyId", dataToken.get(ALIYUN_OSS_ACCESS_KEY));
+                    properties.put("dlf.tokenCache.data.accessKeySecret", dataToken.get(ALIYUN_OSS_SECRET_KEY));
+                    properties.put("dlf.tokenCache.data.securityToken", dataToken.get(ALIYUN_OSS_STS_TOKEN));
+                    provider.init(properties, "", DlfDataToken.class);
                     paimonFileIO = new DlfPaimonFileIO(client,
                             provider,
                             dlfAuthContext,
