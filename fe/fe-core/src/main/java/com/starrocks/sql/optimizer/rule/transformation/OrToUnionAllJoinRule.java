@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 
@@ -128,11 +129,16 @@ public class OrToUnionAllJoinRule extends TransformationRule {
             return false;
         }
 
-        for (ScalarOperator child : compoundPredicate.getChildren()) {
-            if (!(child instanceof BinaryPredicateOperator)) {
-                return false;
-            }
-            BinaryPredicateOperator binaryPredicate = (BinaryPredicateOperator) child;
+        if (!allNestedCompoundAreOR(compoundPredicate)) {
+            return false;
+        }
+
+        List<BinaryPredicateOperator> binaryPredicates = flattenPredicateTree(compoundPredicate);
+        if (binaryPredicates.isEmpty()) {
+            return false;
+        }
+
+        for (BinaryPredicateOperator binaryPredicate : binaryPredicates) {
             if (binaryPredicate.getBinaryType() != BinaryType.EQ) {
                 return false;
             }
@@ -145,10 +151,7 @@ public class OrToUnionAllJoinRule extends TransformationRule {
         LogicalJoinOperator joinOp = (LogicalJoinOperator) input.getOp();
         CompoundPredicateOperator compoundPredicate = (CompoundPredicateOperator) joinOp.getOriginalOnPredicate();
 
-        List<BinaryPredicateOperator> binaryPredicateList = new ArrayList<>();
-        for (ScalarOperator scalarOperator : compoundPredicate.getChildren()) {
-            binaryPredicateList.add((BinaryPredicateOperator) scalarOperator);
-        }
+        List<BinaryPredicateOperator> binaryPredicateList = flattenPredicateTree(compoundPredicate);
 
         Map<Integer, List<BinaryPredicateOperator>> cumulativePredicateMap = new HashMap<>();
         List<BinaryPredicateOperator> cumulativeList = new ArrayList<>();
@@ -180,9 +183,12 @@ public class OrToUnionAllJoinRule extends TransformationRule {
                         .setOnPredicate(predicate0).build();
             } else {
                 List<ScalarOperator> scalarOps = new ArrayList<>(branchPredicates);
-                CompoundPredicateOperator combinedPredicate =
-                        new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND,
-                                scalarOps.toArray(new ScalarOperator[0]));
+                ScalarOperator combinedPredicate;
+                if (scalarOps.size() == 1) {
+                    combinedPredicate = scalarOps.get(0);
+                } else {
+                    combinedPredicate = buildAndPredicate(scalarOps);
+                }
                 ScalarOperator lastPredicate = branchPredicates.get(branchPredicates.size() - 1);
                 branchJoin = new LogicalJoinOperator.Builder().withOperator(joinOp).setOnPredicate(combinedPredicate)
                         .setOriginalOnPredicate(lastPredicate).build();
@@ -214,5 +220,52 @@ public class OrToUnionAllJoinRule extends TransformationRule {
 
         OptExpression result = OptExpression.create(unionOp, unionChildren);
         return Lists.newArrayList(result);
+    }
+
+    private boolean allNestedCompoundAreOR(ScalarOperator op) {
+        if (op instanceof CompoundPredicateOperator) {
+            CompoundPredicateOperator cp = (CompoundPredicateOperator) op;
+            if (cp.getCompoundType() != CompoundPredicateOperator.CompoundType.OR) {
+                return false;
+            }
+            for (ScalarOperator child : cp.getChildren()) {
+                if (!allNestedCompoundAreOR(child)) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    private List<BinaryPredicateOperator> flattenPredicateTree(ScalarOperator op) {
+        List<BinaryPredicateOperator> result = new ArrayList<>();
+        if (op instanceof BinaryPredicateOperator) {
+            result.add((BinaryPredicateOperator) op);
+        } else if (op instanceof CompoundPredicateOperator) {
+            CompoundPredicateOperator cp = (CompoundPredicateOperator) op;
+            if (cp.getCompoundType() == CompoundPredicateOperator.CompoundType.OR) {
+                for (ScalarOperator child : cp.getChildren()) {
+                    result.addAll(flattenPredicateTree(child));
+                }
+            }
+        }
+        return result;
+    }
+
+    private ScalarOperator buildAndPredicate(List<ScalarOperator> predicates) {
+        if (predicates == null || predicates.isEmpty()) {
+            return ConstantOperator.createBoolean(true);
+        }
+        if (predicates.size() == 1) {
+            return predicates.get(0);
+        }
+        ScalarOperator result =
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, predicates.get(0),
+                        predicates.get(1));
+        for (int i = 2; i < predicates.size(); i++) {
+            result = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, result,
+                    predicates.get(i));
+        }
+        return result;
     }
 }
