@@ -41,11 +41,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-<<<<<<< HEAD
-=======
 import com.starrocks.common.Pair;
-import com.starrocks.mysql.ssl.SSLContextLoader;
->>>>>>> fc39755dd7 ([Enhancement] Compatible with mariadb client for ldap user login (#55720))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
