@@ -550,7 +550,7 @@ private:
     std::map<int64_t, int64_t> _gtid_to_version_map;
 
     // used for async apply, make sure at most 1 thread is submited or doing applying
-    mutable std::mutex _apply_running_lock;
+    mutable std::mutex _apply_begin_lock;
     // make sure at most 1 thread is read or write primary index
     mutable std::shared_timed_mutex _index_lock;
     // apply process is running currently

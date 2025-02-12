@@ -901,14 +901,14 @@ void TabletUpdates::_check_for_apply() {
     if (_apply_stopped) {
         return;
     }
-    _apply_running_lock.lock();
+    _apply_begin_lock.lock();
     if ((config::enable_retry_apply && _apply_schedule.load()) || _apply_submited ||
         _apply_version_idx + 1 == _edit_version_infos.size()) {
-        _apply_running_lock.unlock();
+        _apply_begin_lock.unlock();
         return;
     }
     _apply_submited = true;
-    _apply_running_lock.unlock();
+    _apply_begin_lock.unlock();
     std::shared_ptr<Runnable> task(
             std::make_shared<ApplyCommitTask>(std::static_pointer_cast<Tablet>(_tablet.shared_from_this())));
     auto st = StorageEngine::instance()->update_manager()->apply_thread_pool()->submit(std::move(task));
@@ -951,7 +951,7 @@ void TabletUpdates::do_apply() {
     SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
             config::enable_pk_strict_memcheck ? StorageEngine::instance()->update_manager()->mem_tracker() : nullptr);
     {
-        std::lock_guard<std::mutex> lg(_apply_running_lock);
+        std::lock_guard<std::mutex> lg(_apply_begin_lock);
         DCHECK(_apply_submited) << "illegal state: _apply_submited should be true";
         DCHECK(!_apply_running) << "illegal state: _apply_running should be true";
         _apply_running = true;
@@ -1023,7 +1023,7 @@ void TabletUpdates::do_apply() {
     }
 
     {
-        std::lock_guard<std::mutex> lg(_apply_running_lock);
+        std::lock_guard<std::mutex> lg(_apply_begin_lock);
         DCHECK(_apply_submited) << "illegal state: _apply_submited should be true";
         DCHECK(_apply_running) << "illegal state: _apply_running should be true";
         _apply_running = false;
@@ -1036,7 +1036,7 @@ void TabletUpdates::do_apply() {
 // 1. wait until the apply task done if the task has been started.
 // 2. wait until the apply task done if the task has been submited.
 void TabletUpdates::_wait_apply_done(bool wait_for_submited) {
-    std::unique_lock<std::mutex> ul(_apply_running_lock);
+    std::unique_lock<std::mutex> ul(_apply_begin_lock);
     if (wait_for_submited) {
         while (_apply_submited) {
             _apply_stopped_cond.wait(ul);
