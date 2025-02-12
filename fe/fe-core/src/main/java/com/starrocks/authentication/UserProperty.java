@@ -112,7 +112,7 @@ public class UserProperty {
                     checkSessionVariable(sessionKey, value);
                 }
             } else if (key.equalsIgnoreCase(PROP_RAM_USER)) {
-                ramUser = value;
+                setRamUser(value);
             } else {
                 throw new DdlException("Unknown user property(" + key + ")");
             }
@@ -163,6 +163,8 @@ public class UserProperty {
                     setDatabase(value);
                 } else if (key.equalsIgnoreCase(PROP_CATALOG)) {
                     setCatalog(value);
+                } else if (key.equalsIgnoreCase(PROP_RAM_USER)) {
+                    setRamUser(value);
                 } else if (key.startsWith(PROP_SESSION_PREFIX)) {
                     String sessionKey = key.substring(PROP_SESSION_PREFIX.length());
                     if (sessionKey.equalsIgnoreCase(PROP_CATALOG)) {
