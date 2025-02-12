@@ -812,7 +812,7 @@ public class Optimizer {
             ruleRewriteOnlyOnce(tree, rootTaskContext, RuleSetType.PRUNE_COLUMNS);
         }
         ruleRewriteOnlyOnce(tree, rootTaskContext, new PruneSubfieldRule());
-
+        deriveLogicalProperty(tree);
         return tree;
     }
 
