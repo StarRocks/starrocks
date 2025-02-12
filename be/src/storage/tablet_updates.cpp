@@ -951,9 +951,9 @@ void TabletUpdates::do_apply() {
     SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
             config::enable_pk_strict_memcheck ? StorageEngine::instance()->update_manager()->mem_tracker() : nullptr);
     {
+        std::lock_guard<std::mutex> lg(_apply_running_lock);
         DCHECK(_apply_submited) << "illegal state: _apply_submited should be true";
         DCHECK(!_apply_running) << "illegal state: _apply_submited should be true";
-        std::lock_guard<std::mutex> lg(_apply_running_lock);
         _apply_running = true;
     }
     // only 1 thread at max is running this method
