@@ -3987,7 +3987,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### datacache_tiered_cache_enable
 
-- 默认值：true
+- 默认值：false
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
