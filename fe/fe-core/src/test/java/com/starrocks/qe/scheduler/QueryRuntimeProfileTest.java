@@ -60,7 +60,7 @@ public class QueryRuntimeProfileTest {
     }
 
     @Test
-    public void testLoadChannelProfile() {
+    public void testMergeLoadChannelProfile() {
         new Expectations() {
             {
                 jobSpec.hasOlapTableSink();
@@ -75,8 +75,36 @@ public class QueryRuntimeProfileTest {
         profile.updateLoadChannelProfile(reportExecStatusParams);
         Optional<RuntimeProfile> optional = profile.mergeLoadChannelProfile();
         Assert.assertTrue(optional.isPresent());
-        RuntimeProfile mergedProfile = optional.get();
+        verifyMergedLoadChannelProfile(optional.get());
+    }
 
+    @Test
+    public void testBuildNonPipelineQueryProfile() {
+        new Expectations() {
+            {
+                jobSpec.hasOlapTableSink();
+                result = true;
+                minTimes = 0;
+                jobSpec.isEnablePipeline();
+                result = false;
+                minTimes = 0;
+            }
+        };
+
+        QueryRuntimeProfile profile = new QueryRuntimeProfile(connectContext, jobSpec, false);
+        profile.initFragmentProfiles(1);
+        TReportExecStatusParams reportExecStatusParams = buildReportStatus();
+        profile.updateLoadChannelProfile(reportExecStatusParams);
+        RuntimeProfile runtimeProfile = profile.buildQueryProfile(true);
+        Assert.assertNotNull(runtimeProfile);
+        Assert.assertEquals(2, runtimeProfile.getChildMap().size());
+        Assert.assertSame(profile.getFragmentProfiles().get(0), runtimeProfile.getChild("Fragment 0"));
+        RuntimeProfile loadChannelProfile = runtimeProfile.getChild("LoadChannel");
+        Assert.assertNotNull(loadChannelProfile);
+        verifyMergedLoadChannelProfile(loadChannelProfile);
+    }
+
+    private void verifyMergedLoadChannelProfile(RuntimeProfile mergedProfile) {
         Assert.assertEquals("LoadChannel", mergedProfile.getName());
         Assert.assertEquals("288fb1df-f955-472f-a377-cb1e10e4d993", mergedProfile.getInfoString("LoadId"));
         Assert.assertEquals("40", mergedProfile.getInfoString("TxnId"));

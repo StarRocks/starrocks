@@ -101,6 +101,8 @@ public:
 
     TabletSinkProfile* ts_profile() const { return _ts_profile; }
 
+    const PLoadChannelProfileConfig& load_channel_profile_config() const { return _load_channel_profile_config; }
+
 private:
     void _prepare_profile(RuntimeState* state);
 
