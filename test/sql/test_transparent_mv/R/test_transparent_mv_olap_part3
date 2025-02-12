@@ -436,6 +436,119 @@ SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GRO
 SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;
 -- result:
 -- !result
+DROP MATERIALIZED VIEW test_mv1;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW test_mv1
+PARTITION BY dt
+REFRESH DEFERRED MANUAL 
+PROPERTIES ("transparent_mv_rewrite_mode" = "true")
+AS select dt, sum(num) as num from t3 where date_trunc('day', dt) < timestamp(curdate()) GROUP BY dt;
+-- result:
+-- !result
+REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
+SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	3
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	5
+2020-06-21 00:00:00	7
+2020-06-24 00:00:00	9
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt>='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	3
+2020-06-18 00:00:00	5
+2020-06-21 00:00:00	7
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	5
+2020-06-21 00:00:00	7
+2020-06-24 00:00:00	9
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	5
+2020-06-21 00:00:00	7
+2020-06-24 00:00:00	9
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	5
+2020-06-21 00:00:00	7
+2020-06-24 00:00:00	9
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	5
+2020-06-21 00:00:00	7
+2020-07-02 00:00:00	3
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	3
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	3
+-- !result
+INSERT INTO t3 VALUES (3, "2020-06-15");
+-- result:
+-- !result
+INSERT INTO t3 select 1, curdate();
+-- result:
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	6
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	5
+2020-06-21 00:00:00	7
+2020-06-24 00:00:00	9
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt>='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	6
+2020-06-18 00:00:00	5
+2020-06-21 00:00:00	7
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	5
+2020-06-21 00:00:00	7
+2020-06-24 00:00:00	9
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	5
+2020-06-21 00:00:00	7
+2020-06-24 00:00:00	9
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	5
+2020-06-21 00:00:00	7
+2020-06-24 00:00:00	9
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-18 00:00:00	5
+2020-06-21 00:00:00	7
+2020-07-02 00:00:00	3
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	6
+-- !result
+SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
+-- result:
+2020-06-15 00:00:00	6
+-- !result
 drop table t1 force;
 -- result:
 -- !result

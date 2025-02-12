@@ -16,26 +16,17 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.Lists;
 import com.starrocks.clone.DynamicPartitionScheduler;
-import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.pseudocluster.PseudoCluster;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
-import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
-import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
-import com.starrocks.utframe.UtFrameUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -45,9 +36,6 @@ import java.util.List;
 
 public class DropPartitionWithExprListTest extends MVTestBase  {
     private static final Logger LOG = LogManager.getLogger(DropPartitionWithExprListTest.class);
-    protected static ConnectContext connectContext;
-    protected static PseudoCluster cluster;
-    protected static StarRocksAssert starRocksAssert;
     private static String T1;
     private static String T2;
     private static String T3;
@@ -59,19 +47,7 @@ public class DropPartitionWithExprListTest extends MVTestBase  {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
-        connectContext = UtFrameUtils.createDefaultCtx();
-        starRocksAssert = new StarRocksAssert(connectContext);
-
-        // set default config for async mvs
-        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
-
-        if (!starRocksAssert.databaseExist("_statistics_")) {
-            StatisticsMetaManager m = new StatisticsMetaManager();
-            m.createStatisticsTablesForTest();
-        }
-        starRocksAssert.withDatabase("test");
-        starRocksAssert.useDatabase("test");
+        MVTestBase.beforeClass();
 
         // table with partition expression whose partitions have multi columns
         T1 = "CREATE TABLE t1 (\n" +
@@ -142,47 +118,6 @@ public class DropPartitionWithExprListTest extends MVTestBase  {
 
     @AfterClass
     public static void afterClass() throws Exception {
-    }
-
-    @Before
-    public void before() {
-    }
-
-    @After
-    public void after() throws Exception {
-    }
-
-    public static void executeInsertSql(String sql) throws Exception {
-        connectContext.setQueryId(UUIDUtil.genUUID());
-        StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
-        new StmtExecutor(connectContext, statement).execute();
-    }
-
-    private String toPartitionVal(String val) {
-        return val == null ? "NULL" : String.format("'%s'", val);
-    }
-
-    private void addListPartition(String tbl, String pName, String pVal1, String pVal2) {
-        addListPartition(tbl, pName, pVal1, pVal2, false);
-    }
-
-    private void addListPartition(String tbl, String pName, String pVal1, String pVal2, boolean isInsertValues) {
-        String addPartitionSql = String.format("ALTER TABLE %s ADD PARTITION IF NOT EXISTS %s VALUES IN ((%s, %s))",
-                tbl, pName, toPartitionVal(pVal1), toPartitionVal(pVal2));
-        StatementBase stmt = SqlParser.parseSingleStatement(addPartitionSql, connectContext.getSessionVariable().getSqlMode());
-        try {
-            // add a new partition
-            new StmtExecutor(connectContext, stmt).execute();
-
-            // insert values
-            if (isInsertValues) {
-                String insertSql = String.format("insert into %s partition(%s) values(1, 1, '%s', '%s');",
-                        tbl, pName, pVal1, pVal2);
-                executeInsertSql(insertSql);
-            }
-        } catch (Exception e) {
-            Assert.fail("add partition failed:" + e);
-        }
     }
 
     private void withTablePartitions(String tableName) {

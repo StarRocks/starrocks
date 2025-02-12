@@ -21,8 +21,11 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.MvRefreshArbiter;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
@@ -49,22 +52,26 @@ import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
+import com.starrocks.sql.optimizer.MaterializedViewOptimizer;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerConfig;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
+import com.starrocks.sql.optimizer.rule.NonDeterministicVisitor;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
-import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.StarRocksTestBase;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -216,14 +223,23 @@ public class MVTestBase extends StarRocksTestBase {
         return getOptimizedPlan(sql, connectContext);
     }
 
+    public static OptExpression getLogicalOptimizedPlan(String sql) {
+        return getOptimizedPlan(sql, connectContext, new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED));
+    }
+
     public static OptExpression getOptimizedPlan(String sql, ConnectContext connectContext) {
+        return getOptimizedPlan(sql, connectContext, OptimizerConfig.defaultConfig());
+    }
+
+    public static OptExpression getOptimizedPlan(String sql, ConnectContext connectContext,
+                                                 OptimizerConfig optimizerOptions) {
         StatementBase mvStmt;
         try {
             List<StatementBase> statementBases =
                     com.starrocks.sql.parser.SqlParser.parse(sql, connectContext.getSessionVariable());
             Preconditions.checkState(statementBases.size() == 1);
             mvStmt = statementBases.get(0);
-        } catch (ParsingException parsingException) {
+        } catch (Exception e) {
             return null;
         }
         Preconditions.checkState(mvStmt instanceof QueryStatement);
@@ -232,7 +248,7 @@ public class MVTestBase extends StarRocksTestBase {
         ColumnRefFactory columnRefFactory = new ColumnRefFactory();
         LogicalPlan logicalPlan =
                 new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(query);
-        Optimizer optimizer = new Optimizer();
+        Optimizer optimizer = new Optimizer(optimizerOptions);
         return optimizer.optimize(
                 connectContext,
                 logicalPlan.getRoot(),
@@ -388,5 +404,81 @@ public class MVTestBase extends StarRocksTestBase {
     protected static void initAndExecuteTaskRun(TaskRun taskRun) throws Exception {
         taskRun.initStatus(UUIDUtil.genUUID().toString(), System.currentTimeMillis());
         taskRun.executeTaskRun();
+    }
+
+    protected String toPartitionVal(String val) {
+        return val == null ? "NULL" : String.format("'%s'", val);
+    }
+
+    protected void addRangePartition(String tbl, String pName, String pVal1, String pVal2) {
+        addRangePartition(tbl, pName, pVal1, pVal2, false);
+    }
+
+    protected void addRangePartition(String tbl, String pName, String pVal1, String pVal2, boolean isInsertValue) {
+        // mock the check to ensure test can run
+        new MockUp<ExpressionRangePartitionInfo>() {
+            @Mock
+            public boolean isAutomaticPartition() {
+                return false;
+            }
+        };
+        new MockUp<ExpressionRangePartitionInfoV2>() {
+            @Mock
+            public boolean isAutomaticPartition() {
+                return false;
+            }
+        };
+        try {
+            String addPartitionSql = String.format("ALTER TABLE %s ADD " +
+                    "PARTITION %s VALUES [(%s),(%s))", tbl, pName, toPartitionVal(pVal1), toPartitionVal(pVal2));
+            System.out.println(addPartitionSql);
+            starRocksAssert.alterTable(addPartitionSql);
+
+            // insert values
+            if (isInsertValue) {
+                String insertSql = String.format("insert into %s partition(%s) values('%s', 1, 1);",
+                        tbl, pName, pVal1);
+                executeInsertSql(insertSql);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            LOG.error("Failed to add partition", e);
+        }
+    }
+
+    protected void addListPartition(String tbl, String pName, String pVal1, String pVal2) {
+        addListPartition(tbl, pName, pVal1, pVal2, false);
+    }
+
+    protected void addListPartition(String tbl, String pName, String pVal1, String pVal2, boolean isInsertValues) {
+        String addPartitionSql = String.format("ALTER TABLE %s ADD PARTITION IF NOT EXISTS %s VALUES IN ((%s, %s))",
+                tbl, pName, toPartitionVal(pVal1), toPartitionVal(pVal2));
+        StatementBase stmt = SqlParser.parseSingleStatement(addPartitionSql, connectContext.getSessionVariable().getSqlMode());
+        try {
+            // add a new partition
+            new StmtExecutor(connectContext, stmt).execute();
+
+            // insert values
+            if (isInsertValues) {
+                String insertSql = String.format("insert into %s partition(%s) values(1, 1, '%s', '%s');",
+                        tbl, pName, pVal1, pVal2);
+                executeInsertSql(insertSql);
+            }
+        } catch (Exception e) {
+            Assert.fail("add partition failed:" + e);
+        }
+    }
+
+    protected MvPlanContext getOptimizedPlan(MaterializedView mv, boolean isInlineView, boolean isCheckNonDeterministicFunction) {
+        return new MaterializedViewOptimizer().optimize(mv, connectContext, isInlineView, isCheckNonDeterministicFunction);
+
+    }
+
+    protected MvPlanContext getOptimizedPlan(MaterializedView mv, boolean isInlineView) {
+        return new MaterializedViewOptimizer().optimize(mv, connectContext, isInlineView, true);
+    }
+
+    protected boolean hasNonDeterministicFunction(OptExpression root) {
+        return root.getOp().accept(new NonDeterministicVisitor(), root, null);
     }
 }
