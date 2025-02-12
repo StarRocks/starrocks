@@ -40,12 +40,15 @@ public class CostPredictorTest extends PlanTestBase {
         HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
         int port = server.getAddress().getPort();
         final long predictedResult = 10000L;
-        server.createContext("/predict_csv", exchange -> {
+        server.createContext(CostPredictor.ServiceBasedCostPredictor.PREDICT_URL, exchange -> {
             String response = String.valueOf(predictedResult);
             exchange.sendResponseHeaders(200, response.length());
             try (OutputStream os = exchange.getResponseBody()) {
                 os.write(response.getBytes());
             }
+        });
+        server.createContext(CostPredictor.ServiceBasedCostPredictor.HEALTH_URL, exchange -> {
+            exchange.sendResponseHeaders(200, 0);
         });
         server.start();
         Config.query_cost_prediction_service_address = "http://localhost:" + port;
@@ -53,6 +56,15 @@ public class CostPredictorTest extends PlanTestBase {
         // Running the test case predictMemoryBytes again with the mocked service
         // This time, the test should not throw an exception
         Assertions.assertEquals(predictedResult, instance.predictMemoryBytes(planAndFragment.second));
+
+        // test health check
+        Config.enable_query_cost_prediction = true;
+        instance.doHealthCheck();
+        Assertions.assertTrue(instance.isAvailable());
+
+        server.removeContext(CostPredictor.ServiceBasedCostPredictor.HEALTH_URL);
+        instance.doHealthCheck();
+        Assertions.assertFalse(instance.isAvailable());
 
         server.stop(0);
     }

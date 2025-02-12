@@ -16,13 +16,13 @@ package com.starrocks.qe.scheduler.slot;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.common.Config;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.sql.optimizer.cost.feature.CostPredictor;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 
@@ -52,7 +52,7 @@ public class SlotEstimatorFactory {
         @Override
         public int estimateSlots(QueryQueueOptions opts, ConnectContext context, DefaultCoordinator coord) {
             long memCost;
-            if (Config.enable_query_cost_prediction && coord.getPredictedCost() > 0) {
+            if (CostPredictor.getServiceBasedCostPredictor().isAvailable() && coord.getPredictedCost() > 0) {
                 memCost = coord.getPredictedCost();
             } else {
                 memCost = (long) context.getAuditEventBuilder().build().planMemCosts;

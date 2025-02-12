@@ -1229,7 +1229,7 @@ public class StmtExecutor {
     }
 
     private CostPredictor getCostPredictor() {
-        return CostPredictor.ServiceBasedCostPredictor.getInstance();
+        return CostPredictor.getServiceBasedCostPredictor();
     }
 
     // Process a select statement.
