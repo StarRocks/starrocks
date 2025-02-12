@@ -148,7 +148,7 @@ class PredicateColumnsStorageTest extends PlanTestBase {
     }
 
     @Test
-    public void duplicateColumnUsages() {
+    public void testDuplicateColumnUsages() {
         Database db = starRocksAssert.getDb("test");
         Table t1 = starRocksAssert.getTable("test", "t1");
         Column v4 = t1.getColumn("v4");

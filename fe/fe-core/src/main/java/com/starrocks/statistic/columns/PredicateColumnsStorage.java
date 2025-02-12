@@ -52,6 +52,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 
@@ -169,21 +170,20 @@ public class PredicateColumnsStorage {
     }
 
     public List<ColumnUsage> deduplicateColumnUsages(List<ColumnUsage> columnUsages) {
-        Map<ColumnUsage, ColumnUsage> result = new HashMap<>();
+        Map<ColumnUsage, ColumnUsage> merged = columnUsages.stream()
+                .collect(Collectors.toMap(
+                        Function.identity(),
+                        Function.identity(),
+                        (existing, current) -> {
+                            existing.getUseCases().addAll(current.getUseCases());
+                            if (current.getLastUsed().isAfter(existing.getLastUsed())) {
+                                existing.setLastUsed(current.getLastUsed());
+                            }
+                            return existing;
+                        }
+                ));
 
-        for (ColumnUsage columnUsage : columnUsages) {
-            ColumnUsage existingUsage = result.get(columnUsage);
-            if (existingUsage == null) {
-                result.put(columnUsage, columnUsage);
-            } else {
-                existingUsage.getUseCases().addAll(columnUsage.getUseCases());
-                if (columnUsage.getLastUsed().isAfter(existingUsage.getLastUsed())) {
-                    existingUsage.setLastUsed(columnUsage.getLastUsed());
-                }
-            }
-        }
-
-        return new ArrayList<>(result.values());
+        return new ArrayList<>(merged.values());
     }
 
     /**
