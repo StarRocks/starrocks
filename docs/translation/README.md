@@ -1,18 +1,10 @@
 # Translating docs with GPT
 
-This README describes using GPT-4o to translate from Chinese to English, or from English to Chinese. The system used is specific to Docusaurus Markdown and MDX. We are using code provided by Weights and Biases, as they also use Docusaurus and have expertise with LLMs.
+## 1. Build the Docker image
 
-> Note:
->
-> Known issues:
->
-> Frontmatter `keywords` entries are not allowed. [This PR](https://github.com/tcapelle/gpt_translate/pull/16) adds `keywords`, `unlisted`, and `sidebar_label` to the frontmatter. For now, test with docs that do not include `keywords` or `sidebar_label` entries.
->
-> Pydantic error about serialization: There is an error coming up after the translation is complete. I have not debugged this yet, I will see if the author of the tranlation package can help, he knows way more about Python than I do.
+  See the [README in the `DanRoscigno/gpt-translate` repo](https://github.com/DanRoscigno/gpt_translate/blob/main/README.md). Build the Docker image from there.
 
-To translate an English doc:
-
-## Set up the environment
+## 2. Set up the environment
 
 There are three environment variables that need to be set in the file starrocks/docs/translation/.env:
 
@@ -35,8 +27,7 @@ OPENAI_API_KEY=sk-proj-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 WANDB_API_KEY=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 GIT_PYTHON_REFRESH=quiet
 ```
-
-## Files to translate
+## 3. Identify the files to translate
 
 Provide the paths of the files to translate in the file `starrocks/docs/translation/files.txt`
 
@@ -50,7 +41,7 @@ The entries in the file should be relative to the `starrocks/docs/translation/` 
 <tr>
 <td>
 
-### From English to Chinese
+#### From English to Chinese or Japanese
 
 `starrocks/docs/translation/files.txt`
 
@@ -62,19 +53,9 @@ The entries in the file should be relative to the `starrocks/docs/translation/` 
 </td>
 <td>
 
-### From English to Japanese
-
-`starrocks/docs/translation/files.txt`
-
-```bash
-../en/quick_start/routine-load.md
-../en/deployment/helm.md
-```
-
-</td>
 <td>
 
-### From Chinese to English
+#### From Chinese to English
 
 `starrocks/docs/translation/files.txt`
 
@@ -87,16 +68,15 @@ The entries in the file should be relative to the `starrocks/docs/translation/` 
 </tr>
 </table>
 
-## Build the Docker image
+This README describes using GPT-4o to translate from Chinese to English, or from English to Chinese. The system used is specific to Docusaurus Markdown and MDX. We are using code provided by Weights and Biases, as they also use Docusaurus and have expertise with LLMs.
 
-This probably only needs to be done once unless the folks from Weights and Biases modify the Python package `gpt_translate`.
+> Note:
+>
+> Known issues:
+>
+> Pydantic error about serialization: There is an error coming up after the translation is complete. I have not debugged this yet, I will see if the author of the tranlation package can help, he knows way more about Python than I do.
 
-```bash
-cd docs/translation
-docker build -f translation.Dockerfile -t translate .
-```
-
-## Translate the docs
+## 4. Translate the docs
 
 Change dir back up to the `starrocks` folder so that you can mount the `docs/` folder in the container.
 
