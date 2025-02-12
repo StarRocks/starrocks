@@ -201,9 +201,6 @@ CONF_Int32(be_service_threads, "64");
 // key=value pair of default query options for StarRocks, separated by ','
 CONF_String(default_query_options, "");
 
-// If non-zero, StarRocks will output memory usage every log_mem_usage_interval'th fragment completion.
-// CONF_Int32(log_mem_usage_interval, "0");
-
 // Controls the number of threads to run work per core.  It's common to pick 2x
 // or 3x the number of cores.  This keeps the cores busy without causing excessive
 // thrashing.
@@ -1183,7 +1180,7 @@ CONF_Double(datacache_scheduler_threads_per_cpu, "0.125");
 // If false, the raw data will be written to disk directly and read from disk without promotion.
 // For object data, such as parquet footer object, which can only be cached in memory are not affected
 // by this configuration.
-CONF_Bool(datacache_tiered_cache_enable, "true");
+CONF_Bool(datacache_tiered_cache_enable, "false");
 // Whether to persist cached data
 CONF_Bool(datacache_persistence_enable, "true");
 // DataCache engines, alternatives: starcache.
