@@ -391,6 +391,9 @@ public class InsertPlanner {
                 if (insertStmt.isDynamicOverwrite()) {
                     ((OlapTableSink) dataSink).setDynamicOverwrite(true);
                 }
+                if (insertStmt.isFromOverwrite()) {
+                    ((OlapTableSink) dataSink).setIsFromOverwrite(true);
+                }
 
                 // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
                 session.getSessionVariable().setPreferComputeNode(false);

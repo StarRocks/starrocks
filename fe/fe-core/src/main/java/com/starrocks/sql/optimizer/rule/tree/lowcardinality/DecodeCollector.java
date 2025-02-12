@@ -109,6 +109,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
             FunctionSet.CARDINALITY);
 
     private final SessionVariable sessionVariable;
+    private final boolean isQuery;
 
     // These fields are the same as the fields in the DecodeContext,
     // the difference: these fields store all string information, the
@@ -140,8 +141,9 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
     // check if there is a blocking node in plan
     private boolean canBlockingOutput = false;
 
-    public DecodeCollector(SessionVariable session) {
+    public DecodeCollector(SessionVariable session, boolean isQuery) {
         this.sessionVariable = session;
+        this.isQuery = isQuery;
     }
 
     public void collect(OptExpression root, DecodeContext context) {
@@ -607,7 +609,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     @Override
     public DecodeInfo visitPhysicalHiveScan(OptExpression optExpression, DecodeInfo context) {
-        if (!canBlockingOutput || !sessionVariable.isUseLowCardinalityOptimizeOnLake()) {
+        if (!canBlockingOutput || !sessionVariable.isUseLowCardinalityOptimizeOnLake() || !isQuery) {
             return DecodeInfo.EMPTY;
         }
         PhysicalHiveScanOperator scan = optExpression.getOp().cast();
