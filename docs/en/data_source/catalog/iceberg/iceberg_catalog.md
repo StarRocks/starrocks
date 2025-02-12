@@ -295,7 +295,7 @@ Description: The endpoint to retrieve access token from OAuth2 Server.
 
 Required: No
 
-Description: Whether to support querying objects under nested namespace. Default: `true`.
+Description: Whether to use credentials provided by REST backend for file system access. Default: `true`.
 
 ###### iceberg.catalog.warehouse
 
