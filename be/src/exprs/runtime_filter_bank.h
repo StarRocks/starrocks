@@ -69,9 +69,6 @@ public:
     static StatusOr<ExprContext*> rewrite_runtime_filter_in_cross_join_node(ObjectPool* pool, ExprContext* conjunct,
                                                                             Chunk* chunk);
 
-    static bool filter_zonemap_with_min_max(LogicalType type, const RuntimeFilter* filter, const Column* min_column,
-                                            const Column* max_column);
-
     // create min/max predicate from filter.
     static void create_min_max_value_predicate(ObjectPool* pool, SlotId slot_id, LogicalType slot_type,
                                                const RuntimeFilter* filter, Expr** min_max_predicate);
