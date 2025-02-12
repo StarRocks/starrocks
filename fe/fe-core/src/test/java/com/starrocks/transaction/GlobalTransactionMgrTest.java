@@ -55,6 +55,7 @@ import com.starrocks.common.LabelAlreadyUsedException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
+import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.KafkaProgress;
 import com.starrocks.load.routineload.KafkaRoutineLoadJob;
 import com.starrocks.load.routineload.KafkaTaskInfo;
@@ -63,6 +64,8 @@ import com.starrocks.load.routineload.RoutineLoadJob;
 import com.starrocks.load.routineload.RoutineLoadMgr;
 import com.starrocks.load.routineload.RoutineLoadTaskInfo;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.metric.TableMetricsEntity;
+import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageFormatVersion;
 import com.starrocks.persist.ImageWriter;
@@ -71,6 +74,7 @@ import com.starrocks.persist.metablock.SRMetaBlockReaderV2;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
 import com.starrocks.thrift.TLoadSourceType;
+import com.starrocks.thrift.TManualLoadTxnCommitAttachment;
 import com.starrocks.thrift.TRLTaskTxnCommitAttachment;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
@@ -822,8 +826,18 @@ public class GlobalTransactionMgrTest {
         transTablets.add(tabletCommitInfo1);
         transTablets.add(tabletCommitInfo2);
         transTablets.add(tabletCommitInfo3);
+
+        TManualLoadTxnCommitAttachment loadTxnCommitAttachment = new TManualLoadTxnCommitAttachment();
+        loadTxnCommitAttachment.setLoadedRows(100);
+        loadTxnCommitAttachment.setLoadedBytes(10000);
+        loadTxnCommitAttachment.setFilteredRows(0);
+        TxnCommitAttachment txnCommitAttachment = new ManualLoadTxnCommitAttachment(loadTxnCommitAttachment);
+        TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(GlobalStateMgrTestUtil.testTableId1);
+        assertEquals(0, entity.counterStreamLoadRowsTotal.getValue().intValue());
+        assertEquals(0, entity.counterStreamLoadBytesTotal.getValue().intValue());
+        assertEquals(0, entity.counterStreamLoadFinishedTotal.getValue().intValue());
         masterTransMgr.prepareTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, transTablets,
-                Lists.newArrayList(), null);
+                Lists.newArrayList(), txnCommitAttachment);
         TransactionState transactionState = fakeEditLog.getTransaction(transactionId);
         assertEquals(TransactionStatus.PREPARED, transactionState.getTransactionStatus());
 
@@ -841,6 +855,9 @@ public class GlobalTransactionMgrTest {
         Set<Long> errorReplicaIds = Sets.newHashSet();
         errorReplicaIds.add(GlobalStateMgrTestUtil.testReplicaId1);
         masterTransMgr.finishTransaction(GlobalStateMgrTestUtil.testDbId1, transactionId, errorReplicaIds);
+        assertEquals(100, entity.counterStreamLoadRowsTotal.getValue().intValue());
+        assertEquals(10000, entity.counterStreamLoadBytesTotal.getValue().intValue());
+        assertEquals(1, entity.counterStreamLoadFinishedTotal.getValue().intValue());
         transactionState = fakeEditLog.getTransaction(transactionId);
         assertEquals(TransactionStatus.VISIBLE, transactionState.getTransactionStatus());
         // check replica version

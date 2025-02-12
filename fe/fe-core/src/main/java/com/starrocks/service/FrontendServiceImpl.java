@@ -1460,13 +1460,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 if (!(attachment instanceof ManualLoadTxnCommitAttachment)) {
                     break;
                 }
-                ManualLoadTxnCommitAttachment streamAttachment = (ManualLoadTxnCommitAttachment) attachment;
-                entity.counterStreamLoadFinishedTotal.increase(1L);
-                entity.counterStreamLoadBytesTotal.increase(streamAttachment.getReceivedBytes());
-                entity.counterStreamLoadRowsTotal.increase(streamAttachment.getLoadedRows());
 
                 if (streamLoadtask != null) {
-                    streamLoadtask.setLoadState(streamAttachment, "");
+                    streamLoadtask.setLoadState(attachment, "");
                 }
 
                 break;
