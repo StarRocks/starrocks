@@ -31,10 +31,7 @@ function check_keywords() {
 }
 
 sql=$(cat << EOF
-SET enable_profile=true;
-SET enable_async_profile=false;
-INSERT INTO t0 SELECT * FROM t0;
-SELECT get_query_profile(last_query_id());
+SELECT get_query_profile(PROFILE_ID) AS result FROM information_schema.loads WHERE LABEL = '${label}';
 EOF
 )
 

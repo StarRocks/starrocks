@@ -44,7 +44,33 @@ INSERT INTO `t0` (v1, v2, v3) values
     (2, 4, 12);
 -- result:
 -- !result
-shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" bash ${root_path}/sql/test_profile/T/test_load_channel_profile_analysis.sh
+SET enable_profile=true;
+-- result:
+-- !result
+SET enable_async_profile=false;
+-- result:
+-- !result
+INSERT INTO t0 WITH LABEL label_${uuid0} SELECT * FROM t0;
+-- result:
+-- !result
+shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" label="label_${uuid0}" bash ${root_path}/sql/test_profile/T/test_load_channel_profile_analysis.sh
+-- result:
+0
+Analyze profile succeeded
+Analyze profile succeeded
+-- !result
+alter table t0 set('enable_load_profile'='true');
+-- result:
+-- !result
+shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label: "label_${uuid1}"" -H "column_separator: ," -d '1,2,3' -X PUT ${url}/api/${db[0]}/t0/_stream_load
+-- result:
+0
+{
+    "Status": "Success",
+    "Message": "OK"
+}
+-- !result
+shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" label="label_${uuid1}" bash ${root_path}/sql/test_profile/T/test_load_channel_profile_analysis.sh
 -- result:
 0
 Analyze profile succeeded

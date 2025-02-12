@@ -320,7 +320,7 @@ void PlanFragmentExecutor::send_report(bool done) {
     // This will send a report even if we are cancelled.  If the query completed correctly
     // but fragments still need to be cancelled (e.g. limit reached), the coordinator will
     // be waiting for a final report and profile.
-    _report_status_cb(status, profile(), done || !status.ok());
+    _report_status_cb(status, profile(), _runtime_state->load_channel_profile(), done || !status.ok());
 }
 
 Status PlanFragmentExecutor::_get_next_internal_vectorized(ChunkPtr* chunk) {

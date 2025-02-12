@@ -86,7 +86,9 @@ public:
     // Note: this does not take a const RuntimeProfile&, because it might need to call
     // functions like PrettyPrint() or to_thrift(), neither of which is const
     // because they take locks.
-    typedef std::function<void(const Status& status, RuntimeProfile* profile, bool done)> report_status_callback;
+    typedef std::function<void(const Status& status, RuntimeProfile* profile, RuntimeProfile* load_channel_profile,
+                               bool done)>
+            report_status_callback;
 
     // if report_status_cb is not empty, is used to report the accumulated profile
     // information periodically during execution open().
