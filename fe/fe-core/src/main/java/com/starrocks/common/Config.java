@@ -3301,4 +3301,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = false)
     public static int lake_remove_table_thread_num = 4;
+
+    @ConfField(mutable = true)
+    public static boolean transaction_state_print_partition_info = true;
 }
