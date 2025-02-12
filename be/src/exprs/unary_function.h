@@ -107,6 +107,11 @@ public:
             for (int i = 0; i < size; ++i) {
                 r3[i] = OP::template apply<CppType, ResultCppType>(data_array[i]);
             }
+        } else if constexpr (lt_is_object_family<Type>) {
+            const auto& r1 = data_array;
+            for (int i = 0; i < size; ++i) {
+                r3[i] = OP::template apply<CppType, ResultCppType>(r1[i]);
+            }
         } else {
             const auto* r1 = data_array.data();
             for (int i = 0; i < size; ++i) {

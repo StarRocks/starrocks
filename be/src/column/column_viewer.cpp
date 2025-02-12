@@ -50,7 +50,7 @@ ColumnViewer<Type>::ColumnViewer(const ColumnPtr& column)
         _null_column = GlobalVariables::GetInstance()->one_size_not_null_column();
     }
 
-    _data = _column->get_data().data();
+    _data = &_column->get_data();
     _null_data = _null_column->get_data().data();
 }
 

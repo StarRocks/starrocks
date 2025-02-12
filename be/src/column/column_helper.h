@@ -299,18 +299,18 @@ public:
     }
 
     template <LogicalType Type>
-    static inline const RunTimeCppType<Type>* unpack_cpp_data_one_value(const Column* input_column) {
+    static inline const RunTimeCppType<Type> unpack_cpp_data_one_value(const Column* input_column) {
         using ColumnType = RunTimeColumnType<Type>;
         DCHECK(input_column->size() == 1);
         if (input_column->has_null()) return nullptr;
         if (input_column->is_constant()) {
             const auto* const_column = down_cast<const ConstColumn*>(input_column);
-            return down_cast<const ColumnType*>(const_column->data_column().get())->get_data().data();
+            return down_cast<const ColumnType*>(const_column->data_column().get())->get_data()[0];
         } else if (input_column->is_nullable()) {
             const auto* nullable_column = down_cast<const NullableColumn*>(input_column);
-            return down_cast<const ColumnType*>(nullable_column->data_column().get())->get_data().data();
+            return down_cast<const ColumnType*>(nullable_column->data_column().get())->get_data()[0];
         } else {
-            return down_cast<const ColumnType*>(input_column)->get_data().data();
+            return down_cast<const ColumnType*>(input_column)->get_data()[0];
         }
     }
 

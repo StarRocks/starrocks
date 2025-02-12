@@ -45,8 +45,8 @@ public:
         return Status::OK();
     }
 
-    void process_row(const Buffer<BitmapValue*>& src_bitmap_col, SrcSizeCppType batch_size, size_t row,
-                     Column* dst_bitmap_col, UInt32Column* dst_offset_col, uint32_t* compact_offset) const {
+    void process_row(const BitmapColumn::ObjectDataProxyContainer& src_bitmap_col, SrcSizeCppType batch_size,
+                     size_t row, Column* dst_bitmap_col, UInt32Column* dst_offset_col, uint32_t* compact_offset) const {
         auto* bitmap = src_bitmap_col[row];
 
         auto result_bitmaps = bitmap->split_bitmap(batch_size);
