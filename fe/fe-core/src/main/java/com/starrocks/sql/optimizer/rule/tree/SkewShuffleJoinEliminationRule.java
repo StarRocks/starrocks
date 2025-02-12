@@ -81,21 +81,33 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
         this.uniqueSplitId = new AtomicInteger();
     }
 
-    class SkewColumnAndValues {
-        public SkewColumnAndValues(List<ScalarOperator> skewValues,
-                                   Pair<ScalarOperator, ScalarOperator> skewColumns) {
-            this.skewValues = skewValues;
-            this.skewColumns = skewColumns;
-        }
-
-        List<ScalarOperator> skewValues;
-        Pair<ScalarOperator, ScalarOperator> skewColumns;
-    }
-
     @Override
     public OptExpression rewrite(OptExpression root, TaskContext taskContext) {
         handler = new SkewShuffleJoinEliminationVisitor(taskContext.getOptimizerContext().getColumnRefFactory());
         return root.getOp().accept(handler, root, null);
+    }
+
+    class SkewColumnAndValues {
+        List<ScalarOperator> skewValues;
+        Pair<ScalarOperator, ScalarOperator> skewColumns;
+
+        public SkewColumnAndValues(List<ScalarOperator> skewValues, Pair<ScalarOperator, ScalarOperator> skewColumns) {
+            this.skewValues = skewValues;
+            this.skewColumns = skewColumns;
+        }
+    }
+
+    class SplitProducerAndConsumer {
+        OptExpression splitProducer;
+        OptExpression splitConsumerOptForShuffleJoin;
+        OptExpression splitConsumerOptForBroadcastJoin;
+
+        public SplitProducerAndConsumer(OptExpression splitProducer, OptExpression splitConsumerOptForShuffleJoin,
+                                        OptExpression splitConsumerOptForBroadcastJoin) {
+            this.splitProducer = splitProducer;
+            this.splitConsumerOptForShuffleJoin = splitConsumerOptForShuffleJoin;
+            this.splitConsumerOptForBroadcastJoin = splitConsumerOptForBroadcastJoin;
+        }
     }
 
     private class SkewShuffleJoinEliminationVisitor extends OptExpressionVisitor<OptExpression, Void> {
@@ -136,74 +148,26 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             }
 
             // rewrite plan
-            OptExpression leftExchangeOptExp = opt.inputAt(0);
-            PhysicalDistributionOperator leftExchangeOpOfOriginalShuffleJoin =
-                    (PhysicalDistributionOperator) leftExchangeOptExp.getOp();
+            SplitProducerAndConsumer leftSplitProducerAndConsumer =
+                    generateSplitProducerAndConsumer(opt.inputAt(0), leftSkewColumn, skewValues, true);
 
-            OptExpression rightExchangeOptExp = opt.inputAt(1);
-            PhysicalDistributionOperator rightExchangeOpOfOriginalShuffleJoin =
-                    (PhysicalDistributionOperator) rightExchangeOptExp.getOp();
+            SplitProducerAndConsumer rightSplitProducerAndConsumer =
+                    generateSplitProducerAndConsumer(opt.inputAt(1), rightSkewColumn, skewValues, false);
 
-            PhysicalSplitProduceOperator leftSplitProduceOperator =
-                    new PhysicalSplitProduceOperator(uniqueSplitId.getAndIncrement());
-            OptExpression leftSplitProduceOptExp = OptExpression.builder()
-                    .setOp(leftSplitProduceOperator)
-                    .setInputs(leftExchangeOptExp.getInputs())
-                    .setLogicalProperty(leftExchangeOptExp.getLogicalProperty())
-                    .setStatistics(leftExchangeOptExp.getStatistics())
-                    .setCost(leftExchangeOptExp.getCost()).build();
-
-            PhysicalSplitProduceOperator rightSplitProduceOperator =
-                    new PhysicalSplitProduceOperator(uniqueSplitId.getAndIncrement());
-            OptExpression rightSplitProduceOptExp = OptExpression.builder()
-                    .setOp(rightSplitProduceOperator)
-                    .setInputs(rightExchangeOptExp.getInputs())
-                    .setLogicalProperty(rightExchangeOptExp.getLogicalProperty())
-                    .setStatistics(rightExchangeOptExp.getStatistics())
-                    .setCost(rightExchangeOptExp.getCost()).build();
-
-            Pair<ScalarOperator, ScalarOperator> leftTablePredicates =
-                    generateInAndNotInPredicate(leftSkewColumn, skewValues);
-            Pair<ScalarOperator, ScalarOperator> rightTablePredicates =
-                    generateInAndNotInPredicate(rightSkewColumn, skewValues);
-
-            List<ColumnRefOperator> leftSplitOutputColumns =
-                    leftExchangeOptExp.getOutputColumns().getColumnRefOperators(columnRefFactory);
-            List<ColumnRefOperator> rightSplitOutputColumns =
-                    rightExchangeOptExp.getOutputColumns().getColumnRefOperators(columnRefFactory);
-
-            PhysicalSplitConsumeOperator leftSplitConsumerOptForShuffleJoin =
-                    new PhysicalSplitConsumeOperator(leftSplitProduceOperator.getSplitId(),
-                            leftTablePredicates.second,
-                            leftExchangeOpOfOriginalShuffleJoin.getDistributionSpec(), leftSplitOutputColumns);
-
-            PhysicalSplitConsumeOperator leftSplitConsumerOptForBroadcastJoin =
-                    new PhysicalSplitConsumeOperator(leftSplitProduceOperator.getSplitId(), leftTablePredicates.first,
-                            new RoundRobinDistributionSpec(), leftSplitOutputColumns);
-
-            PhysicalSplitConsumeOperator rightSplitConsumerOptForShuffleJoin =
-                    new PhysicalSplitConsumeOperator(rightSplitProduceOperator.getSplitId(),
-                            rightTablePredicates.second,
-                            rightExchangeOpOfOriginalShuffleJoin.getDistributionSpec(), rightSplitOutputColumns);
-
-            PhysicalSplitConsumeOperator rightSplitConsumerOptForBroadcastJoin =
-                    new PhysicalSplitConsumeOperator(rightSplitProduceOperator.getSplitId(),
-                            rightTablePredicates.first,
-                            DistributionSpec.createReplicatedDistributionSpec(), rightSplitOutputColumns);
-
+            // keep projection for new join opt
             Projection projectionOnJoin = originalShuffleJoinOperator.getProjection();
 
-            PhysicalHashJoinOperator newShuffleJoinOpt = new PhysicalHashJoinOperator(
-                    originalShuffleJoinOperator.getJoinType(), originalShuffleJoinOperator.getOnPredicate(),
-                    originalShuffleJoinOperator.getJoinHint(), originalShuffleJoinOperator.getLimit(),
-                    originalShuffleJoinOperator.getPredicate(), projectionOnJoin,
-                    leftSkewColumn, skewValues);
+            PhysicalHashJoinOperator newShuffleJoinOpt =
+                    new PhysicalHashJoinOperator(originalShuffleJoinOperator.getJoinType(),
+                            originalShuffleJoinOperator.getOnPredicate(), originalShuffleJoinOperator.getJoinHint(),
+                            originalShuffleJoinOperator.getLimit(), originalShuffleJoinOperator.getPredicate(),
+                            projectionOnJoin, leftSkewColumn, skewValues);
 
-            PhysicalHashJoinOperator newBroadcastJoinOpt = new PhysicalHashJoinOperator(
-                    originalShuffleJoinOperator.getJoinType(), originalShuffleJoinOperator.getOnPredicate(),
-                    originalShuffleJoinOperator.getJoinHint(), originalShuffleJoinOperator.getLimit(),
-                    originalShuffleJoinOperator.getPredicate(), projectionOnJoin,
-                    leftSkewColumn, skewValues);
+            PhysicalHashJoinOperator newBroadcastJoinOpt =
+                    new PhysicalHashJoinOperator(originalShuffleJoinOperator.getJoinType(),
+                            originalShuffleJoinOperator.getOnPredicate(), originalShuffleJoinOperator.getJoinHint(),
+                            originalShuffleJoinOperator.getLimit(), originalShuffleJoinOperator.getPredicate(),
+                            projectionOnJoin, leftSkewColumn, skewValues);
 
             LocalExchangerType localExchangerType =
                     opt.isExistRequiredDistribution() ? LocalExchangerType.PASS_THROUGH : LocalExchangerType.DIRECT;
@@ -211,57 +175,28 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                     buildConcatenateOperator(opt.getOutputColumns().getColumnRefOperators(columnRefFactory), 2,
                             localExchangerType, originalShuffleJoinOperator.getLimit());
 
-            OptExpression leftSplitConsumerOptExpForShuffleJoin = OptExpression.builder()
-                    .setOp(leftSplitConsumerOptForShuffleJoin)
-                    .setInputs(Collections.emptyList())
-                    .setLogicalProperty(leftSplitProduceOptExp.getLogicalProperty())
-                    .setStatistics(leftSplitProduceOptExp.getStatistics())
-                    .setCost(leftSplitProduceOptExp.getCost()).build();
+            OptExpression newShuffleJoin = OptExpression.builder().setOp(newShuffleJoinOpt).setInputs(
+                            List.of(leftSplitProducerAndConsumer.splitConsumerOptForShuffleJoin,
+                                    rightSplitProducerAndConsumer.splitConsumerOptForShuffleJoin))
+                    .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
+                    .setRequiredProperties(opt.getRequiredProperties()).setCost(opt.getCost()).build();
 
-            OptExpression rightSplitConsumerOptExpForShuffleJoin = OptExpression.builder()
-                    .setOp(rightSplitConsumerOptForShuffleJoin)
-                    .setInputs(Collections.emptyList())
-                    .setLogicalProperty(rightSplitProduceOptExp.getLogicalProperty())
-                    .setStatistics(rightSplitProduceOptExp.getStatistics())
-                    .setCost(rightSplitProduceOptExp.getCost()).build();
-
-            OptExpression newShuffleJoin = OptExpression.builder()
-                    .setOp(newShuffleJoinOpt)
-                    .setInputs(List.of(leftSplitConsumerOptExpForShuffleJoin, rightSplitConsumerOptExpForShuffleJoin))
-                    .setLogicalProperty(opt.getLogicalProperty())
-                    .setStatistics(opt.getStatistics())
-                    .setRequiredProperties(opt.getRequiredProperties())
-                    .setCost(opt.getCost()).build();
-
-            OptExpression leftSplitConsumerOptExpForBroadcastJoin = OptExpression.builder()
-                    .setOp(leftSplitConsumerOptForBroadcastJoin)
-                    .setInputs(Collections.emptyList())
-                    .setLogicalProperty(leftSplitProduceOptExp.getLogicalProperty())
-                    .setStatistics(leftSplitProduceOptExp.getStatistics())
-                    .setCost(leftSplitProduceOptExp.getCost()).build();
-
-            OptExpression rightSplitConsumerOptExpForBroadcastJoin =
-                    OptExpression.builder().setOp(rightSplitConsumerOptForBroadcastJoin)
-                            .setInputs(Collections.emptyList())
-                            .setLogicalProperty(rightSplitProduceOptExp.getLogicalProperty())
-                            .setStatistics(rightSplitProduceOptExp.getStatistics())
-                            .setCost(rightSplitProduceOptExp.getCost()).build();
-
-            PhysicalPropertySet rightBroadcastProperty =
-                    new PhysicalPropertySet(
-                            DistributionProperty.createProperty(DistributionSpec.createReplicatedDistributionSpec()));
+            PhysicalPropertySet rightBroadcastProperty = new PhysicalPropertySet(
+                    DistributionProperty.createProperty(DistributionSpec.createReplicatedDistributionSpec()));
             List<PhysicalPropertySet> requiredPropertiesForBroadcastJoin =
                     Lists.newArrayList(PhysicalPropertySet.EMPTY, rightBroadcastProperty);
-            OptExpression newBroadcastJoin = OptExpression.builder().setOp(newBroadcastJoinOpt)
-                    .setInputs(
-                            List.of(leftSplitConsumerOptExpForBroadcastJoin, rightSplitConsumerOptExpForBroadcastJoin))
-                    .setLogicalProperty(opt.getLogicalProperty())
-                    .setStatistics(opt.getStatistics())
-                    .setRequiredProperties(requiredPropertiesForBroadcastJoin)
-                    .setCost(opt.getCost()).build();
+            OptExpression newBroadcastJoin = OptExpression.builder().setOp(newBroadcastJoinOpt).setInputs(
+                            List.of(leftSplitProducerAndConsumer.splitConsumerOptForBroadcastJoin,
+                                    rightSplitProducerAndConsumer.splitConsumerOptForBroadcastJoin))
+                    .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
+                    .setRequiredProperties(requiredPropertiesForBroadcastJoin).setCost(opt.getCost()).build();
 
             OptExpression rightChildOfConcatenate = newBroadcastJoin;
             if (opt.isExistRequiredDistribution()) {
+                OptExpression rightExchangeOptExp = opt.inputAt(1);
+                PhysicalDistributionOperator rightExchangeOpOfOriginalShuffleJoin =
+                        (PhysicalDistributionOperator) rightExchangeOptExp.getOp();
+
                 PhysicalDistributionOperator newExchangeForBroadcastJoin =
                         new PhysicalDistributionOperator(rightExchangeOpOfOriginalShuffleJoin.getDistributionSpec());
                 // we need add exchange node to make broadcast join's output distribution can be same as shuffle join's
@@ -269,8 +204,8 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                         OptExpression.builder().setOp(newExchangeForBroadcastJoin)
                                 .setInputs(Collections.singletonList(newBroadcastJoin))
                                 .setLogicalProperty(newBroadcastJoin.getLogicalProperty())
-                                .setStatistics(newBroadcastJoin.getStatistics())
-                                .setCost(newBroadcastJoin.getCost()).build();
+                                .setStatistics(newBroadcastJoin.getStatistics()).setCost(newBroadcastJoin.getCost())
+                                .build();
                 rightChildOfConcatenate = exchangeOptExpForBroadcastJoin;
                 if (projectionOnJoin != null) {
                     // broadcast join's projection should keep the columns used in exchange
@@ -289,29 +224,79 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
                 }
             }
 
-            OptExpression concatenateOptExp =
-                    OptExpression.builder().setOp(concatenateOperator)
-                            .setInputs(List.of(newShuffleJoin, rightChildOfConcatenate))
-                            .setLogicalProperty(opt.getLogicalProperty())
-                            .setStatistics(opt.getStatistics())
-                            .setCost(opt.getCost()).build();
+            OptExpression concatenateOptExp = OptExpression.builder().setOp(concatenateOperator)
+                    .setInputs(List.of(newShuffleJoin, rightChildOfConcatenate))
+                    .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
+                    .setCost(opt.getCost()).build();
 
             OptExpression cteAnchorOptExp1 =
                     OptExpression.builder().setOp(new PhysicalCTEAnchorOperator(uniqueSplitId.getAndIncrement()))
-                            .setInputs(List.of(rightSplitProduceOptExp, concatenateOptExp))
-                            .setLogicalProperty(opt.getLogicalProperty())
-                            .setStatistics(opt.getStatistics())
+                            .setInputs(List.of(rightSplitProducerAndConsumer.splitProducer, concatenateOptExp))
+                            .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                             .setCost(opt.getCost()).build();
 
             OptExpression cteAnchorOptExp2 =
                     OptExpression.builder().setOp(new PhysicalCTEAnchorOperator(uniqueSplitId.getAndIncrement()))
-                            .setInputs(List.of(leftSplitProduceOptExp, cteAnchorOptExp1))
-                            .setLogicalProperty(opt.getLogicalProperty())
-                            .setStatistics(opt.getStatistics())
+                            .setInputs(List.of(leftSplitProducerAndConsumer.splitProducer, cteAnchorOptExp1))
+                            .setLogicalProperty(opt.getLogicalProperty()).setStatistics(opt.getStatistics())
                             .setCost(opt.getCost()).build();
 
             // if hit once, we give up rewriting the following subtree
             return cteAnchorOptExp2;
+        }
+
+        private SplitProducerAndConsumer generateSplitProducerAndConsumer(OptExpression exchangeOptExp,
+                                                                          ScalarOperator skewColumn,
+                                                                          List<ScalarOperator> skewValues,
+                                                                          boolean isLeft) {
+            PhysicalDistributionOperator exchangeOpOfOriginalShuffleJoin =
+                    (PhysicalDistributionOperator) exchangeOptExp.getOp();
+
+            PhysicalSplitProduceOperator splitProduceOperator =
+                    new PhysicalSplitProduceOperator(uniqueSplitId.getAndIncrement());
+            OptExpression splitProduceOptExp =
+                    OptExpression.builder().setOp(splitProduceOperator).setInputs(exchangeOptExp.getInputs())
+                            .setLogicalProperty(exchangeOptExp.getLogicalProperty())
+                            .setStatistics(exchangeOptExp.getStatistics()).setCost(exchangeOptExp.getCost()).build();
+
+            Pair<ScalarOperator, ScalarOperator> tablePredicates = generateInAndNotInPredicate(skewColumn, skewValues);
+
+            List<ColumnRefOperator> splitOutputColumns =
+                    exchangeOptExp.getOutputColumns().getColumnRefOperators(columnRefFactory);
+
+            // for broadcast join, left table skew values are sent by round-robin way
+            // right table skew values are sent by broadcast
+            DistributionSpec distributionSpecForBroadCastJoin;
+            if (isLeft) {
+                distributionSpecForBroadCastJoin = new RoundRobinDistributionSpec();
+            } else {
+                distributionSpecForBroadCastJoin = DistributionSpec.createReplicatedDistributionSpec();
+            }
+
+            // use Not-In predicate for shuffle join's input, since shuffle join handle non-skew data
+            PhysicalSplitConsumeOperator splitConsumerOptForShuffleJoin =
+                    new PhysicalSplitConsumeOperator(splitProduceOperator.getSplitId(), tablePredicates.second,
+                            exchangeOpOfOriginalShuffleJoin.getDistributionSpec(), splitOutputColumns);
+
+            //  use In predicate for broadcast join's input, since broadcast join handle skew data
+            PhysicalSplitConsumeOperator splitConsumerOptForBroadcastJoin =
+                    new PhysicalSplitConsumeOperator(splitProduceOperator.getSplitId(), tablePredicates.first,
+                            distributionSpecForBroadCastJoin, splitOutputColumns);
+
+            OptExpression splitConsumerOptExpForShuffleJoin =
+                    OptExpression.builder().setOp(splitConsumerOptForShuffleJoin).setInputs(Collections.emptyList())
+                            .setLogicalProperty(splitProduceOptExp.getLogicalProperty())
+                            .setStatistics(splitProduceOptExp.getStatistics()).setCost(splitProduceOptExp.getCost())
+                            .build();
+
+            OptExpression splitConsumerOptExpForBroadcastJoin =
+                    OptExpression.builder().setOp(splitConsumerOptForBroadcastJoin).setInputs(Collections.emptyList())
+                            .setLogicalProperty(splitProduceOptExp.getLogicalProperty())
+                            .setStatistics(splitProduceOptExp.getStatistics()).setCost(splitProduceOptExp.getCost())
+                            .build();
+
+            return new SplitProducerAndConsumer(splitProduceOptExp, splitConsumerOptExpForShuffleJoin,
+                    splitConsumerOptExpForBroadcastJoin);
         }
 
         private Pair<ScalarOperator, ScalarOperator> generateInAndNotInPredicate(ScalarOperator skewColumn,
@@ -322,13 +307,11 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
 
             ScalarOperator inSkewPredicate = new InPredicateOperator(false, inPredicateParams);
             ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
-            inSkewPredicate = rewriter.rewrite(inSkewPredicate,
-                    ImmutableList.of(new ImplicitCastRule(), new ReduceCastRule()));
-            ScalarOperator notInSkewPredicate =
-                    new InPredicateOperator(true, inSkewPredicate.getChildren());
+            inSkewPredicate =
+                    rewriter.rewrite(inSkewPredicate, ImmutableList.of(new ImplicitCastRule(), new ReduceCastRule()));
+            ScalarOperator notInSkewPredicate = new InPredicateOperator(true, inSkewPredicate.getChildren());
             ScalarOperator notInSkewOrNullPredicate =
-                    CompoundPredicateOperator.or(notInSkewPredicate,
-                            new IsNullPredicateOperator(skewColumn));
+                    CompoundPredicateOperator.or(notInSkewPredicate, new IsNullPredicateOperator(skewColumn));
 
             return Pair.create(inSkewPredicate, notInSkewOrNullPredicate);
 
@@ -343,8 +326,8 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
         }
 
         private PhysicalConcatenateOperator buildConcatenateOperator(List<ColumnRefOperator> outputColumns,
-                                                                     int childNum,
-                                                                     LocalExchangerType localExchangeType, long limit) {
+                                                                     int childNum, LocalExchangerType localExchangeType,
+                                                                     long limit) {
             List<List<ColumnRefOperator>> childOutputColumns = new ArrayList<>();
             for (int i = 0; i < childNum; i++) {
                 childOutputColumns.add(outputColumns);
@@ -365,8 +348,8 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             List<ScalarOperator> skewValues = oldJoinOperator.getSkewValues();
 
             // get equal conjuncts from on predicate, every eq predicate's child can't be constant
-            List<BinaryPredicateOperator> equalConjs = JoinHelper.
-                    getEqualsPredicate(leftOutputColumns, rightOutputColumns,
+            List<BinaryPredicateOperator> equalConjs =
+                    JoinHelper.getEqualsPredicate(leftOutputColumns, rightOutputColumns,
                             Utils.extractConjuncts(oldJoinOperator.getOnPredicate()));
             for (BinaryPredicateOperator equalConj : equalConjs) {
                 ScalarOperator child0 = equalConj.getChild(0);
@@ -412,8 +395,7 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             return new SkewColumnAndValues(skewValues, Pair.create(leftSkewColumn, rightSkewColumn));
         }
 
-        private ScalarOperator replaceColumnRef(ScalarOperator scalarOperator,
-                                                Projection projection) {
+        private ScalarOperator replaceColumnRef(ScalarOperator scalarOperator, Projection projection) {
             if (projection == null) {
                 return scalarOperator;
             }
@@ -434,31 +416,13 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
             return result;
         }
 
-        private class ColumnRefReplacer extends BaseScalarOperatorShuttle {
-
-            private final ScalarOperator scalarOperator;
-
-            public ColumnRefReplacer(ScalarOperator scalarOperator) {
-                this.scalarOperator = scalarOperator;
-            }
-
-            @Override
-            public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
-                return scalarOperator;
-            }
-
-        }
-
         private boolean canOptimize(PhysicalHashJoinOperator joinOp, OptExpression opt) {
-            return isValidJoinType(joinOp) &&
-                    isShuffleJoin(opt) &&
-                    isSkew(opt);
+            return isValidJoinType(joinOp) && isShuffleJoin(opt) && isSkew(opt);
         }
 
         // currently only support inner join and left outer join
         private boolean isValidJoinType(PhysicalHashJoinOperator joinOp) {
-            return joinOp.getJoinType().isInnerJoin() ||
-                    joinOp.getJoinType().isLeftOuterJoin();
+            return joinOp.getJoinType().isInnerJoin() || joinOp.getJoinType().isLeftOuterJoin();
         }
 
         private boolean isShuffleJoin(OptExpression opt) {
@@ -483,6 +447,21 @@ public class SkewShuffleJoinEliminationRule implements TreeRewriteRule {
 
             // respect join hint
             return joinOperator.getJoinHint().equals(JoinOperator.HINT_SKEW);
+        }
+
+        private class ColumnRefReplacer extends BaseScalarOperatorShuttle {
+
+            private final ScalarOperator scalarOperator;
+
+            public ColumnRefReplacer(ScalarOperator scalarOperator) {
+                this.scalarOperator = scalarOperator;
+            }
+
+            @Override
+            public ScalarOperator visitVariableReference(ColumnRefOperator variable, Void context) {
+                return scalarOperator;
+            }
+
         }
     }
 
