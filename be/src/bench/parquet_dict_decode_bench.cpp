@@ -66,7 +66,7 @@ static void BM_DictDecoder(benchmark::State& state) {
     std::random_device rd;
     std::mt19937 rng(rd());
     std::uniform_int_distribution<int> dist(0, 99);
-    std::vector<int32_t> dict_codes;
+    Buffer<int32_t> dict_codes;
     int count = 0;
 
     for (int i = 0; i < kTestChunkSize; i++) {
