@@ -48,9 +48,12 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
 
 /**
  * 1. Persistence:
@@ -157,7 +160,30 @@ public class PredicateColumnsStorage {
 
         String sql = sb.toString();
         List<TResultBatch> tResultBatches = executor.executeDQL(sql);
-        return resultToColumnUsage(tResultBatches);
+        List<ColumnUsage> columnUsages = resultToColumnUsage(tResultBatches);
+        if (GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends().size() == 1) {
+            return columnUsages;
+        } else {
+            return deduplicateColumnUsages(columnUsages);
+        }
+    }
+
+    public List<ColumnUsage> deduplicateColumnUsages(List<ColumnUsage> columnUsages) {
+        Map<ColumnUsage, ColumnUsage> result = new HashMap<>();
+
+        for (ColumnUsage columnUsage : columnUsages) {
+            ColumnUsage existingUsage = result.get(columnUsage);
+            if (existingUsage == null) {
+                result.put(columnUsage, columnUsage);
+            } else {
+                existingUsage.getUseCases().addAll(columnUsage.getUseCases());
+                if (columnUsage.getLastUsed().isAfter(existingUsage.getLastUsed())) {
+                    existingUsage.setLastUsed(columnUsage.getLastUsed());
+                }
+            }
+        }
+
+        return new ArrayList<>(result.values());
     }
 
     /**
