@@ -193,7 +193,7 @@ StarRocks 访问 Iceberg 集群元数据服务的相关参数配置。
 | iceberg.catalog.oauth2.credential | 否  | 用于与服务器的 OAuth2 客户端 Credentials Flow 交换 Token 的 Credential。使用 `OAUTH2` 需要指定 `token` 或 `credential`。示例：`AbCdEf123456`。 |
 | iceberg.catalog.oauth2.scope | 否  | 与 REST Catalog 通信时使用的范围。仅在使用 `credential` 时适用。 |
 | iceberg.catalog.oauth2.server-uri | 否  | 从 OAuth2 服务器获取 Token 的端点。 |
-| iceberg.catalog.vended-credentials-enabled | 否  | 是否支持查询嵌套 namespace 下的对象。默认：`true`。|
+| iceberg.catalog.vended-credentials-enabled | 否  | 是否使用 REST 后端提供的 Credential 访问文件系统。默认：`true`。|
 | iceberg.catalog.warehouse  | 否      | Catalog 的仓库位置或标志符，如 `s3://my_bucket/warehouse_location` 或 `sandbox`。 |
 
 例如，创建一个名为 `tabular` 的 Iceberg Catalog，使用 Tabular 作为元数据服务：
