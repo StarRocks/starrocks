@@ -44,6 +44,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
+        FeConstants.setLengthForVarchar = false;
 
         m1 = new MTable("m1", "k1",
                 ImmutableList.of(
