@@ -81,9 +81,14 @@ StarOSWorker::StarOSWorker() : _mtx(), _shards(), _fs_cache(new_lru_cache(1024))
 
 StarOSWorker::~StarOSWorker() = default;
 
+static const uint64_t kUnknownTableId = UINT64_MAX;
 uint64_t StarOSWorker::get_table_id(const ShardInfo& shard) {
     const auto& properties = shard.properties;
-    CHECK(properties.contains("tableId"));
+    auto iter = properties.find("tableId");
+    if (iter == properties.end()) {
+        DCHECK(false) << "tableId doesn't exist in shard properties";
+        return kUnknownTableId;
+    }
     return std::stoull(properties.at("tableId"));
 }
 

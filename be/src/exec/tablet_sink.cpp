@@ -65,7 +65,6 @@
 #include "util/compression/compression_utils.h"
 #include "util/defer_op.h"
 #include "util/stack_util.h"
-#include "util/starrocks_metrics.h"
 #include "util/thread.h"
 #include "util/thrift_rpc_helper.h"
 #include "util/uid_util.h"
