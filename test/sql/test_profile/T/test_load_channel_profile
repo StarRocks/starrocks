@@ -39,8 +39,8 @@ INSERT INTO `t0` (v1, v2, v3) values
 SET enable_profile=true;
 SET enable_async_profile=false;
 INSERT INTO t0 WITH LABEL label_${uuid0} SELECT * FROM t0;
-shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" label="label_${uuid0}" bash ${root_path}/sql/test_profile/T/test_load_channel_profile_analysis.sh
+shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" label="label_${uuid0}" bash ${root_path}/sql/test_profile/T/test_load_profile_analysis.sh
 
 alter table t0 set('enable_load_profile'='true');
 shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label: "label_${uuid1}"" -H "column_separator: ," -d '1,2,3' -X PUT ${url}/api/${db[0]}/t0/_stream_load
-shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" label="label_${uuid1}" bash ${root_path}/sql/test_profile/T/test_load_channel_profile_analysis.sh
+shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" label="label_${uuid1}" bash ${root_path}/sql/test_profile/T/test_load_profile_analysis.sh

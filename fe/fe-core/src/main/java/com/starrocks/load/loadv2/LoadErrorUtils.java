@@ -14,6 +14,9 @@
 
 package com.starrocks.load.loadv2;
 
+import com.starrocks.qe.DefaultCoordinator;
+import com.starrocks.qe.scheduler.Coordinator;
+
 public class LoadErrorUtils {
 
     public static class ErrorMeta {
@@ -23,6 +26,14 @@ public class LoadErrorUtils {
         public ErrorMeta(String keywords, String description) {
             this.keywords = keywords;
             this.description = description;
+        }
+
+        public String getKeywords() {
+            return keywords;
+        }
+
+        public String getDescription() {
+            return description;
         }
     }
 
@@ -38,5 +49,19 @@ public class LoadErrorUtils {
             }
         }
         return false;
+    }
+
+    public static boolean enableProfileAfterError(Coordinator coordinator) {
+        if (!(coordinator instanceof DefaultCoordinator defaultCoordinator)) {
+            return false;
+        }
+        if (defaultCoordinator.getExecStatus() == null || defaultCoordinator.getExecStatus().ok()
+                || defaultCoordinator.getExecStatus().getErrorMsg() == null) {
+            return false;
+        }
+        if (!defaultCoordinator.getQueryRuntimeProfile().hasLoadChannelProfile()) {
+            return false;
+        }
+        return defaultCoordinator.getExecStatus().getErrorMsg().contains(BACKEND_BRPC_TIMEOUT.getKeywords());
     }
 }

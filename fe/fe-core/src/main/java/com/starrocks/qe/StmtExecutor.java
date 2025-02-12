@@ -98,6 +98,7 @@ import com.starrocks.load.ExportJob;
 import com.starrocks.load.InsertOverwriteJob;
 import com.starrocks.load.InsertOverwriteJobMgr;
 import com.starrocks.load.loadv2.InsertLoadJob;
+import com.starrocks.load.loadv2.LoadErrorUtils;
 import com.starrocks.load.loadv2.LoadJob;
 import com.starrocks.load.loadv2.LoadMgr;
 import com.starrocks.metric.MetricRepo;
@@ -2237,7 +2238,7 @@ public class StmtExecutor {
             throw t;
         } finally {
             boolean isAsync = false;
-            if (context.isProfileEnabled()) {
+            if (context.isProfileEnabled() || LoadErrorUtils.enableProfileAfterError(coord)) {
                 isAsync = tryProcessProfileAsync(execPlan, 0);
                 if (parsedStmt.isExplain() &&
                         StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {

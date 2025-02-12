@@ -53,7 +53,7 @@ SET enable_async_profile=false;
 INSERT INTO t0 WITH LABEL label_${uuid0} SELECT * FROM t0;
 -- result:
 -- !result
-shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" label="label_${uuid0}" bash ${root_path}/sql/test_profile/T/test_load_channel_profile_analysis.sh
+shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" label="label_${uuid0}" bash ${root_path}/sql/test_profile/T/test_load_profile_analysis.sh
 -- result:
 0
 Analyze profile succeeded
@@ -70,7 +70,7 @@ shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label: "lab
     "Message": "OK"
 }
 -- !result
-shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" label="label_${uuid1}" bash ${root_path}/sql/test_profile/T/test_load_channel_profile_analysis.sh
+shell: env mysql_cmd="${mysql_cmd} -D${db[0]}" label="label_${uuid1}" bash ${root_path}/sql/test_profile/T/test_load_profile_analysis.sh
 -- result:
 0
 Analyze profile succeeded

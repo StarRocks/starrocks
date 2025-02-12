@@ -171,6 +171,10 @@ public class QueryRuntimeProfile {
         return fragmentProfiles;
     }
 
+    public boolean hasLoadChannelProfile() {
+        return loadChannelProfile.isPresent() && !loadChannelProfile.get().getChildList().isEmpty();
+    }
+
     public List<String> getDeltaUrls() {
         return deltaUrls;
     }

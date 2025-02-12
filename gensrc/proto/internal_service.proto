@@ -308,6 +308,21 @@ message PTabletWriterCancelRequest {
 message PTabletWriterCancelResult {
 };
 
+// TODO only diagnose from profile currently, and can support more diagnostic methods in the future
+message PLoadDiagnoseRequest {
+    optional PUniqueId id = 1;
+    optional int64 txn_id = 2;
+    // whether to use profile as the diagnose method.
+    // If true, will return the profile in the response
+    optional bool profile = 3;
+};
+
+message PLoadDiagnoseResult {
+    // The result of the profile diagnose
+    optional StatusPB profile_status = 1;
+    optional bytes profile_data = 2;
+};
+
 message PExecPlanFragmentRequest {
     // describe attachment protocol: binary, compact, json
     optional string attachment_protocol = 1;
@@ -693,6 +708,7 @@ service PInternalService {
     rpc tablet_writer_add_chunk_via_http(PHttpRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc tablet_writer_add_chunks_via_http(PHttpRequest) returns (starrocks.PTabletWriterAddBatchResult);
     rpc tablet_writer_add_segment(starrocks.PTabletWriterAddSegmentRequest) returns (starrocks.PTabletWriterAddSegmentResult);
+    rpc load_diagnose(PLoadDiagnoseRequest) returns (PLoadDiagnoseResult);
     rpc transmit_runtime_filter(PTransmitRuntimeFilterParams) returns (PTransmitRuntimeFilterResult);
 
     rpc submit_mv_maintenance_task(PMVMaintenanceTaskRequest) returns (PMVMaintenanceTaskResult);
