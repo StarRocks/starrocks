@@ -320,6 +320,7 @@ Status AggregateStreamingSinkOperator::_push_chunk_by_limited_memory(const Chunk
 
 Status AggregateStreamingSinkOperator::reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) {
     _is_finished = false;
+    ONCE_RESET(_set_finishing_once);
     return _aggregator->reset_state(state, refill_chunks, this);
 }
 
