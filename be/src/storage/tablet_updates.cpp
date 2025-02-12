@@ -953,7 +953,7 @@ void TabletUpdates::do_apply() {
     {
         std::lock_guard<std::mutex> lg(_apply_running_lock);
         DCHECK(_apply_submited) << "illegal state: _apply_submited should be true";
-        DCHECK(!_apply_running) << "illegal state: _apply_submited should be true";
+        DCHECK(!_apply_running) << "illegal state: _apply_running should be true";
         _apply_running = true;
     }
     // only 1 thread at max is running this method
