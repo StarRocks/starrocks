@@ -299,7 +299,7 @@ public class TextMatchBasedRewriteRule extends Rule {
         //  - support different output orders
         //  - support different aliases
         //  - support query is subset of mv's output
-        List<Column> mvColumns = MvRewritePreprocessor.getMvOutputColumns(mv);
+        List<Column> mvColumns = mv.getOrderedOutputColumns();
         Map<String, ColumnRefOperator> mvColRefNameColRefMapping = Maps.newHashMap();
         mvScanOperator.getOutputColumns().stream().forEach(colRef ->
                 mvColRefNameColRefMapping.put(colRef.getName(), colRef));

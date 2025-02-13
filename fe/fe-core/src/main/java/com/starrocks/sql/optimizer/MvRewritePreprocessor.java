@@ -879,7 +879,7 @@ public class MvRewritePreprocessor {
         materializationContext.setScanMvOperator(scanMvOp);
         // should keep the sequence of schema
         List<ColumnRefOperator> scanMvOutputColumns = Lists.newArrayList();
-        for (Column column : getMvOutputColumns(copiedMV)) {
+        for (Column column : copiedMV.getOrderedOutputColumns()) {
             scanMvOutputColumns.add(scanMvOp.getColumnReference(column));
         }
         Preconditions.checkState(mvOutputColumns.size() == scanMvOutputColumns.size());
@@ -897,24 +897,6 @@ public class MvRewritePreprocessor {
         materializationContext.setOutputMapping(outputMapping);
 
         return materializationContext;
-    }
-
-    /**
-     * Get mv's ordered columns by defined output columns order.
-     * @param mv: mv to check
-     * @return: mv's defined output columns in the defined order
-     */
-    public static List<Column> getMvOutputColumns(MaterializedView mv) {
-        if (mv.getQueryOutputIndices() == null || mv.getQueryOutputIndices().isEmpty()) {
-            return mv.getBaseSchemaWithoutGeneratedColumn();
-        } else {
-            List<Column> schema = mv.getBaseSchemaWithoutGeneratedColumn();
-            List<Column> outputColumns = Lists.newArrayList();
-            for (Integer index : mv.getQueryOutputIndices()) {
-                outputColumns.add(schema.get(index));
-            }
-            return outputColumns;
-        }
     }
 
     /**
