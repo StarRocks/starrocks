@@ -199,6 +199,7 @@ import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.cost.feature.CostPredictor;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -1227,6 +1228,10 @@ public class StmtExecutor {
         return new DefaultCoordinator.Factory();
     }
 
+    private CostPredictor getCostPredictor() {
+        return CostPredictor.getServiceBasedCostPredictor();
+    }
+
     // Process a select statement.
     private void handleQueryStmt(ExecPlan execPlan) throws Exception {
         // Every time set no send flag and clean all data in buffer
@@ -1289,6 +1294,14 @@ public class StmtExecutor {
             coord = new FeExecuteCoordinator(context, execPlan);
         } else {
             coord = getCoordinatorFactory().createQueryScheduler(context, fragments, scanNodes, descTable);
+        }
+
+        // Predict the cost of this query
+        if (Config.enable_query_cost_prediction) {
+            CostPredictor predictor = getCostPredictor();
+            long memBytes = predictor.predictMemoryBytes(execPlan);
+            coord.setPredictedCost(memBytes);
+            context.getAuditEventBuilder().setPredictMemBytes(memBytes);
         }
 
         QeProcessorImpl.INSTANCE.registerQuery(context.getExecutionId(),

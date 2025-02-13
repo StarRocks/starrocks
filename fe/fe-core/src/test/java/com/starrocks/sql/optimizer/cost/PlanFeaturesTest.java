@@ -22,8 +22,11 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+
+import java.util.List;
 
 class PlanFeaturesTest extends PlanTestBase {
 
@@ -34,7 +37,7 @@ class PlanFeaturesTest extends PlanTestBase {
                     "| 39,1,0,8,0,2,0,3;40,1,0,8,2,2,4,0,0,1,1;44,1,0,9,0,2,0,0,0,1,1",
             "select max(v1) from t0 where v1 < 100 limit 100" +
                     "|tables=[0,0,10003] " +
-                    "| [39,1,0,8,0,2,0,3;40,1,0,8,2,2,4,0,0,1,1;44,1,0,8,0,2,0,0,0,1,1",
+                    "| 39,1,0,8,0,2,0,3;40,1,0,8,2,2,4,0,0,1,1;44,1,0,8,0,2,0,0,0,1,1",
             "select v1, count(*) from t0 group by v1 " +
                     "| tables=[0,0,10003] " +
                     "| 40,1,0,16,2,2,0,0,1,1,1;44,1,0,8,0,2,0,0,0,0,0",
@@ -50,11 +53,33 @@ class PlanFeaturesTest extends PlanTestBase {
         ExecPlan execPlan = getExecPlan(query);
         OptExpression physicalPlan = execPlan.getPhysicalPlan();
         PlanFeatures planFeatures = FeatureExtractor.extractFeatures(physicalPlan);
+
+        // feature string
         String string = planFeatures.toFeatureString();
         Assertions.assertTrue(string.startsWith(expectedTables), string);
         Splitter.on(";").splitToList(expected).forEach(slice -> {
             Assertions.assertTrue(string.contains(slice), "slice is " + slice + ", feature is " + string);
         });
+
+        // feature csv
+        String csv = planFeatures.toFeatureCsv();
+        Splitter.on(";").splitToList(expected).forEach(slice -> {
+            Assertions.assertTrue(csv.contains(slice), "slice is " + slice + ", feature is " + string);
+        });
+    }
+
+    @Test
+    public void testHeader() {
+        String header = PlanFeatures.featuresHeader();
+        List<String> strings = Splitter.on(",").splitToList(header);
+        long numTables = strings.stream().filter(x -> x.startsWith("tables")).count();
+        long numEnvs = strings.stream().filter(x -> x.startsWith("env")).count();
+        long numVars = strings.stream().filter(x -> x.startsWith("var")).count();
+        long numOperators = strings.stream().filter(x -> x.startsWith("operators")).count();
+        Assertions.assertEquals(3, numTables);
+        Assertions.assertEquals(3, numEnvs);
+        Assertions.assertEquals(1, numVars);
+        Assertions.assertEquals(173, numOperators);
     }
 
 }
