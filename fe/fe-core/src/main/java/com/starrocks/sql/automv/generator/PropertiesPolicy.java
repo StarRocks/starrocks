@@ -87,9 +87,12 @@ public class PropertiesPolicy {
         if (optCollocateGroup.isPresent()) {
             propItems.put(PropertyAnalyzer.PROPERTIES_COLOCATE_WITH, optCollocateGroup.get());
         }
+        // TODO(by satanson): MV with random distribution do not support bucket_size property
+        /*
         if (!isHashDistribution) {
             propItems.put(PropertyAnalyzer.PROPERTIES_BUCKET_SIZE, "1073741824");
         }
+         */
         propItems.put("session.enable_spill", "true");
         if (isPartitioned) {
             propItems.put("partition_refresh_number", "1");

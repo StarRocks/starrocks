@@ -18,6 +18,7 @@ import com.starrocks.connector.iceberg.MockIcebergMetadata;
 import com.starrocks.sql.automv.util.AutoMVUtil;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import com.starrocks.utframe.UtFrameUtils;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -75,7 +76,7 @@ public class PartitionedIcebergTest extends MVTestBase {
     }
 
     @Test
-    public void testMultiColumnTransformPartitionMissingColumns() {
+    public void testMultiColumnTransformPartitionMissingColumns() throws Exception {
         String sql = "SELECT id FROM `iceberg0`.`partitioned_transforms_db`.t0_multi_hour as a";
         List<String> mvs = AutoMVUtil.recommendOneOneMV(connectContext, sql);
         Assert.assertEquals(1, mvs.size());
@@ -84,5 +85,8 @@ public class PartitionedIcebergTest extends MVTestBase {
                 "PARTITION BY (id,data,date_trunc(\"hour\", ts))\n" +
                 "DISTRIBUTED BY RANDOM\n" +
                 "ORDER BY (id, data, ts)"));
+        starRocksAssert.withMaterializedView(mv);
+        String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql);
+        Assert.assertTrue(plan, plan.contains("TABLE: _mv_20"));
     }
 }
