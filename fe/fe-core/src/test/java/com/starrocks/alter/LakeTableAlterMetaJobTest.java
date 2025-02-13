@@ -111,7 +111,10 @@ public class LakeTableAlterMetaJobTest {
         Assert.assertNotEquals(-1L, job.getTransactionId().orElse(-1L).longValue());
         job.runRunningJob();
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
-        job.runFinishedRewritingJob();
+        while (job.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
 
         Assert.assertTrue(table.enablePersistentIndex());
@@ -125,7 +128,10 @@ public class LakeTableAlterMetaJobTest {
         Assert.assertNotEquals(-1L, job.getTransactionId().orElse(-1L).longValue());
         job.runRunningJob();
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job.getJobState());
-        job.runFinishedRewritingJob();
+        while (job.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
         Assert.assertTrue(table.enablePersistentIndex());
         // check persistent index type been set
@@ -144,7 +150,10 @@ public class LakeTableAlterMetaJobTest {
         Assert.assertNotEquals(-1L, job2.getTransactionId().orElse(-1L).longValue());
         job2.runRunningJob();
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job2.getJobState());
-        job2.runFinishedRewritingJob();
+        while (job2.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job2.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, job2.getJobState());
         Assert.assertTrue(table.enablePersistentIndex());
         // check persistent index type been set
@@ -167,7 +176,10 @@ public class LakeTableAlterMetaJobTest {
         Assert.assertNotEquals(-1L, job2.getTransactionId().orElse(-1L).longValue());
         job2.runRunningJob();
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, job2.getJobState());
-        job2.runFinishedRewritingJob();
+        while (job2.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job2.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, job2.getJobState());
         Assert.assertFalse(table2.enablePersistentIndex());
 
@@ -258,8 +270,12 @@ public class LakeTableAlterMetaJobTest {
     }
 
     @Test
-    public void testReplay() {
+    public void testReplay() throws Exception {
         job.run();
+        while (job.getJobState() != AlterJobV2.JobState.FINISHED) {
+            job.run();
+            Thread.sleep(100);
+        }
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
 
         LakeTableAlterMetaJob replayAlterMetaJob = new LakeTableAlterMetaJob(job.jobId,
