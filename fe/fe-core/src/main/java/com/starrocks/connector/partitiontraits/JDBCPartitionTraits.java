@@ -15,9 +15,11 @@ package com.starrocks.connector.partitiontraits;
 
 import com.google.common.collect.Range;
 import com.starrocks.analysis.Expr;
+import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCPartitionKey;
 import com.starrocks.catalog.JDBCTable;
+import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.connector.PartitionInfo;
@@ -27,6 +29,7 @@ import com.starrocks.server.GlobalStateMgr;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 public class JDBCPartitionTraits extends DefaultTraits {
     @Override
@@ -65,6 +68,19 @@ public class JDBCPartitionTraits extends DefaultTraits {
         return partitionNameWithPartition.values().stream()
                 .map(com.starrocks.connector.PartitionInfo::getModifiedTime)
                 .max(Long::compareTo);
+    }
+
+    @Override
+    public Set<String> getUpdatedPartitionNames(List<BaseTableInfo> baseTables,
+                                                MaterializedView.AsyncRefreshContext context) {
+
+        try {
+            return super.getUpdatedPartitionNames(baseTables, context);
+        } catch (Exception e) {
+            // some external table traits do not support getPartitionNameWithPartitionInfo, will throw exception,
+            // just return null
+            return null;
+        }
     }
 }
 
