@@ -30,16 +30,21 @@ import java.io.IOException;
 
 public class ClusterSnapshotJob implements Writable {
     public static final Logger LOG = LogManager.getLogger(ClusterSnapshotJob.class);
+
     /*
      * INITIALIZING: INIT state for the snapshot.
-     * SNAPSHOTING: Doing checkpoint/image generation by replaying log for image both for FE and StarMgr and
-     *              then upload the image into remote storage
+     * SNAPSHOTING: Doing checkpoint/image generation by replaying log for image
+     * both for FE and StarMgr and
+     * then upload the image into remote storage
      * UPLOADING: Uploading image file into remote storage
      * FINISHED: Finish backup snapshot
      * EXPIRED: Not the latest finished backup snapshot
-     * DELETED: Not the lastest finished backup snapshot and the cluster snapshot has been deleted from remote
+     * DELETED: Not the lastest finished backup snapshot and the cluster snapshot
+     * has been deleted from remote
      */
-    public enum ClusterSnapshotJobState { INITIALIZING, SNAPSHOTING, UPLOADING, FINISHED, EXPIRED, DELETED, ERROR }
+    public enum ClusterSnapshotJobState {
+        INITIALIZING, SNAPSHOTING, UPLOADING, FINISHED, EXPIRED, DELETED, ERROR
+    }
 
     @SerializedName(value = "snapshot")
     private ClusterSnapshot snapshot;
@@ -58,7 +63,8 @@ public class ClusterSnapshotJob implements Writable {
         this.state = state;
         if (state == ClusterSnapshotJobState.FINISHED) {
             snapshot.setFinishedTimeMs(System.currentTimeMillis());
-            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().clearFinishedAutomatedClusterSnapshot(getSnapshotName());
+            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                    .clearFinishedAutomatedClusterSnapshot(getSnapshotName());
         }
     }
 
@@ -108,8 +114,8 @@ public class ClusterSnapshotJob implements Writable {
 
     public boolean isUnFinishedState() {
         return state == ClusterSnapshotJobState.INITIALIZING ||
-               state == ClusterSnapshotJobState.SNAPSHOTING ||
-               state == ClusterSnapshotJobState.UPLOADING;
+                state == ClusterSnapshotJobState.SNAPSHOTING ||
+                state == ClusterSnapshotJobState.UPLOADING;
     }
 
     public boolean isError() {
