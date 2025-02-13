@@ -605,6 +605,17 @@ struct TOlapScanNode {
   37: optional i64 schema_id
 
   40: optional TVectorSearchOptions vector_search_options
+<<<<<<< HEAD
+=======
+  41: optional TTableSampleOptions sample_options;
+
+  //back pressure
+  50: optional bool enable_topn_filter_back_pressure
+  51: optional i32 back_pressure_max_rounds
+  52: optional i64 back_pressure_throttle_time
+  53: optional i64 back_pressure_throttle_time_upper_bound
+  54: optional i64 back_pressure_num_rows
+>>>>>>> f86795b85 ([Enhancement] Throttle scan to wait for topn filter (#55660))
 }
 
 struct TJDBCScanNode {
@@ -638,6 +649,13 @@ struct TLakeScanNode {
   32: optional bool output_chunk_by_bucket
   33: optional bool output_asc_hint
   34: optional bool partition_order_hint
+
+  //back pressure
+  38: optional bool enable_topn_filter_back_pressure
+  39: optional i32 back_pressure_max_rounds
+  40: optional i64 back_pressure_throttle_time
+  41: optional i64 back_pressure_throttle_time_upper_bound
+  42: optional i64 back_pressure_num_rows
 }
 
 struct TEqJoinCondition {

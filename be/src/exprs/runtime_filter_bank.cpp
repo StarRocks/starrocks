@@ -398,9 +398,14 @@ void RuntimeFilterProbeCollector::close(RuntimeState* state) {
 // do_evaluate is reentrant, can be called concurrently by multiple operators that shared the same
 // RuntimeFilterProbeCollector.
 void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context) {
-    if ((eval_context.input_chunk_nums++ & 31) == 0) {
+    if (eval_context.mode == RuntimeBloomFilterEvalContext::Mode::M_ONLY_TOPN) {
         update_selectivity(chunk, eval_context);
         return;
+    } else {
+        if ((eval_context.input_chunk_nums++ & 31) == 0) {
+            update_selectivity(chunk, eval_context);
+            return;
+        }
     }
 
     auto& seletivity_map = eval_context.selectivity;
@@ -415,8 +420,14 @@ void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeBloomFilterEv
 
     for (auto& kv : seletivity_map) {
         RuntimeFilterProbeDescriptor* rf_desc = kv.second;
+<<<<<<< HEAD
         const JoinRuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
         if (filter == nullptr || filter->always_true()) {
+=======
+        const RuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
+        bool skip_topn = eval_context.mode == RuntimeBloomFilterEvalContext::Mode::M_WITHOUT_TOPN;
+        if ((skip_topn && rf_desc->is_topn_filter()) || filter == nullptr || filter->always_true()) {
+>>>>>>> f86795b85 ([Enhancement] Throttle scan to wait for topn filter (#55660))
             continue;
         }
         auto* ctx = rf_desc->probe_expr_ctx();
@@ -592,10 +603,24 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeBloomF
     seletivity_map.clear();
     for (auto& kv : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = kv.second;
+<<<<<<< HEAD
         const JoinRuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
         if (filter == nullptr || filter->always_true()) {
+=======
+        const RuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
+        bool should_use =
+                eval_context.mode == RuntimeBloomFilterEvalContext::Mode::M_ONLY_TOPN && rf_desc->is_topn_filter();
+        if (filter == nullptr || (!should_use && filter->always_true())) {
+>>>>>>> f86795b85 ([Enhancement] Throttle scan to wait for topn filter (#55660))
             continue;
         }
+        if (eval_context.mode == RuntimeBloomFilterEvalContext::Mode::M_WITHOUT_TOPN && rf_desc->is_topn_filter()) {
+            continue;
+        } else if (eval_context.mode == RuntimeBloomFilterEvalContext::Mode::M_ONLY_TOPN &&
+                   !rf_desc->is_topn_filter()) {
+            continue;
+        }
+
         auto& selection = eval_context.running_context.use_merged_selection
                                   ? eval_context.running_context.merged_selection
                                   : eval_context.running_context.selection;
@@ -637,6 +662,8 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeBloomF
                     dest[j] = src[j] & dest[j];
                 }
             }
+        } else if (rf_desc->is_topn_filter() && eval_context.mode == RuntimeBloomFilterEvalContext::Mode::M_ONLY_TOPN) {
+            seletivity_map.emplace(selectivity, rf_desc);
         }
     }
     if (!seletivity_map.empty()) {
