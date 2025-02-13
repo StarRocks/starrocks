@@ -574,9 +574,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_block_merger) {
     CountDownLatch latch(10);
     // flush multi times and generate spill blocks
     int64_t old_val = config::write_buffer_size;
-    bool old_val2 = config::enable_load_spill;
     config::write_buffer_size = 1;
-    config::enable_load_spill = true;
     ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
                                                .set_tablet_manager(_tablet_mgr.get())
                                                .set_tablet_id(tablet_id)
@@ -597,15 +595,14 @@ TEST_F(LakeAsyncDeltaWriterTest, test_block_merger) {
     }
     latch.wait();
     config::write_buffer_size = old_val;
-    config::enable_load_spill = old_val2;
     // finish
     CountDownLatch latch2(1);
     delta_writer->finish([&](StatusOr<TxnLogPtr> res) {
         ASSERT_TRUE(res.ok()) << res.ok();
         latch2.count_down();
     });
-    ASSERT_TRUE(_tablet_mgr->in_writing_data_size(tablet_id) > 0);
     latch2.wait();
+    ASSERT_TRUE(_tablet_mgr->in_writing_data_size(tablet_id) > 0);
 }
 
 } // namespace starrocks::lake
