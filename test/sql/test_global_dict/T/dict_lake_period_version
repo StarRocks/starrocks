@@ -3,7 +3,7 @@
 create external catalog hive_sql_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
 
 use hive_sql_test_${uuid0}.hive_oss_db;
-
+drop table if exists dict_version_test force;
 create table dict_version_test (
 c1 int,
 c2 string

@@ -5,6 +5,9 @@ create external catalog hive_sql_test_${uuid0} PROPERTIES ("type"="hive", "hive.
 use hive_sql_test_${uuid0}.hive_oss_db;
 -- result:
 -- !result
+drop table if exists dict_version_test force;
+-- result:
+-- !result
 create table dict_version_test (
 c1 int,
 c2 string
