@@ -137,6 +137,9 @@ import com.starrocks.sql.ast.SubmitTaskStmt;
 import com.starrocks.sql.ast.SyncStmt;
 import com.starrocks.sql.ast.TruncateTableStmt;
 import com.starrocks.sql.ast.UninstallPluginStmt;
+import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
+import com.starrocks.sql.ast.integration.CreateSecurityIntegrationStatement;
+import com.starrocks.sql.ast.integration.DropSecurityIntegrationStatement;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
@@ -581,6 +584,25 @@ public class DDLStmtExecutor {
             ErrorReport.wrapWithRuntimeException(() -> {
                 context.getGlobalStateMgr().getAuthorizationMgr().dropRole(stmt);
             });
+            return null;
+        }
+
+
+        @Override
+        public ShowResultSet visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement stmt,
+                                                                     ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitAlterSecurityIntegrationStatement(AlterSecurityIntegrationStatement stmt,
+                                                                    ConnectContext context) {
+            return null;
+        }
+
+        @Override
+        public ShowResultSet visitDropSecurityIntegrationStatement(DropSecurityIntegrationStatement stmt,
+                                                                   ConnectContext context) {
             return null;
         }
 
@@ -1207,5 +1229,4 @@ public class DDLStmtExecutor {
             return null;
         }
     }
-
 }
