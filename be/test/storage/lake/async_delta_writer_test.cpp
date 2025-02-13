@@ -585,7 +585,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_block_merger) {
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_schema_id(_tablet_schema->id())
                                                .set_profile(&_dummy_runtime_profile)
-                                               .set_immutable_tablet_size(100)
+                                               .set_immutable_tablet_size(10000000)
                                                .build());
     ASSERT_OK(delta_writer->open());
     for (int i = 0; i < 10; i++) {
