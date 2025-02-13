@@ -181,7 +181,7 @@ public:
     Status eval_conjuncts(const std::vector<ExprContext*>& conjuncts, Chunk* chunk, FilterPtr* filter = nullptr);
 
     // equal to ExecNode::eval_join_runtime_filters, is used to apply bloom-filters to Operators.
-    void eval_runtime_bloom_filters(Chunk* chunk);
+    virtual void eval_runtime_bloom_filters(Chunk* chunk);
 
     // Pseudo plan_node_id for final sink, such as result_sink, table_sink
     static const int32_t s_pseudo_plan_node_id_for_final_sink;
@@ -272,6 +272,8 @@ public:
 
     virtual void update_exec_stats(RuntimeState* state);
 
+    void _init_rf_counters(bool init_bloom);
+
 protected:
     OperatorFactory* _factory;
     const int32_t _id;
@@ -328,7 +330,6 @@ protected:
     std::atomic_int64_t _last_growth_cpu_time_ns = 0;
 
 private:
-    void _init_rf_counters(bool init_bloom);
     void _init_conjuct_counters();
 
     std::shared_ptr<MemTracker> _mem_tracker;
