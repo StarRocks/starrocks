@@ -16,10 +16,13 @@ package com.starrocks.connector.jdbc;
 
 import com.google.common.collect.Lists;
 import com.mockrunner.mock.jdbc.MockResultSet;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.Type;
+import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -28,6 +31,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.sql.Types;
 import java.util.Arrays;
@@ -42,10 +46,14 @@ public class OracleSchemaResolverTest {
     @Mocked
     Connection connection;
 
+    @Mocked
+    PreparedStatement preparedStatement;
+
     private Map<String, String> properties;
     private MockResultSet dbResult;
     private MockResultSet tableResult;
     private MockResultSet columnResult;
+    private MockResultSet partitionsResult;
 
     @Before
     public void setUp() throws SQLException {
@@ -71,6 +79,23 @@ public class OracleSchemaResolverTest {
         properties.put(JDBCResource.PASSWORD, "123456");
         properties.put(JDBCResource.CHECK_SUM, "xxxx");
         properties.put(JDBCResource.DRIVER_URL, "xxxx");
+
+        partitionsResult = new MockResultSet("partitions");
+        partitionsResult.addColumn("NAME", Arrays.asList("'20230810'"));
+        partitionsResult.addColumn("COLUMN_NAME", Arrays.asList("`d`"));
+        partitionsResult.addColumn("MODIFIED_TIME", Arrays.asList("2023-08-01 00:00:00"));
+
+        new Expectations() {
+            {
+                dataSource.getConnection();
+                result = connection;
+                minTimes = 0;
+
+                preparedStatement.executeQuery();
+                result = partitionsResult;
+                minTimes = 0;
+            }
+        };
     }
 
     @Test
@@ -185,6 +210,44 @@ public class OracleSchemaResolverTest {
         } catch (Exception e) {
             System.out.println(e.getMessage());
             Assert.fail();
+        }
+    }
+
+    @Test
+    public void testGetPartitions() {
+        try {
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", Arrays.asList(new Column("d", Type.VARCHAR)),
+                    Arrays.asList(new Column("d", Type.VARCHAR)), "test", "catalog", properties);
+            Integer size = jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
+            Assert.assertTrue(size > 0);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testListPartitionNames() {
+        try {
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1",
+                    ConnectorMetadatRequestContext.DEFAULT);
+            Assert.assertFalse(partitionNames.isEmpty());
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
+        }
+    }
+
+    @Test
+    public void testListPartitionColumns() {
+        try {
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            List<Column> partitionCols = jdbcMetadata.listPartitionColumns("test", "tbl1",
+                    Arrays.asList(new Column("`d`", Type.VARCHAR)));
+            Integer size = partitionCols.size();
+            Assert.assertTrue(size > 0);
+        } catch (Exception e) {
+            Assert.fail(e.getMessage());
         }
     }
 }
