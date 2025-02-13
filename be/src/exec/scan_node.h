@@ -131,6 +131,21 @@ public:
 
     const std::vector<ColumnAccessPathPtr>& column_access_paths() const { return _column_access_paths; }
 
+    bool is_enable_topn_filter_back_pressure() const { return this->_enable_topn_filter_back_pressure; }
+    void set_enable_topn_filter_back_pressure(bool value) { this->_enable_topn_filter_back_pressure = value; }
+    int get_back_pressure_max_rounds() const { return this->_back_pressure_max_rounds; }
+    void set_back_pressure_max_rounds(int value) { this->_back_pressure_max_rounds = value; }
+    size_t get_back_pressure_num_rows() const { return this->_back_pressure_num_rows; }
+    void set_back_pressure_num_rows(size_t value) { this->_back_pressure_num_rows = value; }
+    int64_t get_back_pressure_throttle_time() const { return this->_back_pressure_throttle_time; }
+    void set_back_pressure_throttle_time(int64_t value) { this->_back_pressure_throttle_time = value; }
+    int64_t get_back_pressure_throttle_time_upper_bound() const {
+        return this->_back_pressure_throttle_time_upper_bound;
+    }
+    void set_back_pressure_throttle_time_upper_bound(int64_t value) {
+        this->_back_pressure_throttle_time_upper_bound = value;
+    }
+
 protected:
     RuntimeProfile::Counter* _bytes_read_counter = nullptr; // # bytes read from the scanner
     // # rows/tuples read from the scanner (including those discarded by eval_conjucts())
@@ -150,6 +165,12 @@ protected:
     int32_t _io_tasks_per_scan_operator = config::io_tasks_per_scan_operator;
 
     std::vector<ColumnAccessPathPtr> _column_access_paths;
+
+    bool _enable_topn_filter_back_pressure = false;
+    int _back_pressure_max_rounds = 5;
+    size_t _back_pressure_num_rows = 10240;
+    int64_t _back_pressure_throttle_time = 500;
+    int64_t _back_pressure_throttle_time_upper_bound = 5000;
 };
 
 } // namespace starrocks
