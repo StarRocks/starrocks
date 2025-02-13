@@ -14,9 +14,11 @@
 
 #pragma once
 
+#include "exec/exec_node.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/source_operator.h"
+#include "exec/pipeline/topn_runtime_filter_back_pressure.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/lane_arbiter.h"
 #include "exec/workgroup/work_group_fwd.h"
@@ -171,6 +173,57 @@ protected:
         return _scan_status;
     }
 
+    void evaluate_topn_runtime_filters(Chunk* chunk) {
+        if (chunk == nullptr || chunk->is_empty() || !_topn_filter_back_pressure) {
+            return;
+        }
+        if (auto* topn_runtime_filters = runtime_bloom_filters()) {
+            auto input_num_rows = chunk->num_rows();
+            _init_topn_runtime_filter_counters();
+            topn_runtime_filters->evaluate(chunk, _topn_filter_eval_context);
+            _topn_filter_back_pressure->inc_num_rows(chunk->num_rows());
+            if (_topn_filter_eval_context.selectivity.empty()) {
+                _topn_filter_back_pressure->update_selectivity(1.0);
+            } else {
+                double selectivity = _topn_filter_eval_context.selectivity.begin()->first;
+                if (input_num_rows > 1024) {
+                    _topn_filter_back_pressure->update_selectivity(selectivity);
+                }
+            }
+        }
+    }
+
+    void _init_topn_runtime_filter_counters() {
+        if (_topn_filter_eval_context.join_runtime_filter_timer == nullptr) {
+            _topn_filter_eval_context.mode = RuntimeBloomFilterEvalContext::Mode::M_ONLY_TOPN;
+            _topn_filter_eval_context.join_runtime_filter_timer = ADD_TIMER(_common_metrics, "TopnRuntimeFilterTime");
+            _topn_filter_eval_context.join_runtime_filter_hash_timer =
+                    ADD_TIMER(_common_metrics, "TopnRuntimeFilterHashTime");
+            _topn_filter_eval_context.join_runtime_filter_input_counter =
+                    ADD_COUNTER(_common_metrics, "TopnRuntimeFilterInputRows", TUnit::UNIT);
+            _topn_filter_eval_context.join_runtime_filter_output_counter =
+                    ADD_COUNTER(_common_metrics, "TopnRuntimeFilterOutputRows", TUnit::UNIT);
+            _topn_filter_eval_context.join_runtime_filter_eval_counter =
+                    ADD_COUNTER(_common_metrics, "TopnRuntimeFilterEvaluate", TUnit::UNIT);
+            _topn_filter_eval_context.driver_sequence = _runtime_filter_probe_sequence;
+        }
+    }
+
+    void eval_runtime_bloom_filters(Chunk* chunk) override {
+        if (chunk == nullptr || chunk->is_empty()) {
+            return;
+        }
+
+        if (auto* bloom_filters = runtime_bloom_filters()) {
+            _init_rf_counters(true);
+            if (_topn_filter_back_pressure) {
+                _bloom_filter_eval_context.mode = RuntimeBloomFilterEvalContext::Mode::M_WITHOUT_TOPN;
+            }
+            bloom_filters->evaluate(chunk, _bloom_filter_eval_context);
+        }
+        ExecNode::eval_filter_null_values(chunk, filter_null_value_columns());
+    }
+
 protected:
     ScanNode* _scan_node = nullptr;
     const int32_t _dop;
@@ -234,6 +287,9 @@ private:
     RuntimeProfile::Counter* _prepare_chunk_source_timer = nullptr;
     RuntimeProfile::Counter* _submit_io_task_timer = nullptr;
 
+    RuntimeBloomFilterEvalContext _topn_filter_eval_context;
+    std::unique_ptr<TopnRfBackPressure> _topn_filter_back_pressure = nullptr;
+
     DECLARE_RACE_DETECTOR(race_pull_chunk)
 };
 
@@ -261,7 +317,6 @@ public:
 
 protected:
     ScanNode* const _scan_node;
-
     std::shared_ptr<workgroup::ScanTaskGroup> _scan_task_group;
 };
 

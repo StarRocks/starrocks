@@ -213,6 +213,7 @@ private:
     int64_t _ready_timestamp = 0;
     int8_t _join_mode;
     bool _is_topn_filter = false;
+
     bool _skip_wait = false;
     // Indicates that the runtime filter was built from the colocate group execution build side.
     bool _is_group_colocate_rf = false;
@@ -228,7 +229,12 @@ private:
 // into RuntimeBloomFilterEvalContext and make do_evaluate function can be called concurrently.
 struct RuntimeBloomFilterEvalContext {
     RuntimeBloomFilterEvalContext() = default;
-
+    enum Mode {
+        M_ALL,
+        M_WITHOUT_TOPN,
+        M_ONLY_TOPN,
+    };
+    Mode mode = Mode::M_ALL;
     std::map<double, RuntimeFilterProbeDescriptor*> selectivity;
     size_t input_chunk_nums = 0;
     int run_filter_nums = 0;
