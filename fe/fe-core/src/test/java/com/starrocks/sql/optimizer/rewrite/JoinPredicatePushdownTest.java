@@ -25,6 +25,38 @@ public class JoinPredicatePushdownTest extends PlanTestBase {
     }
 
     @Test
+    public void testOrToUnionAllJoinRule() throws Exception {
+        connectContext.getSessionVariable().setEnabledRewriteOrToUnionAllJoin(true);
+        String sql = "select v1, v2, v3 from t0 join t1 where t0.v1= t1.v4 or t0.v2 = t1.v5";
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4");
+        PlanTestBase.assertContains(plan, "10:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v2 = 5: v5\n" +
+                "  |  other join predicates: 1: v1 != 4: v4");
+        sql = "select * from t0 join t1 where t0.v1= t1.v4 or t0.v2 = t1.v5 or t0.v3 = t1.v6";
+        plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "14:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 3: v3 = 6: v6\n" +
+                "  |  other join predicates: 1: v1 != 4: v4, 2: v2 != 5: v5");
+        PlanTestBase.assertContains(plan, "9:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 2: v2 = 5: v5\n" +
+                "  |  other join predicates: 1: v1 != 4: v4");
+        PlanTestBase.assertContains(plan, "4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4");
+    }
+
+    @Test
     public void testJoinPushdownCTE() throws Exception {
         // enable cte reuse to trigger calling PUSH_DOWN_PREDICATE rule set twice
         connectContext.getSessionVariable().setCboCteReuse(true);
