@@ -221,7 +221,7 @@ public class MVCompensationBuilder {
                     partitionKeys.add(PRangeCell.of(partitionKeyRange));
                 }
             } catch (Exception e) {
-                logMVRewrite("Failed to get partition keys for ref base table: {}", refBaseTable.getName(),
+                logMVRewrite("Failed to get partition keys for ref base table: {}, {}", refBaseTable.getName(),
                         DebugUtil.getStackTrace(e));
                 return MVCompensation.createUnkownState(sessionVariable);
             }
@@ -455,7 +455,7 @@ public class MVCompensationBuilder {
                 }
             }
         } catch (Exception e) {
-            logMVRewrite("Failed to get partition keys for ref base table: {}", refBaseTable.getName(),
+            logMVRewrite("Failed to get partition keys for ref base table: {}, {}", refBaseTable.getName(),
                     DebugUtil.getStackTrace(e));
             return null;
         }
