@@ -100,6 +100,7 @@ Status LoadSpillBlockManager::init() {
                                                                  std::move(remote_block_manager));
     // init block container
     _block_container = std::make_unique<LoadSpillBlockContainer>();
+    _initialized = true;
     return Status::OK();
 }
 
