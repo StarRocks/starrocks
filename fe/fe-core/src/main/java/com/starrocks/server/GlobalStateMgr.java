@@ -1426,8 +1426,7 @@ public class GlobalStateMgr {
         connectorTableTriggerAnalyzeMgr.start();
 
         if (RunMode.isSharedDataMode()) {
-            clusterSnapshotMgr.startCheckpointScheduler(checkpointController,
-                                                        StarMgrServer.getCurrentState().getCheckpointController());
+            clusterSnapshotMgr.start();
         }
     }
 
