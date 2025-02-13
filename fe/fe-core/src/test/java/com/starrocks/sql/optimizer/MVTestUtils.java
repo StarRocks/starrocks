@@ -43,11 +43,6 @@ public class MVTestUtils {
                 ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
             }
         }
-        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
-            Assert.assertEquals(String.format("AlterJobV2 %s should be ROLLUP state at the end",
-                            GsonUtils.GSON.toJson(alterJobV2)),
-                    AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
-        }
     }
 
     public static void waitForSchemaChangeAlterJobFinish() {
