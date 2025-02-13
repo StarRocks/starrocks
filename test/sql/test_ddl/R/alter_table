@@ -115,3 +115,47 @@ select count(1) from test_pk_tbl1;
 -- result:
 2
 -- !result
+-- name: test_alter_with_rollup
+CREATE TABLE dup_test (
+    k1 bigint(20),
+    k2 bigint(20),
+    k3 bigint(20),
+    k4 bigint(20)
+)
+DUPLICATE KEY(k1)
+PARTITION BY (k1)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 1
+ORDER BY(k2)
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1",
+"enable_persistent_index" = "true"
+);
+-- result:
+-- !result
+insert into dup_test values (1,1,1,1),(2,2,2,2);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW rollup_test1 PROPERTIES ('session.query_timeout' = '3600') AS SELECT k1,k3,k4 FROM dup_test WHERE k2=2;
+-- result:
+-- !result
+function: wait_alter_table_finish("ROLLUP", 8)
+-- result:
+None
+-- !result
+alter table dup_test drop column k4;
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+alter table dup_test PARTITIONS(p1,p2) DISTRIBUTED BY HASH(k1) BUCKETS 7;
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
