@@ -103,7 +103,7 @@ public class MvBaseTableUpdateInfo {
     public Map<String, PListCell> getPartitionNameWithLists() {
         Map<String, PListCell> result = Maps.newHashMap();
         for (Map.Entry<String, PCell> e : nameToPartKeys.entrySet()) {
-            Preconditions.checkState(e.getValue() instanceof PRangeCell);
+            Preconditions.checkState(e.getValue() instanceof PListCell);
             PListCell listCell = (PListCell) e.getValue();
             result.put(e.getKey(), listCell);
         }
