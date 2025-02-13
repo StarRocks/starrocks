@@ -55,7 +55,7 @@ VALUES
 
 INSERT INTO FILES 支持将数据导出到单个文件或多个文件。您可以通过为这些文件指定不同的存储路径来进一步分区。
 
-在使用 INSERT INTO FILES 导出数据时，您必须通过设置 `compression` 属性手动设置压缩算法。有关 StarRocks 支持的数据压缩算法，请参阅[数据压缩](../table_design/data_compression.md)。
+在使用 INSERT INTO FILES 导出数据时，您必须通过设置 `compression` 属性手动设置压缩算法。有关数据导出支持的压缩算法，请参阅 [unload_data_param](../sql-reference/sql-functions/table-functions/files.md#unload_data_param)。
 
 ### 导出数据到多个文件
 
