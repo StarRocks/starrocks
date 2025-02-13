@@ -260,30 +260,31 @@ public class ForeignKeyConstraint extends Constraint {
 
     public static String getShowCreateTableConstraintDesc(OlapTable baseTable, List<ForeignKeyConstraint> constraints) {
         List<String> constraintStrs = Lists.newArrayList();
-        for (ForeignKeyConstraint constraint : constraints) {
-            BaseTableInfo parentTableInfo = constraint.getParentTableInfo();
-            BaseTableInfo childTableInfo = constraint.getChildTableInfo();
+        if (constraints != null) {
+            for (ForeignKeyConstraint constraint : constraints) {
+                BaseTableInfo parentTableInfo = constraint.getParentTableInfo();
+                BaseTableInfo childTableInfo = constraint.getChildTableInfo();
 
-            StringBuilder constraintSb = new StringBuilder();
-            if (childTableInfo != null) {
-                constraintSb.append(childTableInfo.getReadableString());
+                StringBuilder constraintSb = new StringBuilder();
+                if (childTableInfo != null) {
+                    constraintSb.append(childTableInfo.getReadableString());
+                }
+                constraintSb.append("(");
+                String baseColumns = Joiner.on(",").join(constraint.getColumnNameRefPairs(baseTable)
+                        .stream().map(pair -> pair.first).collect(Collectors.toList()));
+                constraintSb.append(baseColumns);
+                constraintSb.append(")");
+                constraintSb.append(" REFERENCES ");
+                constraintSb.append(parentTableInfo.getReadableString());
+
+                constraintSb.append("(");
+                String parentColumns = Joiner.on(",").join(constraint.getColumnNameRefPairs(baseTable)
+                        .stream().map(pair -> pair.second).collect(Collectors.toList()));
+                constraintSb.append(parentColumns);
+                constraintSb.append(")");
+                constraintStrs.add(constraintSb.toString());
             }
-            constraintSb.append("(");
-            String baseColumns = Joiner.on(",").join(constraint.getColumnNameRefPairs(baseTable)
-                    .stream().map(pair -> pair.first).collect(Collectors.toList()));
-            constraintSb.append(baseColumns);
-            constraintSb.append(")");
-            constraintSb.append(" REFERENCES ");
-            constraintSb.append(parentTableInfo.getReadableString());
-
-            constraintSb.append("(");
-            String parentColumns = Joiner.on(",").join(constraint.getColumnNameRefPairs(baseTable)
-                    .stream().map(pair -> pair.second).collect(Collectors.toList()));
-            constraintSb.append(parentColumns);
-            constraintSb.append(")");
-            constraintStrs.add(constraintSb.toString());
         }
-
         return Joiner.on(";").join(constraintStrs);
     }
 

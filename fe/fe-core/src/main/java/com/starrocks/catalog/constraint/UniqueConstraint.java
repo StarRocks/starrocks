@@ -113,21 +113,22 @@ public class UniqueConstraint extends Constraint {
 
     public static String getShowCreateTableConstraintDesc(List<UniqueConstraint> constraints, Table selfTable) {
         List<String> constraintStrs = Lists.newArrayList();
-        for (UniqueConstraint constraint : constraints) {
-            StringBuilder constraintSb = new StringBuilder();
-            if (constraint.catalogName != null) {
-                constraintSb.append(constraint.catalogName).append(".");
+        if(constraints != null) {
+            for (UniqueConstraint constraint : constraints) {
+                StringBuilder constraintSb = new StringBuilder();
+                if (constraint.catalogName != null) {
+                    constraintSb.append(constraint.catalogName).append(".");
+                }
+                if (constraint.dbName != null) {
+                    constraintSb.append(constraint.dbName).append(".");
+                }
+                if (constraint.tableName != null) {
+                    constraintSb.append(constraint.tableName).append(".");
+                }
+                constraintSb.append(Joiner.on(",").join(constraint.getUniqueColumnNames(selfTable)));
+                constraintStrs.add(constraintSb.toString());
             }
-            if (constraint.dbName != null) {
-                constraintSb.append(constraint.dbName).append(".");
-            }
-            if (constraint.tableName != null) {
-                constraintSb.append(constraint.tableName).append(".");
-            }
-            constraintSb.append(Joiner.on(",").join(constraint.getUniqueColumnNames(selfTable)));
-            constraintStrs.add(constraintSb.toString());
         }
-
         return Joiner.on(";").join(constraintStrs);
     }
 
