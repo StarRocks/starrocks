@@ -510,9 +510,9 @@ Status PhysicalSplitMorselQueue::_init_segment() {
                                                                _range_end_op, _range_start_key, _range_end_key,
                                                                &_tablet_seek_ranges, &_mempool));
             } else {
-                RETURN_IF_ERROR(lake::TabletReader::parse_seek_range(*_tablets[_tablet_idx]->tablet_schema(), _range_start_op,
-                                                                     _range_end_op, _range_start_key, _range_end_key,
-                                                                     &_tablet_seek_ranges, &_mempool));
+                RETURN_IF_ERROR(lake::TabletReader::parse_seek_range(*_tablets[_tablet_idx]->tablet_schema(),
+                                                                     _range_start_op, _range_end_op, _range_start_key,
+                                                                     _range_end_key, &_tablet_seek_ranges, &_mempool));
             }
         }
         // Read a new rowset.
@@ -849,9 +849,9 @@ Status LogicalSplitMorselQueue::_init_tablet() {
                                                            _range_end_op, _range_start_key, _range_end_key,
                                                            &_tablet_seek_ranges, &_mempool));
         } else {
-            RETURN_IF_ERROR(lake::TabletReader::parse_seek_range(*_tablets[_tablet_idx]->tablet_schema(), _range_start_op,
-                                                                 _range_end_op, _range_start_key, _range_end_key,
-                                                                 &_tablet_seek_ranges, &_mempool));
+            RETURN_IF_ERROR(lake::TabletReader::parse_seek_range(*_tablets[_tablet_idx]->tablet_schema(),
+                                                                 _range_start_op, _range_end_op, _range_start_key,
+                                                                 _range_end_key, &_tablet_seek_ranges, &_mempool));
         }
     }
 
