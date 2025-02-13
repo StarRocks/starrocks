@@ -196,22 +196,6 @@ StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join
     return expr;
 }
 
-struct FilterZoneMapWithMinMaxOp {
-    template <LogicalType ltype>
-    bool operator()(const RuntimeFilter* expr, const Column* min_column, const Column* max_column) {
-        using CppType = RunTimeCppType<ltype>;
-        auto* filter = (RuntimeBloomFilter<ltype>*)(expr);
-        const CppType* min_value = ColumnHelper::unpack_cpp_data_one_value<ltype>(min_column);
-        const CppType* max_value = ColumnHelper::unpack_cpp_data_one_value<ltype>(max_column);
-        return filter->filter_zonemap_with_min_max(min_value, max_value);
-    }
-};
-
-bool RuntimeFilterHelper::filter_zonemap_with_min_max(LogicalType type, const RuntimeFilter* filter,
-                                                      const Column* min_column, const Column* max_column) {
-    return type_dispatch_filter(type, false, FilterZoneMapWithMinMaxOp(), filter, min_column, max_column);
-}
-
 Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc,
                                           RuntimeState* state) {
     _filter_id = desc.filter_id;
