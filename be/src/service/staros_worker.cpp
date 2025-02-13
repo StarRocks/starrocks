@@ -89,7 +89,13 @@ uint64_t StarOSWorker::get_table_id(const ShardInfo& shard) {
         DCHECK(false) << "tableId doesn't exist in shard properties";
         return kUnknownTableId;
     }
-    return std::stoull(properties.at("tableId"));
+    const auto& tableId = properties.at("tableId");
+    try {
+        return std::stoull(tableId);
+    } catch (const std::exception& e) {
+        DCHECK(false) << "failed to parse tableId: " << tableId << ", " << e.what();
+        return kUnknownTableId;
+    }
 }
 
 absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
