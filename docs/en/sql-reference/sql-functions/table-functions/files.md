@@ -295,7 +295,127 @@ When used with SELECT, FILES() returns the data in the file as a table.
 
 ## Usage notes
 
+<<<<<<< HEAD
 From v3.2 onwards, FILES() further supports complex data types including ARRAY, JSON, MAP, and STRUCT in addition to basic data types.
+=======
+  ```SQL
+  SELECT * FROM FILES(
+      "path" = "s3://bucket/*.parquet",
+      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "list_files_only" = "true"
+  );
+  +-----------------------+------+--------+---------------------+
+  | PATH                  | SIZE | IS_DIR | MODIFICATION_TIME   |
+  +-----------------------+------+--------+---------------------+
+  | s3://bucket/1.parquet | 5221 |      0 | 2024-08-15 20:47:02 |
+  | s3://bucket/2.parquet | 5222 |      0 | 2024-08-15 20:54:57 |
+  | s3://bucket/3.parquet | 5223 |      0 | 2024-08-20 15:21:00 |
+  | s3://bucket/4.parquet | 5224 |      0 | 2024-08-15 11:32:14 |
+  +-----------------------+------+--------+---------------------+
+  4 rows in set (0.03 sec)
+  ```
+
+#### DESC FILES()
+
+When used with DESC, FILES() returns the schema of the file.
+
+```Plain
+DESC FILES(
+    "path" = "s3://inserttest/lineorder.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "aws.s3.region" = "us-west-2"
+);
+
++------------------+------------------+------+
+| Field            | Type             | Null |
++------------------+------------------+------+
+| lo_orderkey      | int              | YES  |
+| lo_linenumber    | int              | YES  |
+| lo_custkey       | int              | YES  |
+| lo_partkey       | int              | YES  |
+| lo_suppkey       | int              | YES  |
+| lo_orderdate     | int              | YES  |
+| lo_orderpriority | varchar(1048576) | YES  |
+| lo_shippriority  | int              | YES  |
+| lo_quantity      | int              | YES  |
+| lo_extendedprice | int              | YES  |
+| lo_ordtotalprice | int              | YES  |
+| lo_discount      | int              | YES  |
+| lo_revenue       | int              | YES  |
+| lo_supplycost    | int              | YES  |
+| lo_tax           | int              | YES  |
+| lo_commitdate    | int              | YES  |
+| lo_shipmode      | varchar(1048576) | YES  |
++------------------+------------------+------+
+17 rows in set (0.05 sec)
+```
+
+When you viewing files with `list_files_only` set to `true`, the system will return the `Type` and `Null` properties of `PATH`, `SIZE`, `IS_DIR` (whether the given path is a directory), and `MODIFICATION_TIME`.
+
+```Plain
+DESC FILES(
+    "path" = "s3://bucket/*.parquet",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "list_files_only" = "true"
+);
++-------------------+------------------+------+
+| Field             | Type             | Null |
++-------------------+------------------+------+
+| PATH              | varchar(1048576) | YES  |
+| SIZE              | bigint           | YES  |
+| IS_DIR            | boolean          | YES  |
+| MODIFICATION_TIME | datetime         | YES  |
++-------------------+------------------+------+
+4 rows in set (0.00 sec)
+```
+
+## FILES() for unloading
+
+From v3.2.0 onwards, FILES() supports writing data into files in remote storage. You can use INSERT INTO FILES() to unload data from StarRocks to remote storage.
+
+### Syntax
+
+```SQL
+FILES( data_location , data_format [, StorageCredentialParams ] , unload_data_param )
+```
+
+### Parameters
+
+All parameters are in the `"key" = "value"` pairs.
+
+#### data_location
+
+See [FILES() for loading - Parameters - data_location](#data_location).
+
+#### data_format
+
+See [FILES() for loading - Parameters - data_format](#data_format).
+
+#### StorageCredentialParams
+
+See [FILES() for loading - Parameters - StorageCredentialParams](#storagecredentialparams).
+
+#### unload_data_param
+
+```sql
+unload_data_param ::=
+    "compression" = { "uncompressed" | "gzip" | "snappy" | "zstd | "lz4" },
+    "partition_by" = "<column_name> [, ...]",
+    "single" = { "true" | "false" } ,
+    "target_max_file_size" = "<int>"
+```
+
+| **Key**          | **Required** | **Description**                                              |
+| ---------------- | ------------ | ------------------------------------------------------------ |
+| compression      | Yes          | The compression method to use when unloading data. Valid values:<ul><li>`uncompressed`: No compression algorithm is used.</li><li>`gzip`: Use the gzip compression algorithm.</li><li>`snappy`: Use the SNAPPY compression algorithm.</li><li>`zstd`: Use the Zstd compression algorithm.</li><li>`lz4`: Use the LZ4 compression algorithm.</li></ul>**NOTE**<br />Unloading into CSV files does not support data compression. You must set this item as `uncompressed`.                  |
+| partition_by     | No           | The list of columns that are used to partition data files into different storage paths. Multiple columns are separated by commas (,). FILES() extracts the key/value information of the specified columns and stores the data files under the storage paths featured with the extracted key/value pair. For further instructions, see Example 7. |
+| single           | No           | Whether to unload the data into a single file. Valid values:<ul><li>`true`: The data is stored in a single data file.</li><li>`false` (Default): The data is stored in multiple files if the amount of data unloaded exceeds 512 MB.</li></ul>                  |
+| target_max_file_size | No           | The best-effort maximum size of each file in the batch to be unloaded. Unit: Bytes. Default value: 1073741824 (1 GB). When the size of data to be unloaded exceeds this value, the data will be divided into multiple files, and the size of each file will not significantly exceed this value. Introduced in v3.2.7. |
+>>>>>>> f6ffc2a7d6 ([Doc] Fix insert unload desc (#55841))
 
 ## Examples
 

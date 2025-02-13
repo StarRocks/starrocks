@@ -295,7 +295,128 @@ unload_data_param::=
 
 ## 注意事项
 
+<<<<<<< HEAD
 自 v3.2 版本起，除了基本数据类型，FILES() 还支持复杂数据类型 ARRAY、JSON、MAP 和 STRUCT。
+=======
+  ```SQL
+  SELECT * FROM FILES(
+      "path" = "s3://bucket/*.parquet",
+      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "list_files_only" = "true"
+  );
+  +-----------------------+------+--------+---------------------+
+  | PATH                  | SIZE | IS_DIR | MODIFICATION_TIME   |
+  +-----------------------+------+--------+---------------------+
+  | s3://bucket/1.parquet | 5221 |      0 | 2024-08-15 20:47:02 |
+  | s3://bucket/2.parquet | 5222 |      0 | 2024-08-15 20:54:57 |
+  | s3://bucket/3.parquet | 5223 |      0 | 2024-08-20 15:21:00 |
+  | s3://bucket/4.parquet | 5224 |      0 | 2024-08-15 11:32:14 |
+  +-----------------------+------+--------+---------------------+
+  4 rows in set (0.03 sec)
+  ```
+
+#### DESC FILES()
+
+当与 DESC 语句一同使用时，FILES() 函数会返回远端存储文件的 Schema 信息。
+
+```Plain
+DESC FILES(
+    "path" = "s3://inserttest/lineorder.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "aws.s3.region" = "us-west-2"
+);
+
++------------------+------------------+------+
+| Field            | Type             | Null |
++------------------+------------------+------+
+| lo_orderkey      | int              | YES  |
+| lo_linenumber    | int              | YES  |
+| lo_custkey       | int              | YES  |
+| lo_partkey       | int              | YES  |
+| lo_suppkey       | int              | YES  |
+| lo_orderdate     | int              | YES  |
+| lo_orderpriority | varchar(1048576) | YES  |
+| lo_shippriority  | int              | YES  |
+| lo_quantity      | int              | YES  |
+| lo_extendedprice | int              | YES  |
+| lo_ordtotalprice | int              | YES  |
+| lo_discount      | int              | YES  |
+| lo_revenue       | int              | YES  |
+| lo_supplycost    | int              | YES  |
+| lo_tax           | int              | YES  |
+| lo_commitdate    | int              | YES  |
+| lo_shipmode      | varchar(1048576) | YES  |
++------------------+------------------+------+
+17 rows in set (0.05 sec)
+```
+
+在查看文件时将 `list_files_only` 设置为 `true`，系统将返回 `PATH`、`SIZE`、`IS_DIR`（给定路径是否为目录）和 `MODIFICATION_TIME` 的 `Type` 和 `Null` 属性。
+
+```Plain
+DESC FILES(
+    "path" = "s3://bucket/*.parquet",
+    "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+    "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    "list_files_only" = "true"
+);
++-------------------+------------------+------+
+| Field             | Type             | Null |
++-------------------+------------------+------+
+| PATH              | varchar(1048576) | YES  |
+| SIZE              | bigint           | YES  |
+| IS_DIR            | boolean          | YES  |
+| MODIFICATION_TIME | datetime         | YES  |
++-------------------+------------------+------+
+4 rows in set (0.00 sec)
+```
+
+
+## 使用 FILES 导出数据
+
+从 v3.2.0 版本开始，FILES() 写入数据至远程存储。您可以[使用 INSERT INTO FILES() 将数据从 StarRocks 导出到远程存储](../../../unloading/unload_using_insert_into_files.md)。
+
+### 语法
+
+```SQL
+FILES( data_location , data_format [, StorageCredentialParams ] , unload_data_param )
+```
+
+### 参数说明
+
+所有参数均为 `"key" = "value"` 形式的参数对。
+
+#### data_location
+
+参考 [使用 FILES 导入数据 - 参数说明 - data_location](#data_location)。
+
+#### data_format
+
+参考 [使用 FILES 导入数据 - 参数说明 - data_format](#data_format)。
+
+#### StorageCredentialParams
+
+参考 [使用 FILES 导入数据 - 参数说明 - StorageCredentialParams](#storagecredentialparams)。
+
+#### unload_data_param
+
+```sql
+unload_data_param ::=
+    "compression" = { "uncompressed" | "gzip" | "snappy" | "zstd | "lz4" },
+    "partition_by" = "<column_name> [, ...]",
+    "single" = { "true" | "false" } ,
+    "target_max_file_size" = "<int>"
+```
+
+| **参数**          | **必填** | **说明**                                                          |
+| ---------------- | ------------ | ------------------------------------------------------------ |
+| compression      | 是          | 导出数据时要使用的压缩方法。有效值：<ul><li>`uncompressed`：不使用任何压缩算法。</li><li>`gzip`：使用 gzip 压缩算法。</li><li>`snappy`：使用 SNAPPY 压缩算法。</li><li>`zstd`：使用 Zstd 压缩算法。</li><li>`lz4`：使用 LZ4 压缩算法。</li></ul>**说明**<br />导出至 CSV 文件不支持数据压缩，需指定为 `uncompressed`。                |
+| partition_by     | 否           | 用于将数据文件分区到不同存储路径的列，可以指定多个列。FILES() 提取指定列的 Key/Value 信息，并将数据文件存储在以对应 Key/Value 区分的子路径下。详细使用方法请见以下示例七。 |
+| single           | 否           | 是否将数据导出到单个文件中。有效值：<ul><li>`true`：数据存储在单个数据文件中。</li><li>`false`（默认）：如果数据量超过 512 MB，，则数据会存储在多个文件中。</li></ul>                  |
+| target_max_file_size | 否           | 分批导出时，单个文件的大致上限。单位：Byte。默认值：1073741824（1 GB）。当要导出的数据大小超过该值时，数据将被分成多个文件，每个文件的大小不会大幅超过该值。自 v3.2.7 起引入。|
+>>>>>>> f6ffc2a7d6 ([Doc] Fix insert unload desc (#55841))
 
 ## 示例
 
