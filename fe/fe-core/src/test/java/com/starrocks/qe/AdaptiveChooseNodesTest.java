@@ -49,7 +49,7 @@ public class AdaptiveChooseNodesTest extends DistributedEnvPlanTestBase {
     @Test
     @Order(1)
     void testIncreaseNodes() throws Exception {
-        ConfigBase.setMutableConfig("adaptive_choose_instances_threshold", "3");
+        ConfigBase.setMutableConfig("adaptive_choose_instances_threshold", "3", false, "");
         connectContext.getSessionVariable().setChooseExecuteInstancesMode("auto");
         connectContext.getSessionVariable().setPipelineDop(2);
         connectContext.setExecutionId(new TUniqueId(0x33, 0x0));
@@ -88,7 +88,7 @@ public class AdaptiveChooseNodesTest extends DistributedEnvPlanTestBase {
     @Test
     @Order(2)
     void testDecreaseNodesInPipeline() throws Exception {
-        ConfigBase.setMutableConfig("adaptive_choose_instances_threshold", "3");
+        ConfigBase.setMutableConfig("adaptive_choose_instances_threshold", "3", false, "");
         connectContext.getSessionVariable().setChooseExecuteInstancesMode("auto");
         connectContext.getSessionVariable().setPipelineDop(2);
         connectContext.setExecutionId(new TUniqueId(0x33, 0x0));
@@ -161,7 +161,7 @@ public class AdaptiveChooseNodesTest extends DistributedEnvPlanTestBase {
     public static void afterAll() throws Exception {
         connectContext.getSessionVariable().setEnablePipelineEngine(true);
         connectContext.getSessionVariable().setChooseExecuteInstancesMode("locality");
-        ConfigBase.setMutableConfig("adaptive_choose_instances_threshold", "32");
+        ConfigBase.setMutableConfig("adaptive_choose_instances_threshold", "32", false, "");
     }
 
 
