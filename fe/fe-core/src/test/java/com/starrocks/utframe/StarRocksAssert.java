@@ -1170,6 +1170,26 @@ public class StarRocksAssert {
         }
     }
 
+    public void checkSchemaChangeJob() throws Exception {
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().
+                getSchemaChangeHandler().getAlterJobsV2();
+        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
+            if (alterJobV2.getJobState().isFinalState()) {
+                continue;
+            }
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(alterJobV2.getDbId());
+            Table table =
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), alterJobV2.getTableId());
+            Preconditions.checkState(table instanceof OlapTable);
+            OlapTable olapTable = (OlapTable) table;
+            int retry = 0;
+            while (olapTable.getState() != OlapTable.OlapTableState.NORMAL && retry++ < 6000) {
+                Thread.sleep(10);
+            }
+            Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
+        }
+    }
+
     public QueryAssert query(String sql) {
         return new QueryAssert(ctx, sql);
     }

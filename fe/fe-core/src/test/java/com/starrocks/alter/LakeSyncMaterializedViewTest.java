@@ -658,4 +658,26 @@ public class LakeSyncMaterializedViewTest {
         }
         starRocksAssert.dropTable("t1");
     }
+
+    @Test
+    public void testDropColumnWithMVByFastSchema() throws Exception {
+        starRocksAssert.useDatabase("test");
+        starRocksAssert.withTable("CREATE TABLE t1 (\n" +
+                "  k1  int,\n" +
+                "  k2  int,\n" +
+                "  k3  int,\n" +
+                "  k4  int)\n" +
+                "  DUPLICATE KEY(k1)\n" +
+                "  DISTRIBUTED BY HASH(k1) BUCKETS 3;");
+        {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 " +
+                    "AS SELECT k1,sum(k2) AS sum_k2 FROM t1 WHERE k3>2 GROUP BY k1;");
+
+            starRocksAssert.alterTable("ALTER TABLE t1 DROP COLUMN k4;");
+            starRocksAssert.checkSchemaChangeJob();
+
+            starRocksAssert.dropTable("t1");
+            starRocksAssert.dropMaterializedView("mv1");
+        }
+    }
 }
