@@ -3,24 +3,24 @@ description: Kafka Routine Load と共有データストレージ
 displayed_sidebar: docs
 ---
 
-# Kafka routine load StarRocks using shared-data storage
+# Kafkaから共有データクラスタにデータをロードする
 
 import Clients from '../_assets/quick-start/_clientsCompose.mdx'
 import SQL from '../_assets/quick-start/_SQL.mdx'
 
-## About Routine Load
+## Routine Loadについて
 
 Routine Loadは、Apache Kafka、またはこのラボではRedpandaを使用して、データをStarRocksに継続的にストリーミングする方法です。データはKafkaトピックにストリームされ、Routine LoadジョブがそのデータをStarRocksに取り込みます。Routine Loadの詳細は、ラボの最後に提供されています。
 
-## About shared-data
+## 共有データモードについて
 
-ストレージと計算を分離するシステムでは、データはAmazon S3、Google Cloud Storage、Azure Blob Storage、その他のS3互換ストレージ（MinIOなど）のような低コストで信頼性のある遠端ストレージシステムに保存されます。ホットデータは本地でキャッシュされ、キャッシュがヒットすると、查询性能はストレージと計算が結合されたアーキテクチャと同等になります。計算节点（CN）は、数秒以内にオンデマンドで追加または削除できます。このアーキテクチャは、ストレージコストを削減し、リソースの分離を改善し、弾力性とスケーラビリティを提供します。
+ストレージと計算を分離するアーキテクチャは、データはAmazon S3、Google Cloud Storage、Azure Blob Storage、その他のS3互換ストレージ（MinIOなど）のような低コストで信頼性のある遠端ストレージシステムに保存されます。ホットデータはローカルディスクでキャッシュされ、キャッシュがヒットすると、クエリパフォーマンスはストレージと計算が結合されたアーキテクチャと同等になります。計算节点（Compute Node, CN）は、数秒以内にオンデマンドで追加または削除できます。このアーキテクチャは、ストレージコストを削減し、リソースの分離を改善し、弾力性と拡張性を提供します。
 
 このチュートリアルでは以下をカバーします：
 
 - Docker Composeを使用してStarRocks、Redpanda、MinIOを実行する
 - MinIOをStarRocksのストレージ層として使用する
-- StarRocksをshared-data用に設定する
+- StarRocksを共有データモード用に設定する
 - Redpandaからデータを取り込むためのRoutine Loadジョブを追加する
 
 使用されるデータは合成データです。
@@ -28,20 +28,20 @@ Routine Loadは、Apache Kafka、またはこのラボではRedpandaを使用し
 このドキュメントには多くの情報が含まれており、最初にステップバイステップの内容が提示され、技術的な詳細が最後に示されています。これは次の目的を順に果たすためです：
 
 1. Routine Loadを設定する。
-2. 読者がshared-dataデプロイメントでデータを导入し、そのデータを分析できるようにする。
-3. shared-dataデプロイメントの設定詳細を提供する。
+2. 共有データクラスタにデータをロードし、そのデータを分析する。
+3. 共有データデプロイメントの設定詳細を提供する。
 
 ---
 
-## Prerequisites
+## 前提条件
 
 ### Docker
 
 - [Docker](https://docs.docker.com/engine/install/)
-- Dockerに割り当てられた4 GBのRAM
-- Dockerに割り当てられた10 GBの空きディスクスペース
+- Dockerに割り当てられた 4 GB のRAM
+- Dockerに割り当てられた 10 GB の空きディスクスペース
 
-### SQL client
+### SQLクライアント
 
 Docker環境で提供されるSQLクライアントを使用するか、システム上のものを使用できます。多くのMySQL互換クライアントが動作し、このガイドではDBeaverとMySQL Workbenchの設定をカバーしています。
 
@@ -51,44 +51,44 @@ Docker環境で提供されるSQLクライアントを使用するか、シス�
 
 ### Python
 
-Python 3とApache Kafka用のPythonクライアント`kafka-python`が必要です。
+Python 3 とApache Kafka用のPythonクライアント`kafka-python`が必要です。
 
 - [Python](https://www.python.org/)
 - [`kafka-python`](https://pypi.org/project/kafka-python/)
 
 ---
 
-## Terminology
+## StarRocks 用語
 
 ### FE
 
-フロントエンドノードは、メタデータ管理、クライアント接続管理、クエリプランニング、およびクエリスケジューリングを担当します。各FEはメモリ内にメタデータの完全なコピーを保存および維持し、FEs間での無差別なサービスを保証します。
+フロントエンドノードは、メタデータ管理、クライアント接続管理、クエリプランニング、およびクエリスケジューリングを担当します。各FEはメモリ内にメタデータの完全なコピーを保存および維持し、FE間での無差別なサービスを保証します。
 
 ### CN
 
-計算节点は、shared-dataデプロイメントでクエリプランを実行する役割を担います。
+計算节点は、共有データデプロイメントでクエリプランを実行する役割を担います。
 
 ### BE
 
-バックエンドノードは、shared-nothingデプロイメントでデータストレージとクエリプランの実行の両方を担当します。
+バックエンドノードは、共有なしデプロイメントでデータストレージとクエリプランの実行の両方を担当します。
 
 :::note
-このガイドではBEsを使用しませんが、BEsとCNsの違いを理解するためにこの情報を含めています。
+このガイドではBEを使用しませんが、BEとCNの違いを理解するためにこの情報を含めています。
 :::
 
 ---
 
-## Launch StarRocks
+## StarRocksを立ち上げる
 
-Object Storageを使用してshared-dataでStarRocksを実行するには、以下が必要です：
+オブジェクトストレージを使用して共有データでStarRocksを実行するには、以下が必要です：
 
 - フロントエンドエンジン（FE）
 - 計算节点（CN）
-- Object Storage
+- オブジェクトストレージ
 
-このガイドでは、S3互換のObject StorageプロバイダーであるMinIOを使用します。MinIOはGNU Affero General Public Licenseの下で提供されています。
+このガイドでは、S3互換のオブジェクトストレージプロバイダーであるMinIOを使用します。MinIOはGNU Affero General Public Licenseの下で提供されています。
 
-### Download the lab files
+### ラボファイルをダウンロード
 
 #### `docker-compose.yml`
 
@@ -106,7 +106,7 @@ curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-sa
 curl -O https://raw.githubusercontent.com/StarRocks/demo/master/documentation-samples/routine-load-shared-data/gen.py
 ```
 
-## Start StarRocks, MinIO, and Redpanda
+## StarRocks、MinIO、Redpandaをスタート
 
 ```bash
 docker compose up --detach --wait --wait-timeout 120
@@ -135,11 +135,11 @@ container routineload-minio_mc-1 exited (0)
 
 ---
 
-## Examine MinIO credentials
+## MinIOのクレデンシャルを確認
 
-StarRocksでObject StorageとしてMinIOを使用するためには、StarRocksがMinIOアクセスキーを必要とします。アクセスキーはDockerサービスの起動時に生成されました。StarRocksがMinIOに接続する方法をよりよく理解するために、キーが存在することを確認してください。
+StarRocksでオブジェクトストレージとしてMinIOを使用するためには、StarRocksがMinIOアクセスキーを必要とします。アクセスキーはDockerサービスの起動時に生成されました。StarRocksがMinIOに接続する方法をよりよく理解するために、キーが存在することを確認してください。
 
-### Open the MinIO web UI
+### MinIOのWeb UIを起動
 
 http://localhost:9001/access-keys にアクセスします。ユーザー名とパスワードはDocker composeファイルに指定されており、`miniouser`と`miniopassword`です。1つのアクセスキーがあることが確認できるはずです。キーは`AAAAAAAAAAAAAAAAAAAA`で、MinIOコンソールではシークレットは表示されませんが、Docker composeファイルにあり、`BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB`です：
 
@@ -147,39 +147,37 @@ http://localhost:9001/access-keys にアクセスします。ユーザー名と�
 
 ---
 
-## SQL Clients
+## SQLクライアント
 
 <Clients />
 ---
 
-## StarRocks configuration for shared-data
+## 共有データクラスタの設定
 
-この時点で、StarRocks、Redpanda、およびMinIOが実行されています。MinIOアクセスキーはStarRocksとMinioを接続するために使用されます。StarRocksが起動すると、MinIOとの接続が確立され、MinIOにデフォルトの存储卷が作成されました。
+この時点で、StarRocks、Redpanda、およびMinIOが実行されています。MinIOアクセスキーはStarRocksとMinioを接続するために使用されます。StarRocksが起動すると、MinIOとの接続が確立され、MinIOにデフォルトのストレージボリュームが作成されました。
 
-これは、MinIOを使用するためにデフォルトの存储卷を設定するために使用される設定です（これもDocker composeファイルにあります）。設定はこのガイドの最後で詳細に説明されますが、今は`aws_s3_access_key`がMinIOコンソールで見た文字列に設定されていることと、`run_mode`が`shared_data`に設定されていることに注意してください。
+これは、MinIOを使用するためにデフォルトのストレージボリュームを設定するために使用される設定です（これもDocker composeファイルにあります）。設定はこのガイドの最後で詳細に説明されますが、今は`aws_s3_access_key`がMinIOコンソールで見た文字列に設定されていることと、`run_mode`が`shared_data`に設定されていることに注意してください。
 
 ```plaintext
 #highlight-start
-# enable shared data, set storage type, set endpoint
+# 共有データ、ストレージタイプ、エンドポイントを設定
 run_mode = shared_data
 #highlight-end
 cloud_native_storage_type = S3
 aws_s3_endpoint = minio:9000
 
-# set the path in MinIO
+# minIOのパスを設定
 aws_s3_path = starrocks
 
 #highlight-start
-# credentials for MinIO object read/write
+# MinIOオブジェクトの読み書きに関するクレデンシャル
 aws_s3_access_key = AAAAAAAAAAAAAAAAAAAA
 aws_s3_secret_key = BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 #highlight-end
 aws_s3_use_instance_profile = false
 aws_s3_use_aws_sdk_default_behavior = false
 
-# Set this to false if you do not want default
-# storage created in the object storage using
-# the details provided above
+# オブジェクト=ストレージにデフォルトストレージを作成したくない場合は、falseに設定する。
 enable_load_volume_from_conf = true
 ```
 
@@ -195,7 +193,7 @@ docker compose exec starrocks-fe cat fe/conf/fe.conf
 
 :::
 
-### Connect to StarRocks with a SQL client
+### SQLクライアントで StarRocks に接続
 
 :::tip
 
@@ -209,7 +207,7 @@ docker compose exec starrocks-fe \
 mysql -P9030 -h127.0.0.1 -uroot --prompt="StarRocks > "
 ```
 
-#### Examine the storage volume
+#### ストレージボリュームを確認
 
 ```sql
 SHOW STORAGE VOLUMES;
@@ -256,7 +254,7 @@ IsDefault: true
 
 ---
 
-## Create a table
+## テーブルを作る
 
 これらのSQLコマンドはSQLクライアントで実行されます。
 
@@ -280,13 +278,13 @@ PROPERTIES("replication_num"="1");
 
 ---
 
-### Open the Redpanda Console
+### Redpandaコンソールを開く
 
 まだトピックはありませんが、次のステップでトピックが作成されます。
 
 http://localhost:8080/overview
 
-### Publish data to a Redpanda topic
+### Redpandaトピックにデータを公開
 
 `routineload/`フォルダのコマンドシェルからこのコマンドを実行してデータを生成します：
 
@@ -298,7 +296,7 @@ python gen.py 5
 
 システムによっては、コマンドで`python`の代わりに`python3`を使用する必要があるかもしれません。
 
-`kafka-python`が不足している場合は、次を試してください：
+`kafka-python`がない場合は、次を試してください：
 
 ```
 pip install kafka-python
@@ -319,11 +317,11 @@ b'{ "uid": 7273, "site": "https://docs.starrocks.io/", "vtime": 1718034794 } '
 b'{ "uid": 4666, "site": "https://www.starrocks.io/", "vtime": 1718034794 } '
 ```
 
-### Verify in the Redpanda Console
+### Redpandaコンソールで確認
 
-Redpandaコンソールでhttp://localhost:8080/topics に移動すると、`test2`という名前のトピックが1つ表示されます。そのトピックを選択し、**Messages**タブを選択すると、`gen.py`の出力に一致する5つのメッセージが表示されます。
+Redpandaコンソールで http://localhost:8080/topics に移動すると、`test2`という名前のトピックが1つ表示されます。そのトピックを選択し、**Messages**タブを選択すると、`gen.py`の出力に一致する5つのメッセージが表示されます。
 
-## Consume the messages
+## メッセージを消費
 
 StarRocksでは、Routine Loadジョブを作成して以下を行います：
 
@@ -332,7 +330,7 @@ StarRocksでは、Routine Loadジョブを作成して以下を行います：
 
 StarRocksはMinIOをストレージとして使用するように設定されているため、`site_clicks`テーブルに挿入されたデータはMinIOに保存されます。
 
-### Create a Routine Load job
+### Routine Loadジョブを作る
 
 SQLクライアントでこのコマンドを実行してRoutine Loadジョブを作成します。このコマンドはラボの最後で詳細に説明されます。
 
@@ -352,7 +350,7 @@ FROM KAFKA
 );
 ```
 
-### Verify the Routine Load job
+### Routine Loadジョブを確認
 
 ```SQL
 SHOW ROUTINE LOAD\G
@@ -427,13 +425,13 @@ LatestSourcePosition: {"0":"5"}
 
 ---
 
-## Verify that data is stored in MinIO
+## データがMinIOに保存されていることを確認
 
 MinIOを開き、`starrocks`の下にオブジェクトが保存されていることを確認します。
 
 ---
 
-## Query the data from StarRocks
+## StarRocksからデータをクエリ
 
 ```SQL
 USE quickstart;
@@ -453,7 +451,7 @@ SELECT * FROM site_clicks;
 5 rows in set (0.07 sec)
 ```
 
-## Publish additional data
+## 追加データを公開
 
 `gen.py`を再度実行すると、Redpandaにさらに5つのレコードが公開されます。
 
@@ -461,15 +459,15 @@ SELECT * FROM site_clicks;
 python gen.py 5
 ```
 
-### Verify that data is added
+### データが追加されていることを確認
 
 Routine Loadジョブはスケジュールに基づいて実行されるため（デフォルトでは10秒ごと）、データは数秒以内にロードされます。
 
 ```SQL
 SELECT * FROM site_clicks;
-````
-
 ```
+
+```Plaintext
 +------+--------------------------------------------+------------+
 | uid  | site                                       | vtime      |
 +------+--------------------------------------------+------------+
@@ -489,18 +487,18 @@ SELECT * FROM site_clicks;
 
 ---
 
-## Configuration details
+## 設定の詳細
 
-StarRocksをshared-dataで使用する経験を積んだ今、設定を理解することが重要です。
+StarRocksを共有データモードで使用する経験を積んだ今、設定を理解することが重要です。
 
-### CN configuration
+### CNの設定
 
-ここで使用されているCNの設定はデフォルトです。CNはshared-dataの使用を目的として設計されています。デフォルトの設定は以下の通りです。変更を加える必要はありません。
+ここで使用されているCNの設定はデフォルトです。CNは共有データモードの使用を目的として設計されています。デフォルトの設定は以下の通りです。変更を加える必要はありません。
 
 ```bash
 sys_log_level = INFO
 
-# ports for admin, web, heartbeat service
+# 管理、ウェブ、ハートビートサービス用ポート
 be_port = 9060
 be_http_port = 8040
 heartbeat_service_port = 9050
@@ -508,35 +506,33 @@ brpc_port = 8060
 starlet_port = 9070
 ```
 
-### FE configuration
+### FEの設定
 
-FEの設定は、デフォルトとは少し異なります。FEはデータがBEノードの本地ディスクではなく、Object Storageに保存されることを期待するように設定されなければなりません。
+FEの設定は、デフォルトとは少し異なります。FEはデータがBEノードの本地ディスクではなく、オブジェクトストレージに保存されることを期待するように設定されなければなりません。
 
 `docker-compose.yml`ファイルは、`starrocks-fe`サービスの`command`セクションでFEの設定を生成します。
 
 ```plaintext
-# enable shared data, set storage type, set endpoint
+# 共有データ、ストレージタイプ、エンドポイントを設定
 run_mode = shared_data
 cloud_native_storage_type = S3
 aws_s3_endpoint = minio:9000
 
-# set the path in MinIO
+# minIOのパスを設定
 aws_s3_path = starrocks
 
-# credentials for MinIO object read/write
+# MinIOオブジェクトの読み書きに関するクレデンシャル
 aws_s3_access_key = AAAAAAAAAAAAAAAAAAAA
 aws_s3_secret_key = BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 aws_s3_use_instance_profile = false
 aws_s3_use_aws_sdk_default_behavior = false
 
-# Set this to false if you do not want default
-# storage created in the object storage using
-# the details provided above
+# オブジェクト=ストレージにデフォルトストレージを作成したくない場合は、falseに設定する。
 enable_load_volume_from_conf = true
 ```
 
 :::note
-この設定ファイルにはFEのデフォルトエントリは含まれておらず、shared-dataの設定のみが示されています。
+この設定ファイルにはFEのデフォルトエントリは含まれておらず、共有データモードの設定のみが示されています。
 :::
 
 デフォルトではないFEの設定：
@@ -547,7 +543,7 @@ enable_load_volume_from_conf = true
 
 #### `run_mode=shared_data`
 
-これはshared-dataの使用を有効にします。
+これは共有データモードの使用を有効にします。
 
 #### `cloud_native_storage_type=S3`
 
@@ -579,11 +575,11 @@ MinIOを使用する場合、このパラメータは常にfalseに設定され�
 
 #### `enable_load_volume_from_conf=true`
 
-これがtrueの場合、MinIOオブジェクトストレージを使用して`builtin_storage_volume`という名前のStarRocks存储卷が作成され、作成するテーブルのデフォルトの存储卷として設定されます。
+これがtrueに設定されている場合、MinIOオブジェクトストレージを使用して`builtin_storage_volume`という名前のStarRocksストレージボリュームが作成され、作成するテーブルのデフォルトのストレージボリュームとして設定されます。
 
 ---
 
-## Notes on the Routine Load command
+## Routine Loadコマンドに関する注意事項
 
 StarRocks Routine Loadは多くの引数を取ります。このチュートリアルで使用されているものだけがここで説明され、残りは詳細情報セクションでリンクされます。
 
@@ -603,7 +599,7 @@ FROM KAFKA
 );
 ```
 
-### Parameters
+### パラメータ
 
 ```
 CREATE ROUTINE LOAD quickstart.clicks ON site_clicks
@@ -613,15 +609,15 @@ CREATE ROUTINE LOAD quickstart.clicks ON site_clicks
 - database_name.job_name
 - table_name
 
-`database_name`はオプションです。このラボでは`quickstart`で指定されています。
+`database_name.`はオプションです。このラボでは`quickstart`で指定されています。
 
 `job_name`は必須で、`clicks`です。
 
 `table_name`は必須で、`site_clicks`です。
 
-### Job properties
+### ジョブのプロパティ
 
-#### Property `format`
+#### `format`
 
 ```
 "format" = "JSON",
@@ -629,13 +625,13 @@ CREATE ROUTINE LOAD quickstart.clicks ON site_clicks
 
 この場合、データはJSON形式であるため、プロパティは`JSON`に設定されています。他の有効な形式は：`CSV`、`JSON`、および`Avro`です。`CSV`がデフォルトです。
 
-#### Property `jsonpaths`
+#### `jsonpaths`
 
 ```
 "jsonpaths" ="[\"$.uid\",\"$.site\",\"$.vtime\"]"
 ```
 
-JSON形式のデータからロードしたいフィールドの名前。このパラメータの値は有効なJsonPath式です。詳細情報はこのページの最後にあります。
+JSON形式のデータからロードしたいフィールドの名前。このプロパティの値は有効なJsonPath式です。詳細情報はこのページの最後にあります。
 
 ### Data source properties
 
@@ -670,17 +666,17 @@ Kafkaのブローカー接続情報。形式は`<kafka_broker_name_or_ip>:<broke
 
 ---
 
-## Summary
+## 要約
 
 このチュートリアルでは：
 
 - DockerでStarRocks、Reedpanda、およびMinioをデプロイしました
 - Kafkaトピックからデータを取り込むRoutine Loadジョブを作成しました
-- MinIOを使用するStarRocks存储卷の設定方法を学びました
+- MinIOを使用するStarRocksストレージボリュームの設定方法を学びました
 
-## More information
+## 詳細情報
 
-[StarRocks Architecture](../introduction/Architecture.md)
+[StarRocks アーキテクチャ](../introduction/Architecture.md)
 
 このラボで使用されたサンプルは非常にシンプルです。Routine Loadには多くのオプションと機能があります。[詳細はこちら](../loading/RoutineLoad.md)。
 

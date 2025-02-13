@@ -11,7 +11,7 @@ import TabItem from '@theme/TabItem';
 
 ## 概要
 
-- Docker compose を使用して、Object Storage、Apache Spark、Hudi、StarRocks をデプロイ
+- Docker compose を使用して、オブジェクトストレージ、Apache Spark、Hudi、StarRocks をデプロイ
 - Apache Spark を使用して小さなデータセットを Hudi にロード
 - StarRocks を設定して、external catalog を使用して Hive Metastore にアクセス
 - データが存在する場所で StarRocks を使用してデータをクエリ

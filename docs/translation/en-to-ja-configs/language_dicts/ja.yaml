@@ -137,3 +137,6 @@ List Partitioning: リストパーティション化
 Range Partitioning: レンジパーティション化
 Bitmap index: ビットマップインデックス
 Bloom filter index: ブルームフィルターインデックス
+shared-data: 共有データ
+shared-nothing: 共有なし
+object storage: オブジェクトストレージ

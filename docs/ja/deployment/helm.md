@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# Deploy StarRocks with Helm
+# Helmを使用してStarRocksをデプロイする
 
 [Helm](https://helm.sh/) は、Kubernetes のパッケージマネージャーです。[Helm Chart](https://helm.sh/docs/topics/charts/) は Helm パッケージであり、Kubernetes クラスター上でアプリケーションを実行するために必要なすべてのリソース定義を含んでいます。このトピックでは、Helm を使用して Kubernetes クラスター上に StarRocks クラスターを自動的にデプロイする方法について説明します。
 
@@ -130,7 +130,7 @@ displayed_sidebar: docs
 
     - StarRocks クラスターをデプロイする際にルートユーザーのパスワードを自動的に設定するには、[Initialize root user password](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/initialize_root_password_howto.md) を参照してください。
 
-- StarRocks 存算分离集群で CREATE TABLE ステートメントを実行した後に発生する次のエラーを解決する方法。
+- StarRocks 共有データクラスタで CREATE TABLE ステートメントを実行した後に発生する次のエラーを解決する方法。
 
   - **エラーメッセージ**
 
