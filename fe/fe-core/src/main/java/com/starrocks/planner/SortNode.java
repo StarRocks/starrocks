@@ -181,6 +181,7 @@ public class SortNode extends PlanNode implements RuntimeFilterBuildNode {
         rf.setSortInfo(getSortInfo());
         rf.setBuildExpr(orderBy);
         rf.setRuntimeFilterType(RuntimeFilterDescription.RuntimeFilterType.TOPN_FILTER);
+        rf.setTopN(offset < 0 ? limit : offset + limit);
         RuntimeFilterPushDownContext rfPushDownCtx = new RuntimeFilterPushDownContext(rf, descTbl, execGroupSets);
         for (PlanNode child : children) {
             if (child.pushDownRuntimeFilters(rfPushDownCtx, orderBy, Lists.newArrayList())) {

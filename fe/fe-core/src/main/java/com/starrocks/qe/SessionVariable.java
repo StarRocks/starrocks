@@ -855,6 +855,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SCAN_PREDICATE_EXPR_REUSE = "enable_scan_predicate_expr_reuse";
 
+    // 0 for disable, 1 for too many data; 2 for force
+    public static final String TOPN_FILTER_BACK_PRESSURE_MODE = "topn_filter_back_pressure_mode";
+    public static final String BACK_PRESSURE_MAX_ROUNDS = "back_pressure_back_rounds";
+    public static final String BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND = "back_pressure_throttle_time_upper_bound";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -1678,6 +1683,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_SCAN_PREDICATE_EXPR_REUSE, flag = VariableMgr.INVISIBLE)
     private boolean enableScanPredicateExprReuse = true;
+
+    @VarAttr(name = TOPN_FILTER_BACK_PRESSURE_MODE)
+    private int topnFilterBackPressureMode = 0;
+    @VarAttr(name = BACK_PRESSURE_MAX_ROUNDS)
+    private int backPressureMaxRounds = 3;
+    @VarAttr(name = BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND)
+    private long backPressureThrottleTimeUpperBound = 300;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
@@ -4573,6 +4585,30 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableRewriteUnnestBitmapToArray() {
         return enableRewriteUnnestBitmapToArray;
+    }
+
+    public int getTopnFilterBackPressureMode() {
+        return topnFilterBackPressureMode;
+    }
+
+    public void setTopnFilterBackPressureMode(int value) {
+        this.topnFilterBackPressureMode = value;
+    }
+
+    public int getBackPressureMaxRounds() {
+        return this.backPressureMaxRounds;
+    }
+
+    public void setBackPressureMaxRounds(int value) {
+        this.backPressureMaxRounds = value;
+    }
+
+    public long getBackPressureThrottleTimeUpperBound() {
+        return this.backPressureThrottleTimeUpperBound;
+    }
+
+    public void setBackPressureThrottleTimeUpperBound(long value) {
+        this.backPressureThrottleTimeUpperBound = value;
     }
 
     // Serialize to thrift object

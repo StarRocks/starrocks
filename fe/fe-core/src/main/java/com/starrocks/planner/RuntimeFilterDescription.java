@@ -75,6 +75,8 @@ public class RuntimeFilterDescription {
 
     private boolean onlyLocal;
 
+    private long topn;
+
     // ExecGroupInfo. used for check build colocate runtime filter
     private boolean isBuildFromColocateGroup = false;
     private int execGroupId = -1;
@@ -147,6 +149,14 @@ public class RuntimeFilterDescription {
 
     public void setSortInfo(SortInfo sortInfo) {
         this.sortInfo = sortInfo;
+    }
+
+    public void setTopN(long value) {
+        this.topn = value;
+    }
+
+    public long getTopN() {
+        return this.topn;
     }
 
     public boolean canProbeUse(PlanNode node, RuntimeFilterPushDownContext rfPushCtx) {
