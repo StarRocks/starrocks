@@ -253,6 +253,9 @@ public abstract class Coordinator {
 
     public abstract void setTimeoutSecond(int timeoutSecond);
 
+    public void setPredictedCost(long memBytes) {
+    }
+
     public abstract boolean isProfileAlreadyReported();
 
     public abstract String getWarehouseName();
