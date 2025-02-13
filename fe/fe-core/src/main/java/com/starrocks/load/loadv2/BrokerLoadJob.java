@@ -413,6 +413,15 @@ public class BrokerLoadJob extends BulkLoadJob {
         }
     }
 
+    @Override
+    protected void reset() {
+        super.reset();
+        if (context != null) {
+            context.setStartTime();
+            createTimestamp = context.getStartTime();
+        }
+    }
+
     protected void unprotectedClearTasksBeforeRetry(FailMsg failMsg) {
         // get load ids of all loading tasks, we will cancel their coordinator process later
         List<TUniqueId> loadIds = Lists.newArrayList();
