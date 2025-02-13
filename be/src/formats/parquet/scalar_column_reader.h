@@ -147,7 +147,7 @@ public:
 
     void set_can_lazy_decode(bool can_lazy_decode) override {
         _can_lazy_convert = can_lazy_decode;
-        _can_lazy_decode = can_lazy_decode && _col_type->is_string_type() && column_all_pages_dict_encoded();
+        _can_lazy_dict_decode = can_lazy_decode && _col_type->is_string_type() && column_all_pages_dict_encoded();
     }
 
     Status filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
@@ -172,11 +172,11 @@ public:
     }
 
 private:
-    template <bool LAZY_DECODE, bool LAZY_CONVERT>
+    template <bool LAZY_DICT_DECODE, bool LAZY_CONVERT>
     Status _read_range_impl(const Range<uint64_t>& range, const Filter* filter, ColumnContentType content_type,
                             ColumnPtr& dst);
 
-    template <bool LAZY_DECODE, bool LAZY_CONVERT>
+    template <bool LAZY_DICT_DECODE, bool LAZY_CONVERT>
     Status _fill_dst_column_impl(ColumnPtr& dst, ColumnPtr& src);
 
     Status _dict_decode(ColumnPtr& dst, ColumnPtr& src);
@@ -186,8 +186,8 @@ private:
     std::unique_ptr<ColumnDictFilterContext> _dict_filter_ctx;
     const TypeDescriptor* _col_type = nullptr;
 
-    // _can_lazy_decode means string type and all page dict code
-    bool _can_lazy_decode = false;
+    // _can_lazy_dict_decode means string type and all page dict code
+    bool _can_lazy_dict_decode = false;
     bool _can_lazy_convert = false;
     // we use lazy decode adaptively because of RLE && decoder may be better than filter && decoder
     static constexpr double FILTER_RATIO = 0.2;

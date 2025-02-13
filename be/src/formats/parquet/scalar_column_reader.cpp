@@ -347,7 +347,7 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
 Status ScalarColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
     DCHECK(get_column_parquet_field()->is_nullable ? dst->is_nullable() : true);
     _need_lazy_decode =
-            _dict_filter_ctx != nullptr || (_can_lazy_decode && filter != nullptr &&
+            _dict_filter_ctx != nullptr || (_can_lazy_dict_decode && filter != nullptr &&
                                             SIMD::count_nonzero(*filter) * 1.0 / filter->size() < FILTER_RATIO);
     ColumnContentType content_type = !_need_lazy_decode ? ColumnContentType::VALUE : ColumnContentType::DICT_CODE;
     auto need_lazy_covert = _can_lazy_convert && _converter->need_convert;
@@ -395,10 +395,10 @@ Status ScalarColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
     }
 }
 
-template <bool LAZY_DECODE, bool LAZY_CONVERT>
+template <bool LAZY_DICT_DECODE, bool LAZY_CONVERT>
 Status ScalarColumnReader::_read_range_impl(const Range<uint64_t>& range, const Filter* filter,
                                             ColumnContentType content_type, ColumnPtr& dst) {
-    if constexpr (LAZY_DECODE) {
+    if constexpr (LAZY_DICT_DECODE) {
         if (_tmp_code_column == nullptr) {
             _tmp_code_column = ColumnHelper::create_column(
                     TypeDescriptor::from_logical_type(ColumnDictFilterContext::kDictCodePrimitiveType), true);
@@ -456,27 +456,15 @@ Status ScalarColumnReader::_dict_decode(ColumnPtr& dst, ColumnPtr& src) {
     return Status::OK();
 }
 
-template <bool LAZY_DECODE, bool LAZY_CONVERT>
+template <bool LAZY_DICT_DECODE, bool LAZY_CONVERT>
 Status ScalarColumnReader::_fill_dst_column_impl(ColumnPtr& dst, ColumnPtr& src) {
-    if constexpr (LAZY_DECODE) {
+    if constexpr (LAZY_DICT_DECODE) {
         if (_dict_filter_ctx != nullptr && !_dict_filter_ctx->is_decode_needed) {
             dst->append_default(src->size());
             src->reset_column();
         } else {
-            if constexpr (LAZY_CONVERT) {
-                if (_tmp_intermediate_column == nullptr) {
-                    _tmp_intermediate_column = _converter->create_src_column();
-                }
-                _tmp_intermediate_column->reserve(src->size());
-                RETURN_IF_ERROR(_dict_decode(_tmp_intermediate_column, src));
-                {
-                    SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
-                    RETURN_IF_ERROR(_converter->convert(_tmp_intermediate_column, dst.get()));
-                }
-                _tmp_intermediate_column->reset_column();
-            } else {
-                RETURN_IF_ERROR(_dict_decode(dst, src));
-            }
+            static_assert(!LAZY_CONVERT, "LAZY_DICT_DECODE && LAZY_CONVERT == true is not supported by now");
+            RETURN_IF_ERROR(_dict_decode(dst, src));
         }
         src = _ori_column;
     } else {
