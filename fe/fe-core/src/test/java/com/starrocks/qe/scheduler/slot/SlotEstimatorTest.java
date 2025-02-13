@@ -40,13 +40,13 @@ public class SlotEstimatorTest extends SchedulerTestBase {
         DefaultCoordinator coordinator = getScheduler("SELECT * FROM lineitem");
 
         connectContext.getAuditEventBuilder().setPlanMemCosts(-1L);
-        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(1);
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(3);
 
         connectContext.getAuditEventBuilder().setPlanMemCosts(memLimitBytesPerWorker * numWorkers);
         assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(opts.v2().getTotalSlots());
 
         connectContext.getAuditEventBuilder().setPlanMemCosts(memLimitBytesPerWorker * numWorkers - 10);
-        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(opts.v2().getTotalSlots() / 2);
+        assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(opts.v2().getTotalSlots());
 
         connectContext.getAuditEventBuilder().setPlanMemCosts(memLimitBytesPerWorker * numWorkers + 10);
         assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(opts.v2().getTotalSlots());

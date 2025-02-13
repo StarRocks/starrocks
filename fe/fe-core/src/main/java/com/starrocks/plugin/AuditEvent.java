@@ -142,6 +142,8 @@ public class AuditEvent {
 
     @AuditField(value = "Features", ignore_zero = true)
     public String features;
+    @AuditField(value = "PredictMemBytes", ignore_zero = true)
+    public long predictMemBytes = 0;
 
     @AuditField(value = "IsForwardToLeader")
     public boolean isForwardToLeader = false;
@@ -302,6 +304,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setNumSlots(int numSlots) {
             auditEvent.numSlots = numSlots;
+            return this;
+        }
+
+        public AuditEventBuilder setPredictMemBytes(long memBytes) {
+            auditEvent.predictMemBytes = memBytes;
             return this;
         }
 

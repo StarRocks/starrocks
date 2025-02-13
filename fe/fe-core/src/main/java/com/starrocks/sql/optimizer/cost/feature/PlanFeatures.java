@@ -39,6 +39,26 @@ public class PlanFeatures {
     );
 
     // query plan
+    private static final int TOP_N_TABLES = 3;
+    private static final int NUM_ENV_FEATURES = 3;
+    private static final int NUM_VAR_FEATURES = 1;
+    private static final int NUM_OPERATOR_FEATURES;
+
+    static {
+        int num = 0;
+        for (int start = OperatorType.PHYSICAL.ordinal() + 1;
+                start < OperatorType.SCALAR.ordinal();
+                start++) {
+            OperatorType opType = OperatorType.values()[start];
+            if (skipOperator(opType)) {
+                continue;
+            }
+            num += OperatorFeatures.vectorLength(opType);
+            num += AggregatedFeature.numExtraFeatures(opType);
+        }
+        NUM_OPERATOR_FEATURES = num;
+    }
+
     private List<Long> operatorFeatureVectors;
     private final Set<Table> tables = Sets.newHashSet();
 
@@ -50,6 +70,24 @@ public class PlanFeatures {
     // variables
     private long dop;
 
+    public static String featuresHeader() {
+        final String DELIMITER = ",";
+        List<String> fields = Lists.newArrayList();
+        for (int i = 0; i < TOP_N_TABLES; i++) {
+            fields.add("tables_" + i);
+        }
+        for (int i = 0; i < NUM_ENV_FEATURES; i++) {
+            fields.add("env_" + i);
+        }
+        for (int i = 0; i < NUM_VAR_FEATURES; i++) {
+            fields.add("var_" + i);
+        }
+        for (int i = 0; i < NUM_OPERATOR_FEATURES; i++) {
+            fields.add("operators_" + i);
+        }
+
+        return Joiner.on(DELIMITER).join(fields);
+    }
 
     /**
      * The string representation like: tables=[1,2,3]|operators=[4,5,6]|....
@@ -67,6 +105,34 @@ public class PlanFeatures {
         sb.append("]");
 
         return sb.toString();
+    }
+
+    /**
+     * The CSV representation like tables_0,tables_1,tables_2,operators_0,operators_1....
+     *
+     * @return CSV format string
+     */
+    public String toFeatureCsv() {
+        final String DELIMITER = ",";
+        StringBuilder sb = new StringBuilder();
+
+        var topTables = extractTopTables();
+        for (var tableId : topTables) {
+            sb.append(String.valueOf(tableId)).append(DELIMITER);
+        }
+        // env
+        sb.append(numBeNodes).append(DELIMITER);
+        sb.append(avgCpuCoreOfBE).append(DELIMITER);
+        sb.append((long) Math.log1p(memCapacityOfBE)).append(DELIMITER);
+        // var
+        sb.append(dop).append(DELIMITER);
+        // operators
+        for (long operatorFeature : operatorFeatureVectors) {
+            sb.append(operatorFeature).append(DELIMITER);
+        }
+
+        String result = sb.toString();
+        return result.substring(0, result.length() - 1);
     }
 
     public void setNumBeNodes(int numBeNodes) {
@@ -109,7 +175,7 @@ public class PlanFeatures {
         this.operatorFeatureVectors = operatorVector;
     }
 
-    public boolean skipOperator(OperatorType operatorType) {
+    public static boolean skipOperator(OperatorType operatorType) {
         if (EXCLUDE_OPERATORS.contains(operatorType)) {
             return true;
         }
@@ -140,7 +206,6 @@ public class PlanFeatures {
 
 
     private List<Long> extractTopTables() {
-        final int TOP_N_TABLES = 3;
 
         List<Long> result = Lists.newArrayList();
         for (int i = 0; i < TOP_N_TABLES; i++) {
@@ -194,6 +259,10 @@ public class PlanFeatures {
                 result.addAll(vector);
             }
             return result;
+        }
+
+        public static int numExtraFeatures(OperatorType type) {
+            return 2;
         }
 
         public static List<Long> empty(OperatorType type) {
