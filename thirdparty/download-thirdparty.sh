@@ -423,6 +423,10 @@ if [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.11.267" ]; then
         bash ./prefetch_crt_dependency.sh
         touch prefetch_crt_dep_ok
     fi
+    if [ ! -f $PATCHED_MARK ]; then
+        patch -p1  < $TP_PATCH_DIR/aws-cpp-sdk-1.11.267-disable-chunked-upload.patch
+        touch $PATCHED_MARK
+    fi
 fi
 
 # patch jemalloc_hook
