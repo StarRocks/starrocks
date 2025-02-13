@@ -63,6 +63,7 @@ import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
+import com.starrocks.sql.optimizer.task.TaskScheduler;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.parser.SqlParser;
@@ -92,6 +93,7 @@ public class RboOptimizer {
     public RboOptimizer(LogicalPlan logicalPlan, ColumnRefFactory columnRefFactory, ConnectContext connectContext) {
         optimizerOptions = OptimizerOptions.newRuleBaseOpt();
         optimizerContext = OptimizerFactory.initContext(connectContext, columnRefFactory, optimizerOptions);
+        optimizerContext.setTaskScheduler(new TaskScheduler());
         // CTE must be inlined to extract sub-queries
         optimizerContext.getCteContext().setEnableCTE(false);
         taskContext =
