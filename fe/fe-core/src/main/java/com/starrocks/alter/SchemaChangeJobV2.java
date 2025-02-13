@@ -477,8 +477,9 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaVersion,
                     indexSchemaVersionAndHashMap.get(shadowIdxId).schemaHash,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
-                    tbl.getKeysTypeByIndexId(orgIndexId), null, sortKeyIdxes,
-                    sortKeyUniqueIds);
+                    tbl.getKeysTypeByIndexId(orgIndexId), null, 
+                    originIndexId == baseIndexId ? sortKeyIdxes : null,
+                    originIndexId == baseIndexId ? sortKeyUniqueIds : null);
             MaterializedIndexMeta orgIndexMeta = tbl.getIndexMetaByIndexId(orgIndexId);
             Preconditions.checkNotNull(orgIndexMeta);
             MaterializedIndexMeta indexMeta = tbl.getIndexMetaByIndexId(shadowIdxId);
