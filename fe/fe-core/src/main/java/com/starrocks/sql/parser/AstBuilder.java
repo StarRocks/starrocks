@@ -2491,7 +2491,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitAdminSetConfigStatement(StarRocksParser.AdminSetConfigStatementContext context) {
         Property config = (Property) visitProperty(context.property());
-        return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, config, createPos(context));
+        boolean persistent = context.PERSISTENT() != null;
+        return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, config, persistent, createPos(context));
     }
 
     @Override
