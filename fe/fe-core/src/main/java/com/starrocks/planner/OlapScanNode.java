@@ -196,6 +196,12 @@ public class OlapScanNode extends ScanNode {
     // Set just once per query.
     private boolean alreadyFoundSomeLivingCn = false;
 
+    boolean enableTopnFilterBackPressure = false;
+    long backPressureThrottleTimeUpperBound = -1;
+    int backPressureMaxRounds = -1;
+    long backPressureThrottleTime = -1;
+    long backPressureNumRows = -1;
+
     // Constructs node to scan given data files of table 'tbl'.
     // Constructs node to scan given data files of table 'tbl'.
     public OlapScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName) {
@@ -1013,13 +1019,19 @@ public class OlapScanNode extends ScanNode {
         }
 
         assignOrderByHints(keyColumnNames);
-
         if (olapTable.isCloudNativeTableOrMaterializedView()) {
             msg.node_type = TPlanNodeType.LAKE_SCAN_NODE;
             msg.lake_scan_node =
                     new TLakeScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
             msg.lake_scan_node.setSort_key_column_names(keyColumnNames);
             msg.lake_scan_node.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
+            if (enableTopnFilterBackPressure) {
+                msg.lake_scan_node.setEnable_topn_filter_back_pressure(true);
+                msg.lake_scan_node.setBack_pressure_max_rounds(backPressureMaxRounds);
+                msg.lake_scan_node.setBack_pressure_num_rows(backPressureNumRows);
+                msg.lake_scan_node.setBack_pressure_throttle_time(backPressureThrottleTime);
+                msg.lake_scan_node.setBack_pressure_throttle_time_upper_bound(backPressureThrottleTimeUpperBound);
+            }
             if (!conjuncts.isEmpty()) {
                 msg.lake_scan_node.setSql_predicates(getExplainString(conjuncts));
             }
@@ -1058,6 +1070,13 @@ public class OlapScanNode extends ScanNode {
             msg.olap_scan_node.setSchema_id(schemaId);
             msg.olap_scan_node.setSort_key_column_names(keyColumnNames);
             msg.olap_scan_node.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
+            if (enableTopnFilterBackPressure) {
+                msg.olap_scan_node.setEnable_topn_filter_back_pressure(true);
+                msg.olap_scan_node.setBack_pressure_max_rounds(backPressureMaxRounds);
+                msg.olap_scan_node.setBack_pressure_num_rows(backPressureNumRows);
+                msg.olap_scan_node.setBack_pressure_throttle_time(backPressureThrottleTime);
+                msg.olap_scan_node.setBack_pressure_throttle_time_upper_bound(backPressureThrottleTimeUpperBound);
+            }
             if (!conjuncts.isEmpty()) {
                 msg.olap_scan_node.setSql_predicates(getExplainString(conjuncts));
             }
@@ -1515,5 +1534,28 @@ public class OlapScanNode extends ScanNode {
     @Override
     public boolean isRunningAsConnectorOperator() {
         return false;
+    }
+
+    @Override
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context, Expr probeExpr,
+                                          List<Expr> partitionByExprs) {
+        boolean accept = super.pushDownRuntimeFilters(context, probeExpr, partitionByExprs);
+        if (accept && context.getDescription().runtimeFilterType()
+                .equals(RuntimeFilterDescription.RuntimeFilterType.TOPN_FILTER)) {
+            boolean toManyData = this.getCardinality() != -1 && this.cardinality > 50000000;
+            int backPressureMode = Optional.ofNullable(ConnectContext.get())
+                    .map(ctx -> ctx.getSessionVariable().getTopnFilterBackPressureMode())
+                    .orElse(0);
+            if ((backPressureMode == 1 && toManyData) || backPressureMode == 2) {
+                this.enableTopnFilterBackPressure = true;
+                this.backPressureMaxRounds = ConnectContext.get().getSessionVariable().getBackPressureMaxRounds();
+                this.backPressureThrottleTimeUpperBound =
+                        ConnectContext.get().getSessionVariable().getBackPressureThrottleTimeUpperBound();
+                this.backPressureNumRows = 10 * context.getDescription().getTopN();
+                this.backPressureThrottleTime = this.backPressureThrottleTimeUpperBound /
+                        Math.max(this.backPressureMaxRounds, 1);
+            }
+        }
+        return accept;
     }
 }
