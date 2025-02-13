@@ -275,7 +275,7 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         if (config::enable_load_spill &&
             !(_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
               (!_merge_condition.empty() || is_partial_update() || _tablet_schema->has_separate_sort_key()))) {
-            if (_load_spill_block_mgr == nullptr) {
+            if (_load_spill_block_mgr == nullptr || !_load_spill_block_mgr->is_initialized()) {
                 _load_spill_block_mgr =
                         std::make_unique<LoadSpillBlockManager>(UniqueId(_load_id).to_thrift(), _tablet_id, _txn_id,
                                                                 _tablet_manager->tablet_root_location(_tablet_id));
