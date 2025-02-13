@@ -37,4 +37,12 @@ public class SPMTestBase extends PlanTestBase {
         Preconditions.checkState(statements.get(0) instanceof CreateBaselinePlanStmt);
         return (CreateBaselinePlanStmt) statements.get(0);
     }
+
+    public CreateBaselinePlanStmt createBaselinePlanStmt(String bind, String sql) {
+        String createSql = "create baseline on " + bind + " using " + sql;
+        List<StatementBase> statements = SqlParser.parse(createSql, connectContext.getSessionVariable());
+        Preconditions.checkState(statements.size() == 1);
+        Preconditions.checkState(statements.get(0) instanceof CreateBaselinePlanStmt);
+        return (CreateBaselinePlanStmt) statements.get(0);
+    }
 }

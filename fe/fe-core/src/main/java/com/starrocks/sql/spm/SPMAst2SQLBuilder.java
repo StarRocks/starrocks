@@ -16,6 +16,7 @@ package com.starrocks.sql.spm;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
+import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.HintNode;
@@ -188,6 +189,30 @@ public class SPMAst2SQLBuilder {
                 return "?";
             }
             return super.visitLiteral(expr, context);
+        }
+
+        @Override
+        public String visitCompoundPredicate(CompoundPredicate node, Void context) {
+            StringBuilder sqlBuilder = new StringBuilder();
+            if (CompoundPredicate.Operator.NOT.equals(node.getOp())) {
+                sqlBuilder.append("NOT ");
+                sqlBuilder.append(printWithParentheses(node.getChild(0)));
+            } else {
+                sqlBuilder.append(printCompoundPredicate(node, node.getOp()));
+            }
+            return sqlBuilder.toString();
+        }
+
+        public String printCompoundPredicate(Expr node, CompoundPredicate.Operator op) {
+            if (!(node instanceof CompoundPredicate)) {
+                return printWithParentheses(node);
+            }
+            CompoundPredicate compoundPredicate = (CompoundPredicate) node;
+            if (!op.equals(compoundPredicate.getOp())) {
+                return printWithParentheses(node);
+            }
+            return printCompoundPredicate(node.getChild(0), op) + " " + op + " " +
+                    printCompoundPredicate(node.getChild(1), op);
         }
     }
 }
