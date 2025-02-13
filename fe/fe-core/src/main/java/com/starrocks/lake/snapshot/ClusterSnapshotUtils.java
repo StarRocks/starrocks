@@ -23,7 +23,7 @@ import com.starrocks.storagevolume.StorageVolume;
 public class ClusterSnapshotUtils {
     public static String getSnapshotImagePath(StorageVolume sv, String snapshotName) {
         return String.join("/", sv.getLocations().get(0),
-               GlobalStateMgr.getCurrentState().getStarOSAgent().getRawServiceId(), "meta/image", snapshotName);
+                GlobalStateMgr.getCurrentState().getStarOSAgent().getRawServiceId(), "meta/image", snapshotName);
     }
 
     public static void uploadAutomatedSnapshotToRemote(String snapshotName) throws StarRocksException {
@@ -31,7 +31,7 @@ public class ClusterSnapshotUtils {
             return;
         }
 
-        StorageVolume sv = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshotSv();
+        StorageVolume sv = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshotStorageVolume();
         String snapshotImagePath = getSnapshotImagePath(sv, snapshotName);
         String localImagePath = GlobalStateMgr.getServingState().getImageDir();
 
@@ -43,7 +43,7 @@ public class ClusterSnapshotUtils {
             return;
         }
 
-        StorageVolume sv = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshotSv();
+        StorageVolume sv = GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAutomatedSnapshotStorageVolume();
         BrokerDesc brokerDesc = new BrokerDesc(sv.getProperties());
         String snapshotImagePath = getSnapshotImagePath(sv, snapshotName);
 

@@ -1538,8 +1538,7 @@ public class GlobalStateMgr {
         passwordExpiredChecker.start();
 
         if (RunMode.isSharedDataMode()) {
-            clusterSnapshotMgr.startCheckpointScheduler(checkpointController,
-                                                        StarMgrServer.getCurrentState().getCheckpointController());
+            clusterSnapshotMgr.start();
         }
         reportHandler.start();
         tabletCollector.start();
