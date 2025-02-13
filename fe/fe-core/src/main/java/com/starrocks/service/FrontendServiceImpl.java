@@ -3179,11 +3179,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TClusterSnapshotsResponse getClusterSnapshotsInfo(TClusterSnapshotsRequest params) {
-        return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllInfo();
+        return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotsInfo();
     }
 
     @Override
     public TClusterSnapshotJobsResponse getClusterSnapshotJobsInfo(TClusterSnapshotJobsRequest params) {
-        return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllJobsInfo();
+        return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo();
     }
 }
