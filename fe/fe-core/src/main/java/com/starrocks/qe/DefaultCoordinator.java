@@ -38,7 +38,9 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.google.gson.reflect.TypeToken;
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.FsBroker;
@@ -60,6 +62,8 @@ import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.datacache.DataCacheSelectMetrics;
 import com.starrocks.mysql.MysqlCommand;
+import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
 import com.starrocks.planner.ResultSink;
@@ -102,6 +106,7 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTabletCommitInfo;
 import com.starrocks.thrift.TTabletFailInfo;
 import com.starrocks.thrift.TUniqueId;
+import com.starrocks.thrift.TWorkGroup;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -551,6 +556,7 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public void startScheduling(ScheduleOption option) throws StarRocksException, InterruptedException, RpcException {
+        checkPartitionScanNumberLimit();
         try (Timer timer = Tracers.watchScope(Tracers.Module.SCHEDULER, "Pending")) {
             QueryQueueManager.getInstance().maybeWait(connectContext, this);
         }
@@ -1364,5 +1370,45 @@ public class DefaultCoordinator extends Coordinator {
 
     public ResultReceiver getReceiver() {
         return receiver;
+    }
+
+    private void checkPartitionScanNumberLimit() throws StarRocksException {
+        if (connectContext.isExplain()
+                && !connectContext.getSessionVariable().isCheckPartitionScanNumberLimitWhenExplain()) {
+            return;
+        }
+        if (!connectContext.getSessionVariable().isCheckPartitionScanNumberLimit()) {
+            return;
+        }
+        TWorkGroup workGroup = jobSpec.getResourceGroup();
+        if (workGroup == null) {
+            return;
+        }
+        if (workGroup.getPartition_scan_number_limit_rule() == null) {
+            return;
+        }
+        Map<String, Integer> rule = GsonUtils.GSON.fromJson(workGroup.getPartition_scan_number_limit_rule(),
+                new TypeToken<Map<String, Integer>>() {
+                }.getType());
+        for (ScanNode scanNode : jobSpec.getScanNodes()) {
+            if (!(scanNode instanceof OlapScanNode)) {
+                continue;
+            }
+            TableName tableName =
+                    connectContext.getResolvedTables().get(((OlapScanNode) scanNode).getOlapTable().getId());
+            if (tableName == null) {
+                continue;
+            }
+            String tblName = tableName.getDb() + "." + tableName.getTbl();
+            Integer limit = rule.get(tblName);
+            if (limit == null) {
+                continue;
+            }
+            if (((OlapScanNode) scanNode).getSelectedPartitionIds().size() > limit) {
+                throw new StarRocksException(tblName + " scans more than " + limit +
+                        " partition(s), which violates the limit defined in partition_scan_number_limit_rule in resource" +
+                        " group " + workGroup.getName());
+            }
+        }
     }
 }

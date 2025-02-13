@@ -1461,6 +1461,7 @@ public class QueryAnalyzer {
                 ((OlapTable) table).maySetDatabaseName(db.getFullName());
             }
 
+            session.addResolvedTable(tableName, table.getId());
             return table;
         } catch (AnalysisException e) {
             throw new SemanticException(e.getMessage());

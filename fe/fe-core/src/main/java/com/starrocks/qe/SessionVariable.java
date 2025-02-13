@@ -577,6 +577,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_WAIT_DEPENDENT_EVENT = "enable_wait_dependent_event";
 
+    public static final String CHECK_PARTITION_SCAN_NUMBER_LIMIT
+            = "check_partition_scan_number_limit";
+
+    public static final String CHECK_PARTITION_SCAN_NUMBER_LIMIT_WHEN_EXPLAIN
+            = "check_partition_scan_number_limit_when_explain";
+
     public static final String ENABLE_PHASED_SCHEDULER = "enable_phased_scheduler";
     public static final String PHASED_SCHEDULER_MAX_CONCURRENCY = "phased_scheduler_max_concurrency";
 
@@ -2505,6 +2511,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
     }
+
+    @VarAttr(name = CHECK_PARTITION_SCAN_NUMBER_LIMIT)
+    private boolean checkPartitionScanNumberLimit = true;
+
+    @VarAttr(name = CHECK_PARTITION_SCAN_NUMBER_LIMIT_WHEN_EXPLAIN)
+    private boolean checkPartitionScanNumberLimitWhenExplain = false;
 
     public void setExprChildrenLimit(int exprChildrenLimit) {
         this.exprChildrenLimit = exprChildrenLimit;
@@ -4573,6 +4585,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public boolean isEnableRewriteUnnestBitmapToArray() {
         return enableRewriteUnnestBitmapToArray;
+    }
+
+    public boolean isCheckPartitionScanNumberLimit() {
+        return checkPartitionScanNumberLimit;
+    }
+
+    public void setCheckPartitionScanNumberLimit(boolean checkPartitionScanNumberLimit) {
+        this.checkPartitionScanNumberLimit = checkPartitionScanNumberLimit;
+    }
+
+    public boolean isCheckPartitionScanNumberLimitWhenExplain() {
+        return checkPartitionScanNumberLimitWhenExplain;
+    }
+
+    public void setCheckPartitionScanNumberLimitWhenExplain(boolean checkPartitionScanNumberLimitWhenExplain) {
+        this.checkPartitionScanNumberLimitWhenExplain = checkPartitionScanNumberLimitWhenExplain;
     }
 
     // Serialize to thrift object

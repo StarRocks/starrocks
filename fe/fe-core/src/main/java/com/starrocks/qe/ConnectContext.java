@@ -40,6 +40,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authorization.AccessDeniedException;
@@ -239,6 +240,10 @@ public class ConnectContext {
     private ConnectContext parent;
 
     private boolean relationAliasCaseInsensitive = false;
+
+    private boolean isExplain = false;
+
+    protected Map<Long, TableName> resolvedTables = Maps.newHashMap();
 
     private final Map<String, PrepareStmtContext> preparedStmtCtxs = Maps.newHashMap();
 
@@ -946,6 +951,14 @@ public class ConnectContext {
         return relationAliasCaseInsensitive;
     }
 
+    public void setExplain(boolean explain) {
+        isExplain = explain;
+    }
+
+    public boolean isExplain() {
+        return isExplain;
+    }
+
     public void setForwardTimes(int forwardTimes) {
         this.forwardTimes = forwardTimes;
     }
@@ -1225,6 +1238,14 @@ public class ConnectContext {
         } catch (Throwable e) {
             LOG.warn("Failed to clean temporary table on session {}, {}", sessionId, e);
         }
+    }
+
+    public Map<Long, TableName> getResolvedTables() {
+        return resolvedTables;
+    }
+
+    public void addResolvedTable(TableName tableName, long tableId) {
+        resolvedTables.putIfAbsent(tableId, tableName);
     }
 
     // We can not make sure the set variables are all valid. Even if some variables are invalid, we should let user continue

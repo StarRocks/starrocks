@@ -419,6 +419,11 @@ public class ResourceGroupMgr implements Writable {
                     wg.setSpillMemLimitThreshold(spillMemLimitThreshold);
                 }
 
+                String partitionScanNumberLimitRule = changedProperties.getPartitionScanNumberLimitRule();
+                if (partitionScanNumberLimitRule != null) {
+                    wg.setPartitionScanNumberLimitRule(partitionScanNumberLimitRule);
+                }
+
                 // Type is guaranteed to be immutable during the analyzer phase.
                 TWorkGroupType workGroupType = changedProperties.getResourceGroupType();
                 Preconditions.checkState(workGroupType == null);

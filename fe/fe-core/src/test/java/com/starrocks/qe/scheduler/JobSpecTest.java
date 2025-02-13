@@ -21,6 +21,7 @@ import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.load.loadv2.BulkLoadJob;
 import com.starrocks.planner.PlanFragment;
@@ -196,6 +197,104 @@ public class JobSpecTest extends SchedulerTestBase {
             assertThat(group.getName()).isEqualTo(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME);
             assertThat(group.getId()).isEqualTo(ResourceGroup.DEFAULT_MV_WG_ID);
         }
+    }
+
+    @Test
+    public void testFromQuerySpecExceedsPartitionScanLimit() throws Exception {
+        DefaultCoordinator coordinator =
+                buildQueryCoordinator("select * from lineitem_partition", null);
+        starRocksAssert.getCtx().setResourceGroup(null);
+        // no exception thrown
+        Coordinator.ScheduleOption option = new Coordinator.ScheduleOption();
+        option.doDeploy = false;
+        coordinator.startScheduling(option);
+
+        String oldRg = starRocksAssert.getCtx().getSessionVariable().getResourceGroup();
+        try {
+            String rg = "rg_partition_scan_rule";
+            String sql = "create resource group " + rg + "\n" +
+                    "to\n" +
+                    "    (user='rg1_if_not_exists')\n" +
+                    "   with (" +
+                    "   'cpu_core_limit' = '32'," +
+                    "   'mem_limit' = '20%'," +
+                    "   'max_cpu_cores' = '17'," +
+                    "   'concurrency_limit' = '11'," +
+                    "   'partition_scan_number_limit_rule'='{\"test.lineitem_partition\":2}'," +
+                    "   'type' = 'normal'" +
+                    "   );";
+            starRocksAssert.executeResourceGroupDdlSql(sql);
+
+            DefaultCoordinator coordinator1 = buildQueryCoordinator("select * from lineitem_partition", rg);
+            Assert.assertThrows("lineitem_partition scans more than 2 partition(s)",
+                    StarRocksException.class, () -> coordinator1.startScheduling(option));
+
+            DefaultCoordinator coordinator2 =
+                    buildQueryCoordinator("select * from lineitem_partition where L_SHIPDATE='1992-01-01'", rg);
+            // no exception thrown
+            coordinator2.startScheduling(option);
+        } finally {
+            starRocksAssert.getCtx().getSessionVariable().setResourceGroup(oldRg);
+            starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg_partition_scan_rule");
+        }
+    }
+
+    @Test
+    public void testFromExplainQuerySpecExceedsPartitionScanLimit() throws Exception {
+        starRocksAssert.getCtx().setExplain(true);
+
+        String oldRg = starRocksAssert.getCtx().getSessionVariable().getResourceGroup();
+        try {
+            String rg = "rg_partition_scan_rule";
+            String sql = "create resource group " + rg + "\n" +
+                    "to\n" +
+                    "    (user='rg1_if_not_exists')\n" +
+                    "   with (" +
+                    "   'cpu_core_limit' = '32'," +
+                    "   'mem_limit' = '20%'," +
+                    "   'max_cpu_cores' = '17'," +
+                    "   'concurrency_limit' = '11'," +
+                    "   'partition_scan_number_limit_rule'='{\"test.lineitem_partition\":2}'," +
+                    "   'type' = 'normal'" +
+                    "   );";
+            starRocksAssert.executeResourceGroupDdlSql(sql);
+
+            DefaultCoordinator coordinator =
+                    buildQueryCoordinator("explain scheduler select * from lineitem_partition", rg);
+            // no exception thrown
+            Coordinator.ScheduleOption option = new Coordinator.ScheduleOption();
+            option.doDeploy = false;
+            coordinator.startScheduling(option);
+
+            starRocksAssert.getCtx().getSessionVariable().setCheckPartitionScanNumberLimitWhenExplain(true);
+            DefaultCoordinator coordinator1 = buildQueryCoordinator("explain scheduler select * from lineitem_partition", rg);
+            Assert.assertThrows("lineitem_partition scans more than 2 partition(s)",
+                    StarRocksException.class, () -> coordinator1.startScheduling(option));
+            starRocksAssert.getCtx().getSessionVariable().setCheckPartitionScanNumberLimitWhenExplain(false);
+        } finally {
+            starRocksAssert.getCtx().getSessionVariable().setResourceGroup(oldRg);
+            starRocksAssert.executeResourceGroupDdlSql("DROP RESOURCE GROUP rg_partition_scan_rule");
+            starRocksAssert.getCtx().setExplain(false);
+        }
+    }
+
+    private DefaultCoordinator buildQueryCoordinator(String sql, String rg) throws Exception {
+        // Prepare input arguments.
+        ExecPlan execPlan = getExecPlan(sql);
+
+        TUniqueId queryId = new TUniqueId(2, 3);
+        connectContext.setExecutionId(queryId);
+        UUID lastQueryId = new UUID(4L, 5L);
+        connectContext.setLastQueryId(lastQueryId);
+        if (rg != null) {
+            starRocksAssert.getCtx().getSessionVariable().setResourceGroup(rg);
+        }
+        DescriptorTable descTable = new DescriptorTable();
+        List<PlanFragment> fragments = execPlan.getFragments();
+        List<ScanNode> scanNodes = execPlan.getScanNodes();
+
+        return COORDINATOR_FACTORY.createQueryScheduler(
+                connectContext, fragments, scanNodes, descTable.toThrift());
     }
 
     @Test
@@ -424,7 +523,8 @@ public class JobSpecTest extends SchedulerTestBase {
             }
         };
 
-        DefaultCoordinator coordinator = COORDINATOR_FACTORY.createSyncStreamLoadScheduler(planner, new TNetworkAddress());
+        DefaultCoordinator coordinator =
+                COORDINATOR_FACTORY.createSyncStreamLoadScheduler(planner, new TNetworkAddress());
         JobSpec jobSpec = coordinator.getJobSpec();
 
         // Check created jobSpec.

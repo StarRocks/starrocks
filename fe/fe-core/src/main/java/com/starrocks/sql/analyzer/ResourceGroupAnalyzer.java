@@ -15,6 +15,7 @@
 package com.starrocks.sql.analyzer;
 
 import com.google.common.base.Splitter;
+import com.google.common.reflect.TypeToken;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
 import com.starrocks.analysis.Expr;
@@ -25,6 +26,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TWorkGroupType;
@@ -272,6 +274,19 @@ public class ResourceGroupAnalyzer {
             } catch (NumberFormatException exception) {
                 throw new SemanticException(String.format("The value type of the property `%s` must be a valid numeric type, " +
                         "but it is set to `%s`", e.getKey(), e.getValue()));
+            }
+
+            if (key.equalsIgnoreCase(ResourceGroup.PARTITION_SCAN_NUMBER_LIMIT_RULE)) {
+                try {
+                    // validate the rule
+                    Map<String, Integer> ignored = GsonUtils.GSON.fromJson(value,
+                            new TypeToken<Map<String, Integer>>() {
+                            }.getType());
+                    resourceGroup.setPartitionScanNumberLimitRule(value);
+                } catch (Exception ignored) {
+                    throw new SemanticException("Not valid partition scan number limit rule json");
+                }
+                continue;
             }
 
             throw new SemanticException("Unknown property: " + key);
