@@ -20,16 +20,9 @@ namespace starrocks {
 class Cache;
 class CacheKey;
 
-enum class ChargeMode {
-    // use value size as charge
-    VALUESIZE = 0,
-    // use allocator tracking size as charge
-    MEMSIZE = 1
-};
-
 // Create a new cache with a fixed size capacity.  This implementation
 // of Cache uses a least-recently-used eviction policy.
-extern Cache* new_lru_cache(size_t capacity, ChargeMode charge_mode = ChargeMode::VALUESIZE);
+extern Cache* new_lru_cache(size_t capacity);
 
 class CacheKey {
 public:
@@ -139,9 +132,9 @@ public:
     //
     // When the inserted entry is no longer needed, the key and
     // value will be passed to "deleter".
-    virtual Handle* insert(const CacheKey& key, void* value, size_t charge,
+    virtual Handle* insert(const CacheKey& key, void* value, size_t value_size, size_t charge,
                            void (*deleter)(const CacheKey& key, void* value),
-                           CachePriority priority = CachePriority::NORMAL, size_t value_size = 0) = 0;
+                           CachePriority priority = CachePriority::NORMAL) = 0;
 
     // If the cache has no mapping for "key", returns NULL.
     //
@@ -275,9 +268,9 @@ public:
     void set_capacity(size_t capacity);
 
     // Like Cache methods, but with an extra "hash" parameter.
-    Cache::Handle* insert(const CacheKey& key, uint32_t hash, void* value, size_t charge,
+    Cache::Handle* insert(const CacheKey& key, uint32_t hash, void* value, size_t value_size, size_t charge,
                           void (*deleter)(const CacheKey& key, void* value),
-                          CachePriority priority = CachePriority::NORMAL, size_t value_size = 0);
+                          CachePriority priority = CachePriority::NORMAL);
     Cache::Handle* lookup(const CacheKey& key, uint32_t hash);
     void release(Cache::Handle* handle);
     void erase(const CacheKey& key, uint32_t hash);
@@ -318,10 +311,11 @@ static const int kNumShards = 1 << kNumShardBits;
 
 class ShardedLRUCache : public Cache {
 public:
-    explicit ShardedLRUCache(size_t capacity, ChargeMode charge_mode = ChargeMode::VALUESIZE);
+    explicit ShardedLRUCache(size_t capacity);
     ~ShardedLRUCache() override = default;
-    Handle* insert(const CacheKey& key, void* value, size_t charge, void (*deleter)(const CacheKey& key, void* value),
-                   CachePriority priority = CachePriority::NORMAL, size_t value_size = 0) override;
+    Handle* insert(const CacheKey& key, void* value, size_t value_size, size_t charge,
+                   void (*deleter)(const CacheKey& key, void* value),
+                   CachePriority priority = CachePriority::NORMAL) override;
     Handle* lookup(const CacheKey& key) override;
     void release(Handle* handle) override;
     void erase(const CacheKey& key) override;
@@ -347,7 +341,6 @@ private:
     std::mutex _mutex;
     uint64_t _last_id;
     size_t _capacity;
-    ChargeMode _charge_mode;
 };
 
 } // namespace starrocks

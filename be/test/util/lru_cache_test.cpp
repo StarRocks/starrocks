@@ -331,7 +331,7 @@ TEST_F(CacheTest, SetCapacity) {
     // then release 32, usage should be 32.
     for (int i = 32; i < 64; i++) {
         std::string result;
-        handles[i] = _cache->insert(EncodeKey(&result, i), EncodeValue(1000 + kCacheSize), 1, &CacheTest::Deleter);
+        handles[i] = _cache->insert(EncodeKey(&result, i), EncodeValue(1000 + kCacheSize), 1, 1, &CacheTest::Deleter);
     }
     ASSERT_EQ(kCacheSize * 2, _cache->get_capacity());
     ASSERT_EQ(64, _cache->get_memory_usage());
