@@ -443,8 +443,7 @@ public class DatabaseTransactionMgr {
 
         writeLock();
         try {
-            unprotectedCommitTransaction(transactionState, stateListeners);
-            txnOperated = true;
+            txnOperated = unprotectedCommitTransaction(transactionState, stateListeners);
         } finally {
             writeUnlock();
             int numPartitions = 0;
@@ -454,7 +453,14 @@ public class DatabaseTransactionMgr {
             txnSpan.setAttribute("num_partition", numPartitions);
             unprotectedCommitSpan.end();
             // after state transform
-            transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, callback, null);
+            try {
+                transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, callback, null);
+            } catch (Throwable t) {
+                LOG.warn("transaction after state transform failed: {}", transactionState, t);
+            }
+        }
+        if (!txnOperated) {
+            return null;
         }
 
         // 6. update nextVersion because of the failure of persistent transaction resulting in error version
@@ -623,7 +629,11 @@ public class DatabaseTransactionMgr {
             txnSpan.setAttribute("num_partition", numPartitions);
             unprotectedCommitSpan.end();
             // after state transform
-            transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, callback, null);
+            try {
+                transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, callback, null);
+            } catch (Throwable t) {
+                LOG.warn("transaction after state transform failed: {}", transactionState, t);
+            }
         }
 
         if (txnOperated) {
@@ -1124,11 +1134,11 @@ public class DatabaseTransactionMgr {
         LOG.info("finish transaction {} successfully", transactionState);
     }
 
-    protected void unprotectedCommitTransaction(TransactionState transactionState,
+    protected boolean unprotectedCommitTransaction(TransactionState transactionState,
                                                 List<TransactionStateListener> stateListeners) {
         // transaction state is modified during check if the transaction could committed
         if (transactionState.getTransactionStatus() != TransactionStatus.PREPARE) {
-            return;
+            return false;
         }
         // commit timestamps needs to be strictly monotonically increasing
         long commitTs = Math.max(System.currentTimeMillis(), maxCommitTs + 1);
@@ -1146,6 +1156,7 @@ public class DatabaseTransactionMgr {
         for (TransactionStateListener listener : stateListeners) {
             listener.postWriteCommitLog(transactionState);
         }
+        return true;
     }
 
     protected void unprotectedPrepareTransaction(TransactionState transactionState,
