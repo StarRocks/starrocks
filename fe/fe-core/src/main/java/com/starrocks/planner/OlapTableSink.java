@@ -234,7 +234,7 @@ public class OlapTableSink extends DataSink {
         this.isFromOverwrite = isFromOverwrite;
     }
 
-    public void complete(String mergeCondition) throws StarRocksException {
+    public void complete(String mergeCondition) throws UserException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
         if (mergeCondition != null && !mergeCondition.isEmpty()) {
             tSink.setMerge_condition(mergeCondition);
