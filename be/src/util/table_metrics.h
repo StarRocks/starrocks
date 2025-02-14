@@ -69,8 +69,11 @@ public:
 
     TableMetricsPtr get_table_metrics(uint64_t table_id) {
         std::shared_lock l(_mu);
-        DCHECK(_metrics_map.contains(table_id));
-        return _metrics_map.at(table_id);
+        auto iter = _metrics_map.find(table_id);
+        if (iter != _metrics_map.end()) {
+            return iter->second;
+        }
+        return _blackhole_metrics;
     }
 
     void cleanup();
@@ -79,6 +82,11 @@ private:
     MetricRegistry* _metrics;
     std::shared_mutex _mu;
     phmap::flat_hash_map<uint64_t, TableMetricsPtr> _metrics_map;
+    // In some cases, we may not be able to obtain the metrics for the corresponding table id,
+    // For example, when drop tablet and data load concurrently,
+    // the Tablets may have been deleted before the load begins, and the table metrics may be cleared.
+    // In such a scenario, we return blackhole metrics to ensure that subsequent processes can work well.
+    TableMetricsPtr _blackhole_metrics = std::make_shared<TableMetrics>();
     // used for cleanup
     int64_t _last_cleanup_ts = 0;
 
