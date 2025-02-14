@@ -31,14 +31,10 @@ import com.starrocks.common.InternalErrorCode;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
-import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
-import mockit.Mock;
-import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
@@ -186,17 +182,7 @@ public class StarOSAgent2ndTest {
         int workerHeartbeatPort = 9050;
         long shardId = 10L;
 
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(String warehouseName) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID, WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-        };
+        UtFrameUtils.mockInitWarehouseEnv();
 
         WorkerInfo workerInfo = WorkerInfo.newBuilder()
                 .setIpPort(String.format("%s:%d", workerHost, workerStarletPort))

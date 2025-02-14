@@ -286,59 +286,6 @@ public class PseudoClusterTest {
             }
         };
 
-        /*
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID);
-            }
-
-            @Mock
-            public Warehouse getWarehouse(String warehouseName) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME, WarehouseManager.DEFAULT_CLUSTER_ID);
-            }
-
-            @Mock
-            public ComputeNode getComputeNode(LakeTablet tablet) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-
-            @Mock
-            public ComputeNode getComputeNode(Long warehouseId, LakeTablet tablet) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-
-            @Mock
-            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
-                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
-            }
-        };
-
-        new MockUp<Cluster>() {
-            @Mock
-            public List<Long> getComputeNodeIds() {
-                return Lists.newArrayList(1L);
-            }
-        };
-
-        new MockUp<SystemInfoService>() {
-            @Mock
-            public ComputeNode getBackendOrComputeNode(long nodeId) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-        };
-
-        new MockUp<ComputeNode>() {
-            @Mock
-            public boolean isAlive() {
-                return true;
-            }
-        };
-
-         */
-
         Connection connection = PseudoCluster.getInstance().getQueryConnection();
         Statement stmt = connection.createStatement();
         try {

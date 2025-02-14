@@ -57,7 +57,6 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.SchemaVersionAndHash;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.RunMode;
@@ -67,9 +66,8 @@ import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
 import com.starrocks.sql.ast.ReorderColumnsClause;
+import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.hadoop.util.ThreadUtil;
@@ -415,18 +413,11 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
             }
         };
 
-        GlobalStateMgr.getCurrentState().initDefaultWarehouse();
-
-        new MockUp<WarehouseManagerEPack>() {
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        new MockUp<GlobalStateMgr>() {
             @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                            WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public List<Long> getAllComputeNodeIds(long warehouseId) {
-                return Lists.newArrayList(1L);
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
             }
         };
 
@@ -442,19 +433,7 @@ public class SchemaChangeJobV2Test extends DDLTestBase {
         AlterJobV2 alterJobV2 = schemaChangeHandler.analyzeAndCreateJob(Lists.newArrayList(clause), db, olapTable);
         Assert.assertEquals(0L, alterJobV2.warehouseId);
 
-        new MockUp<WarehouseManagerEPack>() {
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                            WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public List<Long> getAllComputeNodeIds(long warehouseId) {
-                return Lists.newArrayList();
-            }
-        };
-
+        mockedWarehouseManager.setAllComputeNodeIds(Lists.newArrayList());
         try {
             alterJobV2 = schemaChangeHandler.analyzeAndCreateJob(Lists.newArrayList(clause), db, olapTable);
             Assert.fail();
