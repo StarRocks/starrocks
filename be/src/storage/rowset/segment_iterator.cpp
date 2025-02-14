@@ -1131,7 +1131,6 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
             if (!vec_or.ok()) {
                 return vec_or.status();
             }
-            std::unique_ptr<char[]> buf(new char[buf_size]);
             for (auto e : *vec_or) {
                 // if buf_size is 1MB, offset is 123, and size is 2MB
                 // after calculation, offset will be 0, and size will be 2MB+123
@@ -1139,7 +1138,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
                 size_t size = e.second + (e.first % buf_size);
                 while (size > 0) {
                     size_t cur_size = std::min(buf_size, size);
-                    RETURN_IF_ERROR(stream->read_at_fully(offset, buf.get(), cur_size));
+                    RETURN_IF_ERROR(stream->touch_cache(offset, cur_size));
                     offset += cur_size;
                     size -= cur_size;
                 }
