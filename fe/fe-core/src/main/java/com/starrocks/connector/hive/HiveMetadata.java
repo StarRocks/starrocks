@@ -173,7 +173,13 @@ public class HiveMetadata implements ConnectorMetadata {
                         hmsTable.getDbName(), hmsTable.getTableName(), hmsTable.getTableLocation()));
             }
         } else {
-            HiveTable hiveTable = (HiveTable) getTable(dbName, tableName);
+            HiveTable hiveTable = null;
+            try {
+                hiveTable = (HiveTable) getTable(dbName, tableName);
+            } catch (Exception e) {
+                // ignore not found exception, we need keep this catch,
+                // otherwise it throws exception when we `drop if exists`.
+            }
             if (hiveTable == null && stmt.isSetIfExists()) {
                 LOG.warn("Table {}.{} doesn't exist", dbName, tableName);
                 return;
