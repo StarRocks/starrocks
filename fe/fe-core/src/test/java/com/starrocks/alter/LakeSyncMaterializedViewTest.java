@@ -660,7 +660,6 @@ public class LakeSyncMaterializedViewTest {
     }
 
     @Test
-<<<<<<< HEAD
     public void testDropColumnWithMVByFastSchema() throws Exception {
         starRocksAssert.useDatabase("test");
         starRocksAssert.withTable("CREATE TABLE t1 (\n" +
@@ -681,8 +680,7 @@ public class LakeSyncMaterializedViewTest {
             starRocksAssert.dropMaterializedView("mv1");
         }
     }
-=======
->>>>>>> d66de200cca (fix ut)
+
     public void testCancelMV() throws Exception {
         starRocksAssert.withTable("CREATE TABLE `t1` " +
                 "(`k1`  date, " +
