@@ -105,12 +105,13 @@ public:
 
     void Insert(int key, int value, int charge) {
         std::string result;
-        _cache->release(_cache->insert(EncodeKey(&result, key), EncodeValue(value), charge, &CacheTest::Deleter));
+        _cache->release(
+                _cache->insert(EncodeKey(&result, key), EncodeValue(value), charge, charge, &CacheTest::Deleter));
     }
 
     void InsertDurable(int key, int value, int charge) {
         std::string result;
-        _cache->release(_cache->insert(EncodeKey(&result, key), EncodeValue(value), charge, &CacheTest::Deleter,
+        _cache->release(_cache->insert(EncodeKey(&result, key), EncodeValue(value), charge, charge, &CacheTest::Deleter,
                                        CachePriority::DURABLE));
     }
 
@@ -236,7 +237,7 @@ static void deleter(const CacheKey& key, void* v) {
 
 static void insert_LRUCache(LRUCache& cache, const CacheKey& key, int value, CachePriority priority) {
     uint32_t hash = key.hash(key.data(), key.size(), 0);
-    cache.release(cache.insert(key, hash, EncodeValue(value), value, &deleter, priority));
+    cache.release(cache.insert(key, hash, EncodeValue(value), value, value, &deleter, priority));
 }
 
 TEST_F(CacheTest, Usage) {
