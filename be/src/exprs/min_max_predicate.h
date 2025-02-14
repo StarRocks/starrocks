@@ -76,7 +76,7 @@ public:
         if (col->is_nullable() && col->has_null()) {
             auto tmp = ColumnHelper::as_raw_column<NullableColumn>(col);
             uint8_t* __restrict__ null_data = tmp->null_column_data().data();
-            if constexpr (lt_is_object_family<Type> || lt_is_string<Type> || lt_is_binary<Type>) {
+            if constexpr (lt_is_object_family<Type>) {
                 const auto& data = ColumnHelper::cast_to_raw<Type>(tmp->data_column())->get_data();
                 for (int i = 0; i < size; i++) {
                     res[i] = (data[i] >= _min_value && data[i] <= _max_value);
@@ -98,7 +98,7 @@ public:
                 }
             }
         } else {
-            if constexpr (lt_is_object_family<Type> || lt_is_string<Type> || lt_is_binary<Type>) {
+            if constexpr (lt_is_object_family<Type>) {
                 const auto& data = ColumnHelper::cast_to_raw<Type>(col)->get_data();
                 for (int i = 0; i < size; i++) {
                     res[i] = (data[i] >= _min_value && data[i] <= _max_value);
