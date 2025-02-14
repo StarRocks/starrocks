@@ -77,6 +77,7 @@ private:
     AggrAutoState _auto_state{};
     AggrAutoContext _auto_context;
     LimitedMemAggState _limited_mem_state;
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };
 
 class AggregateStreamingSinkOperatorFactory final : public OperatorFactory {
