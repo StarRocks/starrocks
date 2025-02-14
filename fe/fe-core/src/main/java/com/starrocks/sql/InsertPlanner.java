@@ -384,6 +384,9 @@ public class InsertPlanner {
                 if (olapTable.getAutomaticBucketSize() > 0) {
                     ((OlapTableSink) dataSink).setAutomaticBucketSize(olapTable.getAutomaticBucketSize());
                 }
+                if (insertStmt.isFromOverwrite()) {
+                    ((OlapTableSink) dataSink).setIsFromOverwrite(true);
+                }
 
                 // if sink is OlapTableSink Assigned to Be execute this sql [cn execute OlapTableSink will crash]
                 session.getSessionVariable().setPreferComputeNode(false);

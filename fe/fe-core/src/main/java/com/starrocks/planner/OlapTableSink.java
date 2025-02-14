@@ -143,6 +143,7 @@ public class OlapTableSink extends DataSink {
     private TPartialUpdateMode partialUpdateMode;
     private long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
     private long automaticBucketSize = 0;
+    private boolean isFromOverwrite = false;
 
     public OlapTableSink(OlapTable dstTable, TupleDescriptor tupleDescriptor, List<Long> partitionIds,
                          TWriteQuorumType writeQuorum, boolean enableReplicatedStorage,
@@ -229,6 +230,10 @@ public class OlapTableSink extends DataSink {
         this.partialUpdateMode = mode;
     }
 
+    public void setIsFromOverwrite(boolean isFromOverwrite) {
+        this.isFromOverwrite = isFromOverwrite;
+    }
+
     public void complete(String mergeCondition) throws UserException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
         if (mergeCondition != null && !mergeCondition.isEmpty()) {
@@ -243,7 +248,7 @@ public class OlapTableSink extends DataSink {
         if (dstTable.getState() != OlapTable.OlapTableState.NORMAL) {
             return partitionIds;
         }
-        if (!enableAutomaticPartition || Config.max_load_initial_open_partition_number <= 0
+        if (isFromOverwrite || !enableAutomaticPartition || Config.max_load_initial_open_partition_number <= 0
                 || partitionIds.size() < Config.max_load_initial_open_partition_number) {
             return partitionIds;
         }
