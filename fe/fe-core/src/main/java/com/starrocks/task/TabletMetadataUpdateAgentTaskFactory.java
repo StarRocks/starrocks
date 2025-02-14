@@ -314,7 +314,9 @@ public class TabletMetadataUpdateAgentTaskFactory {
                                        boolean createSchemaFile) {
             super(backendId, tablets.hashCode());
             this.tablets = new ArrayList<>(tablets);
-            this.tabletSchema = Objects.requireNonNull(tabletSchema, "tabletSchema is null");
+            // tabletSchema may be null when the table has multi materialized index
+            // and the schema of some materialized indexes are not needed to be updated
+            this.tabletSchema = tabletSchema;
             this.createSchemaFile = createSchemaFile;
         }
 
@@ -330,7 +332,11 @@ public class TabletMetadataUpdateAgentTaskFactory {
             for (Long tabletId : tablets) {
                 TTabletMetaInfo metaInfo = new TTabletMetaInfo();
                 metaInfo.setTablet_id(tabletId);
-                metaInfo.setTablet_schema(tabletSchema);
+
+                if (tabletSchema != null) {
+                    metaInfo.setTablet_schema(tabletSchema);
+                }
+
                 metaInfos.add(metaInfo);
                 metaInfo.setCreate_schema_file(create);
                 create = false;
