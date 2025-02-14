@@ -34,6 +34,7 @@ insert into t0 select t0.* from t0, Table(generate_series(1,10));
 insert into t1 select c0, c1 from Table(generate_series(1,10000)) ta(c0), Table(generate_series(1,10)) tb(c1);
 set topn_filter_back_pressure_mode='2';
 set enable_profile='true';
-[UC]select t0.c1, repeat('x', t0.c1+t1.c1) as a, repeat('y',t1.c0 + t1.c0) as b  from t0 join[broadcast] t1 on t0.c0 = t1.c0 order by  1 limit 10;
+set enable_async_profile=false;
+[UC]select t0.c1, repeat('x', t0.c1+t1.c1) as a, repeat('y',t1.c0 + t1.c0) as b  from t0 join[broadcast] t1 on t0.c0 = t1.c0 order by 1 limit 10;
 create table profile_table properties("replication_num"="1") as select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line);
 select assert_true(count(1)>0) from profile_table where line like '%TopnRuntimeFilter%';
