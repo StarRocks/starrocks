@@ -235,15 +235,11 @@ public class OlapTableSink extends DataSink {
         this.enableDynamicOverwrite = enableDynamicOverwrite;
     }
 
-<<<<<<< HEAD
-    public void complete(String mergeCondition) throws UserException {
-=======
     public void setIsFromOverwrite(boolean isFromOverwrite) {
         this.isFromOverwrite = isFromOverwrite;
     }
 
-    public void complete(String mergeCondition) throws StarRocksException {
->>>>>>> 64c83285c ([BugFix] Fix insert overwrite loss data since dynamic open partition (#55756))
+    public void complete(String mergeCondition) throws UserException {
         TOlapTableSink tSink = tDataSink.getOlap_table_sink();
         if (mergeCondition != null && !mergeCondition.isEmpty()) {
             tSink.setMerge_condition(mergeCondition);
