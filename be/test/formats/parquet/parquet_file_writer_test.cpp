@@ -546,6 +546,7 @@ TEST_F(ParquetFileWriterTest, TestWriteDatetimeCompatibleWithHiveReader) {
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ParquetWriterOptions>();
     writer_options->use_int96_timestamp_encoding = true;
+    writer_options->time_zone = "Asia/Shanghai";
     auto writer = std::make_unique<formats::ParquetFileWriter>(
             _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
             TCompressionType::NO_COMPRESSION, writer_options, []() {});

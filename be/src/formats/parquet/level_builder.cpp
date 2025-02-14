@@ -60,14 +60,9 @@ LevelBuilder::LevelBuilder(TypeDescriptor type_desc, ::parquet::schema::NodePtr 
           _use_int96_timestamp_encoding(use_int96_timestamp_encoding) {}
 
 Status LevelBuilder::init() {
-    cctz::time_zone ctz;
-    if (!TimezoneUtils::find_cctz_time_zone(_timezone, ctz)) {
+    if (!TimezoneUtils::find_cctz_time_zone(_timezone, _ctz)) {
         return Status::InternalError(fmt::format("can not find cctz time zone {}", timezone));
     }
-
-    const auto tp = std::chrono::system_clock::now();
-    const cctz::time_zone::absolute_lookup al = ctz.lookup(tp);
-    _offset = al.offset;
     return Status::OK();
 }
 
@@ -357,9 +352,16 @@ Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx
     DeferOp defer([&] { delete[] values; });
 
     for (size_t i = 0; i < col->size(); i++) {
+
+        int64_t days = timestamp::to_julian(data_col[i]._timestamp);
+        int64_t seconds_from_epoch = (days - 2440588) * 86400;
+        std::chrono::system_clock::time_point tp = std::chrono::system_clock::from_time_t(seconds_from_epoch);
+        auto _offset = _ctz.lookup(tp).offset;
+
         auto timestamp = use_int96_timestamp_encoding
                                  ? timestamp::sub<TimeUnit::SECOND>(data_col[i]._timestamp, _offset)
                                  : data_col[i]._timestamp;
+
         if constexpr (use_int96_timestamp_encoding) {
             auto date = reinterpret_cast<int32_t*>(values[i].value + 2);
             auto nanosecond = reinterpret_cast<int64_t*>(values[i].value);
