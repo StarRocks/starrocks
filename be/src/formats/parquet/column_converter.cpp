@@ -93,11 +93,20 @@ private:
     // into UTC time, and when it reads data out, it should be converted to the time
     // according to session variable "time_zone".
     [[nodiscard]] Timestamp _utc_to_local(Timestamp timestamp) const {
-        return timestamp::add<TimeUnit::SECOND>(timestamp, _offset);
+        const JulianDate days = timestamp::to_julian(timestamp);
+        int64_t seconds = (days - 2440588) * 86400;
+
+        int64_t nanoseconds = timestamp::to_time(timestamp);
+        seconds += (nanoseconds / 1000000);
+        TimestampValue ep;
+        ep.from_unixtime(seconds, (nanoseconds % 1000000), _ctz);
+
+        LOG(INFO) << "Int96ToDateTimeConverter._utc_to_local: timestamp:" << timestamp << ", days:" << days << ", seconds:" << seconds << ", nanoseconds:" << nanoseconds << ", _ctz: " << _ctz.name() << ", result:" << ep.timestamp();
+        return ep.timestamp();
     }
 
 private:
-    int _offset = 0;
+    cctz::time_zone _ctz;
 };
 
 class Int64ToDateTimeConverter final : public ColumnConverter {
@@ -628,14 +637,9 @@ Status parquet::Int32ToDateTimeConverter::convert(const ColumnPtr& src, Column* 
 }
 
 Status Int96ToDateTimeConverter::init(const std::string& timezone) {
-    cctz::time_zone ctz;
-    if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {
+    if (!TimezoneUtils::find_cctz_time_zone(timezone, _ctz)) {
         return Status::InternalError(strings::Substitute("can not find cctz time zone $0", timezone));
     }
-
-    const auto tp = std::chrono::system_clock::now();
-    const cctz::time_zone::absolute_lookup al = ctz.lookup(tp);
-    _offset = al.offset;
 
     return Status::OK();
 }
