@@ -60,7 +60,12 @@ public class CustomizedQueryExecutor {
     }
 
     public void exec(ConnectContext context, String sql) throws Exception {
+        exec(context, null, sql);
+    }
+
+    public void exec(ConnectContext context, Class<?> clazz, String sql) throws Exception {
         StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
+        Preconditions.checkState(clazz == null || parsedStmt.getClass().equals(clazz));
         StmtExecutor executor = new StmtExecutor(context, parsedStmt);
         context.setExecutor(executor);
         context.setQueryId(UUIDUtil.genUUID());
