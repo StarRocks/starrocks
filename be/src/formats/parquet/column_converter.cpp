@@ -96,10 +96,12 @@ private:
         const JulianDate days = timestamp::to_julian(timestamp);
         int64_t seconds = (days - 2440588) * 86400;
 
-        int64_t nanoseconds = timestamp::to_time(timestamp);
-        seconds += (nanoseconds / 1000000);
+        int64_t microseconds = timestamp::to_time(timestamp);
+        seconds += (microseconds / 1000000);
+        int64_t remaining_microseconds = microseconds % 1000000;
+
         TimestampValue ep;
-        ep.from_unixtime(seconds, (nanoseconds % 1000000), _ctz);
+        ep.from_unixtime(seconds, remaining_microseconds, _ctz);
 
         return ep.timestamp();
     }
