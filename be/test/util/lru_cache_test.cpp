@@ -318,7 +318,7 @@ TEST_F(CacheTest, SetCapacity) {
     // Insert kCacheSize entries, but not releasing.
     for (int i = 0; i < 32; i++) {
         std::string result;
-        handles[i] = _cache->insert(EncodeKey(&result, i), EncodeValue(1000 + kCacheSize), 1, &CacheTest::Deleter);
+        handles[i] = _cache->insert(EncodeKey(&result, i), EncodeValue(1000 + kCacheSize), 1, 1, &CacheTest::Deleter);
     }
     ASSERT_EQ(kCacheSize, _cache->get_capacity());
     ASSERT_EQ(32, _cache->get_memory_usage());
