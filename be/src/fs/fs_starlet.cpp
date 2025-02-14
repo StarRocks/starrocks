@@ -177,6 +177,15 @@ public:
         }
     }
 
+    Status touch_cache(int64_t offset, size_t length) override {
+        auto stream_st = _file_ptr->stream();
+        if (!stream_st.ok()) {
+            return to_status(stream_st.status());
+        }
+        auto res = (*stream_st)->touch_cache(offset, length);
+        return to_status(res);
+    }
+
     StatusOr<std::unique_ptr<io::NumericStatistics>> get_numeric_statistics() override {
         auto stream_st = _file_ptr->stream();
         if (!stream_st.ok()) {
