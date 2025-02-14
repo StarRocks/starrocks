@@ -577,6 +577,14 @@ MODIFY COLUMN <column_name> DROP FIELD <field_name>
 
 - `field_name`：需要增加或删除字段的名称。可以是单独的字段名，表示第一层级的字段，例如 `new_field_name`。也可以是 Column Access Path，用以表示嵌套层级的字段，例如 `lv1_k1.lv2_k2.new_field_name`。
 - `prior_field_name`：新增字段的前一个字段。与 AFTER 关键字合用，可以表示新加字段的顺序。如果指定 FIRST 关键字，表示新增第一个字段，则无需指定该参数。`prior_field_name` 的层级由 `field_name` 决定，无需手动指定。
+- `<struct_field_key>.<field_name>`：用于在 STRUCT 列的 STRUCT 字段中添加或删除子字段。
+- `<array>.[*].<new_field_name>`：用于在数组字段的每个 STRUCT 字段中添加或删除子字段。
+
+  当 ARRAY 和 STRUCT 类型发生嵌套时，用 `[*]` 代表操作 ARRAY 字段中的所有元素。比如列 `fx struct<c1 int, c2 array<struct <v1 int, v2 int>>>`, `fx` 列中 `c2` 字段是 ARRAY 类型，其中包含 STRUCT 类型元素，包括 `v1` 和 `v2` 两个字段。当向 `c2` 中的 STRUCT 类型元素添加一个新字段 `v3` 时，对应的语法为：
+
+  ```SQL
+  ALTER TABLE tbl MODIFY COLUMN fx ADD FIELD c2.[*].v3 INT 
+  ```
 
 有关示例，参考 [示例 - Column -14](#column)。
 

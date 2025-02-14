@@ -585,6 +585,15 @@ Parameters:
 
 - `field_name`: The name of the field to be added or removed. This can be a simple field name, indicating a top-dimension field, for example, `new_field_name`, or a Column Access Path, representing a nested field, for example, `lv1_k1.lv2_k2.new_field_name`.
 - `prior_field_name`: The field preceding the newly added field. Used in conjunction with the AFTER keyword to specify the order of the new field. You do not need to specify this parameter if the FIRST keyword is used, indicating the new field should be the first field. The dimension of `prior_field_name` is determined by `field_name` and does not need to be specified explicitly.
+- `<struct_field_key>.<field_name>`: Used to add or drop a sub-field in a STRUCT field within a STRUCT column.
+- `<array>.[*].<new_field_name>`: Used to add or drop a sub-field in in every STRUCT field within a ARRAY column.
+
+  When an ARRAY type is nested within a STRUCT type or vice versa, you can use `[*]` to represent all elements in the ARRAY field. For example, in the column `fx struct<c1 int, c2 array<struct <v1 int, v2 int>>>`, the field `c2` is an ARRAY type, which contains a STRUCT with two fields `v1` and `v2`. The syntax to add a `v3` field to the nested STRUCT is:
+
+  ```SQL
+  ALTER TABLE tbl MODIFY COLUMN fx ADD FIELD c2.[*].v3 INT 
+  ```
+
 
 For more usage instructions, see [Example - Column -14](#column).
 
