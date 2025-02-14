@@ -113,7 +113,7 @@ public class UniqueConstraint extends Constraint {
 
     public static String getShowCreateTableConstraintDesc(List<UniqueConstraint> constraints, Table selfTable) {
         List<String> constraintStrs = Lists.newArrayList();
-        if(constraints != null) {
+        if (constraints != null) {
             for (UniqueConstraint constraint : constraints) {
                 StringBuilder constraintSb = new StringBuilder();
                 if (constraint.catalogName != null) {
