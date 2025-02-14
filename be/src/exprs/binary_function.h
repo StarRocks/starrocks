@@ -55,17 +55,11 @@ public:
         result->resize_uninitialized(v1->size());
         auto* data3 = result->get_data().data();
 
-        if constexpr (lt_is_string<LType> || lt_is_binary<LType>) {
+        if constexpr (lt_is_string<LType> || lt_is_binary<LType> || lt_is_object_family<LType>) {
             auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data();
             auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data();
             for (int i = 0; i < s; ++i) {
                 data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(r1[i], r2[i]);
-            }
-        } else if constexpr (lt_is_object_family<LType>) {
-            const auto& data1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data();
-            const auto& data2 = ColumnHelper::cast_to_raw<RType>(v2)->get_data();
-            for (int i = 0; i < s; ++i) {
-                data3[i] = OP::template apply<LCppType, RCppType, ResultCppType>(data1[i], data2[i]);
             }
         } else {
             auto* data1 = ColumnHelper::cast_to_raw<LType>(v1)->get_data().data();
