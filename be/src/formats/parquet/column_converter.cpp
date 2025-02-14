@@ -93,7 +93,6 @@ private:
     // into UTC time, and when it reads data out, it should be converted to the time
     // according to session variable "time_zone".
     [[nodiscard]] Timestamp _utc_to_local(Timestamp timestamp) const {
-
         // Ignore the default value 0000-01-01 00:00:00
         if (timestamp == TimestampValue::MIN_TIMESTAMP_VALUE.timestamp()) {
             return timestamp;
