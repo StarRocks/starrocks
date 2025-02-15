@@ -66,6 +66,7 @@ private:
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::LIMITED
     Status _push_chunk_by_limited_memory(const ChunkPtr& chunk, const size_t chunk_size);
 
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
     // It is used to perform aggregation algorithms shared by
     // AggregateStreamingSourceOperator. It is
     // - prepared at SinkOperator::prepare(),
