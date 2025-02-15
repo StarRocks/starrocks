@@ -1008,7 +1008,7 @@ inline int RleBatchDecoder<T>::GetBatchWithDict(const TV* dictionary, int32_t di
         int32_t num_literals_to_set = std::min(num_literals, batch_num - num_consumed);
         num_literals_to_set = std::min(num_literals_to_set, kBufferSize);
         if (!GetLiteralValues(num_literals_to_set, indices)) {
-            return 0;
+            return -1;
         }
         if (UNLIKELY(!IndicesInRange(indices, num_literals_to_set, dictionary_length))) {
             return -1;

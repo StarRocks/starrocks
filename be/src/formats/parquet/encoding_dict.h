@@ -130,8 +130,8 @@ public:
         T* __restrict__ data = data_column->get_data().data() + cur_size;
 
         auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), data, count);
-        if (UNLIKELY(ret <= 0)) {
-            return Status::InternalError("DictDecoder GetBatchWithDict failed");
+        if (UNLIKELY(ret < 0)) {
+            return Status::InternalError("DictDecoder GetBatchWithDict failed at DictDecoder<T>");
         }
 
         return Status::OK();
@@ -271,8 +271,8 @@ public:
         case VALUE: {
             raw::stl_vector_resize_uninitialized(&_slices, count);
             auto ret = _rle_batch_reader.GetBatchWithDict(_dict.data(), _dict.size(), _slices.data(), count);
-            if (UNLIKELY(ret <= 0)) {
-                return Status::InternalError("DictDecoder GetBatchWithDict failed");
+            if (UNLIKELY(ret < 0)) {
+                return Status::InternalError("DictDecoder GetBatchWithDict failed at DictDecoder<Slice>");
             }
             ret = dst->append_strings_overflow(_slices, _max_value_length);
             if (UNLIKELY(!ret)) {
