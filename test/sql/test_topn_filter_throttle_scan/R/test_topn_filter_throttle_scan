@@ -50,7 +50,10 @@ set topn_filter_back_pressure_mode='2';
 set enable_profile='true';
 -- result:
 -- !result
-[UC]select t0.c1, repeat('x', t0.c1+t1.c1) as a, repeat('y',t1.c0 + t1.c0) as b  from t0 join[broadcast] t1 on t0.c0 = t1.c0 order by  1 limit 10;
+set enable_async_profile=false;
+-- result:
+-- !result
+[UC]select t0.c1, repeat('x', t0.c1+t1.c1) as a, repeat('y',t1.c0 + t1.c0) as b  from t0 join[broadcast] t1 on t0.c0 = t1.c0 order by 1 limit 10;
 -- result:
 0	xxxxxxx	yy
 0	xxxxxxxxx	yy
