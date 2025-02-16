@@ -4,6 +4,26 @@
 
 Docusaurus is used to generate HTML from the Markdown files and that is all. From there we generate PDF files of the pages with the Node.js code in the `PDF` subdirectory. See the README there for the details.
 
+## Build and serve
+
+Run these two commands from the `bare-metal/docusaurus` dir:
+
+```bash
+./scripts/docker-image.sh
+./scripts/docker-build-bare-metal.sh
+```
+
+
+
+
+
+
+
+
+
+
+
+
 ## To Do:
 
 1. See where the docs in the bare-metal/docs dir belong. Some of them are probably the same as either BYOC or open-source docs and should be moved into the same place to make links work.
