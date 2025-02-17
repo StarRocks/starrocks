@@ -98,12 +98,13 @@ Status JitObjectCache::register_func(JITScalarFunction func) {
     // put into LRU cache
     auto* cache = new JitCacheEntry(_obj_code, _func);
     GlobalEnv::GetInstance()->jit_cache_mem_tracker()->consume(cache_func_size);
-    auto* handle = _lru_cache->insert(_cache_key, (void*)cache, cache_func_size, [](const CacheKey& key, void* value) {
-        auto* entry = ((JitCacheEntry*)value);
-        // maybe release earlier as the std::shared_ptr<llvm::MemoryBuffer> is hold by caller
-        GlobalEnv::GetInstance()->jit_cache_mem_tracker()->release(entry->obj_buff->getBufferSize());
-        delete entry;
-    });
+    auto* handle = _lru_cache->insert(
+            _cache_key, (void*)cache, cache_func_size, cache_func_size, [](const CacheKey& key, void* value) {
+                auto* entry = ((JitCacheEntry*)value);
+                // maybe release earlier as the std::shared_ptr<llvm::MemoryBuffer> is hold by caller
+                GlobalEnv::GetInstance()->jit_cache_mem_tracker()->release(entry->obj_buff->getBufferSize());
+                delete entry;
+            });
     if (handle == nullptr) {
         delete cache;
         LOG(WARNING) << "JIT register func failed, func = " << _cache_key << ", ir size = " << cache_func_size;
