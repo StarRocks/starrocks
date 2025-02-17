@@ -39,8 +39,8 @@ public:
     }
 
     void mock_insert(string expr_name) {
-        auto* handle =
-                engine->get_func_cache()->insert(expr_name, nullptr, 1000, [](const CacheKey& key, void* value) {});
+        auto* handle = engine->get_func_cache()->insert(expr_name, nullptr, 1000, 1000,
+                                                        [](const CacheKey& key, void* value) {});
         if (handle != nullptr) {
             engine->get_func_cache()->release(handle);
         }

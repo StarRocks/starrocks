@@ -194,7 +194,8 @@ Iterator* Table::BlockReader(void* arg, const ReadOptions& options, const Slice&
                 if (s.ok()) {
                     block = new Block(contents);
                     if (contents.cachable && options.fill_cache) {
-                        cache_handle = block_cache->insert(key, block, block->size(), &DeleteCachedBlock);
+                        size_t block_size = block->size();
+                        cache_handle = block_cache->insert(key, block, block_size, block_size, &DeleteCachedBlock);
                     }
                 }
                 if (options.stat != nullptr) {

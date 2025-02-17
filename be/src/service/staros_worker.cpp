@@ -345,7 +345,7 @@ absl::StatusOr<std::shared_ptr<StarOSWorker::FileSystem>> StarOSWorker::new_shar
 
     // Put the FileSysatem into LRU cache
     auto value = new CacheValue(fs);
-    handle = _fs_cache->insert(key, value, 1, cache_value_deleter);
+    handle = _fs_cache->insert(key, value, 1, 1, cache_value_deleter);
     if (handle == nullptr) {
         delete value;
     } else {
