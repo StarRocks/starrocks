@@ -748,16 +748,10 @@ public class OptimizerTaskTest {
             }
         };
 
-<<<<<<< HEAD
+        ctx.getSessionVariable().setOptimizerExecuteTimeout(10000);
         Optimizer optimizer = new Optimizer();
         OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(), new ColumnRefSet(),
                 columnRefFactory);
-=======
-        ctx.getSessionVariable().setOptimizerExecuteTimeout(10000);
-        Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
-        OptExpression physicalTree = optimizer.optimize(expression, new ColumnRefSet());
-
->>>>>>> b005b50fa ([UT] fix unstable mv tests (#55921))
         Operator root = physicalTree.getOp();
         assertEquals(root.getOpType(), OperatorType.PHYSICAL_LIMIT);
         ctx.getSessionVariable().setOptimizerExecuteTimeout(3000);
