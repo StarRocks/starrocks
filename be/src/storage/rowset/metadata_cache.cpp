@@ -53,7 +53,7 @@ void MetadataCache::set_capacity(size_t capacity) {
 }
 
 void MetadataCache::_insert(const std::string& key, std::weak_ptr<Rowset>* ptr, size_t size) {
-    Cache::Handle* handle = _cache->insert(CacheKey(key), ptr, size, _cache_value_deleter);
+    Cache::Handle* handle = _cache->insert(CacheKey(key), ptr, size, size, _cache_value_deleter);
     _cache->release(handle);
 }
 
