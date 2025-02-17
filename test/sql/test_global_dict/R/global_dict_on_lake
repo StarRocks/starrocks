@@ -96,6 +96,119 @@ drop table low_card_test_${uuid0} force;
 drop catalog hive_sql_test_${uuid0};
 -- result:
 -- !result
+create external catalog ice_test_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+-- result:
+-- !result
+use ice_test_${uuid0}.iceberg_oss_db;
+-- result:
+-- !result
+drop table if exists low_card_test_${uuid0} force;
+-- result:
+-- !result
+create table low_card_test_${uuid0} (
+c1 int,
+c2 string,
+dt string
+)
+PARTITION BY (dt);
+-- result:
+-- !result
+insert into low_card_test_${uuid0} values (1, '1', '2020-01-01');
+-- result:
+-- !result
+insert into low_card_test_${uuid0} values (2, '2', '2020-01-01');
+-- result:
+-- !result
+insert into low_card_test_${uuid0} values (3, '3', '2020-01-01');
+-- result:
+-- !result
+insert into low_card_test_${uuid0} values (4, '4', '2020-01-02');
+-- result:
+-- !result
+insert into low_card_test_${uuid0} values (5, '5', '2020-01-02');
+-- result:
+-- !result
+insert into low_card_test_${uuid0} values (6, '6', '2020-01-02');
+-- result:
+-- !result
+select count(c2) from low_card_test_${uuid0};
+-- result:
+6
+-- !result
+function: wait_global_dict_ready('c2', 'low_card_test_${uuid0}')
+-- result:
+
+-- !result
+select count(c2) from low_card_test_${uuid0};
+-- result:
+6
+-- !result
+function: wait_global_dict_ready('c2', 'low_card_test_${uuid0}')
+-- result:
+
+-- !result
+select count(c2) from low_card_test_${uuid0};
+-- result:
+6
+-- !result
+insert into low_card_test_${uuid0} values (7, '7', '2020-01-02');
+-- result:
+-- !result
+select count(c2) from low_card_test_${uuid0};
+-- result:
+7
+-- !result
+function: wait_global_dict_ready('c2', 'low_card_test_${uuid0}')
+-- result:
+
+-- !result
+select count(c2) from low_card_test_${uuid0};
+-- result:
+7
+-- !result
+select count(c2) from low_card_test_${uuid0} where c2 = '7';
+-- result:
+1
+-- !result
+select count(c1) from low_card_test_${uuid0} where c2 = '1';
+-- result:
+1
+-- !result
+insert into low_card_test_${uuid0} values (8, '', '2020-01-02');
+-- result:
+-- !result
+select count(c2) from low_card_test_${uuid0};
+-- result:
+8
+-- !result
+function: wait_global_dict_ready('c2', 'low_card_test_${uuid0}')
+-- result:
+
+-- !result
+select count(c2) from low_card_test_${uuid0};
+-- result:
+8
+-- !result
+function: try_collect_dict_N_times('dt', 'low_card_test_${uuid0}', 5)
+-- result:
+None
+-- !result
+function: assert_no_global_dict('dt', 'low_card_test_${uuid0}')
+-- result:
+None
+-- !result
+drop table low_card_test_${uuid0} force;
+-- result:
+-- !result
+drop catalog ice_test_${uuid0};
+-- result:
+-- !result
 set catalog default_catalog;
 -- result:
 -- !result
