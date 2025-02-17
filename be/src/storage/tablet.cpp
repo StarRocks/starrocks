@@ -1538,7 +1538,9 @@ Status Tablet::rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uin
 
 void Tablet::on_shutdown() {
     if (_updates) {
-        _updates->_stop_and_wait_apply_done();
+        // RUNNING is enough because if the tablet dropped/shutdown, this tablet will not be used
+        // any more. It is safe exit bypass through _apply_stopped async if it is not running.
+        _updates->_stop_and_wait_apply_done_from_state(APPLY_TASK_RUNNING);
     }
 }
 

@@ -101,6 +101,24 @@ struct EditVersionInfo {
     CompactionInfo* get_compaction() { return compaction.get(); }
 };
 
+/*
+  APPLY_TASK_NOTREADY ------> APPLY_TASK_SUBMITTED ------> APPLY_TASK_RUNNING
+          |                             |                           |
+          |        (submit failed)      |                           |     
+            ----- <--------- <----------                            |
+          |                                                         |
+           ------------- <------- <--------- <------- --------------
+                    (normal/shortcut by _apply_stopped exit)
+
+   STOPPED/STOPPING state has not been included in task state to make
+   the state transtition more simple.
+*/
+enum TabletUpdatesApplyTaskState {
+    APPLY_TASK_NOTREADY,
+    APPLY_TASK_SUBMITTED,
+    APPLY_TASK_RUNNING
+};
+
 // maintain all states for updatable tablets
 class TabletUpdates {
 public:
@@ -433,8 +451,8 @@ private:
     Status _commit_compaction(std::unique_ptr<CompactionInfo>* info, const RowsetSharedPtr& rowset,
                               EditVersion* commit_version);
 
-    void _wait_apply_done();
-    void _stop_and_wait_apply_done();
+    void _wait_apply_done_from_state(TabletUpdatesApplyTaskState state);
+    void _stop_and_wait_apply_done_from_state(TabletUpdatesApplyTaskState state);
 
     Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo);
 
@@ -499,7 +517,7 @@ private:
             _last_compaction_time_ms = UnixMillis();
         }
     }
-    void wait_apply_done() { _wait_apply_done(); }
+    void wait_apply_done() { _wait_apply_done_from_state(APPLY_TASK_SUBMITTED); }
     bool is_apply_stop() { return _apply_stopped.load(); }
 
     bool compaction_running() { return _compaction_running; }
@@ -519,6 +537,8 @@ private:
 
     void _reset_apply_status(const EditVersionInfo& version_info_apply);
 
+    bool _set_next_apply_task_state(TabletUpdatesApplyTaskState new_state);
+
 private:
     Tablet& _tablet;
 
@@ -537,16 +557,11 @@ private:
     mutable std::mutex _rowsets_lock;
     std::unordered_map<uint32_t, RowsetSharedPtr> _rowsets;
 
-    // used for async apply, make sure at most 1 thread is doing applying
-    mutable std::mutex _apply_running_lock;
     // make sure at most 1 thread is read or write primary index
     mutable std::shared_timed_mutex _index_lock;
-    // apply process is running currently
-    bool _apply_running = false;
 
     // used to stop apply thread when shutting-down this tablet
     std::atomic<bool> _apply_stopped = false;
-    std::condition_variable _apply_stopped_cond;
 
     BlockingQueue<RowsetSharedPtr> _unused_rowsets;
 
@@ -578,6 +593,10 @@ private:
     std::atomic<double> _pk_index_write_amp_score{0.0};
 
     std::atomic<bool> _apply_schedule{false};
+
+    mutable std::mutex _apply_task_state_lock;
+    std::condition_variable _apply_state_cond;
+    TabletUpdatesApplyTaskState _apply_task_state = APPLY_TASK_NOTREADY;
 };
 
 } // namespace starrocks

@@ -71,6 +71,19 @@
 
 namespace starrocks {
 
+std::string apply_task_state_to_string(TabletUpdatesApplyTaskState state) {
+    switch (state) {
+        case APPLY_TASK_NOTREADY:
+            return "APPLY_TASK_NOTREADY";
+        case APPLY_TASK_SUBMITTED:
+            return "APPLY_TASK_SUBMITTED";
+        case APPLY_TASK_RUNNING:
+            return "APPLY_TASK_RUNNING";
+        default:
+            return "UNKNOWN";
+    }
+}
+
 std::string EditVersion::to_string() const {
     if (minor_number() == 0) {
         return strings::Substitute("$0", major_number());
@@ -82,7 +95,7 @@ std::string EditVersion::to_string() const {
 TabletUpdates::TabletUpdates(Tablet& tablet) : _tablet(tablet), _unused_rowsets(UINT64_MAX) {}
 
 TabletUpdates::~TabletUpdates() {
-    _stop_and_wait_apply_done();
+    _stop_and_wait_apply_done_from_state(APPLY_TASK_SUBMITTED);
 }
 
 template <class Itr1, class Itr2>
@@ -886,21 +899,33 @@ void TabletUpdates::_check_for_apply() {
     if (_apply_stopped) {
         return;
     }
-    _apply_running_lock.lock();
-    if ((config::enable_retry_apply && _apply_schedule.load()) || _apply_running ||
+    if ((config::enable_retry_apply && _apply_schedule.load()) ||
         _apply_version_idx + 1 == _edit_version_infos.size()) {
-        _apply_running_lock.unlock();
         return;
     }
-    _apply_running = true;
-    _apply_running_lock.unlock();
+    if (!_set_next_apply_task_state(APPLY_TASK_SUBMITTED)) {
+        return;
+    }
     std::shared_ptr<Runnable> task(
             std::make_shared<ApplyCommitTask>(std::static_pointer_cast<Tablet>(_tablet.shared_from_this())));
     auto st = StorageEngine::instance()->update_manager()->apply_thread_pool()->submit(std::move(task));
     if (!st.ok()) {
-        std::string msg =
-                strings::Substitute("submit apply task failed: $0 $1", st.to_string(), _debug_string(false, false));
-        LOG(FATAL) << msg;
+        if (config::enable_retry_apply) {
+            auto time_point =
+                    std::chrono::steady_clock::now() + std::chrono::seconds(config::retry_apply_interval_second);
+            StorageEngine::instance()->add_schedule_apply_task(_tablet.tablet_id(), time_point);
+            std::string msg =
+                    strings::Substitute("apply task of tablet: $0 failed to be submited and it will retry later, status: $1",
+                                        _tablet.tablet_id(), st.to_string());
+            DCHECK(false) << msg;
+            LOG(WARNING) << msg;
+            _apply_schedule.store(true);
+            (void) _set_next_apply_task_state(APPLY_TASK_NOTREADY);
+        } else {
+            std::string msg =
+                    strings::Substitute("submit apply task failed: $0 $1", st.to_string(), _debug_string(false, false));
+            LOG(FATAL) << msg;
+        }
     }
 }
 
@@ -935,6 +960,15 @@ void TabletUpdates::do_apply() {
     SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
     SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
             config::enable_pk_strict_memcheck ? StorageEngine::instance()->update_manager()->mem_tracker() : nullptr);
+    if (!_set_next_apply_task_state(APPLY_TASK_RUNNING)) {
+        std::stringstream ss;
+        ss << "set apply task as running failed, current state: " << apply_task_state_to_string(_apply_task_state)
+            << " new state: " << apply_task_state_to_string(APPLY_TASK_RUNNING);
+        DCHECK(false) << ss.str();
+        LOG(WARNING) << ss.str();
+        (void) _set_next_apply_task_state(APPLY_TASK_NOTREADY);
+        return;
+    }
     // only 1 thread at max is running this method
     bool first = true;
     while (!_apply_stopped) {
@@ -1000,22 +1034,59 @@ void TabletUpdates::do_apply() {
             }
         }
     }
-    std::lock_guard<std::mutex> lg(_apply_running_lock);
-    CHECK(_apply_running) << "illegal state: _apply_running should be true";
-    _apply_running = false;
-    _apply_stopped_cond.notify_all();
+
+    (void) _set_next_apply_task_state(APPLY_TASK_NOTREADY);
 }
 
-void TabletUpdates::_wait_apply_done() {
-    std::unique_lock<std::mutex> ul(_apply_running_lock);
-    while (_apply_running) {
-        _apply_stopped_cond.wait(ul);
+bool TabletUpdates::_set_next_apply_task_state(TabletUpdatesApplyTaskState new_state) {
+    std::unique_lock<std::mutex> ul(_apply_task_state_lock);
+    switch(new_state) {
+        case APPLY_TASK_NOTREADY: {
+            if (_apply_task_state == APPLY_TASK_NOTREADY) {
+                return false;
+            }
+            break;
+        }
+        case APPLY_TASK_SUBMITTED: {
+            if (_apply_task_state != APPLY_TASK_NOTREADY) {
+                return false;
+            }
+            break;
+        }
+        case APPLY_TASK_RUNNING: {
+            if (_apply_task_state != APPLY_TASK_SUBMITTED) {
+                return false;
+            }
+            break;
+        }
+        default: {
+            LOG(WARNING) << "unknown new state: " << new_state;
+            return false;
+        }
+    }
+    _apply_task_state = new_state;
+
+    if (_apply_task_state == APPLY_TASK_NOTREADY) {
+        _apply_state_cond.notify_all();
+    }
+
+    return true;
+}
+
+void TabletUpdates::_wait_apply_done_from_state(TabletUpdatesApplyTaskState state) {
+    std::unique_lock<std::mutex> ul(_apply_task_state_lock);
+    if (_apply_task_state < state) {
+        return;
+    }
+
+    while (_apply_task_state != APPLY_TASK_NOTREADY) {
+        _apply_state_cond.wait(ul);
     }
 }
 
-void TabletUpdates::_stop_and_wait_apply_done() {
+void TabletUpdates::_stop_and_wait_apply_done_from_state(TabletUpdatesApplyTaskState state) {
     _apply_stopped = true;
-    _wait_apply_done();
+    _wait_apply_done_from_state(state);
 }
 
 Status TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_version) {
@@ -4820,7 +4891,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
             RETURN_IF_ERROR(check_rowset_files(rowset_meta_pb));
         }
         // Stop apply thread.
-        _stop_and_wait_apply_done();
+        _stop_and_wait_apply_done_from_state(APPLY_TASK_SUBMITTED);
 
         DeferOp defer([&]() {
             if (!_error.load()) {
@@ -5547,7 +5618,7 @@ Status TabletUpdates::recover() {
     }
     LOG(INFO) << "Tablet " << _tablet.tablet_id() << " begin do recover: " << _error_msg;
     // Stop apply thread.
-    _stop_and_wait_apply_done();
+    _stop_and_wait_apply_done_from_state(APPLY_TASK_SUBMITTED);
 
     DeferOp defer([&]() {
         if (!_error.load()) {
