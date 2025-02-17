@@ -745,11 +745,13 @@ public class OptimizerTaskTest {
             }
         };
 
+        ctx.getSessionVariable().setOptimizerExecuteTimeout(10000);
         Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
         OptExpression physicalTree = optimizer.optimize(expression, new ColumnRefSet());
 
         Operator root = physicalTree.getOp();
         assertEquals(root.getOpType(), OperatorType.PHYSICAL_LIMIT);
+        ctx.getSessionVariable().setOptimizerExecuteTimeout(3000);
     }
 
     @Test
