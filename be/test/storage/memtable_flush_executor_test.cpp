@@ -327,7 +327,7 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithSeg) {
     bool ret_eos = true;
     ASSERT_TRUE(flush_token
                         ->submit(std::move(mem_table), false,
-                                 [&](std::unique_ptr<SegmentPB> seg, bool eos) {
+                                 [&](std::unique_ptr<SegmentPB> seg, bool eos, int64_t flush_data_size) {
                                      ret_num_rows = seg->num_rows();
                                      ret_eos = eos;
                                  })
@@ -359,7 +359,7 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushWithNullSeg) {
     std::unique_ptr<SegmentPB> ret_seg = make_unique<SegmentPB>();
     ASSERT_TRUE(flush_token
                         ->submit(std::move(mem_table), true,
-                                 [&](std::unique_ptr<SegmentPB> seg, bool eos) {
+                                 [&](std::unique_ptr<SegmentPB> seg, bool eos, int64_t flush_data_size) {
                                      ret_seg = std::move(seg);
                                      ret_eos = eos;
                                  })
@@ -394,7 +394,7 @@ TEST_F(MemTableFlushExecutorTest, testMemtableFlushStatusNotOk) {
     flush_token->set_status(Status::NotSupported("Not Suppoted"));
     ASSERT_FALSE(flush_token->status().ok());
 
-    flush_token->_flush_memtable(nullptr, nullptr, false);
+    flush_token->_flush_memtable(nullptr, nullptr, false, nullptr);
 
     ASSERT_TRUE(MemTableFlushExecutor::calc_max_threads_for_lake_table(data_dirs) > 0);
 }
