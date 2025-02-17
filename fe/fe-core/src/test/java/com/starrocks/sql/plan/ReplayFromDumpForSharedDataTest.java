@@ -15,7 +15,6 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.common.Config;
-import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.EditLog;
@@ -34,20 +33,16 @@ public class ReplayFromDumpForSharedDataTest extends ReplayFromDumpTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+        // create connect context
+        connectContext = UtFrameUtils.createDefaultCtx();
+        starRocksAssert = new StarRocksAssert(connectContext);
         Config.show_execution_groups = false;
         // Should disable Dynamic Partition in replay dump test
         Config.dynamic_partition_enable = false;
         Config.tablet_sched_disable_colocate_overall_balance = true;
-        // create connect context
-        connectContext = UtFrameUtils.createDefaultCtx();
-        connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
-        connectContext.getSessionVariable().setJoinImplementationMode("auto");
-        connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
-        starRocksAssert = new StarRocksAssert(connectContext);
-        FeConstants.runningUnitTest = true;
-        FeConstants.showScanNodeLocalShuffleColumnsInExplain = false;
-        FeConstants.enablePruneEmptyOutputScan = false;
-        FeConstants.showJoinLocalShuffleInExplain = false;
+        UtFrameUtils.setDefaultConfigForAsyncMVTest(connectContext);
+        // set default config for timeliness mvs
+        UtFrameUtils.mockTimelinessForAsyncMVTest(connectContext);
 
         new MockUp<EditLog>() {
             @Mock
