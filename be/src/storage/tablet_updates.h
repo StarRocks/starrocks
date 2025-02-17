@@ -386,6 +386,8 @@ public:
 
     void rewrite_rs_meta(bool is_fatal);
 
+    bool stop_and_check_apply_done();
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;

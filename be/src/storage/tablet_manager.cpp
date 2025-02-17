@@ -375,7 +375,7 @@ TabletSharedPtr TabletManager::_create_tablet_meta_and_dir_unlocked(const TCreat
     return nullptr;
 }
 
-Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
+Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag, bool pk_wait_apply_done) {
     TabletSharedPtr dropped_tablet = nullptr;
     {
         std::unique_lock wlock(_get_tablets_shard_lock(tablet_id));
@@ -392,8 +392,16 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
             return Status::NotFound(strings::Substitute("tablet $0 not fount", tablet_id));
         }
 
-        LOG(INFO) << "Start to drop tablet " << tablet_id;
         dropped_tablet = it->second;
+        if (!pk_wait_apply_done && dropped_tablet->keys_type() == KeysType::PRIMARY_KEYS &&
+            !dropped_tablet->updates()->stop_and_check_apply_done()) {
+            std::stringstream ss;
+            ss << "apply task of primary key tablet: " << tablet_id << " is running, try to drop it later";
+            LOG(WARNING) << ss.str();
+            return Status::InternalError(ss.str());
+        }
+
+        LOG(INFO) << "Start to drop tablet " << tablet_id;
         dropped_tablet->set_is_dropping(true);
         // we can not erase tablet from tablet map here.
         // if tablet is a primary key table, deleting it may wait for apply
