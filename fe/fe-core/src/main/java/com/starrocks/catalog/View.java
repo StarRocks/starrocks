@@ -40,14 +40,17 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.parser.SqlParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.lang.ref.SoftReference;
 import java.util.List;
 import java.util.Map;
 
@@ -61,11 +64,6 @@ import java.util.Map;
  */
 public class View extends Table {
     private static final Logger LOG = LogManager.getLogger(GlobalStateMgr.class);
-
-    // The original SQL-string given as view definition. Set during analysis.
-    // Corresponds to Hive's viewOriginalText.
-    @Deprecated
-    private String originalViewDef = "";
 
     // Query statement (as SQL string) that defines the View for view substitution.
     // It is a transformation of the original view definition, e.g., to enforce the
@@ -89,6 +87,9 @@ public class View extends Table {
     @SerializedName(value = "s")
     private boolean security = false;
 
+    // 'queryStmtRef' is a soft reference, it is created from parsing query stmt
+    private SoftReference<QueryStatement> queryStmtRef = new SoftReference<>(null);
+
     // cache used table names
     private List<TableName> tableRefsCache = Lists.newArrayList();
 
@@ -106,24 +107,24 @@ public class View extends Table {
     }
 
     public QueryStatement getQueryStatement() throws StarRocksPlannerException {
-        Preconditions.checkNotNull(inlineViewDef);
-        ParseNode node;
-        try {
-            node = com.starrocks.sql.parser.SqlParser.parse(inlineViewDef, sqlMode).get(0);
-        } catch (Exception e) {
-            LOG.warn("stmt is {}", inlineViewDef);
-            LOG.warn("exception because: ", e);
-            throw new StarRocksPlannerException(
-                    String.format("Failed to parse view-definition statement of view: %s", name),
-                    ErrorType.INTERNAL_ERROR);
+        QueryStatement queryStatement = queryStmtRef.get();
+        if (queryStatement == null) {
+            synchronized (this) {
+                queryStatement = queryStmtRef.get();
+                if (queryStatement == null) {
+                    try {
+                        queryStatement = init();
+                    } catch (StarRocksException e) {
+                        // should not happen
+                        LOG.error("unexpected exception", e);
+                        throw new StarRocksPlannerException(
+                                String.format("Failed to parse view-definition statement of view: %s", name),
+                                ErrorType.INTERNAL_ERROR);
+                    }
+                }
+            }
         }
-        // Make sure the view definition parses to a query statement.
-        if (!(node instanceof QueryStatement)) {
-            throw new StarRocksPlannerException(String.format("View definition of %s " +
-                    "is not a query statement", name), ErrorType.INTERNAL_ERROR);
-        }
-
-        return (QueryStatement) node;
+        return queryStatement;
     }
 
     public void setInlineViewDefWithSqlMode(String inlineViewDef, long sqlMode) {
@@ -148,18 +149,18 @@ public class View extends Table {
     }
 
     /**
-     * Initializes the originalViewDef, inlineViewDef, and queryStmt members
-     * by parsing the expanded view definition SQL-string.
-     * Throws a TableLoadingException if there was any error parsing the
-     * SQL or if the view definition did not parse into a QueryStmt.
+     * Initializes the inlineViewDef, and queryStmtRef by parsing the expanded view definition SQL-string.
+     *
+     * @throws StarRocksException if there was any error parsing the SQL or if the view definition did not parse into a QueryStmt.
      */
     public synchronized QueryStatement init() throws StarRocksException {
         Preconditions.checkNotNull(inlineViewDef);
-        // Parse the expanded view definition SQL-string into a QueryStmt and
-        // populate a view definition.
+        // Parse the expanded view definition SQL-string into a QueryStmt and populate a view definition.
         ParseNode node;
         try {
-            node = com.starrocks.sql.parser.SqlParser.parse(inlineViewDef, sqlMode).get(0);
+            SessionVariable sessionVariable = new SessionVariable();
+            sessionVariable.setSqlMode(sqlMode);
+            node = SqlParser.parse(inlineViewDef, sessionVariable).get(0);
         } catch (Exception e) {
             LOG.warn("view-definition: {}. got exception: {}", inlineViewDef, e.getMessage(), e);
             // Do not pass e as the exception cause because it might reveal the existence
@@ -172,6 +173,7 @@ public class View extends Table {
             throw new StarRocksException(String.format("View %s without query statement. Its definition is:%n%s",
                     name, inlineViewDef));
         }
+        queryStmtRef = new SoftReference<>((QueryStatement) node);
         return (QueryStatement) node;
     }
 
