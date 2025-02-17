@@ -149,6 +149,8 @@ import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Mock;
 import mockit.MockUp;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 
 import java.io.ByteArrayInputStream;
@@ -179,8 +181,12 @@ import java.util.stream.Collectors;
 import static com.starrocks.sql.plan.PlanTestBase.setPartitionStatistics;
 
 public class UtFrameUtils {
+    private static final Logger LOG = LogManager.getLogger(UtFrameUtils.class);
+
     private static final AtomicInteger INDEX = new AtomicInteger(0);
     private static final AtomicBoolean CREATED_MIN_CLUSTER = new AtomicBoolean(false);
+
+    public static String runningDir;
 
     public static final String CREATE_STATISTICS_TABLE_STMT = "CREATE TABLE `table_statistic_v1` (\n" +
                 "  `table_id` bigint(20) NOT NULL COMMENT \"\",\n" +
@@ -305,13 +311,16 @@ public class UtFrameUtils {
     public static synchronized void createMinStarRocksCluster(boolean startBDB, RunMode runMode) {
         // to avoid call createMinStarRocksCluster multiple times
         if (CREATED_MIN_CLUSTER.get()) {
+            LOG.warn("Reuse cluster with under the running dir: {}", runningDir);
             return;
         }
         try {
             ThriftConnectionPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
             ThriftConnectionPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
 
-            startFEServer("fe/mocked/test/" + UUID.randomUUID().toString() + "/", startBDB, runMode);
+            runningDir = "fe/mocked/test/" + UUID.randomUUID().toString() + "/";
+            LOG.warn("Start cluster with running dir: {}, runMode: {}", runningDir, runMode);
+            startFEServer(runningDir, startBDB, runMode);
 
             addMockBackend(10001);
 

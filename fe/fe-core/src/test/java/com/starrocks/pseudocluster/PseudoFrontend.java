@@ -36,6 +36,7 @@ import com.starrocks.utframe.MockJournal;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.LoggerContext;
 
 import java.io.File;
@@ -50,6 +51,8 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
 public class PseudoFrontend {
+    private static final Logger LOG = LogManager.getLogger(PseudoFrontend.class);
+
     public static final String FE_PROCESS = "fe";
 
     // the running dir of this mocked frontend.
@@ -100,7 +103,9 @@ public class PseudoFrontend {
 
         this.runningDir = runningDir;
         this.fakeJournal = fakeJournal;
-        System.out.println("pseudo frontend running in dir: " + new File(this.runningDir).getAbsolutePath());
+        String logMsg = "pseudo frontend running in dir: " + new File(this.runningDir).getAbsolutePath();
+        System.out.println(logMsg);
+        LOG.warn(logMsg);
 
         // root running dir
         createAndClearDir(this.runningDir);
