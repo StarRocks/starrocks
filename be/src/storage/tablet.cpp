@@ -1478,39 +1478,42 @@ void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
         if (_tablet_meta->get_binlog_config() != nullptr) {
             tablet_info->__set_binlog_config_version(_tablet_meta->get_binlog_config()->version);
         }
+
+        if (_updates == nullptr) {
+            std::shared_lock rdlock(_meta_lock);
+            int64_t max_version = _timestamped_version_tracker.get_max_continuous_version();
+            auto max_rowset = rowset_with_max_version();
+            if (max_rowset != nullptr) {
+                if (max_rowset->version().second != max_version) {
+                    tablet_info->__set_version_miss(true);
+                }
+            } else {
+                // If the tablet is in running state, it must not be doing schema-change. so if we can not
+                // access its rowsets, it means that the tablet is bad and needs to be reported to the FE
+                // for subsequent repairs (through the cloning task)
+                if (tablet_state() == TABLET_RUNNING) {
+                    tablet_info->__set_used(false);
+                }
+                // For other states, FE knows that the tablet is in a certain change process, so here
+                // still sets the state to normal when reporting. Note that every task has an timeout,
+                // so if the task corresponding to this change hangs, when the task timeout, FE will know
+                // and perform state modification operations.
+            }
+            tablet_info->__set_version(max_version);
+            tablet_info->__set_max_readable_version(max_version);
+            // TODO: support getting minReadableVersion
+            tablet_info->__set_min_readable_version(_timestamped_version_tracker.get_min_readable_version());
+            tablet_info->__set_version_count(_tablet_meta->version_count());
+            tablet_info->__set_row_count(_tablet_meta->num_rows());
+            tablet_info->__set_data_size(_tablet_meta->tablet_footprint());
+        }
     }
+
     if (_updates) {
         // primary key specified info will protected by independent lock context
         // in TabletUpdates which means that those lock context can be sperated from
         // the tablet meta_lock when trying to get the extra info
         _updates->get_tablet_info_extra(tablet_info);
-    } else {
-        std::shared_lock rdlock(_meta_lock);
-        int64_t max_version = _timestamped_version_tracker.get_max_continuous_version();
-        auto max_rowset = rowset_with_max_version();
-        if (max_rowset != nullptr) {
-            if (max_rowset->version().second != max_version) {
-                tablet_info->__set_version_miss(true);
-            }
-        } else {
-            // If the tablet is in running state, it must not be doing schema-change. so if we can not
-            // access its rowsets, it means that the tablet is bad and needs to be reported to the FE
-            // for subsequent repairs (through the cloning task)
-            if (tablet_state() == TABLET_RUNNING) {
-                tablet_info->__set_used(false);
-            }
-            // For other states, FE knows that the tablet is in a certain change process, so here
-            // still sets the state to normal when reporting. Note that every task has an timeout,
-            // so if the task corresponding to this change hangs, when the task timeout, FE will know
-            // and perform state modification operations.
-        }
-        tablet_info->__set_version(max_version);
-        tablet_info->__set_max_readable_version(max_version);
-        // TODO: support getting minReadableVersion
-        tablet_info->__set_min_readable_version(_timestamped_version_tracker.get_min_readable_version());
-        tablet_info->__set_version_count(_tablet_meta->version_count());
-        tablet_info->__set_row_count(_tablet_meta->num_rows());
-        tablet_info->__set_data_size(_tablet_meta->tablet_footprint());
     }
 }
 
