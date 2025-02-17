@@ -40,6 +40,8 @@ public:
 
     bool is_remote() const override;
 
+    int64_t append_bytes() const { return _append_bytes; }
+
 private:
     Status _preallocate(size_t block_size);
 
@@ -49,6 +51,7 @@ private:
 private:
     LoadSpillBlockManager* _block_manager = nullptr;
     spill::BlockPtr _block;
+    int64_t _append_bytes = 0;
 };
 
 class SpillMemTableSink : public MemTableSink {
@@ -56,10 +59,12 @@ public:
     SpillMemTableSink(LoadSpillBlockManager* block_manager, TabletWriter* writer, RuntimeProfile* profile);
     ~SpillMemTableSink() override = default;
 
-    Status flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment = nullptr, bool eos = false) override;
+    Status flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment = nullptr, bool eos = false,
+                       int64_t* flush_data_size = nullptr) override;
 
     Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
-                                    starrocks::SegmentPB* segment = nullptr, bool eos = false) override;
+                                    starrocks::SegmentPB* segment = nullptr, bool eos = false,
+                                    int64_t* flush_data_size = nullptr) override;
 
     Status merge_blocks_to_segments();
 
