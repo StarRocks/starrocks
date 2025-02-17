@@ -1089,6 +1089,14 @@ void TabletUpdates::_stop_and_wait_apply_done_from_state(TabletUpdatesApplyTaskS
     _wait_apply_done_from_state(state);
 }
 
+bool TabletUpdates::stop_and_check_apply_not_running() {
+    if (!_apply_stopped) {
+        _apply_stopped = true;
+    }
+    std::unique_lock<std::mutex> ul(_apply_task_state_lock);
+    return _apply_task_state != APPLY_TASK_RUNNING;
+}
+
 Status TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_version) {
     std::lock_guard l(_lock);
     if (_edit_version_infos.empty()) {
