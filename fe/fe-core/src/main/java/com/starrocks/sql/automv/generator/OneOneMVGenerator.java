@@ -17,6 +17,7 @@ package com.starrocks.sql.automv.generator;
 import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Predicates;
+import com.starrocks.analysis.TableName;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.automv.column.ColumnAlias;
 import com.starrocks.sql.automv.column.GenericColumn;
@@ -24,6 +25,7 @@ import com.starrocks.sql.automv.pieces.PieceColumnPruner;
 import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pieces.TablePiece;
 import com.starrocks.sql.automv.pieces.TableUsage;
+import com.starrocks.sql.automv.pn.Op;
 import com.starrocks.sql.automv.qe.PartitionExtractor;
 import com.starrocks.sql.automv.qe.PartitionPlus;
 import com.starrocks.sql.automv.util.PrettyPrinter;
@@ -34,6 +36,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -126,9 +129,8 @@ public class OneOneMVGenerator {
     public static Optional<QueryGenerateResult> generate(TableUsage tableUsage, MVGenerateContext context) {
         QueryGenerateContext queryGenerateContext = QueryGenerateContext.of11MV(tableUsage);
         PartitionExtractor partitionExtractor = context.getOptions().getPartitionExtractor();
-        PlanPiece tablePiece =
-                addPartitionColumns(tableUsage.getTablePiece(), partitionExtractor)
-                        .setConjuncts(tableUsage.getWhereConjuncts());
+        PlanPiece tablePiece = addPartitionColumns(tableUsage.getTablePiece(), partitionExtractor)
+                .setConjuncts(TieredList.<Op>genesis());
         tablePiece = PieceColumnPruner.prune(tablePiece).cast();
         QueryGenerateResult result = QueryGenerator.generate(tablePiece, queryGenerateContext);
 
@@ -194,7 +196,18 @@ public class OneOneMVGenerator {
                 .map(p -> new PrettyPrinter().add(columnAliases.get(p.first).getName()))
                 .collect(TieredList.<PrettyPrinter>toList());
         TieredList<PrettyPrinter> mvFields = mvColumns.concat(mvIndexes);
-        String mvName = context.getMvNameGenerator().apply(result.getSubquery().getResult());
+        String defaultMVName = context.getMvNameGenerator().apply(result.getSubquery().getResult());
+        MVName name = Objects.requireNonNull(MVName.parse(defaultMVName).orElse(null));
+        TableName tableName = tablePiece.mustCast(TablePiece.class).getTable().getFqTableName();
+        String mvName = Stream.of(
+                name.getPrefix(),
+                tableName.getCatalog(),
+                tableName.getDb(),
+                tableName.getTbl(),
+                name.getCreateTime(),
+                name.getDigest().substring(0, 8)
+        ).filter(Objects::nonNull).collect(Collectors.joining("_")).replaceAll("_+", "_");
+
         mvSchema.add("CREATE MATERIALIZED VIEW").spaces(1).add(mvName).spaces(1).add("(").newLine();
         mvSchema.indentEnclose(() -> mvSchema.addSuperStepsWithNlDel(", ", mvFields));
         mvSchema.newLine().add(")").newLine();

@@ -86,9 +86,7 @@ public class OneOneMVGeneratorTest {
                         "  ,`tpcds`.`store_returns`.sr_store_sk\n" +
                         "  ,`tpcds`.`store_returns`.sr_return_amt\n" +
                         "FROM\n" +
-                        "  `tpcds`.`store_returns`\n" +
-                        "WHERE\n" +
-                        "  (`tpcds`.`store_returns`.sr_store_sk IS NOT NULL)"
+                        "  `tpcds`.`store_returns`"
         };
 
         for (int i = 0; i < mergedTableUsages.size(); ++i) {
@@ -142,9 +140,7 @@ public class OneOneMVGeneratorTest {
                     "  ,`tpcds`.`store_returns`.sr_store_sk\n" +
                     "  ,`tpcds`.`store_returns`.sr_return_amt\n" +
                     "FROM\n" +
-                    "  `tpcds`.`store_returns`\n" +
-                    "WHERE\n" +
-                    "  (`tpcds`.`store_returns`.sr_store_sk IS NOT NULL)"));
+                    "  `tpcds`.`store_returns`"));
         });
     }
 

@@ -19,6 +19,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.connector.PartitionUtil;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.automv.column.ColumnAlias;
 import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
@@ -144,6 +145,21 @@ public class PartitionPolicy {
                 .collect(TieredMap.toMap(
                         Map.Entry::getKey,
                         e -> ColumnAlias.of(e.getValue().getName())));
+
+        String unitName = Optional.ofNullable(ConnectContext.get())
+                .map(ctx -> ctx.getSessionVariable().getAutoMVDefaultPartitionByTimeGranule().toUpperCase())
+                .orElse("NONE");
+        // use coarse-granule partition if the base table has only one partition column of date type and
+        // session variable automv_default_partition_by_time_granule is not none to avoid 11MV with too
+        // many partitions.
+        if (partitionOps.size() == 1 && !unitName.equals("NONE")) {
+            TimeGranule.Unit granuleUnit = TimeGranule.Unit.valueOf(unitName);
+            Optional<TimeGranule> optGranule = Optional.ofNullable(TimeGranule.of(partitionOps.get(0)))
+                    .map(granule -> granule.toCoarse(granuleUnit));
+            if (optGranule.isPresent()) {
+                partitionOps = List.of(optGranule.get().toCoarse(granuleUnit).getOp());
+            }
+        }
 
         Function<Op, String> toSqlConverter = OpUtil.toOpToSqlConverter(unqualifiedColumnAliases);
         List<String> partitionExprs = partitionOps.stream().map(toSqlConverter).collect(Collectors.toList());

@@ -64,6 +64,36 @@ public class PartitionedIcebergTest extends MVTestBase {
     }
 
     @Test
+    public void testSingleColumnTransformPartition2() {
+        String sql = "SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.`t0_day` as a";
+        String defaultGranule = connectContext.getSessionVariable().getAutoMVDefaultPartitionByTimeGranule();
+        try {
+            {
+                connectContext.getSessionVariable().setAutoMVDefaultPartitionByTimeGranule("day");
+                List<String> mvs = AutoMVUtil.recommendOneOneMV(connectContext, sql);
+                Assert.assertEquals(1, mvs.size());
+                String mv = mvs.get(0);
+                Assert.assertTrue(mv, mv.contains("COMMENT \"11-MV recommended by AutoMV\"\n" +
+                        "PARTITION BY date_trunc(\"day\", ts)\n" +
+                        "DISTRIBUTED BY RANDOM\n" +
+                        "ORDER BY (id, data, ts)"));
+            }
+            {
+                connectContext.getSessionVariable().setAutoMVDefaultPartitionByTimeGranule("month");
+                List<String> mvs = AutoMVUtil.recommendOneOneMV(connectContext, sql);
+                Assert.assertEquals(1, mvs.size());
+                String mv = mvs.get(0);
+                Assert.assertTrue(mv, mv.contains("COMMENT \"11-MV recommended by AutoMV\"\n" +
+                        "PARTITION BY date_trunc(\"month\", ts)\n" +
+                        "DISTRIBUTED BY RANDOM\n" +
+                        "ORDER BY (id, data, ts)"));
+            }
+        } finally {
+            connectContext.getSessionVariable().setAutoMVDefaultPartitionByTimeGranule(defaultGranule);
+        }
+    }
+
+    @Test
     public void testMultiColumnTransformPartition() {
         String sql = "SELECT id, data, ts  FROM `iceberg0`.`partitioned_transforms_db`.t0_multi_hour as a";
         List<String> mvs = AutoMVUtil.recommendOneOneMV(connectContext, sql);
@@ -87,6 +117,6 @@ public class PartitionedIcebergTest extends MVTestBase {
                 "ORDER BY (id, data, ts)"));
         starRocksAssert.withMaterializedView(mv);
         String plan = UtFrameUtils.getFragmentPlan(starRocksAssert.getCtx(), sql);
-        Assert.assertTrue(plan, plan.contains("TABLE: _mv_20"));
+        Assert.assertTrue(plan, plan.contains("TABLE: _mv_iceberg0_partitioned_transforms_db_t0_multi_hour"));
     }
 }
