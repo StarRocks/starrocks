@@ -4,6 +4,30 @@ displayed_sidebar: docs
 
 # StarRocks version 3.2
 
+## 3.2.15
+
+Release date: February 14, 2025
+
+### New Features
+
+- Window functions support `max_by` and `min_by`. [#54961](https://github.com/StarRocks/starrocks/pull/54961)
+
+### Improvements
+
+- Added StarClient timeout parameters. [#54496](https://github.com/StarRocks/starrocks/pull/54496)
+  - star_client_read_timeout_seconds
+  - star_client_list_timeout_seconds
+  - star_client_write_timeout_seconds
+- Tables with List partitioning strategies support partition pruning for DELETE statements. [#55400](https://github.com/StarRocks/starrocks/pull/55400)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- Stream Load fails when a node with an Alive status of false was scheduled. [#55371](https://github.com/StarRocks/starrocks/pull/55371)
+- An error is returned during partial updates on Primary Key tables with Stream Load. [#53403](https://github.com/StarRocks/starrocks/pull/55430)
+- bRPC error persists after BE node restart. [#40229](https://github.com/StarRocks/starrocks/pull/40229)
+
 ## 3.2.14
 
 Release date: January 8, 2025

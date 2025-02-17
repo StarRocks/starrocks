@@ -4,6 +4,30 @@ displayed_sidebar: docs
 
 # StarRocks version 3.2
 
+## 3.2.15
+
+发布日期：2025 年 2 月 14 日
+
+### 新增特性
+
+- 窗口函数支持 `max_by` 和 `min_by`。[#54961](https://github.com/StarRocks/starrocks/pull/54961)
+
+### 功能优化
+
+- 新增 StarClient 超时参数。[#54496](https://github.com/StarRocks/starrocks/pull/54496)
+  - star_client_read_timeout_seconds
+  - star_client_list_timeout_seconds
+  - star_client_write_timeout_seconds
+- List 分区表在执行 DELETE 语句时支持分区裁剪。[#55400](https://github.com/StarRocks/starrocks/pull/55400)
+
+### 问题修复
+
+修复了如下问题：
+
+- Stream Load 调度到 Alive 状态为 false 的节点时，导入失败。[#55371](https://github.com/StarRocks/starrocks/pull/55371)
+- Stream Load 部分列写入主键表报错。[#53403](https://github.com/StarRocks/starrocks/pull/55430)
+- BE 节点重启后 bRPC 持续报错。[#40229](https://github.com/StarRocks/starrocks/pull/40229)
+
 ## 3.2.14
 
 发布日期：2025 年 1 月 8 日
