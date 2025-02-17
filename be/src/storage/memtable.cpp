@@ -326,7 +326,7 @@ Status MemTable::finalize() {
     return Status::OK();
 }
 
-Status MemTable::flush(SegmentPB* seg_info, bool eos) {
+Status MemTable::flush(SegmentPB* seg_info, bool eos, int64_t* flush_data_size) {
     if (UNLIKELY(_result_chunk == nullptr)) {
         return Status::OK();
     }
@@ -339,9 +339,9 @@ Status MemTable::flush(SegmentPB* seg_info, bool eos) {
     {
         SCOPED_RAW_TIMER(&duration_ns);
         if (_deletes) {
-            RETURN_IF_ERROR(_sink->flush_chunk_with_deletes(*_result_chunk, *_deletes, seg_info, eos));
+            RETURN_IF_ERROR(_sink->flush_chunk_with_deletes(*_result_chunk, *_deletes, seg_info, eos, flush_data_size));
         } else {
-            RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk, seg_info, eos));
+            RETURN_IF_ERROR(_sink->flush_chunk(*_result_chunk, seg_info, eos, flush_data_size));
         }
     }
     auto io_stat = scope.current_scoped_tls_io();

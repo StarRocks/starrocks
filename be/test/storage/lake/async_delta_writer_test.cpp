@@ -574,9 +574,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_block_merger) {
     CountDownLatch latch(10);
     // flush multi times and generate spill blocks
     int64_t old_val = config::write_buffer_size;
-    bool old_val2 = config::enable_load_spill;
     config::write_buffer_size = 1;
-    config::enable_load_spill = true;
     ASSIGN_OR_ABORT(auto delta_writer, AsyncDeltaWriterBuilder()
                                                .set_tablet_manager(_tablet_mgr.get())
                                                .set_tablet_id(tablet_id)
@@ -585,6 +583,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_block_merger) {
                                                .set_mem_tracker(_mem_tracker.get())
                                                .set_schema_id(_tablet_schema->id())
                                                .set_profile(&_dummy_runtime_profile)
+                                               .set_immutable_tablet_size(10000000)
                                                .build());
     ASSERT_OK(delta_writer->open());
     for (int i = 0; i < 10; i++) {
@@ -596,7 +595,6 @@ TEST_F(LakeAsyncDeltaWriterTest, test_block_merger) {
     }
     latch.wait();
     config::write_buffer_size = old_val;
-    config::enable_load_spill = old_val2;
     // finish
     CountDownLatch latch2(1);
     delta_writer->finish([&](StatusOr<TxnLogPtr> res) {
@@ -604,6 +602,7 @@ TEST_F(LakeAsyncDeltaWriterTest, test_block_merger) {
         latch2.count_down();
     });
     latch2.wait();
+    ASSERT_TRUE(_tablet_mgr->in_writing_data_size(tablet_id) > 0);
 }
 
 } // namespace starrocks::lake

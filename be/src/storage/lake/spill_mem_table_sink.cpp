@@ -36,6 +36,7 @@ Status LoadSpillOutputDataStream::append(RuntimeState* state, const std::vector<
     // preallocate block
     RETURN_IF_ERROR(_preallocate(total_size));
     // append data
+    _append_bytes += total_size;
     return _block->append(data);
 }
 
@@ -123,7 +124,8 @@ Status SpillMemTableSink::_do_spill(const Chunk& chunk, const spill::SpillOutput
     return Status::OK();
 }
 
-Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment, bool eos) {
+Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment, bool eos,
+                                      int64_t* flush_data_size) {
     if (eos && _block_manager->block_container()->empty()) {
         // If there is only one flush, flush it to segment directly
         RETURN_IF_ERROR(_writer->write(chunk, segment));
@@ -137,11 +139,15 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
     RETURN_IF_ERROR(_do_spill(chunk, output));
     // 3. flush
     RETURN_IF_ERROR(output->flush());
+    // record append bytes to `flush_data_size`
+    if (flush_data_size != nullptr) {
+        *flush_data_size = output->append_bytes();
+    }
     return Status::OK();
 }
 
 Status SpillMemTableSink::flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
-                                                   starrocks::SegmentPB* segment, bool eos) {
+                                                   starrocks::SegmentPB* segment, bool eos, int64_t* flush_data_size) {
     if (eos && _block_manager->block_container()->empty()) {
         // If there is only one flush, flush it to segment directly
         RETURN_IF_ERROR(_writer->flush_del_file(deletes));
@@ -149,7 +155,7 @@ Status SpillMemTableSink::flush_chunk_with_deletes(const Chunk& upserts, const C
         return _writer->flush(segment);
     }
     // 1. flush upsert
-    RETURN_IF_ERROR(flush_chunk(upserts, segment, eos));
+    RETURN_IF_ERROR(flush_chunk(upserts, segment, eos, flush_data_size));
     // 2. flush deletes
     RETURN_IF_ERROR(_writer->flush_del_file(deletes));
     return Status::OK();

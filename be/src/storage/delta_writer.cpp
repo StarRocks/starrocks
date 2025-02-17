@@ -572,7 +572,8 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
             if ((_mem_table != nullptr && _mem_table->get_result_chunk() != nullptr) || eos) {
                 auto replicate_token = _replicate_token.get();
                 return _flush_token->submit(
-                        std::move(_mem_table), eos, [replicate_token, this](std::unique_ptr<SegmentPB> seg, bool eos) {
+                        std::move(_mem_table), eos,
+                        [replicate_token, this](SegmentPBPtr seg, bool eos, int64_t flush_data_size) {
                             if (seg) {
                                 _tablet->add_in_writing_data_size(_opt.txn_id, seg->data_size());
                             }
@@ -597,7 +598,7 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
         } else {
             if (_mem_table != nullptr && _mem_table->get_result_chunk() != nullptr) {
                 return _flush_token->submit(
-                        std::move(_mem_table), eos, [this](std::unique_ptr<SegmentPB> seg, bool eos) {
+                        std::move(_mem_table), eos, [this](SegmentPBPtr seg, bool eos, int64_t flush_data_size) {
                             if (seg) {
                                 _tablet->add_in_writing_data_size(_opt.txn_id, seg->data_size());
                             }
@@ -616,7 +617,7 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
         }
     } else if (_replica_state == Peer) {
         if (_mem_table != nullptr && _mem_table->get_result_chunk() != nullptr) {
-            return _flush_token->submit(std::move(_mem_table), eos, [this](std::unique_ptr<SegmentPB> seg, bool eos) {
+            return _flush_token->submit(std::move(_mem_table), eos, [this](SegmentPBPtr seg, bool eos, int64_t f) {
                 if (seg) {
                     _tablet->add_in_writing_data_size(_opt.txn_id, seg->data_size());
                 }
