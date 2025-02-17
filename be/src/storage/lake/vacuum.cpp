@@ -391,12 +391,12 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         RETURN_IF_ERROR(collect_files_to_vacuum(tablet_mgr, root_dir, tablet_id, grace_timestamp, min_retain_version,
                                                 &datafile_deleter, &metafile_deleter, vacuumed_file_size,
                                                 &tablet_vacuumed_version));
+        RETURN_IF_ERROR(datafile_deleter.finish());
+        RETURN_IF_ERROR(metafile_deleter.finish());
         if (*vacuumed_version == 0 || *vacuumed_version > tablet_vacuumed_version) {
             // set partition vacuumed_version to min tablet vacuumed version
             *vacuumed_version = tablet_vacuumed_version;
         }
-        RETURN_IF_ERROR(datafile_deleter.finish());
-        RETURN_IF_ERROR(metafile_deleter.finish());
         (*vacuumed_files) += datafile_deleter.delete_count();
         (*vacuumed_files) += metafile_deleter.delete_count();
     }

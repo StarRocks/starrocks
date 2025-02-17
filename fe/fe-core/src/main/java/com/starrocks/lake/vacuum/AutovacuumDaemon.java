@@ -107,13 +107,15 @@ public class AutovacuumDaemon extends FrontendDaemon {
         if (current < partition.getLastVacuumTime() + Config.lake_autovacuum_partition_naptime_seconds * 1000) {
             return false;
         }
-        long minRetainVersion = partition.getMinRetainVersion();
-        if (minRetainVersion <= 0) {
-            minRetainVersion = Math.max(1, partition.getVisibleVersion() - Config.lake_autovacuum_max_previous_versions);
-        }
-        // the file before minRetainVersion vacuum success
-        if (Config.lake_autovacuum_by_version && partition.getLastSuccVacuumVersion() >= minRetainVersion) {
-            return false;
+        if (Config.lake_autovacuum_by_version) {
+            long minRetainVersion = partition.getMinRetainVersion();
+            if (minRetainVersion <= 0) {
+                minRetainVersion = Math.max(1, partition.getVisibleVersion() - Config.lake_autovacuum_max_previous_versions);
+            }
+            // the file before minRetainVersion vacuum success
+            if (partition.getLastSuccVacuumVersion() >= minRetainVersion) {
+                return false;
+            }
         }
         // TODO(zhangqiang)
         // add partition data size and storage size on S3 to decide vacuum or not
