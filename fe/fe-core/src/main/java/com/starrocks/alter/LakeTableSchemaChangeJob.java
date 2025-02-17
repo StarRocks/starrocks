@@ -204,10 +204,16 @@ public class LakeTableSchemaChangeJob extends AlterJobV2 {
         }
 
         for (long shadowIdxId : indexIdMap.keySet()) {
+            List<Integer> sortKeyColumnIndexes = null;
+
             long orgIndexId = indexIdMap.get(shadowIdxId);
+            if (orgIndexId == table.getBaseIndexId()) {
+                sortKeyColumnIndexes = sortKeyIdxes;
+            }
+
             table.setIndexMeta(shadowIdxId, indexIdToName.get(shadowIdxId), indexSchemaMap.get(shadowIdxId), 0, 0,
                     indexShortKeyMap.get(shadowIdxId), TStorageType.COLUMN,
-                    table.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)), null, sortKeyIdxes, null);
+                    table.getKeysTypeByIndexId(indexIdMap.get(shadowIdxId)), null, sortKeyColumnIndexes, null);
             MaterializedIndexMeta orgIndexMeta = table.getIndexMetaByIndexId(orgIndexId);
             Preconditions.checkNotNull(orgIndexMeta);
             MaterializedIndexMeta indexMeta = table.getIndexMetaByIndexId(shadowIdxId);
