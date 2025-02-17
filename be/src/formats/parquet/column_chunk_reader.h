@@ -84,7 +84,7 @@ public:
 
     Status decode_values(size_t n, const uint16_t* is_nulls, ColumnContentType content_type, Column* dst) {
         SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
-        if (_current_row_group_no_null || _current_page_no_null) {
+        if (n > 0 && (_current_row_group_no_null || _current_page_no_null)) {
             return _cur_decoder->next_batch(n, content_type, dst);
         }
         size_t idx = 0;
