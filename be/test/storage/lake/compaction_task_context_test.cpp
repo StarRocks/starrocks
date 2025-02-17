@@ -164,7 +164,7 @@ TEST_F(CompactionTaskContextTest, test_to_string) {
 
     // Case 1: Status is explicitly set to OK
     {
-        CompactionTaskContext context(txn_id, tablet_id, version, force_base_compaction, false, callback);
+        CompactionTaskContext context(txn_id, tablet_id, version, force_base_compaction, callback);
 
         context.start_time.store(1633072800);
         context.finish_time.store(1633076400);
@@ -183,7 +183,7 @@ TEST_F(CompactionTaskContextTest, test_to_string) {
 
     // Case 2: Status is not explicitly set (assuming default constructor sets it to OK)
     {
-        CompactionTaskContext context(txn_id, tablet_id, version, force_base_compaction, false, callback);
+        CompactionTaskContext context(txn_id, tablet_id, version, force_base_compaction, callback);
 
         context.start_time.store(1633072800);
         context.finish_time.store(1633076400);
@@ -201,7 +201,7 @@ TEST_F(CompactionTaskContextTest, test_to_string) {
 
     // Case 3: Status is explicitly set to an error status
     {
-        CompactionTaskContext context(txn_id, tablet_id, version, force_base_compaction, false, callback);
+        CompactionTaskContext context(txn_id, tablet_id, version, force_base_compaction, callback);
 
         context.start_time.store(1633072800);
         context.finish_time.store(1633076400);
