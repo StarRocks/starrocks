@@ -212,8 +212,8 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
         final JDBCTable jdbcTable = (JDBCTable) table;
         final String query = getPartitionQuery(table);
         try (PreparedStatement ps = connection.prepareStatement(query)) {
-            ps.setString(1, jdbcTable.getCatalogDBName());
-            ps.setString(2, jdbcTable.getCatalogTableName());
+            ps.setString(1, jdbcTable.getDbName());
+            ps.setString(2, jdbcTable.getJdbcTable());
             final ResultSet rs = ps.executeQuery();
             final ImmutableList.Builder<Partition> list = ImmutableList.builder();
             if (null != rs) {
