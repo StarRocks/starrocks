@@ -2511,6 +2511,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         }
         return Optional.of(followerForwardMode.equalsIgnoreCase(FollowerQueryForwardMode.LEADER.toString()));
     }
+
     public void setEnablePaimonColumnStatistics(boolean enablePaimonColumnStatistics) {
         this.enablePaimonColumnStatistics = enablePaimonColumnStatistics;
     }

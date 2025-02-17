@@ -432,23 +432,25 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
             ColumnStatistic.Builder builder = ColumnStatistic.builder();
             ColStats<?> colStats = colStatsEntry.getValue();
-            if (colStats.min().isPresent()) {
+            Optional<? extends Comparable<?>> min = colStats.min();
+            if (min.isPresent() && min.get() != null) {
                 if (column.getType().isBoolean()) {
-                    builder.setMinValue((Boolean) colStats.min().get() ? 1 : 0);
+                    builder.setMinValue((Boolean) min.get() ? 1 : 0);
                 } else if (column.getType().isDatetime()) {
-                    builder.setMinValue(getLongFromDateTime(((Timestamp) colStats.min().get()).toLocalDateTime()));
+                    builder.setMinValue(getLongFromDateTime(((Timestamp) min.get()).toLocalDateTime()));
                 } else {
-                    builder.setMinValue(Double.parseDouble(colStats.min().get().toString()));
+                    builder.setMinValue(Double.parseDouble(min.get().toString()));
                 }
             }
 
-            if (colStats.max().isPresent()) {
+            Optional<? extends Comparable<?>> max = colStats.max();
+            if (max.isPresent() && max.get() != null) {
                 if (column.getType().isBoolean()) {
-                    builder.setMaxValue((Boolean) colStats.max().get() ? 1 : 0);
+                    builder.setMaxValue((Boolean) max.get() ? 1 : 0);
                 } else if (column.getType().isDatetime()) {
-                    builder.setMaxValue(getLongFromDateTime(((Timestamp) colStats.max().get()).toLocalDateTime()));
+                    builder.setMaxValue(getLongFromDateTime(((Timestamp) max.get()).toLocalDateTime()));
                 } else if (!column.getType().isBoolean()) {
-                    builder.setMaxValue(Double.parseDouble(colStats.max().get().toString()));
+                    builder.setMaxValue(Double.parseDouble(max.get().toString()));
                 }
             }
 

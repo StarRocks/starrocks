@@ -905,10 +905,14 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             @Mock
             public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
                 Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
-                metaMap.put(new AnalyzeMgr.StatsMetaKey("paimon0", "pmn_db1", "partitioned_table"),
+                ExternalBasicStatsMeta externalBasicStatsMeta =
                         new ExternalBasicStatsMeta("paimon0", "pmn_db1", "partitioned_table", null,
-                                StatsConstants.AnalyzeType.FULL,
-                                LocalDateTime.now().plusHours(20), Maps.newHashMap()));
+                                StatsConstants.AnalyzeType.FULL, LocalDateTime.now().plusHours(20), Maps.newHashMap());
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("pk", null,  LocalDateTime.now().plusHours(20)));
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("d", null,  LocalDateTime.now().plusHours(20)));
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("pt", null,  LocalDateTime.now().plusHours(20)));
+
+                metaMap.put(new AnalyzeMgr.StatsMetaKey("paimon0", "pmn_db1", "partitioned_table"), externalBasicStatsMeta);
                 return metaMap;
             }
         };
@@ -944,11 +948,14 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         new MockUp<AnalyzeMgr>() {
             @Mock
             public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                ExternalBasicStatsMeta externalBasicStatsMeta =
+                        new ExternalBasicStatsMeta("paimon0", "pmn_db1", "unpartitioned_table", null,
+                                StatsConstants.AnalyzeType.FULL, LocalDateTime.now().plusHours(20), Maps.newHashMap());
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("pk", null,  LocalDateTime.now().plusHours(20)));
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("d", null,  LocalDateTime.now().plusHours(20)));
                 Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
                 metaMap.put(new AnalyzeMgr.StatsMetaKey("paimon0", "pmn_db1", "unpartitioned_table"),
-                        new ExternalBasicStatsMeta("paimon0", "pmn_db1", "unpartitioned_table", null,
-                                StatsConstants.AnalyzeType.FULL,
-                                LocalDateTime.now().plusHours(20), Maps.newHashMap()));
+                        externalBasicStatsMeta);
                 return metaMap;
             }
         };
