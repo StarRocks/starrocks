@@ -36,6 +36,8 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
+
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         starRocksAssert.withTable("CREATE TABLE t0(\n" +
                 " k1 datetime,\n" +
                 " v1 INT,\n" +
@@ -129,7 +131,7 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
         PlanTestBase.assertContains(plan, "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: date_trunc('day', 22: k1) < '2024-01-01 01:00:00', 22: k1 >= '2024-01-01 01:00:00'\n" +
-                "     partitions=4/5");
+                "     partitions=1/5");
         starRocksAssert.dropMaterializedView("test_mv1");
     }
 
@@ -155,7 +157,7 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
             PlanTestBase.assertContains(plan, "     TABLE: t0\n" +
                     "     PREAGGREGATION: ON\n" +
                     "     PREDICATES: date_trunc('day', 24: k1) < '2024-01-01 01:00:00', 24: k1 >= '2024-01-01 01:00:00'\n" +
-                    "     partitions=4/5");
+                    "     partitions=1/5");
         }
         {
             // date column should be the same with date_trunc('day', ct)
@@ -184,7 +186,7 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
                     "     PREDICATES: (date_trunc('day', 24: k1) > '2024-01-31 01:00:00') OR " +
                     "(date_trunc('day', 24: k1) < '2024-01-01 01:00:00'), 24: k1 <= '2024-02-01 01:00:00', " +
                     "24: k1 >= '2024-01-01 01:00:00'\n" +
-                    "     partitions=3/5");
+                    "     partitions=2/5");
         }
         starRocksAssert.dropMaterializedView("test_mv1");
     }
@@ -215,11 +217,11 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
         PlanTestBase.assertContains(plan, "     TABLE: test_mv1\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: date_trunc('month', 45: dt) < '2024-01-01 01:00:00', 45: dt >= '2024-01-01 01:00:00'\n" +
-                "     partitions=62/63");
+                "     partitions=31/63");
         PlanTestBase.assertContains(plan, "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: date_trunc('day', 25: k1) < '2024-01-01 01:00:00', 25: k1 >= '2024-01-01 01:00:00'\n" +
-                "     partitions=4/5");
+                "     partitions=1/5");
         starRocksAssert.dropMaterializedView("test_mv1");
         starRocksAssert.dropMaterializedView("test_mv2");
     }
@@ -286,7 +288,7 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
         PlanTestBase.assertContains(plan, "     TABLE: t0\n" +
                 "     PREAGGREGATION: ON\n" +
                 "     PREDICATES: date_trunc('day', 14: k1) < '2024-01-01 01:00:00', 14: k1 >= '2024-01-01 01:00:00'\n" +
-                "     partitions=4/5");
+                "     partitions=1/5");
         PlanTestBase.assertContains(plan, "  16:AGGREGATE (update serialize)\n" +
                 "  |  output: array_unique_agg(18: count)\n" +
                 "  |  group by: \n" +
