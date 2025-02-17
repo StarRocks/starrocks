@@ -55,6 +55,7 @@ import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.table.source.TableScan;
+import org.apache.paimon.table.system.ManifestsTable;
 import org.apache.paimon.table.system.PartitionsTable;
 import org.apache.paimon.table.system.SchemasTable;
 import org.apache.paimon.table.system.SnapshotsTable;
@@ -191,6 +192,28 @@ public class PaimonMetadataTest {
         };
         Assert.assertFalse(metadata.tableExists("nonexistentDb", "nonexistentTbl"));
         Assert.assertNull(metadata.getTable("nonexistentDb", "nonexistentTbl"));
+    }
+
+    @Test
+    public void testGetSystemTable(@Mocked ManifestsTable paimonSystemTable,
+                                   @Mocked ReadBuilder readBuilder) throws Exception {
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable((Identifier) any);
+                result = paimonSystemTable;
+                paimonSystemTable.latestSnapshotId();
+                result = new Exception("Readonly Table tbl1$manifests does not support currentSnapshot.");
+                paimonSystemTable.newReadBuilder();
+                result = readBuilder;
+                readBuilder.withFilter((List<Predicate>) any).withProjection((int[]) any).newScan().plan().splits();
+                result = splits;
+            }
+        };
+        PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1$manifests");
+        List<String> requiredNames = Lists.newArrayList("file_name", "file_size");
+        List<RemoteFileInfo> result =
+                metadata.getRemoteFileInfos(paimonTable, null, -1, null, requiredNames, -1);
+        Assert.assertEquals(1, result.size());
     }
 
     @Test
