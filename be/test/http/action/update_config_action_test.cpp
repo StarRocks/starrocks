@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include "block_cache/block_cache.h"
+#include "cache/block_cache/block_cache.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
 #include "testutil/scoped_updater.h"
