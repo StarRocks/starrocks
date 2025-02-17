@@ -137,6 +137,11 @@ public class CreateLakeTableTest {
     }
 
     @Test
+    public void validateRunMode() {
+        Assert.assertEquals(RunMode.SHARED_DATA, RunMode.getCurrentRunMode());
+    }
+
+    @Test
     public void testCreateLakeTableWithStorageCache() throws StarRocksException {
         // normal
         ExceptionChecker.expectThrowsNoException(() -> createTable(
