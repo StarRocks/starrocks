@@ -1465,21 +1465,27 @@ bool Tablet::_contains_rowset(const RowsetId rowset_id) {
 }
 
 void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
-    std::shared_lock rdlock(_meta_lock);
-    tablet_info->__set_tablet_id(_tablet_meta->tablet_id());
-    tablet_info->__set_schema_hash(_tablet_meta->schema_hash());
-    tablet_info->__set_partition_id(_tablet_meta->partition_id());
-    tablet_info->__set_storage_medium(_data_dir->storage_medium());
-    tablet_info->__set_path_hash(_data_dir->path_hash());
-    tablet_info->__set_enable_persistent_index(_tablet_meta->get_enable_persistent_index());
-    tablet_info->__set_primary_index_cache_expire_sec(_tablet_meta->get_primary_index_cache_expire_sec());
-    tablet_info->__set_tablet_schema_version(_max_version_schema->schema_version());
-    if (_tablet_meta->get_binlog_config() != nullptr) {
-        tablet_info->__set_binlog_config_version(_tablet_meta->get_binlog_config()->version);
+    {
+        std::shared_lock rdlock(_meta_lock);
+        tablet_info->__set_tablet_id(_tablet_meta->tablet_id());
+        tablet_info->__set_schema_hash(_tablet_meta->schema_hash());
+        tablet_info->__set_partition_id(_tablet_meta->partition_id());
+        tablet_info->__set_storage_medium(_data_dir->storage_medium());
+        tablet_info->__set_path_hash(_data_dir->path_hash());
+        tablet_info->__set_enable_persistent_index(_tablet_meta->get_enable_persistent_index());
+        tablet_info->__set_primary_index_cache_expire_sec(_tablet_meta->get_primary_index_cache_expire_sec());
+        tablet_info->__set_tablet_schema_version(_max_version_schema->schema_version());
+        if (_tablet_meta->get_binlog_config() != nullptr) {
+            tablet_info->__set_binlog_config_version(_tablet_meta->get_binlog_config()->version);
+        }
     }
     if (_updates) {
+        // primary key specified info will protected by independent lock context
+        // in TabletUpdates which means that those lock context can be sperated from
+        // the tablet meta_lock when trying to get the extra info
         _updates->get_tablet_info_extra(tablet_info);
     } else {
+        std::shared_lock rdlock(_meta_lock);
         int64_t max_version = _timestamped_version_tracker.get_max_continuous_version();
         auto max_rowset = rowset_with_max_version();
         if (max_rowset != nullptr) {

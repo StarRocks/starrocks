@@ -989,14 +989,21 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
 
     size_t max_tablet_rowset_num = 0;
     for (const auto& tablets_shard : _tablets_shards) {
-        std::shared_lock rlock(tablets_shard.lock);
-        for (const auto& [tablet_id, tablet_ptr] : tablets_shard.tablet_map) {
+        std::vector<TabletSharedPtr> all_tablets_by_shard;
+        {
+            std::shared_lock rlock(tablets_shard.lock);
+            for (const auto& [_, tablet_ptr] : tablets_shard.tablet_map) {
+                all_tablets_by_shard.push_back(tablet_ptr);
+            }
+        }
+
+        for (TabletSharedPtr tablet_ptr : all_tablets_by_shard) {
             TTablet t_tablet;
             TTabletInfo tablet_info;
             tablet_ptr->build_tablet_report_info(&tablet_info);
             max_tablet_rowset_num = std::max(max_tablet_rowset_num, tablet_ptr->version_count());
             // find expired transaction corresponding to this tablet
-            TabletInfo tinfo(tablet_id, tablet_ptr->schema_hash(), tablet_ptr->tablet_uid());
+            TabletInfo tinfo(tablet_ptr->tablet_id(), tablet_ptr->schema_hash(), tablet_ptr->tablet_uid());
             auto find = expire_txn_map.find(tinfo);
             if (find != expire_txn_map.end()) {
                 tablet_info.__set_transaction_ids(find->second);
@@ -1005,9 +1012,10 @@ Status TabletManager::report_all_tablets_info(std::map<TTabletId, TTablet>* tabl
             t_tablet.tablet_infos.push_back(tablet_info);
 
             if (!t_tablet.tablet_infos.empty()) {
-                tablets_info->emplace(tablet_id, t_tablet);
+                tablets_info->emplace(tablet_ptr->tablet_id(), t_tablet);
             }
         }
+        all_tablets_by_shard.clear();
     }
     LOG(INFO) << "Report all " << tablets_info->size()
               << " tablets info. max_tablet_rowset_num:" << max_tablet_rowset_num;
