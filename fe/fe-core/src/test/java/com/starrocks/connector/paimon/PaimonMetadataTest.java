@@ -31,11 +31,13 @@ import com.starrocks.credential.CloudType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -104,6 +106,10 @@ public class PaimonMetadataTest {
     private PaimonMetadata metadata;
     private final List<DataSplit> splits = new ArrayList<>();
 
+    private static ConnectContext connectContext;
+    private static OptimizerContext optimizerContext;
+    private static ColumnRefFactory columnRefFactory;
+
     @Before
     public void setUp() {
         this.metadata = new PaimonMetadata("paimon_catalog", new HdfsEnvironment(), paimonNativeCatalog,
@@ -134,6 +140,10 @@ public class PaimonMetadataTest {
                 .withBucketPath("not used").withDataFiles(meta1).isStreaming(false).build());
         this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row2).withBucket(1)
                 .withBucketPath("not used").withDataFiles(meta2).isStreaming(false).build());
+
+        connectContext = UtFrameUtils.createDefaultCtx();
+        columnRefFactory = new ColumnRefFactory();
+        optimizerContext = OptimizerFactory.mockContext(connectContext, columnRefFactory);
     }
 
     @Test
@@ -561,8 +571,7 @@ public class PaimonMetadataTest {
         };
         PaimonTable paimonTable =
                 new PaimonTable("paimon", "db1", "tbl1", Lists.newArrayList(), nativeTable, 1723081832L);
-        new ConnectContext().setThreadLocalInfo();
-        ConnectContext.get().getSessionVariable().setEnablePaimonColumnStatistics(true);
+        optimizerContext.getSessionVariable().setEnablePaimonColumnStatistics(true);
 
         Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
         ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "user_id", true);
@@ -582,9 +591,8 @@ public class PaimonMetadataTest {
         colRefToColumnMetaMap.put(columnRefOperator7, new Column("list", Type.ARRAY_BIGINT));
 
         com.starrocks.sql.optimizer.statistics.Statistics tableStatistics =
-                metadata.getTableStatistics(new OptimizerContext(null, null, ConnectContext.get()), paimonTable,
-                        colRefToColumnMetaMap,
-                        null, null, -1);
+                metadata.getTableStatistics(optimizerContext, paimonTable, colRefToColumnMetaMap,
+                        null, null, -1, null);
         Assert.assertEquals(tableStatistics.getColumnStatistics().size(), colRefToColumnMetaMap.size());
 
     }
