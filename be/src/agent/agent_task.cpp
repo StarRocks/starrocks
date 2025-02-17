@@ -200,7 +200,7 @@ void run_drop_tablet_task(const std::shared_ptr<DropTabletAgentTaskRequest>& age
         }
 
         TabletDropFlag flag = force_drop ? kDeleteFiles : kMoveFilesToTrash;
-        auto st = StorageEngine::instance()->tablet_manager()->drop_tablet(drop_tablet_req.tablet_id, flag);
+        auto st = StorageEngine::instance()->tablet_manager()->drop_tablet(drop_tablet_req.tablet_id, flag, false);
         if (!st.ok()) {
             LOG(WARNING) << "drop table failed! signature: " << agent_task_req->signature;
             error_msgs.emplace_back("drop table failed!");

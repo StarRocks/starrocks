@@ -888,7 +888,7 @@ void TabletUpdates::_check_for_apply() {
     }
     _apply_running_lock.lock();
     if ((config::enable_retry_apply && _apply_schedule.load()) || _apply_running ||
-        _apply_version_idx + 1 == _edit_version_infos.size()) {
+        _apply_version_idx + 1 == _edit_version_infos.size() || _apply_stopped) {
         _apply_running_lock.unlock();
         return;
     }
@@ -1016,6 +1016,14 @@ void TabletUpdates::_wait_apply_done() {
 void TabletUpdates::_stop_and_wait_apply_done() {
     _apply_stopped = true;
     _wait_apply_done();
+}
+
+bool TabletUpdates::stop_and_check_apply_done() {
+    if (!_apply_stopped) {
+        _apply_stopped = true;
+    }
+    std::lock_guard<std::mutex> lg(_apply_running_lock);
+    return !_apply_running;
 }
 
 Status TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_version) {

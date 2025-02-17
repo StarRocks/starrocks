@@ -105,7 +105,7 @@ public:
     // task to be fail, even if there is enough space on other disks
     Status create_tablet(const TCreateTabletReq& request, std::vector<DataDir*> stores);
 
-    Status drop_tablet(TTabletId tablet_id, TabletDropFlag flag = kMoveFilesToTrash);
+    Status drop_tablet(TTabletId tablet_id, TabletDropFlag flag = kMoveFilesToTrash, bool pk_wait_apply_done = true);
 
     Status drop_tablets_on_error_root_path(const std::vector<TabletInfo>& tablet_info_vec);
 
