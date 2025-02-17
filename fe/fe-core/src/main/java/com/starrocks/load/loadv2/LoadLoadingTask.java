@@ -58,6 +58,9 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TPartialUpdateMode;
@@ -100,6 +103,7 @@ public class LoadLoadingTask extends LoadTask {
 
     private LoadPlanner loadPlanner;
     private final OriginStatement originStmt;
+    private final LoadStmt loadStmt;
     private final List<List<TBrokerFileStatus>> fileStatusList;
     private final int fileNum;
 
@@ -125,6 +129,7 @@ public class LoadLoadingTask extends LoadTask {
         this.context = builder.context;
         this.loadJobType = builder.loadJobType;
         this.originStmt = builder.originStmt;
+        this.loadStmt = builder.loadStmt;
         this.partialUpdateMode = builder.partialUpdateMode;
         this.failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL);
         this.loadId = builder.loadId;
@@ -188,7 +193,12 @@ public class LoadLoadingTask extends LoadTask {
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
-        summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
+        if (AuditEncryptionChecker.needEncrypt(loadStmt)) {
+            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT,
+                    AstToSQLBuilder.toSQLOrDefault(loadStmt, originStmt.originStmt));
+        } else {
+            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
+        }
         summaryProfile.addInfoString("Timeout", DebugUtil.getPrettyStringMs(timeoutS * 1000));
         summaryProfile.addInfoString("Strict Mode", String.valueOf(strictMode));
         summaryProfile.addInfoString("Partial Update", String.valueOf(partialUpdate));
@@ -327,6 +337,7 @@ public class LoadLoadingTask extends LoadTask {
         private TPartialUpdateMode partialUpdateMode;
         private ConnectContext context;
         private OriginStatement originStmt;
+        private LoadStmt loadStmt;
         private List<List<TBrokerFileStatus>> fileStatusList;
         private int fileNum = 0;
         private LoadTaskCallback callback;
@@ -437,6 +448,11 @@ public class LoadLoadingTask extends LoadTask {
 
         public Builder setOriginStmt(OriginStatement originStmt) {
             this.originStmt = originStmt;
+            return this;
+        }
+
+        public Builder setLoadStmt(LoadStmt loadStmt) {
+            this.loadStmt = loadStmt;
             return this;
         }
 
