@@ -573,27 +573,54 @@ Syntax:
 
 ```sql
 -- Add a field
-ALTER TABLE [<db_name>.]<tbl_name>
-MODIFY COLUMN <column_name> ADD FIELD <field_name> <field_type> [AFTER <prior_field_name> |FIRST]
+ALTER TABLE [<db_name>.]<tbl_name> MODIFY COLUMN <column_name>
+ADD FIELD field_path field_desc
 
 -- Drop a field
-ALTER TABLE [<db_name>.]<tbl_name>
-MODIFY COLUMN <column_name> DROP FIELD <field_name>
+ALTER TABLE [<db_name>.]<tbl_name> MODIFY COLUMN <column_name>
+DROP FIELD field_path
+
+field_path ::= [ { <top_field_name>. | [*]. } [ ... ] ]<field_name>
+
+field_desc ::= <field_type> [ AFTER <prior_field_name> | FIRST ]
 ```
 
 Parameters:
 
-- `field_name`: The name of the field to be added or removed. This can be a simple field name, indicating a top-dimension field, for example, `new_field_name`, or a Column Access Path, representing a nested field, for example, `lv1_k1.lv2_k2.new_field_name`.
-- `prior_field_name`: The field preceding the newly added field. Used in conjunction with the AFTER keyword to specify the order of the new field. You do not need to specify this parameter if the FIRST keyword is used, indicating the new field should be the first field. The dimension of `prior_field_name` is determined by `field_name` and does not need to be specified explicitly.
-- `<struct_field_key>.<field_name>`: Used to add or drop a sub-field in a STRUCT field within a STRUCT column.
-- `<array>.[*].<new_field_name>`: Used to add or drop a sub-field in in every STRUCT field within a ARRAY column.
+- `field_path`：需要增加或删除字段。可以是单独的字段名，表示第一层级的字段，例如 `new_field_name`。也可以是 Column Access Path，用以表示嵌套层级的字段，例如 `lv1_k1.lv2_k2.[*].new_field_name`。
+  - `top_field_name`：Column Access Path 中的第一层级字段。
+  - `[*]`：当 ARRAY 和 STRUCT 类型发生嵌套时，`[*]` 代表操作 ARRAY 字段中的所有元素，用于在 ARRAY 类型字段下嵌套的每个 STRUCT 类型字段中添加或删除子字段。
+  - `field_name`：需要增加或删除字段的名称。
+- `prior_field_name`：新增字段的前一个字段。与 AFTER 关键字合用，可以表示新加字段的顺序。如果指定 FIRST 关键字，表示新增第一个字段，则无需指定该参数。`prior_field_name` 的层级由 `field_path` 决定，无需手动指定（也即是 `new_field_name` 之前的部分 `level1_k1.level2_k2.[*]`）。
 
-  When an ARRAY type is nested within a STRUCT type or vice versa, you can use `[*]` to represent all elements in the ARRAY field. For example, in the column `fx struct<c1 int, c2 array<struct <v1 int, v2 int>>>`, the field `c2` is an ARRAY type, which contains a STRUCT with two fields `v1` and `v2`. The syntax to add a `v3` field to the nested STRUCT is:
+
+- `field_path`: The field to be added or removed. This can be a simple field name, indicating a top-dimension field, for example, `new_field_name`, or a Column Access Path, representing a nested field, for example, `lv1_k1.lv2_k2.[*].new_field_name`.
+  - `top_field_name`: The top-dimension field in the Column Access Path.
+  - `[*]`: When a STRUCT type is nested within an ARRAY type, `[*]` represents all elements in the ARRAY field. It is used to add or remove a field in all STRUCT elements nested under the ARRAY field.
+  - `field_name`: The name of the field to be added or removed.
+- `prior_field_name`: The field preceding the newly added field. Used in conjunction with the AFTER keyword to specify the order of the new field. You do not need to specify this parameter if the FIRST keyword is used, indicating the new field should be the first field. The dimension of `prior_field_name` is determined by `field_path` (specifically, the part preceding `new_field_name`, that is, `level1_k1.level2_k2.[*]`) and does not need to be specified explicitly.
+
+Examples of `field_path`:
+
+- Add or drop a sub-field in a STRUCT field nested within a STRUCT column.
+
+  Suppose there is a column `fx stuct<c1 int, c2 struct <v1 int, v2 int>>`. The syntax to add a `v3` field under `c2` is:
 
   ```SQL
-  ALTER TABLE tbl MODIFY COLUMN fx ADD FIELD c2.[*].v3 INT 
+  ALTER TABLE tbl MODIFY COLUMN fx ADD FIELD c2.v3 INT
   ```
 
+  After the operation, the column becomes `fx stuct<c1 int, c2 struct <v1 int, v2 int, v3 int>>`.
+
+- Add or drop a sub-field in every STRUCT field nested within a ARRAY field.
+
+  Suppose there is a column `fx struct<c1 int, c2 array<struct <v1 int, v2 int>>>`. The field `c2` is an ARRAY type, which contains a STRUCT with two fields `v1` and `v2`. The syntax to add a `v3` field to the nested STRUCT is:
+
+  ```SQL
+  ALTER TABLE tbl MODIFY COLUMN fx ADD FIELD c2.[*].v3 INT
+  ```
+
+  After the operation, the column becomes `fx struct<c1 int, c2 array<struct <v1 int, v2 int, v3 int>>>`.
 
 For more usage instructions, see [Example - Column -14](#column).
 
