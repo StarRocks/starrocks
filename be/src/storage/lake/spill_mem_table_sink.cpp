@@ -139,7 +139,7 @@ Status SpillMemTableSink::flush_chunk(const Chunk& chunk, starrocks::SegmentPB* 
     RETURN_IF_ERROR(_do_spill(chunk, output));
     // 3. flush
     RETURN_IF_ERROR(output->flush());
-    // record append bytes to segment pb
+    // record append bytes to `flush_data_size`
     if (flush_data_size != nullptr) {
         *flush_data_size = output->append_bytes();
     }
