@@ -221,7 +221,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             useFastSchemaEvolution = false;
         } else if (stmt.isOlapEngine()) {
             RunMode runMode = RunMode.getCurrentRunMode();
-            LOG.error("Create table with runMode: {}", runMode.toString());
+            LOG.error("Create table '{}' under runMode: {}", tableName, runMode.toString());
             String volume = "";
             if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME)) {
                 volume = properties.remove(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME);
