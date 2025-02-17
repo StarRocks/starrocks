@@ -116,7 +116,7 @@ fi
 
 mkdir ut_ports
 
-TEST_NAME=CreateLakeTableTest,LakeTableSchemaChangeJobTest
+#TEST_NAME=CreateLakeTableTest,LakeTableSchemaChangeJobTest
 
 if [[ ${DUMPCASE} -ne 1 ]]; then
     DUMP_FILTER_TEST="com.starrocks.sql.dump.QueryDumpRegressionTest,com.starrocks.sql.dump.QueryDumpCaseRewriter"
