@@ -12,7 +12,7 @@ import RoutineLoadPrivNote from '../../../../_assets/commonMarkdown/RoutineLoadP
 
 <RoutineLoadPrivNote />
 
-::: warning
+:::warning
 
 导入作业停止且无法恢复。因此请谨慎执行该语句。
 
