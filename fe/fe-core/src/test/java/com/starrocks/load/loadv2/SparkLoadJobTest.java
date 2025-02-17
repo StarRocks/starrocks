@@ -66,11 +66,13 @@ import com.starrocks.load.EtlStatus;
 import com.starrocks.load.loadv2.LoadJob.LoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.SparkLoadJob.SparkLoadJobStateUpdateInfo;
 import com.starrocks.load.loadv2.etl.EtlJobConfig;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.ResourceDesc;
+import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.task.AgentBatchTask;
 import com.starrocks.task.AgentTaskExecutor;
 import com.starrocks.task.LeaderTaskExecutor;
@@ -119,6 +121,8 @@ public class SparkLoadJobTest {
     private long backendId;
     private int schemaHash;
 
+    private ConnectContext ctx;
+
     @Before
     public void setUp() {
         dbId = 1L;
@@ -140,6 +144,11 @@ public class SparkLoadJobTest {
         backendId = 15L;
         physicalPartitionId = 16L;
         schemaHash = 146886;
+
+        // for warehouse property
+        ctx = new ConnectContext(null);
+        ctx.setCurrentUserIdentity(new UserIdentity("testUser", "%"));
+        ctx.setQualifiedUser("testCluster:testUser");
     }
 
     @Test
@@ -188,6 +197,13 @@ public class SparkLoadJobTest {
                 result = null;
                 resourceMgr.getResource(resourceName);
                 result = resource;
+            }
+        };
+
+        new Expectations(ctx) {
+            {
+                ConnectContext.get();
+                result = ctx;
             }
         };
 

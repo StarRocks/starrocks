@@ -62,7 +62,7 @@ public class StreamLoadManagerTest {
     public void setUp() {
         globalTransactionMgr = new GlobalTransactionMgr(globalStateMgr);
         FeConstants.runningUnitTest = true;
-    
+
         try {
             db = CatalogMocker.mockDb();
         } catch (AnalysisException e) {
@@ -146,14 +146,14 @@ public class StreamLoadManagerTest {
     @Test
     public void testBeginStreamLoadTask() throws UserException {
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
-        
+
         String dbName = "test_db";
         String tableName = "test_tbl";
         String labelName = "label1";
         long timeoutMillis = 100000;
         int channelNum = 1;
         int channelId = 0;
-        
+
         TransactionResult resp = new TransactionResult();
         streamLoadManager.beginLoadTaskFromFrontend(
                 dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
@@ -170,20 +170,20 @@ public class StreamLoadManagerTest {
         Map<String, StreamLoadTask> dbToLabelToStreamLoadTask =
                 Deencapsulation.getField(streamLoadManager, "dbToLabelToStreamLoadTask");
         Assert.assertEquals(1, idToStreamLoadTask.size());
-        
+
     }
 
     @Test
     public void testChannelIdEqualChannelNum() throws UserException {
         StreamLoadMgr streamLoadManager = new StreamLoadMgr();
-        
+
         String dbName = "test_db";
         String tableName = "test_tbl";
         String labelName = "label1";
         long timeoutMillis = 100000;
         int channelNum = 1;
         int channelId = 1;
-        
+
         TransactionResult resp = new TransactionResult();
         streamLoadManager.beginLoadTaskFromFrontend(
                 dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
@@ -204,7 +204,7 @@ public class StreamLoadManagerTest {
         long timeoutMillis = 100000;
         int channelNum = 5;
         int channelId = 0;
-        
+
         TransactionResult resp = new TransactionResult();
         streamLoadManager.beginLoadTaskFromFrontend(
                 dbName, tableName, labelName, "", "", timeoutMillis, channelNum, channelId, resp);
