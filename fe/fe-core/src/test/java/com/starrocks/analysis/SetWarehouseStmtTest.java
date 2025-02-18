@@ -14,6 +14,7 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.epack.warehouse.WarehouseManagerEPack;
@@ -49,6 +50,9 @@ public class SetWarehouseStmtTest {
         ctx.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setCurrentRoleIds(new HashSet<>(Collections.singletonList(-1L)));
+
+        Config.run_mode = RunMode.SHARED_DATA.getName();
+        RunMode.detectRunMode();
     }
 
     @Test
