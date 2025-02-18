@@ -251,10 +251,6 @@ public class QueryRuntimeProfile {
     public void finishAllInstances(Status status) {
         if (profileDoneSignal != null) {
             profileDoneSignal.countDownToZero(status);
-            List<String> unFinishedInstanceIds = getUnfinishedInstanceIds();
-            if (!unFinishedInstanceIds.isEmpty()) {
-                LOG.info("unfinished instances: {}", unFinishedInstanceIds);
-            }
         }
     }
 
