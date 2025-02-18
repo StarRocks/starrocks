@@ -42,6 +42,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+import com.starrocks.mysql.ssl.SSLContextLoader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -129,7 +130,7 @@ public class MysqlProto {
         // Server send handshake packet to client.
         serializer.reset();
         MysqlHandshakePacket handshakePacket = new MysqlHandshakePacket(context.getConnectionId(),
-                context.supportSSL());
+                SSLContextLoader.getSslContext() != null);
         handshakePacket.writeTo(serializer);
         channel.sendAndFlush(serializer.toByteBuffer());
 
