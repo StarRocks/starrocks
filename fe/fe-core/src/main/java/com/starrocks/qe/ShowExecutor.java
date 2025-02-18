@@ -2893,6 +2893,8 @@ public class ShowExecutor {
         //     the base table and supports multi table in MV definition.
         //  2. Table's type is OLAP, this is the old MV type which the MV table is associated with the base
         //     table and only supports single table in MV definition.
+
+        // async mvs
         Map<String, List<TaskRunStatus>> mvNameTaskMap;
         if (!materializedViews.isEmpty()) {
             GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
@@ -2909,6 +2911,7 @@ public class ShowExecutor {
             rowSets.add(mvStatus);
         });
 
+        // sync mvs
         singleTableMVs.forEach(singleTableMV -> {
             OlapTable olapTable = singleTableMV.first;
             MaterializedIndexMeta mvMeta = singleTableMV.second;
