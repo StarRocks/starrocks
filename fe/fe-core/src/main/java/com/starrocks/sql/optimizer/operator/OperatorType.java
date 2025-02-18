@@ -61,6 +61,7 @@ public enum OperatorType {
     LOGICAL_CTE_ANCHOR,
     LOGICAL_CTE_PRODUCE,
     LOGICAL_CTE_CONSUME,
+    LOGICAL_SPJG_PIECES,
 
     /**
      * Physical operator
