@@ -36,7 +36,6 @@ package com.starrocks.analysis;
 
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.InvalidConfException;
 import com.starrocks.common.Pair;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
@@ -135,7 +134,7 @@ public class AdminSetConfigStmtTest {
             String stmt = "admin set frontend config(\"alter_table_timeout_second\" = \"60\");";
             AdminSetConfigStmt adminSetConfigStmt =
                     (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
-            expectedEx.expect(InvalidConfException.class);
+            expectedEx.expect(DdlException.class);
             ConfigBase.setConfig(adminSetConfigStmt);
         }
     }
