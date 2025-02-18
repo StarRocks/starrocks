@@ -265,6 +265,17 @@ include_directories(${Poco_INCLUDE_DIRS})
 add_library(jindo-sdk SHARED IMPORTED)
 set_target_properties(jindo-sdk PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/jindosdk/libjindosdk_c.so.6)
 
+set(PAIMON_LIBRARY_ROOT "${THIRDPARTY_DIR}/lib/paimon")
+
+add_library(paimon-cpp-sdk SHARED IMPORTED)
+set_target_properties(paimon-cpp-sdk PROPERTIES IMPORTED_LOCATION ${PAIMON_LIBRARY_ROOT}/libpaimon.so)
+
+add_library(paimon-orc-file-format SHARED IMPORTED)
+set_target_properties(paimon-orc-file-format PROPERTIES IMPORTED_LOCATION ${PAIMON_LIBRARY_ROOT}/libpaimon_orc_file_format.so)
+
+add_library(paimon-local-file-system SHARED IMPORTED)
+set_target_properties(paimon-local-file-system PROPERTIES IMPORTED_LOCATION ${PAIMON_LIBRARY_ROOT}/libpaimon_local_file_system.so)
+
 add_library(libevent STATIC IMPORTED)
 set_target_properties(libevent PROPERTIES IMPORTED_LOCATION ${THIRDPARTY_DIR}/lib/libevent.a)
 
@@ -915,6 +926,9 @@ if (STARROCKS_JIT_ENABLE)
 endif()
 set(STARROCKS_DEPENDENCIES ${STARROCKS_DEPENDENCIES}
     jindo-sdk
+    paimon-cpp-sdk
+    paimon-orc-file-format
+    paimon-local-file-system
 )
 
 # Set thirdparty libraries
