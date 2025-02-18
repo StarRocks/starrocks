@@ -87,9 +87,9 @@ public class JournalWriter {
             protected void runOneCycle() {
                 try {
                     writeOneBatch();
-                } catch (InterruptedException e) {
-                    String msg = "got interrupted exception when trying to write one batch, will exit now.";
-                    LOG.error(msg, e);
+                } catch (Throwable t) {
+                    String msg = "got exception when trying to write one batch, will exit now.";
+                    LOG.error(msg, t);
                     // TODO we should exit gracefully on InterruptedException
                     Util.stdoutWithTime(msg);
                     System.exit(-1);
