@@ -1389,7 +1389,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         partition.getDefaultPhysicalPartition().getVisibleVersionTime());
                 partitionInfos.put(partition.getName(), basePartitionInfo);
             }
-            LOG.info("Collect olap base table {}'s refreshed partition infos: {}", baseTable.getName(), partitionInfos);
+            LOG.debug("Collect olap base table {}'s refreshed partition infos: {}", baseTable.getName(), partitionInfos);
             return partitionInfos;
         } else if (ConnectorPartitionTraits.isSupportPCTRefresh(baseTable.getType())) {
             return getSelectedPartitionInfos(baseTable, Lists.newArrayList(refreshedPartitionNames), baseTableInfo);
