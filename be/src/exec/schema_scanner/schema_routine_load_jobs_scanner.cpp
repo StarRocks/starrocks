@@ -45,9 +45,8 @@ SchemaScanner::ColumnDesc SchemaRoutineLoadJobsScanner::_s_tbls_columns[] = {
         {"ERROR_LOG_URLS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"TRACKING_SQL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"OTHER_MSG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
-        {"LATEST_SOURCE_POSITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue),
-         false},
-        {"OFFSET_LAG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false}};
+        {"LATEST_SOURCE_POSITION", TypeDescriptor::from_logical_type(TYPE_JSON), kJsonDefaultSize, true},
+        {"OFFSET_LAG", TypeDescriptor::from_logical_type(TYPE_JSON), kJsonDefaultSize, true}};
 
 SchemaRoutineLoadJobsScanner::SchemaRoutineLoadJobsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -236,13 +235,29 @@ Status SchemaRoutineLoadJobsScanner::fill_chunk(ChunkPtr* chunk) {
             case 20: {
                 // latest_source_position
                 Slice latest_source_position = Slice(info.latest_source_position);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&latest_source_position);
+                JsonValue json_value;
+                JsonValue* json_value_ptr = &json_value;
+                Status s = JsonValue::parse(latest_source_position, &json_value);
+                if (!s.ok()) {
+                    LOG(WARNING) << "parse latest_source_position failed. latest_source_position:" << latest_source_position.to_string() << " error:" << s;
+                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                } else {
+                    fill_column_with_slot<TYPE_JSON>(column.get(), (void*)&json_value_ptr);
+                }
                 break;
             }
             case 21: {
                 // offset_lag
                 Slice offset_lag = Slice(info.offset_lag);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&offset_lag);
+                JsonValue json_value;
+                JsonValue* json_value_ptr = &json_value;
+                Status s = JsonValue::parse(offset_lag, &json_value);
+                if (!s.ok()) {
+                    LOG(WARNING) << "parse offset_lag failed. offset_lag:" << offset_lag.to_string() << " error:" << s;
+                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                } else {
+                    fill_column_with_slot<TYPE_JSON>(column.get(), (void*)&json_value_ptr);
+                }
                 break;
             }
             default:
