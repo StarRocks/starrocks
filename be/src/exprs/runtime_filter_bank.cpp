@@ -317,6 +317,8 @@ std::string RuntimeFilterProbeDescriptor::debug_string() const {
     } else {
         ss << "nullptr";
     }
+    ss << ", is_local=" << _is_local;
+    ss << ", is_topn=" << _is_topn_filter;
     ss << ", rf=";
     const RuntimeFilter* rf = _runtime_filter.load();
     if (rf != nullptr) {
@@ -398,10 +400,16 @@ void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeBloomFilterEv
         if ((skip_topn && rf_desc->is_topn_filter()) || filter == nullptr || filter->always_true()) {
             continue;
         }
+        if (rf_desc->has_push_down_to_storage()) {
+            continue;
+        }
+
         auto* ctx = rf_desc->probe_expr_ctx();
         ColumnPtr column = EVALUATE_NULL_IF_ERROR(ctx, ctx->root(), chunk);
+
         // for colocate grf
         compute_hash_values(chunk, column.get(), rf_desc, eval_context);
+
         filter->evaluate(column.get(), &eval_context.running_context);
 
         auto true_count = SIMD::count_nonzero(selection);
@@ -549,7 +557,7 @@ void RuntimeFilterProbeCollector::compute_hash_values(Chunk* chunk, Column* colu
     } else {
         // Used to hold generated columns
         std::vector<ColumnPtr> column_holders;
-        std::vector<Column*> partition_by_columns;
+        std::vector<const Column*> partition_by_columns;
         for (auto& partition_ctx : *(rf_desc->partition_by_expr_contexts())) {
             ColumnPtr partition_column = EVALUATE_NULL_IF_ERROR(partition_ctx, partition_ctx->root(), chunk);
             partition_by_columns.push_back(partition_column.get());
@@ -584,6 +592,9 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeBloomF
             continue;
         }
 
+        if (rf_desc->has_push_down_to_storage()) {
+            continue;
+        }
         auto& selection = eval_context.running_context.use_merged_selection
                                   ? eval_context.running_context.merged_selection
                                   : eval_context.running_context.selection;

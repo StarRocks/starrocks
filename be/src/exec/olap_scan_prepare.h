@@ -21,6 +21,7 @@
 #include "runtime/descriptors.h"
 #include "storage/predicate_tree/predicate_tree_fwd.h"
 #include "storage/predicate_tree_params.h"
+#include "storage/runtime_filter_predicate.h"
 #include "storage/runtime_range_pruner.h"
 
 namespace starrocks {
@@ -176,6 +177,7 @@ public:
     static Status eval_const_conjuncts(const std::vector<ExprContext*>& conjunct_ctxs, Status* status);
 
     StatusOr<PredicateTree> get_predicate_tree(PredicateParser* parser, ColumnPredicatePtrs& col_preds_owner);
+    StatusOr<RuntimeFilterPredicates> get_runtime_filter_predicates(ObjectPool* obj_pool, PredicateParser* parser);
 
     Status get_key_ranges(std::vector<std::unique_ptr<OlapScanRange>>* key_ranges);
 
