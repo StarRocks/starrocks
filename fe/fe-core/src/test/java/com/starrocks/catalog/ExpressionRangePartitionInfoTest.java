@@ -483,6 +483,38 @@ public class ExpressionRangePartitionInfoTest {
     }
 
     @Test
+    public void testExpressionRangePartitionInfoSerializedWithKeyword() throws Exception {
+        ConnectContext ctx = starRocksAssert.getCtx();
+        String createSQL = "CREATE TABLE test_expr_part_with_keyword (\n" +
+                "id int(11) NULL COMMENT \"\",\n" +
+                "`partition` date COMMENT \"\"\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(id)\n" +
+                "COMMENT \"OLAP\"\n" +
+                "PARTITION BY date_trunc('day', `partition`)\n" +
+                "DISTRIBUTED BY HASH(id) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"replicated_storage\" = \"true\",\n" +
+                "\"compression\" = \"LZ4\"\n" +
+                ");";
+        CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(createSQL, ctx);
+        StarRocksAssert.utCreateTableWithRetry(createTableStmt);
+        Database db = GlobalStateMgr.getCurrentState().getDb("test");
+        Table table = db.getTable("test_expr_part_with_keyword");
+        // serialize
+        String json = GsonUtils.GSON.toJson(table);
+        // deserialize
+        OlapTable readTable = GsonUtils.GSON.fromJson(json, OlapTable.class);
+        ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) readTable.getPartitionInfo();
+        List<Expr> readPartitionExprs = expressionRangePartitionInfo.getPartitionExprs();
+        Function fn = readPartitionExprs.get(0).getFn();
+        Assert.assertNotNull(fn);
+    }
+
+    @Test
     public void testExpressionRangePartitionInfoSerializedWrongNotFailed() throws Exception {
         ConnectContext ctx = starRocksAssert.getCtx();
         String createSQL = "CREATE TABLE `game_log` (\n" +
