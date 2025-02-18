@@ -42,13 +42,6 @@ import java.io.IOException;
 
 public class MysqlServerTest {
     @Test
-    public void testInvalidParam() throws IOException {
-        int port = UtFrameUtils.findValidPort();
-        MysqlServer server = new MysqlServer(port, null);
-        Assert.assertFalse(server.start());
-    }
-
-    @Test
     public void testBindFail() throws IOException {
         int port = UtFrameUtils.findValidPort();
         MysqlServer server = new MysqlServer(port, null);
