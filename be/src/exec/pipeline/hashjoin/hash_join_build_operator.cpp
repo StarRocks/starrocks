@@ -154,12 +154,14 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
             auto&& bloom_filters = _partial_rf_merger->get_total_bloom_filters();
 
             {
-                size_t total_bf_bytes = std::accumulate(bloom_filters.begin(), bloom_filters.end(), 0ull,
-                                                        [](size_t total, RuntimeFilterBuildDescriptor* desc) -> size_t {
-                                                            auto rf = desc->runtime_filter();
-                                                            total += (rf == nullptr ? 0 : rf->bf_alloc_size());
-                                                            return total;
-                                                        });
+                size_t total_bf_bytes =
+                        std::accumulate(bloom_filters.begin(), bloom_filters.end(), 0ull,
+                                        [](size_t total, RuntimeFilterBuildDescriptor* desc) -> size_t {
+                                            if (desc->runtime_filter() == nullptr) {
+                                                return total;
+                                            }
+                                            return desc->runtime_filter()->get_bloom_filter()->bf_alloc_size();
+                                        });
                 COUNTER_UPDATE(_join_builder->build_metrics().partial_runtime_bloom_filter_bytes, total_bf_bytes);
             }
 

@@ -16,6 +16,7 @@
 
 #include <gtest/gtest.h>
 
+#include "exprs/runtime_filter.h"
 #include "testutil/column_test_helper.h"
 
 namespace starrocks {
@@ -23,11 +24,11 @@ namespace starrocks {
 class MinMaxPredicateTest : public ::testing::Test {
 public:
     void SetUp() override {
-        _rf.init(100);
+        _rf.bloom_filter().init(100);
         _rf.insert(10);
         _rf.insert(20);
 
-        _nullable_rf.init(100);
+        _nullable_rf.bloom_filter().init(100);
         _nullable_rf.insert(10);
         _nullable_rf.insert(20);
         _nullable_rf.insert_null();
@@ -37,8 +38,8 @@ public:
     }
 
 protected:
-    RuntimeBloomFilter<TYPE_INT> _rf;
-    RuntimeBloomFilter<TYPE_INT> _nullable_rf;
+    ComposedRuntimeFilter<TYPE_INT> _rf;
+    ComposedRuntimeFilter<TYPE_INT> _nullable_rf;
     ObjectPool _pool;
     ChunkPtr _chunk;
     ColumnPtr _column;

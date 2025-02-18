@@ -24,8 +24,34 @@
 #include "exprs/runtime_filter_bank.h"
 #include "simd/simd.h"
 #include "testutil/column_test_helper.h"
+#include "types/logical_type.h"
 
 namespace starrocks {
+template <LogicalType type>
+bool check_equals(const TRuntimeBloomFilter<type>& left, const TRuntimeBloomFilter<type>& right) {
+    auto lhs_num_partitions = left._hash_partition_bf.size();
+    auto rhs_num_partitions = right._hash_partition_bf.size();
+    bool first = (left._has_null == right._has_null && left._size == right._size &&
+                  lhs_num_partitions == rhs_num_partitions && left._join_mode == right._join_mode);
+    if (!first) return false;
+    if (lhs_num_partitions == 0) {
+        if (!left._bf.check_equal(right._bf)) return false;
+    } else {
+        for (size_t i = 0; i < lhs_num_partitions; ++i) {
+            if (!left._hash_partition_bf[i].check_equal(right._hash_partition_bf[i])) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+template <LogicalType type>
+bool check_equals(ComposedRuntimeFilter<type>* left, ComposedRuntimeFilter<type>* right) {
+    if (!check_equals(left->bloom_filter(), right->bloom_filter())) return false;
+    return left->min_max_filter().min() == right->min_max_filter().min() &&
+           left->min_max_filter().max() == right->min_max_filter().max();
+}
 
 class RuntimeFilterTest : public ::testing::Test {
 public:
@@ -41,8 +67,10 @@ public:
 protected:
     void _check_equal(const Filter& real, const std::vector<uint8_t>& expect);
 
-    using Int32RF = RuntimeBloomFilter<TYPE_INT>;
-    using StringRF = RuntimeBloomFilter<TYPE_VARCHAR>;
+    using Int32RF = ComposedRuntimeFilter<TYPE_INT>;
+    using StringRF = ComposedRuntimeFilter<TYPE_VARCHAR>;
+    using Int32MinMaxRF = MinMaxRuntimeFilter<TYPE_INT>;
+    using StringMinMaxRF = MinMaxRuntimeFilter<TYPE_VARCHAR>;
     ObjectPool _pool;
 };
 
@@ -54,26 +82,26 @@ void RuntimeBloomFilterTest::_check_equal(const Filter& real, const std::vector<
 }
 
 TEST_F(RuntimeBloomFilterTest, create_with_range) {
-    auto* rf = StringRF::create_with_range<true>(&_pool, "00001", true);
+    auto* rf = StringMinMaxRF::create_with_range<true>(&_pool, "00001", true);
     ASSERT_EQ(rf->min_value(&_pool), Slice("00001"));
     ASSERT_TRUE(rf->left_close_interval());
 
-    rf = StringRF::create_with_range<false>(&_pool, "00009", true);
+    rf = StringMinMaxRF::create_with_range<false>(&_pool, "00009", true);
     ASSERT_EQ(rf->max_value(&_pool), Slice("00009"));
     ASSERT_TRUE(rf->right_close_interval());
 
-    auto* int_rf = Int32RF::create_with_range<true>(&_pool, 1, true);
+    auto* int_rf = Int32MinMaxRF::create_with_range<true>(&_pool, 1, true);
     ASSERT_EQ(int_rf->min_value(&_pool), 1);
     ASSERT_TRUE(int_rf->left_close_interval());
 
-    int_rf = Int32RF::create_with_range<false>(&_pool, 9, true);
+    int_rf = Int32MinMaxRF::create_with_range<false>(&_pool, 9, true);
     ASSERT_EQ(int_rf->max_value(&_pool), 9);
     ASSERT_TRUE(int_rf->right_close_interval());
 }
 
 TEST_F(RuntimeBloomFilterTest, evaluate_with_min_max) {
     // [10, 20]
-    auto* rf = _pool.add(new Int32RF());
+    auto* rf = _pool.add(new Int32MinMaxRF());
     rf->insert(10);
     rf->insert(20);
     auto col = ColumnTestHelper::build_column<int32_t>({5, 10, 15, 20, 25});
@@ -109,13 +137,13 @@ TEST_F(RuntimeBloomFilterTest, evaluate_with_min_max) {
 
 TEST_F(RuntimeBloomFilterTest, filter_zonemap_with_min_max) {
     // > 10
-    auto* rf = Int32RF::create_with_range<true>(&_pool, 10, false);
+    auto* rf = Int32MinMaxRF::create_with_range<true>(&_pool, 10, false);
     int32_t min = 5;
     int32_t max = 10;
     ASSERT_TRUE(rf->filter_zonemap_with_min_max(&min, &max));
 
     // >= 10
-    rf = Int32RF::create_with_range<true>(&_pool, 10, true);
+    rf = Int32MinMaxRF::create_with_range<true>(&_pool, 10, true);
     min = 5;
     max = 10;
     ASSERT_FALSE(rf->filter_zonemap_with_min_max(&min, &max));
@@ -125,13 +153,13 @@ TEST_F(RuntimeBloomFilterTest, filter_zonemap_with_min_max) {
     ASSERT_TRUE(rf->filter_zonemap_with_min_max(&min, &max));
 
     // < 10
-    rf = Int32RF::create_with_range<false>(&_pool, 10, false);
+    rf = Int32MinMaxRF::create_with_range<false>(&_pool, 10, false);
     min = 10;
     max = 15;
     ASSERT_TRUE(rf->filter_zonemap_with_min_max(&min, &max));
 
     // <= 10
-    rf = Int32RF::create_with_range<false>(&_pool, 10, true);
+    rf = Int32MinMaxRF::create_with_range<false>(&_pool, 10, true);
     min = 10;
     max = 15;
     ASSERT_FALSE(rf->filter_zonemap_with_min_max(&min, &max));
@@ -142,32 +170,32 @@ TEST_F(RuntimeBloomFilterTest, filter_zonemap_with_min_max) {
 }
 
 TEST_F(RuntimeBloomFilterTest, create_with_empty_range) {
-    auto* rf = Int32RF::create_with_empty_range_without_null(&_pool);
+    auto* rf = Int32MinMaxRF::create_with_empty_range_without_null(&_pool);
     ASSERT_TRUE(rf->is_empty_range());
     ASSERT_FALSE(rf->has_null());
 }
 
 TEST_F(RuntimeBloomFilterTest, create_with_only_null_range) {
-    auto* rf = Int32RF::create_with_only_null_range(&_pool);
+    auto* rf = Int32MinMaxRF::create_with_only_null_range(&_pool);
     ASSERT_TRUE(rf->is_empty_range());
     ASSERT_TRUE(rf->has_null());
 }
 
 TEST_F(RuntimeBloomFilterTest, create_with_full_range_without_null) {
-    auto* rf = Int32RF::create_with_full_range_without_null(&_pool);
+    auto* rf = Int32MinMaxRF::create_with_full_range_without_null(&_pool);
     ASSERT_TRUE(rf->is_full_range());
     ASSERT_FALSE(rf->has_null());
 }
 
 TEST_F(RuntimeBloomFilterTest, create_with_range_nullable) {
-    auto* rf = Int32RF::create_with_range<true>(&_pool, 10, true, true);
+    auto* rf = Int32MinMaxRF::create_with_range<true>(&_pool, 10, true, true);
     ASSERT_EQ(rf->min_value(&_pool), 10);
     ASSERT_EQ(rf->max_value(&_pool), std::numeric_limits<int32_t>::max());
     ASSERT_TRUE(rf->has_null());
 }
 
 TEST_F(RuntimeBloomFilterTest, update_to_all_null) {
-    auto* rf = Int32RF::create_with_range<true>(&_pool, 10, true, true);
+    auto* rf = Int32MinMaxRF::create_with_range<true>(&_pool, 10, true, true);
 
     rf->update_to_all_null();
     ASSERT_EQ(rf->rf_version(), 1);
@@ -268,23 +296,25 @@ static std::shared_ptr<BinaryColumn> gen_random_binary_column(const std::string&
 }
 
 TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilter) {
-    Int32RF bf;
-    RuntimeFilter* rf = &bf;
+    Int32RF crf;
+    RuntimeFilter* rf = &crf;
+    auto& bf = crf.bloom_filter();
     bf.init(100);
     for (int i = 0; i <= 200; i += 17) {
-        bf.insert(i);
+        crf.insert(i);
     }
-    EXPECT_EQ(bf.min_value(&_pool), 0);
-    EXPECT_EQ(bf.max_value(&_pool), 187);
+    auto& minmax = crf.min_max_filter();
+    EXPECT_EQ(minmax.min_value(&_pool), 0);
+    EXPECT_EQ(minmax.max_value(&_pool), 187);
     for (int i = 0; i <= 200; i += 17) {
         EXPECT_TRUE(bf.test_data(i));
         EXPECT_FALSE(bf.test_data(i + 1));
     }
     EXPECT_FALSE(rf->has_null());
-    bf.insert_null();
+    crf.insert_null();
     EXPECT_TRUE(rf->has_null());
-    EXPECT_EQ(bf.min_value(&_pool), 0);
-    EXPECT_EQ(bf.max_value(&_pool), 187);
+    EXPECT_EQ(minmax.min_value(&_pool), 0);
+    EXPECT_EQ(minmax.max_value(&_pool), 187);
 
     // test evaluate.
     ColumnPtr column = ColumnHelper::create_column(TYPE_INT_DESC, false);
@@ -308,14 +338,17 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilter) {
 }
 
 TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterSlice) {
-    StringRF bf;
+    StringRF crf;
+    auto& bf = crf.bloom_filter();
     bf.init(100);
     std::vector<Slice> values{"aa", "bb", "cc", "d"};
     for (auto& s : values) {
-        bf.insert(s);
+        crf.insert(s);
     }
-    EXPECT_EQ(bf.min_value(&_pool), values[0]);
-    EXPECT_EQ(bf.max_value(&_pool), values[values.size() - 1]);
+
+    auto& minmax = crf.min_max_filter();
+    EXPECT_EQ(minmax.min_value(&_pool), values[0]);
+    EXPECT_EQ(minmax.max_value(&_pool), values[values.size() - 1]);
     for (auto& s : values) {
         EXPECT_TRUE(bf.test_data(s));
     }
@@ -326,9 +359,9 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterSlice) {
 }
 
 TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterSerialize) {
-    RuntimeBloomFilter<TYPE_INT> bf0;
+    ComposedRuntimeFilter<TYPE_INT> bf0;
     RuntimeFilter* rf0 = &bf0;
-    bf0.init(100);
+    bf0.bloom_filter().init(100);
     int rf_version = RF_VERSION_V2;
     for (int i = 0; i <= 200; i += 17) {
         bf0.insert(i);
@@ -342,18 +375,18 @@ TEST_F(RuntimeFilterTest, TestJoinRuntimeFilterSerialize) {
     RuntimeFilter* rf1 = nullptr;
     ObjectPool pool;
     RuntimeFilterHelper::deserialize_runtime_filter(&pool, &rf1, buffer.data(), actual_size);
-    EXPECT_TRUE(rf1->check_equal(*rf0));
+    EXPECT_TRUE(check_equals(&bf0, down_cast<ComposedRuntimeFilter<TYPE_INT>*>(rf1)));
 }
 
 TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterSerialize2) {
     Int32RF bf0;
     RuntimeFilter* rf0 = &bf0;
-    bf0.init(100);
+    bf0.bloom_filter().init(100);
     for (int i = 0; i <= 200; i += 17) {
         bf0.insert(i);
     }
-    EXPECT_EQ(bf0.min_value(&_pool), 0);
-    EXPECT_EQ(bf0.max_value(&_pool), 187);
+    EXPECT_EQ(bf0.min_max_filter().min_value(&_pool), 0);
+    EXPECT_EQ(bf0.min_max_filter().max_value(&_pool), 187);
 
     StringRF bf1;
     RuntimeFilter* rf1 = &bf1;
@@ -362,12 +395,12 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterSerialize2) {
     for (const auto& s : data) {
         values.emplace_back(Slice(s));
     }
-    bf1.init(200);
+    bf1.bloom_filter().init(200);
     for (auto& s : values) {
         bf1.insert(s);
     }
-    EXPECT_EQ(bf1.min_value(&_pool), values[0]);
-    EXPECT_EQ(bf1.max_value(&_pool), values[values.size() - 1]);
+    EXPECT_EQ(bf1.min_max_filter().min_value(&_pool), values[0]);
+    EXPECT_EQ(bf1.min_max_filter().max_value(&_pool), values[values.size() - 1]);
 
     int rf_version = RF_VERSION_V2;
 
@@ -386,40 +419,42 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterSerialize2) {
     RuntimeFilter* rf3 = nullptr;
     RuntimeFilterHelper::deserialize_runtime_filter(&pool, &rf3, buffer0.data(), actual_size);
 
-    EXPECT_TRUE(rf2->check_equal(*rf0));
-    EXPECT_TRUE(rf3->check_equal(*rf1));
+    EXPECT_TRUE(check_equals(down_cast<ComposedRuntimeFilter<TYPE_VARCHAR>*>(rf3),
+                             down_cast<ComposedRuntimeFilter<TYPE_VARCHAR>*>(rf1)));
+    EXPECT_TRUE(check_equals(down_cast<ComposedRuntimeFilter<TYPE_INT>*>(rf2),
+                             down_cast<ComposedRuntimeFilter<TYPE_INT>*>(rf0)));
 }
 
 TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterMerge) {
     Int32RF bf0;
     RuntimeFilter* rf0 = &bf0;
-    bf0.init(100);
+    bf0.bloom_filter().init(100);
     for (int i = 0; i <= 200; i += 17) {
         bf0.insert(i);
     }
-    EXPECT_EQ(bf0.min_value(&_pool), 0);
-    EXPECT_EQ(bf0.max_value(&_pool), 187);
+    EXPECT_EQ(bf0.min_max_filter().min_value(&_pool), 0);
+    EXPECT_EQ(bf0.min_max_filter().max_value(&_pool), 187);
 
-    RuntimeBloomFilter<TYPE_INT> bf1;
+    ComposedRuntimeFilter<TYPE_INT> bf1;
     RuntimeFilter* rf1 = &bf1;
-    bf1.init(100);
+    bf1.bloom_filter().init(100);
     for (int i = 1; i <= 200; i += 17) {
         bf1.insert(i);
     }
-    EXPECT_EQ(bf1.min_value(&_pool), 1);
-    EXPECT_EQ(bf1.max_value(&_pool), 188);
+    EXPECT_EQ(bf1.min_max_filter().min_value(&_pool), 1);
+    EXPECT_EQ(bf1.min_max_filter().max_value(&_pool), 188);
 
-    RuntimeBloomFilter<TYPE_INT> bf2;
-    bf2.init(100);
+    ComposedRuntimeFilter<TYPE_INT> bf2;
+    bf2.get_bloom_filter()->init(100);
     bf2.merge(rf0);
     bf2.merge(rf1);
     for (int i = 0; i <= 200; i += 17) {
-        EXPECT_TRUE(bf2.test_data(i));
-        EXPECT_TRUE(bf2.test_data(i + 1));
-        EXPECT_FALSE(bf2.test_data(i + 2));
+        EXPECT_TRUE(bf2.bloom_filter().test_data(i));
+        EXPECT_TRUE(bf2.bloom_filter().test_data(i + 1));
+        EXPECT_FALSE(bf2.bloom_filter().test_data(i + 2));
     }
-    EXPECT_EQ(bf2.min_value(&_pool), 0);
-    EXPECT_EQ(bf2.max_value(&_pool), 188);
+    EXPECT_EQ(bf2.min_max_filter().min_value(&_pool), 0);
+    EXPECT_EQ(bf2.min_max_filter().max_value(&_pool), 188);
 }
 
 TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterMerge2) {
@@ -431,13 +466,13 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterMerge2) {
         for (const auto& s : data) {
             values.emplace_back(Slice(s));
         }
-        bf0.init(100);
+        bf0.bloom_filter().init(100);
         for (auto& s : values) {
             bf0.insert(s);
         }
         // bb - dd
-        EXPECT_EQ(bf0.min_value(&_pool), values[0]);
-        EXPECT_EQ(bf0.max_value(&_pool), values[values.size() - 1]);
+        EXPECT_EQ(bf0.min_max_filter().min_value(&_pool), values[0]);
+        EXPECT_EQ(bf0.min_max_filter().max_value(&_pool), values[values.size() - 1]);
     }
 
     StringRF bf1;
@@ -449,19 +484,19 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterMerge2) {
         for (const auto& s : data2) {
             values.emplace_back(Slice(s));
         }
-        bf1.init(100);
+        bf1.bloom_filter().init(100);
         for (auto& s : values) {
             bf1.insert(s);
         }
         // aa - dc
-        EXPECT_EQ(bf1.min_value(&_pool), values[0]);
-        EXPECT_EQ(bf1.max_value(&_pool), values[values.size() - 1]);
+        EXPECT_EQ(bf1.min_max_filter().min_value(&_pool), values[0]);
+        EXPECT_EQ(bf1.min_max_filter().max_value(&_pool), values[values.size() - 1]);
     }
 
     // range aa - dd
     rf0->merge(rf1);
-    EXPECT_EQ(bf0.min_value(&_pool), Slice("aa", 2));
-    EXPECT_EQ(bf0.max_value(&_pool), Slice("dd", 2));
+    EXPECT_EQ(bf0.min_max_filter().min_value(&_pool), Slice("aa", 2));
+    EXPECT_EQ(bf0.min_max_filter().max_value(&_pool), Slice("dd", 2));
 }
 
 TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterMerge3) {
@@ -475,7 +510,7 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterMerge3) {
         for (const auto& s : data) {
             values.emplace_back(Slice(s));
         }
-        bf0.init(100);
+        bf0.bloom_filter().init(100);
         for (auto& s : values) {
             bf0.insert(s);
         }
@@ -489,10 +524,10 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterMerge3) {
     }
 
     auto* pbf0 = static_cast<StringRF*>(rf0);
-    EXPECT_EQ(pbf0->min_value(&_pool), Slice("bb", 2));
-    EXPECT_EQ(pbf0->max_value(&_pool), Slice("dd", 2));
+    EXPECT_EQ(pbf0->min_max_filter().min_value(&_pool), Slice("bb", 2));
+    EXPECT_EQ(pbf0->min_max_filter().max_value(&_pool), Slice("dd", 2));
 
-    RuntimeBloomFilter<TYPE_VARCHAR> bf1;
+    ComposedRuntimeFilter<TYPE_VARCHAR> bf1;
     RuntimeFilter* rf1 = &bf1;
     {
         std::vector<std::string> data = {"aa", "cc", "dc"};
@@ -500,7 +535,7 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterMerge3) {
         for (const auto& s : data) {
             values.emplace_back(Slice(s));
         }
-        bf1.init(100);
+        bf1.bloom_filter().init(100);
         for (auto& s : values) {
             bf1.insert(s);
         }
@@ -513,14 +548,14 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterMerge3) {
     }
 
     auto* pbf1 = static_cast<StringRF*>(rf1);
-    EXPECT_EQ(pbf1->min_value(&_pool), Slice("aa", 2));
-    EXPECT_EQ(pbf1->max_value(&_pool), Slice("dc", 2));
+    EXPECT_EQ(pbf1->min_max_filter().min_value(&_pool), Slice("aa", 2));
+    EXPECT_EQ(pbf1->min_max_filter().max_value(&_pool), Slice("dc", 2));
 
     // range aa - dd
     rf0->merge(rf1);
     // out of scope, we expect aa and dd would be still alive.
-    EXPECT_EQ(pbf0->min_value(&_pool), Slice("aa", 2));
-    EXPECT_EQ(pbf0->max_value(&_pool), Slice("dd", 2));
+    EXPECT_EQ(pbf0->min_max_filter().min_value(&_pool), Slice("aa", 2));
+    EXPECT_EQ(pbf0->min_max_filter().max_value(&_pool), Slice("dd", 2));
 }
 
 typedef std::function<void(BinaryColumn*, std::vector<uint32_t>&, std::vector<size_t>&)> PartitionByFunc;
@@ -534,7 +569,7 @@ using TestPipelineLevelRfHelper = std::function<void(TRuntimeFilterBuildJoinMode
 template <bool compatibility>
 void test_grf_helper_template(size_t num_rows, size_t num_partitions, const PartitionByFunc& part_func,
                               const GrfConfigFunc& grf_config_func, const RuntimeFilterLayout& layout) {
-    std::vector<RuntimeBloomFilter<TYPE_VARCHAR>> bfs(num_partitions);
+    std::vector<ComposedRuntimeFilter<TYPE_VARCHAR>> bfs(num_partitions);
     std::vector<RuntimeFilter*> rfs(num_partitions);
     for (auto p = 0; p < num_partitions; ++p) {
         rfs[p] = &bfs[p];
@@ -546,7 +581,7 @@ void test_grf_helper_template(size_t num_rows, size_t num_partitions, const Part
     std::vector<uint32_t> hash_values;
     part_func(column.get(), hash_values, num_rows_per_partitions);
     for (auto p = 0; p < num_partitions; ++p) {
-        bfs[p].init(num_rows_per_partitions[p]);
+        bfs[p].bloom_filter().init(num_rows_per_partitions[p]);
     }
 
     for (auto i = 0; i < num_rows; ++i) {
@@ -565,15 +600,15 @@ void test_grf_helper_template(size_t num_rows, size_t num_partitions, const Part
         serialized_rfs[p].resize(actual_size);
     }
 
-    RuntimeBloomFilter<TYPE_VARCHAR> grf;
+    ComposedRuntimeFilter<TYPE_VARCHAR> grf;
     for (auto p = 0; p < num_partitions; ++p) {
         RuntimeFilter* grf_component;
         RuntimeFilterHelper::deserialize_runtime_filter(&pool, &grf_component, (const uint8_t*)serialized_rfs[p].data(),
                                                         serialized_rfs[p].size());
-        ASSERT_EQ(grf_component->size(), num_rows_per_partitions[p]);
+        ASSERT_EQ(grf_component->get_bloom_filter()->size(), num_rows_per_partitions[p]);
         grf.concat(grf_component);
     }
-    ASSERT_EQ(grf.size(), num_rows);
+    ASSERT_EQ(grf.bloom_filter().size(), num_rows);
     RuntimeFilter::RunningContext running_ctx;
     grf_config_func(&grf, &running_ctx);
     {
@@ -681,7 +716,7 @@ template <bool compatibility>
 void test_pipeline_level_grf_helper_template(TRuntimeFilterBuildJoinMode::type join_mode, size_t num_rows,
                                              size_t num_partitions, const PartitionByFuncGen& part_func_gen,
                                              const RuntimeFilterLayout& layout) {
-    std::vector<RuntimeBloomFilter<TYPE_VARCHAR>> bfs(num_partitions);
+    std::vector<ComposedRuntimeFilter<TYPE_VARCHAR>> bfs(num_partitions);
     std::vector<RuntimeFilter*> rfs(num_partitions);
     for (auto p = 0; p < num_partitions; ++p) {
         rfs[p] = &bfs[p];
@@ -698,7 +733,7 @@ void test_pipeline_level_grf_helper_template(TRuntimeFilterBuildJoinMode::type j
     Columns columns(num_partitions);
     for (auto p = 0; p < num_partitions; ++p) {
         auto size = num_rows_per_partitions[p];
-        bfs[p].init(size);
+        bfs[p].bloom_filter().init(size);
         columns[p] = BinaryColumn::create();
         columns[p]->reserve(size);
     }
@@ -719,7 +754,7 @@ void test_pipeline_level_grf_helper_template(TRuntimeFilterBuildJoinMode::type j
     std::vector<std::vector<RuntimeFilter*>> rfs_per_instance;
     std::vector<Columns> columns_per_instance;
     split_merged_rf(layout, rfs, columns, rfs_per_instance, columns_per_instance);
-    std::vector<RuntimeBloomFilter<TYPE_VARCHAR>> pipeline_level_bfs_per_instance(rfs_per_instance.size());
+    std::vector<ComposedRuntimeFilter<TYPE_VARCHAR>> pipeline_level_bfs_per_instance(rfs_per_instance.size());
     std::vector<RuntimeFilter*> merged_rf_per_instance(rfs_per_instance.size());
     std::vector<std::string> serialized_rfs(merged_rf_per_instance.size());
     for (auto i = 0; i < rfs_per_instance.size(); ++i) {
@@ -733,7 +768,7 @@ void test_pipeline_level_grf_helper_template(TRuntimeFilterBuildJoinMode::type j
         for (auto& col : columns_per_instance[i]) {
             merged_column->append(*col.get(), 0, col->size());
         }
-        merged_rf->set_join_mode(join_mode);
+        merged_rf->get_bloom_filter()->set_join_mode(join_mode);
         ASSERT_EQ(merged_rf->num_hash_partitions(), rfs_per_instance[i].size());
         auto merged_num_rows = merged_column->size();
         {
@@ -765,17 +800,17 @@ void test_pipeline_level_grf_helper_template(TRuntimeFilterBuildJoinMode::type j
         serialized_rfs[i].resize(actual_size);
     }
 
-    RuntimeBloomFilter<TYPE_VARCHAR> grf;
+    ComposedRuntimeFilter<TYPE_VARCHAR> grf;
     for (auto p = 0; p < serialized_rfs.size(); ++p) {
         RuntimeFilter* grf_component;
         RuntimeFilterHelper::deserialize_runtime_filter(&pool, &grf_component, (const uint8_t*)serialized_rfs[p].data(),
                                                         serialized_rfs[p].size());
         grf.concat(grf_component);
     }
-    ASSERT_EQ(grf.size(), num_rows - num_bucket_absent);
+    ASSERT_EQ(grf.bloom_filter().size(), num_rows - num_bucket_absent);
     RuntimeFilter::RunningContext running_ctx;
-    grf.set_join_mode(join_mode);
-    grf.set_global();
+    grf.bloom_filter().set_join_mode(join_mode);
+    grf.bloom_filter().set_global();
     {
         running_ctx.selection.assign(num_rows, 1);
         running_ctx.use_merged_selection = false;
@@ -824,8 +859,8 @@ void test_colocate_or_bucket_shuffle_grf_helper(size_t num_rows, size_t num_part
         }
     };
     auto grf_config_func = [&mode](RuntimeFilter* grf, RuntimeFilter::RunningContext* ctx) {
-        grf->set_global();
-        grf->set_join_mode(mode);
+        grf->get_bloom_filter()->set_global();
+        grf->get_bloom_filter()->set_join_mode(mode);
     };
     RuntimeFilterLayout layout;
     layout.init(1, bucketseq_to_partition);
@@ -876,8 +911,8 @@ void test_partitioned_or_shuffle_hash_bucket_grf_helper(size_t num_rows, size_t 
         }
     };
     auto grf_config_func = [type](RuntimeFilter* grf, RuntimeFilter::RunningContext* ctx) {
-        grf->set_global();
-        grf->set_join_mode(type);
+        grf->get_bloom_filter()->set_global();
+        grf->get_bloom_filter()->set_join_mode(type);
     };
     RuntimeFilterLayout layout;
     layout.init(1, {});
@@ -939,15 +974,15 @@ TEST_F(RuntimeBloomFilterTest, TestGlobalRuntimeFilterMinMax) {
     auto* global = prototype.create_empty(&pool);
     for (int i = 0; i < 3; i++) {
         Int32RF local;
-        local.init(10);
+        local.bloom_filter().init(10);
         for (int j = 0; j < 4; j++) {
             int value = (i + 1) * 10 + j;
             local.insert(value);
         }
         global->concat(&local);
     }
-    EXPECT_EQ(global->min_value(&_pool), 10);
-    EXPECT_EQ(global->max_value(&_pool), 33);
+    EXPECT_EQ(global->min_max_filter().min_value(&_pool), 10);
+    EXPECT_EQ(global->min_max_filter().max_value(&_pool), 33);
 }
 
 void test_pipeline_level_helper(TRuntimeFilterBuildJoinMode::type join_mode, const RuntimeFilterLayout& layout,
@@ -1092,13 +1127,13 @@ void TestMultiColumnsOnRuntimeFilter(TRuntimeFilterBuildJoinMode::type join_mode
     }
 
     int32_t num_column = columns.size();
-    std::vector<RuntimeBloomFilter<TYPE_INT>> bfs(num_column * num_partitions);
-    std::vector<RuntimeBloomFilter<TYPE_INT>> gfs(num_column);
+    std::vector<ComposedRuntimeFilter<TYPE_INT>> bfs(num_column * num_partitions);
+    std::vector<ComposedRuntimeFilter<TYPE_INT>> gfs(num_column);
     for (int i = 0; i < num_column; i++) {
         auto& column = columns[i];
         for (auto p = 0; p < num_partitions; ++p) {
             auto pp = p + (i * num_partitions);
-            bfs[pp].init(num_rows_per_partitions[p]);
+            bfs[pp].bloom_filter().init(num_rows_per_partitions[p]);
         }
         for (auto j = 0; j < num_rows; ++j) {
             auto ele = column->get(j).get_int32();
@@ -1109,16 +1144,16 @@ void TestMultiColumnsOnRuntimeFilter(TRuntimeFilterBuildJoinMode::type join_mode
             auto pp = p + (i * num_partitions);
             gfs[i].concat(&bfs[pp]);
         }
-        ASSERT_EQ(gfs[i].size(), num_rows);
+        ASSERT_EQ(gfs[i].bloom_filter().size(), num_rows);
         ASSERT_EQ(gfs[i].num_hash_partitions(), num_partitions);
     }
     // compute hash
     {
         auto& grf = gfs[0];
-        grf.set_join_mode(join_mode);
+        grf.bloom_filter().set_join_mode(join_mode);
         RuntimeFilterLayout layout;
         layout.init(1, bucketseq_to_partition);
-        grf.set_global();
+        grf.bloom_filter().set_global();
         grf.compute_partition_index(layout, column_ptrs, &running_ctx);
         auto& ctx_hash_values = running_ctx.hash_values;
         for (auto i = 0; i < num_rows; i++) {
@@ -1128,8 +1163,8 @@ void TestMultiColumnsOnRuntimeFilter(TRuntimeFilterBuildJoinMode::type join_mode
 
     for (int i = 0; i < num_column; i++) {
         auto& grf = gfs[i];
-        grf.set_join_mode(join_mode);
-        grf.set_global();
+        grf.bloom_filter().set_join_mode(join_mode);
+        grf.bloom_filter().set_global();
         grf.evaluate(column_ptrs[i], &running_ctx);
         auto true_count = SIMD::count_nonzero(running_ctx.selection.data(), num_rows);
         ASSERT_EQ(true_count, num_rows);

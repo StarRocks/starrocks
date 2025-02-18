@@ -40,13 +40,15 @@ namespace starrocks {
 
 struct FilterBuilder {
     template <LogicalType ltype>
-    RuntimeFilter* operator()() {
-        return new RuntimeBloomFilter<ltype>();
+    RuntimeFilter* operator()(int8_t join_mode) {
+        auto rf = new ComposedRuntimeFilter<ltype>();
+        rf->get_bloom_filter()->set_join_mode(join_mode);
+        return rf;
     }
 };
 
-RuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool, LogicalType type) {
-    RuntimeFilter* filter = type_dispatch_filter(type, (RuntimeFilter*)nullptr, FilterBuilder());
+RuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool, LogicalType type, int8_t join_mode) {
+    RuntimeFilter* filter = type_dispatch_filter(type, (RuntimeFilter*)nullptr, FilterBuilder(), join_mode);
     if (pool != nullptr && filter != nullptr) {
         return pool->add(filter);
     } else {
@@ -98,7 +100,7 @@ int RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, RuntimeFil
     memcpy(&type, data + offset, sizeof(type));
     LogicalType ltype = thrift_to_type(type);
 
-    RuntimeFilter* filter = create_join_runtime_filter(pool, ltype);
+    RuntimeFilter* filter = create_join_runtime_filter(pool, ltype, TJoinDistributionMode::NONE);
     DCHECK(filter != nullptr);
     if (filter != nullptr) {
         offset += filter->deserialize(version, data + offset);
@@ -108,16 +110,10 @@ int RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, RuntimeFil
     return version;
 }
 
-RuntimeFilter* RuntimeFilterHelper::create_runtime_bloom_filter(ObjectPool* pool, LogicalType type) {
-    RuntimeFilter* filter = create_join_runtime_filter(pool, type);
-    return filter;
-}
-
 struct FilterIniter {
     template <LogicalType ltype>
     auto operator()(const ColumnPtr& column, size_t column_offset, RuntimeFilter* expr, bool eq_null) {
-        using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;
-        auto* filter = (RuntimeBloomFilter<ltype>*)(expr);
+        auto* filter = down_cast<ComposedRuntimeFilter<ltype>*>(expr);
 
         if (column->is_nullable()) {
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);

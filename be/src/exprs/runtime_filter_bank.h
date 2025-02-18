@@ -56,10 +56,9 @@ public:
     static size_t serialize_runtime_filter(RuntimeState* state, const RuntimeFilter* rf, uint8_t* data);
     static size_t serialize_runtime_filter(int serialize_version, const RuntimeFilter* rf, uint8_t* data);
     static int deserialize_runtime_filter(ObjectPool* pool, RuntimeFilter** rf, const uint8_t* data, size_t size);
-    static RuntimeFilter* create_join_runtime_filter(ObjectPool* pool, LogicalType type);
+    static RuntimeFilter* create_join_runtime_filter(ObjectPool* pool, LogicalType type, int8_t join_mode);
 
     // ====================================
-    static RuntimeFilter* create_runtime_bloom_filter(ObjectPool* pool, LogicalType type);
     static Status fill_runtime_bloom_filter(const ColumnPtr& column, LogicalType type, RuntimeFilter* filter,
                                             size_t column_offset, bool eq_null);
     static Status fill_runtime_bloom_filter(const std::vector<ColumnPtr>& column, LogicalType type,
