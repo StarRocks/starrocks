@@ -61,6 +61,8 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final Set<String> TASK_RUN_PROPERTIES = ImmutableSet.of(
             MV_ID, PARTITION_START, PARTITION_END, FORCE, START_TASK_RUN_ID, PARTITION_VALUES);
 
+    public static final int INVALID_TASK_PROGRESS = -1;
+
     // Only used in FE's UT
     public static final String IS_TEST = "__IS_TEST__";
     private boolean isKilled = false;
@@ -305,29 +307,46 @@ public class TaskRun implements Comparable<TaskRun> {
         if (status == null) {
             return null;
         }
-        switch (status.getState()) {
-            case RUNNING:
-                if (runCtx != null) {
-                    StmtExecutor executor = runCtx.getExecutor();
-                    if (executor != null && executor.getCoordinator() != null) {
-                        long jobId = executor.getCoordinator().getLoadJobId();
-                        if (jobId != -1) {
-                            InsertLoadJob job = (InsertLoadJob) GlobalStateMgr.getCurrentState()
-                                    .getLoadMgr().getLoadJob(jobId);
-                            int progress = job.getProgress();
-                            if (progress == 100) {
-                                progress = 99;
-                            }
-                            status.setProgress(progress);
-                        }
-                    }
-                }
-                break;
-            case SUCCESS:
-                status.setProgress(100);
-                break;
+        final int progress = getProgress();
+        if (progress != INVALID_TASK_PROGRESS) {
+            status.setProgress(progress);
         }
         return status;
+    }
+
+    private int getProgress() {
+        if (status == null) {
+            return INVALID_TASK_PROGRESS;
+        }
+
+        if (status.getState().isSuccessState()) {
+            return 100;
+        } else if (status.getState().isFinishState()) {
+            return INVALID_TASK_PROGRESS;
+        } else {
+            if (runCtx == null) {
+                return INVALID_TASK_PROGRESS;
+            }
+            final StmtExecutor executor = runCtx.getExecutor();
+            if (executor == null || executor.getCoordinator() == null) {
+                return INVALID_TASK_PROGRESS;
+            }
+            final long jobId = executor.getCoordinator().getLoadJobId();
+            if (jobId == -1) {
+                return INVALID_TASK_PROGRESS;
+            }
+            final InsertLoadJob job = (InsertLoadJob) GlobalStateMgr.getCurrentState()
+                    .getLoadMgr().getLoadJob(jobId);
+            if (job == null) {
+                return INVALID_TASK_PROGRESS;
+            }
+            int progress = job.getProgress();
+            // if the progress is 100, we should return 99 to avoid the task run is marked as success
+            if (progress == 100) {
+                progress = 99;
+            }
+            return progress;
+        }
     }
 
     public TaskRunStatus initStatus(String queryId, Long createTime) {
