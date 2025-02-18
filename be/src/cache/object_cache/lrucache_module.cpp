@@ -16,28 +16,27 @@
 
 #include <butil/fast_rand.h>
 
-#include "common/logging.h"
 #include "cache/status.h"
+#include "common/logging.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks {
 
 Status LRUCacheModule::init() {
     if (!_cache) {
-        auto sharded_lru_cache = dynamic_cast<ShardedLRUCache*>(new_lru_cache(_options.capacity, ChargeMode::MEMSIZE));
+        auto sharded_lru_cache = dynamic_cast<ShardedLRUCache*>(new_lru_cache(_options.capacity));
         _cache.reset(sharded_lru_cache);
     }
     return Status::OK();
 }
 
 Status LRUCacheModule::insert(const std::string& key, void* value, size_t size, size_t charge,
-                               ObjectCacheDeleter deleter, ObjectCacheHandlePtr* handle,
-                               ObjectCacheWriteOptions* options) {
+                              ObjectCacheDeleter deleter, ObjectCacheHandlePtr* handle,
+                              ObjectCacheWriteOptions* options) {
     if (!_check_write(charge, options)) {
         return Status::InternalError("cache insertion is rejected");
     }
-    auto* lru_handle = _cache->insert(key, value, charge, deleter, static_cast<CachePriority>(options->priority),
-                                      size); 
+    auto* lru_handle = _cache->insert(key, value, charge, size, deleter, static_cast<CachePriority>(options->priority));
     if (handle) {
         *handle = reinterpret_cast<ObjectCacheHandlePtr>(lru_handle);
     }
@@ -54,7 +53,7 @@ Status LRUCacheModule::lookup(const std::string& key, ObjectCacheHandlePtr* hand
     return Status::OK();
 }
 
-Status LRUCacheModule::remove(const std::string& key)  {
+Status LRUCacheModule::remove(const std::string& key) {
     CacheKey lru_key(key);
     _cache->erase(lru_key);
     return Status::OK();
@@ -100,7 +99,7 @@ size_t LRUCacheModule::lookup_count() const {
 }
 
 size_t LRUCacheModule::hit_count() const {
-    return _cache->get_hit_count(); 
+    return _cache->get_hit_count();
 }
 
 const ObjectCacheMetrics LRUCacheModule::metrics() const {
@@ -142,7 +141,7 @@ bool LRUCacheModule::_check_write(size_t charge, ObjectCacheWriteOptions* option
     }
 
     if (butil::fast_rand_less_than(100) < options->evict_probability) {
-        return true; 
+        return true;
     }
     return false;
 }
