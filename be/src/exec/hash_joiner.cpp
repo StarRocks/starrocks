@@ -28,6 +28,7 @@
 #include "exec/spill/spiller.hpp"
 #include "exprs/column_ref.h"
 #include "exprs/expr.h"
+#include "exprs/runtime_filter.h"
 #include "gen_cpp/Metrics_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
@@ -588,13 +589,12 @@ Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t li
         if (multi_partitioned) {
             LogicalType build_type = rf_desc->build_expr_type();
             filter = std::shared_ptr<RuntimeFilter>(
-                    RuntimeFilterHelper::create_runtime_bloom_filter(nullptr, build_type));
+                    RuntimeFilterHelper::create_join_runtime_filter(nullptr, build_type, rf_desc->join_mode()));
             if (filter == nullptr) {
                 _runtime_bloom_filter_build_params.emplace_back();
                 continue;
             }
-            filter->set_join_mode(rf_desc->join_mode());
-            filter->init(ht_row_count);
+            filter->get_bloom_filter()->init(ht_row_count);
             RETURN_IF_ERROR(RuntimeFilterHelper::fill_runtime_bloom_filter(columns, build_type, filter.get(),
                                                                            kHashJoinKeyColumnOffset, eq_null));
         }
