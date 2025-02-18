@@ -93,9 +93,6 @@ void StoragePageCache::prune() {
     _cache->prune();
 }
 
-StoragePageCache::StoragePageCache(MemTracker* mem_tracker, size_t capacity)
-        : _mem_tracker(mem_tracker), _cache(new_lru_cache(capacity)) {}
-
 StoragePageCache::~StoragePageCache() = default;
 
 void StoragePageCache::set_capacity(size_t capacity) {
