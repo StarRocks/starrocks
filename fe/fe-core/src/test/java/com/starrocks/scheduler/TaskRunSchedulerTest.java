@@ -21,6 +21,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
@@ -357,5 +358,33 @@ public class TaskRunSchedulerTest {
         Assert.assertEquals(Long.valueOf(3), result.get(0L));
         Assert.assertEquals(Long.valueOf(3), result.get(1L));
         Assert.assertEquals(Long.valueOf(3), result.get(2L));
+    }
+
+    @Test
+    public void testTaskRunProgress() {
+        ConnectContext context1 = new ConnectContext();
+        context1.setGlobalStateMgr(connectContext.getGlobalStateMgr());
+        Task task = new Task("test");
+        TaskRun run = makeTaskRun(1, task, makeExecuteOption(true, false), System.currentTimeMillis());
+        Assert.assertTrue(run.getStatus() != null);
+        Assert.assertEquals(0, run.getStatus().getProgress());
+
+        TaskRunStatus status = run.getStatus();
+        status.setState(Constants.TaskRunState.SUCCESS);
+        Assert.assertEquals(100, run.getStatus().getProgress());
+        status.setState(Constants.TaskRunState.MERGED);
+        Assert.assertEquals(100, run.getStatus().getProgress());
+
+        // keep original progress
+        status.setState(Constants.TaskRunState.FAILED);
+        Assert.assertEquals(100, run.getStatus().getProgress());
+
+        status.setState(Constants.TaskRunState.RUNNING);
+        status.setProgress(10);
+        // should not throw exception
+        Assert.assertEquals(10, run.getStatus().getProgress());
+
+        status.setProgress(100);
+        Assert.assertEquals(100, run.getStatus().getProgress());
     }
 }
