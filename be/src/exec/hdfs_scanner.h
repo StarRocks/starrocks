@@ -101,6 +101,13 @@ struct HdfsScanStats {
     std::vector<int64_t> orc_stripe_sizes{};
     int64_t orc_total_tiny_stripe_size = 0;
 
+    // orc footer cache information
+    int64_t orc_footer_cache_read_ns = 0;
+    int64_t orc_footer_cache_read_count = 0;
+    int64_t orc_footer_cache_write_count = 0;
+    int64_t orc_footer_cache_write_bytes = 0;
+    int64_t orc_footer_cache_write_fail_count = 0;
+
     // io coalesce
     int64_t orc_stripe_active_lazy_coalesce_together = 0;
     int64_t orc_stripe_active_lazy_coalesce_seperately = 0;
@@ -390,6 +397,8 @@ public:
     HdfsScanner() = default;
     virtual ~HdfsScanner() = default;
 
+    static string _build_metacache_key(std::string file_name, uint32_t file_size, int64_t mtime);
+
     Status init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params);
     Status open(RuntimeState* runtime_state);
     Status get_next(RuntimeState* runtime_state, ChunkPtr* chunk);
@@ -400,6 +409,10 @@ public:
     int64_t num_rows_read() const { return _app_stats.rows_read; }
     int64_t cpu_time_spent() const { return _total_running_time - _app_stats.io_ns; }
     int64_t io_time_spent() const { return _app_stats.io_ns; }
+    // only for tests
+    int64_t orc_footer_cache_read_count() const { return _app_stats.orc_footer_cache_read_count; }
+    int64_t orc_footer_cache_write_count() const { return _app_stats.orc_footer_cache_write_count; }
+
     virtual int64_t estimated_mem_usage() const;
     void update_counter();
 

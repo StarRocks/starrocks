@@ -119,7 +119,6 @@ private:
     Status _parse_footer(FileMetaDataPtr* file_metadata_ptr, int64_t* file_metadata_size);
     StatusOr<uint32_t> _get_footer_read_size() const;
     StatusOr<uint32_t> _parse_metadata_length(const std::vector<char>& footer_buff) const;
-    static std::string _build_metacache_key(const std::string& filename, int64_t modification_time, uint64_t file_size);
     RandomAccessFile* _file = nullptr;
     const HdfsScannerContext* _scanner_ctx = nullptr;
     BlockCache* _cache = nullptr;

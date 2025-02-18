@@ -488,7 +488,41 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
             auto* split_context = down_cast<const SplitContext*>(_scanner_ctx.split_context);
             options.setSerializedFileTail(*(split_context->footer.get()));
         }
+        DataCacheHandle cache_handle;
+        std::string metacache_key;
+        bool cache_miss = false;
+        if (_cache && options.getSerializedFileTail().length() == 0) {
+            // try to read serialized footer from cache
+            metacache_key = _build_metacache_key(_file->filename(), _file->get_size().value(),
+                                                 _scanner_params.datacache_options.modification_time);
+            SCOPED_RAW_TIMER(&_app_stats.orc_footer_cache_read_ns);
+            Status st = _cache->read_object(metacache_key, &cache_handle);
+            if (st.ok()) {
+                string serialized_footer = *(static_cast<const string*>(cache_handle.ptr()));
+                options.setSerializedFileTail(serialized_footer);
+                _app_stats.orc_footer_cache_read_count += 1;
+            } else {
+                cache_miss = true;
+            }
+        }
         reader = orc::createReader(std::move(_input_stream), options);
+        if (_cache && cache_miss) {
+            // cache miss, try to write serialized footer to cache
+            string serialized_footer = reader->getSerializedFileTail();
+            string* capture = new string(serialized_footer);
+            auto deleter = [capture]() { delete capture; };
+            WriteCacheOptions write_cache_options;
+            write_cache_options.evict_probability = _scanner_params.datacache_options.datacache_evict_probability;
+            Status st = _cache->write_object(metacache_key, capture, serialized_footer.length(), deleter, &cache_handle,
+                                             &write_cache_options);
+            if (st.ok()) {
+                _app_stats.orc_footer_cache_write_count += 1;
+                _app_stats.orc_footer_cache_write_bytes += serialized_footer.length();
+            } else {
+                _app_stats.orc_footer_cache_write_fail_count += 1;
+                delete capture;
+            }
+        }
     } catch (std::exception& e) {
         bool is_not_found = (errno == ENOENT);
         auto s = strings::Substitute("HdfsOrcScanner::do_open failed. reason = $0", e.what());
@@ -725,6 +759,12 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
 Status HdfsOrcScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams& scanner_params) {
     _should_skip_file = false;
     _use_orc_sargs = true;
+#ifdef WITH_STARCACHE
+    // Only support file metacache in starcache engine
+    if (_scanner_ctx.use_file_metacache) {
+        _cache = BlockCache::instance();
+    }
+#endif
     return Status::OK();
 }
 
@@ -769,6 +809,22 @@ void HdfsOrcScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(stripe_active_lazy_coalesce_together_counter, _app_stats.orc_stripe_active_lazy_coalesce_together);
     COUNTER_UPDATE(stripe_active_lazy_coalesce_seperately_counter,
                    _app_stats.orc_stripe_active_lazy_coalesce_seperately);
+
+    RuntimeProfile::Counter* orc_footer_cache_write_counter =
+            ADD_CHILD_COUNTER(root_profile, "OrcFooterCacheWriteCount", TUnit::UNIT, orcProfileSectionPrefix);
+    RuntimeProfile::Counter* orc_footer_cache_write_bytes =
+            ADD_CHILD_COUNTER(root_profile, "OrcFooterCacheWriteBytes", TUnit::BYTES, orcProfileSectionPrefix);
+    RuntimeProfile::Counter* orc_footer_cache_write_fail_counter =
+            ADD_CHILD_COUNTER(root_profile, "OrcFooterCacheWriteFailCount", TUnit::UNIT, orcProfileSectionPrefix);
+    RuntimeProfile::Counter* orc_footer_cache_read_counter =
+            ADD_CHILD_COUNTER(root_profile, "OrcFooterCacheReadCount", TUnit::UNIT, orcProfileSectionPrefix);
+    RuntimeProfile::Counter* orc_footer_cache_read_timer =
+            ADD_CHILD_TIMER(root_profile, "OrcFooterCacheReadTimer", orcProfileSectionPrefix);
+    COUNTER_UPDATE(orc_footer_cache_write_counter, _app_stats.orc_footer_cache_write_count);
+    COUNTER_UPDATE(orc_footer_cache_write_bytes, _app_stats.orc_footer_cache_write_bytes);
+    COUNTER_UPDATE(orc_footer_cache_write_fail_counter, _app_stats.orc_footer_cache_write_fail_count);
+    COUNTER_UPDATE(orc_footer_cache_read_counter, _app_stats.orc_footer_cache_read_count);
+    COUNTER_UPDATE(orc_footer_cache_read_timer, _app_stats.orc_footer_cache_read_ns);
 
     if (_orc_reader != nullptr) {
         // _orc_reader is nullptr for split task
