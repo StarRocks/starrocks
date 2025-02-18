@@ -285,7 +285,8 @@ public class TaskManager implements MemoryTrackable {
         } finally {
             taskRunManager.taskRunUnlock();
         }
-        return taskRunManager.killTaskRun(task.getId(), force);
+        taskRunManager.killTaskRun(task.getId(), force);
+        return true;
     }
 
     public SubmitResult executeTask(String taskName) {
@@ -377,7 +378,7 @@ public class TaskManager implements MemoryTrackable {
                     periodFutureMap.remove(task.getId());
                 }
                 if (!killTask(task.getName(), false)) {
-                    LOG.error("kill task failed: " + task.getName());
+                    LOG.warn("kill task failed: {}", task.getName());
                 }
                 idToTaskMap.remove(task.getId());
                 nameToTaskMap.remove(task.getName());
