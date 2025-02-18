@@ -14,7 +14,7 @@
 
 #pragma once
 
-#include "block_cache/kv_cache.h"
+#include "cache/block_cache/kv_cache.h"
 #include "common/status.h"
 #include "starcache/star_cache.h"
 #include "starcache/time_based_cache_adaptor.h"
