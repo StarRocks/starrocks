@@ -41,11 +41,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-<<<<<<< HEAD
 import com.starrocks.common.Pair;
-=======
 import com.starrocks.mysql.ssl.SSLContextLoader;
->>>>>>> 49c20e1f8 ([Feature] Support SSL encryption for mysql protocol (#54877))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
