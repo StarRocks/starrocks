@@ -858,12 +858,6 @@ public class Config extends ConfigBase {
     public static int mysql_nio_backlog_num = 1024;
 
     /**
-     * mysql service nio option.
-     */
-    @ConfField
-    public static boolean mysql_service_nio_enabled = true;
-
-    /**
      * num of thread to handle io events in mysql.
      */
     @ConfField
@@ -1261,12 +1255,6 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int qe_max_connection = 4096;
-
-    /**
-     * Maximal number of thread in connection-scheduler-pool.
-     */
-    @ConfField
-    public static int max_connection_scheduler_threads_num = 4096;
 
     /**
      * Used to limit element num of InPredicate in delete statement.

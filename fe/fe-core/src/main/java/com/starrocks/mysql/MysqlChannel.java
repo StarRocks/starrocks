@@ -35,14 +35,18 @@
 package com.starrocks.mysql;
 
 import com.starrocks.common.util.NetUtils;
+import com.starrocks.mysql.nio.ReadListener;
 import com.starrocks.mysql.ssl.SSLChannel;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.ConnectProcessor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.xnio.StreamConnection;
+import org.xnio.channels.Channels;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.SocketChannel;
 
 /**
  * This class used to read/write MySQL logical packet.
@@ -60,8 +64,7 @@ public class MysqlChannel {
     protected static final Logger LOG = LogManager.getLogger(MysqlChannel.class);
     // next sequence id to receive or send
     protected int sequenceId;
-    // channel connected with client
-    protected SocketChannel channel;
+    private StreamConnection conn;
     // used to receive/send header, avoiding new this many time.
     protected ByteBuffer headerByteBuffer = ByteBuffer.allocate(PACKET_HEADER_LEN);
     // default packet byte buffer for most packet
@@ -76,33 +79,23 @@ public class MysqlChannel {
     protected boolean isSend;
     protected boolean closed;
 
-    protected MysqlChannel() {
-        this(null);
-    }
-
-    public MysqlChannel(SocketChannel channel) {
+    public MysqlChannel(StreamConnection connection) {
+        this.conn = connection;
         this.closed = false;
         this.sequenceId = 0;
         this.isSend = false;
         this.remoteHostPortString = "";
         this.remoteIp = "";
-        this.channel = channel;
 
-        if (channel != null) {
-            try {
-                if (channel.getRemoteAddress() instanceof InetSocketAddress) {
-                    InetSocketAddress address = (InetSocketAddress) channel.getRemoteAddress();
-                    // avoid calling getHostName() which may trigger a name service reverse lookup
-                    remoteHostPortString = NetUtils.getHostPortInAccessibleFormat(address.getHostString(), 
-                            address.getPort());
-                    remoteIp = address.getAddress().getHostAddress();
-                } else {
-                    // Reach here, what's it?
-                    remoteHostPortString = channel.getRemoteAddress().toString();
-                    remoteIp = channel.getRemoteAddress().toString();
-                }
-            } catch (Exception e) {
-                LOG.warn("get remote host string failed: ", e);
+        if (connection != null) {
+            if (connection.getPeerAddress() instanceof InetSocketAddress) {
+                InetSocketAddress address = (InetSocketAddress) connection.getPeerAddress();
+                remoteHostPortString = NetUtils.getHostPortInAccessibleFormat(address.getHostString(), address.getPort());
+                remoteIp = address.getAddress().getHostAddress();
+            } else {
+                // Reach here, what's it?
+                remoteHostPortString = connection.getPeerAddress().toString();
+                remoteIp = connection.getPeerAddress().toString();
             }
         }
     }
@@ -138,7 +131,7 @@ public class MysqlChannel {
             return;
         }
         try {
-            channel.close();
+            conn.close();
         } catch (IOException e) {
             LOG.warn("Close channel exception, ignore.");
         } finally {
@@ -172,7 +165,7 @@ public class MysqlChannel {
     }
 
     public int realNetRead(ByteBuffer dstBuf) throws IOException {
-        return channel.read(dstBuf);
+        return Channels.readBlocking(conn.getSourceChannel(), dstBuf);
     }
 
     // read one logical mysql protocol packet
@@ -240,12 +233,13 @@ public class MysqlChannel {
 
     public void realNetSend(ByteBuffer buffer) throws IOException {
         long bufLen = buffer.remaining();
-        long writeLen = channel.write(buffer);
+        long writeLen = Channels.writeBlocking(conn.getSinkChannel(), buffer);
         if (bufLen != writeLen) {
             throw new IOException("Write mysql packet failed.[write=" + writeLen
                     + ", needToWrite=" + bufLen + "]");
         }
-        channel.write(buffer);
+        Channels.flushBlocking(conn.getSinkChannel());
+        isSend = true;
     }
 
     public void flush() throws IOException {
@@ -341,5 +335,22 @@ public class MysqlChannel {
 
     public String getRemoteHostPortString() {
         return remoteHostPortString;
+    }
+
+    public void startAcceptQuery(ConnectContext connectContext, ConnectProcessor connectProcessor) {
+        conn.getSourceChannel().setReadListener(new ReadListener(connectContext, connectProcessor));
+        conn.getSourceChannel().resumeReads();
+    }
+
+    public void suspendAcceptQuery() {
+        conn.getSourceChannel().suspendReads();
+    }
+
+    public void resumeAcceptQuery() {
+        conn.getSourceChannel().resumeReads();
+    }
+
+    public void stopAcceptQuery() throws IOException {
+        conn.getSourceChannel().shutdownReads();
     }
 }
