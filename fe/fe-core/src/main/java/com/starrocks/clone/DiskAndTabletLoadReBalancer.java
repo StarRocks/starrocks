@@ -554,6 +554,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                             continue;
                         }
 
+                        if (!olapTable.needSchedule(false)) {
+                            continue;
+                        }
+
                         if (isDestBackendLocationMismatch(olapTable, hBackend.getId(), lBackend.getId(),
                                 physicalPartition.getParentId(), tabletId)) {
                             continue;
@@ -742,8 +746,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
         long destPathHash = pathStats.get(destPathIndex).getPathHash();
 
         // (partition, index) => tabletIds
-        Map<Pair<Long, Long>, Set<Long>> srcPathPartitionTablets = getPartitionTablets(beId, medium, srcPathHash);
-        Map<Pair<Long, Long>, Set<Long>> destPathPartitionTablets = getPartitionTablets(beId, medium, destPathHash);
+        Map<Pair<Long, Long>, Set<Long>> srcPathPartitionTablets = getPartitionTablets(beId, medium, srcPathHash, true);
+        Map<Pair<Long, Long>, Set<Long>> destPathPartitionTablets = getPartitionTablets(beId, medium, destPathHash, true);
         Map<Pair<Long, Long>, PartitionStat> partitionStats = getPartitionStats(medium, true, null, null);
 
         boolean srcChanged = false;
@@ -755,13 +759,13 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             if (srcChanged) {
                 srcPathUsedCap = srcPathStat.getUsedCapacityB();
                 srcPathHash = srcPathStat.getPathHash();
-                srcPathPartitionTablets = getPartitionTablets(beId, medium, srcPathHash);
+                srcPathPartitionTablets = getPartitionTablets(beId, medium, srcPathHash, true);
                 srcChanged = false;
             }
             if (destChanged) {
                 destPathUsedCap = destPathStat.getUsedCapacityB();
                 destPathHash = destPathStat.getPathHash();
-                destPathPartitionTablets = getPartitionTablets(beId, medium, destPathHash);
+                destPathPartitionTablets = getPartitionTablets(beId, medium, destPathHash, true);
                 destChanged = false;
             }
 
@@ -962,7 +966,8 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
     /**
      * @return map : (physical partition id, index) => tablets
      */
-    private Map<Pair<Long, Long>, Set<Long>> getPartitionTablets(long beId, TStorageMedium medium, long pathHash) {
+    private Map<Pair<Long, Long>, Set<Long>> getPartitionTablets(long beId, TStorageMedium medium, long pathHash,
+                                                                 boolean isLocalBalance) {
         Map<Pair<Long, Long>, Set<Long>> partitionTablets = Maps.newHashMap();
         List<Long> tabletIds =
                 GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getTabletIdsByBackendIdAndStorageMedium(beId, medium);
@@ -982,6 +987,11 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                 if (replica == null || replica.getPathHash() != pathHash) {
                     continue;
                 }
+            }
+
+            OlapTable olapTable = getOlapTableById(tabletMeta.getDbId(), tabletMeta.getTableId());
+            if (olapTable != null && !olapTable.needSchedule(isLocalBalance)) {
+                continue;
             }
 
             Pair<Long, Long> key = new Pair<>(tabletMeta.getPhysicalPartitionId(), tabletMeta.getIndexId());
@@ -1465,6 +1475,10 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
             if (table == null) {
                 return result;
             }
+            if (!table.needSchedule(beIds == null)) {
+                return result;
+            }
+
             if (table.isCloudNativeTableOrMaterializedView()) {
                 // replicas are managed by StarOS and cloud storage.
                 return result;
@@ -1826,7 +1840,7 @@ public class DiskAndTabletLoadReBalancer extends Rebalancer {
                                                        Map<Long, Integer> partitionReplicaCnt,
                                                        int backendCnt,
                                                        boolean sortPartition) {
-        Map<Pair<Long, Long>, Set<Long>> physicalPartitionTablets = getPartitionTablets(backendId, medium, -1L);
+        Map<Pair<Long, Long>, Set<Long>> physicalPartitionTablets = getPartitionTablets(backendId, medium, -1L, false);
         Map<Pair<Long, Long>, List<Long>> partitionTabletList = new HashMap<>();
         for (Map.Entry<Pair<Long, Long>, Set<Long>> entry : physicalPartitionTablets.entrySet()) {
             partitionTabletList.put(entry.getKey(), new LinkedList<>(entry.getValue()));
