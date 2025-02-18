@@ -210,7 +210,7 @@ public class OptExpressionDuplicator {
                 if (olapScan.getDistributionSpec() instanceof HashDistributionSpec) {
                     HashDistributionSpec newHashDistributionSpec =
                             processHashDistributionSpec((HashDistributionSpec) olapScan.getDistributionSpec(),
-                            columnRefFactory, columnMapping);
+                            newColumnMetaToColRefMap);
                     olapScanBuilder.setDistributionSpec(newHashDistributionSpec);
                 }
 
@@ -661,47 +661,58 @@ public class OptExpressionDuplicator {
         // because the columns ids have changed
         private HashDistributionSpec processHashDistributionSpec(
                 HashDistributionSpec originSpec,
-                ColumnRefFactory columnRefFactory,
-                Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {
-
+                Map<Column, ColumnRefOperator> newColumnMetaToColRefMap) {
             // HashDistributionDesc
-            List<DistributionCol> newColumns = Lists.newArrayList();
-            for (DistributionCol column : originSpec.getShuffleColumns()) {
-                ColumnRefOperator oldRefOperator = columnRefFactory.getColumnRef(column.getColId());
-                ColumnRefOperator newRefOperator = columnMapping.get(oldRefOperator);
+            final List<DistributionCol> newColumns = Lists.newArrayList();
+            for (DistributionCol distributionCol : originSpec.getShuffleColumns()) {
+                final ColumnRefOperator newRefOperator = getNewDistributionColRef(distributionCol, newColumnMetaToColRefMap);
                 Preconditions.checkNotNull(newRefOperator);
-                newColumns.add(new DistributionCol(newRefOperator.getId(), column.isNullStrict()));
+                newColumns.add(new DistributionCol(newRefOperator.getId(), distributionCol.isNullStrict()));
             }
             Preconditions.checkState(newColumns.size() == originSpec.getShuffleColumns().size());
-            HashDistributionDesc hashDistributionDesc =
+            final HashDistributionDesc hashDistributionDesc =
                     new HashDistributionDesc(newColumns, originSpec.getHashDistributionDesc().getSourceType());
 
-            EquivalentDescriptor equivDesc = originSpec.getEquivDesc();
-
-            EquivalentDescriptor newEquivDesc = new EquivalentDescriptor(equivDesc.getTableId(), equivDesc.getPartitionIds());
-            updateDistributionUnionFind(newEquivDesc.getNullRelaxUnionFind(), equivDesc.getNullStrictUnionFind());
-            updateDistributionUnionFind(newEquivDesc.getNullStrictUnionFind(), equivDesc.getNullRelaxUnionFind());
-
+            final EquivalentDescriptor equivDesc = originSpec.getEquivDesc();
+            final EquivalentDescriptor newEquivDesc = new EquivalentDescriptor(equivDesc.getTableId(),
+                    equivDesc.getPartitionIds());
+            updateDistributionUnionFind(newEquivDesc.getNullRelaxUnionFind(), equivDesc.getNullStrictUnionFind(),
+                    newColumnMetaToColRefMap);
+            updateDistributionUnionFind(newEquivDesc.getNullStrictUnionFind(), equivDesc.getNullRelaxUnionFind(),
+                    newColumnMetaToColRefMap);
             return new HashDistributionSpec(hashDistributionDesc, newEquivDesc);
         }
 
         private void updateDistributionUnionFind(UnionFind<DistributionCol> newUnionFind,
-                                                UnionFind<DistributionCol> oldUnionFind) {
-
+                                                UnionFind<DistributionCol> oldUnionFind,
+                                                 Map<Column, ColumnRefOperator> newColumnMetaToColRefMap) {
             for (Set<DistributionCol> distributionColSet : oldUnionFind.getAllGroups()) {
                 DistributionCol first = null;
                 for (DistributionCol next : distributionColSet) {
                     if (first == null) {
                         first = next;
                     }
-                    ColumnRefOperator firstCol = columnRefFactory.getColumnRef(first.getColId());
-                    ColumnRefOperator newFirstCol = columnMapping.get(firstCol).cast();
-
-                    ColumnRefOperator nextCol = columnRefFactory.getColumnRef(next.getColId());
-                    ColumnRefOperator newNextCol = columnMapping.get(nextCol).cast();
+                    final ColumnRefOperator newFirstCol = getNewDistributionColRef(first, newColumnMetaToColRefMap);
+                    final ColumnRefOperator newNextCol = getNewDistributionColRef(next, newColumnMetaToColRefMap);
                     newUnionFind.union(first.updateColId(newFirstCol.getId()), next.updateColId(newNextCol.getId()));
                 }
             }
+        }
+
+        private ColumnRefOperator getNewDistributionColRef(DistributionCol col,
+                                                           Map<Column, ColumnRefOperator> newColumnMetaToColRefMap) {
+            int colId = col.getColId();
+            final ColumnRefOperator oldRefOperator = columnRefFactory.getColumnRef(colId);
+            Preconditions.checkArgument(oldRefOperator != null);
+            // use column mapping to find the new ColumnRefOperator
+            ColumnRefOperator newRefOperator = columnMapping.get(oldRefOperator);
+            if (newRefOperator != null) {
+                return newRefOperator;
+            }
+            // use column to meta to find the new ColumnRefOperator if not found in column mapping
+            final Column column = columnRefFactory.getColumn(oldRefOperator);
+            Preconditions.checkArgument(column != null);
+            return newColumnMetaToColRefMap.get(column);
         }
 
         private void processCommon(Operator.Builder opBuilder) {
