@@ -317,9 +317,16 @@ public class UtFrameUtils {
         try {
             ThriftConnectionPool.beHeartbeatPool = new MockGenericPool.HeatBeatPool("heartbeat");
             ThriftConnectionPool.backendPool = new MockGenericPool.BackendThriftPool("backend");
-
+            List<String> stacks = LogUtil.getCurrentStackTraceToList();
+            StringBuilder printString = new StringBuilder();
+            for (String stack : stacks) {
+                if (stack.contains("com.starrocks.") && !stack.contains("LogUtil.java")) {
+                    printString.append(",").append(stack);
+                }
+            }
             runningDir = "fe/mocked/test/" + UUID.randomUUID().toString() + "/";
-            LOG.warn("Start cluster with running dir: {}, runMode: {}", runningDir, runMode);
+            LOG.warn("Start cluster with running dir: {}, runMode: {}, create_stack: {}", runningDir, runMode,
+                    printString.toString());
             startFEServer(runningDir, startBDB, runMode);
 
             addMockBackend(10001);

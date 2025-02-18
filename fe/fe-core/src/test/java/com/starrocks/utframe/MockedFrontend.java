@@ -55,7 +55,9 @@ import com.starrocks.staros.StarMgrServer;
 import mockit.Mock;
 import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.core.LoggerContext;
+import org.junit.Assert;
 
 import java.io.File;
 import java.io.IOException;
@@ -65,6 +67,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Comparator;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
@@ -99,6 +102,7 @@ import java.util.concurrent.locks.ReentrantLock;
  */
 public class MockedFrontend {
     public static final String FE_PROCESS = "fe";
+    private static final Logger LOG = LogManager.getLogger(MockedFrontend.class);
 
     // the running dir of this mocked frontend.
     // log/ starrocks-meta/ and conf/ dirs will be created under this dir.
@@ -213,11 +217,14 @@ public class MockedFrontend {
         private final String[] args;
         private final boolean startBDB;
         private final RunMode runMode;
+        private final CountDownLatch initDoneLatch;
 
-        public FERunnable(MockedFrontend frontend, boolean startBDB, RunMode runMode, String[] args) {
+        public FERunnable(MockedFrontend frontend, boolean startBDB, RunMode runMode, CountDownLatch initDoneLatch,
+                          String[] args) {
             this.frontend = frontend;
             this.startBDB = startBDB;
             this.runMode = runMode;
+            this.initDoneLatch = initDoneLatch;
             this.args = args;
         }
 
@@ -259,7 +266,7 @@ public class MockedFrontend {
 
                 GlobalStateMgr.getCurrentState().initialize(args);
 
-                if (RunMode.isSharedDataMode()) {
+                if (runMode == RunMode.SHARED_DATA) {
                     // setup and start StarManager service
                     Journal journal = GlobalStateMgr.getCurrentState().getJournal();
                     // TODO: support MockJournal in StarMgrServer
@@ -275,6 +282,9 @@ public class MockedFrontend {
                         GlobalStateMgr.getCurrentState().getStateChangeExecution());
                 StateChangeExecutor.getInstance().start();
                 StateChangeExecutor.getInstance().notifyNewFETypeTransfer(FrontendNodeType.LEADER);
+
+                // notify the main thread that the GlobalStateMgr instance is initialized.
+                initDoneLatch.countDown();
 
                 GlobalStateMgr.getCurrentState().waitForReady();
 
@@ -295,10 +305,17 @@ public class MockedFrontend {
             throw new NotInitException("fe process is not initialized");
         }
         initLock.unlock();
-        Thread feThread = new Thread(new FERunnable(this, startBDB, runMode, args), FE_PROCESS);
+        CountDownLatch initLatch = new CountDownLatch(1);
+        Thread feThread = new Thread(new FERunnable(this, startBDB, runMode, initLatch, args), FE_PROCESS);
         feThread.start();
+        // initLatch.wait();
         waitForCatalogReady();
-        System.out.println("Fe process is started");
+        String msg = String.format("Fe process is started with runMode: %s, expected runMode: %s, running dir: %s",
+                RunMode.getCurrentRunMode(), runMode, getRunningDir());
+        LOG.warn(msg);
+        System.out.printf(msg);
+        // make sure the runMode is up as expected
+        Assert.assertEquals(runMode, RunMode.getCurrentRunMode());
     }
 
     private void waitForCatalogReady() throws FeStartException {
