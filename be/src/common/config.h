@@ -1081,6 +1081,9 @@ CONF_mBool(lake_clear_corrupted_cache, "true");
 // The maximum number of files which need to rebuilt in cloud native pk index.
 // If files which need to rebuilt larger than this, we will flush memtable immediately.
 CONF_mInt32(cloud_native_pk_index_rebuild_files_threshold, "50");
+// if set to true, CACHE SELECT will only read file, save CPU time
+// if set to false, CACHE SELECT will behave like SELECT
+CONF_mBool(lake_cache_select_in_physical_way, "true");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
