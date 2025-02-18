@@ -1,0 +1,5 @@
+-- name: test_create_table_exp
+CREATE TABLE orders_new (     ts INT NOT NULL,     id BIGINT NOT NULL,     city STRING NOT NULL ) PARTITION BY date_trunc('month', str_to_date(CAST(ts as STRING),'%Y%m%d'));
+insert into orders_new values('20200201',1,'cd');
+insert into orders_new values('20200101',1,'cd');
+explain select * from orders_new where ts=20200101;
