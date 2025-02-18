@@ -37,7 +37,7 @@ public class LogicalIcebergEqualityDeleteScanOperator extends LogicalScanOperato
 
     // Mainly used for table with iceberg equality delete files. Record full iceberg mor params in the table,
     // used for the first build to associate multiple scan nodes RemoteFileInfoSource.
-    private IcebergTableMORParams tableFullMORParams;
+    private IcebergTableMORParams tableFullMORParams = IcebergTableMORParams.EMPTY;
 
     // Mainly used for table with iceberg equality delete files.
     // Marking this split scan node type after IcebergEqualityDeleteRewriteRule rewriting.

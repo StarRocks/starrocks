@@ -24,6 +24,8 @@ public class IcebergTableMORParams {
     private final long morId;
     private final List<IcebergMORParams> morParamsList;
 
+    public static IcebergTableMORParams EMPTY = new IcebergTableMORParams(-1, List.of());
+
     public IcebergTableMORParams(long id, List<IcebergMORParams> morParamsList) {
         this.morId = id;
         this.morParamsList = morParamsList;

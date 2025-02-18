@@ -26,7 +26,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
 
 public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
     private ScanOperatorPredicates predicates;
-    private IcebergTableMORParams tableFullMORParams;
+    private IcebergTableMORParams tableFullMORParams = IcebergTableMORParams.EMPTY;
     private IcebergMORParams morParams = IcebergMORParams.EMPTY;
 
     public PhysicalIcebergScanOperator(LogicalIcebergScanOperator scanOperator) {

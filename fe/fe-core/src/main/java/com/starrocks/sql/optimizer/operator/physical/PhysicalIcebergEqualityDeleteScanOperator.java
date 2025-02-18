@@ -29,7 +29,7 @@ public class PhysicalIcebergEqualityDeleteScanOperator extends PhysicalScanOpera
 
     private ScalarOperator originPredicate;
 
-    private IcebergTableMORParams tableFullMORParams;
+    private IcebergTableMORParams tableFullMORParams = IcebergTableMORParams.EMPTY;
     private IcebergMORParams morParams;
 
     public PhysicalIcebergEqualityDeleteScanOperator(LogicalIcebergEqualityDeleteScanOperator scanOperator) {
