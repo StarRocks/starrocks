@@ -79,6 +79,14 @@ struct LakeIOOptions {
     bool skip_disk_cache = false;
     // Specify different buffer size for different read scenarios
     int64_t buffer_size = -1;
+<<<<<<< HEAD
+=======
+    bool fill_metadata_cache = false;
+    bool use_page_cache = false;
+    bool cache_file_only = false; // only used for CACHE SELECT
+    std::shared_ptr<FileSystem> fs;
+    std::shared_ptr<starrocks::lake::LocationProvider> location_provider;
+>>>>>>> d67595790a ([Enhancement] support lake table cache select in physical way (#55248))
 };
 
 } // namespace starrocks

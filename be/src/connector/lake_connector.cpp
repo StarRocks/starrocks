@@ -253,7 +253,14 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
             !config::disable_storage_page_cache && _scan_range.fill_data_cache && !_scan_range.skip_page_cache;
     _params.lake_io_opts.fill_data_cache = _scan_range.fill_data_cache;
     _params.lake_io_opts.skip_disk_cache = _scan_range.skip_disk_cache;
+<<<<<<< HEAD
     _params.runtime_range_pruner = OlapRuntimeScanRangePruner(parser, _conjuncts_manager.unarrived_runtime_filters());
+=======
+    _params.runtime_range_pruner = RuntimeScanRangePruner(parser, _conjuncts_manager->unarrived_runtime_filters());
+    _params.lake_io_opts.cache_file_only = _runtime_state->query_options().__isset.enable_cache_select &&
+                                           _runtime_state->query_options().enable_cache_select &&
+                                           config::lake_cache_select_in_physical_way;
+>>>>>>> d67595790a ([Enhancement] support lake table cache select in physical way (#55248))
     _params.splitted_scan_rows = _provider->get_splitted_scan_rows();
     _params.scan_dop = _provider->get_scan_dop();
 
