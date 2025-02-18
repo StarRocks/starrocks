@@ -1409,6 +1409,38 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     MonotonicStopWatch sw;
     sw.start();
 
+#ifdef USE_STAROS
+    // only used for CACHE SELECT, do not form any chunk to save CPU time,
+    // just read file content in `_scan_range`
+    if (_opts.lake_io_opts.cache_file_only) {
+        // read every column in this segment at once, maybe optimize this later
+        size_t buf_size = config::starlet_fs_stream_buffer_size_bytes;
+        if (buf_size <= 0) {
+            buf_size = 1048576; // 1MB
+        }
+        std::unique_ptr<char[]> buf(new char[buf_size]);
+        for (auto& [cid, stream] : _column_files) {
+            ASSIGN_OR_RETURN(auto vec, _column_iterators[cid]->get_io_range_vec(_scan_range));
+            for (auto e : vec) {
+                // if buf_size is 1MB, offset is 123, and size is 2MB
+                // after calculation, offset will be 0, and size will be 2MB+123
+                size_t offset = (e.first / buf_size) * buf_size;
+                size_t size = e.second + (e.first % buf_size);
+                while (size > 0) {
+                    size_t cur_size = std::min(buf_size, size);
+                    RETURN_IF_ERROR(stream->read_at_fully(offset, buf.get(), cur_size));
+                    offset += cur_size;
+                    size -= cur_size;
+                }
+            }
+        }
+
+        _opts.stats->block_load_ns += sw.elapsed_time();
+
+        return Status::EndOfFile("no more data in segment");
+    }
+#endif // USE_STAROS
+
     const uint32_t chunk_capacity = _reserve_chunk_size;
     const uint32_t return_chunk_threshold = std::max<uint32_t>(chunk_capacity - chunk_capacity / 4, 1);
     const bool has_non_expr_predicate = !_non_expr_pred_tree.empty();
