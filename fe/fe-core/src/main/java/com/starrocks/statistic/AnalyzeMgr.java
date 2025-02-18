@@ -273,13 +273,12 @@ public class AnalyzeMgr implements Writable {
             return;
         }
 
-        GlobalStateMgr.getCurrentStatisticStorage().expireTableAndColumnStatistics(table, columns);
         if (async) {
-            GlobalStateMgr.getCurrentStatisticStorage().refreshTableStatistic(table);
-            GlobalStateMgr.getCurrentStatisticStorage().getColumnStatistics(table, columns);
+            GlobalStateMgr.getCurrentStatisticStorage().refreshTableStatistic(table, false);
+            GlobalStateMgr.getCurrentStatisticStorage().refreshColumnStatistics(table, columns, false);
         } else {
-            GlobalStateMgr.getCurrentStatisticStorage().refreshTableStatisticSync(table);
-            GlobalStateMgr.getCurrentStatisticStorage().getColumnStatisticsSync(table, columns);
+            GlobalStateMgr.getCurrentStatisticStorage().refreshTableStatistic(table, true);
+            GlobalStateMgr.getCurrentStatisticStorage().refreshColumnStatistics(table, columns, true);
         }
     }
 
@@ -291,13 +290,8 @@ public class AnalyzeMgr implements Writable {
         } catch (Exception e) {
             return;
         }
-
-        GlobalStateMgr.getCurrentStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
-        if (async) {
-            GlobalStateMgr.getCurrentStatisticStorage().getConnectorTableStatistics(table, columns);
-        } else {
-            GlobalStateMgr.getCurrentStatisticStorage().getConnectorTableStatisticsSync(table, columns);
-        }
+        GlobalStateMgr.getCurrentStatisticStorage()
+                .refreshConnectorTableColumnStatistics(table, columns, async);
     }
 
     public void replayRemoveBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
