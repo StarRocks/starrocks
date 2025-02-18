@@ -44,8 +44,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "block_cache/block_cache.h"
-#include "block_cache/datacache_utils.h"
+#include "cache/block_cache/block_cache.h"
+#include "cache/block_cache/datacache_utils.h"
 #include "cctz/time_zone.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"

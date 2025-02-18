@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "block_cache/starcache_wrapper.h"
+#include "cache/block_cache/starcache_wrapper.h"
 
 #include <filesystem>
 

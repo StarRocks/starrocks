@@ -13,24 +13,24 @@
 # limitations under the License.
 
 # where to put generated libraries
-set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/block_cache")
+set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/cache")
 
 # where to put generated binaries
-set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/block_cache")
+set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/cache")
 
 set(CACHE_FILES
-  block_cache.cpp
-  io_buffer.cpp
-  cache_options.h
-  datacache_utils.cpp
-  disk_space_monitor.cpp
-  block_cache_hit_rate_counter.hpp
+  block_cache/block_cache.cpp
+  block_cache/io_buffer.cpp
+  block_cache/cache_options.h
+  block_cache/datacache_utils.cpp
+  block_cache/disk_space_monitor.cpp
+  block_cache/block_cache_hit_rate_counter.hpp
 )
 
 if (${WITH_STARCACHE} STREQUAL "ON")
-    list(APPEND CACHE_FILES starcache_wrapper.cpp)
+    list(APPEND CACHE_FILES block_cache/starcache_wrapper.cpp)
 endif()
 
-add_library(BlockCache STATIC
+add_library(Cache STATIC
     ${CACHE_FILES}
 )

@@ -16,8 +16,8 @@
 
 #include <atomic>
 
-#include "block_cache/disk_space_monitor.h"
-#include "block_cache/kv_cache.h"
+#include "cache/block_cache/disk_space_monitor.h"
+#include "cache/block_cache/kv_cache.h"
 #include "common/status.h"
 
 namespace starrocks {

@@ -20,7 +20,7 @@
 #include <random>
 #include <set>
 
-#include "block_cache/block_cache.h"
+#include "cache/block_cache/block_cache.h"
 #include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "common/logging.h"
