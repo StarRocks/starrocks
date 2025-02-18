@@ -83,6 +83,7 @@ struct LakeIOOptions {
     int64_t buffer_size = -1;
     bool fill_metadata_cache = false;
     bool use_page_cache = false;
+    bool cache_file_only = false; // only used for CACHE SELECT
     std::shared_ptr<FileSystem> fs;
     std::shared_ptr<starrocks::lake::LocationProvider> location_provider;
 };
