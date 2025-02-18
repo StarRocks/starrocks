@@ -76,6 +76,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionStatus;
+import org.apache.commons.lang.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -178,9 +179,7 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
 
     @Override
     protected String getSourceLagString(String progressJsonStr) {
-
         Gson gson = new Gson();
-
         Map<String, String> progress = gson.fromJson(progressJsonStr, Map.class);
 
         if (progress == null || progress.isEmpty()) {
@@ -192,17 +191,29 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
         }
 
         Map<String, String> partitionLag = Maps.newHashMap();
-
         for (Map.Entry<Integer, Long> entry : latestPartitionOffsets.entrySet()) {
             // progress and latest all have same id
             String mapKey = entry.getKey().toString();
             if (progress.containsKey(mapKey)) {
+                String progressVal = progress.get(mapKey);
+                //check progressVal
+                if (!checkProgressVal(progressVal)) continue;
                 Long lag = entry.getValue() - Long.valueOf(progress.get(mapKey));
                 lag = lag < 0 ? 0 : lag;
                 partitionLag.put(mapKey, lag.toString());
             }
         }
         return gson.toJson(partitionLag);
+    }
+
+    private boolean checkProgressVal(String progressVal) {
+        if (progressVal == null) return false;
+
+        if (progressVal.equals(KafkaProgress.OFFSET_ZERO) || progressVal.equals(KafkaProgress.OFFSET_END) || progressVal.equals(KafkaProgress.OFFSET_BEGINNING))
+            return false;
+
+        if (!StringUtils.isNumeric(progressVal)) return false;
+        return true;
     }
 
     public void setPartitionOffset(int partition, long offset) {
