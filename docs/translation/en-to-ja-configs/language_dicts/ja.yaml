@@ -140,3 +140,5 @@ Bloom filter index: ブルームフィルターインデックス
 shared-data: 共有データ
 shared-nothing: 共有なし
 object storage: オブジェクトストレージ
+logical view: ビュー
+join: ジョイン

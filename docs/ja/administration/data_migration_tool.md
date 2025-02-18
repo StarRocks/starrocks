@@ -108,7 +108,7 @@ SET GLOBAL enable_filter_unused_columns_in_scan_stage=false;
 | **パラメータ**                         | **デフォルト** | **単位** | **説明**                                              |
 | ------------------------------------- | ----------- | -------- | ------------------------------------------------------------ |
 | replication_max_parallel_table_count  | 100         | -        | 許可される最大の同時データ同期タスク数。StarRocks は各テーブルに対して1つの同期タスクを作成します。 |
-| replication_max_parallel_replica_count| 10240       | -        | 同時同期のために許可される最大の tablet レプリカ数。 |
+| replication_max_parallel_replica_count| 10240       | -        | 同時同期のために許可される最大の Tablet レプリカ数。 |
 | replication_max_parallel_data_size_mb | 1048576     | MB       | 同時同期のために許可されるデータの最大サイズ。 |
 | replication_transaction_timeout_sec   | 86400       | 秒       | 同期タスクのタイムアウト時間。              |
 
@@ -150,7 +150,7 @@ vi conf/sync.properties
 ファイルの内容は次のとおりです。
 
 ```Properties
-# true の場合、すべてのテーブルは一度だけ同期され、完了後にプログラムは自動的に終了します。
+# If true, all tables will be synchronized only once, and the program will exit automatically after completion.
 one_time_run_mode=false
 
 source_fe_host=
@@ -166,13 +166,13 @@ target_cluster_user=root
 target_cluster_password=
 target_cluster_password_secret_key=
 
-# カンマ区切りのデータベース名またはテーブル名のリスト <db_name> または <db_name.table_name>
-# 例: db1,db2.tbl2,db3
-# 有効な順序: 1. include 2. exclude
+# Comma-separated list of database names or table names like <db_name> or <db_name.table_name>
+# example: db1,db2.tbl2,db3
+# Effective order: 1. include 2. exclude
 include_data_list=
 exclude_data_list=
 
-# 特別な要件がない場合、次の設定のデフォルト値を維持してください。
+# If there are no special requirements, please maintain the default values for the following configurations.
 target_cluster_storage_volume=
 target_cluster_replication_num=-1
 target_cluster_max_disk_used_percent=80
@@ -202,7 +202,7 @@ report_interval_seconds=300
 | source_cluster_user                       | ソースクラスタにログインするために使用されるユーザー名。このユーザーは SYSTEM レベルで OPERATE 権限を付与されている必要があります。 |
 | source_cluster_password                   | ソースクラスタにログインするために使用されるユーザーパスワード。      |
 | source_cluster_password_secret_key        | ソースクラスタのログインユーザーのパスワードを暗号化するために使用される秘密鍵。デフォルト値は空文字列で、ログインパスワードが暗号化されていないことを意味します。`source_cluster_password` を暗号化したい場合、SQL ステートメント `SELECT TO_BASE64(AES_ENCRYPT('<source_cluster_password>','<source_cluster_password_ secret_key>'))` を使用して暗号化された `source_cluster_password` 文字列を取得できます。 |
-| source_cluster_token                      | ソースクラスタのトークン。クラスタトークンの取得方法については、以下の [Obtain Cluster Token](#obtain-cluster-token) を参照してください。 |
+| source_cluster_token                      | ソースクラスタのトークン。クラスタトークンの取得方法については、以下の [クラスタトークンの取得](#クラスタトークンの取得) を参照してください。 |
 | target_fe_host                            | ターゲットクラスタの FE の IP アドレスまたは FQDN（完全修飾ドメイン名）。 |
 | target_fe_query_port                      | ターゲットクラスタの FE のクエリポート (`query_port`)。    |
 | target_cluster_user                       | ターゲットクラスタにログインするために使用されるユーザー名。このユーザーは SYSTEM レベルで OPERATE 権限を付与されている必要があります。 |
@@ -382,7 +382,7 @@ ORDER BY TABLE_NAME;
 - データベース
 - 内部テーブルとそのデータ
 - マテリアライズドビューのスキーマとその構築ステートメント（マテリアライズドビュー内のデータは同期されません。また、マテリアライズドビューのベーステーブルがターゲットクラスタに同期されていない場合、マテリアライズドビューのバックグラウンドリフレッシュタスクはエラーを報告します。）
-- 論理ビュー
+- ビュー
 
 ## Q&A
 
@@ -397,4 +397,3 @@ ORDER BY TABLE_NAME;
 | FE          | rpc_port       | 9020 |
 | BE          | be_http_port   | 8040 |
 | BE          | be_port        | 9060 |
-```
