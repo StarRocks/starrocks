@@ -281,10 +281,7 @@ public class StreamLoadInfo {
                 params.getFileFormatType().orElse(TFileFormatType.FORMAT_CSV_PLAIN), timeout);
         streamLoadInfo.setOptionalFromStreamLoad(params);
         String warehouseName = params.getWarehouse().orElse(DEFAULT_WAREHOUSE_NAME);
-        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseName);
-        if (warehouse == null) {
-            throw new StarRocksException(String.format("Warehouse [%s] does not exist", warehouseName));
-        }
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
         streamLoadInfo.setWarehouseId(warehouse.getId());
         return streamLoadInfo;
     }

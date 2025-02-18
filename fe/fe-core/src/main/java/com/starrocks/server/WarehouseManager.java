@@ -278,12 +278,7 @@ public class WarehouseManager implements Writable {
     }
 
     private Optional<Long> selectWorkerGroupInternal(long warehouseId) {
-        Warehouse warehouse = getWarehouseAllowNull(warehouseId);
-        if (warehouse == null) {
-            LOG.warn("failed to get warehouse by id {}", warehouseId);
-            return Optional.empty();
-        }
-
+        Warehouse warehouse = getWarehouse(warehouseId);
         List<Long> ids = warehouse.getWorkerGroupIds();
         if (CollectionUtils.isEmpty(ids)) {
             LOG.warn("failed to get worker group id from warehouse {}", warehouse);
