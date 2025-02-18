@@ -134,8 +134,6 @@ bool StoragePageCache::lookup(const CacheKey& key, PageCacheHandle* handle) {
 }
 
 Status StoragePageCache::insert(const CacheKey& key, const Slice& data, PageCacheHandle* handle, bool in_memory) {
-    // mem size should equals to data size when running UT
-    int64_t mem_size = data.size;
 #ifndef BE_TEST
     int64_t mem_size = malloc_usable_size(data.data);
     tls_thread_status.mem_release(mem_size);
