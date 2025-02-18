@@ -36,7 +36,7 @@
 
 #include <gflags/gflags.h>
 
-#include "block_cache/block_cache.h"
+#include "cache/block_cache/block_cache.h"
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "common/minidump.h"

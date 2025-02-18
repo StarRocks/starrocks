@@ -14,9 +14,9 @@
 
 #pragma once
 
-#include "block_cache/cache_options.h"
-#include "block_cache/dummy_types.h"
-#include "block_cache/io_buffer.h"
+#include "cache/block_cache/cache_options.h"
+#include "cache/block_cache/dummy_types.h"
+#include "cache/block_cache/io_buffer.h"
 #include "common/status.h"
 
 #ifdef WITH_STARCACHE

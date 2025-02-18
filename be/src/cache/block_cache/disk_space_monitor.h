@@ -19,7 +19,7 @@
 #include <thread>
 #include <unordered_map>
 
-#include "block_cache/cache_options.h"
+#include "cache/block_cache/cache_options.h"
 #include "common/status.h"
 #include "fs/fs.h"
 #include "util/disk_info.h"

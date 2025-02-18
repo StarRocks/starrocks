@@ -15,7 +15,7 @@
 #include "exec/schema_scanner/schema_be_datacache_metrics_scanner.h"
 
 #include "agent/master_info.h"
-#include "block_cache/block_cache.h"
+#include "cache/block_cache/block_cache.h"
 #include "column/datum.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/string_value.h"
