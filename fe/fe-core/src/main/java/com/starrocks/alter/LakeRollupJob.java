@@ -415,7 +415,8 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
 
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
-            table.setState(OlapTable.OlapTableState.NORMAL);
+            // There is no need to set the table state to normal,
+            // because it will be set in MaterializedViewHandler `onJobDone`
         }
 
         writeEditLog(this);
@@ -444,7 +445,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
             LakeTable table = (db != null) ? db.getTable(tableId) : null;
             if (table != null) {
                 removeRollupIndex(table);
-                table.setState(OlapTable.OlapTableState.NORMAL);
             }
         }
 
@@ -541,10 +541,8 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 updateNextVersion(table);
             } else if (jobState == JobState.FINISHED) {
                 visualiseRollupIndex(table);
-                table.setState(OlapTable.OlapTableState.NORMAL);
             } else if (jobState == JobState.CANCELLED) {
                 removeRollupIndex(table);
-                table.setState(OlapTable.OlapTableState.NORMAL);
             } else {
                 throw new RuntimeException("unknown job state '{}'" + jobState.name());
             }
