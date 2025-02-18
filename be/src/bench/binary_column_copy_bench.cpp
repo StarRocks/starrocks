@@ -16,6 +16,7 @@
 #include <testutil/assert.h>
 
 #include "column/binary_column.h"
+#include "column/object_column.h"
 #include "util/random.h"
 
 namespace starrocks {
@@ -53,6 +54,7 @@ public:
 private:
     std::string _rand_str();
     std::shared_ptr<BinaryColumn> _gen_binary_column();
+    std::shared_ptr<BitmapColumn> _gen_object_column();
 
     int _mode = 1;
     std::random_device _rd;
@@ -62,6 +64,7 @@ private:
 
 void BinaryColumnCopyBench::do_bench(benchmark::State& state) {
     auto column = _gen_binary_column();
+    auto bitmap_column = _gen_object_column();
     BinaryColumn dest_column;
 
     if (_mode == 1) {
@@ -81,6 +84,29 @@ void BinaryColumnCopyBench::do_bench(benchmark::State& state) {
             dest_column.append(data[i]);
         }
 
+        state.PauseTiming();
+    } else if (_mode == 3)  {
+        state.ResumeTiming();
+        auto& data = bitmap_column->get_data();
+        size_t value = 0;
+        for (size_t i = 0; i < _chunk_size; i++) {
+            value += data[i]->cardinality();
+        }
+        state.PauseTiming();
+    } else if (_mode == 4)  {
+        state.ResumeTiming();
+        size_t value = 0;
+        for (size_t i = 0; i < _chunk_size; i++) {
+            value += bitmap_column->get_object(i)->cardinality();
+        }
+        state.PauseTiming();
+    } else if (_mode == 5)  {
+        auto& data = bitmap_column->get_data();
+        state.ResumeTiming();
+        size_t value = 0;
+        for (size_t i = 0; i < _chunk_size; i++) {
+            value += data[i]->cardinality();
+        }
         state.PauseTiming();
     } else {
         state.ResumeTiming();
@@ -117,6 +143,16 @@ std::shared_ptr<BinaryColumn> BinaryColumnCopyBench::_gen_binary_column() {
     return column;
 }
 
+std::shared_ptr<BitmapColumn> BinaryColumnCopyBench::_gen_object_column() {
+    std::shared_ptr<BitmapColumn> column = std::make_shared<BitmapColumn>();
+
+    for (size_t i = 0; i < _chunk_size; i++) {
+        std::string str = _rand_str();
+        column->append(BitmapValue(i));
+    }
+    return column;
+}
+
 static void bench_func(benchmark::State& state) {
     int mode = state.range(0);
     int chunk_size = state.range(1);
@@ -127,21 +163,23 @@ static void bench_func(benchmark::State& state) {
 }
 
 static void process_args(benchmark::internal::Benchmark* b) {
-    b->Args({1, 4096})->Iterations(100);
-    b->Args({2, 4096})->Iterations(100);
-    b->Args({3, 4096})->Iterations(100);
+    b->Args({3, 4096})->Iterations(1000);
+    b->Args({4, 4096})->Iterations(1000);
+    b->Args({5, 4096})->Iterations(1000);
 
-    b->Args({1, 40960})->Iterations(100);
-    b->Args({2, 40960})->Iterations(100);
+    /*
     b->Args({3, 40960})->Iterations(100);
+    b->Args({4, 40960})->Iterations(100);
+    b->Args({5, 40960})->Iterations(100);
 
-    b->Args({1, 409600})->Iterations(10);
-    b->Args({2, 409600})->Iterations(10);
-    b->Args({3, 409600})->Iterations(10);
+    b->Args({3, 409600})->Iterations(100);
+    b->Args({4, 409600})->Iterations(100);
+    b->Args({5, 409600})->Iterations(100);
 
-    b->Args({1, 4096000})->Iterations(10);
-    b->Args({2, 4096000})->Iterations(10);
-    b->Args({3, 4096000})->Iterations(10);
+    b->Args({3, 4096000})->Iterations(100);
+    b->Args({4, 4096000})->Iterations(100);
+    b->Args({5, 4096000})->Iterations(100);
+    */
 }
 
 BENCHMARK(bench_func)->Apply(process_args);

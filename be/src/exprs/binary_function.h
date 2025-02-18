@@ -55,7 +55,7 @@ public:
         result->resize_uninitialized(v1->size());
         auto* data3 = result->get_data().data();
 
-        if constexpr (lt_is_string<LType> || lt_is_binary<LType>) {
+        if constexpr (lt_is_string<LType> || lt_is_binary<LType> || lt_is_object_family<LType>) {
             auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data();
             auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data();
             for (int i = 0; i < s; ++i) {
@@ -84,7 +84,7 @@ public:
         result->resize_uninitialized(size);
         auto* data3 = result->get_data().data();
 
-        if constexpr (lt_is_string<LType> || lt_is_binary<LType>) {
+        if constexpr (lt_is_string<LType> || lt_is_binary<LType> || lt_is_object_family<LType>) {
             auto data1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data()[0];
             auto& r2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data();
             for (int i = 0; i < size; ++i) {
@@ -114,7 +114,7 @@ public:
         auto& r3 = result->get_data();
         auto* data3 = r3.data();
 
-        if constexpr (lt_is_string<LType> || lt_is_binary<LType>) {
+        if constexpr (lt_is_string<LType> || lt_is_binary<LType> || lt_is_object_family<LType>) {
             auto& r1 = ColumnHelper::cast_to_raw<LType>(v1)->get_proxy_data();
             auto data2 = ColumnHelper::cast_to_raw<RType>(v2)->get_proxy_data()[0];
             for (int i = 0; i < size; ++i) {
