@@ -190,10 +190,14 @@ public class PartitionCommitInfo implements Writable {
 
     @Override
     public String toString() {
+<<<<<<< HEAD
         StringBuilder sb = new StringBuilder("partitionid=");
         sb.append(partitionId);
+=======
+        StringBuilder sb = new StringBuilder("partitionId=");
+        sb.append(physicalPartitionId);
+>>>>>>> be4c1ac103 ([Enhancement] support print partition version info in transaction state (#55852))
         sb.append(", version=").append(version);
-        sb.append(", versionHash=").append(0);
         sb.append(", versionTime=").append(versionTime);
         sb.append(", isDoubleWrite=").append(isDoubleWrite);
         return sb.toString();
