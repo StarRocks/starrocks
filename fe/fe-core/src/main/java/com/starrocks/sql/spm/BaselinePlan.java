@@ -16,26 +16,68 @@ package com.starrocks.sql.spm;
 import java.time.LocalDateTime;
 
 public class BaselinePlan {
-    public long id;
+    private long id;
 
-    public boolean isEnable;
-
-    public boolean isGlobal;
+    private final boolean isGlobal;
 
     // bind sql with spm function, for extract placeholder
-    public String bindSql;
+    private final String bindSql;
     // bind sql without spm function, for bind query
-    public String bindSqlDigest;
+    private final String bindSqlDigest;
     // bind sql hash, for fast search
-    public long bindSqlHash;
+    private final long bindSqlHash;
     // plan sql with hints
-    public String planSql;
+    private final String planSql;
 
-    public double costs;
+    private final double costs;
 
-    public LocalDateTime updateTime;
+    private final LocalDateTime updateTime;
+
+    public BaselinePlan(boolean isGlobal, String bindSql, String bindSqlDigest,
+                        long bindSqlHash,
+                        String planSql, double costs) {
+        this.isGlobal = isGlobal;
+        this.bindSql = bindSql;
+        this.bindSqlDigest = bindSqlDigest;
+        this.bindSqlHash = bindSqlHash;
+        this.planSql = planSql;
+        this.costs = costs;
+        this.updateTime = LocalDateTime.now();
+    }
 
     public long getId() {
         return id;
+    }
+
+    public void setId(long id) {
+        this.id = id;
+    }
+
+    public boolean isGlobal() {
+        return isGlobal;
+    }
+
+    public String getBindSql() {
+        return bindSql;
+    }
+
+    public String getBindSqlDigest() {
+        return bindSqlDigest;
+    }
+
+    public long getBindSqlHash() {
+        return bindSqlHash;
+    }
+
+    public String getPlanSql() {
+        return planSql;
+    }
+
+    public double getCosts() {
+        return costs;
+    }
+
+    public LocalDateTime getUpdateTime() {
+        return updateTime;
     }
 }

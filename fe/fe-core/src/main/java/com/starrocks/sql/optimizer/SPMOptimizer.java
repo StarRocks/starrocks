@@ -78,12 +78,14 @@ public class SPMOptimizer extends Optimizer {
     }
 
     /*
+    Remove:
     isEnableFineGrainedRangePredicate
     isEnableRewriteGroupingsetsToUnionAll
     isCboPushDownGroupingSet
     isEnableStatsToOptimizeSkewJoin
+    MVRewrite
+    PruneTable
      */
-
     private OptExpression optimizeByRule(OptExpression tree,
                                          TaskContext rootTaskContext) {
         tree = OptExpression.create(new LogicalTreeAnchorOperator(), tree);

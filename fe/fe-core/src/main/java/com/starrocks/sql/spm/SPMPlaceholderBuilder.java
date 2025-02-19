@@ -126,7 +126,9 @@ public class SPMPlaceholderBuilder {
             if (placeholderExprs.stream().anyMatch(p -> p.equals(node, parent))) {
                 throw new SemanticException("sql plan found conflict placeholder expression: " + node.toMySql());
             }
-            PlaceholderExpr p = new PlaceholderExpr(node, s, parent.clone());
+            PlaceholderExpr p = parent == null ?
+                    new PlaceholderExpr(node, s, null) :
+                    new PlaceholderExpr(node, s, parent.clone());
             placeholderExprs.add(p);
             return s;
         }

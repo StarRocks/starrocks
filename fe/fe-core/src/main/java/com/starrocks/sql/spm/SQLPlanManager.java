@@ -27,17 +27,16 @@ public class SQLPlanManager {
     }
 
     public void storeBaselinePlan(BaselinePlan plan) {
-        plan.id = GlobalStateMgr.getCurrentState().getNextId();
-        plan.isEnable = true;
+        plan.setId(GlobalStateMgr.getCurrentState().getNextId());
         baselinePlans.add(plan);
     }
 
     public List<BaselinePlan> findBaselinePlan(String sqlDigest, long hash) {
-        return baselinePlans.stream().filter(p -> p.bindSqlHash == hash && p.bindSqlDigest.equals(sqlDigest))
+        return baselinePlans.stream().filter(p -> p.getBindSqlHash() == hash && p.getBindSqlDigest().equals(sqlDigest))
                 .collect(Collectors.toList());
     }
 
     public void dropBaselinePlan(long baseLineId) {
-        baselinePlans.removeIf(p -> p.id == baseLineId);
+        baselinePlans.removeIf(p -> p.getId() == baseLineId);
     }
 }

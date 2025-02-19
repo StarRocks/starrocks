@@ -48,7 +48,6 @@ import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
 
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -85,17 +84,8 @@ public class SPMPlanBuilder {
         analyze();
         parameterizedStmt();
         generatePlan();
-
-        BaselinePlan baselinePlan = new BaselinePlan();
-        baselinePlan.isGlobal = stmt.isGlobal();
-        baselinePlan.bindSqlDigest = bindSqlDigest;
-        baselinePlan.bindSqlHash = bindSqlHash;
-        baselinePlan.bindSql = bindSql;
-        baselinePlan.planSql = planStmtSQL;
-        baselinePlan.costs = costs;
-        baselinePlan.updateTime = LocalDateTime.now();
-
-        return baselinePlan;
+        return new BaselinePlan(stmt.isGlobal(), bindSql, bindSqlDigest, bindSqlHash,
+                planStmtSQL, costs);
     }
 
     // don't need lock, because we don't need to modify table stats

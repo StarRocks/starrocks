@@ -96,6 +96,27 @@ public class SPMFunctions {
         return call;
     }
 
+    // SPM operator revert to scalar operator
+    public static ScalarOperator revertSPMFunctions(ScalarOperator operator) {
+        ScalarOperator clone = operator.clone();
+        List<ScalarOperator> newChildren = Lists.newArrayList();
+        for (ScalarOperator child : clone.getChildren()) {
+            if (!isSPMFunctions(child)) {
+                newChildren.add(child);
+            } else {
+                CallOperator call = (CallOperator) child;
+                if (call.getChildren().size() <= 1) {
+                    return operator;
+                } else {
+                    call.getChildren().stream().skip(1).forEach(newChildren::add);
+                }
+            }
+        }
+        clone.getChildren().clear();
+        clone.getChildren().addAll(newChildren);
+        return clone;
+    }
+
     public static String toSQL(String function, List<String> children) {
         if (enableSPMParamsPrint) {
             return function + "(" + String.join(", ", children) + ")";
