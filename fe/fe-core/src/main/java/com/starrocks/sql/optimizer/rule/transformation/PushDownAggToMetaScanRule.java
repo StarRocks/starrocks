@@ -131,9 +131,14 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
 
             aggColumnIdToNames.put(metaColumn.getId(), metaColumnName);
             Column c = metaScan.getColRefToColumnMetaMap().get(usedColumn);
-            if (hasCountAgg) {
+            if (aggCall.getFnName().equals(FunctionSet.COUNT) || hasCountAgg) {
                 Column copiedColumn = new Column(c);
-                copiedColumn.setIsAllowNull(true);
+                if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
+                    copiedColumn.setType(Type.BIGINT);
+                }
+                if (hasCountAgg) {
+                    copiedColumn.setIsAllowNull(true);
+                }
                 newScanColumnRefs.put(metaColumn, copiedColumn);
             } else {
                 newScanColumnRefs.put(metaColumn, c);
