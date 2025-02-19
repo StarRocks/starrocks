@@ -91,6 +91,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -960,6 +961,16 @@ public class StarRocksAssert {
                 refreshMvPartition(String.format("refresh materialized view %s", mvName));
             }
         }
+        return this;
+    }
+
+    public StarRocksAssert cancelMV(String sql) throws Exception {
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        if (stmt instanceof CancelAlterTableStmt) {
+            CancelAlterTableStmt cancelAlterTableStmt = (CancelAlterTableStmt) stmt;
+            GlobalStateMgr.getCurrentState().getLocalMetastore().cancelAlter(cancelAlterTableStmt);
+        }
+
         return this;
     }
 

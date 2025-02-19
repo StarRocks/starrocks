@@ -753,6 +753,10 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         tabletIdMap.put(rollupTabletId, baseTabletId);
     }
 
+    public String getRollupIndexName() {
+        return rollupIndexName;
+    }
+
     @Override
     public void addMVIndex(long partitionId, MaterializedIndex mvIndex) {
         this.physicalPartitionIdToRollupIndex.put(partitionId, mvIndex);
