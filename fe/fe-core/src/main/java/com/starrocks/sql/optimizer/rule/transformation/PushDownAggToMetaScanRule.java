@@ -131,10 +131,11 @@ public class PushDownAggToMetaScanRule extends TransformationRule {
             // VARCHAR to ARRAY_VARCHAR
             if (aggCall.getFnName().equals(FunctionSet.DICT_MERGE)) {
                 Function aggFunction = Expr.getBuiltinFunction(aggCall.getFnName(),
-                        new Type[] {Type.ARRAY_VARCHAR}, Function.CompareMode.IS_IDENTICAL);
+                        new Type[] {Type.ARRAY_VARCHAR, Type.INT}, Function.CompareMode.IS_IDENTICAL);
 
                 newAggCalls.put(kv.getKey(),
-                        new CallOperator(aggCall.getFnName(), aggCall.getType(), List.of(metaColumn), aggFunction));
+                        new CallOperator(aggCall.getFnName(), aggCall.getType(),
+                                List.of(metaColumn, aggCall.getChild(1)), aggFunction));
             } else if (aggCall.getFnName().equals(FunctionSet.COUNT)) {
                 // rewrite count to sum
                 Function aggFunction = Expr.getBuiltinFunction(FunctionSet.SUM, new Type[] {Type.BIGINT},

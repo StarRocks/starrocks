@@ -44,6 +44,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.statistics.CacheDictManager;
 import com.starrocks.sql.optimizer.statistics.IRelaxDictManager;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
@@ -298,7 +299,8 @@ public class StatisticExecutor {
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         String sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
                 "cast(" + version + " as bigint), " +
-                "dict_merge(" + StatisticUtils.quoting(columnName) + ") as _dict_merge_" + columnName +
+                "dict_merge(" + StatisticUtils.quoting(columnName) + ", " +
+                CacheDictManager.LOW_CARDINALITY_THRESHOLD + ") as _dict_merge_" + columnName +
                 " from " + StatisticUtils.quoting(catalogName, db.getOriginName(), table.getName()) + " [_META_]";
 
         return executeStatisticDQLWithoutContext(sql);
@@ -348,7 +350,8 @@ public class StatisticExecutor {
         }
         String sql = "select cast(" + StatsConstants.STATISTIC_DICT_VERSION + " as Int), " +
                 "cast(0 as bigint), " +
-                "dict_merge(" + StatisticUtils.quoting(columnName) + ") from " +
+                "dict_merge(" + StatisticUtils.quoting(columnName) + ", " +
+                CacheDictManager.LOW_CARDINALITY_THRESHOLD + ") from " +
                 StatisticUtils.quoting(names.get(0), names.get(1), names.get(2));
 
         return executeStatisticDQLWithSample(sql, strategy);
