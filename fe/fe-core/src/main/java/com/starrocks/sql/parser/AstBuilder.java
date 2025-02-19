@@ -469,6 +469,11 @@ import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ShowPlanAdvisorStmt;
+import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
+import com.starrocks.sql.ast.integration.CreateSecurityIntegrationStatement;
+import com.starrocks.sql.ast.integration.DropSecurityIntegrationStatement;
+import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
+import com.starrocks.sql.ast.integration.ShowSecurityIntegrationStatement;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
 import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
 import com.starrocks.sql.ast.pipe.AlterPipePauseResume;
@@ -6613,6 +6618,54 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         grantRevokePrivilegeObjects.setPrivilegeObjectNameTokensList(objectNameList);
         return grantRevokePrivilegeObjects;
+    }
+
+    // ---------------------------------------- Security Integration Statement --------------------------------------
+
+    @Override
+    public ParseNode visitCreateSecurityIntegrationStatement(
+            StarRocksParser.CreateSecurityIntegrationStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        Map<String, String> propertyMap = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                propertyMap.put(property.getKey(), property.getValue());
+            }
+        }
+        return new CreateSecurityIntegrationStatement(name, propertyMap, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterSecurityIntegrationStatement(
+            StarRocksParser.AlterSecurityIntegrationStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        Map<String, String> properties = new HashMap<>();
+        List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+        for (Property property : propertyList) {
+            properties.put(property.getKey(), property.getValue());
+        }
+        return new AlterSecurityIntegrationStatement(name, properties, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropSecurityIntegrationStatement(
+            StarRocksParser.DropSecurityIntegrationStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        return new DropSecurityIntegrationStatement(name, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowCreateSecurityIntegrationStatement(
+            StarRocksParser.ShowCreateSecurityIntegrationStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        return new ShowCreateSecurityIntegrationStatement(name, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowSecurityIntegrationStatement(
+            StarRocksParser.ShowSecurityIntegrationStatementContext context) {
+        return new ShowSecurityIntegrationStatement(createPos(context));
     }
 
     // ------------------------------------------- Expression ----------------------------------------------------------
