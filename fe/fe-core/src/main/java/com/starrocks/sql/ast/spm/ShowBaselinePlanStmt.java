@@ -25,7 +25,6 @@ public class ShowBaselinePlanStmt extends ShowStmt {
 
     private static final ShowResultSetMetaData META_DATA = ShowResultSetMetaData.builder()
             .addColumn(new Column("Id", ScalarType.createVarchar(60)))
-            .addColumn(new Column("enable", ScalarType.createVarchar(10)))
             .addColumn(new Column("global", ScalarType.createVarchar(10)))
             .addColumn(new Column("bindSQLDigest", ScalarType.createVarchar(65535)))
             .addColumn(new Column("bindSQLHash", ScalarType.createVarchar(60)))

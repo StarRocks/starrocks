@@ -62,7 +62,7 @@ public class SPMAst2SQLBuilder {
     }
 
     public String build(QueryRelation statement) {
-        return statement.accept(builder, null);
+        return new QueryStatement(statement).accept(builder, null);
     }
 
     public String build(QueryStatement statement) {

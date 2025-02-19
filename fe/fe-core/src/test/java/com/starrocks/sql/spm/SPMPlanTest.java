@@ -21,6 +21,7 @@ import com.starrocks.sql.ast.spm.CreateBaselinePlanStmt;
 import com.starrocks.sql.parser.SqlParser;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -33,19 +34,22 @@ public class SPMPlanTest extends SPMTestBase {
         connectContext.getSessionVariable().setEnableSPMRewrite(true);
     }
 
+    @BeforeEach
+    public void before() {
+        SPMFunctions.enableSPMParamsPrint = true;
+    }
+
     @Test
     public void testBindScan() {
+        SPMFunctions.enableSPMParamsPrint = false;
         CreateBaselinePlanStmt stmt = createBaselinePlanStmt("select * from t0 where v2 = 1");
         SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
 
-        generator.analyze();
-        generator.parameterizedStmt();
+        generator.execute();
         assertContains(generator.getBindSqlDigest(), "SELECT *\n" +
                 "FROM `test`.`t0`\n" +
                 "WHERE `test`.`t0`.`v2` = ?");
-
-        generator.generatePlan();
-        assertContains(generator.getPlanStmtSQL(), "SELECT * FROM t0 WHERE v2 = _spm_const_var(0)");
+        assertContains(generator.getPlanStmtSQL(), "SELECT * FROM t0 WHERE v2 = _spm_const_var(1)");
     }
 
     @Test
@@ -64,67 +68,62 @@ public class SPMPlanTest extends SPMTestBase {
 
     @Test
     public void testBindJoin() {
+        SPMFunctions.enableSPMParamsPrint = false;
         CreateBaselinePlanStmt stmt = createBaselinePlanStmt(
                 "select * from t0 join t1 on t0.v3 = t1.v6 where t0.v2 = 1");
         SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
 
-        generator.analyze();
-        generator.parameterizedStmt();
+        generator.execute();
         assertContains(generator.getBindSqlDigest(), "SELECT *\n" +
                 "FROM `test`.`t0` INNER JOIN `test`.`t1` ON `test`.`t0`.`v3` = `test`.`t1`.`v6`\n" +
                 "WHERE `test`.`t0`.`v2` = ?");
 
-        generator.generatePlan();
         assertContains(generator.getPlanStmtSQL(),
-                "SELECT * FROM " +
-                        "(SELECT * FROM t0 WHERE v2 = _spm_const_var(0)) t_0 INNER JOIN[BROADCAST] " +
+                "SELECT * FROM " + "(SELECT * FROM t0 WHERE v2 = _spm_const_var(1)) t_0 INNER JOIN[BROADCAST] " +
                         "(SELECT * FROM t1 WHERE v6 IS NOT NULL) t_1 ON v3 = v6");
     }
 
     @Test
     public void testBindJoin2() {
+        SPMFunctions.enableSPMParamsPrint = false;
         CreateBaselinePlanStmt stmt = createBaselinePlanStmt(
                 "select t1.v4, t0.v2 from t0 join t1 on t0.v3 = t1.v6 where t0.v2 = 1");
         SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
 
-        generator.analyze();
-        generator.parameterizedStmt();
+        generator.execute();
         assertContains(generator.getBindSqlDigest(), "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2`\n" +
                 "FROM `test`.`t0` INNER JOIN `test`.`t1` ON `test`.`t0`.`v3` = `test`.`t1`.`v6`\n" +
                 "WHERE `test`.`t0`.`v2` = ?");
 
-        generator.generatePlan();
         assertContains(generator.getPlanStmtSQL(),
-                "SELECT v2, v4 FROM " +
-                        "(SELECT * FROM t0 WHERE v2 = _spm_const_var(0)) t_0 INNER JOIN[BROADCAST] " +
+                "SELECT v2, v4 FROM " + "(SELECT * FROM t0 WHERE v2 = _spm_const_var(1)) t_0 INNER JOIN[BROADCAST] " +
                         "(SELECT * FROM t1 WHERE v6 IS NOT NULL) t_1 ON v3 = v6");
     }
 
     @Test
     public void testBindJoin3() {
+        SPMFunctions.enableSPMParamsPrint = false;
         CreateBaselinePlanStmt stmt = createBaselinePlanStmt(
                 "select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 where t0.v2 = 1");
         SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
 
-        generator.analyze();
-        generator.parameterizedStmt();
+        generator.execute();
         assertContains(generator.getBindSqlDigest(), "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2`\n" +
                 "FROM `test`.`t0` INNER JOIN `test`.`t1` ON `test`.`t0`.`v3` = `test`.`t1`.`v6`\n" +
                 "WHERE `test`.`t0`.`v2` = ?");
 
-        assertContains(generator.getBindSql(), "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2`\n" +
-                "FROM `test`.`t0` INNER JOIN `test`.`t1` ON `test`.`t0`.`v3` = `test`.`t1`.`v6`\n" +
-                "WHERE `test`.`t0`.`v2` = _spm_const_var(0)");
+        assertContains(generator.getBindSql(), "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2`\n"
+                + "FROM `test`.`t0` INNER JOIN `test`.`t1` ON `test`.`t0`.`v3` = `test`.`t1`.`v6`\n"
+                + "WHERE `test`.`t0`.`v2` = _spm_const_var(1)");
 
-        generator.generatePlan();
         assertContains(generator.getPlanStmtSQL(),
-                "SELECT v2, v4 FROM " +
-                        "(SELECT * FROM t0 WHERE v2 = _spm_const_var(0)) t_0 INNER JOIN[SHUFFLE] " +
+                "SELECT v2, v4 FROM " + "(SELECT * FROM t0 WHERE v2 = _spm_const_var(1)) t_0 INNER JOIN[SHUFFLE] " +
                         "(SELECT * FROM t1 WHERE v6 IS NOT NULL) t_1 ON v3 = v6");
     }
 
     @Test
     public void testSPMReplaceJoinPlan() {
+        SPMFunctions.enableSPMParamsPrint = false;
         CreateBaselinePlanStmt stmt = createBaselinePlanStmt(
                 "select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 where t0.v2 = 1000");
         SPMStmtExecutor.execute(connectContext, stmt);
@@ -137,8 +136,8 @@ public class SPMPlanTest extends SPMTestBase {
         StatementBase query = planner.plan(statements.get(0));
         Assertions.assertTrue(planner.getBaseline().getId() > 1);
         Assertions.assertNotEquals(query, statements.get(0));
-        assertContains(planner.getBaseline().planSql, "SELECT v2, v4 FROM " +
-                "(SELECT * FROM t0 WHERE v2 = _spm_const_var(0)) t_0 INNER JOIN[SHUFFLE] " +
+        assertContains(planner.getBaseline().getPlanSql(),
+                "SELECT v2, v4 FROM " + "(SELECT * FROM t0 WHERE v2 = _spm_const_var(1)) t_0 INNER JOIN[SHUFFLE] " +
                 "(SELECT * FROM t1 WHERE v6 IS NOT NULL) t_1 ON v3 = v6");
         assertContains(AstToSQLBuilder.toSQL(query), "SELECT `v2`, `v4`\n" +
                 "FROM (SELECT *\n" +
@@ -150,42 +149,31 @@ public class SPMPlanTest extends SPMTestBase {
 
     @Test
     public void testBindInPredicate() {
-        SPMFunctions.enableSPMParamsPrint = true;
         CreateBaselinePlanStmt stmt = createBaselinePlanStmt(
                 "select t1.v4, t0.v2 from t0 join[SHUFFLE] t1 on t0.v3 = t1.v6 where t0.v2 in (1,2,3,4)");
         SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
 
-        generator.analyze();
-        generator.parameterizedStmt();
-        generator.generatePlan();
-        SPMFunctions.enableSPMParamsPrint = false;
-
+        generator.execute();
         assertContains(generator.getBindSqlDigest(), "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2`\n" +
                 "FROM `test`.`t0` INNER JOIN `test`.`t1` ON `test`.`t0`.`v3` = `test`.`t1`.`v6`\n" +
                 "WHERE `test`.`t0`.`v2` IN (?)");
 
-        assertContains(generator.getBindSql(), "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2`\n" +
-                "FROM `test`.`t0` INNER JOIN `test`.`t1` ON `test`.`t0`.`v3` = `test`.`t1`.`v6`\n" +
-                "WHERE `test`.`t0`.`v2` IN (_spm_const_list(0, 1, 2, 3, 4))");
+        assertContains(generator.getBindSql(), "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2`\n"
+                + "FROM `test`.`t0` INNER JOIN `test`.`t1` ON `test`.`t0`.`v3` = `test`.`t1`.`v6`\n"
+                + "WHERE `test`.`t0`.`v2` IN (_spm_const_list(1, 1, 2, 3, 4))");
 
         assertContains(generator.getPlanStmtSQL(),
-                "SELECT v2, v4 FROM " +
-                        "(SELECT * FROM t0 WHERE v2 IN (_spm_const_list(0, 1, 2, 3, 4))) t_0 " +
+                "SELECT v2, v4 FROM " + "(SELECT * FROM t0 WHERE v2 IN (_spm_const_list(1, 1, 2, 3, 4))) t_0 " +
                         "INNER JOIN[SHUFFLE] " +
                         "(SELECT * FROM t1 WHERE v6 IS NOT NULL) t_1 ON v3 = v6");
     }
 
     @Test
     public void testPlanHints() {
-        SPMFunctions.enableSPMParamsPrint = true;
         CreateBaselinePlanStmt stmt = createBaselinePlanStmt(
                 "select /*+SET_VAR(cbo_cte_reuse=false,cbo_push_down_aggregate=false)*/ * from t0");
         SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
-        generator.analyze();
-        generator.parameterizedStmt();
-        generator.generatePlan();
-        SPMFunctions.enableSPMParamsPrint = false;
-
+        generator.execute();
         assertContains(generator.getBindSqlDigest(), "SELECT *\n" +
                 "FROM `test`.`t0`");
 
@@ -198,7 +186,6 @@ public class SPMPlanTest extends SPMTestBase {
 
     @Test
     public void testBindPlan() {
-        SPMFunctions.enableSPMParamsPrint = true;
         CreateBaselinePlanStmt stmt = createBaselinePlanStmt(
                 "select t1.v4, t0.v2 from t0, t1 where t0.v3 = t1.v6 and t0.v2 in (1,2,3,4)",
                 "SELECT v2, v4 FROM " +
@@ -206,11 +193,7 @@ public class SPMPlanTest extends SPMTestBase {
                         " INNER JOIN[SHUFFLE] " +
                         " t1 ON v3 = v6");
         SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
-        generator.analyze();
-        generator.parameterizedStmt();
-        generator.generatePlan();
-        SPMFunctions.enableSPMParamsPrint = false;
-
+        generator.execute();
         assertContains(generator.getBindSqlDigest(), "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2`\n" +
                 "FROM `test`.`t0` , `test`.`t1` \n" +
                 "WHERE (`test`.`t0`.`v3` = `test`.`t1`.`v6`) AND (`test`.`t0`.`v2` IN (?))");
@@ -227,7 +210,6 @@ public class SPMPlanTest extends SPMTestBase {
 
     @Test
     public void testUserBindPlan() {
-        SPMFunctions.enableSPMParamsPrint = true;
         CreateBaselinePlanStmt stmt = createBaselinePlanStmt(
                 "select t1.v4, t0.v2 from t0, t1 where t0.v3 = t1.v6 and " +
                         "t0.v2 in (_spm_const_list(1, 10, 11)) and t1.v5 = _spm_const_var(2, 5)",
@@ -236,11 +218,7 @@ public class SPMPlanTest extends SPMTestBase {
                         " INNER JOIN[SHUFFLE] " +
                         " (SELECT * FROM t1 WHERE v5 = _spm_const_var(2, 5)) t_1 ON v3 = v6");
         SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
-        generator.analyze();
-        generator.parameterizedStmt();
-        generator.generatePlan();
-        SPMFunctions.enableSPMParamsPrint = false;
-
+        generator.execute();
         assertContains(generator.getBindSqlDigest(), "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2`\n" +
                 "FROM `test`.`t0` , `test`.`t1` \n" +
                 "WHERE (`test`.`t0`.`v3` = `test`.`t1`.`v6`) AND (`test`.`t0`.`v2` IN (?)) AND (`test`.`t1`.`v5` = ?)");
@@ -259,7 +237,6 @@ public class SPMPlanTest extends SPMTestBase {
 
     @Test
     public void testUserBindPlan2() {
-        SPMFunctions.enableSPMParamsPrint = true;
         CreateBaselinePlanStmt stmt = createBaselinePlanStmt(
                 "select t1.v4, t0.v2 from t0, t1 where t0.v3 = t1.v6 and " +
                         "t0.v2 in (_spm_const_list(1, 10, 11)) and t1.v5 = 1",
@@ -268,25 +245,21 @@ public class SPMPlanTest extends SPMTestBase {
                         " INNER JOIN[SHUFFLE] " +
                         " (SELECT * FROM t1 WHERE v5 = 1) t_1 ON v3 = v6");
         SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
-        generator.analyze();
-        generator.parameterizedStmt();
-        generator.generatePlan();
-        SPMFunctions.enableSPMParamsPrint = false;
-
+        generator.execute();
         assertContains(generator.getBindSqlDigest(), "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2`\n" +
                 "FROM `test`.`t0` , `test`.`t1` \n" +
                 "WHERE (`test`.`t0`.`v3` = `test`.`t1`.`v6`) AND (`test`.`t0`.`v2` IN (?)) AND (`test`.`t1`.`v5` = ?)");
 
-        assertContains(generator.getBindSql(), "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2`\n" +
-                "FROM `test`.`t0` , `test`.`t1` \n" +
-                "WHERE (`test`.`t0`.`v3` = `test`.`t1`.`v6`) " +
-                "AND (`test`.`t0`.`v2` IN (_spm_const_list(1, 10, 11))) " +
-                "AND (`test`.`t1`.`v5` = _spm_const_var(2, 5))");
+        assertContains(generator.getBindSql(),
+                "SELECT `test`.`t1`.`v4`, `test`.`t0`.`v2`\n" + "FROM `test`.`t0` , `test`.`t1` \n"
+                        + "WHERE (`test`.`t0`.`v3` = `test`.`t1`.`v6`) "
+                        + "AND (`test`.`t0`.`v2` IN (_spm_const_list(1, 10, 11))) "
+                        + "AND (`test`.`t1`.`v5` = _spm_const_var(2, 1))");
 
-        assertContains(generator.getPlanStmtSQL(), "SELECT v2, v4 FROM " +
-                "(SELECT * FROM t0 WHERE v3 IS NOT NULL AND v2 IN (_spm_const_list(1, 10, 11))) t_0 " +
-                "INNER JOIN[SHUFFLE] " +
-                "(SELECT * FROM t1 WHERE v6 IS NOT NULL AND v5 = _spm_const_var(2, 5)) t_1 ON v3 = v6");
+        assertContains(generator.getPlanStmtSQL(), "SELECT v2, v4 FROM "
+                + "(SELECT * FROM t0 WHERE v3 IS NOT NULL AND v2 IN (_spm_const_list(1, 10, 11))) t_0 "
+                + "INNER JOIN[SHUFFLE] (SELECT * FROM t1 WHERE v6 IS NOT NULL AND v5 = _spm_const_var(2, 1)) t_1 ON "
+                + "v3 = v6");
     }
 
     @Test
@@ -315,5 +288,203 @@ public class SPMPlanTest extends SPMTestBase {
         SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
         generator.analyze();
         Assertions.assertThrows(SemanticException.class, generator::parameterizedStmt);
+    }
+
+    @Test
+    public void testBindAggregate() {
+        CreateBaselinePlanStmt stmt = createBaselinePlanStmt("SELECT v2, sum(v3) FROM t0 WHERE v1 = 1 GROUP BY v2");
+        SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
+        generator.execute();
+
+        assertContains(generator.getBindSqlDigest(),
+                "SELECT `test`.`t0`.`v2`, sum(`test`.`t0`.`v3`)\n" + "FROM `test`.`t0`\n"
+                        + "WHERE `test`.`t0`.`v1` = ?\n" + "GROUP BY `test`.`t0`.`v2`");
+
+        assertContains(generator.getBindSql(), "SELECT `test`.`t0`.`v2`, sum(`test`.`t0`.`v3`)\n" + "FROM `test`.`t0`\n"
+                + "WHERE `test`.`t0`.`v1` = _spm_const_var(1, 1)\n" + "GROUP BY `test`.`t0`.`v2`");
+
+        assertContains(generator.getPlanStmtSQL(),
+                "SELECT v2, sum(v3) AS c_4 FROM (SELECT * FROM t0 WHERE v1 = _spm_const_var(1, 1)) t_0 GROUP BY v2");
+    }
+
+    @Test
+    public void testBindAggregateHaving() {
+        CreateBaselinePlanStmt stmt =
+                createBaselinePlanStmt("SELECT v2, sum(v3) FROM t0 WHERE v1 = 1 GROUP BY v2 HAVING sum(v3) > 100");
+        SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
+        generator.execute();
+
+        assertContains(generator.getBindSqlDigest(),
+                "SELECT `test`.`t0`.`v2`, sum(`test`.`t0`.`v3`)\n" + "FROM `test`.`t0`\n"
+                        + "WHERE `test`.`t0`.`v1` = ?\n" + "GROUP BY `test`.`t0`.`v2`");
+
+        assertContains(generator.getBindSql(), "SELECT `test`.`t0`.`v2`, sum(`test`.`t0`.`v3`)\n" + "FROM `test`.`t0`\n"
+                + "WHERE `test`.`t0`.`v1` = _spm_const_var(1, 1)\n" + "GROUP BY `test`.`t0`.`v2`");
+
+        assertContains(generator.getPlanStmtSQL(),
+                "SELECT v2, sum(v3) AS c_4 FROM (SELECT * FROM t0 WHERE v1 = _spm_const_var(1, 1)) t_0 "
+                        + "GROUP BY v2 HAVING c_4 > _spm_const_var(2, 100)");
+    }
+
+    @Test
+    public void testValuesSQL() {
+        CreateBaselinePlanStmt stmt = createBaselinePlanStmt("SELECT * from (values(1,2,3), (4,5,6))");
+        SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
+        generator.execute();
+
+        assertContains(generator.getBindSqlDigest(), "SELECT *\n" + "FROM (VALUES(?, ?, ?), (?, ?, ?))");
+
+        assertContains(generator.getBindSql(),
+                "SELECT *\n" + "FROM (VALUES(_spm_const_var(1, 1), _spm_const_var(2, 2), _spm_const_var(3, 3)), "
+                        + "(_spm_const_var(4, 4), _spm_const_var(5, 5), _spm_const_var(6, 6)))");
+
+        assertContains(generator.getPlanStmtSQL(),
+                "SELECT * FROM (VALUES (_spm_const_var(1, 1), _spm_const_var(2, 2), _spm_const_var(3, 3)), "
+                        + "(_spm_const_var(4, 4), _spm_const_var(5, 5), _spm_const_var(6, 6))) AS t(c_1, c_2, c_3)");
+    }
+
+    @Test
+    public void testJoinValuesSQL() {
+        CreateBaselinePlanStmt stmt = createBaselinePlanStmt("SELECT * from (values(1,2,3), (4,5,6)) x(v1, v2, v3) "
+                + "join (values(9,7,8), (11,22,33)) y(v4, v5, v6) on x.v1 = y.v4");
+        SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
+        generator.execute();
+
+        assertContains(generator.getBindSqlDigest(),
+                "SELECT *\n" + "FROM (VALUES(?, ?, ?), (?, ?, ?)) x(v1,v2,v3) INNER JOIN "
+                        + "(VALUES(?, ?, ?), (?, ?, ?)) y(v4,v5,v6) ON `x`.`v1` = `y`.`v4`");
+
+        assertContains(generator.getBindSql(),
+                "SELECT *\n" + "FROM (VALUES(_spm_const_var(1, 1), _spm_const_var(2, 2), _spm_const_var(3, 3)), "
+                        + "(_spm_const_var(4, 4), _spm_const_var(5, 5), _spm_const_var(6, 6))) x(v1,v2,v3) "
+                        + "INNER JOIN (VALUES(_spm_const_var(7, 9), _spm_const_var(8, 7), _spm_const_var(9, 8)), "
+                        + "(_spm_const_var(10, 11), _spm_const_var(11, 22), _spm_const_var(12, 33))) y(v4,v5,v6) ON "
+                        + "`x`.`v1` = `y`.`v4`");
+
+        assertContains(generator.getPlanStmtSQL(), "SELECT * FROM " + "(SELECT * FROM "
+                + "(SELECT * FROM (VALUES (_spm_const_var(1, 1), _spm_const_var(2, 2), _spm_const_var(3, 3)), "
+                + "(_spm_const_var(4, 4), _spm_const_var(5, 5), _spm_const_var(6, 6))) AS t(c_1, c_2, c_3)) t_0 "
+                + "WHERE c_1 IS NOT NULL) t_2 " + "INNER JOIN[BROADCAST] " + "(SELECT * FROM "
+                + "(SELECT * FROM (VALUES (_spm_const_var(7, 9), _spm_const_var(8, 7), _spm_const_var(9, 8)), "
+                + "(_spm_const_var(10, 11), _spm_const_var(11, 22), _spm_const_var(12, 33))) AS t(c_4, c_5, c_6)) "
+                + "t_1 WHERE c_4 IS NOT NULL) t_3 ON c_1 = c_4");
+    }
+
+    @Test
+    public void testUnion() {
+        CreateBaselinePlanStmt stmt =
+                createBaselinePlanStmt("SELECT * from t0 where v1 = 1 union all select * from t0 where v1 = 2");
+        SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
+        generator.execute();
+
+        assertContains(generator.getBindSqlDigest(),
+                "SELECT *\n" + "FROM `test`.`t0`\n" + "WHERE `test`.`t0`.`v1` = ? UNION ALL SELECT *\n"
+                        + "FROM `test`.`t0`\n" + "WHERE `test`.`t0`.`v1` = ?");
+
+        assertContains(generator.getBindSql(), "SELECT *\n" + "FROM `test`.`t0`\n"
+                + "WHERE `test`.`t0`.`v1` = _spm_const_var(1, 1) UNION ALL SELECT *\n" + "FROM `test`.`t0`\n"
+                + "WHERE `test`.`t0`.`v1` = _spm_const_var(2, 2)");
+
+        assertContains(generator.getPlanStmtSQL(), "SELECT c_7, c_8, c_9 " + "FROM ("
+                + "SELECT v1, v2, v3 FROM (SELECT * FROM t0 WHERE v1 = _spm_const_var(1, 1)) t_0 " + "UNION "
+                + "SELECT v1, v2, v3 FROM (SELECT * FROM t0 WHERE v1 = _spm_const_var(2, 2)) t_1" + ") t_2");
+    }
+
+    @Test
+    public void testOrderBy() {
+        CreateBaselinePlanStmt stmt = createBaselinePlanStmt("SELECT * from t0 where v1 = 1 order by v2 limit 10, 20");
+        SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
+        generator.execute();
+
+        assertContains(generator.getBindSqlDigest(), "SELECT *\n" + "FROM `test`.`t0`\n"
+                + "WHERE `test`.`t0`.`v1` = ? ORDER BY `test`.`t0`.`v2` ASC  LIMIT 10, 20");
+
+        assertContains(generator.getBindSql(), "SELECT *\n" + "FROM `test`.`t0`\n"
+                + "WHERE `test`.`t0`.`v1` = _spm_const_var(1, 1) ORDER BY `test`.`t0`.`v2` ASC  LIMIT 10, 20");
+
+        assertContains(generator.getPlanStmtSQL(),
+                "SELECT * FROM t0 WHERE v1 = _spm_const_var(1, 1) ORDER BY v2 ASC LIMIT 10, 20");
+    }
+
+    @Test
+    public void testCte() {
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+        CreateBaselinePlanStmt stmt = createBaselinePlanStmt(
+                "with x as (select * from t0), y as (select * from x) SELECT x.* from x, y where x.v1 = 1");
+        SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
+        generator.execute();
+
+        assertContains(generator.getBindSqlDigest(), "WITH `x` (`v1`, `v2`, `v3`) AS (SELECT *\n"
+                + "FROM `test`.`t0`) , `y` (`v1`, `v2`, `v3`) AS (SELECT *\n" + "FROM `x`) SELECT x.*\n"
+                + "FROM `x` , `y` \n" + "WHERE `x`.`v1` = ?");
+
+        assertContains(generator.getBindSql(), "WITH `x` (`v1`, `v2`, `v3`) AS (SELECT *\n"
+                + "FROM `test`.`t0`) , `y` (`v1`, `v2`, `v3`) AS (SELECT *\n" + "FROM `x`) SELECT x.*\n"
+                + "FROM `x` , `y` \n" + "WHERE `x`.`v1` = _spm_const_var(1, 1)");
+
+        assertContains(generator.getPlanStmtSQL(),
+                "WITH t_0 AS (SELECT * FROM t0) " + "SELECT t_1.v1 AS c_4, t_1.v2 AS c_5, t_1.v3 AS c_6 "
+                        + "FROM (SELECT * FROM t_0 WHERE v1 = _spm_const_var(1, 1)) t_1 " + "CROSS JOIN[BROADCAST] "
+                        + "(SELECT 1 AS c_12 FROM t_0) t_2");
+    }
+
+    @Test
+    public void testWindow() {
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+        CreateBaselinePlanStmt stmt = createBaselinePlanStmt(
+                "select v3, avg(v2) over (partition by v2, v3 order by v2 desc), "
+                        + "sum(v2) over (partition by v2, v3 order by v2 desc) as sum1 from t0");
+        SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
+        generator.execute();
+
+        assertContains(generator.getBindSqlDigest(), "SELECT `test`.`t0`.`v3`, "
+                + "avg(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`"
+                + ".`v2` DESC ), "
+                + "sum(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`"
+                + ".`v2` DESC ) AS `sum1`\n" + "FROM `test`.`t0`");
+
+        assertContains(generator.getBindSql(), "SELECT `test`.`t0`.`v3`, "
+                + "avg(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`"
+                + ".`v2` DESC ), "
+                + "sum(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`"
+                + ".`v2` DESC ) AS `sum1`\n" + "FROM `test`.`t0`");
+
+        assertContains(generator.getPlanStmtSQL(),
+                "SELECT v2, v3, avg(v2) OVER (PARTITION BY v2, v3 ORDER BY v2 DESC ) AS c_4, "
+                        + "sum(v2) OVER (PARTITION BY v2, v3 ORDER BY v2 DESC ) AS c_5 FROM t0");
+    }
+
+    @Test
+    public void testGroupingSets() {
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+        CreateBaselinePlanStmt stmt = createBaselinePlanStmt(
+                "select v1, v2, grouping_id(v1, v2) as b, sum(v3) from t0 group by grouping sets((), (v1, v2))");
+        SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
+        generator.execute();
+
+        assertContains(generator.getBindSqlDigest(), "SELECT `test`.`t0`.`v3`, "
+                + "avg(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`"
+                + ".`v2` DESC ), "
+                + "sum(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`"
+                + ".`v2` DESC ) AS `sum1`\n" + "FROM `test`.`t0`");
+
+        assertContains(generator.getBindSql(), "SELECT `test`.`t0`.`v3`, "
+                + "avg(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`"
+                + ".`v2` DESC ), "
+                + "sum(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`"
+                + ".`v2` DESC ) AS `sum1`\n" + "FROM `test`.`t0`");
+
+        assertContains(generator.getPlanStmtSQL(),
+                "SELECT v2, v3, avg(v2) OVER (PARTITION BY v2, v3 ORDER BY v2 DESC ) AS c_4, "
+                        + "sum(v2) OVER (PARTITION BY v2, v3 ORDER BY v2 DESC ) AS c_5 FROM t0");
+    }
+
+    @org.junit.Test
+    public void testGroupingSetsToUnionRewrite2() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(false);
+        String sql = "select v1, v2, grouping_id(v1, v2) as b, sum(v3) "
+                + "from t0 group by grouping sets((), (v1, v2)) order by v1, b";
+        String plan = getFragmentPlan(sql);
+        System.out.println(plan);
     }
 }
