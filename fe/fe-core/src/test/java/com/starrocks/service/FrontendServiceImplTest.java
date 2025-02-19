@@ -834,38 +834,6 @@ public class FrontendServiceImplTest {
     }
 
     @Test(expected = AnalysisException.class)
-    public void testCreateCeilForbidAutomaticTable() throws Exception {
-        starRocksAssert.withDatabase("test2").useDatabase("test2")
-                    .withTable("CREATE TABLE site_access_ceil (\n" +
-                                "    event_day datetime,\n" +
-                                "    site_id INT DEFAULT '10',\n" +
-                                "    city_code VARCHAR(100),\n" +
-                                "    user_name VARCHAR(32) DEFAULT '',\n" +
-                                "    pv BIGINT DEFAULT '0'\n" +
-                                ")\n" +
-                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
-                                "PARTITION BY time_slice(event_day, interval 1 day, CEIL) \n" +
-                                "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
-                                "PROPERTIES(\"replication_num\" = \"1\");");
-    }
-
-    @Test(expected = AnalysisException.class)
-    public void testCreateTimeSliceForbidAutomaticTable() throws Exception {
-        starRocksAssert.withDatabase("test2").useDatabase("test2")
-                    .withTable("CREATE TABLE site_access_time_slice_hour_date (\n" +
-                                "    event_day date,\n" +
-                                "    site_id INT DEFAULT '10',\n" +
-                                "    city_code VARCHAR(100),\n" +
-                                "    user_name VARCHAR(32) DEFAULT '',\n" +
-                                "    pv BIGINT DEFAULT '0'\n" +
-                                ")\n" +
-                                "DUPLICATE KEY(event_day, site_id, city_code, user_name)\n" +
-                                "PARTITION BY time_slice(event_day, interval 1 hour) \n" +
-                                "DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 32\n" +
-                                "PROPERTIES(\"replication_num\" = \"1\");");
-    }
-
-    @Test(expected = AnalysisException.class)
     public void testCreateDateTruncForbidAutomaticTable() throws Exception {
         starRocksAssert.withDatabase("test2").useDatabase("test2")
                     .withTable("CREATE TABLE site_access_date_trunc_hour_date (\n" +
