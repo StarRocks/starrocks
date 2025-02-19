@@ -579,7 +579,8 @@ public class CreateTableAnalyzer {
             if (engineName.equalsIgnoreCase(Table.TableType.ELASTICSEARCH.name())) {
                 EsUtil.analyzePartitionDesc(partitionDesc);
             } else if (engineName.equalsIgnoreCase(Table.TableType.ICEBERG.name())
-                    || engineName.equalsIgnoreCase(Table.TableType.HIVE.name())) {
+                    || engineName.equalsIgnoreCase(Table.TableType.HIVE.name())
+                    || engineName.equalsIgnoreCase(Table.TableType.PAIMON.name())) {
                 if (partitionDesc != null) {
                     ((ListPartitionDesc) partitionDesc).analyzeExternalPartitionColumns(stmt.getColumnDefs(), engineName);
                 }
