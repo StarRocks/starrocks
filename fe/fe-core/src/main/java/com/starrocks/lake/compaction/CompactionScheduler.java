@@ -226,7 +226,8 @@ public class CompactionScheduler extends Daemon {
     private void finishJob(CompactionJob job, String errorMsg) {
         job.finish();
         history.offer(CompactionRecord.build(job, errorMsg));
-        LOG.info("Finished compaction job. partitionId={}, errorMsg={}", job.getPartition().getId(), errorMsg);
+        LOG.info("Finished compaction job. txnId={}, partitionId={}, errorMsg={}", job.getTxnId(),
+                job.getPartition().getId(), errorMsg);
     }
 
     private void abortTransactionIgnoreException(CompactionJob job, String reason) {
