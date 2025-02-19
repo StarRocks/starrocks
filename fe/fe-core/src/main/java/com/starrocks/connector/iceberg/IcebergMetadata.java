@@ -811,7 +811,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
         RemoteFileInfoSource baseSource = buildRemoteInfoSource(icebergTable, icebergPredicate, snapshotId.get());
 
-        List<IcebergMORParams> tableFullMORParams = param.getTableFullMORParams();
+        IcebergTableMORParams tableFullMORParams = param.getTableFullMORParams();
         if (tableFullMORParams.isEmpty()) {
             return baseSource;
         } else {
@@ -819,7 +819,8 @@ public class IcebergMetadata implements ConnectorMetadata {
             String dbName = icebergTable.getCatalogDBName();
             String tableName = icebergTable.getCatalogTableName();
             IcebergRemoteFileInfoSourceKey remoteFileInfoSourceKey = IcebergRemoteFileInfoSourceKey.of(
-                    dbName, tableName, snapshotId.get(), param.getPredicate(), param.getMORParams());
+                    dbName, tableName, snapshotId.get(), param.getPredicate(), tableFullMORParams.getMORId(),
+                    param.getMORParams());
 
             if (!remoteFileInfoSources.containsKey(remoteFileInfoSourceKey)) {
                 IcebergRemoteSourceTrigger trigger = new IcebergRemoteSourceTrigger(baseSource, tableFullMORParams);
@@ -827,9 +828,9 @@ public class IcebergMetadata implements ConnectorMetadata {
                 // split scan nodes from one table scan node is one by one. And in the IcebergRemoteSourceTrigger,
                 // multiple queues need to be filled according to different iceberg mor params when executing iceberg planing.
                 // Therefore, here we initialize the remoteFileInfoSource of all iceberg mor params for the first time.
-                for (IcebergMORParams morParams : tableFullMORParams) {
+                for (IcebergMORParams morParams : tableFullMORParams.getMorParamsList()) {
                     IcebergRemoteFileInfoSourceKey key = IcebergRemoteFileInfoSourceKey.of(
-                            dbName, tableName, snapshotId.get(), param.getPredicate(), morParams);
+                            dbName, tableName, snapshotId.get(), param.getPredicate(), tableFullMORParams.getMORId(), morParams);
                     Deque<RemoteFileInfo> remoteFileInfoDeque = trigger.getQueue(morParams);
                     remoteFileInfoSources.put(key, new QueueIcebergRemoteFileInfoSource(trigger, remoteFileInfoDeque));
                 }

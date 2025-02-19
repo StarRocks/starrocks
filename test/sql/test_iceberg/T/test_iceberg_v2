@@ -4,6 +4,7 @@ create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", 
 
 -- Currently only flink can write iceberg equality delete file. The table in the case was created in advance and some test data was inserted using flink. If you want test more cases, you could contact stephen5217@163.com
 
+set enable_connector_incremental_scan_ranges=true;
 
 -- unpartitioned table with orc (eq-delete && pos-delete) 
 /*
@@ -68,6 +69,19 @@ select k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_unpart
 select count(*) from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_unpartitioned_table;
 
 select k1 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_unpartitioned_table group by k1 having count(1) > 1;
+
+select l.k1, sum(length(l.k2)) l_k2, sum(length(r.k2)) r_k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_unpartitioned_table l
+left join iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_unpartitioned_table r on l.k1 = r.k1 group by 1 order by 1;
+
+with cte1 as (
+    select l.k1, sum(length(l.k2)) l_k2, sum(length(r.k2)) r_k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_unpartitioned_table l
+        left join iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_unpartitioned_table r on l.k1 = r.k1 group by 1
+    ),
+    cte2 as (
+    select l.k1, sum(length(l.k2)) l_k2, sum(length(r.k2)) r_k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_unpartitioned_table l
+        left join iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_unpartitioned_table r on l.k1 = r.k1 group by 1
+    )
+select cte1.k1, cte2.k1, cte1.l_k2, cte2.r_k2 from cte1 left join cte2 on cte1.k1 = cte2.k1;
 
 -- partitioned table with parquet (eq-delete && pos-delete)
 /*
