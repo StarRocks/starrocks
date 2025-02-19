@@ -680,4 +680,58 @@ public class LakeSyncMaterializedViewTest {
             starRocksAssert.dropMaterializedView("mv1");
         }
     }
+
+    @Test
+    public void testCancelMV() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE `t1` " +
+                "(`k1`  date, " +
+                " `k2`  datetime," +
+                " `k3`  char(20)," +
+                " `k4`  varchar(20)," +
+                " `k5` boolean, " +
+                " `k6`  tinyint," +
+                " `k7`  smallint," +
+                " `k8`  int," +
+                " `k9`  bigint," +
+                " `k10` largeint, " +
+                " `k11` float," +
+                " `k12` double," +
+                " `k13` decimal(27,9) )" +
+                " DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) " +
+                " DISTRIBUTED BY HASH(`k1`, `k2`, `k3`) BUCKETS 3");
+
+        String sql = "CREATE MATERIALIZED VIEW mv1\n" +
+                "   AS\n" +
+                "   SELECT\n" +
+                "   k1,\n" +
+                "   MIN(k6),\n" +
+                "   MIN(k7),\n" +
+                "   MIN(k8),\n" +
+                "   SUM(k9),\n" +
+                "   MAX(k10),\n" +
+                "   MIN(k11),\n" +
+                "   MIN(k12),\n" +
+                "   SUM(k13)\n" +
+                "   FROM t1\n" +
+                "   GROUP BY k1;";
+
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
+        if (stmt instanceof CreateMaterializedViewStmt) {
+            CreateMaterializedViewStmt createMaterializedViewStmt = (CreateMaterializedViewStmt) stmt;
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createMaterializedView(createMaterializedViewStmt);
+        }
+
+        starRocksAssert.cancelMV("cancel alter materialized view from test.mv1");
+
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
+        GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobInfosByDb(db);
+        Table table = db.getTable("t1");
+
+        long unfinishedJobs = GlobalStateMgr.getCurrentState().getRollupHandler().
+                getUnfinishedAlterJobV2ByTableId(table.getId()).size();
+        Assert.assertEquals(0, unfinishedJobs);
+
+        starRocksAssert.dropMaterializedView("mv1");
+        starRocksAssert.dropTable("t1");
+    }
 }
