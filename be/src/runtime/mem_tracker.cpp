@@ -33,10 +33,10 @@
 // under the License.
 
 #include "runtime/mem_tracker.h"
-#include "runtime/runtime_state.h"
 
 #include <utility>
 
+#include "runtime/runtime_state.h"
 #include "service/backend_options.h"
 
 namespace starrocks {
@@ -221,7 +221,7 @@ std::string MemTracker::err_msg(const std::string& msg, RuntimeState* state) con
     str << "Memory of " << label() << " exceed limit. " << msg << " ";
     str << "Backend: " << BackendOptions::get_localhost() << ", ";
     if (state != nullptr) {
-        str << "fragment: " << print_id(state->fragment_instance_id()) << " ";                                  \
+        str << "fragment: " << print_id(state->fragment_instance_id()) << " ";
     }
     str << "Used: " << consumption() << ", Limit: " << limit() << ". ";
     switch (type()) {
