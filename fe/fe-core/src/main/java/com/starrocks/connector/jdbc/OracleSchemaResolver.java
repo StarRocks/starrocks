@@ -23,12 +23,8 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
-<<<<<<< HEAD
-=======
-import com.starrocks.common.SchemaConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.exception.StarRocksConnectorException;
->>>>>>> ce0a05ea2a ([Enhancement] Support materialized view for Oracle Dialect JDBC Catalog (#55372))
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
@@ -215,8 +211,8 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
         final JDBCTable jdbcTable = (JDBCTable) table;
         final String query = getPartitionQuery(table);
         try (PreparedStatement ps = connection.prepareStatement(query)) {
-            ps.setString(1, jdbcTable.getCatalogDBName());
-            ps.setString(2, jdbcTable.getCatalogTableName());
+            ps.setString(1, jdbcTable.getDbName());
+            ps.setString(2, jdbcTable.getJdbcTable());
             final ResultSet rs = ps.executeQuery();
             final ImmutableList.Builder<Partition> list = ImmutableList.builder();
             if (null != rs) {

@@ -22,7 +22,6 @@ import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.zaxxer.hikari.HikariDataSource;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -230,8 +229,7 @@ public class OracleSchemaResolverTest {
     public void testListPartitionNames() {
         try {
             JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
-            List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1",
-                    ConnectorMetadatRequestContext.DEFAULT);
+            List<String> partitionNames = jdbcMetadata.listPartitionNames("test", "tbl1");
             Assert.assertFalse(partitionNames.isEmpty());
         } catch (Exception e) {
             Assert.fail(e.getMessage());
