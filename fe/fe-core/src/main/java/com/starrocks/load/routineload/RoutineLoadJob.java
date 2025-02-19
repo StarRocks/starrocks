@@ -140,6 +140,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public static final long DEFAULT_TASK_SCHED_INTERVAL_SECOND = 10;
     public static final boolean DEFAULT_STRICT_MODE = false; // default is false
+    public static final boolean DEFAULT_PAUSE_ON_PARSE_ERROR = true;
 
     protected static final String STAR_STRING = "*";
 
@@ -306,7 +307,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     @SerializedName("pope")
-    protected boolean pauseOnParseError = true;
+    protected boolean pauseOnParseError = DEFAULT_PAUSE_ON_PARSE_ERROR;
 
     protected ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
     // TODO(ml): error sample
@@ -376,6 +377,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         if (stmt.getMaxBatchRows() != -1) {
             this.maxBatchRows = stmt.getMaxBatchRows();
         }
+        this.pauseOnParseError = stmt.isPauseOnParseError();
         jobProperties.put(LoadStmt.LOG_REJECTED_RECORD_NUM, String.valueOf(stmt.getLogRejectedRecordNum()));
         jobProperties.put(LoadStmt.PARTIAL_UPDATE, String.valueOf(stmt.isPartialUpdate()));
         jobProperties.put(LoadStmt.PARTIAL_UPDATE_MODE, String.valueOf(stmt.getPartialUpdateMode()));
@@ -1661,6 +1663,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         jobProperties.put("desireTaskConcurrentNum", String.valueOf(desireTaskConcurrentNum));
         jobProperties.put("taskConsumeSecond", String.valueOf(taskConsumeSecond));
         jobProperties.put("taskTimeoutSecond", String.valueOf(taskTimeoutSecond));
+        jobProperties.put("pauseOnParseError", String.valueOf(pauseOnParseError));
         jobProperties.putAll(this.jobProperties);
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         return gson.toJson(jobProperties);
@@ -1997,6 +2000,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND)) {
             this.taskTimeoutSecond = Long.parseLong(
                     copiedJobProperties.remove(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND));
+        }
+        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.PAUSE_ON_PARSE_ERROR)) {
+            this.pauseOnParseError = Boolean.parseBoolean(
+                    copiedJobProperties.remove(CreateRoutineLoadStmt.PAUSE_ON_PARSE_ERROR));
         }
 
         if (copiedJobProperties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
