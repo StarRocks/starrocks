@@ -53,7 +53,7 @@ public class CacheDictManager implements IDictManager, MemoryTrackable {
     private static final Set<ColumnIdentifier> NO_DICT_STRING_COLUMNS = Sets.newConcurrentHashSet();
     private static final Set<Long> FORBIDDEN_DICT_TABLE_IDS = Sets.newConcurrentHashSet();
 
-    public static final Integer LOW_CARDINALITY_THRESHOLD = 255;
+    public static final Integer LOW_CARDINALITY_THRESHOLD = Config.low_cardinality_threshold;
 
     public CacheDictManager() {
     }

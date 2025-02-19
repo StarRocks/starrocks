@@ -55,6 +55,8 @@ public:
 
     int16_t* code_convert_data() { return _code_convert_map.has_value() ? _code_convert_map->data() + 1 : nullptr; }
 
+    int32_t dict_convert_size() const { return _code_convert_map.has_value() ? _code_convert_map->size() - 1 : 0; }
+
 private:
     Status _encode_string_to_global_id(Column* datas, Column* codes);
 

@@ -310,11 +310,6 @@ Status SegmentMetaCollecter::_collect_dict(ColumnId cid, Column* column, Logical
         RETURN_IF_ERROR(_column_iterators[cid]->fetch_all_dict_words(&words));
     }
 
-    if (words.size() > DICT_DECODE_MAX_SIZE) {
-        return Status::GlobalDictError(fmt::format("global dict size:{} greater than DICT_DECODE_MAX_SIZE:{}",
-                                                   words.size(), DICT_DECODE_MAX_SIZE));
-    }
-
     // array<string> has none dict, return directly
     if (words.size() < 1) {
         return Status::OK();
