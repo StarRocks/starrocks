@@ -23,6 +23,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.PaimonView;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
@@ -41,6 +42,8 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
+import com.starrocks.sql.ast.ColWithComment;
+import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -123,6 +126,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+import static com.starrocks.catalog.Table.TableType.PAIMON_VIEW;
+import static com.starrocks.catalog.Type.INT;
 import static org.apache.paimon.io.DataFileMeta.DUMMY_LEVEL;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
@@ -739,5 +744,32 @@ public class PaimonMetadataTest {
                 metadata.getTableStatistics(optimizerContext, paimonTable, colRefToColumnMetaMap,
                         null, null, -1, null);
         Assert.assertEquals(tableStatistics.getColumnStatistics().size(), colRefToColumnMetaMap.size());
+    }
+
+    @Test
+    public void testCreateView(@Mocked org.apache.paimon.view.View paimonView) throws Exception {
+        new Expectations() {
+            {
+                paimonNativeCatalog.getView((Identifier) any);
+                result = new Catalog.ViewNotExistException(new Identifier("test", "ViewNotExist"));
+            }
+        };
+        CreateViewStmt stmt = new CreateViewStmt(false, false, new TableName("paimon_catalog", "db", "test_view"),
+                Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", false, null, NodePosition.ZERO);
+        stmt.setColumns(Lists.newArrayList(new Column("k1", INT)));
+        metadata.createView(stmt);
+        new Expectations() {
+            {
+                paimonNativeCatalog.getView((Identifier) any);
+                result = paimonView;
+                paimonView.query();
+                result = "select * from table";
+            }
+        };
+        PaimonView table = (PaimonView) metadata.getView("db", "test_view");
+        Assert.assertEquals(PAIMON_VIEW, table.getType());
+        Assert.assertEquals("test_view", table.getName());
+        Assert.assertEquals("select * from table", table.getInlineViewDef());
+        Assert.assertEquals("", table.getTableLocation());
     }
 }
