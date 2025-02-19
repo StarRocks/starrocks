@@ -10,15 +10,13 @@ These are the general steps to install CelerData Manager and deploy a StarRocks 
   - Prepare disks, open ports, add a user, configure authentication
   - Install software prerequisites
 - Install CelerData Manager
-  - MySQL
-  - Install
 - Configure the Manager
   - User DB configuration
   - Nodes Setup
 - Deploy StarRocks Enterprise Edition
   - FE deployment
   - BE deployment
-  - HDFS Brokers
+  - Brokers
   - Center Service
   - Apply your license
 
@@ -137,15 +135,51 @@ sudo chown celerdata /data
 
 The default ports used by CelerData Manager and StarRocks Enterprise Edition are:
 
-| Port  | Service       | Notes                                 |
-|-------|---------------|---------------------------------------|
-| 22    | SSH           | Between all servers                   |
-| 19321 | Admin Console |                                       |
-| 19320 | Supervisor    |                                       |
-| 3306  | MySQL         | Only if MySQL is on a separate server |
+### Common (all servers)
+| <div style="width:200px">Port name</div> | <div style="width:60px">Default</div> | <div style="width:125px">Direction</div> | Explanation | 
+|-----------|--------------|-------------------------|-------------|
+| SSH | 22 | All <--> All | Management processes communicate via SSH |
 
+### BE and CN instances
+| <div style="width:200px">Port name</div> | <div style="width:60px">Default</div> | <div style="width:125px">Direction</div> | Explanation | 
+|-----------|--------------|-------------------------|-------------|
+| be_port | 9060 | FE --> BE/CN | Port of thrift server on BE/CN, receiving requests from FE |
+| webserver_port | 8040 | BE/CN <--> BE/CN | Port of http server on BE/CN |
+| heartbeat_service_port | 9050 | FE --> BE | Heartbeat server level port (thrift) on BE, receive heartbeat from FE |
+| brpc_port | 8060 | FE <--> BE | BRPC port on BE for communication between BEs | BE <--> BE |
+| starlet_port | 9070 | FE --> BE | Port for BE/CN heartbeat service in storage and calculation separation mode | (In the integrated storage and computing mode, BE also needs to open this port.) |
 
-During the deployment of the Supervisor and the yyyy processes on the FE and BE servers, and the deployment of the FEs and BEs you will see timeout messages if any ports are blocked by your firewall. After opening the ports retry the step that displayed the timeout.
+### FE instances
+| <div style="width:200px">Port name</div> | <div style="width:60px">Default</div> | <div style="width:125px">Direction</div> | Explanation | 
+|-----------|--------------|-------------------------|-------------|
+| http_port | 8030 | FE <--> FE | Port of http server on FE | User < -- > FE |
+| rpc_port | 9020 | BE --> FE | Thrift server port on FE | FE <--> FE |
+| query_port | 9030 | User < -- > FE | Port of mysql server on FE |
+| edit_log_port | 9010 | FE <--> FE | Port for communication between bdbje on FE |
+| cloud_native_meta_port | 6090 | FE <--> BE | Cloud Native metadata service listening port in storage and calculation separation mode | FE <--> FE |
+
+### Broker instances
+| <div style="width:200px">Port name</div> | <div style="width:60px">Default</div> | <div style="width:125px">Direction</div> | Explanation | 
+|-----------|--------------|-------------------------|-------------|
+| broker_rpc_port | 8000 | FE --> Broker | Thrift server on Broker for receiving requests | | BE --> Broker |
+
+### Manager
+| <div style="width:200px">Port name</div> | <div style="width:60px">Default</div> | <div style="width:125px">Direction</div> | Explanation | 
+|-----------|--------------|-------------------------|-------------|
+| admin_console_port | 19321 | Manager external | Nginx does port forwarding for external web ports |
+
+### Agent service
+| <div style="width:200px">Port name</div> | <div style="width:60px">Default</div> | <div style="width:125px">Direction</div> | Explanation | 
+|-----------|--------------|-------------------------|-------------|
+| supervisor_http_port | 19320 | Internal | Supervisor management process | Center Service | 19319 | Supervisor management process |
+| agent_port | 19323 | Agent --> Center | Agent and Center Service communicate, and users report monitoring information |
+
+### Center service
+| <div style="width:200px">Port name</div> | <div style="width:60px">Default</div> | <div style="width:125px">Direction</div> | Explanation | 
+|-----------|--------------|-------------------------|-------------|
+| center_rpc_port | 19322 | Web --> Center | Communication ports for Web and Center Services |
+
+During the deployment of the Supervisor and the Agent processes on the FE and BE servers, and the deployment of the FEs and BEs you will see timeout messages if any ports are blocked by your firewall. After opening the ports retry the step that displayed the timeout.
 
 ### Install python-setuptools for all nodes
 
@@ -298,35 +332,30 @@ After clicking Next it takes a while, you can check progress by looking at the d
 
 ### BE deployment
 
-Manager will choose all of the nodes for BEs. Is this best practice? Should FEs and BEs be on the same nodes?
+Manager will choose all of the nodes for BEs. If you would like to prevent a BE from being deployed on one or more of the servers hosting FEs, then remove those nodes by clicking on the red `-` to the right of the BE instance.
 
-Make sure to set the Install Path to a disk with space, and edit it for each of the BEs being deployed. I set Install Path to `/data/sr`
+Make sure to set the Install Path to a disk with space, and edit it for each of the BEs being deployed. In the screenshot, the Install Path is set to `/data/sr`
 
 ![BE config](../_assets/manager/BE_Setup.png)
 
-### HDFS Brokers
+### Brokers
 
-Need to be renamed to just "Brokers"
-
-I just skipped this, no idea if we need to deploy brokers. The old docs said to put them everywhere, but I do not think that is true except for certain cases, and I do not know what those cases are.
+Brokers may be needed in some cases when using HDFS or Cloud storage.
 
 ### Center Service
 
-I am trying to get this renamed to "Service Center" or "Admin Service." This is the service that collects logs and metrics for the diagnostics, and I think it manages the alerts.
+This is the service that collects logs and metrics for the diagnostics, and manages alerts.
 
 You have to set these:
 
-```bash
-Metrics storage path: /data/metrics
-Metrics retention days: 10
-```
+- Metrics storage path
+- Metrics retention days
 
-Regarding SMTP: I just hit next as I do not want to send through my personal SMTP server.
-
+Regarding SMTP: If you are not using email for alerts you can skip the SMTP related settings.
 
 ### Complete
 
-Save your password and token
+Save your password and token to log in to the Manager UI.
 
 Password for `root` is: abcdef-c1c1234-44567-a94c-242468101214
 
