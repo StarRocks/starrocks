@@ -1541,46 +1541,53 @@ bool Tablet::_contains_rowset(const RowsetId rowset_id) {
 }
 
 void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
-    std::shared_lock rdlock(_meta_lock);
-    tablet_info->__set_tablet_id(_tablet_meta->tablet_id());
-    tablet_info->__set_schema_hash(_tablet_meta->schema_hash());
-    tablet_info->__set_partition_id(_tablet_meta->partition_id());
-    tablet_info->__set_storage_medium(_data_dir->storage_medium());
-    tablet_info->__set_path_hash(_data_dir->path_hash());
-    tablet_info->__set_enable_persistent_index(_tablet_meta->get_enable_persistent_index());
-    tablet_info->__set_primary_index_cache_expire_sec(_tablet_meta->get_primary_index_cache_expire_sec());
-    tablet_info->__set_tablet_schema_version(_max_version_schema->schema_version());
-    if (_tablet_meta->get_binlog_config() != nullptr) {
-        tablet_info->__set_binlog_config_version(_tablet_meta->get_binlog_config()->version);
+    {
+        std::shared_lock rdlock(_meta_lock);
+        tablet_info->__set_tablet_id(_tablet_meta->tablet_id());
+        tablet_info->__set_schema_hash(_tablet_meta->schema_hash());
+        tablet_info->__set_partition_id(_tablet_meta->partition_id());
+        tablet_info->__set_storage_medium(_data_dir->storage_medium());
+        tablet_info->__set_path_hash(_data_dir->path_hash());
+        tablet_info->__set_enable_persistent_index(_tablet_meta->get_enable_persistent_index());
+        tablet_info->__set_primary_index_cache_expire_sec(_tablet_meta->get_primary_index_cache_expire_sec());
+        tablet_info->__set_tablet_schema_version(_max_version_schema->schema_version());
+        if (_tablet_meta->get_binlog_config() != nullptr) {
+            tablet_info->__set_binlog_config_version(_tablet_meta->get_binlog_config()->version);
+        }
+        if (_updates == nullptr) {
+            int64_t max_version = _timestamped_version_tracker.get_max_continuous_version();
+            auto max_rowset = rowset_with_max_version();
+            if (max_rowset != nullptr) {
+                if (max_rowset->version().second != max_version) {
+                    tablet_info->__set_version_miss(true);
+                }
+            } else {
+                // If the tablet is in running state, it must not be doing schema-change. so if we can not
+                // access its rowsets, it means that the tablet is bad and needs to be reported to the FE
+                // for subsequent repairs (through the cloning task)
+                if (tablet_state() == TABLET_RUNNING) {
+                    tablet_info->__set_used(false);
+                }
+                // For other states, FE knows that the tablet is in a certain change process, so here
+                // still sets the state to normal when reporting. Note that every task has an timeout,
+                // so if the task corresponding to this change hangs, when the task timeout, FE will know
+                // and perform state modification operations.
+            }
+            tablet_info->__set_version(max_version);
+            tablet_info->__set_max_readable_version(max_version);
+            // TODO: support getting minReadableVersion
+            tablet_info->__set_min_readable_version(_timestamped_version_tracker.get_min_readable_version());
+            tablet_info->__set_version_count(_tablet_meta->version_count());
+            tablet_info->__set_row_count(_tablet_meta->num_rows());
+            tablet_info->__set_data_size(_tablet_meta->tablet_footprint());
+        }
     }
+
+    // primary key specified info will protected by independent lock context
+    // in TabletUpdates which means that the lock context can be sperated from
+    // the tablet meta_lock when trying to get the extra info
     if (_updates) {
         _updates->get_tablet_info_extra(tablet_info);
-    } else {
-        int64_t max_version = _timestamped_version_tracker.get_max_continuous_version();
-        auto max_rowset = rowset_with_max_version();
-        if (max_rowset != nullptr) {
-            if (max_rowset->version().second != max_version) {
-                tablet_info->__set_version_miss(true);
-            }
-        } else {
-            // If the tablet is in running state, it must not be doing schema-change. so if we can not
-            // access its rowsets, it means that the tablet is bad and needs to be reported to the FE
-            // for subsequent repairs (through the cloning task)
-            if (tablet_state() == TABLET_RUNNING) {
-                tablet_info->__set_used(false);
-            }
-            // For other states, FE knows that the tablet is in a certain change process, so here
-            // still sets the state to normal when reporting. Note that every task has an timeout,
-            // so if the task corresponding to this change hangs, when the task timeout, FE will know
-            // and perform state modification operations.
-        }
-        tablet_info->__set_version(max_version);
-        tablet_info->__set_max_readable_version(max_version);
-        // TODO: support getting minReadableVersion
-        tablet_info->__set_min_readable_version(_timestamped_version_tracker.get_min_readable_version());
-        tablet_info->__set_version_count(_tablet_meta->version_count());
-        tablet_info->__set_row_count(_tablet_meta->num_rows());
-        tablet_info->__set_data_size(_tablet_meta->tablet_footprint());
     }
 }
 
