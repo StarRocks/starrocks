@@ -5717,6 +5717,7 @@ void TabletUpdates::_reset_apply_status(const EditVersionInfo& version_info_appl
             auto& index = index_entry->value();
             index.unload();
             manager->index_cache().update_object_size(index_entry, index.memory_usage());
+            manager->index_cache().release(index_entry);
         }
     }
 }

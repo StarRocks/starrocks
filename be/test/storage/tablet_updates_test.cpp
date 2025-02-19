@@ -3567,6 +3567,10 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
 
         // Verify the read result
         ASSERT_EQ(expected_read_result, read_tablet(_tablet, version));
+        auto index_entry = StorageEngine::instance()->update_manager()->index_cache().get(_tablet->tablet_id());
+        ASSERT_TRUE(index_entry != nullptr);
+        ASSERT_EQ(index_entry->get_ref(), 2);
+        StorageEngine::instance()->update_manager()->index_cache().release(index_entry);
     };
 
     // 2. internal error
