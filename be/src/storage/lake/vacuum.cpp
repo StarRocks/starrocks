@@ -395,6 +395,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         RETURN_IF_ERROR(collect_files_to_vacuum(tablet_mgr, root_dir, tablet_id, grace_timestamp, min_retain_version,
                                                 &datafile_deleter, &metafile_deleter, vacuumed_file_size,
                                                 &tablet_vacuumed_version));
+        LOG(INFO) << "tablet: " << tablet_id << " min_retain_version: " << min_retain_version << ", vacuum_version: " <<  tablet_vacuumed_version;
         RETURN_IF_ERROR(datafile_deleter.finish());
         RETURN_IF_ERROR(metafile_deleter.finish());
         if (final_vacuum_version > tablet_vacuumed_version) {

@@ -367,12 +367,20 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         return maxDataSize;
     }
 
-    public long storageDataSize() {
+    public long dataSize() {
         long dataSize = 0;
         for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
             dataSize += mIndex.getDataSize();
         }
         return dataSize;
+    }
+
+    public long storageSize() {
+        long storageSize = 0;
+        for (MaterializedIndex mIndex : getMaterializedIndices(IndexExtState.VISIBLE)) {
+            storageSize += mIndex.getStorageSize();
+        }
+        return storageSize;
     }
 
     public long storageRowCount() {
@@ -489,7 +497,8 @@ public class PhysicalPartition extends MetaObject implements GsonPostProcessable
         buffer.append("versionEpoch: ").append(versionEpoch).append("; ");
         buffer.append("versionTxnType: ").append(versionTxnType).append("; ");
 
-        buffer.append("storageDataSize: ").append(storageDataSize()).append("; ");
+        buffer.append("dataSize: ").append(dataSize()).append("; ");
+        buffer.append("storageSize: ").append(storageSize()).append("; ");
         buffer.append("storageRowCount: ").append(storageRowCount()).append("; ");
         buffer.append("storageReplicaCount: ").append(storageReplicaCount()).append("; ");
 

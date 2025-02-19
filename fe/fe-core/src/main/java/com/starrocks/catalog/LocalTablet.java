@@ -505,6 +505,16 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         return dataSize;
     }
 
+    // Not implement for Shared-Nothing mode yet
+    // If we want to get the accurate storage disk size, we need to list the tablet's storage directory, 
+    // which will result in a large amount of disk I/O. 
+    // Monitoring the StorageSize is not urgent in shared-nothing right now, so we temporarily use the DataSize to 
+    // represent the StorageSize right now.
+    @Override
+    public long getStorageSize(boolean singleReplica) {
+        return getDataSize(singleReplica);
+    }
+
     // Get max row count of all replicas which version catches up.
     @Override
     public long getRowCount(long version) {

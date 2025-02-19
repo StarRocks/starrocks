@@ -95,7 +95,7 @@ public:
         DCHECK(_mem_tracker == nullptr);
         _mem_tracker = mem_tracker;
     }
-
+    
     // get or return null
     Entry* get(const Key& key) {
         std::lock_guard<Lock> lg(_lock);

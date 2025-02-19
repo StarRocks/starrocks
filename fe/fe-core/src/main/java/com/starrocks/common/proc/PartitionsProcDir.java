@@ -117,6 +117,7 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("DistributionKey")
                     .add("Buckets")
                     .add("DataSize")
+                    .add("StorageSize")
                     .add("RowCount")
                     .add("EnableDataCache")
                     .add("AsyncWrite")
@@ -144,6 +145,7 @@ public class PartitionsProcDir implements ProcDirInterface {
                     .add("CooldownTime")
                     .add("LastConsistencyCheckTime")
                     .add("DataSize")
+                    .add("StorageSize")
                     .add("IsInMemory")
                     .add("RowCount")
                     .add("DataVersion")
@@ -356,13 +358,15 @@ public class PartitionsProcDir implements ProcDirInterface {
         short replicationNum = tblPartitionInfo.getReplicationNum(partition.getId());
         partitionInfo.add(String.valueOf(replicationNum));
 
-        long dataSize = physicalPartition.storageDataSize();
+        long dataSize = physicalPartition.dataSize();
+        long storageSize = physicalPartition.storageSize();
         ByteSizeValue byteSizeValue = new ByteSizeValue(dataSize);
         DataProperty dataProperty = tblPartitionInfo.getDataProperty(partition.getId());
         partitionInfo.add(dataProperty.getStorageMedium().name());
         partitionInfo.add(TimeUtils.longToTimeString(dataProperty.getCooldownTimeMs()));
         partitionInfo.add(TimeUtils.longToTimeString(partition.getLastCheckTime()));
         partitionInfo.add(byteSizeValue);
+        partitionInfo.add(new ByteSizeValue(storageSize));
         partitionInfo.add(tblPartitionInfo.getIsInMemory(partition.getId()));
         partitionInfo.add(physicalPartition.storageRowCount());
 
@@ -392,7 +396,8 @@ public class PartitionsProcDir implements ProcDirInterface {
         partitionInfo.add(findRangeOrListValues(tblPartitionInfo, partition.getId())); // List or Range
         partitionInfo.add(distributionKeyAsString(table, partition.getDistributionInfo())); // DistributionKey
         partitionInfo.add(partition.getDistributionInfo().getBucketNum()); // Buckets
-        partitionInfo.add(new ByteSizeValue(physicalPartition.storageDataSize())); // DataSize
+        partitionInfo.add(new ByteSizeValue(physicalPartition.dataSize())); // DataSize
+        partitionInfo.add(new ByteSizeValue(physicalPartition.storageSize())); // StorageSize
         partitionInfo.add(physicalPartition.storageRowCount()); // RowCount
         partitionInfo.add(cacheInfo.isEnabled()); // EnableCache
         partitionInfo.add(cacheInfo.isAsyncWriteBack()); // AsyncWrite
