@@ -122,6 +122,7 @@ import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import static com.starrocks.common.ErrorCode.ERR_PARSE_ERROR;
 import static com.starrocks.common.ErrorCode.ERR_TOO_MANY_ERROR_ROWS;
 
 /**
@@ -1252,6 +1253,23 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         LOG.debug("replay on aborted: {}, has attachment: {}", txnState, txnState.getTxnCommitAttachment() == null);
     }
 
+    private Optional<ErrorReason> shouldPauseOnTxnStateChange(String txnStatusChangeReasonStr ) {
+        TransactionState.TxnStatusChangeReason reason = TransactionState.TxnStatusChangeReason.fromString(txnStatusChangeReasonStr);
+        if (reason == null) {
+            return Optional.empty();
+        }
+        switch (reason) {
+            case FILTERED_ROWS:
+                return Optional.of(new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
+                        ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(txnStatusChangeReasonStr, "max_filter_ratio")));
+            case PARSE_ERROR:
+                return !pauseOnParseError ? Optional.empty() : Optional.of(new ErrorReason(InternalErrorCode.PARSE_ERR,
+                        ERR_PARSE_ERROR.formatErrorMsg(txnStatusChangeReasonStr)));
+            default:
+                return Optional.empty();
+        }
+    }
+
     // check task exists or not before call method
     private void executeTaskOnTxnStatusChanged(RoutineLoadTaskInfo routineLoadTaskInfo, TransactionState txnState,
                                                TransactionStatus txnStatus, String txnStatusChangeReasonStr)
@@ -1280,12 +1298,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
         routineLoadTaskInfo.setTxnStatus(txnStatus);
 
-        if (TransactionState.TxnStatusChangeReason.fromString(txnStatusChangeReasonStr) ==
-                TransactionState.TxnStatusChangeReason.FILTERED_ROWS) {
-            updateState(JobState.PAUSED,
-                    new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
-                            ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(txnStatusChangeReasonStr, "max_filter_ratio")),
-                    false /* not replay */);
+        Optional<ErrorReason> pauseOptional = shouldPauseOnTxnStateChange(txnStatusChangeReasonStr);
+        if (pauseOptional.isPresent()) {
+            updateState(JobState.PAUSED, pauseOptional.get(), false /* not replay */);
             LOG.warn(
                     "routine load task [job name {}, task id {}] aborted because of {}, change state to PAUSED",
                     name, routineLoadTaskInfo.getId().toString(), txnStatusChangeReasonStr);
