@@ -426,7 +426,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             String warehouseName = prop.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
             jobProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, warehouseName);
 
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseName);
             if (warehouse == null) {
                 throw new UserException("Warehouse " + warehouseName + " not exists.");
             }
@@ -1727,7 +1727,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             sb.append("\",\n");
             sb.append("\"").append(PropertyAnalyzer.PROPERTIES_WAREHOUSE).append("\"=\"");
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseId);
             if (warehouse != null) {
                 sb.append(warehouse.getName()).append("\"\n");
             } else {
@@ -1997,7 +1997,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
         if (copiedJobProperties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
             String warehouseName = copiedJobProperties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseName);
             if (warehouse != null) {
                 this.warehouseId = warehouse.getId();
             } else {
