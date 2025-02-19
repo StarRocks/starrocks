@@ -885,10 +885,21 @@ public class TransactionState implements Writable, GsonPreProcessable {
             sb.append(", newFinish");
         }
         if (txnCommitAttachment != null) {
-            sb.append(" attachment: ").append(txnCommitAttachment);
+            sb.append(", attachment: ").append(txnCommitAttachment);
         }
         if (tabletCommitInfos != null) {
-            sb.append(" tabletCommitInfos size: ").append(tabletCommitInfos.size());
+            sb.append(", tabletCommitInfos size: ").append(tabletCommitInfos.size());
+        }
+        if (Config.transaction_state_print_partition_info && idToTableCommitInfos != null) {
+            sb.append(", partition commit info:[");
+            for (TableCommitInfo tinfo : idToTableCommitInfos.values()) {
+                if (tinfo.getIdToPartitionCommitInfo() != null) {
+                    for (PartitionCommitInfo pinfo : tinfo.getIdToPartitionCommitInfo().values()) {
+                        sb.append(pinfo.toString()).append(",");
+                    }
+                }
+            }
+            sb.append("]");
         }
         return sb.toString();
     }
