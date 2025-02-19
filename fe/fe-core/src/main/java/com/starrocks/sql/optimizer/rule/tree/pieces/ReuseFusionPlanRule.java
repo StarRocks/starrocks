@@ -21,14 +21,20 @@ import com.google.common.collect.Sets;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.JoinOperator;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.HashDistributionInfo;
+import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.optimizer.CTEContext;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.base.DistributionSpec;
+import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -38,6 +44,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEProduceOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -48,6 +55,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarRangePredicateExtractor;
 import com.starrocks.sql.optimizer.rule.tree.TreeRewriteRule;
 import com.starrocks.sql.optimizer.task.TaskContext;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
@@ -429,6 +437,28 @@ public class ReuseFusionPlanRule implements TreeRewriteRule {
             ScalarRangePredicateExtractor extractor = new ScalarRangePredicateExtractor();
             predicate = extractor.rewriteOnlyColumn(predicate);
             builder.setPredicate(predicate);
+
+            // rewrite hash distribution info for olap table scan operator
+            if (node instanceof LogicalOlapScanOperator) {
+                if (((LogicalOlapScanOperator) node).getDistributionSpec().getType()
+                        == DistributionSpec.DistributionType.SHUFFLE) {
+                    OlapTable olapTable = ((OlapTable) node.getTable());
+                    DistributionInfo distributionInfo = olapTable.getDefaultDistributionInfo();
+
+                    List<Integer> hashDistributeColumns = new ArrayList<>();
+                    HashDistributionInfo hashDistributionInfo = (HashDistributionInfo) distributionInfo;
+                    List<Column> distributedColumns =
+                            MetaUtils.getColumnsByColumnIds(olapTable, hashDistributionInfo.getDistributionColumns());
+                    for (Column distributedColumn : distributedColumns) {
+                        Preconditions.checkState(columnMetaToColRefMap.containsKey(distributedColumn));
+                        hashDistributeColumns.add(columnMetaToColRefMap.get(distributedColumn).getId());
+                    }
+                    HashDistributionDesc hashDistributionDesc =
+                            new HashDistributionDesc(hashDistributeColumns, HashDistributionDesc.SourceType.LOCAL);
+                    ((LogicalOlapScanOperator.Builder) builder).setDistributionSpec(
+                            DistributionSpec.createHashDistributionSpec(hashDistributionDesc));
+                }
+            }
             return QueryPieces.of(builder.build(), filterUsedRefs);
         }
 

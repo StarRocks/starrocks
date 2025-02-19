@@ -103,19 +103,32 @@ public class OptExpressionDuplicator {
     }
 
     public OptExpression duplicate(OptExpression source) {
-        return duplicate(source, false, false);
+        return duplicate(source, columnRefFactory, false, false);
     }
 
     public OptExpression duplicate(OptExpression source,
                                    boolean isResetSelectedPartitions) {
-        return duplicate(source, isResetSelectedPartitions, false);
+        return duplicate(source, columnRefFactory, isResetSelectedPartitions, false);
     }
 
+    public OptExpression duplicate(OptExpression source, ColumnRefFactory prevColumnRefFactory) {
+        return duplicate(source, prevColumnRefFactory, false, false);
+    }
+
+    /**
+     * Duplicate the OptExpression tree.
+     * @param source: source OptExpression
+     * @param prevColumnRefFactory: column ref factory where source OptExpression is from
+     * @param isResetSelectedPartitions: whether to reset selected partitions
+     * @param isRefreshExternalTable: whether to refresh external table
+     * @return
+     */
     public OptExpression duplicate(OptExpression source,
+                                   ColumnRefFactory prevColumnRefFactory,
                                    boolean isResetSelectedPartitions,
                                    boolean isRefreshExternalTable) {
         OptExpressionDuplicatorVisitor visitor = new OptExpressionDuplicatorVisitor(optimizerContext, columnMapping, rewriter,
-                isResetSelectedPartitions, isRefreshExternalTable);
+                prevColumnRefFactory, isResetSelectedPartitions, isRefreshExternalTable);
         return source.getOp().accept(visitor, source, null);
     }
 
@@ -145,15 +158,18 @@ public class OptExpressionDuplicator {
         private final ReplaceColumnRefRewriter rewriter;
         private final boolean isResetSelectedPartitions;
         private final boolean isRefreshExternalTable;
+        private final ColumnRefFactory prevColumnRefFactory;
 
         OptExpressionDuplicatorVisitor(OptimizerContext optimizerContext,
                                        Map<ColumnRefOperator, ColumnRefOperator> columnMapping,
                                        ReplaceColumnRefRewriter rewriter,
+                                       ColumnRefFactory prevColumnRefFactory,
                                        boolean isResetSelectedPartitions,
                                        boolean isRefreshExternalTable) {
             this.optimizerContext = optimizerContext;
             this.columnMapping = columnMapping;
             this.rewriter = rewriter;
+            this.prevColumnRefFactory = prevColumnRefFactory;
             this.isResetSelectedPartitions = isResetSelectedPartitions;
             this.isRefreshExternalTable = isRefreshExternalTable;
         }
@@ -209,8 +225,7 @@ public class OptExpressionDuplicator {
                 LogicalOlapScanOperator.Builder olapScanBuilder = (LogicalOlapScanOperator.Builder) scanBuilder;
                 if (olapScan.getDistributionSpec() instanceof HashDistributionSpec) {
                     HashDistributionSpec newHashDistributionSpec =
-                            processHashDistributionSpec((HashDistributionSpec) olapScan.getDistributionSpec(),
-                            columnRefFactory, columnMapping);
+                            processHashDistributionSpec((HashDistributionSpec) olapScan.getDistributionSpec());
                     olapScanBuilder.setDistributionSpec(newHashDistributionSpec);
                 }
 
@@ -659,49 +674,48 @@ public class OptExpressionDuplicator {
 
         // rewrite shuffle columns and joinEquivalentColumns in HashDistributionSpec
         // because the columns ids have changed
-        private HashDistributionSpec processHashDistributionSpec(
-                HashDistributionSpec originSpec,
-                ColumnRefFactory columnRefFactory,
-                Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {
-
+        private HashDistributionSpec processHashDistributionSpec(HashDistributionSpec originSpec) {
             // HashDistributionDesc
-            List<DistributionCol> newColumns = Lists.newArrayList();
-            for (DistributionCol column : originSpec.getShuffleColumns()) {
-                ColumnRefOperator oldRefOperator = columnRefFactory.getColumnRef(column.getColId());
-                ColumnRefOperator newRefOperator = columnMapping.get(oldRefOperator);
+            final List<DistributionCol> newColumns = Lists.newArrayList();
+            for (DistributionCol distributionCol : originSpec.getShuffleColumns()) {
+                final ColumnRefOperator newRefOperator = getNewDistributionColRef(distributionCol);
                 Preconditions.checkNotNull(newRefOperator);
-                newColumns.add(new DistributionCol(newRefOperator.getId(), column.isNullStrict()));
+                newColumns.add(new DistributionCol(newRefOperator.getId(), distributionCol.isNullStrict()));
             }
             Preconditions.checkState(newColumns.size() == originSpec.getShuffleColumns().size());
-            HashDistributionDesc hashDistributionDesc =
+            final HashDistributionDesc hashDistributionDesc =
                     new HashDistributionDesc(newColumns, originSpec.getHashDistributionDesc().getSourceType());
 
-            EquivalentDescriptor equivDesc = originSpec.getEquivDesc();
-
-            EquivalentDescriptor newEquivDesc = new EquivalentDescriptor(equivDesc.getTableId(), equivDesc.getPartitionIds());
+            final EquivalentDescriptor equivDesc = originSpec.getEquivDesc();
+            final EquivalentDescriptor newEquivDesc = new EquivalentDescriptor(equivDesc.getTableId(),
+                    equivDesc.getPartitionIds());
             updateDistributionUnionFind(newEquivDesc.getNullRelaxUnionFind(), equivDesc.getNullStrictUnionFind());
             updateDistributionUnionFind(newEquivDesc.getNullStrictUnionFind(), equivDesc.getNullRelaxUnionFind());
-
             return new HashDistributionSpec(hashDistributionDesc, newEquivDesc);
         }
 
         private void updateDistributionUnionFind(UnionFind<DistributionCol> newUnionFind,
-                                                UnionFind<DistributionCol> oldUnionFind) {
-
+                                                 UnionFind<DistributionCol> oldUnionFind) {
             for (Set<DistributionCol> distributionColSet : oldUnionFind.getAllGroups()) {
                 DistributionCol first = null;
                 for (DistributionCol next : distributionColSet) {
                     if (first == null) {
                         first = next;
                     }
-                    ColumnRefOperator firstCol = columnRefFactory.getColumnRef(first.getColId());
-                    ColumnRefOperator newFirstCol = columnMapping.get(firstCol).cast();
-
-                    ColumnRefOperator nextCol = columnRefFactory.getColumnRef(next.getColId());
-                    ColumnRefOperator newNextCol = columnMapping.get(nextCol).cast();
+                    final ColumnRefOperator newFirstCol = getNewDistributionColRef(first);
+                    final ColumnRefOperator newNextCol = getNewDistributionColRef(next);
                     newUnionFind.union(first.updateColId(newFirstCol.getId()), next.updateColId(newNextCol.getId()));
                 }
             }
+        }
+
+        private ColumnRefOperator getNewDistributionColRef(DistributionCol col) {
+            int colId = col.getColId();
+            final ColumnRefOperator oldRefOperator = prevColumnRefFactory.getColumnRef(colId);
+            Preconditions.checkArgument(oldRefOperator != null);
+            // use column mapping to find the new ColumnRefOperator
+            ColumnRefOperator newRefOperator = columnMapping.get(oldRefOperator);
+            return newRefOperator;
         }
 
         private void processCommon(Operator.Builder opBuilder) {
