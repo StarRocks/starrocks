@@ -3507,4 +3507,7 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = false)
     public static String oidc_required_audience = "";
+
+    @ConfField(mutable = true)
+    public static boolean transaction_state_print_partition_info = true;
 }
