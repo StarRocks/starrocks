@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.statistic.MockHistogramStatisticStorage;
@@ -298,5 +299,16 @@ public class SkewJoinTest extends PlanTestBase {
         String sqlPlan = getFragmentPlan(sql);
         assertCContains(sqlPlan, "equal join conjunct: 21: rand_col = 28: rand_col\n" +
                 "  |  equal join conjunct: 9: l_returnflag = 19: c3", "cardinality=540034112");
+    }
+
+    @Test
+    public void testIntSkewColumnVarchar() throws Exception {
+        connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0);
+        ((MockHistogramStatisticStorage) connectContext.getGlobalStateMgr()
+                .getStatisticStorage()).addHistogramStatistis("c_nationkey", Type.INT, 100);
+
+        String sql = "select * from test.customer join test.part on P_SIZE = C_NATIONKEY and p_partkey = c_custkey";
+        String sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "C_NATIONKEY IN (22, 23, 24, 10, 11)");
     }
 }

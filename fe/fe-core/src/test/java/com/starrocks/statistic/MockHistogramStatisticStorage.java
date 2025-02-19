@@ -305,7 +305,7 @@ public class MockHistogramStatisticStorage implements StatisticStorage {
         ), ImmutableMap.of("200", 15L, "220", 14L, "320", 12L)));
     }
 
-    private void addHistogramStatistis(String fileName, Type type, int scala) {
+    public void addHistogramStatistis(String fileName, Type type, int scala) {
         String path = Objects.requireNonNull(ClassLoader.getSystemClassLoader().getResource("sql")).getPath();
         File file = new File(path + "/tpch-histogram-cost/histogram-stats/" + fileName + ".json");
 
