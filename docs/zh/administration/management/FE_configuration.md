@@ -649,15 +649,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：MySQL 服务器支持的 Backlog 队列长度。
 - 引入版本：-
 
-##### mysql_service_nio_enabled
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：是否开启 MySQL 服务器的异步 I/O 选项。
-- 引入版本：-
-
 ##### mysql_service_io_threads_num
 
 - 默认值：4
@@ -706,15 +697,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：-
 - 是否动态：否
 - 描述：FE 支持的最大连接数，包括所有用户发起的连接。默认值由 v3.1.12、v3.2.7 起由 `1024` 变为 `4096`。
-- 引入版本：-
-
-##### max_connection_scheduler_threads_num
-
-- 默认值：4096
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：连接调度器支持的最大线程数。
 - 引入版本：-
 
 ### 元数据与集群管理

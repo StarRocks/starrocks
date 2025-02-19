@@ -117,9 +117,9 @@ import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.MockedStatic;
 import org.mockito.Mockito;
+import org.xnio.StreamConnection;
 
 import java.lang.reflect.Field;
-import java.nio.channels.SocketChannel;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -1319,7 +1319,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testShowProcessList(@Mocked MysqlChannel channel,
-                                    @Mocked SocketChannel socketChannel) throws Exception {
+                                    @Mocked StreamConnection connection) throws Exception {
         new Expectations() {
             {
                 channel.getRemoteHostPortString();
@@ -1335,12 +1335,12 @@ public class PrivilegeCheckerTest {
             }
         };
 
-        ConnectContext ctx1 = new ConnectContext(socketChannel);
+        ConnectContext ctx1 = new ConnectContext(connection);
         ctx1.setQualifiedUser("test");
         ctx1.setCurrentUserIdentity(new UserIdentity("test", "%"));
         ctx1.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx1.setConnectionId(1);
-        ConnectContext ctx2 = new ConnectContext(socketChannel);
+        ConnectContext ctx2 = new ConnectContext(connection);
         ctx2.setQualifiedUser("test2");
         ctx2.setCurrentUserIdentity(new UserIdentity("test2", "%"));
         ctx2.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -1991,7 +1991,7 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testKillStmt(@Mocked MysqlChannel channel,
-                             @Mocked SocketChannel socketChannel) throws Exception {
+                             @Mocked StreamConnection connection) throws Exception {
         new Expectations() {
             {
                 channel.getRemoteHostPortString();
@@ -2013,12 +2013,12 @@ public class PrivilegeCheckerTest {
             }
         };
 
-        ConnectContext ctx1 = new ConnectContext(socketChannel);
+        ConnectContext ctx1 = new ConnectContext(connection);
         ctx1.setCurrentUserIdentity(new UserIdentity("test", "%"));
         ctx1.setQualifiedUser("test");
         ctx1.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx1.setConnectionId(1);
-        ConnectContext ctx2 = new ConnectContext(socketChannel);
+        ConnectContext ctx2 = new ConnectContext(connection);
         ctx2.setQualifiedUser("test2");
         ctx2.setCurrentUserIdentity(new UserIdentity("test2", "%"));
         ctx2.setGlobalStateMgr(GlobalStateMgr.getCurrentState());

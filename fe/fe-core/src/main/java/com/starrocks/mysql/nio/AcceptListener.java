@@ -72,9 +72,10 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
             }
             // connection has been established, so need to call context.cleanup()
             // if exception happens.
-            NConnectContext context = new NConnectContext(connection);
+            ConnectContext context = new ConnectContext(connection);
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            connectScheduler.submit(context);
+            context.setConnectionId(connectScheduler.getNextConnectionId());
+            context.resetConnectionStartTime();
             int connectionId = context.getConnectionId();
             SocketAddress remoteAddr = connection.getPeerAddress();
             LOG.info("Connection established. remote={}, connectionId={}", remoteAddr, connectionId);

@@ -240,7 +240,8 @@ public class ExecuteSqlAction extends RestBaseAction {
     private void registerContext(String sql, HttpConnectContext context) throws StarRocksHttpException {
         // now register this request in connectScheduler
         ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
-        connectScheduler.submit(context);
+        context.setConnectionId(connectScheduler.getNextConnectionId());
+        context.resetConnectionStartTime();
 
         context.setConnectScheduler(connectScheduler);
         // mark as registered
