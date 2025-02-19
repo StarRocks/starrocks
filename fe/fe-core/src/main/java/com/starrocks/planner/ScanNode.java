@@ -179,4 +179,11 @@ public abstract class ScanNode extends PlanNode {
     public boolean isRunningAsConnectorOperator() {
         return true;
     }
+
+    public boolean isConnectorScanNode() {
+        return this instanceof HdfsScanNode || this instanceof IcebergScanNode ||
+                this instanceof HudiScanNode || this instanceof DeltaLakeScanNode ||
+                this instanceof FileTableScanNode || this instanceof PaimonScanNode ||
+                this instanceof OdpsScanNode || this instanceof IcebergMetadataScanNode;
+    }
 }
