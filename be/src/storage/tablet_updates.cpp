@@ -2256,19 +2256,6 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     auto index_entry = manager->index_cache().get_or_create(tablet_id);
     index_entry->update_expire_time(MonotonicMillis() + manager->get_index_cache_expire_ms(_tablet));
     auto& index = index_entry->value();
-    // `enable_persistent_index` of tablet maybe change by alter, we should get `enable_persistent_index` from index to
-    // avoid inconsistency between persistent index file and PersistentIndexMeta
-    bool enable_persistent_index = index.enable_persistent_index();
-    // release or remove index entry when function end
-    DeferOp index_defer([&]() {
-        index.reset_cancel_major_compaction();
-        if ((enable_persistent_index ^ _tablet.get_enable_persistent_index()) ||
-            !index.get_load_status().ok()) {
-            manager->index_cache().remove(index_entry);
-        } else {
-            manager->index_cache().release(index_entry);
-        }
-    });
 
     Status st;
     google::protobuf::Arena arena;
@@ -2286,10 +2273,23 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     if (!st.ok()) {
         std::string msg = strings::Substitute("_apply_compaction_commit error: load primary index failed: $0 $1",
                                               st.to_string(), debug_string());
+        manager->index_cache().remove(index_entry);
         failure_handler(msg, st.code());
         return apply_st;
     }
 
+    // `enable_persistent_index` of tablet maybe change by alter, we should get `enable_persistent_index` from index to
+    // avoid inconsistency between persistent index file and PersistentIndexMeta
+    bool enable_persistent_index = index.enable_persistent_index();
+    // release or remove index entry when function end
+    DeferOp index_defer([&]() {
+        index.reset_cancel_major_compaction();
+        if ((enable_persistent_index ^ _tablet.get_enable_persistent_index()) || !index.get_load_status().ok()) {
+            manager->index_cache().remove(index_entry);
+        } else {
+            manager->index_cache().release(index_entry);
+        }
+    });
     if (enable_persistent_index && !rebuild_index) {
         st = TabletMetaManager::get_persistent_index_meta(_tablet.data_dir(), tablet_id, index_meta);
         FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_get_pindex_meta_failed,
