@@ -681,6 +681,7 @@ public class LakeSyncMaterializedViewTest {
         }
     }
 
+    @Test
     public void testCancelMV() throws Exception {
         starRocksAssert.withTable("CREATE TABLE `t1` " +
                 "(`k1`  date, " +
