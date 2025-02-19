@@ -14,15 +14,24 @@
 
 package com.starrocks.qe.scheduler.slot;
 
+import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.planner.PlanNode;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.qe.scheduler.SchedulerTestBase;
 import com.starrocks.sql.optimizer.statistics.Statistics;
+import com.starrocks.sql.plan.ConnectorPlanTestBase;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class SlotEstimatorTest extends SchedulerTestBase {
+    @BeforeClass
+    public static void beforeClass() throws Exception {
+        SchedulerTestBase.beforeClass();
+        ConnectorPlanTestBase.mockCatalog(connectContext, MockedHiveMetadata.MOCKED_HIVE_CATALOG_NAME);
+    }
+
     @Test
     public void testDefaultSlotEstimator() {
         SlotEstimatorFactory.DefaultSlotEstimator estimator = new SlotEstimatorFactory.DefaultSlotEstimator();
@@ -64,7 +73,6 @@ public class SlotEstimatorTest extends SchedulerTestBase {
         final int dop = numCoresPerWorker / 2;
         QueryQueueOptions opts = new QueryQueueOptions(true,
                 new QueryQueueOptions.V2(4, numWorkers, numCoresPerWorker, 64L * 1024 * 1024 * 1024, numRowsPerWorker, 100));
-
 
         {
             DefaultCoordinator coordinator = getScheduler("SELECT * FROM lineitem");
@@ -148,6 +156,33 @@ public class SlotEstimatorTest extends SchedulerTestBase {
             DefaultCoordinator coordinator = getScheduler(sql);
             setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * dop * 10);
             connectContext.getAuditEventBuilder().setPlanCpuCosts(100. * numWorkers * dop * 5 / 4);
+            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(dop * numWorkers);
+        }
+    }
+
+    @Test
+    public void testParallelismBasedSlotsEstimatorForConnectorScan() throws Exception {
+        SlotEstimatorFactory.ParallelismBasedSlotsEstimator estimator = new SlotEstimatorFactory.ParallelismBasedSlotsEstimator();
+        final int numWorkers = 3;
+        final int numCoresPerWorker = 16;
+        final int numRowsPerWorker = 4096;
+        final int dop = numCoresPerWorker / 2;
+        QueryQueueOptions opts = new QueryQueueOptions(true,
+                new QueryQueueOptions.V2(4, numWorkers, numCoresPerWorker, 64L * 1024 * 1024 * 1024, numRowsPerWorker, 100));
+
+        String sql = "SELECT /*+SET_VAR(pipeline_dop=8)*/ " +
+                "count(1) FROM hive0.tpch.lineitem t1 join [shuffle] hive0.tpch.lineitem t2 on t1.l_orderkey = t2.l_orderkey";
+
+        {
+            DefaultCoordinator coordinator = getScheduler(sql);
+            setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * dop);
+            connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
+            assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(dop * numWorkers);
+        }
+        {
+            DefaultCoordinator coordinator = getScheduler(sql);
+            setNodeCardinality(coordinator, 1, numWorkers * numRowsPerWorker * dop * 10);
+            connectContext.getAuditEventBuilder().setPlanCpuCosts(100 * 10000);
             assertThat(estimator.estimateSlots(opts, connectContext, coordinator)).isEqualTo(dop * numWorkers);
         }
     }
