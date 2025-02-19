@@ -465,8 +465,10 @@ Status RepeatedStoredColumnReader::_read_values_on_levels(size_t num_values,
         _collect_not_null_values(num_values, num_values != _num_values_left_in_cur_page);
         dst->append_default(null_pos);
         return Status::OK();
-    } else {
+    } else if (null_pos != 0) {
         return _reader->decode_values(null_pos, &_is_nulls[0], content_type, dst);
+    } else {
+        return Status::OK();
     }
 }
 
