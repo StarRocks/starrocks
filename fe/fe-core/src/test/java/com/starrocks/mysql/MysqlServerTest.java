@@ -34,14 +34,18 @@
 
 package com.starrocks.mysql;
 
+<<<<<<< HEAD
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ConnectScheduler;
 import mockit.Mocked;
+=======
+import com.starrocks.utframe.UtFrameUtils;
+>>>>>>> ebe413ff66 ([Refactor] Remove mysql block io code (#56005))
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
+<<<<<<< HEAD
 import java.net.InetSocketAddress;
 import java.net.ServerSocket;
 import java.nio.ByteBuffer;
@@ -104,13 +108,21 @@ public class MysqlServerTest {
         int port = socket.getLocalPort();
         socket.close();
         MysqlServer server = new MysqlServer(port, scheduler);
+=======
+
+public class MysqlServerTest {
+    @Test
+    public void testBindFail() throws IOException {
+        int port = UtFrameUtils.findValidPort();
+        MysqlServer server = new MysqlServer(port, null);
+>>>>>>> ebe413ff66 ([Refactor] Remove mysql block io code (#56005))
         Assert.assertTrue(server.start());
-        MysqlServer server1 = new MysqlServer(port, scheduler);
+        MysqlServer server1 = new MysqlServer(port, null);
         Assert.assertFalse(server1.start());
 
         server.stop();
-        server.join();
     }
+<<<<<<< HEAD
 
     @Test
     public void testSubFail() throws IOException, InterruptedException {
@@ -147,4 +159,6 @@ public class MysqlServerTest {
         Assert.assertEquals(2, submitFailNum.get());
     }
 
+=======
+>>>>>>> ebe413ff66 ([Refactor] Remove mysql block io code (#56005))
 }

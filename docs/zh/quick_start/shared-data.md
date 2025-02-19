@@ -408,7 +408,6 @@ http_port = 8030
 rpc_port = 9020
 query_port = 9030
 edit_log_port = 9010
-mysql_service_nio_enabled = true
 
 # highlight-start
 run_mode=shared_data
