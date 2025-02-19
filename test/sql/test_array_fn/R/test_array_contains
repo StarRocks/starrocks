@@ -667,3 +667,1687 @@ select array_contains_seq('abc',['a']);
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 37. Detail message: 1-th input of array_contains_seq should be an array, rather than varchar.')
 -- !result
+-- name: test_array_contains_all_type
+CREATE TABLE test_array_contains (
+    id INT,
+    array_boolean ARRAY<BOOLEAN>,
+    array_tinyint ARRAY<TINYINT>,
+    array_smallint ARRAY<SMALLINT>,
+    array_int ARRAY<INT>,
+    array_bigint ARRAY<BIGINT>,
+    array_largeint ARRAY<LARGEINT>,
+    array_decimalv2 ARRAY<DECIMALV2(10, 2)>,
+    array_decimal32 ARRAY<DECIMAL32(9, 2)>,
+    array_decimal64 ARRAY<DECIMAL64(18, 2)>,
+    array_decimal128 ARRAY<DECIMAL128(38, 10)>,
+    array_float ARRAY<FLOAT>,
+    array_double ARRAY<DOUBLE>,
+    array_varchar ARRAY<VARCHAR(100)>,
+    array_date ARRAY<DATE>,
+    array_datetime ARRAY<DATETIME>
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO test_array_contains VALUES
+(1, [true, false, NULL], [1, 2, NULL], [100, 200, NULL], [10, 20, NULL], [1000, 2000, NULL], [1234567890123456789, NULL, NULL],
+ [12345.67, 89012.34, NULL], [123.45, 678.90, NULL], [12345678.90, 9876543.21, NULL], [1234567890.1234567890, NULL, NULL], 
+ [1.23, 4.56, NULL], [123.456, 789.012, NULL], ['hello', NULL, 'starrocks'], 
+ ['2025-01-01', '2025-01-02', NULL], ['2025-01-01 12:00:00', NULL, '2025-01-02 14:00:00']),
+(2, NULL, [5, NULL, 3], [500, 400, NULL], [50, 40, NULL], [5000, NULL, 3000], [987654321987654321, NULL, NULL], 
+ [56789.01, NULL, 45678.12], [345.67, NULL, 234.56], [56789012.34, NULL, 34567890.12], [2345678901.2345678901, NULL, NULL], 
+ [2.34, NULL, 1.23], [234.567, NULL, 123.456], [NULL, 'array', 'test'], 
+ [NULL, '2024-12-31', '2024-12-30'], ['2024-12-31 23:59:59', '2024-12-30 12:00:00', NULL]),
+(3, [true, NULL, false], [1, 6, NULL], [150, NULL, 250], [15, NULL, 35], [1100, NULL, 2200], [2345678901234567890, NULL, NULL],
+ [67890.12, NULL, 56789.01], [456.78, NULL, 345.67], [67890123.45, NULL, 56789012.34], [3456789012.3456789012, NULL, NULL],
+ [1.11, NULL, 3.33], [222.333, NULL, 333.444], ['foo', 'bar', NULL], 
+ ['2025-01-03', NULL, '2025-01-04'], ['2025-01-03 16:00:00', '2025-01-04 18:00:00', NULL]),
+(4, [NULL, true, false], [NULL, 20, 10], [110, 220, NULL], [NULL, 12, 24], [1200, NULL, 2400], [3456789012345678901, NULL, NULL],
+ [78901.23, 67890.12, NULL], [567.89, 456.78, NULL], [78901234.56, 67890123.45, NULL], [4567890123.4567890123, NULL, NULL],
+ [NULL, 5.55, 4.44], [NULL, 777.888, 666.777], ['NULL', 'banana', 'apple'], 
+ [NULL, '2025-01-05', '2025-01-06'], [NULL, '2025-01-06 20:00:00', '2025-01-05 18:00:00']),
+(5, [false, NULL, true], [10, NULL, 30], [300, 400, NULL], [70, NULL, 90], [4000, NULL, 6000], [987654321234567890, NULL, NULL],
+ [123456.78, NULL, 876543.21], [678.90, NULL, 789.01], [9876543.21, NULL, 1234567.89], [5678901234.5678901234, NULL, NULL],
+ [3.21, 4.32, NULL], [111.222, NULL, 333.444], ['dog', 'cat', NULL], 
+ ['2025-01-07', '2025-01-08', NULL], ['2025-01-07 10:00:00', NULL, '2025-01-08 15:00:00']),
+(6, [NULL, true, true], [NULL, 40, 50], [450, 500, NULL], [80, 100, NULL], [1500, NULL, 2500], [765432198765432109, NULL, NULL],
+ [34567.89, NULL, 12345.67], [123.45, NULL, 678.90], [54321.12, NULL, 12345.67], [7654321098.7654321098, NULL, NULL],
+ [NULL, 6.54, 7.65], [555.666, NULL, 444.333], [NULL, 'bird', 'fish'], 
+ ['2025-01-09', '2025-01-10', NULL], ['2025-01-09 12:00:00', NULL, '2025-01-10 18:00:00']),
+(7, [false, false, NULL], [70, NULL, 90], [650, NULL, 750], [120, 140, NULL], [8000, NULL, 9000], [543210987654321098, NULL, NULL],
+ [45678.12, NULL, 23456.78], [234.56, NULL, 456.78], [67890123.45, NULL, 34567890.12], [4321098765.4321098765, NULL, NULL],
+ [7.89, 8.90, NULL], [333.222, NULL, 111.000], ['lion', NULL, 'tiger'], 
+ ['2025-01-11', '2025-01-12', NULL], ['2025-01-11 20:00:00', NULL, '2025-01-12 22:00:00']),
+(8, [true, NULL, false], [5, 15, NULL], [50, NULL, 150], [25, NULL, 75], [4500, NULL, 5500], [321098765432109876, NULL, NULL],
+ [23456.78, NULL, 12345.67], [345.67, NULL, 456.78], [8901234.56, NULL, 7890123.45], [2109876543.2109876543, NULL, NULL],
+ [5.67, NULL, 4.56], [666.555, NULL, 222.111], [NULL, 'grape', 'pear'], 
+ ['2025-01-13', NULL, '2025-01-14'], ['2025-01-13 23:59:59', '2025-01-14 12:00:00', NULL]),
+(9, [false, true, NULL], [25, 35, NULL], [350, NULL, 450], [100, 200, NULL], [6000, NULL, 7000], [654321098765432109, NULL, NULL],
+ [67890.12, NULL, 34567.89], [456.78, NULL, 234.56], [34567890.12, NULL, 23456789.01], [8765432109.8765432109, NULL, NULL],
+ [9.87, NULL, 8.76], [444.333, NULL, 555.222], ['watermelon', NULL, 'kiwi'], 
+ [NULL, '2025-01-15', '2025-01-16'], ['2025-01-15 12:00:00', NULL, '2025-01-16 18:00:00']),
+(10, [true, true, NULL], [50, 70, NULL], [750, 850, NULL], [300, 400, NULL], [10000, NULL, 12000], [789012345678901234, NULL, NULL],
+ [78901.23, NULL, 67890.12], [567.89, NULL, 456.78], [12345678.90, NULL, 9876543.21], [1234567890.1234567890, NULL, NULL],
+ [NULL, 1.11, 2.22], [777.888, 999.000, NULL], ['blueberry', 'cherry', NULL], 
+ ['2025-01-17', '2025-01-18', NULL], [NULL, '2025-01-17 10:00:00', '2025-01-18 20:00:00']);
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_boolean, true) ORDER BY idSELECT id FROM test_array_contains WHERE array_contains(array_boolean, true) ORDER BY id;;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 95. Detail message: Unexpected input 'id', the most similar input is {<EOF>, ';'}.")
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_boolean, NULL) ORDER BY idSELECT id FROM test_array_contains WHERE array_contains(array_boolean, NULL) ORDER BY id;;
+-- result:
+E: (1064, "Getting syntax error at line 1, column 95. Detail message: Unexpected input 'id', the most similar input is {<EOF>, ';'}.")
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_boolean, false) ORDER BY id;
+-- result:
+1
+3
+4
+5
+7
+8
+9
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_tinyint, 5) ORDER BY id;
+-- result:
+2
+8
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_tinyint, NULL) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_tinyint, 20) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_smallint, 100) ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_smallint, NULL) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_smallint, 300) ORDER BY id;
+-- result:
+5
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_int, 50) ORDER BY id;
+-- result:
+2
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_int, NULL) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_int, 90) ORDER BY id;
+-- result:
+5
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_bigint, 4000) ORDER BY id;
+-- result:
+5
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_bigint, NULL) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_bigint, 8000) ORDER BY id;
+-- result:
+7
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_largeint, 1234567890123456789) ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_largeint, NULL) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_largeint, 765432198765432109) ORDER BY id;
+-- result:
+6
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_decimalv2, 12345.67) ORDER BY id;
+-- result:
+1
+6
+8
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_decimalv2, NULL) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_decimalv2, 56789.01) ORDER BY id;
+-- result:
+2
+3
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_decimal32, 123.45) ORDER BY id;
+-- result:
+1
+6
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_decimal32, NULL) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_decimal32, 567.89) ORDER BY id;
+-- result:
+4
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_decimal64, 12345678.90) ORDER BY id;
+-- result:
+1
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_decimal64, NULL) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_decimal64, 7890123.45) ORDER BY id;
+-- result:
+8
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_decimal128, 1234567890.1234567890) ORDER BY id;
+-- result:
+1
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_decimal128, NULL) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_decimal128, 8765432109.8765432109) ORDER BY id;
+-- result:
+9
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_float, 1.23) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_float, NULL) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_float, 7.89) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_double, 123.456) ORDER BY id;
+-- result:
+1
+2
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_double, NULL) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_double, 444.333) ORDER BY id;
+-- result:
+6
+9
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_varchar, 'hello') ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_varchar, NULL) ORDER BY id;
+-- result:
+1
+2
+3
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_varchar, 'starrocks') ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_date, '2025-01-01') ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_date, NULL) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_date, '2025-01-13') ORDER BY id;
+-- result:
+8
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_datetime, '2025-01-01 12:00:00') ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_datetime, NULL) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains(array_datetime, '2025-01-17 10:00:00') ORDER BY id;
+-- result:
+10
+-- !result
+SELECT id, array_position(array_boolean, true) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	1
+2	None
+3	1
+4	2
+5	3
+6	2
+7	0
+8	1
+9	2
+10	1
+-- !result
+SELECT id, array_position(array_boolean, NULL) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	3
+2	None
+3	2
+4	1
+5	2
+6	1
+7	3
+8	2
+9	3
+10	3
+-- !result
+SELECT id, array_position(array_boolean, false) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	2
+2	None
+3	3
+4	3
+5	1
+6	0
+7	1
+8	3
+9	1
+10	0
+-- !result
+SELECT id, array_position(array_tinyint, 5) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	0
+2	1
+3	0
+4	0
+5	0
+6	0
+7	0
+8	1
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_tinyint, NULL) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	3
+2	2
+3	3
+4	1
+5	2
+6	1
+7	2
+8	3
+9	3
+10	3
+-- !result
+SELECT id, array_position(array_tinyint, 20) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	0
+2	0
+3	0
+4	2
+5	0
+6	0
+7	0
+8	0
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_smallint, 100) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	1
+2	0
+3	0
+4	0
+5	0
+6	0
+7	0
+8	0
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_smallint, NULL) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	3
+2	3
+3	2
+4	3
+5	3
+6	3
+7	2
+8	2
+9	2
+10	3
+-- !result
+SELECT id, array_position(array_smallint, 300) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	0
+2	0
+3	0
+4	0
+5	1
+6	0
+7	0
+8	0
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_int, 50) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	0
+2	1
+3	0
+4	0
+5	0
+6	0
+7	0
+8	0
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_int, NULL) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	3
+2	3
+3	2
+4	1
+5	2
+6	3
+7	3
+8	2
+9	3
+10	3
+-- !result
+SELECT id, array_position(array_int, 90) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	0
+2	0
+3	0
+4	0
+5	3
+6	0
+7	0
+8	0
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_bigint, 4000) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	0
+2	0
+3	0
+4	0
+5	1
+6	0
+7	0
+8	0
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_bigint, NULL) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	3
+2	2
+3	2
+4	2
+5	2
+6	2
+7	2
+8	2
+9	2
+10	2
+-- !result
+SELECT id, array_position(array_bigint, 8000) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	0
+2	0
+3	0
+4	0
+5	0
+6	0
+7	1
+8	0
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_largeint, 1234567890123456789) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	1
+2	0
+3	0
+4	0
+5	0
+6	0
+7	0
+8	0
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_largeint, NULL) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	2
+2	2
+3	2
+4	2
+5	2
+6	2
+7	2
+8	2
+9	2
+10	2
+-- !result
+SELECT id, array_position(array_largeint, 765432198765432109) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	0
+2	0
+3	0
+4	0
+5	0
+6	1
+7	0
+8	0
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_decimalv2, 12345.67) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	1
+2	0
+3	0
+4	0
+5	0
+6	3
+7	0
+8	3
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_decimalv2, NULL) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	3
+2	2
+3	2
+4	3
+5	2
+6	2
+7	2
+8	2
+9	2
+10	2
+-- !result
+SELECT id, array_position(array_decimalv2, 56789.01) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	0
+2	1
+3	3
+4	0
+5	0
+6	0
+7	0
+8	0
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_decimal32, 123.45) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	1
+2	0
+3	0
+4	0
+5	0
+6	1
+7	0
+8	0
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_decimal32, NULL) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	3
+2	2
+3	2
+4	3
+5	2
+6	2
+7	2
+8	2
+9	2
+10	2
+-- !result
+SELECT id, array_position(array_decimal32, 567.89) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	0
+2	0
+3	0
+4	1
+5	0
+6	0
+7	0
+8	0
+9	0
+10	1
+-- !result
+SELECT id, array_position(array_decimal64, 12345678.90) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	1
+2	0
+3	0
+4	0
+5	0
+6	0
+7	0
+8	0
+9	0
+10	1
+-- !result
+SELECT id, array_position(array_decimal64, NULL) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	3
+2	2
+3	2
+4	3
+5	2
+6	2
+7	2
+8	2
+9	2
+10	2
+-- !result
+SELECT id, array_position(array_decimal64, 7890123.45) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	0
+2	0
+3	0
+4	0
+5	0
+6	0
+7	0
+8	3
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_decimal128, 1234567890.1234567890) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	1
+2	0
+3	0
+4	0
+5	0
+6	0
+7	0
+8	0
+9	0
+10	1
+-- !result
+SELECT id, array_position(array_decimal128, NULL) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	2
+2	2
+3	2
+4	2
+5	2
+6	2
+7	2
+8	2
+9	2
+10	2
+-- !result
+SELECT id, array_position(array_decimal128, 8765432109.8765432109) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	0
+2	0
+3	0
+4	0
+5	0
+6	0
+7	0
+8	0
+9	1
+10	0
+-- !result
+SELECT id, array_position(array_float, 1.23) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	0
+2	0
+3	0
+4	0
+5	0
+6	0
+7	0
+8	0
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_float, NULL) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	3
+2	2
+3	2
+4	1
+5	3
+6	1
+7	3
+8	2
+9	2
+10	1
+-- !result
+SELECT id, array_position(array_float, 7.89) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	0
+2	0
+3	0
+4	0
+5	0
+6	0
+7	0
+8	0
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_double, 123.456) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	1
+2	3
+3	0
+4	0
+5	0
+6	0
+7	0
+8	0
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_double, NULL) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	3
+2	2
+3	2
+4	1
+5	2
+6	2
+7	2
+8	2
+9	2
+10	3
+-- !result
+SELECT id, array_position(array_double, 444.333) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	0
+2	0
+3	0
+4	0
+5	0
+6	3
+7	0
+8	0
+9	1
+10	0
+-- !result
+SELECT id, array_position(array_varchar, 'hello') AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	1
+2	0
+3	0
+4	0
+5	0
+6	0
+7	0
+8	0
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_varchar, NULL) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	2
+2	1
+3	3
+4	0
+5	3
+6	1
+7	2
+8	1
+9	2
+10	3
+-- !result
+SELECT id, array_position(array_varchar, 'starrocks') AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	3
+2	0
+3	0
+4	0
+5	0
+6	0
+7	0
+8	0
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_date, '2025-01-01') AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	1
+2	0
+3	0
+4	0
+5	0
+6	0
+7	0
+8	0
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_date, NULL) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	3
+2	1
+3	2
+4	1
+5	3
+6	3
+7	3
+8	2
+9	1
+10	3
+-- !result
+SELECT id, array_position(array_date, '2025-01-13') AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	0
+2	0
+3	0
+4	0
+5	0
+6	0
+7	0
+8	1
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_datetime, '2025-01-01 12:00:00') AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	1
+2	0
+3	0
+4	0
+5	0
+6	0
+7	0
+8	0
+9	0
+10	0
+-- !result
+SELECT id, array_position(array_datetime, NULL) AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	2
+2	3
+3	3
+4	1
+5	2
+6	2
+7	2
+8	3
+9	2
+10	1
+-- !result
+SELECT id, array_position(array_datetime, '2025-01-17 10:00:00') AS position FROM test_array_contains ORDER BY id;
+-- result:
+1	0
+2	0
+3	0
+4	0
+5	0
+6	0
+7	0
+8	0
+9	0
+10	2
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_boolean, [true, false]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_boolean, [NULL]) ORDER BY id;
+-- result:
+1
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(array_boolean, [true, false]) ORDER BY id;
+-- result:
+1
+4
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_tinyint, [5, 10]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_tinyint, [NULL]) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(array_tinyint, [5, 10]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_smallint, [100, 200]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_smallint, [NULL]) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(array_smallint, [100, 200]) ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_int, [50, 60]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_int, [NULL]) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(array_int, [50, 60]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_bigint, [4000, 6000]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_bigint, [NULL]) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(array_bigint, [4000, 6000]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_largeint, [1234567890123456789, 987654321098765432]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_largeint, [NULL]) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(array_largeint, [1234567890123456789, 987654321098765432]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_decimalv2, [12345.67, 78901.23]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_decimalv2, [NULL]) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(array_decimalv2, [12345.67, 78901.23]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_decimal32, [123.45, 567.89]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_decimal32, [NULL]) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(array_decimal32, [123.45, 567.89]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_decimal64, [12345678.90, 56789012.34]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_decimal64, [NULL]) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(array_decimal64, [12345678.90, 56789012.34]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_decimal128, [1234567890.1234567890, 8765432109.8765432109]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_decimal128, [NULL]) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(array_decimal128, [1234567890.1234567890, 8765432109.8765432109]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_float, [1.23, 4.56]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_float, [NULL]) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(array_float, [1.23, 4.56]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_double, [123.456, 789.012]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_double, [NULL]) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(array_double, [123.456, 789.012]) ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_varchar, ['hello', 'world']) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_varchar, [NULL]) ORDER BY id;
+-- result:
+1
+2
+3
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(array_varchar, ['hello', 'world']) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_date, ['2025-01-01', '2025-01-13']) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_date, [NULL]) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(array_date, ['2025-01-01', '2025-01-13']) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_datetime, ['2025-01-01 12:00:00', '2025-01-17 10:00:00']) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_datetime, [NULL]) ORDER BY id;
+-- result:
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(array_datetime, ['2025-01-01 12:00:00', '2025-01-17 10:00:00']) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([true, false], array_boolean) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([NULL], array_boolean) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq([true, false], array_boolean) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([5, 10], array_tinyint) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([NULL], array_tinyint) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq([5, 10], array_tinyint) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([100, 200], array_smallint) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([NULL], array_smallint) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq([100, 200], array_smallint) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([50, 60], array_int) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([NULL], array_int) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq([50, 60], array_int) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([4000, 6000], array_bigint) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([NULL], array_bigint) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq([4000, 6000], array_bigint) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([1234567890123456789, 987654321098765432], array_largeint) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([NULL], array_largeint) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq([1234567890123456789, 987654321098765432], array_largeint) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([12345.67, 78901.23], array_decimalv2) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([NULL], array_decimalv2) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq([12345.67, 78901.23], array_decimalv2) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([123.45, 567.89], array_decimal32) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([NULL], array_decimal32) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq([123.45, 567.89], array_decimal32) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([12345678.90, 56789012.34], array_decimal64) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([NULL], array_decimal64) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq([12345678.90, 56789012.34], array_decimal64) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([1234567890.1234567890, 8765432109.8765432109], array_decimal128) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([NULL], array_decimal128) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq([1234567890.1234567890, 8765432109.8765432109], array_decimal128) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([1.23, 4.56], array_float) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([NULL], array_float) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq([1.23, 4.56], array_float) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([123.456, 789.012], array_double) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([NULL], array_double) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq([123.456, 789.012], array_double) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(['hello', 'world'], array_varchar) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([NULL], array_varchar) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(['hello', 'world'], array_varchar) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(['2025-01-01', '2025-01-13'], array_date) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([NULL], array_date) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(['2025-01-01', '2025-01-13'], array_date) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(['2025-01-01 12:00:00', '2025-01-17 10:00:00'], array_datetime) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all([NULL], array_datetime) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(['2025-01-01 12:00:00', '2025-01-17 10:00:00'], array_datetime) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_boolean, []) ORDER BY id;
+-- result:
+1
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(array_boolean, []) ORDER BY id;
+-- result:
+1
+3
+4
+5
+6
+7
+8
+9
+10
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_tinyint, [1, 2, 3, 4, 5]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(array_tinyint, [1, 2, 3, 4, 5]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_smallint, [10, 20, 30, 40, 50]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(array_smallint, [10, 20, 30, 40, 50]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_int, [100, 200, 300, 400, 500]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(array_int, [100, 200, 300, 400, 500]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_all(array_varchar, ['a', 'b', 'c', 'd', 'e']) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains WHERE array_contains_seq(array_varchar, ['a', 'b', 'c', 'd', 'e']) ORDER BY id;
+-- result:
+-- !result
+-- name: test_array_contains_complex_type
+CREATE TABLE test_array_contains_complex_type (
+    id INT,
+    array_map ARRAY<MAP<STRING, INT>>,
+    array_json ARRAY<JSON>,
+    array_struct ARRAY<STRUCT<f1 INT, f2 STRING>>
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO test_array_contains_complex_type VALUES
+(1, [map{'a': 1, 'b': 2}, map{'c': 3, 'd': 4}], ['{"key1": 100, "key2": 200}', '{"key3": 300}'], [row(10, 'hello'), row(20, 'world')]),
+(2, [map{'x': 5, 'y': 6}], ['{"key4": 400}', '{"key5": 500, "key6": 600}'], [row(30,'starrocks'), row(40, 'database')]),
+(3, NULL, NULL, NULL),
+(4, [], [], []);
+-- result:
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_all([map{'a': 1, 'b': 2}], array_map) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq([map{'c': 3, 'd': 4}], array_map) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_all([NULL], array_map) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq([], array_map) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_all(['{"key1": 100}'], array_json) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq(['{"key3": 300}'], array_json) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_all(['{"key5": 500, "key6": 600}'], array_json) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq([NULL], array_json) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_all([], array_json) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_all([row(10,'hello')], array_struct) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq([row(20,'world')], array_struct) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_all([row(40,'database')], array_struct) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq([NULL], array_struct) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_all([], array_struct) ORDER BY id;
+-- result:
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_all(array_map, [map{'a': 1}]) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq(array_json, ['{"key3": 300}']) ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_all(array_struct, [row(10, 'hello')]) ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains_seq(array_map, []) ORDER BY id;
+-- result:
+1
+2
+4
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_map, map{'a': 1, 'b': 2}) ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_map, map{'c': 3, 'd': 4}) ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_map, map{'x': 5, 'y': 6}) ORDER BY id;
+-- result:
+2
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_map, NULL) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_map, map{}) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_json, '{"key1": 100, "key2": 200}') ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_json, '{"key3": 300}') ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_json, '{"key5": 500, "key6": 600}') ORDER BY id;
+-- result:
+2
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_json, NULL) ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_json, '{}') ORDER BY id;
+-- result:
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_struct, row(10, 'hello')) ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_struct, row(20, 'world')) ORDER BY id;
+-- result:
+1
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_struct, row(40, 'database')) ORDER BY id;
+-- result:
+2
+-- !result
+SELECT id FROM test_array_contains_complex_type WHERE array_contains(array_struct, NULL) ORDER BY id;
+-- result:
+-- !result
+SELECT id, array_position(array_map, map{'a': 1, 'b': 2}) FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	1
+2	0
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_map, map{'c': 3, 'd': 4}) FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	2
+2	0
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_map, map{'x': 5, 'y': 6}) FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	0
+2	1
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_map, NULL) FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	0
+2	0
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_map, map{}) FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	0
+2	0
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_json, '{"key1": 100, "key2": 200}') FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	1
+2	0
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_json, '{"key3": 300}') FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	2
+2	0
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_json, '{"key5": 500, "key6": 600}') FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	0
+2	2
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_json, NULL) FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	0
+2	0
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_json, '{}') FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	0
+2	0
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_struct, row(10, 'hello')) FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	1
+2	0
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_struct, row(20, 'world')) FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	2
+2	0
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_struct, row(40, 'database')) FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	0
+2	2
+3	None
+4	0
+-- !result
+SELECT id, array_position(array_struct, NULL) FROM test_array_contains_complex_type ORDER BY id;
+-- result:
+1	0
+2	0
+3	None
+4	0
+-- !result
