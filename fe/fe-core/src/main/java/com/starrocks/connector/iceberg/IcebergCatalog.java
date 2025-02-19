@@ -224,7 +224,10 @@ public interface IcebergCatalog extends MemoryTrackable {
                         try {
                             lastUpdated = row.get(7, Long.class);
                         } catch (NullPointerException e) {
-                            logger.error("The table [{}] snapshot [{}] has been expired", nativeTable.name(), snapshotId, e);
+                            // It is a known issue but we do not hanle it right now. If the refresh frequency of 
+                            // the materialized view is very high, an excessive number of error logs will be printed. 
+                            // Therefore, only brief logs are printed now.
+                            logger.error("The table [{}] snapshot [{}] has been expired", nativeTable.name(), snapshotId);
                         }
                         partition = new Partition(lastUpdated);
                         break;
