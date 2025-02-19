@@ -1757,7 +1757,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                             partition.getId(), partition.getVisibleVersion(), partition.getVisibleVersionTime());
                     partitionInfos.put(partition.getName(), basePartitionInfo);
                 }
-                LOG.info("Collect olap base table {}'s refreshed partition infos: {}", olapTable.getName(), partitionInfos);
+                LOG.debug("Collect olap base table {}'s refreshed partition infos: {}", olapTable.getName(), partitionInfos);
                 changedOlapTablePartitionInfos.put(olapTable.getId(), partitionInfos);
             }
         }
