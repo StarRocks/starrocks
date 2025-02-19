@@ -1064,6 +1064,10 @@ public class MaterializedViewHandler extends AlterHandler {
                             if (((RollupJobV2) alterJobV2).getRollupIndexName().equals(tableName)) {
                                 materializedViewJob = alterJobV2;
                             }
+                        } else if (alterJobV2 instanceof LakeRollupJob) {
+                            if (((LakeRollupJob) alterJobV2).getRollupIndexName().equals(tableName)) {
+                                materializedViewJob = alterJobV2;
+                            }
                         }
                     }
                 }
