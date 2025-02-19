@@ -62,10 +62,12 @@ public class MysqlHandshakePacket extends MysqlPacket {
     public static final String NATIVE_AUTH_PLUGIN_NAME = "mysql_native_password";
     public static final String CLEAR_PASSWORD_PLUGIN_NAME = "mysql_clear_password";
     public static final String AUTHENTICATION_KERBEROS_CLIENT = "authentication_kerberos_client";
+    public static final String AUTHENTICATION_OPENID_CONNECT_CLIENT = "authentication_openid_connect_client";
 
     private static final ImmutableMap<String, Boolean> SUPPORTED_PLUGINS = new ImmutableMap.Builder<String, Boolean>()
             .put(NATIVE_AUTH_PLUGIN_NAME, true)
             .put(CLEAR_PASSWORD_PLUGIN_NAME, true)
+            .put(AUTHENTICATION_OPENID_CONNECT_CLIENT, true)
             .build();
 
     // connection id used in KILL statement.

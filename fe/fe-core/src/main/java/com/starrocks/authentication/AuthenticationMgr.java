@@ -132,8 +132,6 @@ public class AuthenticationMgr {
     protected Map<String, SecurityIntegration> nameToSecurityIntegrationMap = new ConcurrentHashMap<>();
 
     public AuthenticationMgr() {
-        // default plugin
-
         // default user
         userToAuthenticationInfo = new UserAuthInfoTreeMap();
         UserAuthenticationInfo info = new UserAuthenticationInfo();

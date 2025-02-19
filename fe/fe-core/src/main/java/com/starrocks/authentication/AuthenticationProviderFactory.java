@@ -15,6 +15,7 @@
 package com.starrocks.authentication;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.common.Config;
 import com.starrocks.epack.authentication.LDAPAuthProviderForExternal;
 import com.starrocks.epack.authentication.PlainPasswordAuthenticationProviderEPack;
 
@@ -27,6 +28,11 @@ public class AuthenticationProviderFactory {
                     .put(LDAPAuthProviderForNative.PLUGIN_NAME, new LDAPAuthProviderForNative())
                     .put(KerberosAuthenticationProvider.PLUGIN_NAME, new KerberosAuthenticationProvider())
                     .put(LDAPAuthProviderForExternal.PLUGIN_NAME, new LDAPAuthProviderForExternal())
+                    .put(OpenIdConnectAuthenticationProvider.PLUGIN_NAME, new OpenIdConnectAuthenticationProvider(
+                            Config.oidc_jwks_url,
+                            Config.oidc_principal_field,
+                            Config.oidc_required_issuer,
+                            Config.oidc_required_audience))
                     .build();
 
     private AuthenticationProviderFactory() {
