@@ -338,8 +338,7 @@ public class OlapTableFactory implements AbstractTableFactory {
                     PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
             table.setIsInMemory(isInMemory);
 
-            boolean enablePersistentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(properties,
-                    table.getKeysType() == KeysType.PRIMARY_KEYS);
+            boolean enablePersistentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(properties);
             if (!enablePersistentIndex) {
                 // disable memory index
                 throw new DdlException("In-Memory index is not supported, please create table with persistent index");

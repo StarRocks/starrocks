@@ -1953,6 +1953,23 @@ public class CreateTableTest {
     }
 
     @Test
+    public void testPrimaryKeyDisableInMemoryIndex() {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql1 = "CREATE TABLE test.disable_inmemory_index (\n" +
+                "ship_id int(11) NOT NULL COMMENT \" \",\n" +
+                "sub_ship_id bigint(20) NOT NULL COMMENT \" \"\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(ship_id) COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(ship_id) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"enable_persistent_index\" = \"false\"" +
+                ");";
+        ExceptionChecker.expectThrows(DdlException.class, () -> starRocksAssert.withTable(sql1));
+    }
+
+    @Test
     public void testPrimaryKeyNotSupportCoolDown() {
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
                 "Primary key table does not support storage medium cool down currently.",

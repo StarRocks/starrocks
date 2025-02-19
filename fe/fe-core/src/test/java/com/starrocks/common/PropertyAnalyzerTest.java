@@ -223,17 +223,17 @@ public class PropertyAnalyzerTest {
     public void testEnablePersistentIndex() throws AnalysisException {
         // empty property
         Map<String, String> property = new HashMap<>();
-        Boolean enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property, true);
+        boolean enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property);
         Assert.assertEquals(true, enablePeristentIndex);
         // with property
         Map<String, String> property2 = new HashMap<>();
         property2.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "true");
-        enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property2, true);
+        enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property2);
         Assert.assertEquals(true, enablePeristentIndex);
 
         Map<String, String> property3 = new HashMap<>();
         property3.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false");
-        enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property3, true);
+        enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property3);
         Assert.assertEquals(false, enablePeristentIndex);
 
         // change config
@@ -241,24 +241,19 @@ public class PropertyAnalyzerTest {
 
         // empty property
         Map<String, String> property4 = new HashMap<>();
-        enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property4, true);
+        enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property4);
         Assert.assertEquals(true, enablePeristentIndex);
         // with property
         Map<String, String> property5 = new HashMap<>();
         property5.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "true");
-        enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property5, true);
+        enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property5);
         Assert.assertEquals(true, true);
 
         Map<String, String> property6 = new HashMap<>();
         property6.put(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX, "false");
-        enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property6, true);
+        enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property6);
         Assert.assertEquals(false, enablePeristentIndex);
         Config.enable_persistent_index_by_default = true;
-
-        // non primary key
-        Map<String, String> property7 = new HashMap<>();
-        enablePeristentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(property7, false);
-        Assert.assertEquals(true, enablePeristentIndex);
     }
 
     @Test
