@@ -799,11 +799,11 @@ public class ShowExecutor {
 
             List<List<String>> rows = Lists.newArrayList();
             if (table.isConnectorView()) {
-                String createViewSql = AstToStringBuilder.getExternalCatalogViewDdlStmt((ConnectorView) table);
+                String createViewSql = AstToStringBuilder.getExternalCatalogViewDdlStmt(db.getFullName(), (ConnectorView) table);
                 rows.add(Lists.newArrayList(tableName, createViewSql));
                 return new ShowResultSet(ShowCreateTableStmt.getConnectorViewMetaData(), rows);
             } else {
-                String createTableSql = AstToStringBuilder.getExternalCatalogTableDdlStmt(table);
+                String createTableSql = AstToStringBuilder.getExternalCatalogTableDdlStmt(db.getFullName(), table);
                 rows.add(Lists.newArrayList(tableName, createTableSql));
                 return new ShowResultSet(showStmt.getMetaData(), rows);
             }

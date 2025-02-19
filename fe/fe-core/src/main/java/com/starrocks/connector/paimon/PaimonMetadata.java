@@ -19,13 +19,18 @@ import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.PaimonView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReport;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorProperties;
+import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
@@ -37,6 +42,8 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -63,13 +70,17 @@ import org.apache.paimon.types.DataTypeChecks;
 import org.apache.paimon.types.DateType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.DateTimeUtils;
+import org.apache.paimon.view.View;
+import org.apache.paimon.view.ViewImpl;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+import static com.starrocks.connector.ColumnTypeConverter.toPaimonDataType;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 public class PaimonMetadata implements ConnectorMetadata {
@@ -104,9 +115,71 @@ public class PaimonMetadata implements ConnectorMetadata {
     @Override
     public List<String> listTableNames(String dbName) {
         try {
-            return paimonNativeCatalog.listTables(dbName);
+            List<String> tableIdentifiers = paimonNativeCatalog.listTables(dbName);
+            List<String> viewIdentifiers = paimonNativeCatalog.listViews(dbName);
+            if (!viewIdentifiers.isEmpty()) {
+                tableIdentifiers.addAll(viewIdentifiers);
+            }
+            return tableIdentifiers;
         } catch (Catalog.DatabaseNotExistException e) {
             throw new StarRocksConnectorException("Database %s not exists", dbName);
+        }
+    }
+
+    @Override
+    public void createView(CreateViewStmt stmt) throws DdlException {
+        String dbName = stmt.getDbName();
+        String viewName = stmt.getTable();
+
+        Database db = getDb(stmt.getDbName());
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+
+        if (getView(dbName, viewName) != null) {
+            if (stmt.isSetIfNotExists()) {
+                LOG.info("create view[{}] which already exists", viewName);
+                return;
+            } else if (stmt.isReplace()) {
+                LOG.info("view {} already exists, need to replace it", viewName);
+            } else {
+                ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, viewName);
+            }
+        }
+
+        ConnectorViewDefinition viewDefinition = ConnectorViewDefinition.fromCreateViewStmt(stmt);
+        RowType.Builder builder = RowType.builder();
+        for (Column column : stmt.getColumns()) {
+            builder.field(column.getName(), toPaimonDataType(column.getType()), column.getComment());
+        }
+        RowType rowType = builder.build();
+        Identifier identifier = new org.apache.paimon.catalog.Identifier(dbName, viewName);
+        View view = new ViewImpl(identifier, rowType, viewDefinition.getInlineViewDef(), stmt.getComment(), new HashMap<>());
+        try {
+            paimonNativeCatalog.createView(new Identifier(dbName, viewName), view, stmt.isReplace());
+        } catch (Catalog.ViewAlreadyExistException | Catalog.DatabaseNotExistException e) {
+            throw new DdlException("Paimon createView error: " + e.getMessage());
+        }
+    }
+
+    @Override
+    public void dropTable(DropTableStmt stmt) throws DdlException {
+        String dbName = stmt.getDbName();
+        String tableName = stmt.getTableName();
+        Table paimonTable = getTable(stmt.getDbName(), stmt.getTableName());
+        if (paimonTable == null) {
+            return;
+        }
+        try {
+            if (paimonTable.isPaimonView()) {
+                paimonNativeCatalog.dropView(new Identifier(dbName, tableName), stmt.isForceDrop());
+                return;
+            }
+            paimonNativeCatalog.dropTable(new Identifier(dbName, tableName), stmt.isForceDrop());
+        } catch (Catalog.TableNotExistException e) {
+            throw new DdlException("Paimon error: " + e.getMessage());
+        } catch (Catalog.ViewNotExistException e) {
+            throw new RuntimeException("Paimon error: ", e);
         }
     }
 
@@ -214,7 +287,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             paimonNativeTable = this.paimonNativeCatalog.getTable(identifier);
         } catch (Catalog.TableNotExistException e) {
             LOG.error("Paimon table {}.{} does not exist.", dbName, tblName, e);
-            return null;
+            return getView(dbName, tblName);
         }
         List<DataField> fields = paimonNativeTable.rowType().getFields();
         ArrayList<Column> fullSchema = new ArrayList<>(fields.size());
@@ -235,6 +308,39 @@ public class PaimonMetadata implements ConnectorMetadata {
         tables.put(identifier, table);
         return table;
     }
+
+    public Table getView(String dbName, String viewName) {
+        Identifier identifier = new Identifier(dbName, viewName);
+        if (tables.containsKey(identifier)) {
+            return tables.get(identifier);
+        }
+        org.apache.paimon.view.View paimonNativeView;
+        try {
+            paimonNativeView = paimonNativeCatalog.getView(new Identifier(dbName, viewName));
+        } catch (Catalog.ViewNotExistException e) {
+            LOG.error("Paimon view {}.{} does not exist.", dbName, viewName, e);
+            return null;
+        }
+        List<DataField> fields = paimonNativeView.rowType().getFields();
+        List<Column> columns = new ArrayList<>(fields.size());
+        for (DataField field : fields) {
+            String fieldName = field.name();
+            DataType type = field.type();
+            Type fieldType = ColumnTypeConverter.fromPaimonType(type);
+            Column column = new Column(fieldName, fieldType, true, field.description());
+            columns.add(column);
+        }
+        String comment = "";
+        if (paimonNativeView.comment().isPresent()) {
+            comment = paimonNativeView.comment().get();
+        }
+        PaimonView view = new PaimonView(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName, dbName, viewName,
+                columns, paimonNativeView.query(), catalogName, dbName, "");
+        view.setComment(comment);
+        tables.put(identifier, view);
+        return view;
+    }
+
 
     @Override
     public boolean tableExists(String dbName, String tableName) {
