@@ -10,7 +10,7 @@ There are three environment variables that need to be set in the file starrocks/
 
 > Tip
 >
-> Copy the file `starrocks/translation/.env.sample` to `starrocks/translation/.env` and edit with your API keys, or contact the Doc team leader for keys.
+> Copy the file `starrocks/docs/translation/.env.sample` to `starrocks/docs/translation/.env` and edit with your API keys, or contact the Doc team leader for keys.
 
 - OPENAI_API_KEY
 - WANDB_API_KEY
