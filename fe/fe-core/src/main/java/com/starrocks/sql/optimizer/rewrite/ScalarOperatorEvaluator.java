@@ -248,6 +248,8 @@ public enum ScalarOperatorEvaluator {
         }
 
         if (FunctionSet.DATE_FORMAT.equalsIgnoreCase(invoker.getSignature().getName())
+                || FunctionSet.STR_TO_DATE.equalsIgnoreCase(invoker.getSignature().getName())
+                || FunctionSet.STR2DATE.equalsIgnoreCase(invoker.getSignature().getName())
                 || (FunctionSet.FROM_UNIXTIME.equalsIgnoreCase(invoker.getSignature().getName())
                 && operator.getChildren().size() == 2)) {
             String pattern = operator.getChild(1).toString();

@@ -26,7 +26,7 @@ INSERT INTO t1 VALUES
 select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%' and partition_name != '$shadow_automatic_partition';
 ALTER TABLE t1 DROP PARTITIONS WHERE province like '%a%';
 select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%' and partition_name != '$shadow_automatic_partition';
-ALTER TABLE t1 DROP PARTITIONS WHERE str2date(dt, '%Y-%m-%d') = '2020-07-01';
+ALTER TABLE t1 DROP PARTITIONS WHERE str2date(dt, '%Y-%m-%d') = '2020-07-07';
 select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%' and partition_name != '$shadow_automatic_partition';
 ALTER TABLE t1 DROP PARTITIONS WHERE dt >= '2020-07-03';
 select COUNT(1) from INFORMATION_SCHEMA.PARTITIONS_META where db_name = 'db_${uuid0}' and table_name like '%t1%' and partition_name != '$shadow_automatic_partition';
