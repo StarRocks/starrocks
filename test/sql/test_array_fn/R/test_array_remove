@@ -1,0 +1,654 @@
+-- name: test_array_remove_all_type
+CREATE TABLE test_array_remove (
+    id INT,
+    array_boolean ARRAY<BOOLEAN>,
+    array_tinyint ARRAY<TINYINT>,
+    array_smallint ARRAY<SMALLINT>,
+    array_int ARRAY<INT>,
+    array_bigint ARRAY<BIGINT>,
+    array_largeint ARRAY<LARGEINT>,
+    array_decimalv2 ARRAY<DECIMALV2(10, 2)>,
+    array_decimal32 ARRAY<DECIMAL32(9, 2)>,
+    array_decimal64 ARRAY<DECIMAL64(18, 2)>,
+    array_decimal128 ARRAY<DECIMAL128(38, 10)>,
+    array_float ARRAY<FLOAT>,
+    array_double ARRAY<DOUBLE>,
+    array_varchar ARRAY<VARCHAR(100)>,
+    array_date ARRAY<DATE>,
+    array_datetime ARRAY<DATETIME>
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO test_array_remove VALUES
+(1, [true, false, NULL], [1, 2, NULL], [100, 200, NULL], [10, 20, NULL], [1000, 2000, NULL], [1234567890123456789, NULL, NULL],
+ [12345.67, 89012.34, NULL], [123.45, 678.90, NULL], [12345678.90, 9876543.21, NULL], [1234567890.1234567890, NULL, NULL], 
+ [1.23, 4.56, NULL], [123.456, 789.012, NULL], ['hello', NULL, 'starrocks'], 
+ ['2025-01-01', '2025-01-02', NULL], ['2025-01-01 12:00:00', NULL, '2025-01-02 14:00:00']),
+(2, NULL, [5, NULL, 3], [500, 400, NULL], [50, 40, NULL], [5000, NULL, 3000], [987654321987654321, NULL, NULL], 
+ [56789.01, NULL, 45678.12], [345.67, NULL, 234.56], [56789012.34, NULL, 34567890.12], [2345678901.2345678901, NULL, NULL], 
+ [2.34, NULL, 1.23], [234.567, NULL, 123.456], [NULL, 'array', 'test'], 
+ [NULL, '2024-12-31', '2024-12-30'], ['2024-12-31 23:59:59', '2024-12-30 12:00:00', NULL]),
+(3, [true, NULL, false], [1, 6, NULL], [150, NULL, 250], [15, NULL, 35], [1100, NULL, 2200], [2345678901234567890, NULL, NULL],
+ [67890.12, NULL, 56789.01], [456.78, NULL, 345.67], [67890123.45, NULL, 56789012.34], [3456789012.3456789012, NULL, NULL],
+ [1.11, NULL, 3.33], [222.333, NULL, 333.444], ['foo', 'bar', NULL], 
+ ['2025-01-03', NULL, '2025-01-04'], ['2025-01-03 16:00:00', '2025-01-04 18:00:00', NULL]),
+(4, [NULL, true, false], [NULL, 20, 10], [110, 220, NULL], [NULL, 12, 24], [1200, NULL, 2400], [3456789012345678901, NULL, NULL],
+ [78901.23, 67890.12, NULL], [567.89, 456.78, NULL], [78901234.56, 67890123.45, NULL], [4567890123.4567890123, NULL, NULL],
+ [NULL, 5.55, 4.44], [NULL, 777.888, 666.777], ['NULL', 'banana', 'apple'], 
+ [NULL, '2025-01-05', '2025-01-06'], [NULL, '2025-01-06 20:00:00', '2025-01-05 18:00:00']),
+(5, [false, NULL, true], [10, NULL, 30], [300, 400, NULL], [70, NULL, 90], [4000, NULL, 6000], [987654321234567890, NULL, NULL],
+ [123456.78, NULL, 876543.21], [678.90, NULL, 789.01], [9876543.21, NULL, 1234567.89], [5678901234.5678901234, NULL, NULL],
+ [3.21, 4.32, NULL], [111.222, NULL, 333.444], ['dog', 'cat', NULL], 
+ ['2025-01-07', '2025-01-08', NULL], ['2025-01-07 10:00:00', NULL, '2025-01-08 15:00:00']),
+(6, [NULL, true, true], [NULL, 40, 50], [450, 500, NULL], [80, 100, NULL], [1500, NULL, 2500], [765432198765432109, NULL, NULL],
+ [34567.89, NULL, 12345.67], [123.45, NULL, 678.90], [54321.12, NULL, 12345.67], [7654321098.7654321098, NULL, NULL],
+ [NULL, 6.54, 7.65], [555.666, NULL, 444.333], [NULL, 'bird', 'fish'], 
+ ['2025-01-09', '2025-01-10', NULL], ['2025-01-09 12:00:00', NULL, '2025-01-10 18:00:00']),
+(7, [false, false, NULL], [70, NULL, 90], [650, NULL, 750], [120, 140, NULL], [8000, NULL, 9000], [543210987654321098, NULL, NULL],
+ [45678.12, NULL, 23456.78], [234.56, NULL, 456.78], [67890123.45, NULL, 34567890.12], [4321098765.4321098765, NULL, NULL],
+ [7.89, 8.90, NULL], [333.222, NULL, 111.000], ['lion', NULL, 'tiger'], 
+ ['2025-01-11', '2025-01-12', NULL], ['2025-01-11 20:00:00', NULL, '2025-01-12 22:00:00']),
+(8, [true, NULL, false], [5, 15, NULL], [50, NULL, 150], [25, NULL, 75], [4500, NULL, 5500], [321098765432109876, NULL, NULL],
+ [23456.78, NULL, 12345.67], [345.67, NULL, 456.78], [8901234.56, NULL, 7890123.45], [2109876543.2109876543, NULL, NULL],
+ [5.67, NULL, 4.56], [666.555, NULL, 222.111], [NULL, 'grape', 'pear'], 
+ ['2025-01-13', NULL, '2025-01-14'], ['2025-01-13 23:59:59', '2025-01-14 12:00:00', NULL]),
+(9, [false, true, NULL], [25, 35, NULL], [350, NULL, 450], [100, 200, NULL], [6000, NULL, 7000], [654321098765432109, NULL, NULL],
+ [67890.12, NULL, 34567.89], [456.78, NULL, 234.56], [34567890.12, NULL, 23456789.01], [8765432109.8765432109, NULL, NULL],
+ [9.87, NULL, 8.76], [444.333, NULL, 555.222], ['watermelon', NULL, 'kiwi'], 
+ [NULL, '2025-01-15', '2025-01-16'], ['2025-01-15 12:00:00', NULL, '2025-01-16 18:00:00']),
+(10, [true, true, NULL], [50, 70, NULL], [750, 850, NULL], [300, 400, NULL], [10000, NULL, 12000], [789012345678901234, NULL, NULL],
+ [78901.23, NULL, 67890.12], [567.89, NULL, 456.78], [12345678.90, NULL, 9876543.21], [1234567890.1234567890, NULL, NULL],
+ [NULL, 1.11, 2.22], [777.888, 999.000, NULL], ['blueberry', 'cherry', NULL], 
+ ['2025-01-17', '2025-01-18', NULL], [NULL, '2025-01-17 10:00:00', '2025-01-18 20:00:00']);
+-- result:
+-- !result
+SELECT id, array_remove(array_boolean, true) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[0,null]
+2	None
+3	[null,0]
+4	[null,0]
+5	[0,null]
+6	[null]
+7	[0,0,null]
+8	[null,0]
+9	[0,null]
+10	[null]
+-- !result
+SELECT id, array_remove(array_boolean, NULL) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[1,0]
+2	None
+3	[1,0]
+4	[1,0]
+5	[0,1]
+6	[1,1]
+7	[0,0]
+8	[1,0]
+9	[0,1]
+10	[1,1]
+-- !result
+SELECT id, array_remove(array_boolean, false) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[1,null]
+2	None
+3	[1,null]
+4	[null,1]
+5	[null,1]
+6	[null,1,1]
+7	[null]
+8	[1,null]
+9	[1,null]
+10	[1,1,null]
+-- !result
+SELECT id, array_remove(array_tinyint, 5) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[1,2,null]
+2	[null,3]
+3	[1,6,null]
+4	[null,20,10]
+5	[10,null,30]
+6	[null,40,50]
+7	[70,null,90]
+8	[15,null]
+9	[25,35,null]
+10	[50,70,null]
+-- !result
+SELECT id, array_remove(array_tinyint, NULL) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[1,2]
+2	[5,3]
+3	[1,6]
+4	[20,10]
+5	[10,30]
+6	[40,50]
+7	[70,90]
+8	[5,15]
+9	[25,35]
+10	[50,70]
+-- !result
+SELECT id, array_remove(array_tinyint, 20) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[1,2,null]
+2	[5,null,3]
+3	[1,6,null]
+4	[null,10]
+5	[10,null,30]
+6	[null,40,50]
+7	[70,null,90]
+8	[5,15,null]
+9	[25,35,null]
+10	[50,70,null]
+-- !result
+SELECT id, array_remove(array_smallint, 100) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[200,null]
+2	[500,400,null]
+3	[150,null,250]
+4	[110,220,null]
+5	[300,400,null]
+6	[450,500,null]
+7	[650,null,750]
+8	[50,null,150]
+9	[350,null,450]
+10	[750,850,null]
+-- !result
+SELECT id, array_remove(array_smallint, NULL) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[100,200]
+2	[500,400]
+3	[150,250]
+4	[110,220]
+5	[300,400]
+6	[450,500]
+7	[650,750]
+8	[50,150]
+9	[350,450]
+10	[750,850]
+-- !result
+SELECT id, array_remove(array_smallint, 300) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[100,200,null]
+2	[500,400,null]
+3	[150,null,250]
+4	[110,220,null]
+5	[400,null]
+6	[450,500,null]
+7	[650,null,750]
+8	[50,null,150]
+9	[350,null,450]
+10	[750,850,null]
+-- !result
+SELECT id, array_remove(array_int, 50) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[10,20,null]
+2	[40,null]
+3	[15,null,35]
+4	[null,12,24]
+5	[70,null,90]
+6	[80,100,null]
+7	[120,140,null]
+8	[25,null,75]
+9	[100,200,null]
+10	[300,400,null]
+-- !result
+SELECT id, array_remove(array_int, NULL) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[10,20]
+2	[50,40]
+3	[15,35]
+4	[12,24]
+5	[70,90]
+6	[80,100]
+7	[120,140]
+8	[25,75]
+9	[100,200]
+10	[300,400]
+-- !result
+SELECT id, array_remove(array_int, 90) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[10,20,null]
+2	[50,40,null]
+3	[15,null,35]
+4	[null,12,24]
+5	[70,null]
+6	[80,100,null]
+7	[120,140,null]
+8	[25,null,75]
+9	[100,200,null]
+10	[300,400,null]
+-- !result
+SELECT id, array_remove(array_bigint, 4000) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[1000,2000,null]
+2	[5000,null,3000]
+3	[1100,null,2200]
+4	[1200,null,2400]
+5	[null,6000]
+6	[1500,null,2500]
+7	[8000,null,9000]
+8	[4500,null,5500]
+9	[6000,null,7000]
+10	[10000,null,12000]
+-- !result
+SELECT id, array_remove(array_bigint, NULL) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[1000,2000]
+2	[5000,3000]
+3	[1100,2200]
+4	[1200,2400]
+5	[4000,6000]
+6	[1500,2500]
+7	[8000,9000]
+8	[4500,5500]
+9	[6000,7000]
+10	[10000,12000]
+-- !result
+SELECT id, array_remove(array_bigint, 8000) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[1000,2000,null]
+2	[5000,null,3000]
+3	[1100,null,2200]
+4	[1200,null,2400]
+5	[4000,null,6000]
+6	[1500,null,2500]
+7	[null,9000]
+8	[4500,null,5500]
+9	[6000,null,7000]
+10	[10000,null,12000]
+-- !result
+SELECT id, array_remove(array_largeint, 1234567890123456789) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[null,null]
+2	[987654321987654321,null,null]
+3	[2345678901234567890,null,null]
+4	[3456789012345678901,null,null]
+5	[987654321234567890,null,null]
+6	[765432198765432109,null,null]
+7	[543210987654321098,null,null]
+8	[321098765432109876,null,null]
+9	[654321098765432109,null,null]
+10	[789012345678901234,null,null]
+-- !result
+SELECT id, array_remove(array_largeint, NULL) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[1234567890123456789]
+2	[987654321987654321]
+3	[2345678901234567890]
+4	[3456789012345678901]
+5	[987654321234567890]
+6	[765432198765432109]
+7	[543210987654321098]
+8	[321098765432109876]
+9	[654321098765432109]
+10	[789012345678901234]
+-- !result
+SELECT id, array_remove(array_largeint, 765432198765432109) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[1234567890123456789,null,null]
+2	[987654321987654321,null,null]
+3	[2345678901234567890,null,null]
+4	[3456789012345678901,null,null]
+5	[987654321234567890,null,null]
+6	[null,null]
+7	[543210987654321098,null,null]
+8	[321098765432109876,null,null]
+9	[654321098765432109,null,null]
+10	[789012345678901234,null,null]
+-- !result
+SELECT id, array_remove(array_decimalv2, 12345.67) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[89012.340000000,null]
+2	[56789.010000000,null,45678.120000000]
+3	[67890.120000000,null,56789.010000000]
+4	[78901.230000000,67890.120000000,null]
+5	[123456.780000000,null,876543.210000000]
+6	[34567.890000000,null]
+7	[45678.120000000,null,23456.780000000]
+8	[23456.780000000,null]
+9	[67890.120000000,null,34567.890000000]
+10	[78901.230000000,null,67890.120000000]
+-- !result
+SELECT id, array_remove(array_decimalv2, NULL) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[12345.67,89012.34]
+2	[56789.01,45678.12]
+3	[67890.12,56789.01]
+4	[78901.23,67890.12]
+5	[123456.78,876543.21]
+6	[34567.89,12345.67]
+7	[45678.12,23456.78]
+8	[23456.78,12345.67]
+9	[67890.12,34567.89]
+10	[78901.23,67890.12]
+-- !result
+SELECT id, array_remove(array_decimalv2, 56789.01) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[12345.670000000,89012.340000000,null]
+2	[null,45678.120000000]
+3	[67890.120000000,null]
+4	[78901.230000000,67890.120000000,null]
+5	[123456.780000000,null,876543.210000000]
+6	[34567.890000000,null,12345.670000000]
+7	[45678.120000000,null,23456.780000000]
+8	[23456.780000000,null,12345.670000000]
+9	[67890.120000000,null,34567.890000000]
+10	[78901.230000000,null,67890.120000000]
+-- !result
+SELECT id, array_remove(array_decimal32, 123.45) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[678.90,null]
+2	[345.67,null,234.56]
+3	[456.78,null,345.67]
+4	[567.89,456.78,null]
+5	[678.90,null,789.01]
+6	[null,678.90]
+7	[234.56,null,456.78]
+8	[345.67,null,456.78]
+9	[456.78,null,234.56]
+10	[567.89,null,456.78]
+-- !result
+SELECT id, array_remove(array_decimal32, NULL) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[123.45,678.90]
+2	[345.67,234.56]
+3	[456.78,345.67]
+4	[567.89,456.78]
+5	[678.90,789.01]
+6	[123.45,678.90]
+7	[234.56,456.78]
+8	[345.67,456.78]
+9	[456.78,234.56]
+10	[567.89,456.78]
+-- !result
+SELECT id, array_remove(array_decimal32, 567.89) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[123.45,678.90,null]
+2	[345.67,null,234.56]
+3	[456.78,null,345.67]
+4	[456.78,null]
+5	[678.90,null,789.01]
+6	[123.45,null,678.90]
+7	[234.56,null,456.78]
+8	[345.67,null,456.78]
+9	[456.78,null,234.56]
+10	[null,456.78]
+-- !result
+SELECT id, array_remove(array_decimal64, 12345678.90) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[9876543.21,null]
+2	[56789012.34,null,34567890.12]
+3	[67890123.45,null,56789012.34]
+4	[78901234.56,67890123.45,null]
+5	[9876543.21,null,1234567.89]
+6	[54321.12,null,12345.67]
+7	[67890123.45,null,34567890.12]
+8	[8901234.56,null,7890123.45]
+9	[34567890.12,null,23456789.01]
+10	[null,9876543.21]
+-- !result
+SELECT id, array_remove(array_decimal64, NULL) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[12345678.90,9876543.21]
+2	[56789012.34,34567890.12]
+3	[67890123.45,56789012.34]
+4	[78901234.56,67890123.45]
+5	[9876543.21,1234567.89]
+6	[54321.12,12345.67]
+7	[67890123.45,34567890.12]
+8	[8901234.56,7890123.45]
+9	[34567890.12,23456789.01]
+10	[12345678.90,9876543.21]
+-- !result
+SELECT id, array_remove(array_decimal64, 7890123.45) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[12345678.90,9876543.21,null]
+2	[56789012.34,null,34567890.12]
+3	[67890123.45,null,56789012.34]
+4	[78901234.56,67890123.45,null]
+5	[9876543.21,null,1234567.89]
+6	[54321.12,null,12345.67]
+7	[67890123.45,null,34567890.12]
+8	[8901234.56,null]
+9	[34567890.12,null,23456789.01]
+10	[12345678.90,null,9876543.21]
+-- !result
+SELECT id, array_remove(array_decimal128, 1234567890.1234567890) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[null,null]
+2	[2345678901.2345678901,null,null]
+3	[3456789012.3456789012,null,null]
+4	[4567890123.4567890123,null,null]
+5	[5678901234.5678901234,null,null]
+6	[7654321098.7654321098,null,null]
+7	[4321098765.4321098765,null,null]
+8	[2109876543.2109876543,null,null]
+9	[8765432109.8765432109,null,null]
+10	[null,null]
+-- !result
+SELECT id, array_remove(array_decimal128, NULL) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[1234567890.1234567890]
+2	[2345678901.2345678901]
+3	[3456789012.3456789012]
+4	[4567890123.4567890123]
+5	[5678901234.5678901234]
+6	[7654321098.7654321098]
+7	[4321098765.4321098765]
+8	[2109876543.2109876543]
+9	[8765432109.8765432109]
+10	[1234567890.1234567890]
+-- !result
+SELECT id, array_remove(array_decimal128, 8765432109.8765432109) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[1234567890.1234567890,null,null]
+2	[2345678901.2345678901,null,null]
+3	[3456789012.3456789012,null,null]
+4	[4567890123.4567890123,null,null]
+5	[5678901234.5678901234,null,null]
+6	[7654321098.7654321098,null,null]
+7	[4321098765.4321098765,null,null]
+8	[2109876543.2109876543,null,null]
+9	[null,null]
+10	[1234567890.1234567890,null,null]
+-- !result
+SELECT id, array_remove(array_float, 1.23) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[1.2300000190734863,4.559999942779541,null]
+2	[2.3399999141693115,null,1.2300000190734863]
+3	[1.1100000143051147,null,3.3299999237060547]
+4	[null,5.550000190734863,4.440000057220459]
+5	[3.2100000381469727,4.320000171661377,null]
+6	[null,6.539999961853027,7.650000095367432]
+7	[7.889999866485596,8.899999618530273,null]
+8	[5.670000076293945,null,4.559999942779541]
+9	[9.869999885559082,null,8.760000228881836]
+10	[null,1.1100000143051147,2.2200000286102295]
+-- !result
+SELECT id, array_remove(array_float, NULL) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[1.23,4.56]
+2	[2.34,1.23]
+3	[1.11,3.33]
+4	[5.55,4.44]
+5	[3.21,4.32]
+6	[6.54,7.65]
+7	[7.89,8.9]
+8	[5.67,4.56]
+9	[9.87,8.76]
+10	[1.11,2.22]
+-- !result
+SELECT id, array_remove(array_float, 7.89) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[1.2300000190734863,4.559999942779541,null]
+2	[2.3399999141693115,null,1.2300000190734863]
+3	[1.1100000143051147,null,3.3299999237060547]
+4	[null,5.550000190734863,4.440000057220459]
+5	[3.2100000381469727,4.320000171661377,null]
+6	[null,6.539999961853027,7.650000095367432]
+7	[7.889999866485596,8.899999618530273,null]
+8	[5.670000076293945,null,4.559999942779541]
+9	[9.869999885559082,null,8.760000228881836]
+10	[null,1.1100000143051147,2.2200000286102295]
+-- !result
+SELECT id, array_remove(array_double, 123.456) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[789.012,null]
+2	[234.567,null]
+3	[222.333,null,333.444]
+4	[null,777.888,666.777]
+5	[111.222,null,333.444]
+6	[555.666,null,444.333]
+7	[333.222,null,111]
+8	[666.555,null,222.111]
+9	[444.333,null,555.222]
+10	[777.888,999,null]
+-- !result
+SELECT id, array_remove(array_double, NULL) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[123.456,789.012]
+2	[234.567,123.456]
+3	[222.333,333.444]
+4	[777.888,666.777]
+5	[111.222,333.444]
+6	[555.666,444.333]
+7	[333.222,111]
+8	[666.555,222.111]
+9	[444.333,555.222]
+10	[777.888,999]
+-- !result
+SELECT id, array_remove(array_double, 444.333) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[123.456,789.012,null]
+2	[234.567,null,123.456]
+3	[222.333,null,333.444]
+4	[null,777.888,666.777]
+5	[111.222,null,333.444]
+6	[555.666,null]
+7	[333.222,null,111]
+8	[666.555,null,222.111]
+9	[null,555.222]
+10	[777.888,999,null]
+-- !result
+SELECT id, array_remove(array_varchar, 'hello') AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[null,"starrocks"]
+2	[null,"array","test"]
+3	["foo","bar",null]
+4	["NULL","banana","apple"]
+5	["dog","cat",null]
+6	[null,"bird","fish"]
+7	["lion",null,"tiger"]
+8	[null,"grape","pear"]
+9	["watermelon",null,"kiwi"]
+10	["blueberry","cherry",null]
+-- !result
+SELECT id, array_remove(array_varchar, NULL) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	["hello","starrocks"]
+2	["array","test"]
+3	["foo","bar"]
+4	["NULL","banana","apple"]
+5	["dog","cat"]
+6	["bird","fish"]
+7	["lion","tiger"]
+8	["grape","pear"]
+9	["watermelon","kiwi"]
+10	["blueberry","cherry"]
+-- !result
+SELECT id, array_remove(array_varchar, 'starrocks') AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	["hello",null]
+2	[null,"array","test"]
+3	["foo","bar",null]
+4	["NULL","banana","apple"]
+5	["dog","cat",null]
+6	[null,"bird","fish"]
+7	["lion",null,"tiger"]
+8	[null,"grape","pear"]
+9	["watermelon",null,"kiwi"]
+10	["blueberry","cherry",null]
+-- !result
+SELECT id, array_remove(array_date, '2025-01-01') AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	["2025-01-02",null]
+2	[null,"2024-12-31","2024-12-30"]
+3	["2025-01-03",null,"2025-01-04"]
+4	[null,"2025-01-05","2025-01-06"]
+5	["2025-01-07","2025-01-08",null]
+6	["2025-01-09","2025-01-10",null]
+7	["2025-01-11","2025-01-12",null]
+8	["2025-01-13",null,"2025-01-14"]
+9	[null,"2025-01-15","2025-01-16"]
+10	["2025-01-17","2025-01-18",null]
+-- !result
+SELECT id, array_remove(array_date, NULL) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	["2025-01-01","2025-01-02"]
+2	["2024-12-31","2024-12-30"]
+3	["2025-01-03","2025-01-04"]
+4	["2025-01-05","2025-01-06"]
+5	["2025-01-07","2025-01-08"]
+6	["2025-01-09","2025-01-10"]
+7	["2025-01-11","2025-01-12"]
+8	["2025-01-13","2025-01-14"]
+9	["2025-01-15","2025-01-16"]
+10	["2025-01-17","2025-01-18"]
+-- !result
+SELECT id, array_remove(array_date, '2025-01-13') AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	["2025-01-01","2025-01-02",null]
+2	[null,"2024-12-31","2024-12-30"]
+3	["2025-01-03",null,"2025-01-04"]
+4	[null,"2025-01-05","2025-01-06"]
+5	["2025-01-07","2025-01-08",null]
+6	["2025-01-09","2025-01-10",null]
+7	["2025-01-11","2025-01-12",null]
+8	[null,"2025-01-14"]
+9	[null,"2025-01-15","2025-01-16"]
+10	["2025-01-17","2025-01-18",null]
+-- !result
+SELECT id, array_remove(array_datetime, '2025-01-01 12:00:00') AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	[null,"2025-01-02 14:00:00"]
+2	["2024-12-31 23:59:59","2024-12-30 12:00:00",null]
+3	["2025-01-03 16:00:00","2025-01-04 18:00:00",null]
+4	[null,"2025-01-06 20:00:00","2025-01-05 18:00:00"]
+5	["2025-01-07 10:00:00",null,"2025-01-08 15:00:00"]
+6	["2025-01-09 12:00:00",null,"2025-01-10 18:00:00"]
+7	["2025-01-11 20:00:00",null,"2025-01-12 22:00:00"]
+8	["2025-01-13 23:59:59","2025-01-14 12:00:00",null]
+9	["2025-01-15 12:00:00",null,"2025-01-16 18:00:00"]
+10	[null,"2025-01-17 10:00:00","2025-01-18 20:00:00"]
+-- !result
+SELECT id, array_remove(array_datetime, NULL) AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	["2025-01-01 12:00:00","2025-01-02 14:00:00"]
+2	["2024-12-31 23:59:59","2024-12-30 12:00:00"]
+3	["2025-01-03 16:00:00","2025-01-04 18:00:00"]
+4	["2025-01-06 20:00:00","2025-01-05 18:00:00"]
+5	["2025-01-07 10:00:00","2025-01-08 15:00:00"]
+6	["2025-01-09 12:00:00","2025-01-10 18:00:00"]
+7	["2025-01-11 20:00:00","2025-01-12 22:00:00"]
+8	["2025-01-13 23:59:59","2025-01-14 12:00:00"]
+9	["2025-01-15 12:00:00","2025-01-16 18:00:00"]
+10	["2025-01-17 10:00:00","2025-01-18 20:00:00"]
+-- !result
+SELECT id, array_remove(array_datetime, '2025-01-17 10:00:00') AS result FROM test_array_remove ORDER BY id;
+-- result:
+1	["2025-01-01 12:00:00",null,"2025-01-02 14:00:00"]
+2	["2024-12-31 23:59:59","2024-12-30 12:00:00",null]
+3	["2025-01-03 16:00:00","2025-01-04 18:00:00",null]
+4	[null,"2025-01-06 20:00:00","2025-01-05 18:00:00"]
+5	["2025-01-07 10:00:00",null,"2025-01-08 15:00:00"]
+6	["2025-01-09 12:00:00",null,"2025-01-10 18:00:00"]
+7	["2025-01-11 20:00:00",null,"2025-01-12 22:00:00"]
+8	["2025-01-13 23:59:59","2025-01-14 12:00:00",null]
+9	["2025-01-15 12:00:00",null,"2025-01-16 18:00:00"]
+10	[null,"2025-01-18 20:00:00"]
+-- !result
