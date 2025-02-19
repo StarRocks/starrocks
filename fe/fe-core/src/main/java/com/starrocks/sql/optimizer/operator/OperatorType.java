@@ -15,6 +15,10 @@
 
 package com.starrocks.sql.optimizer.operator;
 
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 public enum OperatorType {
     /**
      * Logical operator
@@ -67,6 +71,8 @@ public enum OperatorType {
     PHYSICAL_HASH_JOIN,
     PHYSICAL_MERGE_JOIN,
     PHYSICAL_NESTLOOP_JOIN,
+
+    // TODO: collapse these verbose scans
     PHYSICAL_OLAP_SCAN,
     PHYSICAL_HIVE_SCAN,
     PHYSICAL_FILE_SCAN,
@@ -83,6 +89,7 @@ public enum OperatorType {
     PHYSICAL_META_SCAN,
     PHYSICAL_ES_SCAN,
     PHYSICAL_JDBC_SCAN,
+
     PHYSICAL_PROJECT,
     PHYSICAL_SORT,
     PHYSICAL_TOPN,
@@ -149,5 +156,14 @@ public enum OperatorType {
     //  join   table
     //  /  \
     // table table
-    PATTERN_MULTIJOIN,
+    PATTERN_MULTIJOIN;
+
+    private static final Set<OperatorType> PHYSICAL_SCANS =
+            Arrays.stream(OperatorType.values())
+                    .filter(x -> x.name().startsWith("PHYSICAL") && x.name().endsWith("SCAN"))
+                    .collect(Collectors.toUnmodifiableSet());
+
+    public boolean isPhysicalScan() {
+        return PHYSICAL_SCANS.contains(this);
+    }
 }
