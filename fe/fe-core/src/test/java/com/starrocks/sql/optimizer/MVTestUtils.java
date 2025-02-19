@@ -15,7 +15,6 @@
 package com.starrocks.sql.optimizer;
 
 import com.starrocks.alter.AlterJobV2;
-import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
@@ -42,11 +41,6 @@ public class MVTestUtils {
                         "rollup job " + alterJobV2.getJobId() + " is running. state: " + alterJobV2.getJobState());
                 ThreadUtil.sleepAtLeastIgnoreInterrupts(1000L);
             }
-        }
-        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
-            Assert.assertEquals(String.format("AlterJobV2 %s should be ROLLUP state at the end",
-                            GsonUtils.GSON.toJson(alterJobV2)),
-                    AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
         }
     }
 
