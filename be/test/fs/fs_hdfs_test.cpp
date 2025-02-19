@@ -40,6 +40,8 @@ public:
 
     void create_file_and_destroy();
 
+    void test_get_numric_statistics();
+
 public:
     std::string _root_path;
 };
@@ -68,6 +70,28 @@ void HdfsFileSystemTest::create_file_and_destroy() {
 
     // done the file, check if there is any memory leak
     (*wfile).reset();
+}
+
+void HdfsFileSystemTest::test_get_numric_statistics() {
+    auto fs = new_fs_hdfs(FSOptions());
+    // use file:// as the fs scheme, which will leverage Hadoop LocalFileSystem for testing
+    std::string filepath = "hdfs://" + _root_path + "/create_file_and_destroy_file";
+    auto file = fs->new_random_access_file(filepath);
+    auto status_or = file->get()->stream()->get_numeric_statistics();
+    EXPECT_TRUE(status_or.value() != nullptr);
+    config::hdfs_client_disable_get_read_statistics = true;
+    status_or = file->get()->stream()->get_numeric_statistics();
+    EXPECT_TRUE(status_or.value() == nullptr);
+
+    // error injection during HDFSWritableFile::close, it is hard to simulate a sync failure with a POSIX filesystem.
+    // HDFS FileSystem sync operation will fail if the file is removed from remote name node.
+    SyncPoint::GetInstance()->SetCallBack("HDFSWritableFile::close", [](void* arg) { *(int*)arg = -1; });
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("HDFSWritableFile::close");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
 }
 
 TEST_F(HdfsFileSystemTest, create_file_and_destroy) {
@@ -124,6 +148,12 @@ TEST_F(HdfsFileSystemTest, create_file_with_open_truncate) {
 
     (*wfile_1).reset();
     (*wfile_2).reset();
+}
+
+TEST_F(HdfsFileSystemTest, test_get_numric_statistics) {
+    // NOTE: use separate thread to run the test case to avoid some weird tls memory issue introduced by JVM
+    auto thread = std::thread([this] { test_get_numric_statistics(); });
+    thread.join();
 }
 
 } // namespace starrocks

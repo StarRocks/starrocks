@@ -240,7 +240,8 @@ void HdfsInputStream::set_size(int64_t value) {
 
 StatusOr<std::unique_ptr<io::NumericStatistics>> HdfsInputStream::get_numeric_statistics() {
     // `GetReadStatistics` is only supported in HDFS input stream
-    if (!fs::is_hdfs_uri(_handle->getPath())) {
+    // For oss-hdfs,users may use hdfs:// scheme, we should skip reading statistics
+    if (!fs::is_hdfs_uri(_handle->getPath()) || config::hdfs_client_disable_get_read_statistics) {
         return nullptr;
     }
 
