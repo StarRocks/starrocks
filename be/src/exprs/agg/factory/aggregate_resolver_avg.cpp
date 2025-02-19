@@ -45,18 +45,6 @@ struct ArrayAggDispatcher {
     }
 };
 
-struct ArrayUnionAggDispatcher {
-    template <LogicalType lt>
-    void operator()(AggregateFuncResolver* resolver) {
-        if constexpr (lt_is_aggregate<lt>) {
-            auto func = std::make_shared<ArrayUnionAggAggregateFunction<lt, false>>();
-            using AggState = ArrayUnionAggAggregateState<lt, false>;
-            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, AggState, AggregateFunctionPtr, false>("array_union_agg",
-                                                                                                   false, func);
-        }
-    }
-};
-
 struct ArrayUniqueAggDispatcher {
     template <LogicalType pt>
     void operator()(AggregateFuncResolver* resolver) {
@@ -147,7 +135,6 @@ void AggregateFuncResolver::register_avg() {
         type_dispatch_all(type, AvgDispatcher(), this);
         type_dispatch_all(type, ArrayAggDispatcher(), this);
         type_dispatch_all(type, ArrayAggDistinctDispatcher(), this);
-        type_dispatch_all(type, ArrayUnionAggDispatcher(), this);
         type_dispatch_all(type, ArrayUniqueAggDispatcher(), this);
         type_dispatch_all(type, MapAggDispatcher(), this);
     }
