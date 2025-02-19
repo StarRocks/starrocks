@@ -317,8 +317,10 @@ public class SkewJoinOptimizeRule extends TransformationRule {
         when.add(roundFnOperator);
         when.add(inPredicateOperator);
         when.add(roundFnOperator);
-        CaseWhenOperator caseWhenOperator = new CaseWhenOperator(roundFnOperator.getType(), null,
+        ScalarOperator caseWhenOperator = new CaseWhenOperator(roundFnOperator.getType(), null,
                 ConstantOperator.createBigint(0), when);
+        ScalarOperatorRewriter rewriter = new ScalarOperatorRewriter();
+        caseWhenOperator = rewriter.rewrite(caseWhenOperator, ScalarOperatorRewriter.DEFAULT_TYPE_CAST_RULE);
 
         Map<ColumnRefOperator, ScalarOperator> projectMaps = columnRefSet.getStream()
                 .map(columnRefId -> context.getColumnRefFactory().getColumnRef(columnRefId))
