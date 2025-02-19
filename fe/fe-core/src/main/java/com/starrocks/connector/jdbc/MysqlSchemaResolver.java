@@ -147,8 +147,12 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                 primitiveType = PrimitiveType.DATETIME;
                 break;
             default:
-                primitiveType = PrimitiveType.UNKNOWN_TYPE;
-                break;
+                // The mysql-connector-j will convert the JSON type in MySQL to Types.LONGVARCHAR(1073741824).
+                // However, the mariadb-java-client does not handle the JSON type,
+                // so it will be converted to Types.Other. Here, in order to handle JSON, for the Types.Other,
+                // it is uniformly converted to Types.LONGVARCHAR(1073741824).
+                // If later mariadb-java-client support json, this code can be reverted.
+                return ScalarType.createVarcharType(1073741824);
         }
 
         if (primitiveType != PrimitiveType.DECIMAL32) {

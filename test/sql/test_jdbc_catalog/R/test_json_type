@@ -1,0 +1,46 @@
+-- name: test_jdbc_catalog_json_type
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'create database db_json_${uuid0};'
+-- result:
+0
+
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_json_${uuid0}; CREATE TABLE t1 (c1 int, c2 json);'
+-- result:
+0
+
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'use db_json_${uuid0}; INSERT INTO t1 VALUES (1,"{\"c1\": 1}");'
+-- result:
+0
+
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+create external catalog jdbc_catalog_${uuid0}
+properties
+(
+    "type"="jdbc",
+    "user"="${external_mysql_user}",
+    "password"="${external_mysql_password}",
+    "jdbc_uri"="jdbc:mysql://${external_mysql_ip}:${external_mysql_port}",
+    "driver_url"="https://repo1.maven.org/maven2/mysql/mysql-connector-java/8.0.28/mysql-connector-java-8.0.28.jar",
+    "driver_class"="com.mysql.cj.jdbc.Driver"
+);
+-- result:
+-- !result
+set catalog jdbc_catalog_${uuid0};
+-- result:
+-- !result
+select * from db_json_${uuid0}.t1;
+-- result:
+1	{"c1": 1}
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'drop database db_json_${uuid0};'
+-- result:
+0
+
+-- !result
