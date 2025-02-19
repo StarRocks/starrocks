@@ -148,6 +148,7 @@ properties
 );
 
 
+set materialized_view_rewrite_mode='force';
 -------------------------------- IDENTITY --------------------------------
 CREATE MATERIALIZED VIEW test_date
 PARTITION BY (l_returnflag, l_linestatus, l_shipdate)
