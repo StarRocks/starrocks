@@ -3430,4 +3430,38 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = false)
     public static int max_historical_automated_cluster_snapshot_jobs = 100;
+<<<<<<< HEAD
+=======
+
+    /**
+     * The URL to a JWKS service or a local file in the conf dir
+     */
+    @ConfField(mutable = false)
+    public static String oidc_jwks_url = "";
+
+    /**
+     * String to identify the field in the JWT that identifies the subject of the JWT.
+     * The default value is sub.
+     * The value of this field must be the same as the user specified when logging into StarRocks.
+     */
+    @ConfField(mutable = false)
+    public static String oidc_principal_field = "sub";
+
+    /**
+     * Specifies a string that must match the value of the JWT’s issuer (iss) field in order to consider this JWT valid.
+     * The iss field in the JWT identifies the principal that issued the JWT.
+     */
+    @ConfField(mutable = false)
+    public static String oidc_required_issuer = "";
+
+    /**
+     * Specifies a string that must match the value of the JWT’s Audience (aud) field in order to consider this JWT valid.
+     * The aud field in the JWT identifies the recipients that the JWT is intended for.
+     */
+    @ConfField(mutable = false)
+    public static String oidc_required_audience = "";
+
+    @ConfField(mutable = true)
+    public static boolean transaction_state_print_partition_info = true;
+>>>>>>> be4c1ac10 ([Enhancement] support print partition version info in transaction state (#55852))
 }
