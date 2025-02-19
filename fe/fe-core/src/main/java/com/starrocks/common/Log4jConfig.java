@@ -301,6 +301,7 @@ public class Log4jConfig extends XmlConfiguration {
                             "'file':{'$resolver':'source','field':'fileName'}," +
                             "'method':{'$resolver':'source','field':'methodName'}," +
                             "'message':{'$resolver':'message','stringfield':'true'}," +
+                            "'srid':{'$resolver':'ctx','field':'srid'}," +
                             "'exception':{'$resolver':'exception','field':'stackTrace','stackTrace':{'stringified':true,'full':true}}}";
             jsonConfig = jsonConfig.replace("'", "\"");
             String jsonLayoutFormatter = "<JsonTemplateLayout maxStringLength=\"%d\" locationInfoEnabled=\"true\">\n" +
@@ -316,17 +317,17 @@ public class Log4jConfig extends XmlConfiguration {
         } else {
             // fallback to plaintext logging
             properties.put("syslog_default_layout",
-                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n\"/>");
+                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m -srid=%X{srid}%n\"/>");
             properties.put("syslog_warning_layout",
-                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m%n %ex\"/>");
+                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} %p (%t|%tid) [%C{1}.%M():%L] %m -srid=%X{srid}%n %ex\"/>");
             properties.put("syslog_audit_layout",
-                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n\"/>");
+                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m -srid=%X{srid}%n\"/>");
             properties.put("syslog_dump_layout",
-                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n\"/>");
+                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m -srid=%X{srid}%n\"/>");
             properties.put("syslog_bigquery_layout",
-                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n\"/>");
+                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m -srid=%X{srid}%n\"/>");
             properties.put("syslog_profile_layout",
-                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m%n\"/>");
+                    "<PatternLayout charset=\"UTF-8\" pattern=\"%d{yyyy-MM-dd HH:mm:ss.SSSXXX} [%c{1}] %m -srid=%X{srid}%n\"/>");
         }
 
         String xmlConfTemplate = generateXmlConfTemplate();
