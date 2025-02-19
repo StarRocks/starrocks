@@ -253,8 +253,6 @@ public class WarehouseManager implements Writable {
         return nextComputeNodeIndex;
     }
 
-
-
     public Warehouse getCompactionWarehouse() {
         return getWarehouse(DEFAULT_WAREHOUSE_ID);
     }
@@ -281,11 +279,6 @@ public class WarehouseManager implements Writable {
 
     private Optional<Long> selectWorkerGroupInternal(long warehouseId) {
         Warehouse warehouse = getWarehouse(warehouseId);
-        if (warehouse == null) {
-            LOG.warn("failed to get warehouse by id {}", warehouseId);
-            return Optional.empty();
-        }
-
         List<Long> ids = warehouse.getWorkerGroupIds();
         if (CollectionUtils.isEmpty(ids)) {
             LOG.warn("failed to get worker group id from warehouse {}", warehouse);
