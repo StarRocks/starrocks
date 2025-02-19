@@ -61,7 +61,7 @@ public class FunctionParams implements Writable {
     private List<OrderByElement> orderByElements;
     // c'tor for non-star params
     public FunctionParams(boolean isDistinct, List<Expr> exprs) {
-        if (exprs.stream().anyMatch(e -> e instanceof NamedArgument)) {
+        if (exprs != null && exprs.stream().anyMatch(e -> e instanceof NamedArgument)) {
             this.exprs = exprs.stream().map(e -> (e instanceof NamedArgument ? ((NamedArgument) e).getExpr()
                     : e)).collect(Collectors.toList());
             this.exprsNames = exprs.stream().map(e -> (e instanceof NamedArgument ? ((NamedArgument) e).getName()
