@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.operator.physical;
 
 import com.starrocks.connector.iceberg.IcebergMORParams;
+import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.operator.OperatorType;
@@ -24,14 +25,11 @@ import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergEqualityDeleteScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.ArrayList;
-import java.util.List;
-
 public class PhysicalIcebergEqualityDeleteScanOperator extends PhysicalScanOperator {
 
     private ScalarOperator originPredicate;
 
-    private List<IcebergMORParams> tableFullMORParams = new ArrayList<>();
+    private IcebergTableMORParams tableFullMORParams = IcebergTableMORParams.EMPTY;
     private IcebergMORParams morParams;
 
     public PhysicalIcebergEqualityDeleteScanOperator(LogicalIcebergEqualityDeleteScanOperator scanOperator) {
@@ -46,11 +44,11 @@ public class PhysicalIcebergEqualityDeleteScanOperator extends PhysicalScanOpera
         this.originPredicate = originPredicate;
     }
 
-    public List<IcebergMORParams> getTableFullMORParams() {
+    public IcebergTableMORParams getTableFullMORParams() {
         return tableFullMORParams;
     }
 
-    public void setTableFullMORParams(List<IcebergMORParams> tableFullMORParams) {
+    public void setTableFullMORParams(IcebergTableMORParams tableFullMORParams) {
         this.tableFullMORParams = tableFullMORParams;
     }
 

@@ -33,6 +33,7 @@ import com.starrocks.connector.iceberg.IcebergConnectorScanRangeSource;
 import com.starrocks.connector.iceberg.IcebergGetRemoteFilesParams;
 import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.iceberg.IcebergRemoteSourceTrigger;
+import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.connector.iceberg.QueueIcebergRemoteFileInfoSource;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -65,12 +66,12 @@ public class IcebergScanNode extends ScanNode {
     private CloudConfiguration cloudConfiguration = null;
     protected Optional<Long> snapshotId;
     private IcebergConnectorScanRangeSource scanRangeSource = null;
-    private final List<IcebergMORParams> tableFullMORParams;
+    private final IcebergTableMORParams tableFullMORParams;
     private final IcebergMORParams morParams;
     private int selectedPartitionCount = -1;
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
-                           List<IcebergMORParams> tableFullMORParams, IcebergMORParams morParams) {
+                           IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams) {
         super(id, desc, planNodeName);
         this.icebergTable = (IcebergTable) desc.getTable();
         this.tableFullMORParams = tableFullMORParams;
@@ -188,7 +189,7 @@ public class IcebergScanNode extends ScanNode {
     }
 
     // for unit tests
-    public List<IcebergMORParams> getTableFullMORParams() {
+    public IcebergTableMORParams getTableFullMORParams() {
         return tableFullMORParams;
     }
 

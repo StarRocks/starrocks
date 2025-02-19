@@ -21,15 +21,14 @@ import com.starrocks.catalog.Table;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.iceberg.IcebergDeleteSchema;
 import com.starrocks.connector.iceberg.IcebergMORParams;
+import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
-import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -45,7 +44,7 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
 
     // Mainly used for table with iceberg equality delete files. Record full iceberg mor params in the table,
     // used for the first build to associate multiple scan nodes RemoteFileInfoSource.
-    private List<IcebergMORParams> tableFullMORParams = new ArrayList<>();
+    private IcebergTableMORParams tableFullMORParams = IcebergTableMORParams.EMPTY;
 
     // Mainly used for table with iceberg equality delete files.
     // Marking this split scan node type after IcebergEqualityDeleteRewriteRule rewriting.
@@ -107,11 +106,11 @@ public class LogicalIcebergScanOperator extends LogicalScanOperator {
         this.deleteSchemas = deleteSchemas;
     }
 
-    public List<IcebergMORParams> getTableFullMORParams() {
+    public IcebergTableMORParams getTableFullMORParams() {
         return tableFullMORParams;
     }
 
-    public void setTableFullMORParams(List<IcebergMORParams> tableFullMORParams) {
+    public void setTableFullMORParams(IcebergTableMORParams tableFullMORParams) {
         this.tableFullMORParams = tableFullMORParams;
     }
 

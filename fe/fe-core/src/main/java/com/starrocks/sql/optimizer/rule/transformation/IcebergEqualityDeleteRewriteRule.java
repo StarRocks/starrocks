@@ -25,6 +25,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergDeleteSchema;
 import com.starrocks.connector.iceberg.IcebergMORParams;
+import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
@@ -141,9 +142,10 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
                         Stream.of(IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, IcebergMORParams.DATA_FILE_WITH_EQ_DELETE),
                         allIds.stream().map(ids -> IcebergMORParams.of(IcebergMORParams.ScanTaskType.EQ_DELETE, ids)))
                 .collect(Collectors.toList());
+        IcebergTableMORParams icebergTableFullMorParams = new IcebergTableMORParams(icebergTable.getId(), tableFullMorParams);
 
         scanOperator.setMORParam(IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE);
-        scanOperator.setTableFullMORParams(tableFullMorParams);
+        scanOperator.setTableFullMORParams(icebergTableFullMorParams);
         scanOperator.setFromEqDeleteRewriteRule(true);
         OptExpression dataFileWithoutDeleteScanOp = OptExpression.create(scanOperator);
 
@@ -151,7 +153,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
         LogicalIcebergScanOperator icebergDataFileWithDeleteScanOp = buildNewScanOperatorWithUnselectedAndExtendedField(
                 deleteSchemas, scanOperator, columnRefFactory, projectForUnion, hasPartitionEvolution);
         icebergDataFileWithDeleteScanOp.setMORParam(IcebergMORParams.DATA_FILE_WITH_EQ_DELETE);
-        icebergDataFileWithDeleteScanOp.setTableFullMORParams(tableFullMorParams);
+        icebergDataFileWithDeleteScanOp.setTableFullMORParams(icebergTableFullMorParams);
         icebergDataFileWithDeleteScanOp.setFromEqDeleteRewriteRule(true);
         OptExpression optExpression = OptExpression.create(icebergDataFileWithDeleteScanOp);
 
@@ -181,7 +183,7 @@ public class IcebergEqualityDeleteRewriteRule extends TransformationRule {
                     equalityDeleteTable, colRefToColumn.build(), columnToColRef.build(), -1, null,
                     scanOperator.getTableVersionRange());
             eqScanOp.setOriginPredicate(scanOperator.getPredicate());
-            eqScanOp.setTableFullMORParams(tableFullMorParams);
+            eqScanOp.setTableFullMORParams(icebergTableFullMorParams);
             eqScanOp.setMORParams(IcebergMORParams.of(IcebergMORParams.ScanTaskType.EQ_DELETE, equalityIds));
 
             ScalarOperator onPredicate = buildOnPredicate(
