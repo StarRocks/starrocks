@@ -66,10 +66,10 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
+import org.xnio.StreamConnection;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.SocketChannel;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class ConnectProcessorTest extends DDLTestBase {
@@ -85,7 +85,7 @@ public class ConnectProcessorTest extends DDLTestBase {
     private static ConnectContext myContext;
 
     @Mocked
-    private static SocketChannel socketChannel;
+    private static StreamConnection connection;
 
     private static PQueryStatistics statistics = new PQueryStatistics();
 
@@ -186,7 +186,7 @@ public class ConnectProcessorTest extends DDLTestBase {
         changeUserPacket.clear();
         resetConnectionPacket.clear();
         // Mock
-        MysqlChannel channel = new MysqlChannel(socketChannel);
+        MysqlChannel channel = new MysqlChannel(connection);
         new Expectations(channel) {
             {
                 channel.getRemoteHostPortString();
@@ -194,13 +194,13 @@ public class ConnectProcessorTest extends DDLTestBase {
                 result = "127.0.0.1:12345";
             }
         };
-        myContext = new ConnectContext(socketChannel);
+        myContext = new ConnectContext(connection);
         Deencapsulation.setField(myContext, "mysqlChannel", channel);
     }
 
     private static MysqlChannel mockChannel(ByteBuffer packet) {
         try {
-            MysqlChannel channel = new MysqlChannel(socketChannel);
+            MysqlChannel channel = new MysqlChannel(connection);
             new Expectations(channel) {
                 {
                     // Mock receive
@@ -228,7 +228,7 @@ public class ConnectProcessorTest extends DDLTestBase {
     }
 
     private static ConnectContext initMockContext(MysqlChannel channel, GlobalStateMgr globalStateMgr) {
-        ConnectContext context = new ConnectContext(socketChannel) {
+        ConnectContext context = new ConnectContext(connection) {
             private boolean firstTimeToSetCommand = true;
 
             @Override

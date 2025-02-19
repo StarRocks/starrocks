@@ -36,7 +36,6 @@ package com.starrocks.qe;
 
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlServer;
-import com.starrocks.mysql.nio.NMysqlServer;
 import com.starrocks.mysql.ssl.SSLContextLoader;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -49,13 +48,9 @@ public class QeService {
     // MySQL protocol service
     private MysqlServer mysqlServer;
 
-    public QeService(int port, boolean nioEnabled, ConnectScheduler scheduler) throws Exception {
+    public QeService(int port, ConnectScheduler scheduler) throws Exception {
         SSLContextLoader.load();
-        if (nioEnabled) {
-            mysqlServer = new NMysqlServer(port, scheduler);
-        } else {
-            mysqlServer = new MysqlServer(port, scheduler);
-        }
+        mysqlServer = new MysqlServer(port, scheduler);
     }
 
     public void start() throws IOException {

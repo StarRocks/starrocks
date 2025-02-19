@@ -45,13 +45,12 @@ import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.nio.channels.SocketChannel;
+import org.xnio.StreamConnection;
 
 public class ConnectSchedulerTest {
     private static final Logger LOG = LoggerFactory.getLogger(ConnectScheduler.class);
     @Mocked
-    SocketChannel socketChannel;
+    StreamConnection connection;
     @Mocked
     MysqlChannel channel;
     @Mocked
@@ -80,20 +79,14 @@ public class ConnectSchedulerTest {
     public void testProcessException(@Mocked ConnectProcessor processor) throws Exception {
         ConnectScheduler scheduler = new ConnectScheduler(10);
 
-        ConnectContext context = new ConnectContext(socketChannel);
+        ConnectContext context = new ConnectContext(connection);
         context.setGlobalStateMgr(AccessTestUtil.fetchAdminCatalog());
         context.setQualifiedUser("root");
-        Assert.assertTrue(scheduler.submit(context));
+        context.setConnectionId(scheduler.getNextConnectionId());
+        context.resetConnectionStartTime();
         Assert.assertEquals(0, context.getConnectionId());
 
         Thread.sleep(1000);
         Assert.assertNull(scheduler.getContext(0));
-    }
-
-    @Test
-    public void testSubmitTooMany() throws InterruptedException {
-        ConnectScheduler scheduler = new ConnectScheduler(0);
-        ConnectContext context = new ConnectContext(socketChannel);
-        Assert.assertTrue(scheduler.submit(context));
     }
 }

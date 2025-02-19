@@ -648,15 +648,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The length of the backlog queue held by the MySQL server in the FE node.
 - Introduced in: -
 
-##### mysql_service_nio_enabled
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Specifies whether asynchronous I/O is enabled for the FE node.
-- Introduced in: -
-
 ##### mysql_service_nio_enable_keep_alive
 
 - Default: true
@@ -714,15 +705,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: -
 - Is mutable: No
 - Description: The maximum number of connections that can be established by all users to the FE node. From v3.1.12 and v3.2.7 onwards, the default value has been changed from `1024` to `4096`.
-- Introduced in: -
-
-##### max_connection_scheduler_threads_num
-
-- Default: 4096
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: The maximum number of threads that are supported by the connection scheduler.
 - Introduced in: -
 
 ### Metadata and cluster management
