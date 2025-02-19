@@ -866,7 +866,7 @@ public class ConnectContext {
             return WarehouseManager.DEFAULT_WAREHOUSE_ID;
         }
 
-        Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
+        Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouseAllowNull(warehouseName);
         if (warehouse == null) {
             throw new SemanticException("Warehouse " + warehouseName + " not exist");
         }

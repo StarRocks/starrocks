@@ -414,7 +414,7 @@ public class GrantsTo {
                         }
                     } else {
                         Warehouse warehouse =
-                                GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                                GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseId);
                         if (warehouse == null) {
                             continue;
                         }

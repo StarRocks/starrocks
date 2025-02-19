@@ -1424,7 +1424,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             sb.append(",\n");
             sb.append("\"").append(PropertyAnalyzer.PROPERTIES_WAREHOUSE)
                     .append("\" = \"");
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(this.warehouseId);
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(this.warehouseId);
             if (warehouse != null) {
                 sb.append(warehouse.getName()).append("\"");
             } else {
