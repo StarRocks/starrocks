@@ -14,6 +14,9 @@ properties
 );
 -- result:
 -- !result
+set materialized_view_rewrite_mode='force';
+-- result:
+-- !result
 CREATE MATERIALIZED VIEW test_date
 PARTITION BY (l_returnflag, l_linestatus, l_shipdate)
 REFRESH DEFERRED MANUAL
