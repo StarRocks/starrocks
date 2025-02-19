@@ -512,7 +512,7 @@ public class CreateTableTest {
                         "PRIMARY KEY( k0, k1, k2) \n" +
                         "PARTITION BY RANGE (k1) (START (\"1970-01-01\") END (\"2022-09-30\") " +
                         "EVERY (INTERVAL 60 day)) DISTRIBUTED BY HASH(k0) BUCKETS 1 " +
-                        "PROPERTIES (\"replication_num\"=\"1\",\"enable_persistent_index\" = \"false\"," +
+                        "PROPERTIES (\"replication_num\"=\"1\",\"enable_persistent_index\" = \"true\"," +
                         "\"datacache.enable\" = \"true\",\"asd\" = \"true\");"));
 
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
@@ -559,7 +559,7 @@ public class CreateTableTest {
                         "\"dynamic_partition.history_partition_num\" = \"0\",\n" +
                         "\"in_memory\" = \"false\",\n" +
                         "\"storage_format\" = \"DEFAULT\",\n" +
-                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"enable_persistent_index\" = \"true\",\n" +
                         "\"compression\" = \"LZ4\"\n" +
                         ");"));
     }

@@ -930,10 +930,7 @@ public class PropertyAnalyzer {
             properties.remove(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX);
             return Pair.create(Boolean.parseBoolean(val), true);
         } else {
-            if (isPrimaryKey) {
-                return Pair.create(Config.enable_persistent_index_by_default, false);
-            }
-            return Pair.create(false, false);
+            return Pair.create(true, false);
         }
     }
 

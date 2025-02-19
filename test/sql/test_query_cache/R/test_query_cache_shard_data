@@ -19,7 +19,7 @@ PROPERTIES
 (
     "replication_num" = "3",
     "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false"
+    "enable_persistent_index" = "true"
 );
 -- result:
 -- !result
@@ -231,7 +231,7 @@ PROPERTIES
 (
     "replication_num" = "3",
     "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false"
+    "enable_persistent_index" = "true"
 );
 -- result:
 -- !result

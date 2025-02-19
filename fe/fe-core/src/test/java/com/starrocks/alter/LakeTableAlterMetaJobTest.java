@@ -80,7 +80,7 @@ public class LakeTableAlterMetaJobTest {
 
         table = createTable(connectContext,
                     "CREATE TABLE t0(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
-                                "PROPERTIES('enable_persistent_index'='false')");
+                                "PROPERTIES('enable_persistent_index'='true')");
         Assert.assertFalse(table.enablePersistentIndex());
         job = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(), db.getId(), table.getId(),
                     table.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "CLOUD_NATIVE");

@@ -532,7 +532,7 @@ DISTRIBUTED BY hash(id) buckets 1
 PROPERTIES (
 "bucket_size" = "4294967296",
 "in_memory" = "false",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "fast_schema_evolution" = "true"
 );
