@@ -16,11 +16,13 @@ package com.starrocks.sql.automv.generator;
 
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Pair;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.automv.pieces.AggregatePiece;
 import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pieces.TablePiece;
 import com.starrocks.sql.automv.util.PrettyPrinter;
 import com.starrocks.sql.automv.util.Util;
+import com.starrocks.system.BackendResourceStat;
 
 import java.util.List;
 
@@ -29,7 +31,8 @@ import java.util.List;
 // 2. MV of group-by agg, we use the harmony mean of bucket numbers of base tables as MV's bucket number.
 //    MV, and MV's bucket number at least is 64.
 public class DistributionPolicy {
-    public static Pair<Boolean, PrettyPrinter> getDistribution(PlanPiece piece, List<String> bucketColumns) {
+    public static Pair<Boolean, PrettyPrinter> getDistribution(PlanPiece piece, List<String> bucketColumns,
+                                                               boolean partitionIsScarce) {
         PrettyPrinter printer = new PrettyPrinter();
         List<TablePiece> tablePieces = PlanPiece.collect(piece, TablePiece.class);
         double harmonyDivider = tablePieces.stream().map(tablePiece ->
@@ -38,7 +41,15 @@ public class DistributionPolicy {
                         .orElse(1)
         ).reduce(0.0, Double::sum);
         int harmonyMean = (int) (tablePieces.size() / harmonyDivider);
+
+        int beNum = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getTotalBackendNumber();
+        int coreNumPerBe = BackendResourceStat.getInstance().getAvgNumHardwareCoresOfBe();
+        int tabletNum = beNum * coreNumPerBe * 4;
+
         int bucketNum = Math.max(harmonyMean, 64);
+        if (!partitionIsScarce) {
+            bucketNum = Math.min(Math.max(tabletNum, 64), 256);
+        }
         // non-group-by agg mv, we use dummy column integer 1 as bucket column and set bucketNum to 1
         if (piece.cast(AggregatePiece.class).map(aggPiece -> aggPiece.getDimensions().isEmpty()).orElse(false)) {
             bucketNum = 1;
@@ -52,7 +63,11 @@ public class DistributionPolicy {
                     .newLine();
             isHashDistribution = true;
         } else {
-            printer.add("DISTRIBUTED BY RANDOM").newLine();
+            printer.add("DISTRIBUTED BY RANDOM");
+            if (partitionIsScarce) {
+                printer.add(" BUCKETS ").add(bucketNum);
+            }
+            printer.newLine();
             isHashDistribution = false;
         }
         return Pair.create(isHashDistribution, printer);

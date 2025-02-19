@@ -76,7 +76,8 @@ public class AggregateMVGenerator {
                 .map(p -> columnAliases.get(p.first))
                 .map(ColumnAlias::getName).collect(Collectors.toList());
 
-        Pair<Boolean, PrettyPrinter> dist = DistributionPolicy.getDistribution(aggPiece, mvDimensionColumns);
+        Pair<Boolean, PrettyPrinter> dist =
+                DistributionPolicy.getDistribution(aggPiece, mvDimensionColumns, !optPartitionExpr.isPresent());
         mvSchema.addSuperStep(dist.second);
         List<Pair<Integer, GenericColumn>> candidateOrderByColumns = Lists.newArrayList();
 

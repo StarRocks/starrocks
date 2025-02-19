@@ -59,7 +59,7 @@ public class PartitionedIcebergTest extends MVTestBase {
         String mv = mvs.get(0);
         Assert.assertTrue(mv, mv.contains("COMMENT \"11-MV recommended by AutoMV\"\n" +
                 "PARTITION BY date_trunc(\"year\", ts)\n" +
-                "DISTRIBUTED BY RANDOM\n" +
+                "DISTRIBUTED BY RANDOM BUCKETS 64\n" +
                 "ORDER BY (id, data, ts)"));
     }
 

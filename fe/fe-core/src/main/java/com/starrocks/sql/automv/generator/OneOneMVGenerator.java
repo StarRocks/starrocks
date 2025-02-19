@@ -26,6 +26,7 @@ import com.starrocks.sql.automv.pieces.PlanPiece;
 import com.starrocks.sql.automv.pieces.TablePiece;
 import com.starrocks.sql.automv.pieces.TableUsage;
 import com.starrocks.sql.automv.pn.Op;
+import com.starrocks.sql.automv.pn.TimeGranule;
 import com.starrocks.sql.automv.qe.PartitionExtractor;
 import com.starrocks.sql.automv.qe.PartitionPlus;
 import com.starrocks.sql.automv.util.PrettyPrinter;
@@ -214,9 +215,13 @@ public class OneOneMVGenerator {
         mvSchema.add("COMMENT").spaces(1).addDoubleQuoted("11-MV recommended by AutoMV").newLine();
         PartitionExtractor extractor = context.getOptions().getPartitionExtractor();
 
-        Optional<PrettyPrinter> optPartitionExpr =
+        Optional<Pair<TimeGranule, PrettyPrinter>> optGranuleAndPartitionExpr =
                 PartitionPolicy.getPartitionClauseFor11MV(tablePiece, extractor, columnAliases);
+        Optional<PrettyPrinter> optPartitionExpr = optGranuleAndPartitionExpr.map(pair -> pair.second);
+        Optional<TimeGranule> optGranule = optGranuleAndPartitionExpr.map(pair -> pair.first);
+
         optPartitionExpr.ifPresent(mvSchema::addSuperStep);
+
         TieredMap<Integer, GenericColumn> columns = tablePiece.getColumns();
 
         List<String> bucketKey = optCollocateBucketKey.map(collocateBucketKey -> columns.keySet()
@@ -225,7 +230,11 @@ public class OneOneMVGenerator {
                 .map(column -> columnAliases.get(column).getName())
                 .collect(Collectors.toList())).orElseGet(Collections::emptyList);
 
-        Pair<Boolean, PrettyPrinter> dist = DistributionPolicy.getDistribution(tablePiece, bucketKey);
+        boolean partitionIsScarce =
+                optGranule.map(granule -> granule.getUnit().compareTo(TimeGranule.Unit.MONTH) > 0).orElse(true);
+
+        Pair<Boolean, PrettyPrinter> dist =
+                DistributionPolicy.getDistribution(tablePiece, bucketKey, partitionIsScarce);
         mvSchema.addSuperStep(dist.second);
 
         List<String> orderByItems = orderByColumns.stream()
