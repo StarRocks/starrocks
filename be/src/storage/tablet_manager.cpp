@@ -1289,7 +1289,6 @@ void TabletManager::release_schema_change_lock(TTabletId tablet_id) {
 void TabletManager::update_root_path_info(std::map<std::string, DataDirInfo>* path_map, size_t* tablet_count) {
     DCHECK(tablet_count != nullptr);
     *tablet_count = 0;
-    std::vector<TabletSharedPtr> all_tablets_by_shard;
     for (const auto& tablets_shard : _tablets_shards) {
         std::vector<TabletSharedPtr> all_tablets_by_shard = _get_all_tablets_from_shard(tablets_shard);
         for (const auto& tablet : all_tablets_by_shard) {
