@@ -1611,12 +1611,23 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new ParsingException(PARSER_ERROR_MSG.conflictedOptions("if not exists", "or replace"),
                     createPos(context));
         }
+
+        boolean isSecurity = false;
+        if (context.SECURITY() != null) {
+            if (context.NONE() != null) {
+                isSecurity = false;
+            } else if (context.INVOKER() != null) {
+                isSecurity = true;
+            }
+        }
+
         return new CreateViewStmt(
                 context.IF() != null,
                 context.REPLACE() != null,
                 targetTableName,
                 colWithComments,
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment())).getStringValue(),
+                isSecurity,
                 (QueryStatement) visit(context.queryStatement()), createPos(context));
     }
 
@@ -1626,13 +1637,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         TableName targetTableName = qualifiedNameToTableName(qualifiedName);
 
         List<ColWithComment> colWithComments = null;
-        if (context.columnNameWithComment().size() > 0) {
+        if (!context.columnNameWithComment().isEmpty()) {
             colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
         }
-        QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
-        AlterClause alterClause = new AlterViewClause(colWithComments, queryStatement, createPos(context));
 
-        return new AlterViewStmt(targetTableName, alterClause, createPos(context));
+        boolean isSecurity = false;
+        if (context.SECURITY() != null) {
+            if (context.NONE() != null) {
+                isSecurity = false;
+            } else if (context.INVOKER() != null) {
+                isSecurity = true;
+            }
+
+            return new AlterViewStmt(targetTableName, isSecurity, null, createPos(context));
+        } else {
+            QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
+            AlterClause alterClause = new AlterViewClause(colWithComments, queryStatement, createPos(context));
+
+            return new AlterViewStmt(targetTableName, isSecurity, alterClause, createPos(context));
+        }
     }
 
     @Override
