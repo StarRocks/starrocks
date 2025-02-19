@@ -24,6 +24,8 @@ import com.starrocks.persist.MetaCleaner;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TCancelCheckpointRequest;
+import com.starrocks.thrift.TCancelCheckpointResponse;
 import com.starrocks.thrift.TFinishCheckpointRequest;
 import com.starrocks.thrift.TFinishCheckpointResponse;
 import com.starrocks.thrift.TStatus;
@@ -45,11 +47,13 @@ public abstract class CheckpointWorker extends FrontendDaemon {
     private NextPoint nextPoint;
     protected GlobalStateMgr servingGlobalState;
     private String subDir;
+    private boolean finishCheckpointError;
 
     public CheckpointWorker(String name, Journal journal, String subDir) {
         super(name, FeConstants.checkpoint_interval_second * 1000L);
         this.journal = journal;
         this.subDir = subDir;
+        this.finishCheckpointError = false;
     }
 
     abstract void doCheckpoint(long epoch, long journalId) throws Exception;
@@ -81,11 +85,18 @@ public abstract class CheckpointWorker extends FrontendDaemon {
             return;
         }
 
-        if (nextPoint.journalId <= getImageJournalId()) {
+        if (nextPoint.epoch != servingGlobalState.getEpoch()) {
+            // reset if leader has been changed
+            finishCheckpointError = false;
             return;
         }
 
-        if (nextPoint.epoch != servingGlobalState.getEpoch()) {
+        if (finishCheckpointError && cancelCheckpointToLeader()) {
+            // reset if cancel finish checkpoint successfully
+            finishCheckpointError = false;
+        }
+
+        if (nextPoint.journalId <= getImageJournalId()) {
             return;
         }
 
@@ -145,30 +156,7 @@ public abstract class CheckpointWorker extends FrontendDaemon {
                 controller.cancelCheckpoint(nodeName, message);
             }
         } else {
-            TFinishCheckpointRequest request = new TFinishCheckpointRequest();
-            request.setJournal_id(journalId);
-            request.setNode_name(nodeName);
-            request.setIs_success(isSuccess);
-            request.setMessage(message);
-            request.setIs_global_state_mgr(isBelongToGlobalStateMgr());
-
-            try {
-                TFinishCheckpointResponse response = ThriftRPCRequestExecutor.call(
-                        ThriftConnectionPool.frontendPool,
-                        servingGlobalState.getNodeMgr().getLeaderRpcEndpoint(),
-                        Config.thrift_rpc_timeout_ms,
-                        client -> client.finishCheckpoint(request));
-                TStatus status = response.getStatus();
-                if (status.getStatus_code() != TStatusCode.OK) {
-                    String errMessage = "";
-                    if (status.getError_msgs() != null && !status.getError_msgs().isEmpty()) {
-                        errMessage = String.join(",", status.getError_msgs());
-                    }
-                    LOG.warn("call finishCheckpoint failed, error message: {}",  errMessage);
-                }
-            } catch (TException e) {
-                LOG.warn("call finishCheckpoint failed", e);
-            }
+            finishCheckpointError = finishCheckpointToLeader(nodeName, journalId, isSuccess, message);
         }
     }
 
@@ -180,6 +168,64 @@ public abstract class CheckpointWorker extends FrontendDaemon {
             LOG.warn("get image journal id failed", e);
             return 0;
         }
+    }
+
+    private boolean finishCheckpointToLeader(String nodeName, long journalId, boolean isSuccess, String message) {
+        TFinishCheckpointRequest request = new TFinishCheckpointRequest();
+        request.setJournal_id(journalId);
+        request.setNode_name(nodeName);
+        request.setIs_success(isSuccess);
+        request.setMessage(message);
+        request.setIs_global_state_mgr(isBelongToGlobalStateMgr());
+
+        try {
+            TFinishCheckpointResponse response = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.frontendPool,
+                    servingGlobalState.getNodeMgr().getLeaderRpcEndpoint(),
+                    Config.thrift_rpc_timeout_ms,
+                    client -> client.finishCheckpoint(request));
+            TStatus status = response.getStatus();
+            if (status.getStatus_code() != TStatusCode.OK) {
+                String errMessage = "";
+                if (status.getError_msgs() != null && !status.getError_msgs().isEmpty()) {
+                    errMessage = String.join(",", status.getError_msgs());
+                }
+                LOG.warn("call finishCheckpoint failed, error message: {}",  errMessage);
+                return false;
+            }
+        } catch (TException e) {
+            LOG.warn("call finishCheckpoint failed", e);
+            return false;
+        }
+        return true;
+    }
+
+    private boolean cancelCheckpointToLeader() {
+        TCancelCheckpointRequest request = new TCancelCheckpointRequest();
+        request.setNode_name(servingGlobalState.getNodeMgr().getNodeName());
+        request.setReason("call finishCheckpoint failed");
+        request.setIs_global_state_mgr(isBelongToGlobalStateMgr());
+
+        try {
+            TCancelCheckpointResponse response = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.frontendPool,
+                    servingGlobalState.getNodeMgr().getLeaderRpcEndpoint(),
+                    Config.thrift_rpc_timeout_ms,
+                    client -> client.cancelCheckpoint(request));
+            TStatus status = response.getStatus();
+            if (status.getStatus_code() != TStatusCode.OK) {
+                String errMessage = "";
+                if (status.getError_msgs() != null && !status.getError_msgs().isEmpty()) {
+                    errMessage = String.join(",", status.getError_msgs());
+                }
+                LOG.warn("call cancelCheckpoint failed, error message: {}",  errMessage);
+                return false;
+            }
+        } catch (TException e) {
+            LOG.warn("call cancelCheckpoint failed", e);
+            return false;
+        }
+        return true;
     }
 
     static class NextPoint {

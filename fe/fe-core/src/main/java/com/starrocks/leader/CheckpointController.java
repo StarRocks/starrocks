@@ -489,8 +489,9 @@ public class CheckpointController extends FrontendDaemon {
 
     public void cancelCheckpoint(String nodeName, String reason) {
         if (nodeName.equals(workerNodeName)) {
+            String leaderNodeName = GlobalStateMgr.getServingState().getNodeMgr().getNodeName();
             result.offer(Pair.create(false, reason));
-            LOG.warn("cancel checkpoint on node: {}, because: {}", nodeName, reason);
+            LOG.warn("cancel checkpoint on leader node: {}, by worker node: {}, because: {}", leaderNodeName, nodeName, reason);
         }
     }
 

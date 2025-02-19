@@ -1938,6 +1938,16 @@ struct TFinishCheckpointResponse {
     1: optional Status.TStatus status;
 }
 
+struct TCancelCheckpointRequest {
+    1: optional string node_name;
+    2: optional string reason;
+    3: optional bool is_global_state_mgr;
+}
+
+struct TCancelCheckpointResponse {
+    1: optional Status.TStatus status;
+}
+
 // Batch fetching partition meta info by a list of tablet ids
 // FIXME: add auth info to the request, so the API will be secured
 struct TPartitionMetaRequest {
@@ -2117,5 +2127,7 @@ service FrontendService {
 
     TClusterSnapshotsResponse getClusterSnapshotsInfo(1: TClusterSnapshotsRequest request)
     TClusterSnapshotJobsResponse getClusterSnapshotJobsInfo(1: TClusterSnapshotJobsRequest request)
+
+    TCancelCheckpointResponse cancelCheckpoint(1: TCancelCheckpointRequest request)
 }
 

@@ -187,6 +187,8 @@ import com.starrocks.thrift.TBatchReportExecStatusParams;
 import com.starrocks.thrift.TBatchReportExecStatusResult;
 import com.starrocks.thrift.TBeginRemoteTxnRequest;
 import com.starrocks.thrift.TBeginRemoteTxnResponse;
+import com.starrocks.thrift.TCancelCheckpointRequest;
+import com.starrocks.thrift.TCancelCheckpointResponse;
 import com.starrocks.thrift.TClusterSnapshotJobsRequest;
 import com.starrocks.thrift.TClusterSnapshotJobsResponse;
 import com.starrocks.thrift.TClusterSnapshotsRequest;
@@ -3071,6 +3073,28 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             response.setStatus(status);
             return response;
         }
+    }
+
+    @Override
+    public TCancelCheckpointResponse cancelCheckpoint(TCancelCheckpointRequest request) throws TException {
+        TCancelCheckpointResponse response = new TCancelCheckpointResponse();
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
+            TStatus status = new TStatus(TStatusCode.CANCELLED);
+            status.addToError_msgs("current node is not leader");
+            response.setStatus(status);
+            return response;
+        }
+
+        CheckpointController controller;
+        if (request.is_global_state_mgr) {
+            controller = GlobalStateMgr.getCurrentState().getCheckpointController();
+        } else {
+            controller = StarMgrServer.getCurrentState().getCheckpointController();
+        }
+
+        controller.cancelCheckpoint(request.getNode_name(), request.getReason());
+        response.setStatus(new TStatus(OK));
+        return response;
     }
 
     @Override
