@@ -21,14 +21,17 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import java.util.Objects;
 
 public class IcebergRemoteFileInfoSourceKey extends PredicateSearchKey {
+    private final long morId;
     private final IcebergMORParams icebergMORParams;
 
     private IcebergRemoteFileInfoSourceKey(String databaseName,
                                            String tableName,
                                            long snapshotId,
                                            ScalarOperator predicate,
+                                           long morId,
                                            IcebergMORParams icebergMORParams) {
         super(databaseName, tableName, snapshotId, predicate);
+        this.morId = morId;
         this.icebergMORParams = icebergMORParams;
     }
 
@@ -36,9 +39,10 @@ public class IcebergRemoteFileInfoSourceKey extends PredicateSearchKey {
                                                     String tableName,
                                                     long snapshotId,
                                                     ScalarOperator predicate,
+                                                    long morId,
                                                     IcebergMORParams icebergMORParams) {
         predicate = predicate == null ? ConstantOperator.TRUE : predicate;
-        return new IcebergRemoteFileInfoSourceKey(databaseName, tableName, snapshotId, predicate, icebergMORParams);
+        return new IcebergRemoteFileInfoSourceKey(databaseName, tableName, snapshotId, predicate, morId, icebergMORParams);
     }
 
     @Override
@@ -54,11 +58,11 @@ public class IcebergRemoteFileInfoSourceKey extends PredicateSearchKey {
         }
 
         IcebergRemoteFileInfoSourceKey that = (IcebergRemoteFileInfoSourceKey) o;
-        return Objects.equals(icebergMORParams, that.icebergMORParams);
+        return morId == that.morId && Objects.equals(icebergMORParams, that.icebergMORParams);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(super.hashCode(), icebergMORParams);
+        return Objects.hash(super.hashCode(), morId, icebergMORParams);
     }
 }
