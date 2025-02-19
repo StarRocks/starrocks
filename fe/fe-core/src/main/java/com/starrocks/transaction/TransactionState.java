@@ -138,7 +138,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
         OFFSET_OUT_OF_RANGE,
         PAUSE,
         NO_PARTITIONS,
-        FILTERED_ROWS;
+        FILTERED_ROWS,
+        PARSE_ERROR;
 
         public static TxnStatusChangeReason fromString(String reasonString) {
             if (Strings.isNullOrEmpty(reasonString)) {
@@ -162,6 +163,8 @@ public class TransactionState implements Writable, GsonPreProcessable {
                     return "No partitions have data available for loading";
                 case FILTERED_ROWS:
                     return "too many filtered rows";
+                case PARSE_ERROR:
+                    return "parse error";
                 default:
                     return this.name();
             }
