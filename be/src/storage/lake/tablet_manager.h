@@ -211,6 +211,8 @@ public:
     StatusOr<TabletAndRowsets> capture_tablet_and_rowsets(int64_t tablet_id, int64_t from_version, int64_t to_version);
 
     int64_t get_average_row_size_from_latest_metadata(int64_t tablet_id);
+    
+    StatusOr<int64_t> collect_tablet_storage_size(int64_t tablet_id, int64_t curr_version, int64_t vacuum_version);
 
     void stop();
 

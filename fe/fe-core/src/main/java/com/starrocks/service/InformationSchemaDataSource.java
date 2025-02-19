@@ -368,8 +368,9 @@ public class InformationSchemaDataSource {
         // REPLICATION_NUM
         partitionMetaInfo.setReplication_num(partitionInfo.getReplicationNum(partition.getId()));
         // DATA_SIZE
-        ByteSizeValue byteSizeValue = new ByteSizeValue(physicalPartition.storageDataSize());
+        ByteSizeValue byteSizeValue = new ByteSizeValue(physicalPartition.dataSize());
         partitionMetaInfo.setData_size(byteSizeValue.toString());
+        partitionMetaInfo.setStorage_size(physicalPartition.storageSize());
         DataProperty dataProperty = partitionInfo.getDataProperty(partition.getId());
         // STORAGE_MEDIUM
         partitionMetaInfo.setStorage_medium(dataProperty.getStorageMedium().name());
