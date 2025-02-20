@@ -1253,7 +1253,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         LOG.debug("replay on aborted: {}, has attachment: {}", txnState, txnState.getTxnCommitAttachment() == null);
     }
 
-    private Optional<ErrorReason> shouldPauseOnTxnStateChange(String txnStatusChangeReasonStr ) {
+    private Optional<ErrorReason> shouldPauseOnTxnStateChange(String txnStatusChangeReasonStr) {
         TransactionState.TxnStatusChangeReason reason = TransactionState.TxnStatusChangeReason.fromString(txnStatusChangeReasonStr);
         if (reason == null) {
             return Optional.empty();
