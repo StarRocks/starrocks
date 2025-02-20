@@ -45,6 +45,7 @@ public class MvTransparentRewriteWithOlapTableTest extends MVTestBase {
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
 
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
         m1 = new MTable("m1", "k1",
                 ImmutableList.of(
                         "k1 INT",
