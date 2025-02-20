@@ -169,7 +169,8 @@ private:
 
     void _init_storage_page_cache();
 
-    std::shared_ptr<MemTracker> regist_tracker(MemTrackerType type, size_t level, int64_t bytes_limit, MemTracker* parent);
+    std::shared_ptr<MemTracker> regist_tracker(MemTrackerType type, size_t level, int64_t bytes_limit,
+                                               MemTracker* parent);
 
     // root process memory tracker
     std::shared_ptr<MemTracker> _process_mem_tracker;
