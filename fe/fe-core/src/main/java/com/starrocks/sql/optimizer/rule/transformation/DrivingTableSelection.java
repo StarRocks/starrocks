@@ -134,9 +134,9 @@ public class DrivingTableSelection extends TransformationRule {
 
         } else if (operator instanceof LogicalProjectOperator projectOperator) {
             projectOperator.getRowOutputInfo(root.getInputs()).getColumnRefMap().forEach((columnOp, scalarOp) -> {
-                for (int columnId : scalarOp.getUsedColumns().getColumnIds()) {
-                    if (columnOp.getId() != columnId) {
-                        columnMapping.put(columnOp.getId(), columnId);
+                if (scalarOp instanceof ColumnRefOperator columnRefOperator) {
+                    if (columnOp.getId() != columnRefOperator.getId()) {
+                        columnMapping.put(columnOp.getId(), columnRefOperator.getId());
                     }
                 }
             });
@@ -203,12 +203,18 @@ public class DrivingTableSelection extends TransformationRule {
             List<Pair<Node, Integer>> joinWithTableIdx = new ArrayList<>();
             List<Node> projections = new ArrayList<>();
             extractJoins(null, -1, input, joinTables, joinWithTableIdx, projections);
-
+            if (joinWithTableIdx.isEmpty()) {
+                return Collections.emptyList();
+            }
+            int joinsHash = joinTables.hashCode();
             // JoinReorder
             Map<Long, Integer> finalTableDepthMap = tableDepthMap.get();
             joinTables.sort(Comparator.comparingInt((Pair<Long, OptExpression> pair) -> finalTableDepthMap.get(pair.first))
-                    .thenComparingLong(pair -> pair.first));
-
+                    .thenComparingLong(pair -> -pair.first));
+            // If the join order does not change, then skip
+            if (joinTables.hashCode() == joinsHash) {
+                return Collections.emptyList();
+            }
             for (int i = 0; i < joinTables.size(); i++) {
                 Pair<Node, Integer> joinPair = joinWithTableIdx.get(i);
                 Node join = joinPair.first;
