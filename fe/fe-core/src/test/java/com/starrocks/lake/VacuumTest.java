@@ -86,7 +86,7 @@ public class VacuumTest {
                     .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable1);
         partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
         partition.setVisibleVersion(10L, System.currentTimeMillis());
-        partition.setMinRetainVersion(5L);
+        partition.setMinRetainVersion(10L);
         partition.setLastSuccVacuumVersion(4L);
 
         warehouseManager = mock(WarehouseManager.class);
@@ -131,12 +131,12 @@ public class VacuumTest {
         
         Assert.assertEquals(5L, partition.getLastSuccVacuumVersion());
 
-        partition.setVisibleVersion(5L, System.currentTimeMillis());
+        mockResponse.vacuumedVersion = 7L;
         try (MockedStatic<BrpcProxy> mockBrpcProxyStatic = mockStatic(BrpcProxy.class)) {
             mockBrpcProxyStatic.when(() -> BrpcProxy.getLakeService(anyString(), anyInt())).thenReturn(lakeService);
             autovacuumDaemon.testVacuumPartitionImpl(db, olapTable, partition);
         }
-        Assert.assertEquals(5L, partition.getLastSuccVacuumVersion());
+        Assert.assertEquals(7L, partition.getLastSuccVacuumVersion());
     }
 
     @Test
