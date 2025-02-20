@@ -1210,7 +1210,7 @@ public class WindowTest extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
-                "     table: t0, rollup: t0\n" +
+                "     TABLE: t0, rollup: t0\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: [1: v1, BIGINT, true] = 1, 1: v1 IS NOT NULL\n" +
                 "     partitionsRatio=0/1, tabletsRatio=0/0\n" +

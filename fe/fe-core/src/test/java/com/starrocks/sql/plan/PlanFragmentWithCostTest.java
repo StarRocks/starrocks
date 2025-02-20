@@ -846,7 +846,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
                     "  |      [8: expr, BIGINT, true] | [6: v5, BIGINT, true] | [7: v6, BIGINT, true]\n" +
                     "  |  pass-through-operands: all\n");
             assertContains(unionPlan, "  4:OlapScanNode\n" +
-                    "     table: t1, rollup: t1\n" +
+                    "     TABLE: t1, rollup: t1\n" +
                     "     preAggregation: on\n" +
                     "     Predicates: 5: v4 + 2 IS NOT NULL\n" +
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
@@ -856,7 +856,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
                     "     probe runtime filters:\n" +
                     "     - filter_id = 0, probe_expr = (5: v4 + 2)");
             assertContains(unionPlan, "  1:OlapScanNode\n" +
-                    "     table: t0, rollup: t0\n" +
+                    "     TABLE: t0, rollup: t0\n" +
                     "     preAggregation: on\n" +
                     "     Predicates: 1: v1 + 1 IS NOT NULL\n" +
                     "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
@@ -982,7 +982,7 @@ public class PlanFragmentWithCostTest extends PlanWithCostTestBase {
                 "    select cte.v4, cte.v5, cte.v6 from t2 join cte on cte.v4 = t2.v7 and t2.v8 < 10) as t\n";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "  0:OlapScanNode\n" +
-                "     table: t1, rollup: t1\n" +
+                "     TABLE: t1, rollup: t1\n" +
                 "     preAggregation: on\n" +
                 "     partitionsRatio=1/1, tabletsRatio=3/3\n" +
                 "     tabletList=" + tabletIdsStrList.get(0) + "\n" +

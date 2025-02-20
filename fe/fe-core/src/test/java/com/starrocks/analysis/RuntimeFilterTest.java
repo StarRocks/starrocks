@@ -106,7 +106,7 @@ public class RuntimeFilterTest {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  6:OlapScanNode\n" +
-                "     table: duplicate_par_tbl, rollup: duplicate_par_tbl\n" +
+                "     TABLE: duplicate_par_tbl, rollup: duplicate_par_tbl\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: [39: k13, DECIMAL128(27,9), true] > 60, 31: k5 IS NULL\n" +
                 "     partitionsRatio=1/3, tabletsRatio=3/3\n" +

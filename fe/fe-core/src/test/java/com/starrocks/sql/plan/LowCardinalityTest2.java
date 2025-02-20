@@ -282,7 +282,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  1:OlapScanNode\n" +
-                "     table: lineitem, rollup: lineitem\n" +
+                "     TABLE: lineitem, rollup: lineitem\n" +
                 "     preAggregation: on\n" +
                 "     dict_col=L_COMMENT\n" +
                 "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
@@ -947,7 +947,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "l.S_NAME = r.S_NAME where upper(l.S_ADDRESS) like '%A%' and upper(l.S_ADDRESS) not like '%B%'";
         plan = getCostExplain(sql);
         assertContains(plan, "0:OlapScanNode\n" +
-                "     table: supplier, rollup: supplier\n" +
+                "     TABLE: supplier, rollup: supplier\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: DictDecode(17: S_ADDRESS, [(upper(<place-holder>) LIKE '%A%')" +
                 " AND (NOT (upper(<place-holder>) LIKE '%B%'))])\n" +

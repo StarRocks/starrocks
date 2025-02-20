@@ -274,7 +274,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  1:OlapScanNode\n" +
-                "     table: lineitem, rollup: lineitem\n" +
+                "     TABLE: lineitem, rollup: lineitem\n" +
                 "     preAggregation: on\n" +
                 "     dict_col=L_COMMENT\n" +
                 "     partitionsRatio=0/1, tabletsRatio=0/0\n" +
@@ -859,7 +859,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "l.S_NAME = r.S_NAME where upper(l.S_ADDRESS) like '%A%' and upper(l.S_ADDRESS) not like '%B%'";
         plan = getCostExplain(sql);
         assertContains(plan, "0:OlapScanNode\n" +
-                "     table: supplier, rollup: supplier\n" +
+                "     TABLE: supplier, rollup: supplier\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: upper(3: S_ADDRESS) LIKE '%A%', NOT (upper(3: S_ADDRESS) LIKE '%B%')\n" +
                 "     dict_col=S_COMMENT");
@@ -2000,7 +2000,7 @@ public class LowCardinalityTest extends PlanTestBase {
                 "  |  * cast-->[-Infinity, Infinity, 0.0, 16.0, 3.0] ESTIMATE\n" +
                 "  |  \n" +
                 "  1:OlapScanNode\n" +
-                "     table: part_v2, rollup: part_v2\n" +
+                "     TABLE: part_v2, rollup: part_v2\n" +
                 "     preAggregation: on\n" +
                 "     dict_col=P_NAME,P_BRAND");
         System.out.println(plan);
