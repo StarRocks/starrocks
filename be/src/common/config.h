@@ -1568,4 +1568,6 @@ CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
 CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
 // used to control whether the metrics/ interface collects table metrics
 CONF_mBool(enable_collect_table_metrics, "true");
+
+CONF_mBool(enable_stuct_apply_task, "false");
 } // namespace starrocks::config

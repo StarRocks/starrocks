@@ -1269,7 +1269,9 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                               Status::InternalError("inject tablet_apply_normal_rowset_commit_internal_error"));
     FAIL_POINT_TRIGGER_RETURN(tablet_apply_normal_rowset_commit_memory_exceed,
                               Status::MemoryLimitExceeded("inject tablet_apply_normal_rowset_commit_memory_exceed"));
-
+    while (config::enable_stuct_apply_task) {
+        sleep(1);
+    }
     // NOTE: after commit, apply must success or fatal crash
     int64_t t_start = MonotonicMillis();
     auto tablet_id = _tablet.tablet_id();
