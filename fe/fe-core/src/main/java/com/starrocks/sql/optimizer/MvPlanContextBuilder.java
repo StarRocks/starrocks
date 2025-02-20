@@ -52,14 +52,9 @@ public class MvPlanContextBuilder {
 
             // TODO: Only add context with view when view rewrite is set on.
             if (mv.getBaseTableTypes().stream().anyMatch(type -> type == TableType.VIEW)) {
-<<<<<<< HEAD
-                MvPlanContext contextWithView = mvOptimizer.optimize(mv, connectContext, false);
-                results.add(contextWithView);
-=======
-                Optional.ofNullable(doGetOptimizePlan(() -> mvOptimizer.optimize(mv, connectContext, false, true),
+                Optional.ofNullable(doGetOptimizePlan(() -> mvOptimizer.optimize(mv, connectContext, false),
                                 isThrowException))
                         .map(results::add);
->>>>>>> 107727bb68 ([UT] [BugFix] Fix mv unstable test cases (#55998))
             }
         }
         return results;
