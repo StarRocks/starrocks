@@ -24,7 +24,7 @@ CREATE [TEMPORARY] [EXTERNAL] TABLE [IF NOT EXISTS] [database.]table_name
 [partition_desc]
 [distribution_desc]
 [rollup_index]
-[ORDER BY (column_definition1,...)]
+[ORDER BY (column_name1,...)]
 [PROPERTIES ("key"="value", ...)]
 [BROKER PROPERTIES ("key"="value", ...)]
 ```
