@@ -28,6 +28,7 @@ import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
@@ -46,6 +47,7 @@ import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
@@ -128,9 +130,7 @@ import java.util.Optional;
 
 import static com.starrocks.catalog.Table.TableType.PAIMON_VIEW;
 import static com.starrocks.catalog.Type.INT;
-import static org.apache.paimon.io.DataFileMeta.DUMMY_LEVEL;
-import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
-import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
+import static org.apache.paimon.io.DataFileMeta.*;
 import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
 import static org.junit.Assert.assertEquals;
 
@@ -248,6 +248,8 @@ public class PaimonMetadataTest {
             {
                 paimonNativeCatalog.getTable(identifier);
                 result = new Catalog.TableNotExistException(identifier);
+                paimonNativeCatalog.getView(identifier);
+                result = new Catalog.ViewNotExistException(identifier);
             }
         };
         Assert.assertFalse(metadata.tableExists(connectContext, "nonexistentDb", "nonexistentTbl"));
@@ -747,7 +749,8 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testCreateView(@Mocked org.apache.paimon.view.View paimonView) throws Exception {
+    public void testView(@Mocked org.apache.paimon.view.View paimonView) throws Exception {
+        //test createview
         new Expectations() {
             {
                 paimonNativeCatalog.getView((Identifier) any);
@@ -758,6 +761,8 @@ public class PaimonMetadataTest {
                 Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", false, null, NodePosition.ZERO);
         stmt.setColumns(Lists.newArrayList(new Column("k1", INT)));
         metadata.createView(stmt);
+
+        //test getview
         new Expectations() {
             {
                 paimonNativeCatalog.getView((Identifier) any);
@@ -771,5 +776,18 @@ public class PaimonMetadataTest {
         Assert.assertEquals("test_view", table.getName());
         Assert.assertEquals("select * from table", table.getInlineViewDef());
         Assert.assertEquals("", table.getTableLocation());
+
+        //test drop normal
+        DropTableStmt dropStmt = new DropTableStmt(true, new TableName("paimon_catalog", "db", "test_view"), true, true);
+        metadata.dropTable(dropStmt);
+
+        //test drop not exist
+        new Expectations() {
+            {
+                paimonNativeCatalog.dropView((Identifier) any,true);
+                result = new Catalog.ViewNotExistException(new Identifier("test", "ViewNotExist"));
+            }
+        };
+        Assert.assertThrows(DdlException.class, () -> metadata.dropTable(dropStmt));
     }
 }

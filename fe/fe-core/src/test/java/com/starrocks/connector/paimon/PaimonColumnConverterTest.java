@@ -24,6 +24,8 @@ import org.apache.paimon.types.BinaryType;
 import org.apache.paimon.types.BooleanType;
 import org.apache.paimon.types.CharType;
 import org.apache.paimon.types.DataField;
+import org.apache.paimon.types.DataType;
+import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.types.DateType;
 import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.DoubleType;
@@ -189,5 +191,20 @@ public class PaimonColumnConverterTest {
         Assert.assertEquals(Type.VARBINARY, srType.getField("f0").getType());
         Assert.assertEquals(Type.BIGINT, srType.getField("f1").getType());
         Assert.assertEquals(Type.FLOAT, srType.getField("f2").getType());
+    }
+
+    @Test
+    public void testConvertToPaimonType() {
+        DataType paimonDataType = ColumnTypeConverter.toPaimonDataType(Type.INT);
+        Assert.assertEquals(paimonDataType, DataTypes.INT());
+
+        paimonDataType = ColumnTypeConverter.toPaimonDataType(Type.BIGINT);
+        Assert.assertEquals(paimonDataType, DataTypes.BIGINT());
+
+        paimonDataType = ColumnTypeConverter.toPaimonDataType(Type.BOOLEAN);
+        Assert.assertEquals(paimonDataType, DataTypes.BOOLEAN());
+
+        paimonDataType = ColumnTypeConverter.toPaimonDataType(Type.VARBINARY);
+        Assert.assertEquals(paimonDataType, DataTypes.VARBINARY(VarBinaryType.MAX_LENGTH));
     }
 }
