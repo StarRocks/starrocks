@@ -83,7 +83,6 @@ import org.apache.paimon.utils.DateTimeUtils;
 import org.apache.paimon.utils.PartitionPathUtils;
 import org.apache.paimon.view.View;
 import org.apache.paimon.view.ViewImpl;
-import org.jetbrains.annotations.NotNull;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
