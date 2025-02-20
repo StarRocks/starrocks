@@ -81,7 +81,7 @@ SpillMemTableSink::SpillMemTableSink(LoadSpillBlockManager* block_manager, Table
     _spiller_factory = spill::make_spilled_factory();
     std::string tracker_label = "LoadSpillMerge-" + std::to_string(_block_manager->tablet_id()) + "-" +
                                 std::to_string(_block_manager->txn_id());
-    _merge_mem_tracker = std::make_unique<MemTracker>(MemTracker::COMPACTION, -1, std::move(tracker_label),
+    _merge_mem_tracker = std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1, std::move(tracker_label),
                                                       GlobalEnv::GetInstance()->compaction_mem_tracker());
 }
 
