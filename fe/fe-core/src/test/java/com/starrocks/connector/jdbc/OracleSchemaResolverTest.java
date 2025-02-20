@@ -250,4 +250,56 @@ public class OracleSchemaResolverTest {
             Assert.fail(e.getMessage());
         }
     }
+
+    @Test
+    public void testMysqlInvalidPartition1() {
+        try {
+            MockResultSet invalidPartition = new MockResultSet("partitions");
+            invalidPartition.addColumn("NAME", Arrays.asList("'20230810'"));
+            invalidPartition.addColumn("PARTITION_EXPRESSION", Arrays.asList("`d`"));
+            invalidPartition.addColumn("MODIFIED_TIME", Arrays.asList("2023-08-01"));
+
+            new Expectations() {
+                {
+                    preparedStatement.executeQuery();
+                    result = invalidPartition;
+                    minTimes = 0;
+                }
+            };
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            List<Column> columns = Arrays.asList(new Column("d", Type.VARCHAR));
+            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", columns, Lists.newArrayList(),
+                    "test", "catalog", properties);
+            jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
+            // different mysql source may have different partition information, so we can ignore partition information parse
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testMysqlInvalidPartition2() {
+        try {
+            MockResultSet invalidPartition = new MockResultSet("partitions");
+            invalidPartition.addColumn("NAME", Arrays.asList("'20230810'"));
+            invalidPartition.addColumn("PARTITION_EXPRESSION", Arrays.asList("`d`"));
+            invalidPartition.addColumn("MODIFIED_TIME", Arrays.asList("NULL"));
+
+            new Expectations() {
+                {
+                    preparedStatement.executeQuery();
+                    result = invalidPartition;
+                    minTimes = 0;
+                }
+            };
+            JDBCMetadata jdbcMetadata = new JDBCMetadata(properties, "catalog", dataSource);
+            List<Column> columns = Arrays.asList(new Column("d", Type.VARCHAR));
+            JDBCTable jdbcTable = new JDBCTable(100000, "tbl1", columns, Lists.newArrayList(),
+                    "test", "catalog", properties);
+            jdbcMetadata.getPartitions(jdbcTable, Arrays.asList("20230810")).size();
+            // different mysql source may have different partition information, so we can ignore partition information parse
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
 }
