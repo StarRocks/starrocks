@@ -2273,6 +2273,7 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     if (!st.ok()) {
         std::string msg = strings::Substitute("_apply_compaction_commit error: load primary index failed: $0 $1",
                                               st.to_string(), debug_string());
+        manager->index_cache().remove(index_entry);
         failure_handler(msg, st.code());
         return apply_st;
     }
@@ -2283,7 +2284,7 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     // release or remove index entry when function end
     DeferOp index_defer([&]() {
         index.reset_cancel_major_compaction();
-        if (enable_persistent_index ^ _tablet.get_enable_persistent_index()) {
+        if ((enable_persistent_index ^ _tablet.get_enable_persistent_index()) || !index.get_load_status().ok()) {
             manager->index_cache().remove(index_entry);
         } else {
             manager->index_cache().release(index_entry);
@@ -5717,6 +5718,7 @@ void TabletUpdates::_reset_apply_status(const EditVersionInfo& version_info_appl
             auto& index = index_entry->value();
             index.unload();
             manager->index_cache().update_object_size(index_entry, index.memory_usage());
+            manager->index_cache().release(index_entry);
         }
     }
 }

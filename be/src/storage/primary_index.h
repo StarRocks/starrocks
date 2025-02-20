@@ -153,6 +153,8 @@ public:
 
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
 
+    Status get_load_status() { return _status; }
+
     // only for ut
     void set_status(bool loaded, Status st) {
         _loaded = loaded;
