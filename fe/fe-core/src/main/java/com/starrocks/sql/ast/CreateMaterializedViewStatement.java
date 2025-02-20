@@ -303,20 +303,10 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.columnRefFactory = columnRefFactory;
     }
 
-<<<<<<< HEAD
-=======
-    public Map<Integer, Column> getGeneratedPartitionCols() {
-        return generatedPartitionCols;
-    }
-
-    public Map<Expr, Expr> getPartitionByExprToAdjustExprMap() {
-        return partitionByExprToAdjustExprMap;
-    }
     public String getOriginalDBName() {
         return originalDBName;
     }
 
->>>>>>> 8906c3da24 ([BugFix] Support text base mv rewrite for different dbs (#56001))
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateMaterializedViewStatement(this, context);

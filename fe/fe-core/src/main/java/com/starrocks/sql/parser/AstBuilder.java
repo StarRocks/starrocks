@@ -105,6 +105,7 @@ import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.scheduler.persist.TaskSchedule;
 import com.starrocks.server.WarehouseManager;
@@ -1814,12 +1815,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
                 comment,
                 refreshSchemeDesc,
-<<<<<<< HEAD
                 partitionByExpr, distributionDesc, sortKeys, properties, queryStatement, queryStartIndex,
-=======
-                partitionByExprs, distributionDesc, sortKeys, properties, queryStatement, queryStartIndex,
                 currentDBName,
->>>>>>> 8906c3da24 ([BugFix] Support text base mv rewrite for different dbs (#56001))
                 createPos(context));
     }
 
