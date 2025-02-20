@@ -22,10 +22,10 @@ import com.starrocks.analysis.AnalyticWindow;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
-import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.OrderByElement;
+import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
@@ -169,17 +169,19 @@ public class WindowTransformer {
 
             // Also flip first_value()/last_value(). For other analytic functions there is no
             // need to also change the function.
-            FunctionName reversedFnName = null;
+            String reversedFnName = null;
 
             if (callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE)) {
-                reversedFnName = new FunctionName(AnalyticExpr.LASTVALUE);
+                reversedFnName = AnalyticExpr.LASTVALUE;
             } else if (callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.LASTVALUE)) {
-                reversedFnName = new FunctionName(AnalyticExpr.FIRSTVALUE);
+                reversedFnName = AnalyticExpr.FIRSTVALUE;
             }
 
             if (reversedFnName != null) {
-                callExpr = new FunctionCallExpr(reversedFnName, callExpr.getParams());
-                callExpr.setIsAnalyticFnCall(true);
+                callExpr.resetFnName("", reversedFnName);
+                Function reversedFn = Expr.getBuiltinFunction(reversedFnName,
+                        callExpr.getFn().getArgs(), Function.CompareMode.IS_IDENTICAL);
+                callExpr.setFn(reversedFn);
             }
         }
 
