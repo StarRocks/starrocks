@@ -38,6 +38,7 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
         MVTestBase.beforeClass();
 
         connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
         starRocksAssert.withTable("CREATE TABLE t0(\n" +
                 " k1 datetime,\n" +
                 " v1 INT,\n" +
