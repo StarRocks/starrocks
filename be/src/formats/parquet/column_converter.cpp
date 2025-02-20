@@ -94,7 +94,7 @@ private:
     // according to session variable "time_zone".
     [[nodiscard]] Timestamp _utc_to_local(Timestamp timestamp) const {
         int64_t days = timestamp::to_julian(timestamp);
-        int64_t seconds_from_epoch = (days - 2440588) * 86400;
+        int64_t seconds_from_epoch = (days - date::UNIX_EPOCH_JULIAN) * 86400;
 
         int64_t microseconds = timestamp::to_time(timestamp);
         seconds_from_epoch += (microseconds / 1000000);
