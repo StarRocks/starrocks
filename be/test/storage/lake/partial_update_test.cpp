@@ -285,8 +285,8 @@ TEST_P(LakePartialUpdateTest, test_partial_update_with_condition) {
 
     auto chunk0 = generate_data(kChunkSize, 0, false, 3);
     std::vector<Chunk> chunks(3);
-    chunks[0] = generate_data(kChunkSize, 0, true, 3);
-    chunks[1] = generate_data(kChunkSize, 0, true, 2);
+    chunks[0] = generate_data(kChunkSize, 0, true, 2);
+    chunks[1] = generate_data(kChunkSize, 0, true, 3);
     chunks[2] = generate_data(kChunkSize, 0, true, 4);
     auto indexes = std::vector<uint32_t>(kChunkSize);
     for (int i = 0; i < kChunkSize; i++) {
