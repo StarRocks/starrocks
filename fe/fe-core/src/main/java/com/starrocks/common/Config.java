@@ -3057,4 +3057,90 @@ public class Config extends ConfigBase {
     // whether to print sql before parser
     @ConfField(mutable = true)
     public static boolean enable_print_sql = false;
+<<<<<<< HEAD
+=======
+
+    @ConfField(mutable = false)
+    public static int lake_remove_partition_thread_num = 8;
+
+    @ConfField(mutable = false)
+    public static int lake_remove_table_thread_num = 4;
+
+    @ConfField(mutable = true)
+    public static int merge_commit_gc_check_interval_ms = 60000;
+
+    @ConfField(mutable = true)
+    public static int merge_commit_idle_ms = 3600000;
+
+    @ConfField(mutable = false)
+    public static int merge_commit_executor_threads_num = 4096;
+
+    @ConfField(mutable = true)
+    public static int merge_commit_txn_state_dispatch_retry_times = 3;
+
+    @ConfField(mutable = true)
+    public static int merge_commit_txn_state_dispatch_retry_interval_ms = 200;
+
+    @ConfField(mutable = true)
+    public static int merge_commit_be_assigner_schedule_interval_ms = 5000;
+
+    @ConfField(mutable = true, comment = "Defines the maximum balance factor allowed " +
+            "between any two nodes before triggering a balance")
+    public static double merge_commit_be_assigner_balance_factor_threshold = 0.1;
+
+    /**
+     * Enable Arrow Flight SQL server only when the port is set to positive value.
+     */
+    @ConfField
+    public static int arrow_flight_port = -1;
+
+    @ConfField(mutable = true)
+    public static int arrow_token_cache_size = 1024;
+
+    @ConfField(mutable = true)
+    public static int arrow_token_cache_expire = 3600;
+
+    @ConfField(mutable = false)
+    public static int query_deploy_threadpool_size = max(50, getRuntime().availableProcessors() * 10);
+
+    @ConfField(mutable = true)
+    public static long automated_cluster_snapshot_interval_seconds = 600;
+
+    @ConfField(mutable = false)
+    public static int max_historical_automated_cluster_snapshot_jobs = 100;
+
+    /**
+     * The URL to a JWKS service or a local file in the conf dir
+     */
+    @ConfField(mutable = false)
+    public static String oidc_jwks_url = "";
+
+    /**
+     * String to identify the field in the JWT that identifies the subject of the JWT.
+     * The default value is sub.
+     * The value of this field must be the same as the user specified when logging into StarRocks.
+     */
+    @ConfField(mutable = false)
+    public static String oidc_principal_field = "sub";
+
+    /**
+     * Specifies a string that must match the value of the JWT’s issuer (iss) field in order to consider this JWT valid.
+     * The iss field in the JWT identifies the principal that issued the JWT.
+     */
+    @ConfField(mutable = false)
+    public static String oidc_required_issuer = "";
+
+    /**
+     * Specifies a string that must match the value of the JWT’s Audience (aud) field in order to consider this JWT valid.
+     * The aud field in the JWT identifies the recipients that the JWT is intended for.
+     */
+    @ConfField(mutable = false)
+    public static String oidc_required_audience = "";
+
+    @ConfField(mutable = true)
+    public static boolean transaction_state_print_partition_info = true;
+
+    @ConfField(mutable = true)
+    public static int max_show_proc_transactions_entry = 2000;
+>>>>>>> 45931ecc57 ([Enhancement] support configure show proc '/transactions' max entry count (#55933))
 }
