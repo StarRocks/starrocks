@@ -222,6 +222,10 @@ public class RewriteSimpleAggToHDFSScanRule extends TransformationRule {
             }
         }
 
+        if (aggregationOperator.getAggregations().isEmpty()) {
+            return false;
+        }
+
         boolean allValid = aggregationOperator.getAggregations().values().stream().allMatch(
                 aggregator -> {
                     AggregateFunction aggregateFunction = (AggregateFunction) aggregator.getFunction();
