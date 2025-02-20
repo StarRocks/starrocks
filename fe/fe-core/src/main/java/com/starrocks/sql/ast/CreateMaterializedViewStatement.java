@@ -68,6 +68,8 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private String simpleViewDef;
     // original view definition of the mv query without any rewrite which can be used in text based rewrite.
     private String originalViewDefineSql;
+    // current db name when creating mv
+    private String originalDBName;
     private List<BaseTableInfo> baseTableInfos;
 
     // Maintenance information
@@ -99,6 +101,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
                                            Map<String, String> properties,
                                            QueryStatement queryStatement,
                                            int queryStartIndex,
+                                           String originalDBName,
                                            NodePosition pos) {
         super(pos);
         this.tableName = tableName;
@@ -113,6 +116,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.properties = properties;
         this.queryStartIndex = queryStartIndex;
         this.queryStatement = queryStatement;
+        this.originalDBName = originalDBName;
     }
 
     public TableName getTableName() {
@@ -299,6 +303,20 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.columnRefFactory = columnRefFactory;
     }
 
+<<<<<<< HEAD
+=======
+    public Map<Integer, Column> getGeneratedPartitionCols() {
+        return generatedPartitionCols;
+    }
+
+    public Map<Expr, Expr> getPartitionByExprToAdjustExprMap() {
+        return partitionByExprToAdjustExprMap;
+    }
+    public String getOriginalDBName() {
+        return originalDBName;
+    }
+
+>>>>>>> 8906c3da24 ([BugFix] Support text base mv rewrite for different dbs (#56001))
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitCreateMaterializedViewStatement(this, context);

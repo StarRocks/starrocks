@@ -1809,11 +1809,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new ParsingException(PARSER_ERROR_MSG.feConfigDisable("enable_experimental_mv"), NodePosition.ZERO);
         }
 
+        String currentDBName = ConnectContext.get() == null ? null : ConnectContext.get().getDatabase();
         return new CreateMaterializedViewStatement(tableName, ifNotExist, colWithComments,
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
                 comment,
                 refreshSchemeDesc,
+<<<<<<< HEAD
                 partitionByExpr, distributionDesc, sortKeys, properties, queryStatement, queryStartIndex,
+=======
+                partitionByExprs, distributionDesc, sortKeys, properties, queryStatement, queryStartIndex,
+                currentDBName,
+>>>>>>> 8906c3da24 ([BugFix] Support text base mv rewrite for different dbs (#56001))
                 createPos(context));
     }
 
