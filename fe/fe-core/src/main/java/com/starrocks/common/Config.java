@@ -1842,7 +1842,7 @@ public class Config extends ConfigBase {
      * its authentication info is stored in SR metadata.
      * <p>
      * For more information about security integration, you can refer to
-     * {@link SecurityIntegration}
+     * {@link com.starrocks.authentication.SecurityIntegration}
      */
     @ConfField(mutable = true)
     public static String[] authentication_chain = {AUTHENTICATION_CHAIN_MECHANISM_NATIVE};
