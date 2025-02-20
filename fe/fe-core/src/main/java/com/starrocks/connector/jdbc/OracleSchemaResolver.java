@@ -216,21 +216,26 @@ public class OracleSchemaResolver extends JDBCSchemaResolver {
             ps.setString(2, jdbcTable.getCatalogTableName());
             final ResultSet rs = ps.executeQuery();
             final ImmutableList.Builder<Partition> list = ImmutableList.builder();
+            long createTime = TimeUtils.getEpochSeconds();
             if (null != rs) {
                 while (rs.next()) {
                     final String[] partitionNames = rs.getString("NAME").
                             replace("'", "").split(",");
-                    final long createTime = rs.getTimestamp("MODIFIED_TIME").getTime();
+                    try {
+                        createTime = rs.getTimestamp("MODIFIED_TIME").getTime();
+                    } catch (Exception e) {
+                        // ignore
+                    }
                     for (String partitionName : partitionNames) {
                         list.add(new Partition(partitionName, createTime));
                     }
                 }
                 final ImmutableList<Partition> partitions = list.build();
                 return partitions.isEmpty()
-                        ? Lists.newArrayList(new Partition(table.getName(), TimeUtils.getEpochSeconds()))
+                        ? Lists.newArrayList(new Partition(table.getName(), createTime))
                         : partitions;
             } else {
-                return Lists.newArrayList(new Partition(table.getName(), TimeUtils.getEpochSeconds()));
+                return Lists.newArrayList(new Partition(table.getName(), createTime));
             }
         } catch (SQLException | NullPointerException e) {
             throw new StarRocksConnectorException(e.getMessage(), e);
