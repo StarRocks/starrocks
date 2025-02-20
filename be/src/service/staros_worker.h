@@ -71,15 +71,28 @@ public:
     // the worker will try to fetch it back from starmgr.
     absl::StatusOr<ShardInfo> retrieve_shard_info(ShardId id);
 
+<<<<<<< HEAD
+=======
+    // register the listener(callback) when new shard is added to the worker
+    void register_add_shard_listener(add_shard_listener listener) { _add_shard_listener = std::move(listener); }
+
+    void set_fs_cache_capacity(int32_t capacity);
+
+>>>>>>> 95955286d9 ([Enhancement] Using lru cache to limit the number of starlet filesystem instance (#55845))
 private:
     struct ShardInfoDetails {
         ShardInfo shard_info;
-        std::shared_ptr<FileSystem> fs;
+        std::shared_ptr<std::string> fs_cache_key;
 
         ShardInfoDetails(const ShardInfo& info) : shard_info(info) {}
     };
 
-    using CacheValue = std::weak_ptr<FileSystem>;
+    struct CacheValue {
+        std::weak_ptr<std::string> key;
+        std::shared_ptr<FileSystem> fs;
+
+        CacheValue(const std::weak_ptr<std::string>& key, const std::shared_ptr<FileSystem>& fs) : key(key), fs(fs) {}
+    };
 
     // This function can be made static perfectly. The only reason to make it `virtual`
     // is, for unit test MOCK as it is the only interface to interact with g_starlet.
@@ -96,12 +109,20 @@ private:
     static bool need_enable_cache(const ShardInfo& info);
 
     absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_on_demand(ShardId id, const Configuration& conf);
-    absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_from_shard_info(const ShardInfo& info,
-                                                                                 const Configuration& conf);
-    absl::StatusOr<std::shared_ptr<FileSystem>> new_shared_filesystem(std::string_view scheme,
-                                                                      const Configuration& conf);
+    absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<FileSystem>>>
+    build_filesystem_from_shard_info(const ShardInfo& info, const Configuration& conf);
+    absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<FileSystem>>> new_shared_filesystem(
+            std::string_view scheme, const Configuration& conf);
     absl::Status invalidate_fs(const ShardInfo& shard);
 
+    std::shared_ptr<std::string> insert_fs_cache(const std::string& key, const std::shared_ptr<FileSystem>& fs);
+    void erase_fs_cache(const std::string& key);
+    std::shared_ptr<FileSystem> lookup_fs_cache(const std::string& key);
+    std::shared_ptr<FileSystem> lookup_fs_cache(const std::shared_ptr<std::string>& key);
+    absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<FileSystem>>> find_fs_cache(
+            const std::string& key);
+
+private:
     mutable std::shared_mutex _mtx;
     std::unordered_map<ShardId, ShardInfoDetails> _shards;
     std::unique_ptr<Cache> _fs_cache;

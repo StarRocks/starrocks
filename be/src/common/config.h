@@ -1003,6 +1003,11 @@ CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
 // make starlet_fslib_s3client_request_timeout_ms as an alias of the object_storage_request_timeout_ms
 // NOTE: need to handle the negative value properly
 CONF_Alias(object_storage_request_timeout_ms, starlet_fslib_s3client_request_timeout_ms);
+<<<<<<< HEAD
+=======
+CONF_mInt32(starlet_delete_files_max_key_in_batch, "1000");
+CONF_mInt32(starlet_filesystem_instance_cache_capacity, "10000");
+>>>>>>> 95955286d9 ([Enhancement] Using lru cache to limit the number of starlet filesystem instance (#55845))
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
