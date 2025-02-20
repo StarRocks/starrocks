@@ -18,6 +18,7 @@
 #include "http/default_path_handlers.h"
 
 #include <gtest/gtest.h>
+
 #include "runtime/exec_env.h"
 
 namespace starrocks {
@@ -40,4 +41,4 @@ TEST_F(DefaultPathHandlersTest, mem_tracker) {
     ASSERT_TRUE(output2.str().find("<tr><td>1</td><td>process</td><td>") == std::string::npos);
     ASSERT_TRUE(output2.str().find("<tr><td>3</td><td>tablet_metadata</td><td>metadata</td>") != std::string::npos);
 }
-}
+} // namespace starrocks
