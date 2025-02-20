@@ -87,6 +87,13 @@ public:
 
     void get_split_tasks(std::vector<pipeline::ScanSplitContextPtr>* split_tasks) { split_tasks->swap(_split_tasks); }
 
+    static Status parse_seek_range(const TabletSchema& tablet_schema,
+                                   TabletReaderParams::RangeStartOperation range_start_op,
+                                   TabletReaderParams::RangeEndOperation range_end_op,
+                                   const std::vector<OlapTuple>& range_start_key,
+                                   const std::vector<OlapTuple>& range_end_key, std::vector<SeekRange>* ranges,
+                                   MemPool* mempool);
+
 protected:
     Status do_get_next(Chunk* chunk) override;
     Status do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) override;
@@ -108,13 +115,6 @@ private:
 
     static Status to_seek_tuple(const TabletSchema& tablet_schema, const OlapTuple& input, SeekTuple* tuple,
                                 MemPool* mempool);
-
-    static Status parse_seek_range(const TabletSchema& tablet_schema,
-                                   TabletReaderParams::RangeStartOperation range_start_op,
-                                   TabletReaderParams::RangeEndOperation range_end_op,
-                                   const std::vector<OlapTuple>& range_start_key,
-                                   const std::vector<OlapTuple>& range_end_key, std::vector<SeekRange>* ranges,
-                                   MemPool* mempool);
 
     TabletManager* _tablet_mgr;
     std::shared_ptr<const TabletMetadataPB> _tablet_metadata;

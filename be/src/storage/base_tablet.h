@@ -121,6 +121,8 @@ public:
 
     virtual StatusOr<bool> has_delete_predicates(const Version& version) = 0;
 
+    virtual bool belonged_to_cloud_native() const = 0;
+
 protected:
     virtual void on_shutdown() {}
 

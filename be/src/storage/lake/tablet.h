@@ -172,6 +172,8 @@ public:
 
     size_t num_rows() const override;
 
+    bool belonged_to_cloud_native() const override { return true; }
+
 private:
     TabletManager* _mgr;
     int64_t _id;
