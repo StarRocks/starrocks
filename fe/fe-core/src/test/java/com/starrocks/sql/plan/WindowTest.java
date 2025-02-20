@@ -1604,4 +1604,33 @@ public class WindowTest extends PlanTestBase {
                 "  |  order by: 9: a ASC\n" +
                 "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW");
     }
+
+    @Test
+    public void testFirstLastValueReverse() throws Exception {
+        String sql =
+                "select v1,v2,v3, first_value(v3) over (partition by v1 order by v2" +
+                        " rows between current row and unbounded following) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "2:ANALYTIC\n" +
+                "  |  functions: [, last_value(3: v3), ]\n" +
+                "  |  partition by: 1: v1\n" +
+                "  |  order by: 2: v2 DESC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  \n" +
+                "  1:SORT\n" +
+                "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 DESC");
+
+        sql =
+                "select v1,v2,v3, last_value(v3) over (partition by v1 order by v2" +
+                        " rows between current row and unbounded following) from t0";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "2:ANALYTIC\n" +
+                "  |  functions: [, first_value(3: v3), ]\n" +
+                "  |  partition by: 1: v1\n" +
+                "  |  order by: 2: v2 DESC\n" +
+                "  |  window: ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW\n" +
+                "  |  \n" +
+                "  1:SORT\n" +
+                "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 DESC");
+    }
 }
