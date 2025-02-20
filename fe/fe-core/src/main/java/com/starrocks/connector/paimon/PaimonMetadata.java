@@ -70,7 +70,6 @@ import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.DateTimeUtils;
 import org.apache.paimon.view.View;
 import org.apache.paimon.view.ViewImpl;
-import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.HashMap;

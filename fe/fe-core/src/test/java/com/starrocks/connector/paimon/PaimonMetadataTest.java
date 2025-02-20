@@ -91,7 +91,9 @@ import java.util.Map;
 
 import static com.starrocks.catalog.Table.TableType.PAIMON_VIEW;
 import static com.starrocks.catalog.Type.INT;
-import static org.apache.paimon.io.DataFileMeta.*;
+import static org.apache.paimon.io.DataFileMeta.DUMMY_LEVEL;
+import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
+import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
 import static org.apache.paimon.stats.SimpleStats.EMPTY_STATS;
 import static org.junit.Assert.assertEquals;
 
@@ -507,7 +509,7 @@ public class PaimonMetadataTest {
         //test drop not exist
         new Expectations() {
             {
-                paimonNativeCatalog.dropView((Identifier) any,true);
+                paimonNativeCatalog.dropView((Identifier) any, true);
                 result = new Catalog.ViewNotExistException(new Identifier("test", "ViewNotExist"));
             }
         };
