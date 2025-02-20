@@ -375,7 +375,7 @@ Status LinkedSchemaChange::generate_delta_column_group_and_cols(const Tablet* ne
         auto cols_file_schema = TabletSchema::create_with_uid(new_tablet_schema, unique_column_ids);
 
         (void)fs->delete_file(path); // delete .cols if already exist
-        WritableFileOptions opts{.sync_on_close = true};
+        WritableFileOptions opts{.sync_on_close = true, .tablet_id = new_tablet->tablet_id()};
         ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, path));
         SegmentWriterOptions writer_options;
         auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), idx, cols_file_schema, writer_options);

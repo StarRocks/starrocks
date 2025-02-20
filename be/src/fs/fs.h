@@ -133,6 +133,7 @@ struct RandomAccessFileOptions {
     FileEncryptionInfo encryption_info;
     bool skip_disk_cache = false;
     OperationKind op_type = OperationKind::UNDEFINED;
+    int64_t tablet_id = 0;
 };
 
 struct DirEntry {
@@ -361,6 +362,7 @@ struct WritableFileOptions {
     FileSystem::OpenMode mode = FileSystem::MUST_CREATE;
     FileEncryptionInfo encryption_info;
     OperationKind op_type = OperationKind::UNDEFINED;
+    int64_t tablet_id = 0;
 };
 
 // A `SequentialFile` is an `io::InputStream` with a name.

@@ -201,13 +201,13 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::read(const Schema& schema, const
     seg_options.asc_hint = options.asc_hint;
     seg_options.column_access_paths = options.column_access_paths;
     seg_options.has_preaggregation = options.has_preaggregation;
+    seg_options.tablet_id = tablet_id();
     if (options.is_primary_keys) {
         seg_options.is_primary_keys = true;
         seg_options.delvec_loader = std::make_shared<LakeDelvecLoader>(
                 _tablet_mgr, nullptr, seg_options.lake_io_opts.fill_data_cache, seg_options.lake_io_opts);
         seg_options.dcg_loader = std::make_shared<LakeDeltaColumnGroupLoader>(_tablet_metadata);
         seg_options.version = options.version;
-        seg_options.tablet_id = tablet_id();
         seg_options.rowset_id = metadata().id();
     }
     if (options.delete_predicates != nullptr) {

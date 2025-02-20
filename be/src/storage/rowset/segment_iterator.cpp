@@ -792,11 +792,12 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     iter_opts.has_preaggregation = _opts.has_preaggregation;
 
     RandomAccessFileOptions opts{.skip_fill_local_cache = !_opts.lake_io_opts.fill_data_cache,
-                                 .buffer_size = _opts.lake_io_opts.buffer_size};
+                                 .buffer_size = _opts.lake_io_opts.buffer_size,
+                                 .tablet_id = static_cast<int64_t>(_opts.tablet_id)};
 
     bool is_compaction =
             (_opts.reader_type == READER_BASE_COMPACTION || _opts.reader_type == READER_CUMULATIVE_COMPACTION);
-    
+
     if (is_compaction) {
         opts.op_type = OperationKind::COMPACTION;
     }

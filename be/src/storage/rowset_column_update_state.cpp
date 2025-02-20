@@ -394,7 +394,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> RowsetColumnUpdateState::_prepare_delta
     const std::string path = Rowset::delta_column_group_path(rowset->rowset_path(), rowsetid_segid.unique_rowset_id,
                                                              rowsetid_segid.segment_id, ver, idx);
     (void)fs->delete_file(path); // delete .cols if already exist
-    WritableFileOptions opts{.sync_on_close = true};
+    WritableFileOptions opts{.sync_on_close = true, .tablet_id = rowset->tablet_id()};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, path));
     SegmentWriterOptions writer_options;
     auto segment_writer =
@@ -489,7 +489,7 @@ StatusOr<std::unique_ptr<SegmentWriter>> RowsetColumnUpdateState::_prepare_segme
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(rowset->rowset_path()));
     const std::string path = Rowset::segment_file_path(rowset->rowset_path(), rowset->rowset_id(), segment_id);
     (void)fs->delete_file(path); // delete .dat if already exist
-    WritableFileOptions opts{.sync_on_close = true};
+    WritableFileOptions opts{.sync_on_close = true, .tablet_id = rowset->tablet_id()};
     ASSIGN_OR_RETURN(auto wfile, fs->new_writable_file(opts, path));
     SegmentWriterOptions writer_options;
     auto segment_writer = std::make_unique<SegmentWriter>(std::move(wfile), segment_id, tablet_schema, writer_options);

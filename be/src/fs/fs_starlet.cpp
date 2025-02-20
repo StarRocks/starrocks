@@ -367,6 +367,7 @@ public:
         auto opt = ReadOptions();
         set_api_kind(opt, opts);
         opt.skip_fill_local_cache = opts.skip_fill_local_cache;
+        opt.tablet_id = opts.tablet_id;
         opt.buffer_size = opts.buffer_size;
         opt.skip_read_local_cache = opts.skip_disk_cache;
         opt.enable_data_cache = enable_datacache;
@@ -434,6 +435,7 @@ public:
             }
         }
         fslib_opts.enable_data_cache = enable_datacache;
+        fslib_opts.tablet_id = opts.tablet_id;
         set_api_kind(fslib_opts, opts);
         auto file_st = (*fs_st)->create(pair.first, fslib_opts);
         if (!file_st.ok()) {

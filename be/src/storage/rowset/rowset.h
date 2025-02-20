@@ -238,6 +238,7 @@ public:
     int64_t creation_time() const { return rowset_meta()->creation_time(); }
     PUniqueId load_id() const { return rowset_meta()->load_id(); }
     int64_t txn_id() const { return rowset_meta()->txn_id(); }
+    int64_t tablet_id() const { return rowset_meta()->tablet_id(); }
     int64_t partition_id() const { return rowset_meta()->partition_id(); }
     int64_t num_segments() const { return rowset_meta()->num_segments(); }
     uint32_t num_delete_files() const { return rowset_meta()->get_num_delete_files(); }
