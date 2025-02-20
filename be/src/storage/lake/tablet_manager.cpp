@@ -914,13 +914,13 @@ StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(int64_t tab
 }
 
 StatusOr<int64_t> TabletManager::collect_tablet_storage_size(int64_t tablet_id, int64_t curr_version,
-                                                             int64_t vacuum_version) {
+                                                             int64_t vacuum_version, int64_t min_version) {
     auto root_dir = tablet_root_location(tablet_id);
     auto data_dir = join_path(root_dir, lake::kSegmentDirectoryName);
     auto version = curr_version;
     int64_t total_size = 0;
     ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_dir));
-    while (version >= vacuum_version) {
+    while (version >= vacuum_version && version >= min_version) {
         // TODO(zhangqiang)
         // not found metadata will cause one api call
         auto res = get_tablet_metadata(tablet_id, version, false);
@@ -935,6 +935,14 @@ StatusOr<int64_t> TabletManager::collect_tablet_storage_size(int64_t tablet_id, 
             for (const auto& rowset : metadata->rowsets()) {
                 total_size += rowset.data_size();
             }
+
+            for (auto& [_, file_meta] : metadata->delvec_meta().version_to_file()) {
+                total_size += file_meta.size();
+            }
+
+            for (const auto& sstable : metadata->sstable_meta().sstables()) {
+                total_size += sstable.filesize();
+            }
         }
         // the compaction input files and ophan files in vacuum version are removed
         if (version > vacuum_version) {
@@ -944,14 +952,6 @@ StatusOr<int64_t> TabletManager::collect_tablet_storage_size(int64_t tablet_id, 
 
             for (const auto& file : metadata->orphan_files()) {
                 total_size += file.size();
-            }
-
-            for (auto& [_, file_meta] : metadata->delvec_meta().version_to_file()) {
-                total_size += file_meta.size();
-            }
-
-            for (const auto& sstable : metadata->sstable_meta().sstables()) {
-                total_size += sstable.filesize();
             }
         }
         version = metadata->prev_garbage_version();

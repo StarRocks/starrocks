@@ -147,6 +147,7 @@ message TabletStatRequest {
         optional int64 tablet_id = 1;
         optional int64 version = 2;
         optional int64 vacuum_version = 3;
+        optional int64 min_version = 4;
     }
 
     repeated TabletInfo tablet_infos = 1;

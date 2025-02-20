@@ -673,6 +673,7 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                     int64_t tablet_id = tablet_info.tablet_id();
                     int64_t version = tablet_info.version();
                     int64_t vacuum_version = tablet_info.vacuum_version();
+                    int64_t min_version = tablet_info.min_version();
                     if (std::chrono::system_clock::now() >= timeout_deadline) {
                         LOG(WARNING) << "Cancelled tablet stat collection task due to timeout exceeded. tablet_id: "
                                      << tablet_id << ", version: " << version;
@@ -695,7 +696,8 @@ void LakeServiceImpl::get_tablet_stats(::google::protobuf::RpcController* contro
                     for (const auto& [_, file] : (*tablet_metadata)->delvec_meta().version_to_file()) {
                         data_size += file.size();
                     }
-                    auto res = _tablet_mgr->collect_tablet_storage_size(tablet_id, version, vacuum_version);
+                    auto res =
+                            _tablet_mgr->collect_tablet_storage_size(tablet_id, version, vacuum_version, min_version);
                     if (!res.ok()) {
                         LOG(WARNING) << "Fail to collect tablet storage size. tablet_id: " << tablet_id
                                      << ", version: " << version << ", vacuum_version: " << vacuum_version

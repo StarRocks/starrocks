@@ -378,6 +378,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 tabletInfo.tabletId = tablet.getId();
                 tabletInfo.version = version;
                 tabletInfo.vacuumVersion = vacuumVersion;
+                tabletInfo.minVersion = ((LakeTablet) tablet).getMinVersion();
                 beToTabletInfos.computeIfAbsent(node, k -> Lists.newArrayList()).add(tabletInfo);
             }
 
