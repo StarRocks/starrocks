@@ -18,6 +18,10 @@ insert into iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew select generate
 set enable_plan_advisor=true;
 set enable_plan_analyzer=true;
 use iceberg_catalog_${uuid0}.iceberg_db_${uuid0};
+
+-- https://github.com/StarRocks/starrocks/issues/56100
+set low_cardinality_optimize_on_lake = false;
+
 set catalog default_catalog;
 function: assert_explain_not_contains("select count(*) from (select * from iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew t1 join (select * from iceberg_catalog_${uuid0}.iceberg_db_${uuid0}.c1_skew where c1 = 'f') t2 on t1.c2 = t2.c2) t", "RightChildEstimationErrorTuningGuide")
 
