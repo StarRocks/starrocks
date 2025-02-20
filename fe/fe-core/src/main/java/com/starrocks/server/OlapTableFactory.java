@@ -339,11 +339,15 @@ public class OlapTableFactory implements AbstractTableFactory {
             table.setIsInMemory(isInMemory);
 
             boolean enablePersistentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(properties);
-            if (!enablePersistentIndex) {
-                // disable memory index
-                throw new DdlException("In-Memory index is not supported, please create table with persistent index");
+            if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+                if (!enablePersistentIndex) {
+                    // disable memory index
+                    throw new DdlException("In-Memory index is not supported, please create table with persistent index");
+                } else {
+                    table.setEnablePersistentIndex(enablePersistentIndex);
+                }
             }
-            if (table.isCloudNativeTable()) {
+            if (table.isCloudNativeTable() && table.getKeysType() == KeysType.PRIMARY_KEYS) {
                 TPersistentIndexType persistentIndexType;
                 try {
                     persistentIndexType = PropertyAnalyzer.analyzePersistentIndexType(properties);
@@ -364,7 +368,6 @@ public class OlapTableFactory implements AbstractTableFactory {
                 }
                 table.setPersistentIndexType(persistentIndexType);
             }
-            table.setEnablePersistentIndex(enablePersistentIndex);
 
             try {
                 table.setPrimaryIndexCacheExpireSec(PropertyAnalyzer.analyzePrimaryIndexCacheExpireSecProp(properties,
