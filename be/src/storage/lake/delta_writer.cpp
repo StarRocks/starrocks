@@ -557,10 +557,6 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
     op_write->mutable_rowset()->set_overlapped(op_write->rowset().segments_size() > 1);
 
-    if (is_partial_update() && !_merge_condition.empty()) {
-        return Status::NotSupported("partial update and condition update at the same time");
-    }
-
     // handle partial update
     bool skip_pk_preload = config::skip_pk_preload;
     RowsetTxnMetaPB* rowset_txn_meta = _tablet_writer->rowset_txn_meta();
