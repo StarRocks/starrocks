@@ -597,10 +597,12 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
 }
 
 int LakeTabletsChannel::_close_sender(const int64_t* partitions, size_t partitions_size) {
+    // Notice: `_num_remaining_senders` and `_dirty_partitions` should be protected by same lock,
+    // so we can make sure the last sender request can get the dirty partitions from `_dirty_partitions`.
+    std::lock_guard l(_dirty_partitions_lock);
     int n = _num_remaining_senders.fetch_sub(1);
     // if sender close means data send finished, we need to decrease _num_initial_senders
     _num_initial_senders.fetch_sub(1);
-    std::lock_guard l(_dirty_partitions_lock);
     for (int i = 0; i < partitions_size; i++) {
         _dirty_partitions.insert(partitions[i]);
     }
