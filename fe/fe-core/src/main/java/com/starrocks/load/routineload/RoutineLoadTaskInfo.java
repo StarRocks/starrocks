@@ -296,7 +296,7 @@ public abstract class RoutineLoadTaskInfo {
 
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
             // add warehouse in task info
-            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+            Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseId);
             if (warehouse == null) {
                 row.add("NULL");
             } else {
