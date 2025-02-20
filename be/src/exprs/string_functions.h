@@ -26,6 +26,7 @@
 #include "exprs/function_helper.h"
 #include "runtime/current_thread.h"
 #include "util/phmap/phmap.h"
+#include "util/url_coding.h"
 #include "util/url_parser.h"
 
 namespace starrocks {

@@ -21,6 +21,8 @@
 #include <string>
 #include <vector>
 
+#include "common/status.h"
+
 namespace starrocks {
 void base64_encode(const std::string& in, std::string* out);
 
@@ -32,4 +34,5 @@ bool base64_decode(const std::string& in, std::string* out);
 // refers to https://stackoverflow.com/questions/154536/encode-decode-urls-in-c
 std::string url_encode(const std::string& decoded);
 
+Status url_decode_slice(const char* value, size_t len, std::string* to);
 } // namespace starrocks

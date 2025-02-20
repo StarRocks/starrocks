@@ -235,20 +235,23 @@ int StreamLoadAction::on_header(HttpRequest* req) {
     ctx->load_src_type = TLoadSourceType::RAW;
 
     ctx->label = req->header(HTTP_LABEL_KEY);
-    if (!url_decode(req->param(HTTP_DB_KEY), &ctx->db)) {
-        std::string error_msg = fmt::format("failed to decode the db key in the stream load url, "
-                "please make sure the url is encoded rightly. uri={}, db_key={}, label={}.",
-                req->uri(), req->param(HTTP_DB_KEY, ctx->label);
+    auto& db_param = req->param(HTTP_DB_KEY);
+    auto decode_st = url_decode_slice(db_param.c_str(), db_param.size(), &ctx->db);
+    if (!decode_st.ok()) {
+        std::string error_msg = fmt::format("failed to decode db parameter. uri={}, db param={}, label={}, error={}",
+                                            req->uri(), db_param, ctx->label, decode_st.message());
         LOG(WARNING) << error_msg;
         ctx->status = Status::InternalError(error_msg);
         _send_reply(req, error_msg);
         return -1;
     }
 
-    if (!url_decode(req->param(HTTP_TABLE_KEY), &ctx->db)) {
-        std::string error_msg = fmt::format("failed to decode the table key in the stream load url, "
-                "please make sure the url is encoded rightly. uri={}, table_key={}, db={}, label={}.",
-                req->uri(), req->param(HTTP_TABLE_KEY, ctx->db, ctx->label);
+    auto& table_param = req->param(HTTP_TABLE_KEY);
+    decode_st = url_decode_slice(table_param.c_str(), table_param.size(), &ctx->table);
+    if (!decode_st.ok()) {
+        std::string error_msg =
+                fmt::format("failed to decode table parameter. uri={}, table param={}, label={}, error={}", req->uri(),
+                            table_param, ctx->label, decode_st.message());
         LOG(WARNING) << error_msg;
         ctx->status = Status::InternalError(error_msg);
         _send_reply(req, error_msg);
