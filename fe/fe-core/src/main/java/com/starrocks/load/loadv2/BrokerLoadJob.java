@@ -112,6 +112,11 @@ public class BrokerLoadJob extends BulkLoadJob {
         this.jobType = EtlJobType.BROKER;
     }
 
+    // for ut
+    public void setConnectContext(ConnectContext context) {
+        this.context = context;
+    }
+
     public BrokerLoadJob(long dbId, String label, BrokerDesc brokerDesc, LoadStmt stmt, ConnectContext context)
             throws MetaNotFoundException {
         super(dbId, label, stmt != null ? stmt.getOrigStmt() : null);
@@ -407,6 +412,15 @@ public class BrokerLoadJob extends BulkLoadJob {
             retryTime--;
         } finally {
             writeUnlock();
+        }
+    }
+
+    @Override
+    protected void reset() {
+        super.reset();
+        if (context != null) {
+            context.setStartTime();
+            createTimestamp = context.getStartTime();
         }
     }
 
