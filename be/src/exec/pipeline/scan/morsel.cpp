@@ -21,6 +21,7 @@
 #include "common/statusor.h"
 #include "exec/olap_utils.h"
 #include "storage/chunk_helper.h"
+#include "storage/lake/tablet_reader.h"
 #include "storage/range.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/rowset/rowset.h"
@@ -504,9 +505,15 @@ Status PhysicalSplitMorselQueue::_init_segment() {
         if (0 == _rowset_idx) {
             _tablet_seek_ranges.clear();
             _mempool.clear();
-            RETURN_IF_ERROR(TabletReader::parse_seek_range(_tablets[_tablet_idx]->tablet_schema(), _range_start_op,
-                                                           _range_end_op, _range_start_key, _range_end_key,
-                                                           &_tablet_seek_ranges, &_mempool));
+            if (!_tablets[_tablet_idx]->belonged_to_cloud_native()) {
+                RETURN_IF_ERROR(TabletReader::parse_seek_range(_tablets[_tablet_idx]->tablet_schema(), _range_start_op,
+                                                               _range_end_op, _range_start_key, _range_end_key,
+                                                               &_tablet_seek_ranges, &_mempool));
+            } else {
+                RETURN_IF_ERROR(lake::TabletReader::parse_seek_range(*_tablets[_tablet_idx]->tablet_schema(),
+                                                                     _range_start_op, _range_end_op, _range_start_key,
+                                                                     _range_end_key, &_tablet_seek_ranges, &_mempool));
+            }
         }
         // Read a new rowset.
         RETURN_IF_ERROR(_cur_rowset()->load());
@@ -837,9 +844,15 @@ Status LogicalSplitMorselQueue::_init_tablet() {
 
     if (_tablet_idx == 0) {
         // All the tablets have the same schema, so parse seek range with the first table schema.
-        RETURN_IF_ERROR(TabletReader::parse_seek_range(_tablets[_tablet_idx]->tablet_schema(), _range_start_op,
-                                                       _range_end_op, _range_start_key, _range_end_key,
-                                                       &_tablet_seek_ranges, &_mempool));
+        if (!_tablets[_tablet_idx]->belonged_to_cloud_native()) {
+            RETURN_IF_ERROR(TabletReader::parse_seek_range(_tablets[_tablet_idx]->tablet_schema(), _range_start_op,
+                                                           _range_end_op, _range_start_key, _range_end_key,
+                                                           &_tablet_seek_ranges, &_mempool));
+        } else {
+            RETURN_IF_ERROR(lake::TabletReader::parse_seek_range(*_tablets[_tablet_idx]->tablet_schema(),
+                                                                 _range_start_op, _range_end_op, _range_start_key,
+                                                                 _range_end_key, &_tablet_seek_ranges, &_mempool));
+        }
     }
 
     _largest_rowset = _find_largest_rowset(_tablet_rowsets[_tablet_idx]);
