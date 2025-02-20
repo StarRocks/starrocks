@@ -22,11 +22,9 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PaimonView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorProperties;
@@ -72,6 +70,7 @@ import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.DateTimeUtils;
 import org.apache.paimon.view.View;
 import org.apache.paimon.view.ViewImpl;
+import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -82,6 +81,8 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ColumnTypeConverter.toPaimonDataType;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
+import static com.starrocks.connector.paimon.PaimonApiConverter.getPaimonView;
+import static com.starrocks.connector.paimon.PaimonApiConverter.toFullSchemas;
 
 public class PaimonMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(PaimonMetadata.class);
@@ -288,14 +289,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             return getView(dbName, tblName);
         }
         List<DataField> fields = paimonNativeTable.rowType().getFields();
-        ArrayList<Column> fullSchema = new ArrayList<>(fields.size());
-        for (DataField field : fields) {
-            String fieldName = field.name();
-            DataType type = field.type();
-            Type fieldType = ColumnTypeConverter.fromPaimonType(type);
-            Column column = new Column(fieldName, fieldType, true, field.description());
-            fullSchema.add(column);
-        }
+        List<Column> fullSchema = toFullSchemas(fields);
         long createTime = this.getTableCreateTime(dbName, tblName);
         String comment = "";
         if (paimonNativeTable.comment().isPresent()) {
@@ -319,26 +313,10 @@ public class PaimonMetadata implements ConnectorMetadata {
             LOG.error("Paimon view {}.{} does not exist.", dbName, viewName, e);
             return null;
         }
-        List<DataField> fields = paimonNativeView.rowType().getFields();
-        List<Column> columns = new ArrayList<>(fields.size());
-        for (DataField field : fields) {
-            String fieldName = field.name();
-            DataType type = field.type();
-            Type fieldType = ColumnTypeConverter.fromPaimonType(type);
-            Column column = new Column(fieldName, fieldType, true, field.description());
-            columns.add(column);
-        }
-        String comment = "";
-        if (paimonNativeView.comment().isPresent()) {
-            comment = paimonNativeView.comment().get();
-        }
-        PaimonView view = new PaimonView(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName, dbName, viewName,
-                columns, paimonNativeView.query(), catalogName, dbName, "");
-        view.setComment(comment);
+        PaimonView view = getPaimonView(this.catalogName, dbName, viewName, paimonNativeView);
         tables.put(identifier, view);
         return view;
     }
-
 
     @Override
     public boolean tableExists(String dbName, String tableName) {
