@@ -23,7 +23,7 @@
 namespace starrocks::pipeline {
 
 TEST(QueryContextManagerTest, testSingleThreadOperations) {
-    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY_POOL, 1073741824L, "parent", nullptr);
+    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
     {
         auto query_ctx_mgr = std::make_shared<QueryContextManager>(6);
         ASSERT_TRUE(query_ctx_mgr->init().ok());
@@ -174,7 +174,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
 }
 
 TEST(QueryContextManagerTest, testMulitiThreadOperations) {
-    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY_POOL, 1073741824L, "parent", nullptr);
+    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
     auto query_ctx_mgr = std::make_shared<QueryContextManager>(6);
     ASSERT_TRUE(query_ctx_mgr->init().ok());
     TUniqueId query_id;
@@ -241,7 +241,7 @@ QueryContext* gen_query_ctx(MemTracker* parent_mem_tracker, QueryContextManager*
 }
 
 TEST(QueryContextManagerTest, testSetWorkgroup) {
-    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY_POOL, 1073741824L, "parent", nullptr);
+    auto parent_mem_tracker = std::make_shared<MemTracker>(MemTrackerType::QUERY_POOL, 1073741824L, "parent", nullptr);
     auto query_ctx_mgr = std::make_shared<QueryContextManager>(6);
     ASSERT_TRUE(query_ctx_mgr->init().ok());
 

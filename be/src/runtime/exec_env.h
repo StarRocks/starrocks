@@ -44,6 +44,7 @@
 #include "exec/query_cache/cache_manager.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "runtime/base_load_path_mgr.h"
+#include "runtime/mem_tracker.h"
 #include "storage/options.h"
 #include "util/threadpool.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
@@ -64,7 +65,6 @@ class LoadStreamMgr;
 class StreamContextMgr;
 class TransactionMgr;
 class BatchWriteMgr;
-class MemTracker;
 class MetricRegistry;
 class StorageEngine;
 class ThreadPool;
@@ -168,8 +168,7 @@ private:
 
     void _init_storage_page_cache();
 
-    template <class... Args>
-    std::shared_ptr<MemTracker> regist_tracker(Args&&... args);
+    std::shared_ptr<MemTracker> regist_tracker(MemTrackerType type, int64_t bytes_limit, MemTracker* parent);
 
     // root process memory tracker
     std::shared_ptr<MemTracker> _process_mem_tracker;

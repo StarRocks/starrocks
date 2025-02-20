@@ -154,19 +154,6 @@ static int64_t calc_max_consistency_memory(int64_t process_mem_limit) {
     return std::min<int64_t>(limit, process_mem_limit * percent / 100);
 }
 
-class SetMemTrackerForColumnPool {
-public:
-    SetMemTrackerForColumnPool(std::shared_ptr<MemTracker> mem_tracker) : _mem_tracker(std::move(mem_tracker)) {}
-
-    template <typename Pool>
-    void operator()() {
-        Pool::singleton()->set_mem_tracker(_mem_tracker);
-    }
-
-private:
-    std::shared_ptr<MemTracker> _mem_tracker = nullptr;
-};
-
 bool GlobalEnv::_is_init = false;
 
 bool GlobalEnv::is_init() {
@@ -203,52 +190,52 @@ Status GlobalEnv::_init_mem_tracker() {
         return Status::InternalError(ss.str());
     }
 
-    _process_mem_tracker = regist_tracker(MemTracker::PROCESS, bytes_limit, "process");
-    _jemalloc_metadata_tracker =
-            regist_tracker(MemTracker::JEMALLOC, -1, "jemalloc_metadata", _process_mem_tracker.get());
+    _process_mem_tracker = regist_tracker(MemTrackerType::PROCESS, bytes_limit, nullptr);
+    _jemalloc_metadata_tracker = regist_tracker(MemTrackerType::JEMALLOC, -1, process_mem_tracker());
     int64_t query_pool_mem_limit =
             calc_max_query_memory(_process_mem_tracker->limit(), config::query_max_memory_limit_percent);
-    _query_pool_mem_tracker =
-            regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit, "query_pool", this->process_mem_tracker());
+    _query_pool_mem_tracker = regist_tracker(MemTrackerType::QUERY_POOL, query_pool_mem_limit, process_mem_tracker());
     int64_t query_pool_spill_limit = query_pool_mem_limit * config::query_pool_spill_mem_limit_threshold;
     _query_pool_mem_tracker->set_reserve_limit(query_pool_spill_limit);
-    _connector_scan_pool_mem_tracker =
-            regist_tracker(MemTracker::QUERY_POOL, query_pool_mem_limit, "query_pool/connector_scan", nullptr);
+    _connector_scan_pool_mem_tracker = regist_tracker(MemTrackerType::CONNECTOR_SCAN, query_pool_mem_limit, nullptr);
 
     int64_t load_mem_limit = calc_max_load_memory(_process_mem_tracker->limit());
-    _load_mem_tracker = regist_tracker(MemTracker::LOAD, load_mem_limit, "load", process_mem_tracker());
+    _load_mem_tracker = regist_tracker(MemTrackerType::LOAD, load_mem_limit, process_mem_tracker());
 
     // Metadata statistics memory statistics do not use new mem statistics framework with hook
-    _metadata_mem_tracker = regist_tracker(-1, "metadata", nullptr);
+    _metadata_mem_tracker = regist_tracker(MemTrackerType::METADATA, -1, nullptr);
 
-    _tablet_metadata_mem_tracker = regist_tracker(-1, "tablet_metadata", _metadata_mem_tracker.get());
-    _rowset_metadata_mem_tracker = regist_tracker(-1, "rowset_metadata", _metadata_mem_tracker.get());
-    _segment_metadata_mem_tracker = regist_tracker(-1, "segment_metadata", _metadata_mem_tracker.get());
-    _column_metadata_mem_tracker = regist_tracker(-1, "column_metadata", _metadata_mem_tracker.get());
+    _tablet_metadata_mem_tracker = regist_tracker(MemTrackerType::TABLET_METADATA, -1, metadata_mem_tracker());
+    _rowset_metadata_mem_tracker = regist_tracker(MemTrackerType::ROWSET_METADATA, -1, metadata_mem_tracker());
+    _segment_metadata_mem_tracker = regist_tracker(MemTrackerType::SEGMENT_METADATA, -1, metadata_mem_tracker());
+    _column_metadata_mem_tracker = regist_tracker(MemTrackerType::COLUMN_METADATA, -1, metadata_mem_tracker());
 
-    _tablet_schema_mem_tracker = regist_tracker(-1, "tablet_schema", _tablet_metadata_mem_tracker.get());
-    _segment_zonemap_mem_tracker = regist_tracker(-1, "segment_zonemap", _segment_metadata_mem_tracker.get());
-    _short_key_index_mem_tracker = regist_tracker(-1, "short_key_index", _segment_metadata_mem_tracker.get());
-    _column_zonemap_index_mem_tracker = regist_tracker(-1, "column_zonemap_index", _column_metadata_mem_tracker.get());
-    _ordinal_index_mem_tracker = regist_tracker(-1, "ordinal_index", _column_metadata_mem_tracker.get());
-    _bitmap_index_mem_tracker = regist_tracker(-1, "bitmap_index", _column_metadata_mem_tracker.get());
-    _bloom_filter_index_mem_tracker = regist_tracker(-1, "bloom_filter_index", _column_metadata_mem_tracker.get());
+    _tablet_schema_mem_tracker = regist_tracker(MemTrackerType::TABLET_SCHEMA, -1, tablet_metadata_mem_tracker());
+    _segment_zonemap_mem_tracker = regist_tracker(MemTrackerType::SEGMENT_METADATA, -1, segment_metadata_mem_tracker());
+    _short_key_index_mem_tracker = regist_tracker(MemTrackerType::SHORT_KEY_INDEX, -1, segment_metadata_mem_tracker());
+    _column_zonemap_index_mem_tracker =
+            regist_tracker(MemTrackerType::COLUMN_ZONEMAP_INDEX, -1, column_metadata_mem_tracker());
+    _ordinal_index_mem_tracker = regist_tracker(MemTrackerType::ORDINAL_INDEX, -1, column_metadata_mem_tracker());
+    _bitmap_index_mem_tracker = regist_tracker(MemTrackerType::BITMAP_INDEX, -1, column_metadata_mem_tracker());
+    _bloom_filter_index_mem_tracker =
+            regist_tracker(MemTrackerType::BLOOM_FILTER_INDEX, -1, column_metadata_mem_tracker());
 
     int64_t compaction_mem_limit = calc_max_compaction_memory(_process_mem_tracker->limit());
-    _compaction_mem_tracker = regist_tracker(compaction_mem_limit, "compaction", _process_mem_tracker.get());
-    _schema_change_mem_tracker = regist_tracker(-1, "schema_change", _process_mem_tracker.get());
-    _page_cache_mem_tracker = regist_tracker(-1, "page_cache", _process_mem_tracker.get());
-    _jit_cache_mem_tracker = regist_tracker(-1, "jit_cache", _process_mem_tracker.get());
+    _compaction_mem_tracker = regist_tracker(MemTrackerType::COMPACTION, compaction_mem_limit, process_mem_tracker());
+    _schema_change_mem_tracker = regist_tracker(MemTrackerType::SCHEMA_CHANGE, -1, process_mem_tracker());
+    _page_cache_mem_tracker = regist_tracker(MemTrackerType::PAGE_CACHE, -1, process_mem_tracker());
+    _jit_cache_mem_tracker = regist_tracker(MemTrackerType::JIT_CACHE, -1, process_mem_tracker());
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
-    _update_mem_tracker = regist_tracker(bytes_limit * update_mem_percent / 100, "update", nullptr);
-    _chunk_allocator_mem_tracker = regist_tracker(-1, "chunk_allocator", _process_mem_tracker.get());
-    _passthrough_mem_tracker = regist_tracker(MemTracker::PASSTHROUGH, -1, "passthrough");
-    _clone_mem_tracker = regist_tracker(-1, "clone", _process_mem_tracker.get());
+    _update_mem_tracker = regist_tracker(MemTrackerType::UPDATE, bytes_limit * update_mem_percent / 100, nullptr);
+    _chunk_allocator_mem_tracker = regist_tracker(MemTrackerType::CHUNK_ALLOCATOR, -1, process_mem_tracker());
+    _passthrough_mem_tracker = regist_tracker(MemTrackerType::PASSTHROUGH, -1, nullptr);
+    _clone_mem_tracker = regist_tracker(MemTrackerType::CLONE, -1, process_mem_tracker());
     int64_t consistency_mem_limit = calc_max_consistency_memory(_process_mem_tracker->limit());
-    _consistency_mem_tracker = regist_tracker(consistency_mem_limit, "consistency", _process_mem_tracker.get());
-    _datacache_mem_tracker = regist_tracker(-1, "datacache", _process_mem_tracker.get());
-    _poco_connection_pool_mem_tracker = regist_tracker(-1, "poco_connection_pool", _process_mem_tracker.get());
-    _replication_mem_tracker = regist_tracker(-1, "replication", _process_mem_tracker.get());
+    _consistency_mem_tracker =
+            regist_tracker(MemTrackerType::CONSISTENCY, consistency_mem_limit, process_mem_tracker());
+    _datacache_mem_tracker = regist_tracker(MemTrackerType::DATACACHE, -1, process_mem_tracker());
+    _poco_connection_pool_mem_tracker = regist_tracker(MemTrackerType::POCO_CONNECTION_POOL, -1, process_mem_tracker());
+    _replication_mem_tracker = regist_tracker(MemTrackerType::POCO_CONNECTION_POOL, -1, process_mem_tracker());
 
     MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
 
@@ -291,9 +278,8 @@ int64_t GlobalEnv::check_storage_page_cache_size(int64_t storage_cache_limit) {
     return storage_cache_limit;
 }
 
-template <class... Args>
-std::shared_ptr<MemTracker> GlobalEnv::regist_tracker(Args&&... args) {
-    auto mem_tracker = std::make_shared<MemTracker>(std::forward<Args>(args)...);
+std::shared_ptr<MemTracker> GlobalEnv::regist_tracker(MemTrackerType type, int64_t bytes_limit, MemTracker* parent) {
+    auto mem_tracker = std::make_shared<MemTracker>(type, bytes_limit, MemTracker::type_to_label(type), parent);
     _mem_trackers.emplace_back(mem_tracker);
     return mem_tracker;
 }

@@ -126,11 +126,12 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
         if (wg != nullptr && big_query_mem_limit > 0 &&
             (query_mem_limit <= 0 || big_query_mem_limit < query_mem_limit)) {
             std::string label = "Group=" + wg->name() + ", " + _profile->name();
-            _mem_tracker = std::make_shared<MemTracker>(MemTracker::RESOURCE_GROUP_BIG_QUERY, big_query_mem_limit,
+            _mem_tracker = std::make_shared<MemTracker>(MemTrackerType::RESOURCE_GROUP_BIG_QUERY, big_query_mem_limit,
                                                         std::move(label), parent);
             _mem_tracker->set_reserve_limit(tracker_reserve_limit);
         } else {
-            _mem_tracker = std::make_shared<MemTracker>(MemTracker::QUERY, query_mem_limit, _profile->name(), parent);
+            _mem_tracker =
+                    std::make_shared<MemTracker>(MemTrackerType::QUERY, query_mem_limit, _profile->name(), parent);
             _mem_tracker->set_reserve_limit(tracker_reserve_limit);
         }
 
@@ -154,7 +155,7 @@ void QueryContext::init_mem_tracker(int64_t query_mem_limit, MemTracker* parent,
                 connector_scan_use_query_mem_ratio = runtime_state->query_options().connector_scan_use_query_mem_ratio;
             }
             _connector_scan_mem_tracker = std::make_shared<MemTracker>(
-                    MemTracker::QUERY, _static_query_mem_limit * connector_scan_use_query_mem_ratio,
+                    MemTrackerType::QUERY, _static_query_mem_limit * connector_scan_use_query_mem_ratio,
                     _profile->name() + "/connector_scan", connector_scan_parent);
         }
     });
