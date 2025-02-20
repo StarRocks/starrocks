@@ -478,7 +478,7 @@ public class PaimonMetadataTest {
         //test createview
         new Expectations() {
             {
-                paimonNativeCatalog.getView((Identifier) any);
+                paimonNativeCatalog.getView((org.apache.paimon.catalog.Identifier) any);
                 result = new Catalog.ViewNotExistException(new Identifier("test", "ViewNotExist"));
             }
         };

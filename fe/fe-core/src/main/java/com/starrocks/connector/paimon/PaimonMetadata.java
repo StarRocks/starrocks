@@ -23,8 +23,6 @@ import com.starrocks.catalog.PaimonView;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
 import com.starrocks.connector.ConnectorProperties;
@@ -78,10 +76,10 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-import static com.starrocks.connector.ColumnTypeConverter.toPaimonDataType;
+import static com.starrocks.connector.ColumnTypeConverter.fromPaimonSchemas;
+import static com.starrocks.connector.ColumnTypeConverter.toPaimonRowType;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 import static com.starrocks.connector.paimon.PaimonApiConverter.getPaimonView;
-import static com.starrocks.connector.paimon.PaimonApiConverter.toFullSchemas;
 
 public class PaimonMetadata implements ConnectorMetadata {
     private static final Logger LOG = LogManager.getLogger(PaimonMetadata.class);
@@ -130,33 +128,12 @@ public class PaimonMetadata implements ConnectorMetadata {
     public void createView(CreateViewStmt stmt) throws DdlException {
         String dbName = stmt.getDbName();
         String viewName = stmt.getTable();
-
-        Database db = getDb(stmt.getDbName());
-        if (db == null) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
-        }
-
-        if (getView(dbName, viewName) != null) {
-            if (stmt.isSetIfNotExists()) {
-                LOG.info("create view[{}] which already exists", viewName);
-                return;
-            } else if (stmt.isReplace()) {
-                LOG.info("view {} already exists, need to replace it", viewName);
-            } else {
-                ErrorReport.reportDdlException(ErrorCode.ERR_TABLE_EXISTS_ERROR, viewName);
-            }
-        }
-
-        ConnectorViewDefinition viewDefinition = ConnectorViewDefinition.fromCreateViewStmt(stmt);
-        RowType.Builder builder = RowType.builder();
-        for (Column column : stmt.getColumns()) {
-            builder.field(column.getName(), toPaimonDataType(column.getType()), column.getComment());
-        }
-        RowType rowType = builder.build();
+        String viewDefinition = ConnectorViewDefinition.fromCreateViewStmt(stmt).getInlineViewDef();
+        RowType rowType = toPaimonRowType(stmt.getColumns());
         Identifier identifier = new org.apache.paimon.catalog.Identifier(dbName, viewName);
-        View view = new ViewImpl(identifier, rowType, viewDefinition.getInlineViewDef(), stmt.getComment(), new HashMap<>());
+        View view = new ViewImpl(identifier, rowType, viewDefinition, stmt.getComment(), new HashMap<>());
         try {
-            paimonNativeCatalog.createView(new Identifier(dbName, viewName), view, stmt.isReplace());
+            paimonNativeCatalog.createView(new Identifier(dbName, viewName), view, stmt.isSetIfNotExists());
         } catch (Catalog.ViewAlreadyExistException | Catalog.DatabaseNotExistException e) {
             throw new DdlException("Paimon createView error: " + e.getMessage());
         }
@@ -288,7 +265,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             return getView(dbName, tblName);
         }
         List<DataField> fields = paimonNativeTable.rowType().getFields();
-        List<Column> fullSchema = toFullSchemas(fields);
+        List<Column> fullSchema = fromPaimonSchemas(fields);
         long createTime = this.getTableCreateTime(dbName, tblName);
         String comment = "";
         if (paimonNativeTable.comment().isPresent()) {

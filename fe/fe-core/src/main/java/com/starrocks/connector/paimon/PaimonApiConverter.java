@@ -16,37 +16,19 @@ package com.starrocks.connector.paimon;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PaimonView;
-import com.starrocks.catalog.Type;
-import com.starrocks.connector.ColumnTypeConverter;
 import org.apache.paimon.types.DataField;
-import org.apache.paimon.types.DataType;
 import org.apache.paimon.view.View;
-import org.jetbrains.annotations.NotNull;
 
-import java.util.ArrayList;
 import java.util.List;
 
+import static com.starrocks.connector.ColumnTypeConverter.fromPaimonSchemas;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 public class PaimonApiConverter {
 
-    @NotNull
-    static List<Column> toFullSchemas(List<DataField> fields) {
-        List<Column> columns = new ArrayList<>(fields.size());
-        for (DataField field : fields) {
-            String fieldName = field.name();
-            DataType type = field.type();
-            Type fieldType = ColumnTypeConverter.fromPaimonType(type);
-            Column column = new Column(fieldName, fieldType, true, field.description());
-            columns.add(column);
-        }
-        return columns;
-    }
-
-    @NotNull
     static PaimonView getPaimonView(String catalogName, String dbName, String viewName, View paimonNativeView) {
         List<DataField> fields = paimonNativeView.rowType().getFields();
-        List<Column> fullSchema = toFullSchemas(fields);
+        List<Column> fullSchema = fromPaimonSchemas(fields);
         String comment = "";
         if (paimonNativeView.comment().isPresent()) {
             comment = paimonNativeView.comment().get();

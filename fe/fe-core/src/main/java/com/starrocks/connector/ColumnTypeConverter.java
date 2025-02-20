@@ -581,13 +581,25 @@ public class ColumnTypeConverter {
         }
     }
 
-    public static org.apache.paimon.schema.Schema.Builder toPaimonSchema(List<Column> columns) {
-        org.apache.paimon.schema.Schema.Builder schemaBuilder = org.apache.paimon.schema.Schema.newBuilder();
+    public static List<Column> fromPaimonSchemas(List<DataField> fields) {
+        List<Column> columns = new ArrayList<>(fields.size());
+        for (DataField field : fields) {
+            String fieldName = field.name();
+            org.apache.paimon.types.DataType type = field.type();
+            Type fieldType = ColumnTypeConverter.fromPaimonType(type);
+            Column column = new Column(fieldName, fieldType, true, field.description());
+            columns.add(column);
+        }
+        return columns;
+    }
+
+    public static org.apache.paimon.types.RowType toPaimonRowType(List<Column> columns) {
+        org.apache.paimon.types.RowType.Builder rowTypeBuilder = org.apache.paimon.types.RowType.builder();
         for (Column column : columns) {
             org.apache.paimon.types.DataType dataType = toPaimonDataType(column.getType());
-            schemaBuilder.column(column.getName(), dataType, column.getComment());
+            rowTypeBuilder.field(column.getName(), dataType, column.getComment());
         }
-        return schemaBuilder;
+        return rowTypeBuilder.build();
     }
 
     public static org.apache.paimon.types.DataType toPaimonDataType(Type type) {
