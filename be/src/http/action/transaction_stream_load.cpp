@@ -399,7 +399,7 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
                     fmt::format("failed to decode columns parameter. uri={}, columns param={}, label={}, error={}",
                                 http_req->uri(), columns_param, ctx->label, st.message());
         }
-        request.__set_columns(http_req->header(HTTP_COLUMNS));
+        request.__set_columns(columns);
     }
     if (!http_req->header(HTTP_WHERE).empty()) {
         request.__set_where(http_req->header(HTTP_WHERE));
