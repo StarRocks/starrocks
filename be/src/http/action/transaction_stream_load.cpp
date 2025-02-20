@@ -255,7 +255,7 @@ int TransactionStreamLoadAction::on_header(HttpRequest* req) {
         }
     });
 
-    auto& db_param = req->param(HTTP_DB_KEY);
+    auto& db_param = req->header(HTTP_DB_KEY);
     std::string db;
     auto decode_st = url_decode_slice(db_param.c_str(), db_param.size(), &db);
     if (!decode_st.ok()) {
@@ -265,13 +265,13 @@ int TransactionStreamLoadAction::on_header(HttpRequest* req) {
         return -1;
     }
 
-    if (ctx->db != req->header(HTTP_DB_KEY)) {
+    if (ctx->db != db) {
         _send_error_reply(req, Status::InvalidArgument(fmt::format(
                                        "Request database {} not equal transaction database {}", db, ctx->db)));
         return -1;
     }
 
-    auto& table_param = req->param(HTTP_TABLE_KEY);
+    auto& table_param = req->header(HTTP_TABLE_KEY);
     std::string table;
     decode_st = url_decode_slice(table_param.c_str(), table_param.size(), &table);
     if (!decode_st.ok()) {
