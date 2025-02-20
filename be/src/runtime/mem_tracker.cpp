@@ -36,6 +36,7 @@
 
 #include <utility>
 
+#include "runtime/runtime_state.h"
 #include "service/backend_options.h"
 
 namespace starrocks {
@@ -43,6 +44,88 @@ namespace starrocks {
 const std::string MemTracker::PEAK_MEMORY_USAGE = "PeakMemoryUsage";
 const std::string MemTracker::ALLOCATED_MEMORY_USAGE = "AllocatedMemoryUsage";
 const std::string MemTracker::DEALLOCATED_MEMORY_USAGE = "DeallocatedMemoryUsage";
+
+std::string MemTracker::type_to_label(MemTrackerType type) {
+    switch (type) {
+    case MemTrackerType::NO_SET:
+        return "";
+    case MemTrackerType::PROCESS:
+        return "process";
+    case MemTrackerType::QUERY_POOL:
+        return "query_pool";
+    case MemTrackerType::LOAD:
+        return "load";
+    case MemTrackerType::CONSISTENCY:
+        return "consistency";
+    case MemTrackerType::COMPACTION:
+        return "compaction";
+    case MemTrackerType::SCHEMA_CHANGE:
+        return "schema_change";
+    case MemTrackerType::JEMALLOC:
+        return "jemalloc_metadata";
+    case MemTrackerType::PASSTHROUGH:
+        return "passthrough";
+    case MemTrackerType::CONNECTOR_SCAN:
+        return "connector_scan";
+    case MemTrackerType::METADATA:
+        return "metadata";
+    case MemTrackerType::TABLET_METADATA:
+        return "tablet_metadata";
+    case MemTrackerType::ROWSET_METADATA:
+        return "rowset_metadata";
+    case MemTrackerType::SEGMENT_METADATA:
+        return "segment_metadata";
+    case MemTrackerType::COLUMN_METADATA:
+        return "column_metadata";
+    case MemTrackerType::TABLET_SCHEMA:
+        return "tablet_schema";
+    case MemTrackerType::SEGMENT_ZONEMAP:
+        return "segment_zonemap";
+    case MemTrackerType::SHORT_KEY_INDEX:
+        return "short_key_index";
+    case MemTrackerType::COLUMN_ZONEMAP_INDEX:
+        return "column_zonemap_index";
+    case MemTrackerType::ORDINAL_INDEX:
+        return "ordinal_index";
+    case MemTrackerType::BITMAP_INDEX:
+        return "bitmap_index";
+    case MemTrackerType::BLOOM_FILTER_INDEX:
+        return "bloom_filter_index";
+    case MemTrackerType::PAGE_CACHE:
+        return "page_cache";
+    case MemTrackerType::JIT_CACHE:
+        return "jit_cache";
+    case MemTrackerType::UPDATE:
+        return "update";
+    case MemTrackerType::CHUNK_ALLOCATOR:
+        return "chunk_allocator";
+    case MemTrackerType::CLONE:
+        return "clone";
+    case MemTrackerType::DATACACHE:
+        return "datacache";
+    case MemTrackerType::POCO_CONNECTION_POOL:
+        return "poco_connection_pool";
+    case MemTrackerType::REPLICATION:
+        return "replication";
+    case MemTrackerType::ROWSET_UPDATE_STATE:
+        return "rowset_update_state";
+    case MemTrackerType::INDEX_CACHE:
+        return "index_cache";
+    case MemTrackerType::DEL_VEC_CACHE:
+        return "del_vec_cache";
+    case MemTrackerType::COMPACTION_STATE:
+        return "compaction_state";
+    case MemTrackerType::QUERY:
+    case MemTrackerType::RESOURCE_GROUP:
+    case MemTrackerType::RESOURCE_GROUP_BIG_QUERY:
+    case MemTrackerType::COMPACTION_TASK:
+    case MemTrackerType::SCHEMA_CHANGE_TASK:
+        // Use user-defined label
+        return "";
+    default:
+        return "";
+    }
+}
 
 MemTracker::MemTracker(int64_t byte_limit, std::string label, MemTracker* parent)
         : _limit(byte_limit),
@@ -59,7 +142,7 @@ MemTracker::MemTracker(int64_t byte_limit, std::string label, MemTracker* parent
     Init();
 }
 
-MemTracker::MemTracker(Type type, int64_t byte_limit, std::string label, MemTracker* parent)
+MemTracker::MemTracker(MemTrackerType type, int64_t byte_limit, std::string label, MemTracker* parent)
         : _type(type),
           _limit(byte_limit),
           _label(std::move(label)),
@@ -133,34 +216,37 @@ Status MemTracker::check_mem_limit(const std::string& msg) const {
     return Status::MemoryLimitExceeded(tracker->err_msg(msg));
 }
 
-std::string MemTracker::err_msg(const std::string& msg) const {
+std::string MemTracker::err_msg(const std::string& msg, RuntimeState* state) const {
     std::stringstream str;
     str << "Memory of " << label() << " exceed limit. " << msg << " ";
     str << "Backend: " << BackendOptions::get_localhost() << ", ";
+    if (state != nullptr) {
+        str << "fragment: " << print_id(state->fragment_instance_id()) << " ";
+    }
     str << "Used: " << consumption() << ", Limit: " << limit() << ". ";
     switch (type()) {
-    case MemTracker::NO_SET:
+    case MemTrackerType::NO_SET:
         break;
-    case MemTracker::QUERY:
+    case MemTrackerType::QUERY:
         str << "Mem usage has exceed the limit of single query, You can change the limit by "
                "set session variable query_mem_limit.";
         break;
-    case MemTracker::PROCESS:
+    case MemTrackerType::PROCESS:
         str << "Mem usage has exceed the limit of BE";
         break;
-    case MemTracker::QUERY_POOL:
+    case MemTrackerType::QUERY_POOL:
         str << "Mem usage has exceed the limit of query pool";
         break;
-    case MemTracker::LOAD:
+    case MemTrackerType::LOAD:
         str << "Mem usage has exceed the limit of load";
         break;
-    case MemTracker::CONSISTENCY:
+    case MemTrackerType::CONSISTENCY:
         str << "Mem usage has exceed the limit of consistency";
         break;
-    case MemTracker::SCHEMA_CHANGE_TASK:
+    case MemTrackerType::SCHEMA_CHANGE_TASK:
         str << "You can change the limit by modify BE config [memory_limitation_per_thread_for_schema_change]";
         break;
-    case MemTracker::RESOURCE_GROUP:
+    case MemTrackerType::RESOURCE_GROUP:
         // TODO: make default_wg configuable.
         if (label() == "default_wg") {
             str << "Mem usage has exceed the limit of query pool";
@@ -169,7 +255,7 @@ std::string MemTracker::err_msg(const std::string& msg) const {
                 << "You can change the limit by modifying [mem_limit] of this group";
         }
         break;
-    case MemTracker::RESOURCE_GROUP_BIG_QUERY:
+    case MemTrackerType::RESOURCE_GROUP_BIG_QUERY:
         str << "Mem usage has exceed the big query limit of the resource group [" << label() << "]. "
             << "You can change the limit by modifying [big_query_mem_limit] of this group";
         break;
