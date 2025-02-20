@@ -230,7 +230,7 @@ public class MvPartitionCompensator {
             return null;
         }
         OptExpressionDuplicator duplicator = new OptExpressionDuplicator(mvContext);
-        OptExpression newMvQueryPlan = duplicator.duplicate(compensateMvQueryPlan);
+        OptExpression newMvQueryPlan = duplicator.duplicate(compensateMvQueryPlan, mvContext.getMvColumnRefFactory());
         if (newMvQueryPlan == null) {
             logMVRewrite(mvContext, "Duplicate compensate query plan failed");
             return null;

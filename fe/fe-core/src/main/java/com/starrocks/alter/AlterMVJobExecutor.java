@@ -20,7 +20,6 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
-import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
@@ -492,6 +491,31 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
     }
 
     /**
+     * Inactive the materialized view and its related materialized views.
+     */
+    private static void doInactiveMaterializedView(MaterializedView mv, String reason) {
+        if (mv == null) {
+            return;
+        }
+        LOG.warn("Inactive MV {}/{} because {}", mv.getName(), mv.getId(), reason);
+        // inactive mv by reason
+        if (mv.isActive()) {
+            // log edit log
+            String status = AlterMaterializedViewStatusClause.INACTIVE;
+            GlobalStateMgr.getCurrentState().getAlterJobMgr().
+                    alterMaterializedViewStatus(mv, status, reason, false);
+            AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
+                    mv.getId(), status, MANUAL_INACTIVE_MV_REASON);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
+        } else {
+            mv.setInactiveAndReason(reason);
+        }
+        // recursive inactive
+        inactiveRelatedMaterializedView(mv,
+                MaterializedViewExceptions.inactiveReasonForBaseTableActive(mv.getName()), false);
+    }
+
+    /**
      * Inactive related materialized views because of base table/view is changed or dropped in the leader background.
      */
     public static void inactiveRelatedMaterializedView(Table olapTable, String reason, boolean isReplay) {
@@ -511,32 +535,15 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
             if (db == null) {
                 LOG.warn("Table {} inactive MaterializedView, viewId {} ,db {} not found",
-                        olapTable.getName(),
-                        mvId.getId(),
-                        mvId.getDbId());
+                        olapTable.getName(), mvId.getId(), mvId.getDbId());
                 continue;
             }
             MaterializedView mv = (MaterializedView) db.getTable(mvId.getId());
-            if (mv != null) {
-                LOG.warn("Inactive MV {}/{} because {}", mv.getName(), mv.getId(), reason);
-                // inactive mv by reason
-                if (mv.isActive()) {
-                    // log edit log
-                    String status = AlterMaterializedViewStatusClause.INACTIVE;
-                    GlobalStateMgr.getCurrentState().getAlterJobMgr().
-                            alterMaterializedViewStatus(mv, status, reason, false);
-                    AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
-                            mv.getId(), status, MANUAL_INACTIVE_MV_REASON);
-                    GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
-                } else {
-                    mv.setInactiveAndReason(reason);
-                }
-                // recursive inactive
-                inactiveRelatedMaterializedView(mv,
-                        MaterializedViewExceptions.inactiveReasonForBaseTableActive(mv.getName()), false);
-            } else {
+            if (mv == null) {
                 LOG.info("Ignore materialized view {} does not exists", mvId);
+                continue;
             }
+            doInactiveMaterializedView(mv, reason);
         }
     }
 
@@ -566,8 +573,9 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
 
             }
             // TODO: support more types for base table's schema change.
+            String reason = MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns);
             try {
-                List<MvPlanContext> mvPlanContexts = MvPlanContextBuilder.getPlanContext(mv);
+                List<MvPlanContext> mvPlanContexts = MvPlanContextBuilder.getPlanContext(mv, true);
                 for (MvPlanContext mvPlanContext : mvPlanContexts) {
                     if (mvPlanContext != null) {
                         OptExpression mvPlan = mvPlanContext.getLogicalPlan();
@@ -581,14 +589,8 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                         Set<String> usedColNames = usedColRefs.stream()
                                 .map(x -> x.getName())
                                 .collect(Collectors.toCollection(() -> new TreeSet<>(String.CASE_INSENSITIVE_ORDER)));
-                        for (String modifiedColumn : modifiedColumns) {
-                            if (usedColNames.contains(modifiedColumn)) {
-                                LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                                "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
-                                        modifiedColumn, olapTable.getName());
-                                mv.setInactiveAndReason(
-                                        MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
-                            }
+                        if (modifiedColumns.stream().anyMatch(usedColNames::contains)) {
+                            doInactiveMaterializedView(mv, reason);
                         }
                     }
                 }
@@ -597,19 +599,12 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 LOG.warn("Setting the materialized view {}({}) to invalid because " +
                                 "the columns  of the table {} was modified.", mv.getName(), mv.getId(),
                         olapTable.getName());
-                mv.setInactiveAndReason(MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
+                doInactiveMaterializedView(mv, reason);
             } catch (Exception e) {
                 LOG.warn("Get related materialized view {} failed:", mv.getName(), e);
                 // basic check: may lose some situations
-                for (Column mvColumn : mv.getColumns()) {
-                    if (modifiedColumns.contains(mvColumn.getName())) {
-                        LOG.warn("Setting the materialized view {}({}) to invalid because " +
-                                        "the column {} of the table {} was modified.", mv.getName(), mv.getId(),
-                                mvColumn.getName(), olapTable.getName());
-                        mv.setInactiveAndReason(
-                                MaterializedViewExceptions.inactiveReasonForColumnChanged(modifiedColumns));
-                        break;
-                    }
+                if (mv.getColumns().stream().anyMatch(x -> modifiedColumns.contains(x.getName()))) {
+                    doInactiveMaterializedView(mv, reason);
                 }
             }
         }
