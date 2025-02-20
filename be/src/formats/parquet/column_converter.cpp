@@ -85,19 +85,29 @@ public:
     ~Int96ToDateTimeConverter() override = default;
 
     Status init(const std::string& timezone);
-    // convert column from int96 to timestamp
     Status convert(const ColumnPtr& src, Column* dst) override;
 
 private:
-    // When Hive stores a timestamp value into Parquet format, it converts local time
-    // into UTC time, and when it reads data out, it should be converted to the time
-    // according to session variable "time_zone".
-    [[nodiscard]] Timestamp _utc_to_local(Timestamp timestamp) const {
-        return timestamp::add<TimeUnit::SECOND>(timestamp, _offset);
+    [[nodiscard]] inline Timestamp _decode_int96(const int96_t& value) const {
+        // Get Julian date
+        int64_t days = value.hi;
+        int64_t seconds_from_epoch = (days - date::UNIX_EPOCH_JULIAN) * 86400;
+
+        // Get timezone offset using original seconds_from_epoch
+        std::chrono::system_clock::time_point tp = std::chrono::system_clock::from_time_t(seconds_from_epoch);
+        auto offset = _ctz.lookup(tp).offset;
+
+        // Subtract UNIX_EPOCH_SECONDS for timestamp conversion
+        int64_t adjusted_seconds = seconds_from_epoch - timestamp::UNIX_EPOCH_SECONDS;
+
+        // value.lo contains nanoseconds
+        int64_t nanoseconds = value.lo;
+
+        return timestamp::add<TimeUnit::SECOND>(timestamp::of_epoch_second(adjusted_seconds, nanoseconds), offset);
     }
 
 private:
-    int _offset = 0;
+    cctz::time_zone _ctz;
 };
 
 class Int64ToDateTimeConverter final : public ColumnConverter {
@@ -109,10 +119,17 @@ public:
     Status convert(const ColumnPtr& src, Column* dst) override;
 
 private:
+    [[nodiscard]] Timestamp _utc_to_local(Timestamp timestamp) const {
+        const auto tp = std::chrono::system_clock::from_time_t(timestamp);
+        const auto al = _ctz.lookup(tp);
+        return timestamp::add<TimeUnit::SECOND>(timestamp, al.offset);
+    }
+
+private:
     bool _is_adjusted_to_utc = false;
-    cctz::time_zone _ctz;
     int64_t _second_mask = 0;
     int64_t _scale_to_nano_factor = 0;
+    cctz::time_zone _ctz;
 };
 
 template <typename SourceType, typename DestType>
@@ -628,22 +645,14 @@ Status parquet::Int32ToDateTimeConverter::convert(const ColumnPtr& src, Column* 
 }
 
 Status Int96ToDateTimeConverter::init(const std::string& timezone) {
-    cctz::time_zone ctz;
-    if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {
+    if (!TimezoneUtils::find_cctz_time_zone(timezone, _ctz)) {
         return Status::InternalError(strings::Substitute("can not find cctz time zone $0", timezone));
     }
-
-    const auto tp = std::chrono::system_clock::now();
-    const cctz::time_zone::absolute_lookup al = ctz.lookup(tp);
-    _offset = al.offset;
-
     return Status::OK();
 }
 
 Status Int96ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     auto* src_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(src);
-    // hive only support null column
-    // TODO: support not null
     auto* dst_nullable_column = down_cast<NullableColumn*>(dst);
     dst_nullable_column->resize_uninitialized(src_nullable_column->size());
 
@@ -659,10 +668,10 @@ Status Int96ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];
         if (!src_null_data[i]) {
-            Timestamp timestamp = (static_cast<uint64_t>(src_data[i].hi) << TIMESTAMP_BITS) | (src_data[i].lo / 1000);
-            dst_data[i].set_timestamp(_utc_to_local(timestamp));
+            dst_data[i].set_timestamp(_decode_int96(src_data[i]));
         }
     }
+
     dst_nullable_column->set_has_null(src_nullable_column->has_null());
     return Status::OK();
 }
@@ -676,11 +685,8 @@ Status Int64ToDateTimeConverter::init(const std::string& timezone, const tparque
             return Status::InternalError(
                     strings::Substitute("expect parquet logical type is TIMESTAMP, actual is $0", ss.str()));
         }
-
         _is_adjusted_to_utc = schema_element.logicalType.TIMESTAMP.isAdjustedToUTC;
-
         const auto& time_unit = schema_element.logicalType.TIMESTAMP.unit;
-
         if (time_unit.__isset.MILLIS) {
             _second_mask = 1000;
             _scale_to_nano_factor = 1000000;
@@ -697,7 +703,6 @@ Status Int64ToDateTimeConverter::init(const std::string& timezone, const tparque
         }
     } else if (schema_element.__isset.converted_type) {
         _is_adjusted_to_utc = true;
-
         const auto& converted_type = schema_element.converted_type;
         if (converted_type == tparquet::ConvertedType::TIMESTAMP_MILLIS) {
             _second_mask = 1000;
@@ -719,7 +724,6 @@ Status Int64ToDateTimeConverter::init(const std::string& timezone, const tparque
             return Status::InternalError(strings::Substitute("can not find cctz time zone $0", timezone));
         }
     }
-
     return Status::OK();
 }
 
@@ -742,13 +746,17 @@ Status Int64ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     for (size_t i = 0; i < size; i++) {
         dst_null_data[i] = src_null_data[i];
         if (!src_null_data[i]) {
-            int64_t seconds = src_data[i] / _second_mask;
+            // substruct UNIX_EPOCH_SECONDS because of_epoch_second will add again
+            int64_t seconds = src_data[i] / _second_mask - timestamp::UNIX_EPOCH_SECONDS;
             int64_t nanoseconds = (src_data[i] % _second_mask) * _scale_to_nano_factor;
-            TimestampValue ep;
-            ep.from_unixtime(seconds, nanoseconds / 1000, _ctz);
-            dst_data[i].set_timestamp(ep.timestamp());
+            Timestamp timestamp = timestamp::of_epoch_second(static_cast<int>(seconds), static_cast<int>(nanoseconds));
+            if (_is_adjusted_to_utc) {
+                timestamp = _utc_to_local(timestamp);
+            }
+            dst_data[i].set_timestamp(timestamp);
         }
     }
+
     dst_nullable_column->set_has_null(src_nullable_column->has_null());
     return Status::OK();
 }
