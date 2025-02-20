@@ -176,10 +176,8 @@ public class PaimonMetadata implements ConnectorMetadata {
                 return;
             }
             paimonNativeCatalog.dropTable(new Identifier(dbName, tableName), stmt.isForceDrop());
-        } catch (Catalog.TableNotExistException e) {
-            throw new DdlException("Paimon error: " + e.getMessage());
-        } catch (Catalog.ViewNotExistException e) {
-            throw new RuntimeException("Paimon error: ", e);
+        } catch (Exception e) {
+            throw new DdlException("Paimon error: " + e.getMessage(), e);
         }
     }
 
