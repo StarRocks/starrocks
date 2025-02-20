@@ -115,6 +115,8 @@ public:
     size_t version_count() const;
     Version max_version() const;
 
+    bool belonged_to_cloud_native() const override { return false; }
+
     // propreties encapsulated in TabletSchema
     KeysType keys_type() const;
     size_t num_columns_with_max_version() const;
