@@ -326,4 +326,36 @@ public class TableFunctionTest extends PlanTestBase {
             Assert.assertEquals(optTableFuncNode.get().isFnResultRequired(), isRequired);
         }
     }
+
+    @Test
+    public void testUnnesetFnResultNotRequired2() throws Exception {
+        String sql = "WITH `CTE` AS\n" +
+                "  (SELECT\n" +
+                "     `T2`.`a` AS `a`,\n" +
+                "     NOT(((`T`.`v1`) IS NULL)) AS `b`\n" +
+                "   FROM\n" +
+                "     `t0` AS `T`,\n" +
+                "     UNNEST([\"A\",\"B\",\"C\",\"D\"]) AS T2(`a`))\n" +
+                "SELECT\n" +
+                "  (CASE\n" +
+                "       WHEN `a` = \"A\"\n" +
+                "            AND `a` = \"B\" THEN \"A and B\"\n" +
+                "       WHEN `a` = \"A\" THEN \"A only\"\n" +
+                "       WHEN `a` = \"B\" THEN \"B only\"\n" +
+                "       ELSE \"None\"\n" +
+                "   END),\n" +
+                "  `b`\n" +
+                "FROM `CTE`\n" +
+                "LIMIT 50;";
+        ExecPlan plan = getExecPlan(sql);
+
+        Optional<TableFunctionNode> optTableFuncNode = plan.getFragments()
+                .stream()
+                .flatMap(fragment -> fragment.collectNodes().stream())
+                .filter(planNode -> planNode instanceof TableFunctionNode)
+                .map(planNode -> (TableFunctionNode) planNode)
+                .findFirst();
+        Assert.assertTrue(optTableFuncNode.isPresent());
+        Assert.assertEquals(optTableFuncNode.get().isFnResultRequired(), true);
+    }
 }
