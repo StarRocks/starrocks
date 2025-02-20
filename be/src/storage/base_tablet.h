@@ -118,14 +118,9 @@ public:
 
     virtual size_t num_rows() const = 0;
 
-<<<<<<< HEAD
-=======
-    virtual StatusOr<bool> has_delete_predicates(const Version& version) = 0;
-
     virtual bool belonged_to_cloud_native() const = 0;
 
 protected:
->>>>>>> 1354398f31 ([BugFix] Use correct TabletReader::parse_seek_range for clould native table when tablet_internal_parallel is enabled (#55867))
     virtual void on_shutdown() {}
 
 protected:
