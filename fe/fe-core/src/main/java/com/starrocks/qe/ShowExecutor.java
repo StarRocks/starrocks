@@ -2837,18 +2837,7 @@ public class ShowExecutor {
             if (olapTable.getPartitionInfo() != null && olapTable.getPartitionInfo().getType() != null) {
                 mvStatus.setPartitionType(olapTable.getPartitionInfo().getType().toString());
             }
-<<<<<<< HEAD
-            // rows
-            if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
-                Partition partition = olapTable.getPartitions().iterator().next();
-                MaterializedIndex index = partition.getIndex(mvId);
-                mvStatus.setRows(index.getRowCount());
-            } else {
-                mvStatus.setRows(0L);
-            }
-=======
             // text
->>>>>>> c1290985f9 ([BugFix] Fix show materialized view NPE bug (#55995))
             if (mvMeta.getOriginStmt() == null) {
                 final String mvName = olapTable.getIndexNameById(mvId);
                 mvStatus.setText(buildCreateMVSql(olapTable, mvName, mvMeta));
@@ -2858,8 +2847,8 @@ public class ShowExecutor {
             }
             // rows
             if (olapTable.getPartitionInfo().getType() == PartitionType.UNPARTITIONED) {
-                final Partition partition = olapTable.getPartitions().iterator().next();
-                final MaterializedIndex index = partition.getDefaultPhysicalPartition().getIndex(mvId);
+                Partition partition = olapTable.getPartitions().iterator().next();
+                MaterializedIndex index = partition.getIndex(mvId);
                 mvStatus.setRows(index.getRowCount());
             } else {
                 mvStatus.setRows(0L);
