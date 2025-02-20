@@ -118,6 +118,8 @@ public:
 
     virtual size_t num_rows() const = 0;
 
+    virtual bool belonged_to_cloud_native() const = 0;
+
     virtual void on_shutdown() {}
 
 protected:
