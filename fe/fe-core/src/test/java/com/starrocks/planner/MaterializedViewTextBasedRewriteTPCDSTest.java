@@ -36,11 +36,16 @@ public class MaterializedViewTextBasedRewriteTPCDSTest extends MaterializedViewT
     private static final List<List<Arguments>> ARGUMENTS = Lists.newArrayList();
     private static final int N = 5;
 
+    private static final String MATERIALIZED_DB_NAME = "mv_db";
+    private static final String TABLE_DB_NAME = "table_db";
     @BeforeAll
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         MaterializedViewTestBase.beforeClass();
-        starRocksAssert.useDatabase(MATERIALIZED_DB_NAME);
+        starRocksAssert.withDatabase(MATERIALIZED_DB_NAME);
+        starRocksAssert
+                .withDatabase(TABLE_DB_NAME)
+                .useDatabase(TABLE_DB_NAME);
         connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(true);
         TPCDSTestUtil.prepareTables(starRocksAssert);
         prepareArguments();
@@ -49,7 +54,8 @@ public class MaterializedViewTextBasedRewriteTPCDSTest extends MaterializedViewT
     @ParameterizedTest(name = "Tpcds.{0}")
     @MethodSource("tpcdsSource0")
     public void testTPCDS0(String name, String sql) {
-        testRewriteOK(sql, sql);
+        starRocksAssert.useDatabase(TABLE_DB_NAME);
+        testRewriteOK(MATERIALIZED_DB_NAME, sql, sql, "");
     }
 
     @ParameterizedTest(name = "Tpcds.{0}")
