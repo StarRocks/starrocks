@@ -59,6 +59,7 @@
 #include "util/thrift_rpc_helper.h"
 #include "util/time.h"
 #include "util/uid_util.h"
+#include "util/url_coding.h"
 
 namespace starrocks {
 
@@ -216,9 +217,19 @@ Status TransactionMgr::rollback_transaction(const HttpRequest* req, std::string*
                 delete ctx;
             }
         });
-        if (ctx->db != req->header(HTTP_DB_KEY)) {
-            st = Status::InvalidArgument(
-                    fmt::format("request db {} transaction db {} not match", req->header(HTTP_DB_KEY), ctx->db));
+        auto& db_param = req->param(HTTP_DB_KEY);
+        std::string db;
+        auto decode_st = url_decode_slice(db_param.c_str(), db_param.size(), &db);
+        if (!decode_st.ok()) {
+            std::string error_msg =
+                    fmt::format("failed to decode db parameter. uri={}, db param={}, label={}, error={}", req->uri(),
+                                db_param, label, decode_st.message());
+            st = Status::InvalidArgument(error_msg);
+            *resp = _build_reply(label, TXN_ROLLBACK, st);
+            return st;
+        }
+        if (ctx->db != db) {
+            st = Status::InvalidArgument(fmt::format("request db {} transaction db {} not match", db, ctx->db));
             *resp = _build_reply(label, TXN_ROLLBACK, st);
             return st;
         }
@@ -245,9 +256,20 @@ Status TransactionMgr::commit_transaction(const HttpRequest* req, std::string* r
                 delete ctx;
             }
         });
-        if (ctx->db != req->header(HTTP_DB_KEY)) {
-            st = Status::InvalidArgument(
-                    fmt::format("request db {} transaction db {} not match", req->header(HTTP_DB_KEY), ctx->db));
+
+        auto& db_param = req->param(HTTP_DB_KEY);
+        std::string db;
+        auto decode_st = url_decode_slice(db_param.c_str(), db_param.size(), &db);
+        if (!decode_st.ok()) {
+            std::string error_msg =
+                    fmt::format("failed to decode db parameter. uri={}, db param={}, label={}, error={}", req->uri(),
+                                db_param, label, decode_st.message());
+            st = Status::InvalidArgument(error_msg);
+            *resp = _build_reply(label, TXN_COMMIT, st);
+            return st;
+        }
+        if (ctx->db != db) {
+            st = Status::InvalidArgument(fmt::format("request db {} transaction db {} not match", db, ctx->db));
             *resp = _build_reply(label, TXN_COMMIT, st);
             return st;
         }
@@ -276,8 +298,22 @@ Status TransactionMgr::_begin_transaction(const HttpRequest* req, StreamLoadCont
     ctx->load_type = TLoadType::MANUAL_LOAD;
     ctx->load_src_type = TLoadSourceType::RAW;
 
-    ctx->db = req->header(HTTP_DB_KEY);
-    ctx->table = req->header(HTTP_TABLE_KEY);
+    auto& db_param = req->param(HTTP_DB_KEY);
+    auto decode_st = url_decode_slice(db_param.c_str(), db_param.size(), &ctx->db);
+    if (!decode_st.ok()) {
+        std::string error_msg = fmt::format("failed to decode db parameter. uri={}, db param={}, label={}, error={}",
+                                            req->uri(), db_param, ctx->label, decode_st.message());
+        return Status::InvalidArgument(error_msg);
+    }
+
+    auto& table_param = req->param(HTTP_TABLE_KEY);
+    decode_st = url_decode_slice(table_param.c_str(), table_param.size(), &ctx->table);
+    if (!decode_st.ok()) {
+        std::string error_msg =
+                fmt::format("failed to decode table parameter. uri={}, table param={}, label={}, error={}", req->uri(),
+                            table_param, ctx->label, decode_st.message());
+        return Status::InvalidArgument(error_msg);
+    }
     ctx->label = req->header(HTTP_LABEL_KEY);
 
     if (!req->header(HTTP_TIMEOUT).empty()) {

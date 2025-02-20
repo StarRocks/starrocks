@@ -60,6 +60,7 @@
 #include "util/thrift_rpc_helper.h"
 #include "util/time.h"
 #include "util/uid_util.h"
+#include "util/url_coding.h"
 
 namespace starrocks {
 
@@ -254,16 +255,35 @@ int TransactionStreamLoadAction::on_header(HttpRequest* req) {
         }
     });
 
-    if (ctx->db != req->header(HTTP_DB_KEY)) {
-        _send_error_reply(req,
-                          Status::InvalidArgument(fmt::format("Request database {} not equal transaction database {}",
-                                                              req->header(HTTP_DB_KEY), ctx->db)));
+    auto& db_param = req->param(HTTP_DB_KEY);
+    std::string db;
+    auto decode_st = url_decode_slice(db_param.c_str(), db_param.size(), &db);
+    if (!decode_st.ok()) {
+        std::string error_msg = fmt::format("failed to decode db parameter. uri={}, db param={}, label={}, error={}",
+                                            req->uri(), db_param, ctx->label, decode_st.message());
+        _send_error_reply(req, Status::InvalidArgument(error_msg));
         return -1;
     }
 
-    if (ctx->table != req->header(HTTP_TABLE_KEY)) {
+    if (ctx->db != req->header(HTTP_DB_KEY)) {
+        _send_error_reply(req, Status::InvalidArgument(fmt::format(
+                                       "Request database {} not equal transaction database {}", db, ctx->db)));
+        return -1;
+    }
+
+    auto& table_param = req->param(HTTP_TABLE_KEY);
+    std::string table;
+    decode_st = url_decode_slice(table_param.c_str(), table_param.size(), &table);
+    if (!decode_st.ok()) {
+        std::string error_msg =
+                fmt::format("failed to decode table parameter. uri={}, table param={}, label={}, error={}", req->uri(),
+                            table_param, ctx->label, decode_st.message());
+        _send_error_reply(req, Status::InvalidArgument(error_msg));
+        return -1;
+    }
+    if (ctx->table != table) {
         _send_error_reply(req, Status::InvalidArgument(fmt::format("Request table {} not equal transaction table {}",
-                                                                   req->header(HTTP_TABLE_KEY), ctx->table)));
+                                                                   table, ctx->table)));
         return -1;
     }
 
@@ -371,6 +391,14 @@ Status TransactionStreamLoadAction::_parse_request(HttpRequest* http_req, Stream
     }
 
     if (!http_req->header(HTTP_COLUMNS).empty()) {
+        auto& columns_param = http_req->header(HTTP_COLUMNS);
+        std::string columns;
+        auto st = url_decode_slice(columns_param.c_str(), columns_param.size(), &columns);
+        if (!st.ok()) {
+            std::string error_msg =
+                    fmt::format("failed to decode columns parameter. uri={}, columns param={}, label={}, error={}",
+                                http_req->uri(), columns_param, ctx->label, st.message());
+        }
         request.__set_columns(http_req->header(HTTP_COLUMNS));
     }
     if (!http_req->header(HTTP_WHERE).empty()) {

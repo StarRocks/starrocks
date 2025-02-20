@@ -241,7 +241,7 @@ int StreamLoadAction::on_header(HttpRequest* req) {
         std::string error_msg = fmt::format("failed to decode db parameter. uri={}, db param={}, label={}, error={}",
                                             req->uri(), db_param, ctx->label, decode_st.message());
         LOG(WARNING) << error_msg;
-        ctx->status = Status::InternalError(error_msg);
+        ctx->status = Status::InvalidArgument(error_msg);
         _send_reply(req, error_msg);
         return -1;
     }
@@ -253,7 +253,7 @@ int StreamLoadAction::on_header(HttpRequest* req) {
                 fmt::format("failed to decode table parameter. uri={}, table param={}, label={}, error={}", req->uri(),
                             table_param, ctx->label, decode_st.message());
         LOG(WARNING) << error_msg;
-        ctx->status = Status::InternalError(error_msg);
+        ctx->status = Status::InvalidArgument(error_msg);
         _send_reply(req, error_msg);
         return -1;
     }
@@ -504,6 +504,14 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         ctx->body_sink = file_sink;
     }
     if (!http_req->header(HTTP_COLUMNS).empty()) {
+        auto& columns_param = http_req->header(HTTP_COLUMNS);
+        std::string columns;
+        auto st = url_decode_slice(columns_param.c_str(), columns_param.size(), &columns);
+        if (!st.ok()) {
+            std::string error_msg =
+                    fmt::format("failed to decode columns parameter. uri={}, columns param={}, label={}, error={}",
+                                http_req->uri(), columns_param, ctx->label, st.message());
+        }
         request.__set_columns(http_req->header(HTTP_COLUMNS));
     }
     if (!http_req->header(HTTP_WHERE).empty()) {
