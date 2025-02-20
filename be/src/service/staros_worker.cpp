@@ -77,11 +77,17 @@ std::unique_ptr<staros::starlet::Starlet> g_starlet;
 
 namespace fslib = staros::starlet::fslib;
 
-StarOSWorker::StarOSWorker() : _mtx(), _shards(), _fs_cache(new_lru_cache(1024)) {}
+StarOSWorker::StarOSWorker()
+        : _mtx(), _shards(), _fs_cache(new_lru_cache(config::starlet_filesystem_instance_cache_capacity)) {}
 
 StarOSWorker::~StarOSWorker() = default;
 
 static const uint64_t kUnknownTableId = UINT64_MAX;
+
+void StarOSWorker::set_fs_cache_capacity(int32_t capacity) {
+    _fs_cache->set_capacity(capacity);
+}
+
 uint64_t StarOSWorker::get_table_id(const ShardInfo& shard) {
     const auto& properties = shard.properties;
     auto iter = properties.find("tableId");
@@ -135,9 +141,7 @@ absl::Status StarOSWorker::invalidate_fs(const ShardInfo& info) {
     if (!conf.ok()) {
         return conf.status();
     }
-    std::string key_str = get_cache_key(*scheme, *conf);
-    CacheKey key(key_str);
-    _fs_cache->erase(key);
+    erase_fs_cache(get_cache_key(*scheme, *conf));
     return absl::OkStatus();
 }
 
@@ -214,8 +218,10 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
             l.unlock();
             return build_filesystem_on_demand(id, conf);
         }
-        if (it->second.fs) {
-            return it->second.fs;
+
+        auto fs = lookup_fs_cache(it->second.fs_cache_key);
+        if (fs != nullptr) {
+            return fs;
         }
     }
 
@@ -228,15 +234,18 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
             l.unlock();
             return build_filesystem_on_demand(id, conf);
         }
-        if (shard_iter->second.fs) {
-            return shard_iter->second.fs;
+
+        auto fs = lookup_fs_cache(shard_iter->second.fs_cache_key);
+        if (fs != nullptr) {
+            return fs;
         }
+
         auto fs_or = build_filesystem_from_shard_info(shard_iter->second.shard_info, conf);
         if (!fs_or.ok()) {
             return fs_or.status();
         }
-        shard_iter->second.fs = std::move(fs_or).value();
-        return shard_iter->second.fs;
+        shard_iter->second.fs_cache_key = std::move(fs_or->first);
+        return fs_or->second;
     }
 }
 
@@ -260,11 +269,17 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesyste
     if (!info_or.ok()) {
         return info_or.status();
     }
-    return build_filesystem_from_shard_info(info_or.value(), conf);
+    auto fs_or = build_filesystem_from_shard_info(info_or.value(), conf);
+    if (!fs_or.ok()) {
+        return fs_or.status();
+    }
+
+    // Do not return the cache key shared_ptr, so if it not held by anyone else, the fs instance will be removed from the fs cache immediately.
+    return fs_or->second;
 }
 
-absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesystem_from_shard_info(
-        const ShardInfo& info, const Configuration& conf) {
+absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<fslib::FileSystem>>>
+StarOSWorker::build_filesystem_from_shard_info(const ShardInfo& info, const Configuration& conf) {
     auto localconf = build_conf_from_shard_info(info);
     if (!localconf.ok()) {
         return localconf.status();
@@ -316,23 +331,17 @@ absl::StatusOr<fslib::Configuration> StarOSWorker::build_conf_from_shard_info(co
     return info.fslib_conf_from_this(need_enable_cache(info), "");
 }
 
-absl::StatusOr<std::shared_ptr<StarOSWorker::FileSystem>> StarOSWorker::new_shared_filesystem(
-        std::string_view scheme, const Configuration& conf) {
-    std::string key_str = get_cache_key(scheme, conf);
-    CacheKey key(key_str);
+absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<fslib::FileSystem>>>
+StarOSWorker::new_shared_filesystem(std::string_view scheme, const Configuration& conf) {
+    std::string cache_key = get_cache_key(scheme, conf);
 
     // Lookup LRU cache
-    std::shared_ptr<fslib::FileSystem> fs;
-    auto handle = _fs_cache->lookup(key);
-    if (handle != nullptr) {
-        auto value = static_cast<CacheValue*>(_fs_cache->value(handle));
-        fs = value->lock();
-        _fs_cache->release(handle);
-        if (fs != nullptr) {
-            VLOG(9) << "Share filesystem";
-            return std::move(fs);
-        }
+    auto value_or = find_fs_cache(cache_key);
+    if (value_or.ok()) {
+        VLOG(9) << "Share filesystem";
+        return value_or;
     }
+
     VLOG(9) << "Create a new filesystem";
 
     // Create a new instance of FileSystem
@@ -341,18 +350,12 @@ absl::StatusOr<std::shared_ptr<StarOSWorker::FileSystem>> StarOSWorker::new_shar
         return fs_or.status();
     }
     // turn unique_ptr to shared_ptr
-    fs = std::move(fs_or).value();
+    std::shared_ptr<fslib::FileSystem> fs = std::move(fs_or).value();
 
     // Put the FileSysatem into LRU cache
-    auto value = new CacheValue(fs);
-    handle = _fs_cache->insert(key, value, 1, 1, cache_value_deleter);
-    if (handle == nullptr) {
-        delete value;
-    } else {
-        _fs_cache->release(handle);
-    }
+    auto fs_cache_key = insert_fs_cache(cache_key, fs);
 
-    return std::move(fs);
+    return std::make_pair(std::move(fs_cache_key), std::move(fs));
 }
 
 std::string StarOSWorker::get_cache_key(std::string_view scheme, const Configuration& conf) {
@@ -365,6 +368,73 @@ std::string StarOSWorker::get_cache_key(std::string_view scheme, const Configura
     }
     sha256.digest();
     return sha256.hex();
+}
+
+std::shared_ptr<std::string> StarOSWorker::insert_fs_cache(const std::string& key,
+                                                           const std::shared_ptr<FileSystem>& fs) {
+    std::shared_ptr<std::string> fs_cache_key(new std::string(key), [](std::string* key) {
+        if (g_worker) {
+            g_worker->erase_fs_cache(*key);
+        }
+        delete key;
+    });
+
+    CacheKey cache_key(key);
+    auto value = new CacheValue(fs_cache_key, fs);
+    auto handle = _fs_cache->insert(cache_key, value, 1, 1, cache_value_deleter);
+    if (handle == nullptr) {
+        delete value;
+        return nullptr;
+    }
+
+    _fs_cache->release(handle);
+    return fs_cache_key;
+}
+
+void StarOSWorker::erase_fs_cache(const std::string& key) {
+    CacheKey cache_key(key);
+    _fs_cache->erase(key);
+}
+
+std::shared_ptr<fslib::FileSystem> StarOSWorker::lookup_fs_cache(const std::shared_ptr<std::string>& key) {
+    if (key == nullptr) {
+        return nullptr;
+    }
+    return lookup_fs_cache(*key);
+}
+
+std::shared_ptr<fslib::FileSystem> StarOSWorker::lookup_fs_cache(const std::string& key) {
+    auto value_or = find_fs_cache(key);
+    if (!value_or.ok()) {
+        return nullptr;
+    }
+
+    return value_or->second;
+}
+
+absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<fslib::FileSystem>>> StarOSWorker::find_fs_cache(
+        const std::string& key) {
+    if (key.empty()) {
+        return absl::InvalidArgumentError("key is empty");
+    }
+
+    CacheKey cache_key(key);
+    auto handle = _fs_cache->lookup(cache_key);
+    if (handle == nullptr) {
+        return absl::NotFoundError(key + " not found");
+    }
+
+    auto value = static_cast<CacheValue*>(_fs_cache->value(handle));
+    // The value->key may be expired in a very short critical moment.
+    // At that moment, the value->key is not referenced by anyone but it's shared_ptr deleter haven't be executed,
+    // so the item haven't be removed from cache yet.
+    // In this situation, this function will return a null key and a valid fs instance.
+    // So the caller cannot assume the returned key always valid.
+    auto ret = std::make_pair(value->key.lock(), value->fs);
+
+    _fs_cache->release(handle);
+
+    return ret;
 }
 
 Status to_status(const absl::Status& absl_status) {
