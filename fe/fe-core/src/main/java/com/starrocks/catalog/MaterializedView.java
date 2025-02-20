@@ -470,7 +470,8 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     // This is the original user's view define SQL which can be used to generate ast key in text based rewrite.
     @SerializedName(value = "originalViewDefineSql")
     private String originalViewDefineSql;
-
+    // This is the original database name when the mv is created.
+    private String originalDBName;
     // Deprecated field which is used to store single partition ref table exprs of the mv in old version.
     @Deprecated
     @SerializedName(value = "partitionRefTableExprs")
@@ -651,6 +652,14 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
 
     public void setOriginalViewDefineSql(String originalViewDefineSql) {
         this.originalViewDefineSql = originalViewDefineSql;
+    }
+
+    public String getOriginalDBName() {
+        return originalDBName;
+    }
+
+    public void setOriginalDBName(String originalDBName) {
+        this.originalDBName = originalDBName;
     }
 
     public String getTaskDefinition() {
@@ -2163,11 +2172,24 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 return null;
             }
             ConnectContext connectContext = ConnectContext.buildInner();
-            connectContext.setDatabase(db.getOriginName());
             if (!Strings.isNullOrEmpty(originalViewDefineSql)) {
-                this.defineQueryParseNode = MvUtils.getQueryAst(originalViewDefineSql, connectContext);
-            } else {
-                this.defineQueryParseNode = MvUtils.getQueryAst(viewDefineSql, connectContext);
+                try {
+                    String currentDBName = Strings.isNullOrEmpty(originalDBName) ? db.getOriginName() : originalDBName;
+                    connectContext.setDatabase(currentDBName);
+                    this.defineQueryParseNode = MvUtils.getQueryAst(originalViewDefineSql, connectContext);
+                } catch (Exception e) {
+                    // ignore
+                    LOG.warn("parse original view define sql failed:", e);
+                }
+            }
+            if (this.defineQueryParseNode == null) {
+                try {
+                    connectContext.setDatabase(db.getOriginName());
+                    this.defineQueryParseNode = MvUtils.getQueryAst(viewDefineSql, connectContext);
+                } catch (Exception e) {
+                    // ignore
+                    LOG.warn("parse view define sql failed:", e);
+                }
             }
         }
         return this.defineQueryParseNode;
