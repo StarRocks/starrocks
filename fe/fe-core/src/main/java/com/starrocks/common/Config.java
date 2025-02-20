@@ -3433,4 +3433,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean transaction_state_print_partition_info = true;
+
+    @ConfField(mutable = true)
+    public static int max_show_proc_transactions_entry = 2000;
 }
