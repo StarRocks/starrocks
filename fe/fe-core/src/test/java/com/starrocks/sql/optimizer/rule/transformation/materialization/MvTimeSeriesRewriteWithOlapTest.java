@@ -36,6 +36,12 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         MVTestBase.beforeClass();
+<<<<<<< HEAD
+=======
+
+        connectContext.getSessionVariable().setMaterializedViewRewriteMode("force");
+        connectContext.getSessionVariable().setEnableLowCardinalityOptimize(false);
+>>>>>>> 107727bb6 ([UT] [BugFix] Fix mv unstable test cases (#55998))
         starRocksAssert.withTable("CREATE TABLE t0(\n" +
                 " k1 datetime,\n" +
                 " v1 INT,\n" +
