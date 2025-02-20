@@ -221,11 +221,6 @@ statement
     | grantPrivilegeStatement
     | revokePrivilegeStatement
     | showGrantsStatement
-    | createSecurityIntegrationStatement
-    | alterSecurityIntegrationStatement
-    | dropSecurityIntegrationStatement
-    | showSecurityIntegrationStatement
-    | showCreateSecurityIntegrationStatement
     | createRoleMappingStatement
     | alterRoleMappingStatement
     | dropRoleMappingStatement
@@ -250,6 +245,13 @@ statement
     | showCreatePasswordPolicy
     | setPasswordPolicy
     | unsetPasswordPolicy
+
+    // Security Integration Statement
+    | createSecurityIntegrationStatement
+    | alterSecurityIntegrationStatement
+    | dropSecurityIntegrationStatement
+    | showSecurityIntegrationStatement
+    | showCreateSecurityIntegrationStatement
 
     // Backup Restore Statement
     | backupStatement
@@ -1929,26 +1931,6 @@ showGrantsStatement
     | SHOW GRANTS FOR ROLE identifierOrString
     ;
 
-createSecurityIntegrationStatement
-    : CREATE SECURITY INTEGRATION identifier properties
-    ;
-
-alterSecurityIntegrationStatement
-    : ALTER SECURITY INTEGRATION identifier SET propertyList
-    ;
-
-dropSecurityIntegrationStatement
-    : DROP SECURITY INTEGRATION identifier
-    ;
-
-showSecurityIntegrationStatement
-    : SHOW SECURITY INTEGRATIONS
-    ;
-
-showCreateSecurityIntegrationStatement
-    : SHOW CREATE SECURITY INTEGRATION identifier
-    ;
-
 createRoleMappingStatement
     : CREATE ROLE MAPPING identifier properties
     ;
@@ -2083,6 +2065,28 @@ setPasswordPolicy
 
 unsetPasswordPolicy
     : ALTER SYSTEM UNSET PASSWORD POLICY
+    ;
+
+// ------------------------------------------- Security Integration Statement ----------------------------------------------------
+
+createSecurityIntegrationStatement
+    : CREATE SECURITY INTEGRATION identifier properties
+    ;
+
+alterSecurityIntegrationStatement
+    : ALTER SECURITY INTEGRATION identifier SET propertyList
+    ;
+
+dropSecurityIntegrationStatement
+    : DROP SECURITY INTEGRATION identifier
+    ;
+
+showSecurityIntegrationStatement
+    : SHOW SECURITY INTEGRATIONS
+    ;
+
+showCreateSecurityIntegrationStatement
+    : SHOW CREATE SECURITY INTEGRATION identifier
     ;
 
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
