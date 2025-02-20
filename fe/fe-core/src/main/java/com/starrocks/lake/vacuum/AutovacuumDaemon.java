@@ -240,7 +240,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
 
         partition.setLastVacuumTime(startTime);
         if (!hasError && vacuumedVersion > partition.getLastSuccVacuumVersion()) {
-            partition.setLastSuccVacuumVersion(minRetainVersion);
+            partition.setLastSuccVacuumVersion(vacuumedVersion);
         }
         LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} " +
                         "visibleVersion={} minRetainVersion={} minActiveTxnId={} cost={}ms",
