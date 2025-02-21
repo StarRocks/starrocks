@@ -50,13 +50,13 @@ TEST_F(MemTrackerTest, get_snapshot) {
     _query_1->consume(10);
     _query_2->consume(20);
 
-    auto* snapshot = _process_mem_tracker->get_snapshot(&_pool, 1, 2);
+    auto* snapshot = _process_mem_tracker->get_snapshot(&_pool, 2);
     ASSERT_EQ(snapshot->debug_string(),
               "{\"label:\"process\",\"level:\"1\",\"limit:\"1024\",\"cur_mem_usage:\"30\",\"peak_mem_usage:\"30\","
               "\"child\":[{\"label:\"query_pool\",\"level:\"2\",\"limit:\"512\",\"cur_mem_usage:\"30\",\"peak_mem_"
               "usage:\"30\",\"child\":[]}]}");
 
-    snapshot = _process_mem_tracker->get_snapshot(&_pool, 1, 10);
+    snapshot = _process_mem_tracker->get_snapshot(&_pool, 10);
     ASSERT_EQ(snapshot->debug_string(),
               "{\"label:\"process\",\"level:\"1\",\"limit:\"1024\",\"cur_mem_usage:\"30\",\"peak_mem_usage:\"30\","
               "\"child\":[{\"label:\"query_pool\",\"level:\"2\",\"limit:\"512\",\"cur_mem_usage:\"30\",\"peak_mem_"

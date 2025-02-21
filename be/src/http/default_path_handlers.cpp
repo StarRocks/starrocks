@@ -129,7 +129,6 @@ void MemTrackerWebPageHandler::handle(MemTracker* mem_tracker, const WebPageHand
     (*output) << "<tbody>\n";
 
     size_t upper_level;
-    size_t cur_level;
     auto iter = args.find("upper_level");
     if (iter != args.end()) {
         upper_level = std::stol(iter->second);
@@ -141,16 +140,13 @@ void MemTrackerWebPageHandler::handle(MemTracker* mem_tracker, const WebPageHand
     iter = args.find("type");
     if (iter != args.end()) {
         auto item = GlobalEnv::GetInstance()->get_mem_tracker_by_type(MemTracker::label_to_type(iter->second));
-        if (item.second != nullptr) {
-            start_mem_tracker = item.second.get();
-            cur_level = item.first;
+        if (item != nullptr) {
+            start_mem_tracker = item.get();
         } else {
             start_mem_tracker = mem_tracker;
-            cur_level = 1;
         }
     } else {
         start_mem_tracker = mem_tracker;
-        cur_level = 1;
     }
 
     ObjectPool obj_pool;
@@ -158,17 +154,17 @@ void MemTrackerWebPageHandler::handle(MemTracker* mem_tracker, const WebPageHand
     std::vector<MemTracker::SimpleItem> items;
 
     if (start_mem_tracker != nullptr) {
-        MemTracker::SimpleItem* root = start_mem_tracker->get_snapshot(&obj_pool, cur_level, upper_level);
+        MemTracker::SimpleItem* root = start_mem_tracker->get_snapshot(&obj_pool, upper_level);
         if (start_mem_tracker == GlobalEnv::GetInstance()->process_mem_tracker()) {
             // Metadata memory statistics use the old memory framework,
             // not in RootMemTrackerTree, so it needs to be added here
             MemTracker* meta_mem_tracker = GlobalEnv::GetInstance()->metadata_mem_tracker();
-            auto* meta_item = meta_mem_tracker->get_snapshot(&obj_pool, 2, upper_level);
+            auto* meta_item = meta_mem_tracker->get_snapshot(&obj_pool, upper_level);
 
             // Update memory statistics use the old memory framework,
             // not in RootMemTrackerTree, so it needs to be added here
             MemTracker* update_mem_tracker = GlobalEnv::GetInstance()->update_mem_tracker();
-            auto* update_item = update_mem_tracker->get_snapshot(&obj_pool, 2, upper_level);
+            auto* update_item = update_mem_tracker->get_snapshot(&obj_pool, upper_level);
 
             root->childs.emplace_back(meta_item);
             root->childs.emplace_back(update_item);

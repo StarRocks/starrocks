@@ -124,7 +124,10 @@ MemTracker::MemTracker(int64_t byte_limit, std::string label, MemTracker* parent
           _local_allocation_counter(TUnit::BYTES),
           _deallocation(&_local_deallocation_counter),
           _local_deallocation_counter(TUnit::BYTES) {
-    if (parent != nullptr) _parent->add_child_tracker(this);
+    if (parent != nullptr) {
+        _parent->add_child_tracker(this);
+        _level = _parent->_level + 1;
+    }
     Init();
 }
 
@@ -140,7 +143,10 @@ MemTracker::MemTracker(MemTrackerType type, int64_t byte_limit, std::string labe
           _local_allocation_counter(TUnit::BYTES),
           _deallocation(&_local_deallocation_counter),
           _local_deallocation_counter(TUnit::BYTES) {
-    if (parent != nullptr) _parent->add_child_tracker(this);
+    if (parent != nullptr) {
+        _parent->add_child_tracker(this);
+        _level = _parent->_level + 1;
+    }
     Init();
 }
 
@@ -167,7 +173,10 @@ MemTracker::MemTracker(RuntimeProfile* profile, std::tuple<bool, bool, bool> att
                                                        RuntimeProfile::Counter::create_strategy(TUnit::BYTES))
                                 : &_local_deallocation_counter),
           _local_deallocation_counter(TUnit::BYTES) {
-    if (parent != nullptr) _parent->add_child_tracker(this);
+    if (parent != nullptr) {
+        _parent->add_child_tracker(this);
+        _level = _parent->_level + 1;
+    }
     Init();
 }
 
@@ -202,21 +211,21 @@ Status MemTracker::check_mem_limit(const std::string& msg) const {
     return Status::MemoryLimitExceeded(tracker->err_msg(msg));
 }
 
-MemTracker::SimpleItem* MemTracker::_get_snapshot_internal(ObjectPool* pool, SimpleItem* parent, size_t cur_level,
+MemTracker::SimpleItem* MemTracker::_get_snapshot_internal(ObjectPool* pool, SimpleItem* parent,
                                                            size_t upper_level) const {
     SimpleItem* item = pool->add(new SimpleItem());
     item->label = _label;
     item->parent = parent;
-    item->level = cur_level;
+    item->level = _level;
     item->limit = _limit;
     item->cur_consumption = _consumption->current_value();
     item->peak_consumption = _consumption->value();
 
-    if (cur_level < upper_level) {
+    if (_level < upper_level) {
         std::lock_guard<std::mutex> l(_child_trackers_lock);
         item->childs.reserve(_child_trackers.size());
         for (const auto& child : _child_trackers) {
-            item->childs.emplace_back(child->_get_snapshot_internal(pool, item, cur_level + 1, upper_level));
+            item->childs.emplace_back(child->_get_snapshot_internal(pool, item, upper_level));
         }
     }
 

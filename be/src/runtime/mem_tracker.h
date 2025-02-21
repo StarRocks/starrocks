@@ -177,6 +177,9 @@ public:
                         const std::string& counter_name_prefix = std::string(), int64_t byte_limit = -1,
                         std::string label = std::string(), MemTracker* parent = nullptr);
 
+    void set_level(int64_t level) { _level = level; }
+    int64_t get_level() const { return _level; }
+
     ~MemTracker();
 
     // Removes this tracker from _parent->_child_trackers.
@@ -225,8 +228,8 @@ public:
 
     void release_without_root() { return release_without_root(consumption()); }
 
-    SimpleItem* get_snapshot(ObjectPool* pool, size_t cur_level, size_t upper_level) const {
-        return _get_snapshot_internal(pool, nullptr, cur_level, upper_level);
+    SimpleItem* get_snapshot(ObjectPool* pool, size_t upper_level) const {
+        return _get_snapshot_internal(pool, nullptr, upper_level);
     }
 
     /// Increases consumption of this tracker and its ancestors by 'bytes' only if
@@ -422,11 +425,11 @@ private:
         tracker->_child_tracker_it = _child_trackers.insert(_child_trackers.end(), tracker);
     }
 
-    SimpleItem* _get_snapshot_internal(ObjectPool* pool, SimpleItem* parent, size_t cur_level,
-                                       size_t upper_level) const;
+    SimpleItem* _get_snapshot_internal(ObjectPool* pool, SimpleItem* parent, size_t upper_level) const;
 
     MemTrackerType _type{MemTrackerType::NO_SET};
 
+    int64_t _level = 1;
     int64_t _limit;              // in bytes
     int64_t _reserve_limit = -1; // only used in spillable query
 
