@@ -410,7 +410,7 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitAlterViewStatement(AlterViewStmt stmt, ConnectContext context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                context.getGlobalStateMgr().getLocalMetastore().alterView(stmt);
+                context.getGlobalStateMgr().getMetadataMgr().alterView(stmt);
             });
             return null;
         }

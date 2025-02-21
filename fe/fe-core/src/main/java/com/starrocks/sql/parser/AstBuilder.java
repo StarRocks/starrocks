@@ -1649,6 +1649,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         boolean isSecurity = false;
+        Map<String, String> properties = new HashMap<>();
         if (context.SECURITY() != null) {
             if (context.NONE() != null) {
                 isSecurity = false;
@@ -1656,12 +1657,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 isSecurity = true;
             }
 
-            return new AlterViewStmt(targetTableName, isSecurity, null, createPos(context));
+            return new AlterViewStmt(targetTableName, isSecurity, AlterViewStmt.AlterDialectType.NONE, properties,
+                    null, createPos(context));
+        } else if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+            return new AlterViewStmt(targetTableName, isSecurity, AlterViewStmt.AlterDialectType.NONE, properties,
+                    null, createPos(context));
         } else {
+            AlterViewStmt.AlterDialectType alterDialectType = context.ADD() != null ? AlterViewStmt.AlterDialectType.ADD :
+                    context.MODIFY() != null ? AlterViewStmt.AlterDialectType.MODIFY : AlterViewStmt.AlterDialectType.NONE;
             QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
-            AlterClause alterClause = new AlterViewClause(colWithComments, queryStatement, createPos(context));
-
-            return new AlterViewStmt(targetTableName, isSecurity, alterClause, createPos(context));
+            AlterViewClause alterClause = new AlterViewClause(colWithComments, queryStatement, createPos(context));
+            return new AlterViewStmt(targetTableName, isSecurity, alterDialectType, properties, alterClause, createPos(context));
         }
     }
 

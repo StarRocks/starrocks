@@ -353,7 +353,11 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
+<<<<<<< HEAD
     public void alterView(AlterViewStmt stmt) throws DdlException, UserException {
+=======
+    public void alterView(AlterViewStmt stmt) throws StarRocksException {
+>>>>>>> 892e858b2 ([Feature] Support alter iceberg view add/modify dialect (#56120))
         normal.alterView(stmt);
     }
 

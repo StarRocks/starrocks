@@ -333,7 +333,12 @@ public interface ConnectorMetadata {
     default void createView(CreateViewStmt stmt) throws DdlException {
     }
 
+<<<<<<< HEAD
     default void alterView(AlterViewStmt stmt) throws DdlException, UserException {
+=======
+    default void alterView(AlterViewStmt stmt) throws StarRocksException {
+        throw new StarRocksConnectorException("This connector doesn't support alter view");
+>>>>>>> 892e858b2 ([Feature] Support alter iceberg view add/modify dialect (#56120))
     }
 
     default CloudConfiguration getCloudConfiguration() {
