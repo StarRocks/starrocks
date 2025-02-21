@@ -26,6 +26,7 @@ import com.starrocks.connector.RemoteFileDesc;
 import com.starrocks.connector.RemoteFileIO;
 import com.starrocks.connector.RemotePathKey;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import com.starrocks.metric.MetricRepo;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.BlockLocation;
 import org.apache.hadoop.fs.FileStatus;
@@ -63,7 +64,14 @@ public class HiveRemoteFileIO implements RemoteFileIO {
     }
 
     public Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey) {
-        return getRemoteFiles(pathKey, false);
+        long startTime = System.currentTimeMillis();
+        Map<RemotePathKey, List<RemoteFileDesc>> o = getRemoteFiles(pathKey, false);
+        long elapseMs = System.currentTimeMillis() - startTime;
+        if (MetricRepo.HISTO_GET_REMOT_FILES_LATENCY != null) {
+            MetricRepo.HISTO_GET_REMOT_FILES_LATENCY.update(elapseMs);
+        }
+        return o;
+
     }
 
     public Map<RemotePathKey, List<RemoteFileDesc>> getRemoteFiles(RemotePathKey pathKey, boolean expandWildCards) {
