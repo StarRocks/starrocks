@@ -119,7 +119,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     public static final String ENCLOSE = "enclose";
     public static final String ESCAPE = "escape";
 
-    public static final String PAUSE_ON_PARSE_ERROR = "pause_on_parse_error";
+    public static final String PAUSE_ON_FATAL_PARSE_ERROR = "pause_on_fatal_parse_error";
 
     // kafka type properties
     public static final String KAFKA_BROKER_LIST_PROPERTY = "kafka_broker_list";
@@ -151,7 +151,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
             .add(MAX_BATCH_INTERVAL_SEC_PROPERTY)
             .add(MAX_BATCH_ROWS_PROPERTY)
             .add(MAX_BATCH_SIZE_PROPERTY)
-            .add(PAUSE_ON_PARSE_ERROR)
+            .add(PAUSE_ON_FATAL_PARSE_ERROR)
             .add(FORMAT)
             .add(JSONPATHS)
             .add(STRIP_OUTER_ARRAY)
@@ -211,7 +211,7 @@ public class CreateRoutineLoadStmt extends DdlStmt {
     private boolean partialUpdate = false;
     private String mergeConditionStr;
     private String partialUpdateMode = "row";
-    private boolean pauseOnParseError = RoutineLoadJob.DEFAULT_PAUSE_ON_PARSE_ERROR;
+    private boolean pauseOnFatalParseError = RoutineLoadJob.DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR;
     /**
      * RoutineLoad support json data.
      * Require Params:
@@ -386,8 +386,8 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         return mergeConditionStr;
     }
 
-    public boolean isPauseOnParseError() {
-        return pauseOnParseError;
+    public boolean isPauseOnFatalParseError() {
+        return pauseOnFatalParseError;
     }
 
     public String getFormat() {
@@ -588,9 +588,9 @@ public class CreateRoutineLoadStmt extends DdlStmt {
         }
         timezone = TimeUtils.checkTimeZoneValidAndStandardize(jobProperties.getOrDefault(LoadStmt.TIMEZONE, timezone));
 
-        pauseOnParseError = Util.getBooleanPropertyOrDefault(jobProperties.get(PAUSE_ON_PARSE_ERROR),
-                RoutineLoadJob.DEFAULT_PAUSE_ON_PARSE_ERROR,
-                PAUSE_ON_PARSE_ERROR + " should be a boolean");
+        pauseOnFatalParseError = Util.getBooleanPropertyOrDefault(jobProperties.get(PAUSE_ON_FATAL_PARSE_ERROR),
+                RoutineLoadJob.DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR,
+                PAUSE_ON_FATAL_PARSE_ERROR + " should be a boolean");
 
         format = jobProperties.get(FORMAT);
         if (format != null) {

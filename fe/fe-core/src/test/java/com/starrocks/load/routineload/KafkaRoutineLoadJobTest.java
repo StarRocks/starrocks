@@ -518,7 +518,7 @@ public class KafkaRoutineLoadJobTest {
     }
 
     @Test
-    public void testCreateStmtWithPauseOnParseError(@Mocked GlobalStateMgr globalStateMgr,
+    public void testCreateStmtWithPauseOnFatalParseError(@Mocked GlobalStateMgr globalStateMgr,
                                                             @Injectable Database database,
                                                             @Injectable OlapTable table) throws StarRocksException {
         CreateRoutineLoadStmt createRoutineLoadStmt = initCreateRoutineLoadStmt();
@@ -563,12 +563,12 @@ public class KafkaRoutineLoadJobTest {
 
         {
             KafkaRoutineLoadJob kafkaRoutineLoadJob = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
-            Assert.assertTrue(Deencapsulation.getField(kafkaRoutineLoadJob, "pauseOnParseError"));
+            Assert.assertTrue(Deencapsulation.getField(kafkaRoutineLoadJob, "pauseOnFatalParseError"));
         }
         {
-            Deencapsulation.setField(createRoutineLoadStmt, "pauseOnParseError", false);
+            Deencapsulation.setField(createRoutineLoadStmt, "pauseOnFatalParseError", false);
             KafkaRoutineLoadJob kafkaRoutineLoadJob = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
-            Assert.assertFalse(Deencapsulation.getField(kafkaRoutineLoadJob, "pauseOnParseError"));
+            Assert.assertFalse(Deencapsulation.getField(kafkaRoutineLoadJob, "pauseOnFatalParseError"));
         }
     }
 }

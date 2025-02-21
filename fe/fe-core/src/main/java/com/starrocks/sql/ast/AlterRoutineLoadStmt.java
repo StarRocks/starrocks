@@ -56,7 +56,7 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             .add(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY)
             .add(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND)
             .add(CreateRoutineLoadStmt.TASK_CONSUME_SECOND)
-            .add(CreateRoutineLoadStmt.PAUSE_ON_PARSE_ERROR)
+            .add(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR)
             .add(LoadStmt.STRICT_MODE)
             .add(LoadStmt.TIMEZONE)
             .build();
@@ -283,9 +283,9 @@ public class AlterRoutineLoadStmt extends DdlStmt {
             analyzedJobProperties.put(CreateRoutineLoadStmt.STRIP_OUTER_ARRAY, String.valueOf(stripOuterArray));
         }
 
-        if (jobProperties.containsKey(CreateRoutineLoadStmt.PAUSE_ON_PARSE_ERROR)) {
-            boolean pauseOnParseError = Boolean.valueOf(jobProperties.get(CreateRoutineLoadStmt.PAUSE_ON_PARSE_ERROR));
-            analyzedJobProperties.put(CreateRoutineLoadStmt.PAUSE_ON_PARSE_ERROR, String.valueOf(pauseOnParseError));
+        if (jobProperties.containsKey(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR)) {
+            boolean pauseOnFatalParseError = Boolean.valueOf(jobProperties.get(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR));
+            analyzedJobProperties.put(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR, String.valueOf(pauseOnFatalParseError));
         }
     }
 

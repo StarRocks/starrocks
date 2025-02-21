@@ -306,7 +306,7 @@ public class RoutineLoadJobTest {
             //The displayed value is the actual value - 1
             Assert.assertEquals("{\"0\":\"1233\"}", showInfo.get(14));
             Assert.assertEquals("{\"0\":\"1701411708409\"}", showInfo.get(15));
-            Assert.assertTrue(showInfo.get(10).contains("\"pauseOnParseError\":\"true\""));
+            Assert.assertTrue(showInfo.get(10).contains("\"pauseOnFatalParseError\":\"true\""));
         }
 
         {
@@ -317,7 +317,7 @@ public class RoutineLoadJobTest {
             partitionOffsetTimestamps.put(Integer.valueOf(0), Long.valueOf(1701411708410L));
             KafkaProgress kafkaTimestampProgress = new KafkaProgress(partitionOffsetTimestamps);
             Deencapsulation.setField(routineLoadJob, "timestampProgress", kafkaTimestampProgress);
-            Deencapsulation.setField(routineLoadJob, "pauseOnParseError", false);
+            Deencapsulation.setField(routineLoadJob, "pauseOnFatalParseError", false);
 
             routineLoadJob.updateState(RoutineLoadJob.JobState.RUNNING, null, false);
             // The job is set unstable due to the progress is too slow.
@@ -344,7 +344,7 @@ public class RoutineLoadJobTest {
             showInfo = routineLoadJob.getShowInfo();
             Assert.assertEquals("RUNNING", showInfo.get(7));
             Assert.assertEquals("", showInfo.get(16));
-            Assert.assertTrue(showInfo.get(10).contains("\"pauseOnParseError\":\"false\""));
+            Assert.assertTrue(showInfo.get(10).contains("\"pauseOnFatalParseError\":\"false\""));
         }
     }
 
@@ -512,7 +512,7 @@ public class RoutineLoadJobTest {
         String jsonRoot = "$.RECORDS";
         String taskTimeout = "20";
         String taskConsumeTime = "3";
-        String pauseOnParseError = "false";
+        String pauseOnFatalParseError = "false";
         String originStmt = "alter routine load for db.job1 " +
                 "properties (" +
                 "   \"desired_concurrent_number\" = \"" + desiredConcurrentNumber + "\"," +
@@ -523,7 +523,7 @@ public class RoutineLoadJobTest {
                 "   \"task_consume_second\" = \"" + taskConsumeTime + "\"," +
                 "   \"task_timeout_second\" = \"" + taskTimeout + "\"," +
                 "   \"strict_mode\" = \"" + strictMode + "\"," +
-                "   \"pause_on_parse_error\" = \"" + pauseOnParseError + "\"," +
+                "   \"pause_on_fatal_parse_error\" = \"" + pauseOnFatalParseError + "\"," +
                 "   \"timezone\" = \"" + timeZone + "\"," +
                 "   \"jsonpaths\" = \"" + jsonPaths + "\"," +
                 "   \"strip_outer_array\" = \"" + stripOuterArray + "\"," +
@@ -555,8 +555,8 @@ public class RoutineLoadJobTest {
         Assert.assertEquals(jsonPaths.replace("\\", ""), routineLoadJob.getJsonPaths());
         Assert.assertEquals(Boolean.parseBoolean(stripOuterArray), routineLoadJob.isStripOuterArray());
         Assert.assertEquals(jsonRoot, routineLoadJob.getJsonRoot());
-        Assert.assertEquals(Boolean.parseBoolean(pauseOnParseError),
-                Deencapsulation.getField(routineLoadJob, "pauseOnParseError"));
+        Assert.assertEquals(Boolean.parseBoolean(pauseOnFatalParseError),
+                Deencapsulation.getField(routineLoadJob, "pauseOnFatalParseError"));
     }
 
     @Test
@@ -764,7 +764,7 @@ public class RoutineLoadJobTest {
     }
 
     @Test
-    public void testPauseOnParseError(@Mocked GlobalStateMgr globalStateMgr, @Injectable TransactionState transactionState,
+    public void testPauseOnFatalParseError(@Mocked GlobalStateMgr globalStateMgr, @Injectable TransactionState transactionState,
                                                        @Injectable RoutineLoadTaskInfo routineLoadTaskInfo)
             throws StarRocksException {
         long txnId = 1L;
@@ -796,7 +796,7 @@ public class RoutineLoadJobTest {
             }
         };
 
-        // pauseOnParseError = true
+        // pauseOnFatalParseError = true
         {
             List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
             routineLoadTaskInfoList.add(routineLoadTaskInfo);
@@ -811,7 +811,7 @@ public class RoutineLoadJobTest {
             Assert.assertEquals(errorMsg, routineLoadJob.getPauseReason());
         }
 
-        // pauseOnParseError = false
+        // pauseOnFatalParseError = false
         {
             new MockUp<GlobalStateMgr>() {
                 @Mock
@@ -825,7 +825,7 @@ public class RoutineLoadJobTest {
             RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
             Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
             Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
-            Deencapsulation.setField(routineLoadJob, "pauseOnParseError", false);
+            Deencapsulation.setField(routineLoadJob, "pauseOnFatalParseError", false);
             routineLoadJob.afterAborted(transactionState, true,
                     TxnStatusChangeReason.PARSE_ERROR.toString());
             System.out.println(routineLoadJob.getPauseReason());
