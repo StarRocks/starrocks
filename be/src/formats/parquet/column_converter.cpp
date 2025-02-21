@@ -739,25 +739,12 @@ Status Int64ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
         dst_null_data[i] = src_null_data[i];
         if (!src_null_data[i]) {
             int64_t seconds = src_data[i] / _second_mask;
-            // int offset = timestamp::get_offset_by_timezone(seconds, _ctz);
             int64_t nanoseconds = (src_data[i] % _second_mask) * _scale_to_nano_factor;
-            // TimestampValue ep;
-            // ep.from_unixtime(seconds, nanoseconds / 1000, _ctz);
 
             std::chrono::system_clock::time_point tp = std::chrono::system_clock::from_time_t(seconds);
             int offset = _ctz.lookup(tp).offset;
             seconds += offset;
-            // std::cout << "offset: " << offset << ",src_data[i]: " << src_data[i] << std::endl;
 
-            // dst_data[i].set_timestamp(ep.timestamp());
-            // std::cout << "dst_data[i]: " << ep.timestamp() << std::endl;
-            // dst_data[i].set_timestamp(src_data[i]/1000000);
-
-            // int64_t second = seconds + timestamp::UNIX_EPOCH_SECONDS;
-            // JulianDate day = second / SECS_PER_DAY;
-            // auto new_value = timestamp::from_julian_and_time(day, (second % SECS_PER_DAY) * USECS_PER_SEC + nanoseconds / NANOSECS_PER_USEC);
-            // std::cout << "seconds: " << seconds << ",nanoseconds[i]: " << nanoseconds << std::endl;
-            // std::cout << "old_value: " << ep.timestamp() << ", new_value: " << new_value << std::endl;
             dst_data[i].set_timestamp(timestamp::of_epoch_second(seconds, nanoseconds));
         }
     }
