@@ -96,13 +96,20 @@ public class StatisticUtils {
     }
 
     public static ConnectContext buildConnectContext(TResultSinkType connectType) {
-        ConnectContext context =
-                switch (connectType) {
-                    case MYSQL_PROTOCAL -> ConnectContext.buildInner();
-                    case HTTP_PROTOCAL -> HttpConnectContext.build();
-                    case ARROW_FLIGHT_PROTOCAL -> new ArrowFlightSqlConnectContext();
-                    default -> throw new IllegalStateException("Unexpected value: " + connectType);
-                };
+        ConnectContext context;
+        switch (connectType) {
+            case MYSQL_PROTOCAL:
+                context = ConnectContext.buildInner();
+                break;
+            case HTTP_PROTOCAL:
+                context = HttpConnectContext.build();
+                break;
+            case ARROW_FLIGHT_PROTOCAL:
+                context = new ArrowFlightSqlConnectContext();
+                break;
+            default:
+                throw new IllegalStateException("Unexpected value: " + connectType);
+        }
         // Note: statistics query does not register query id to QeProcessorImpl::coordinatorMap,
         // but QeProcessorImpl::reportExecStatus will check query id,
         // So we must disable report query status from BE to FE
