@@ -67,6 +67,7 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -307,6 +308,28 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         ConnectorViewDefinition viewDefinition = ConnectorViewDefinition.fromCreateViewStmt(stmt);
         icebergCatalog.createView(catalogName, viewDefinition, stmt.isReplace());
+    }
+
+    @Override
+    public void alterView(AlterViewStmt stmt) throws StarRocksException {
+        String dbName = stmt.getDbName();
+        String viewName = stmt.getTable();
+
+        Database db = getDb(stmt.getDbName());
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+        if (getView(dbName, viewName) == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, dbName + "." + viewName);
+        }
+
+        ConnectorViewDefinition viewDefinition = ConnectorViewDefinition.fromAlterViewStmt(stmt);
+        View currentView = icebergCatalog.getView(dbName, viewName);
+        if (!stmt.getProperties().isEmpty() || stmt.isAlterDialect()) {
+            icebergCatalog.alterView(currentView, viewDefinition);
+        } else {
+            throw new DdlException("ALTER VIEW <viewName> AS is not supported. Use CREATE OR REPLACE VIEW instead");
+        }
     }
 
     @Override

@@ -310,9 +310,9 @@ public class AlterTableTest extends TableTestBase {
             }
         };
 
-        String sql = "alter view iceberg_catalog.db.srTableName as select * from a;";
+        String sql = "alter view iceberg_catalog.db.srTableName as select * from db.a;";
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class,
-                "cannot alter connector view",
+                "Unknown database 'db'",
                 () -> UtFrameUtils.parseStmtWithNewParser(sql, starRocksAssert.getCtx()));
 
     }

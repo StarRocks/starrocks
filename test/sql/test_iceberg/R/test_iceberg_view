@@ -12,6 +12,36 @@ select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_${uuid0}
 drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_${uuid0};
 -- result:
 -- !result
+create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} as select k1, k2 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0};
+-- result:
+1	beijing
+2	shanghai
+-- !result
+alter view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} add dialect select k1, k2, k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+-- result:
+E: (1064, 'Invalid view version: Cannot add multiple queries for dialect starrocks')
+-- !result
+alter view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} add dialect starrocks select k1, k2, k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+-- result:
+E: (1064, 'Invalid view version: Cannot add multiple queries for dialect starrocks')
+-- !result
+alter view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} modify dialect starrocks select k1, k2, k3 from iceberg_sql_test_${uuid0}.iceberg_ci_db.iceberg_v2_parquet_partitioned_table;
+-- result:
+-- !result
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0};
+-- result:
+1	beijing	zhangsan
+2	shanghai	lisi
+-- !result
+alter view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0} set properties ('k1'='v1');
+-- result:
+-- !result
+drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_alter_iceberg_view_${uuid0};
+-- result:
+-- !result
 drop catalog iceberg_sql_test_${uuid0};
 -- result:
 -- !result
