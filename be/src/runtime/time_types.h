@@ -14,12 +14,13 @@
 
 #pragma once
 
+#include <cctz/time_zone.h>
+
 #include <cstdint>
 #include <string>
 
 #include "common/compiler_util.h"
 #include "util/raw_container.h"
-#include <cctz/time_zone.h>
 
 namespace starrocks {
 

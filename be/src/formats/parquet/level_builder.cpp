@@ -354,9 +354,8 @@ Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx
     for (size_t i = 0; i < col->size(); i++) {
         auto offset = timestamp::get_offset_by_timezone(data_col[i]._timestamp, _ctz);
 
-        auto timestamp = use_int96_timestamp_encoding
-                                 ? timestamp::sub<TimeUnit::SECOND>(data_col[i]._timestamp, offset)
-                                 : data_col[i]._timestamp;
+        auto timestamp = use_int96_timestamp_encoding ? timestamp::sub<TimeUnit::SECOND>(data_col[i]._timestamp, offset)
+                                                      : data_col[i]._timestamp;
 
         if constexpr (use_int96_timestamp_encoding) {
             auto date = reinterpret_cast<int32_t*>(values[i].value + 2);
