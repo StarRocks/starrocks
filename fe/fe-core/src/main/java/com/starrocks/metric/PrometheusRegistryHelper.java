@@ -18,18 +18,28 @@ import io.prometheus.metrics.model.registry.PrometheusRegistry;
 import io.prometheus.metrics.model.snapshots.DataPointSnapshot;
 import io.prometheus.metrics.model.snapshots.MetricSnapshot;
 import io.prometheus.metrics.model.snapshots.MetricSnapshots;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * A simple helper class to visitor a PrometheusRegistry with PrometheusMetric.
  */
 public class PrometheusRegistryHelper {
+    private static final Logger LOG = LogManager.getLogger(PrometheusRegistryHelper.class);
 
     public static void visitPrometheusRegistry(PrometheusRegistry registry, MetricVisitor visitor) {
         MetricSnapshots snapshots = registry.scrape();
         for (MetricSnapshot snapshot : snapshots) {
             for (DataPointSnapshot dp : snapshot.getDataPoints()) {
-                PrometheusMetric metric = PrometheusMetric.create(snapshot.getMetadata(), dp);
-                visitor.visit(metric);
+                try {
+                    PrometheusMetric metric = PrometheusMetric.create(snapshot.getMetadata(), dp);
+                    visitor.visit(metric);
+                } catch (RuntimeException exception) {
+                    // set to debug level, otherwise the message will be printed whenever the /metrics interface is accessed.
+                    LOG.debug(
+                            "Unexpected exception converting prometheus metric to starrocks metric, ignore it. Error: {}",
+                            exception.getMessage());
+                }
             }
         }
     }
