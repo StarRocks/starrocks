@@ -250,7 +250,15 @@ Status GlobalEnv::_init_mem_tracker() {
     return Status::OK();
 }
 
-std::pair<size_t, MemTracker*> GlobalEnv::get_mem_tracker_by_type(MemTrackerType type) {
+std::vector<std::shared_ptr<MemTracker>> GlobalEnv::mem_trackers() const {
+    std::vector<std::shared_ptr<MemTracker>> mem_trackers;
+    for (auto& item : _mem_tracker_map) {
+        mem_trackers.emplace_back(item.second.second);
+    }
+    return mem_trackers;
+}
+
+std::pair<size_t, std::shared_ptr<MemTracker>> GlobalEnv::get_mem_tracker_by_type(MemTrackerType type) {
     auto iter = _mem_tracker_map.find(type);
     if (iter != _mem_tracker_map.end()) {
         return iter->second;
@@ -260,8 +268,8 @@ std::pair<size_t, MemTracker*> GlobalEnv::get_mem_tracker_by_type(MemTrackerType
 }
 
 void GlobalEnv::_reset_tracker() {
-    for (auto iter = _mem_trackers.rbegin(); iter != _mem_trackers.rend(); ++iter) {
-        iter->reset();
+    for (auto& iter : _mem_tracker_map) {
+        iter.second.second.reset();
     }
 }
 
@@ -297,8 +305,7 @@ int64_t GlobalEnv::check_storage_page_cache_size(int64_t storage_cache_limit) {
 std::shared_ptr<MemTracker> GlobalEnv::regist_tracker(MemTrackerType type, size_t level, int64_t bytes_limit,
                                                       MemTracker* parent) {
     auto mem_tracker = std::make_shared<MemTracker>(type, bytes_limit, MemTracker::type_to_label(type), parent);
-    _mem_trackers.emplace_back(mem_tracker);
-    _mem_tracker_map[type] = {level, mem_tracker.get()};
+    _mem_tracker_map[type] = {level, mem_tracker};
     return mem_tracker;
 }
 

@@ -142,7 +142,7 @@ void MemTrackerWebPageHandler::handle(MemTracker* mem_tracker, const WebPageHand
     if (iter != args.end()) {
         auto item = GlobalEnv::GetInstance()->get_mem_tracker_by_type(MemTracker::label_to_type(iter->second));
         if (item.second != nullptr) {
-            start_mem_tracker = item.second;
+            start_mem_tracker = item.second.get();
             cur_level = item.first;
         } else {
             start_mem_tracker = mem_tracker;

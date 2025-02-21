@@ -154,8 +154,8 @@ public:
     MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
     MemTracker* poco_connection_pool_mem_tracker() { return _poco_connection_pool_mem_tracker.get(); }
     MemTracker* jemalloc_metadata_traker() { return _jemalloc_metadata_tracker.get(); }
-    std::pair<size_t, MemTracker*> get_mem_tracker_by_type(MemTrackerType type);
-    std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
+    std::pair<size_t, std::shared_ptr<MemTracker>> get_mem_tracker_by_type(MemTrackerType type);
+    std::vector<std::shared_ptr<MemTracker>> mem_trackers() const;
 
     int64_t get_storage_page_cache_size();
     int64_t check_storage_page_cache_size(int64_t storage_cache_limit);
@@ -234,8 +234,7 @@ private:
     // The memory used for poco connection pool
     std::shared_ptr<MemTracker> _poco_connection_pool_mem_tracker;
 
-    std::vector<std::shared_ptr<MemTracker>> _mem_trackers;
-    std::map<MemTrackerType, std::pair<size_t, MemTracker*>> _mem_tracker_map;
+    std::map<MemTrackerType, std::pair<size_t, std::shared_ptr<MemTracker>>> _mem_tracker_map;
 };
 
 // Execution environment for queries/plan fragments.
