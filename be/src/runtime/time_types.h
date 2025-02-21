@@ -19,6 +19,7 @@
 
 #include "common/compiler_util.h"
 #include "util/raw_container.h"
+#include <cctz/time_zone.h>
 
 namespace starrocks {
 
@@ -214,6 +215,8 @@ public:
 
     inline static bool check(int year, int month, int day, int hour, int minute, int second, int microsecond);
 
+    inline static int get_offset_by_timezone(Timestamp timestamp, const cctz::time_zone &ctz);
+
     template <TimeUnit UNIT>
     static Timestamp add(Timestamp timestamp, int count);
 
@@ -362,6 +365,14 @@ Timestamp timestamp::from_time(int hour, int minute, int second, int microsecond
 
 bool timestamp::check(int year, int month, int day, int hour, int minute, int second, int microsecond) {
     return date::check(year, month, day) && check_time(hour, minute, second, microsecond);
+}
+
+int timestamp::get_offset_by_timezone(Timestamp timestamp, const cctz::time_zone &ctz) {
+    int64_t days = timestamp::to_julian(timestamp);
+    int64_t seconds_from_epoch = (days - date::UNIX_EPOCH_JULIAN) * SECS_PER_DAY;
+
+    std::chrono::system_clock::time_point tp = std::chrono::system_clock::from_time_t(seconds_from_epoch);
+    return ctz.lookup(tp).offset;
 }
 
 inline void timestamp::to_time(Timestamp timestamp, int* hour, int* minute, int* second, int* microsecond) {

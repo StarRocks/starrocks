@@ -93,16 +93,8 @@ private:
     // into UTC time, and when it reads data out, it should be converted to the time
     // according to session variable "time_zone".
     [[nodiscard]] Timestamp _utc_to_local(Timestamp timestamp) const {
-        int64_t days = timestamp::to_julian(timestamp);
-        int64_t seconds_from_epoch = (days - date::UNIX_EPOCH_JULIAN) * 86400;
-
-        int64_t microseconds = timestamp::to_time(timestamp);
-        seconds_from_epoch += (microseconds / 1000000);
-        int64_t remaining_microseconds = microseconds % 1000000;
-
-        TimestampValue ep;
-        ep.from_unixtime(seconds_from_epoch, remaining_microseconds, _ctz);
-        return ep.timestamp();
+        int offset = timestamp::get_offset_by_timezone(timestamp, _ctz);
+        return timestamp::add<TimeUnit::SECOND>(timestamp, offset);
     }
 
 private:
