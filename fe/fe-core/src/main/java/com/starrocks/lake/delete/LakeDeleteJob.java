@@ -29,7 +29,10 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.ErrorCode;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.Utils;
@@ -190,9 +193,12 @@ public class LakeDeleteJob extends DeleteJob {
 
     @Override
     public boolean commitImpl(Database db, long timeoutMs) throws StarRocksException {
-        return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                .commitAndPublishTransaction(db, getTransactionId(), getTabletCommitInfos(), getTabletFailInfos(),
-                        timeoutMs);
+        try {
+            return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().commitAndPublishTransaction(db, getTransactionId(),
+                    getTabletCommitInfos(), getTabletFailInfos(), timeoutMs, timeoutMs, null);
+        } catch (LockTimeoutException e) {
+            throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
+        }
     }
 
     @Override

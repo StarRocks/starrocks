@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.lake.delete;
 
 import com.google.common.collect.Lists;
@@ -38,6 +37,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.DeleteJob;
@@ -179,7 +179,7 @@ public class DeleteTest {
     }
 
     @Test
-    public void testNormal() throws StarRocksException, RpcException {
+    public void testNormal() throws StarRocksException, RpcException, LockTimeoutException {
         setUpExpectation();
         TransactionState transactionState = new TransactionState();
         transactionState.setTransactionStatus(TransactionStatus.VISIBLE);
@@ -221,7 +221,7 @@ public class DeleteTest {
                     }
                 };
 
-                globalTransactionMgr.commitAndPublishTransaction(db, anyLong, (List) any, (List) any, anyLong);
+                globalTransactionMgr.commitAndPublishTransaction(db, anyLong, (List) any, (List) any, anyLong, anyLong, null);
                 result = true;
 
                 globalTransactionMgr.getTransactionState(anyLong, anyLong);

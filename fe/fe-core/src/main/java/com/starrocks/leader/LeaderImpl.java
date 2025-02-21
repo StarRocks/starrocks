@@ -478,7 +478,7 @@ public class LeaderImpl {
                 locker.lockDatabase(db.getId(), LockType.READ);
                 try {
                     OlapTable olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
-                                .getTable(db.getId(), tableId);
+                            .getTable(db.getId(), tableId);
                     if (olapTable != null) {
                         MaterializedIndexMeta indexMeta = olapTable.getIndexMetaByIndexId(indexId);
                         if (indexMeta != null) {
@@ -1231,9 +1231,11 @@ public class LeaderImpl {
         long txnId;
         try {
             txnId = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().beginTransaction(db.getId(),
-                    request.getTable_ids(), request.getLabel(),
+                    request.getTable_ids(), request.getLabel(), null,
                     new TxnCoordinator(TxnSourceType.FE, FrontendOptions.getLocalHostAddress()),
-                    LoadJobSourceType.valueOf(request.getSource_type()), request.getTimeout_second(),
+                    LoadJobSourceType.valueOf(request.getSource_type()),
+                    -1,
+                    request.getTimeout_second(),
                     WarehouseManager.DEFAULT_WAREHOUSE_ID);
         } catch (Exception e) {
             LOG.warn("begin remote txn failed, label {}", request.getLabel(), e);
@@ -1295,6 +1297,7 @@ public class LeaderImpl {
             boolean visible = transactionMgr.commitAndPublishTransaction(db, request.getTxn_id(),
                     TabletCommitInfo.fromThrift(request.getCommit_infos()),
                     TabletFailInfo.fromThrift(request.getFail_infos()),
+                    timeoutMs,
                     timeoutMs,
                     attachment);
             if (!visible) { // timeout

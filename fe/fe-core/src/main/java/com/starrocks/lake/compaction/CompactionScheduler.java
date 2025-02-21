@@ -375,8 +375,8 @@ public class CompactionScheduler extends Daemon {
 
         WarehouseManager manager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         Warehouse warehouse = manager.getCompactionWarehouse();
-        return transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, coordinator,
-                loadJobSourceType, Config.lake_compaction_default_timeout_second, warehouse.getId());
+        return transactionMgr.beginTransaction(dbId, Lists.newArrayList(tableId), label, null, coordinator,
+                loadJobSourceType, -1, Config.lake_compaction_default_timeout_second, warehouse.getId());
     }
 
     private void commitCompaction(PartitionIdentifier partition, CompactionJob job, boolean forceCommit)

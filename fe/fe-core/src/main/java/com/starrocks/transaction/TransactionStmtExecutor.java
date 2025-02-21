@@ -67,7 +67,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
-import java.util.concurrent.TimeUnit;
 
 import static com.starrocks.common.ErrorCode.ERR_TXN_NOT_EXIST;
 
@@ -181,19 +180,20 @@ public class TransactionStmtExecutor {
             }
 
             TxnCommitAttachment txnCommitAttachment = new InsertTxnCommitAttachment(loadedRows);
-            VisibleStateWaiter visibleWaiter = transactionMgr.retryCommitOnRateLimitExceeded(
+            long publishWaitMs = Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() :
+                    context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000;
+
+            boolean result = transactionMgr.commitAndPublishTransaction(
                     database,
                     transactionId,
                     commitInfos,
                     failInfos,
-                    txnCommitAttachment,
-                    timeout);
-
-            long publishWaitMs = Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() :
-                    context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000;
+                    timeout,
+                    publishWaitMs,
+                    txnCommitAttachment);
 
             TransactionStatus txnStatus;
-            if (visibleWaiter.await(publishWaitMs, TimeUnit.MILLISECONDS)) {
+            if (result) {
                 txnStatus = TransactionStatus.VISIBLE;
             } else {
                 txnStatus = TransactionStatus.COMMITTED;

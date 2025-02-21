@@ -395,8 +395,7 @@ public class OlapDeleteJob extends DeleteJob {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         try {
             return globalTransactionMgr.commitAndPublishTransaction(db, transactionId, getTabletCommitInfos(),
-                        getTabletFailInfos(), timeoutMs,
-                        new InsertTxnCommitAttachment());
+                        getTabletFailInfos(), timeoutMs, timeoutMs, new InsertTxnCommitAttachment());
         } catch (LockTimeoutException e) {
             throw ErrorReportException.report(ErrorCode.ERR_LOCK_ERROR, e.getMessage());
         }
