@@ -49,8 +49,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+
 
 /**
  * 1. Persistence:
@@ -157,7 +160,29 @@ public class PredicateColumnsStorage {
 
         String sql = sb.toString();
         List<TResultBatch> tResultBatches = executor.executeDQL(sql);
-        return resultToColumnUsage(tResultBatches);
+        List<ColumnUsage> columnUsages = resultToColumnUsage(tResultBatches);
+        if (GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends().size() == 1) {
+            return columnUsages;
+        } else {
+            return deduplicateColumnUsages(columnUsages);
+        }
+    }
+
+    public List<ColumnUsage> deduplicateColumnUsages(List<ColumnUsage> columnUsages) {
+        Map<ColumnUsage, ColumnUsage> merged = columnUsages.stream()
+                .collect(Collectors.toMap(
+                        Function.identity(),
+                        Function.identity(),
+                        (existing, current) -> {
+                            existing.getUseCases().addAll(current.getUseCases());
+                            if (current.getLastUsed().isAfter(existing.getLastUsed())) {
+                                existing.setLastUsed(current.getLastUsed());
+                            }
+                            return existing;
+                        }
+                ));
+
+        return new ArrayList<>(merged.values());
     }
 
     /**
