@@ -38,6 +38,7 @@
 #include <string>
 #include <utility>
 
+#include "cache/object_cache/object_cache.h"
 #include "gutil/macros.h" // for DISALLOW_COPY
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
@@ -57,7 +58,7 @@ static constexpr int64_t kcacheMinSize = 268435456;
 // TODO(zc): We should add some metric to see cache hit/miss rate.
 class StoragePageCache {
 public:
-    virtual ~StoragePageCache();
+    virtual ~StoragePageCache() = default;
     // The unique key identifying entries in the page cache.
     // Each cached page corresponds to a specific offset within
     // a file.
@@ -78,7 +79,7 @@ public:
     };
 
     // Create global instance of this class
-    static void create_global_cache(MemTracker* mem_tracker, size_t capacity);
+    static void create_global_cache(ObjectCache* obj_cache);
 
     static void release_global_cache();
 
@@ -86,7 +87,7 @@ public:
     // Client should call create_global_cache before.
     static StoragePageCache* instance() { return _s_instance; }
 
-    StoragePageCache(MemTracker* mem_tracker, size_t capacity);
+    StoragePageCache(ObjectCache* obj_cache) : _cache(obj_cache) {}
 
     // Lookup the given page in the cache.
     //
@@ -102,9 +103,9 @@ public:
     // This function is thread-safe, and when two clients insert two same key
     // concurrently, this function can assure that only one page is cached.
     // The in_memory page will have higher priority.
-    void insert(const CacheKey& key, const Slice& data, PageCacheHandle* handle, bool in_memory = false);
+    Status insert(const CacheKey& key, const Slice& data, PageCacheHandle* handle, bool in_memory = false);
 
-    size_t memory_usage() const { return _cache->get_memory_usage(); }
+    size_t memory_usage() const { return _cache->usage(); }
 
     void set_capacity(size_t capacity);
 
@@ -121,7 +122,7 @@ public:
 private:
     static StoragePageCache* _s_instance;
 
-    std::unique_ptr<Cache> _cache = nullptr;
+    ObjectCache* _cache = nullptr;
 };
 
 // A handle for StoragePageCache entry. This class make it easy to handle
@@ -130,7 +131,7 @@ private:
 class PageCacheHandle {
 public:
     PageCacheHandle() = default;
-    PageCacheHandle(Cache* cache, Cache::Handle* handle) : _cache(cache), _handle(handle) {}
+    PageCacheHandle(ObjectCache* cache, ObjectCacheHandle* handle) : _cache(cache), _handle(handle) {}
     ~PageCacheHandle() {
         if (_handle != nullptr) {
             _cache->release(_handle);
@@ -149,12 +150,12 @@ public:
         return *this;
     }
 
-    Cache* cache() const { return _cache; }
+    ObjectCache* cache() const { return _cache; }
     Slice data() const { return _cache->value_slice(_handle); }
 
 private:
-    Cache* _cache = nullptr;
-    Cache::Handle* _handle = nullptr;
+    ObjectCache* _cache = nullptr;
+    ObjectCacheHandle* _handle = nullptr;
 
     // Don't allow copy and assign
     PageCacheHandle(const PageCacheHandle&) = delete;

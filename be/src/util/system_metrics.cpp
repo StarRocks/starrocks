@@ -54,6 +54,9 @@
 #include "runtime/runtime_filter_worker.h"
 #include "storage/page_cache.h"
 #include "util/metrics.h"
+#include "cache/block_cache/block_cache.h"
+#include "storage/page_cache.h"
+#include "util/metrics.h"
 
 namespace starrocks {
 
