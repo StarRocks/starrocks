@@ -72,14 +72,8 @@ public:
     // the worker will try to fetch it back from starmgr.
     absl::StatusOr<ShardInfo> retrieve_shard_info(ShardId id);
 
-<<<<<<< HEAD
-=======
-    // register the listener(callback) when new shard is added to the worker
-    void register_add_shard_listener(add_shard_listener listener) { _add_shard_listener = std::move(listener); }
-
     void set_fs_cache_capacity(int32_t capacity);
 
->>>>>>> 95955286d ([Enhancement] Using lru cache to limit the number of starlet filesystem instance (#55845))
 private:
     struct ShardInfoDetails {
         ShardInfo shard_info;
