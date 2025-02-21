@@ -75,7 +75,6 @@ public class SPMPlan2SQLBuilder {
     private class SQLRelation {
         private final Map<Integer, String> columnNames = Maps.newHashMap();
         private final List<String> cte = Lists.newArrayList();
-        private List<Integer> groupingIds = Lists.newArrayList();
         private String select = "";
         private String hints = "";
         private String from = "";
@@ -100,6 +99,10 @@ public class SPMPlan2SQLBuilder {
 
         private void newAlias() {
             relationName = "t_" + (tableId++);
+        }
+
+        private String getRelationAlias() {
+            return relationName == null ? from : relationName;
         }
 
         private String toRelationSQL() {
@@ -174,7 +177,7 @@ public class SPMPlan2SQLBuilder {
                     join.getJoinHint();
 
             // check column name conflicts
-            if (StringUtils.equalsIgnoreCase(left.relationName, right.relationName)) {
+            if (StringUtils.equalsIgnoreCase(left.getRelationAlias(), right.getRelationAlias())) {
                 left.newAlias();
                 right.newAlias();
             }
@@ -182,11 +185,11 @@ public class SPMPlan2SQLBuilder {
             boolean columnConflicts = !Collections.disjoint(left.columnNames.values(), right.columnNames.values());
             if (columnConflicts) {
                 left.columnNames.forEach((k, v) -> {
-                    mergeRelation.columnNames.put(k, left.relationName + "." + v);
+                    mergeRelation.columnNames.put(k, left.getRelationAlias() + "." + v);
                     joinRelation.registerRef(k);
                 });
                 right.columnNames.forEach((k, v) -> {
-                    mergeRelation.columnNames.put(k, right.relationName + "." + v);
+                    mergeRelation.columnNames.put(k, right.getRelationAlias() + "." + v);
                     joinRelation.registerRef(k);
                 });
             } else {
@@ -229,19 +232,29 @@ public class SPMPlan2SQLBuilder {
         public SQLRelation visitPhysicalHashAggregate(OptExpression optExpression, Void context) {
             PhysicalHashAggregateOperator agg = optExpression.getOp().cast();
             SQLRelation childRelation = process(optExpression.inputAt(0));
-            if (!agg.getType().isGlobal() && !agg.getType().isDistinctGlobal()) {
-                return childRelation;
+            if (agg.getType().isLocal() || agg.getType().isDistinct()) {
+                // update aggregate outputs function name
+                for (var entry : agg.getAggregations().entrySet()) {
+                    ColumnRefOperator key = entry.getKey();
+                    CallOperator aggFn = entry.getValue();
+                    String aggFnStr = exprSQLBuilder.print(aggFn, childRelation);
+                    childRelation.registerRef(key.getId(), aggFnStr);
+                }
             }
 
             // group by grouping sets
             SQLRelation aggRelation;
             List<String> selects = Lists.newArrayList();
-
-            if (!CollectionUtils.isEmpty(childRelation.groupingIds)) {
+            if (!StringUtils.isEmpty(childRelation.groupings)) {
                 aggRelation = childRelation;
-
+                for (ColumnRefOperator groupBy : agg.getGroupBys()) {
+                    if (childRelation.columnNames.containsKey(groupBy.getId())) {
+                        // grouping_id doesn't contains
+                        selects.add(exprSQLBuilder.print(groupBy, childRelation));
+                        aggRelation.registerRef(groupBy.getId(), childRelation.columnNames.get(groupBy.getId()));
+                    }
+                }
                 aggRelation.groupBy = aggRelation.groupings;
-                
             } else {
                 aggRelation = new SQLRelation();
                 aggRelation.from = childRelation.toRelationSQL();
@@ -257,16 +270,20 @@ public class SPMPlan2SQLBuilder {
                 ColumnRefOperator key = entry.getKey();
                 CallOperator aggFn = entry.getValue();
                 String alias = aggRelation.registerRef(key.getId());
-                selects.add(exprSQLBuilder.print(aggFn, childRelation) + " AS " + alias);
+                if (childRelation.columnNames.containsKey(key.getId())) {
+                    selects.add(exprSQLBuilder.print(key, childRelation) + " AS " + alias);
+                } else {
+                    selects.add(exprSQLBuilder.print(aggFn, childRelation) + " AS " + alias);
+                }
             }
 
             aggRelation.having = exprSQLBuilder.print(agg.getPredicate(), aggRelation);
             aggRelation.select = String.join(", ", selects);
-
+            aggRelation.newAlias();
             if (agg.getProjection() == null) {
-                aggRelation.newAlias();
                 return aggRelation;
             }
+
             SQLRelation projectRelation = new SQLRelation();
             projectRelation.from = aggRelation.toRelationSQL();
             visitProjection(agg.getProjection(), aggRelation);
@@ -310,7 +327,7 @@ public class SPMPlan2SQLBuilder {
             }
 
             setRelation.newAlias();
-            setRelation.from = "(" + String.join(" " + op + " ", children) + ") " + setRelation.relationName;
+            setRelation.from = "(" + String.join(" " + op + " ", children) + ") " + setRelation.getRelationAlias();
             setRelation.select = set.getOutputColumnRefOp().stream().map(c -> setRelation.registerRef(c.getId()))
                     .collect(Collectors.joining(", "));
             setRelation.newAlias();
@@ -397,11 +414,11 @@ public class SPMPlan2SQLBuilder {
 
             SQLRelation produce = process(optExpression.getInputs().get(0));
             produce.newAlias();
-            cteRelationNames.put(anchor.getCteId(), produce.relationName);
+            cteRelationNames.put(anchor.getCteId(), produce.getRelationAlias());
             cteColumnNames.putAll(produce.columnNames);
 
             SQLRelation consume = process(optExpression.getInputs().get(1));
-            consume.cte.add(produce.relationName + " AS (" + produce.toSQL() + ")");
+            consume.cte.add(produce.getRelationAlias() + " AS (" + produce.toSQL() + ")");
             return consume;
         }
 
@@ -500,7 +517,22 @@ public class SPMPlan2SQLBuilder {
             SQLRelation groupingRelation = new SQLRelation();
             groupingRelation.from = relation.toRelationSQL();
             groupingRelation.columnNames.putAll(relation.columnNames);
-
+            for (ColumnRefOperator grouping : repeat.getOutputGrouping()) {
+                if ("GROUPING_ID".equals(grouping.getName())) {
+                    continue;
+                }
+                Preconditions.checkState("GROUPING".equals(grouping.getName()));
+                Preconditions.checkState(repeat.getGroupingsFnArgs().containsKey(grouping));
+                String fn = "GROUPING(" + repeat.getGroupingsFnArgs().get(grouping).stream()
+                        .map(p -> exprSQLBuilder.print(p, relation)).collect(Collectors.joining(", ")) + ")";
+                groupingRelation.registerRef(grouping.getId(), fn);
+            }
+            List<String> groupings = Lists.newArrayList();
+            for (var group : repeat.getRepeatColumnRef()) {
+                groupings.add("(" + group.stream().map(c -> exprSQLBuilder.print(c, relation))
+                        .collect(Collectors.joining(", ")) + ")");
+            }
+            groupingRelation.groupings = "GROUPING SETS(" + String.join(", ", groupings) + ")";
             return groupingRelation;
         }
 

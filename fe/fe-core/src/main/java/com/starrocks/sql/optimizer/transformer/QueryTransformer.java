@@ -556,8 +556,10 @@ public class QueryTransformer {
             repeatOutput.add(grouping);
 
             //Build grouping function in select item
+            Map<ColumnRefOperator, List<ColumnRefOperator>> groupingFnArgs = Maps.newHashMap();
             for (Expr groupingFunction : groupingFunctionCallExprs) {
                 grouping = columnRefFactory.create(GROUPING, Type.BIGINT, false);
+                List<ColumnRefOperator> fnArgs = Lists.newArrayList();
 
                 ArrayList<BitSet> tempGroupingIdsBitSets = new ArrayList<>();
                 for (int i = 0; i < repeatColumnRefList.size(); ++i) {
@@ -569,6 +571,7 @@ public class QueryTransformer {
 
                     ColumnRefOperator groupingKey = (ColumnRefOperator) SqlToScalarOperatorTranslator
                             .translate(expr, subOpt.getExpressionMapping(), columnRefFactory);
+                    fnArgs.add(groupingKey);
                     for (List<ColumnRefOperator> repeatColumns : repeatColumnRefList) {
                         if (repeatColumns.contains(groupingKey)) {
                             for (int repeatColIdx = 0; repeatColIdx < repeatColumnRefList.size(); ++repeatColIdx) {
@@ -586,10 +589,11 @@ public class QueryTransformer {
                         .collect(Collectors.toList()));
                 groupByColumnRefs.add(grouping);
                 repeatOutput.add(grouping);
+                groupingFnArgs.put(grouping, fnArgs);
             }
 
             LogicalRepeatOperator repeatOperator =
-                    new LogicalRepeatOperator(repeatOutput, repeatColumnRefList, groupingIds);
+                    new LogicalRepeatOperator(repeatOutput, repeatColumnRefList, groupingIds, groupingFnArgs);
             subOpt = new OptExprBuilder(repeatOperator, Lists.newArrayList(subOpt), groupingTranslations);
         }
 

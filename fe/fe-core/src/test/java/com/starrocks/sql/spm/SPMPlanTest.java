@@ -14,11 +14,13 @@
 
 package com.starrocks.sql.spm;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.spm.CreateBaselinePlanStmt;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.plan.PlanTestBase;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -26,17 +28,32 @@ import org.junit.jupiter.api.Test;
 
 import java.util.List;
 
-public class SPMPlanTest extends SPMTestBase {
-
+public class SPMPlanTest extends PlanTestBase {
     @BeforeAll
     public static void beforeAll() throws Exception {
-        SPMTestBase.beforeAll();
+        PlanTestBase.beforeAll();
         connectContext.getSessionVariable().setEnableSPMRewrite(true);
     }
 
     @BeforeEach
     public void before() {
         SPMFunctions.enableSPMParamsPrint = true;
+    }
+
+    public CreateBaselinePlanStmt createBaselinePlanStmt(String sql) {
+        String createSql = "create baseline using " + sql;
+        List<StatementBase> statements = SqlParser.parse(createSql, connectContext.getSessionVariable());
+        Preconditions.checkState(statements.size() == 1);
+        Preconditions.checkState(statements.get(0) instanceof CreateBaselinePlanStmt);
+        return (CreateBaselinePlanStmt) statements.get(0);
+    }
+
+    public CreateBaselinePlanStmt createBaselinePlanStmt(String bind, String sql) {
+        String createSql = "create baseline on " + bind + " using " + sql;
+        List<StatementBase> statements = SqlParser.parse(createSql, connectContext.getSessionVariable());
+        Preconditions.checkState(statements.size() == 1);
+        Preconditions.checkState(statements.get(0) instanceof CreateBaselinePlanStmt);
+        return (CreateBaselinePlanStmt) statements.get(0);
     }
 
     @Test
@@ -462,29 +479,17 @@ public class SPMPlanTest extends SPMTestBase {
         SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
         generator.execute();
 
-        assertContains(generator.getBindSqlDigest(), "SELECT `test`.`t0`.`v3`, "
-                + "avg(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`"
-                + ".`v2` DESC ), "
-                + "sum(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`"
-                + ".`v2` DESC ) AS `sum1`\n" + "FROM `test`.`t0`");
+        assertContains(generator.getBindSqlDigest(),
+                "SELECT `test`.`t0`.`v1`, `test`.`t0`.`v2`, grouping(`test`.`t0`.`v1`, `test`.`t0`.`v2`) AS `b`, sum"
+                        + "(`test`.`t0`.`v3`)\n" + "FROM `test`.`t0`\n"
+                        + "GROUP BY GROUPING SETS ((), (`test`.`t0`.`v1`, `test`.`t0`.`v2`))");
 
-        assertContains(generator.getBindSql(), "SELECT `test`.`t0`.`v3`, "
-                + "avg(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`"
-                + ".`v2` DESC ), "
-                + "sum(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`"
-                + ".`v2` DESC ) AS `sum1`\n" + "FROM `test`.`t0`");
+        assertContains(generator.getBindSql(),
+                "SELECT `test`.`t0`.`v1`, `test`.`t0`.`v2`, grouping(`test`.`t0`.`v1`, `test`.`t0`.`v2`) AS `b`, sum"
+                        + "(`test`.`t0`.`v3`)\n" + "FROM `test`.`t0`\n"
+                        + "GROUP BY GROUPING SETS ((), (`test`.`t0`.`v1`, `test`.`t0`.`v2`))");
 
-        assertContains(generator.getPlanStmtSQL(),
-                "SELECT v2, v3, avg(v2) OVER (PARTITION BY v2, v3 ORDER BY v2 DESC ) AS c_4, "
-                        + "sum(v2) OVER (PARTITION BY v2, v3 ORDER BY v2 DESC ) AS c_5 FROM t0");
-    }
-
-    @org.junit.Test
-    public void testGroupingSetsToUnionRewrite2() throws Exception {
-        connectContext.getSessionVariable().setEnableRewriteGroupingSetsToUnionAll(false);
-        String sql = "select v1, v2, grouping_id(v1, v2) as b, sum(v3) "
-                + "from t0 group by grouping sets((), (v1, v2)) order by v1, b";
-        String plan = getFragmentPlan(sql);
-        System.out.println(plan);
+        assertContains(generator.getPlanStmtSQL(), "SELECT * FROM (SELECT v1, v2, GROUPING(v1, v2), sum(c_4) AS c_4 "
+                + "FROM t0 GROUP BY GROUPING SETS((), (v1, v2))) t_0");
     }
 }
