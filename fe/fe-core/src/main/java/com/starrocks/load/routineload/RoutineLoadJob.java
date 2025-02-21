@@ -1192,10 +1192,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 ++abortedTaskNum;
                 entity.counterRoutineLoadAbortedTasksTotal.increase(1L);
                 setOtherMsg(txnStatusChangeReasonString);
-                TransactionState.TxnStatusChangeReason txnStatusChangeReason = null;
+                TxnStatusChangeReason txnStatusChangeReason = null;
                 if (txnStatusChangeReasonString != null) {
                     txnStatusChangeReason =
-                            TransactionState.TxnStatusChangeReason.fromString(txnStatusChangeReasonString);
+                            TxnStatusChangeReason.fromString(txnStatusChangeReasonString);
                     if (txnStatusChangeReason != null) {
                         switch (txnStatusChangeReason) {
                             case OFFSET_OUT_OF_RANGE:
@@ -1241,7 +1241,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         if (txnState.getTxnCommitAttachment() != null &&
                 checkCommitInfo((RLTaskTxnCommitAttachment) txnState.getTxnCommitAttachment(),
                         txnState,
-                        TransactionState.TxnStatusChangeReason.fromString(txnState.getReason()))) {
+                        TxnStatusChangeReason.fromString(txnState.getReason()))) {
             replayUpdateProgress((RLTaskTxnCommitAttachment) txnState.getTxnCommitAttachment());
         }
         this.abortedTaskNum++;
@@ -1254,8 +1254,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     private Optional<ErrorReason> shouldPauseOnTxnStateChange(String txnStatusChangeReasonStr) {
-        TransactionState.TxnStatusChangeReason reason =
-                TransactionState.TxnStatusChangeReason.fromString(txnStatusChangeReasonStr);
+        TxnStatusChangeReason reason =
+                TxnStatusChangeReason.fromString(txnStatusChangeReasonStr);
         if (reason == null) {
             return Optional.empty();
         }
@@ -1288,7 +1288,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                         .build());
             }
         } else if (checkCommitInfo(rlTaskTxnCommitAttachment, txnState,
-                TransactionState.TxnStatusChangeReason.fromString(txnStatusChangeReasonStr))) {
+                TxnStatusChangeReason.fromString(txnStatusChangeReasonStr))) {
             // step2: update job progress
             updateProgress(rlTaskTxnCommitAttachment);
         }
@@ -1535,7 +1535,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     // check the correctness of commit info
     protected abstract boolean checkCommitInfo(RLTaskTxnCommitAttachment rlTaskTxnCommitAttachment,
                                                TransactionState txnState,
-                                               TransactionState.TxnStatusChangeReason txnStatusChangeReason);
+                                               TxnStatusChangeReason txnStatusChangeReason);
 
     protected abstract String getStatistic();
 
