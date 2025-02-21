@@ -139,6 +139,13 @@ public class MysqlProto {
             return new NegotiateResult(null, NegotiateState.READ_FIRST_AUTH_PKG_FAILED);
         }
 
+        if (Config.require_secure_transport && !authPacket.isSSLConnRequest()) {
+            LOG.debug("server refused insecure client connection");
+            ErrorReport.report(ErrorCode.ERR_SECURE_TRANSPORT_REQUIRED);
+            sendResponsePacket(context);
+            return new NegotiateResult(null, NegotiateState.SERVER_REJECTED_INSECURE_CONNECTION);
+        }
+
         if (authPacket.isSSLConnRequest()) {
             // change to ssl session
             LOG.info("start to enable ssl connection");
