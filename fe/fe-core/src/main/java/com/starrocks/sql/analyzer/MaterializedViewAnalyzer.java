@@ -314,7 +314,8 @@ public class MaterializedViewAnalyzer {
             String originalViewDef = statement.getOrigStmt().originStmt;
             Preconditions.checkArgument(originalViewDef != null,
                     "MV's original view definition is null");
-            statement.setOriginalViewDefineSql(originalViewDef.substring(statement.getQueryStartIndex()));
+            statement.setOriginalViewDefineSql(originalViewDef.substring(statement.getQueryStartIndex(),
+                    statement.getQueryStopIndex()));
 
             // collect table from query statement
 
