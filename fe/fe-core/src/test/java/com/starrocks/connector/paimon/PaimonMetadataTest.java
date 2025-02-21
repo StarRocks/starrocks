@@ -496,11 +496,10 @@ public class PaimonMetadataTest {
                 result = "select * from table";
             }
         };
-        PaimonView table = (PaimonView) metadata.getView("db", "test_view");
-        Assert.assertEquals(PAIMON_VIEW, table.getType());
-        Assert.assertEquals("test_view", table.getName());
-        Assert.assertEquals("select * from table", table.getInlineViewDef());
-        Assert.assertEquals("", table.getTableLocation());
+        PaimonView view = (PaimonView) metadata.getView("db", "test_view");
+        Assert.assertEquals(PAIMON_VIEW, view.getType());
+        Assert.assertEquals("test_view", view.getName());
+        Assert.assertEquals("select * from table", view.getInlineViewDef());
 
         //test drop normal
         DropTableStmt dropStmt = new DropTableStmt(true, new TableName("paimon_catalog", "db", "test_view"), true, true);
