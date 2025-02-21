@@ -62,6 +62,7 @@ under the License.
         <arrow.version>18.0.0</arrow.version>
         <protobuf.version>3.25.1</protobuf.version>
         <grpc.version>1.63.0</grpc.version>
+        <puppycrawl.version>10.21.1</puppycrawl.version>
     </properties>
 
     <profiles>
