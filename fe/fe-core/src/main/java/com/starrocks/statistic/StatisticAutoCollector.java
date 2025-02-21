@@ -36,6 +36,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -68,7 +69,7 @@ public class StatisticAutoCollector extends FrontendDaemon {
             return;
         }
 
-        initDefaultJob();
+        prepareDefaultJob();
 
         runJobs();
     }
@@ -152,10 +153,16 @@ public class StatisticAutoCollector extends FrontendDaemon {
     /**
      * Choose user-created jobs first, fallback to default job if it doesn't exist
      */
-    private void initDefaultJob() {
+    public void prepareDefaultJob() {
         List<NativeAnalyzeJob> allNativeAnalyzeJobs =
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAllNativeAnalyzeJobList();
-        if (allNativeAnalyzeJobs.stream().anyMatch(NativeAnalyzeJob::isDefaultJob)) {
+        Optional<NativeAnalyzeJob> defaultJob = allNativeAnalyzeJobs.stream().filter(NativeAnalyzeJob::isDefaultJob).findFirst();
+        // Compatible with old version.
+        // since the default_job will be persisted and not cleaned up when it's first created.
+        // we need to ensure that auto collection uses the correct analyze_type according to user config.
+        if (defaultJob.isPresent()) {
+            AnalyzeType analyzeType = Config.enable_collect_full_statistic ? AnalyzeType.FULL : AnalyzeType.SAMPLE;
+            defaultJob.get().setType(analyzeType);
             return;
         }
 
