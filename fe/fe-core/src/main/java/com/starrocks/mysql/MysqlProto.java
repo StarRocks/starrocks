@@ -140,10 +140,10 @@ public class MysqlProto {
         }
 
         if (Config.require_secure_transport && !authPacket.isSSLConnRequest()) {
-            LOG.debug("server refused insecure client connection");
+            LOG.warn("Connections using insecure transport are prohibited");
             ErrorReport.report(ErrorCode.ERR_SECURE_TRANSPORT_REQUIRED);
             sendResponsePacket(context);
-            return new NegotiateResult(null, NegotiateState.SERVER_REJECTED_INSECURE_CONNECTION);
+            return new NegotiateResult(null, NegotiateState.INSECURE_TRANSPORT_PROHIBITED);
         }
 
         if (authPacket.isSSLConnRequest()) {
