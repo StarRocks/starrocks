@@ -42,6 +42,11 @@ public class BrpcProxy {
         // Therefore, MaxIdleSize shouldn't less than MaxTotal for the async requests.
         rpcOptions.setMaxIdleSize(Config.brpc_connection_pool_size);
         rpcOptions.setMaxWait(Config.brpc_idle_wait_max_time);
+        rpcOptions.setJmxEnabled(true);
+        rpcOptions.setReuseAddress(Config.brpc_reuse_addr);
+        rpcOptions.setMinEvictableIdleTime(Config.brpc_min_evictable_idle_time_ms);
+        rpcOptions.setShortConnection(Config.brpc_short_connection);
+        rpcOptions.setInnerResuePool(Config.brpc_inner_reuse_pool);
 
         rpcClient = new RpcClient(rpcOptions);
         backendServiceMap = new ConcurrentHashMap<>();
@@ -87,14 +92,14 @@ public class BrpcProxy {
         ProtobufRpcProxy<PBackendService> proxy = new ProtobufRpcProxy<>(rpcClient, PBackendService.class);
         proxy.setHost(address.getHostname());
         proxy.setPort(address.getPort());
-        return proxy.proxy();
+        return new PBackendServiceWithMetrics(proxy.proxy());
     }
 
     private LakeService createLakeService(TNetworkAddress address) {
         ProtobufRpcProxy<LakeService> proxy = new ProtobufRpcProxy<>(rpcClient, LakeService.class);
         proxy.setHost(address.getHostname());
         proxy.setPort(address.getPort());
-        return proxy.proxy();
+        return new LakeServiceWithMetrics(proxy.proxy());
     }
 
     private static class SingletonHolder {

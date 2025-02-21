@@ -59,6 +59,7 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.datacache.DataCacheSelectMetrics;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
@@ -671,6 +672,7 @@ public class DefaultCoordinator extends Coordinator {
                             this::handleErrorExecution, option.doDeploy);
             scheduler.prepareSchedule(this, deployer, executionDAG);
             this.scheduler.schedule(option);
+            MetricRepo.HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY.update(ignored.getTotalTime());
             queryProfile.attachExecutionProfiles(executionDAG.getExecutions());
         } finally {
             unlock();
