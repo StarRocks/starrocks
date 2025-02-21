@@ -115,6 +115,9 @@ public class StarRocksFE {
 
             Log4jConfig.initLogging();
 
+            // test jul logging
+            java.util.logging.Logger.getLogger(java.util.logging.Logger.class.getName()).info("java.util.logging init");
+
             // set dns cache ttl
             java.security.Security.setProperty("networkaddress.cache.ttl", "60");
 
