@@ -81,31 +81,10 @@ StarOSWorker::StarOSWorker()
 
 StarOSWorker::~StarOSWorker() = default;
 
-<<<<<<< HEAD
-=======
-static const uint64_t kUnknownTableId = UINT64_MAX;
-
 void StarOSWorker::set_fs_cache_capacity(int32_t capacity) {
     _fs_cache->set_capacity(capacity);
 }
 
-uint64_t StarOSWorker::get_table_id(const ShardInfo& shard) {
-    const auto& properties = shard.properties;
-    auto iter = properties.find("tableId");
-    if (iter == properties.end()) {
-        DCHECK(false) << "tableId doesn't exist in shard properties";
-        return kUnknownTableId;
-    }
-    const auto& tableId = properties.at("tableId");
-    try {
-        return std::stoull(tableId);
-    } catch (const std::exception& e) {
-        DCHECK(false) << "failed to parse tableId: " << tableId << ", " << e.what();
-        return kUnknownTableId;
-    }
-}
-
->>>>>>> 95955286d9 ([Enhancement] Using lru cache to limit the number of starlet filesystem instance (#55845))
 absl::Status StarOSWorker::add_shard(const ShardInfo& shard) {
     std::unique_lock l(_mtx);
     auto it = _shards.find(shard.id);
@@ -331,17 +310,7 @@ StarOSWorker::new_shared_filesystem(std::string_view scheme, const Configuration
     std::shared_ptr<fslib::FileSystem> fs = std::move(fs_or).value();
 
     // Put the FileSysatem into LRU cache
-<<<<<<< HEAD
-    auto value = new CacheValue(fs);
-    handle = _fs_cache->insert(key, value, 1, cache_value_deleter);
-    if (handle == nullptr) {
-        delete value;
-    } else {
-        _fs_cache->release(handle);
-    }
-=======
     auto fs_cache_key = insert_fs_cache(cache_key, fs);
->>>>>>> 95955286d9 ([Enhancement] Using lru cache to limit the number of starlet filesystem instance (#55845))
 
     return std::make_pair(std::move(fs_cache_key), std::move(fs));
 }
@@ -369,7 +338,7 @@ std::shared_ptr<std::string> StarOSWorker::insert_fs_cache(const std::string& ke
 
     CacheKey cache_key(key);
     auto value = new CacheValue(fs_cache_key, fs);
-    auto handle = _fs_cache->insert(cache_key, value, 1, 1, cache_value_deleter);
+    auto handle = _fs_cache->insert(cache_key, value, 1, cache_value_deleter);
     if (handle == nullptr) {
         delete value;
         return nullptr;
