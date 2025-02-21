@@ -412,8 +412,6 @@ public class CreateLakeTableTest {
                         "DISTRIBUTED BY HASH(`r_regionkey`) BUCKETS 1\n" +
                         "PROPERTIES (\n" +
                         " 'replication_num' = '1',\n " +
-                        " 'enable_persistent_index' = 'true', \n" +
-                        " 'persistent_index_type' = 'cloud_native', \n" +
                         " 'unique_constraints' = 'r_regionkey'\n" +
                         ");"));
         ExceptionChecker.expectThrowsNoException(() -> createTable(
@@ -427,8 +425,6 @@ public class CreateLakeTableTest {
                         "DISTRIBUTED BY HASH(`N_NATIONKEY`) BUCKETS 1\n" +
                         "PROPERTIES (\n" +
                         " 'replication_num' = '1',\n" +
-                        " 'enable_persistent_index' = 'true', \n" +
-                        " 'persistent_index_type' = 'cloud_native', \n" +
                         " 'unique_constraints' = 'n_nationkey',\n" +
                         " 'foreign_key_constraints' = '(n_regionkey) references region(r_regionkey)'\n" +
                         ");"));

@@ -20,7 +20,7 @@ ORDER BY (k2)
 PROPERTIES (
     "replication_num" = "1",
     "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false"
+    "enable_persistent_index" = "true"
 );
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: The sort columns of AGGREGATE KEY table must be same with key columns.')
@@ -39,7 +39,7 @@ ORDER BY (k2,v2)
 PROPERTIES (
     "replication_num" = "1",
     "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false"
+    "enable_persistent_index" = "true"
 );
 -- result:
 E: (1064, 'Getting analyzing error. Detail message: The sort columns of AGGREGATE KEY table must be same with key columns.')
@@ -59,7 +59,7 @@ PROPERTIES (
     "replication_num" = "1",
     "in_memory" = "false",
     "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false"
+    "enable_persistent_index" = "true"
 );
 -- result:
 E: (1064, 'Duplicate sort key column k1 is not allowed.')
@@ -78,7 +78,7 @@ ORDER BY (k2,k1)
 PROPERTIES (
     "replication_num" = "1",
     "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false"
+    "enable_persistent_index" = "true"
 );
 -- result:
 -- !result
@@ -343,7 +343,7 @@ ORDER BY (k2,k1)
 PROPERTIES (
     "replication_num" = "1",
     "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false"
+    "enable_persistent_index" = "true"
 );
 -- result:
 -- !result

@@ -10,7 +10,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`region`, `order_date`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );

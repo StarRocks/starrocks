@@ -5,7 +5,7 @@ arrow: CREATE DATABASE arrow_demo;
 
 arrow: USE arrow_demo;
 
-arrow: CREATE TABLE arrow_demo.students (     id INT NOT NULL,    name VARCHAR(255) NOT NULL,    age INT NOT NULL,    enrollment_date DATE ) ENGINE=OLAP  PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 10 PROPERTIES (    'replication_num' = '1',    'in_memory' = 'false',    'enable_persistent_index' = 'false',    'replicated_storage' = 'true',    'fast_schema_evolution' = 'true',    'compression' = 'LZ4');
+arrow: CREATE TABLE arrow_demo.students (     id INT NOT NULL,    name VARCHAR(255) NOT NULL,    age INT NOT NULL,    enrollment_date DATE ) ENGINE=OLAP  PRIMARY KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 10 PROPERTIES (    'replication_num' = '1',    'in_memory' = 'false',    'enable_persistent_index' = 'true',    'replicated_storage' = 'true',    'fast_schema_evolution' = 'true',    'compression' = 'LZ4');
 
 arrow: INSERT INTO arrow_demo.students (id, name, age, enrollment_date) VALUES (1, 'John Doe', 20, '2024-01-10'),(2, 'Jane Smith', 22, '2024-01-11'),(3, 'Emily Davis', 21, '2024-01-12');
 

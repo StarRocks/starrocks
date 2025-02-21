@@ -142,7 +142,7 @@ DUPLICATE KEY(`pk`)
 DISTRIBUTED BY HASH(`pk`) BUCKETS 3 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "fast_schema_evolution" = "true",
 "compression" = "LZ4"

@@ -109,7 +109,7 @@ DISTRIBUTED BY HASH(`id_int`) BUCKETS 1
 PROPERTIES (
     "replication_num" = "1",
     "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false",
+    "enable_persistent_index" = "true",
     "fast_schema_evolution" = "true"
 );
 
@@ -139,7 +139,7 @@ DISTRIBUTED BY HASH(`id_int`) BUCKETS 1
 PROPERTIES (
     "replication_num" = "1",
     "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false",
+    "enable_persistent_index" = "true",
     "fast_schema_evolution" = "false"
 );
 
