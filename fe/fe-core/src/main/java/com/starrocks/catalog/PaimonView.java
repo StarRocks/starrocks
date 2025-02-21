@@ -20,34 +20,22 @@ import com.starrocks.sql.ast.TableRelation;
 import java.util.List;
 
 public class PaimonView extends ConnectorView {
-    private final String defaultCatalogName;
-    private final String defaultDbName;
-    private final String location;
 
     public PaimonView(long id, String catalogName, String dbName, String name, List<Column> schema,
-                      String definition, String defaultCatalogName, String defaultDbName, String location) {
+                      String definition) {
         super(id, catalogName, dbName, name, schema, definition, TableType.PAIMON_VIEW);
-        this.defaultCatalogName = defaultCatalogName;
-        this.defaultDbName = defaultDbName;
-        this.location = location;
     }
 
     @Override
     protected void formatRelations(List<TableRelation> tableRelations, List<String> cteRelationNames) {
         for (TableRelation tableRelation : tableRelations) {
-            // iceberg view query statement with external catalog which created by starrocks must have catalog name
             if (com.google.common.base.Strings.isNullOrEmpty(tableRelation.getName().getCatalog())) {
                 tableRelation.getName().setCatalog(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
             }
 
             if (Strings.isNullOrEmpty(tableRelation.getName().getDb())) {
-                tableRelation.getName().setDb(defaultDbName);
+                tableRelation.getName().setDb(super.dbName);
             }
         }
-    }
-
-    @Override
-    public String getTableLocation() {
-        return location;
     }
 }
