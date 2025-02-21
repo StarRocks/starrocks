@@ -345,6 +345,10 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db, tableIdList, LockType.WRITE);
         }
+        if (waiter == null) {
+            throw new TransactionCommitFailedException(String.format("transaction fail to commit, %s",
+                    transactionState.toString()));
+        }
 
         MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
         stopWatch.stop();
