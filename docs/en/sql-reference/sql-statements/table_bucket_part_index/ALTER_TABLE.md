@@ -580,7 +580,7 @@ ADD FIELD field_path field_desc
 ALTER TABLE [<db_name>.]<tbl_name> MODIFY COLUMN <column_name>
 DROP FIELD field_path
 
-field_path ::= [ { <top_field_name>. | [*]. } [ ... ] ]<field_name>
+field_path ::= [ { <field_name>. | [*]. } [ ... ] ]<field_name>
 
   -- Note that here `[*]` as a whole is a pre-defined symbol and represents all elements in the ARRAY field 
   -- when adding or removing a field in a STRUCT type nested within an ARRAY type.
@@ -591,7 +591,8 @@ field_desc ::= <field_type> [ AFTER <prior_field_name> | FIRST ]
 
 Parameters:
 
-- `field_path`: The field to be added or removed. This can be a simple field name, indicating a top-dimension field, for example, `new_field_name`, or a Column Access Path that represents a nested field, for example, `lv1_k1.lv2_k2.[*].new_field_name`. When a STRUCT type is nested within an ARRAY type, `[*]` represents all elements in the ARRAY field. It is used to add or remove a field in all STRUCT elements nested under the ARRAY field.
+- `field_path`: The field to be added or removed. This can be a simple field name, indicating a top-dimension field, for example, `new_field_name`, or a Column Access Path that represents a nested field, for example, `lv1_k1.lv2_k2.[*].new_field_name`.
+- `[*]`: When a STRUCT type is nested within an ARRAY type, `[*]` represents all elements in the ARRAY field. It is used to add or remove a field in all STRUCT elements nested under the ARRAY field.
 - `prior_field_name`: The field preceding the newly added field. Used in conjunction with the AFTER keyword to specify the order of the new field. You do not need to specify this parameter if the FIRST keyword is used, indicating the new field should be the first field. The dimension of `prior_field_name` is determined by `field_path` (specifically, the part preceding `new_field_name`, that is, `level1_k1.level2_k2.[*]`) and does not need to be specified explicitly.
 
 Examples of `field_path`:
