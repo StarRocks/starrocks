@@ -132,7 +132,7 @@ public class DrivingTableSelectionRuleTest {
         {
             assertEquals(0, ((LogicalOlapScanOperator) newJoinTree.inputAt(1).getOp()).getTable().getId());
             assertEquals(2,
-                    ((LogicalOlapScanOperator) newJoinTree.inputAt(0).inputAt(0).inputAt(0).inputAt(0).inputAt(0).inputAt(0)
+                    ((LogicalOlapScanOperator) newJoinTree.inputAt(0).inputAt(0).inputAt(0).inputAt(0).inputAt(1).inputAt(0)
                             .getOp()).getTable().getId());
         }
         // Projection
@@ -150,8 +150,8 @@ public class DrivingTableSelectionRuleTest {
 
             assertEquals(map1, ((LogicalProjectOperator) newJoinTree.inputAt(0).inputAt(0).inputAt(0).getOp()).getColumnRefMap());
 
-            Map<ColumnRefOperator, ScalarOperator> map2 = new HashMap<>(t3Scan.getRowOutputInfo().getColumnRefMap());
-            t2Scan.getRowOutputInfo().getColumnRefMap().forEach((k, v) -> map2.put(k, ConstantOperator.createNull(v.getType())));
+            Map<ColumnRefOperator, ScalarOperator> map2 = new HashMap<>(t2Scan.getRowOutputInfo().getColumnRefMap());
+            t3Scan.getRowOutputInfo().getColumnRefMap().forEach((k, v) -> map2.put(k, ConstantOperator.createNull(v.getType())));
 
             assertEquals(map2, ((LogicalProjectOperator) newJoinTree.inputAt(0).inputAt(0).inputAt(0).inputAt(0).inputAt(1)
                     .getOp()).getColumnRefMap());

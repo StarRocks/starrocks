@@ -209,8 +209,7 @@ public class DrivingTableSelection extends TransformationRule {
             int joinsHash = joinTables.hashCode();
             // JoinReorder
             Map<Long, Integer> finalTableDepthMap = tableDepthMap.get();
-            joinTables.sort(Comparator.comparingInt((Pair<Long, OptExpression> pair) -> finalTableDepthMap.get(pair.first))
-                    .thenComparingLong(pair -> -pair.first));
+            joinTables.sort(Comparator.comparingInt((Pair<Long, OptExpression> pair) -> finalTableDepthMap.get(pair.first)));
             // If the join order does not change, then skip
             if (joinTables.hashCode() == joinsHash) {
                 return Collections.emptyList();
