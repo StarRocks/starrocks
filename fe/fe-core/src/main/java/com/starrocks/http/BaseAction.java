@@ -321,8 +321,13 @@ public abstract class BaseAction implements IAction {
                 globalStateMgr.getAuthenticationMgr().checkPlainPassword(
                         authInfo.fullUserName, authInfo.remoteIp, authInfo.password);
         if (currentUser == null) {
+            String userAndHost = authInfo.fullUserName.concat("@").concat(authInfo.remoteIp);
+            if (globalStateMgr.getAuthenticationMgr().isUserLocked(userAndHost)) {
+                throw new AccessDeniedException("Access denied for " + userAndHost +
+                    ". Account is temporarily locked due to multiple failed logins.");
+            }
             throw new AccessDeniedException("Access denied for "
-                    + authInfo.fullUserName + "@" + authInfo.remoteIp);
+                    + userAndHost);
         }
         return currentUser;
     }

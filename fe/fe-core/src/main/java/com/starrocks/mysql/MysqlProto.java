@@ -77,7 +77,13 @@ public class MysqlProto {
         if (Config.enable_auth_check) {
             currentUser = authenticationManager.checkPassword(user, remoteIp, scramble, randomString);
             if (currentUser == null) {
-                ErrorReport.report(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePasswd);
+                String userAndHost = user.concat("@").concat(remoteIp);
+                if (authenticationManager.isUserLocked(userAndHost)) {
+                    ErrorReport.report(ErrorCode.ERR_FAILED_ATTEMPT, user, remoteIp,
+                            Config.max_failed_login_attempts);
+                } else {
+                    ErrorReport.report(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePasswd);
+                }
                 return false;
             }
         } else {

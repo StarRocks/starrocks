@@ -2742,6 +2742,19 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static boolean enable_password_reuse = true;
+
+    /**
+     * Number of attempts to login if failed. -1 means unlimited.
+     */
+    @ConfField(mutable = true)
+    public static int max_failed_login_attempts = -1;
+
+    /**
+     * Duration to lock the account after failed login attempts.
+     */
+    @ConfField(mutable = true)
+    public static long password_lock_interval_seconds = 600L;
+
     /**
      * If set to false, when the load is empty, success is returned.
      * Otherwise, `No partitions have data available for loading` is returned.

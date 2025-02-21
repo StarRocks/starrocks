@@ -1220,6 +1220,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         UserIdentity currentUser =
                 globalStateMgr.getAuthenticationMgr().checkPlainPassword(user, clientIp, passwd);
         if (currentUser == null) {
+            String userAndHost = user.concat("@").concat(clientIp);
+            if (globalStateMgr.getAuthenticationMgr().isUserLocked(userAndHost)) {
+                throw new AuthenticationException("Access denied for " + userAndHost + ". Locked for " +
+                    globalStateMgr.getAuthenticationMgr().getRemainingLockedTime(userAndHost) + "seconds.");
+            }
             throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
         }
         // check INSERT action on table
