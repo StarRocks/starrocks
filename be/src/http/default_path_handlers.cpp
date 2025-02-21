@@ -160,11 +160,13 @@ void MemTrackerWebPageHandler::handle(MemTracker* mem_tracker, const WebPageHand
             // not in RootMemTrackerTree, so it needs to be added here
             MemTracker* meta_mem_tracker = GlobalEnv::GetInstance()->metadata_mem_tracker();
             auto* meta_item = meta_mem_tracker->get_snapshot(&obj_pool, upper_level);
+            meta_item->parent = root;
 
             // Update memory statistics use the old memory framework,
             // not in RootMemTrackerTree, so it needs to be added here
             MemTracker* update_mem_tracker = GlobalEnv::GetInstance()->update_mem_tracker();
             auto* update_item = update_mem_tracker->get_snapshot(&obj_pool, upper_level);
+            update_item->parent = root;
 
             root->childs.emplace_back(meta_item);
             root->childs.emplace_back(update_item);
