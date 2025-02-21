@@ -141,7 +141,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public static final long DEFAULT_TASK_SCHED_INTERVAL_SECOND = 10;
     public static final boolean DEFAULT_STRICT_MODE = false; // default is false
-    public static final boolean DEFAULT_PAUSE_ON_PARSE_ERROR = true;
+    public static final boolean DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR = true;
 
     protected static final String STAR_STRING = "*";
 
@@ -307,8 +307,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     @SerializedName("warehouseId")
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
-    @SerializedName("pope")
-    protected boolean pauseOnParseError = DEFAULT_PAUSE_ON_PARSE_ERROR;
+    @SerializedName("pofpe")
+    protected boolean pauseOnFatalParseError = DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR;
 
     protected ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
     // TODO(ml): error sample
@@ -378,7 +378,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         if (stmt.getMaxBatchRows() != -1) {
             this.maxBatchRows = stmt.getMaxBatchRows();
         }
-        this.pauseOnParseError = stmt.isPauseOnParseError();
+        this.pauseOnFatalParseError = stmt.isPauseOnFatalParseError();
         jobProperties.put(LoadStmt.LOG_REJECTED_RECORD_NUM, String.valueOf(stmt.getLogRejectedRecordNum()));
         jobProperties.put(LoadStmt.PARTIAL_UPDATE, String.valueOf(stmt.isPartialUpdate()));
         jobProperties.put(LoadStmt.PARTIAL_UPDATE_MODE, String.valueOf(stmt.getPartialUpdateMode()));
@@ -1264,7 +1264,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 return Optional.of(new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
                         ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(txnStatusChangeReasonStr, "max_filter_ratio")));
             case PARSE_ERROR:
-                return !pauseOnParseError ? Optional.empty() : Optional.of(new ErrorReason(InternalErrorCode.PARSE_ERR,
+                return !pauseOnFatalParseError ? Optional.empty() : Optional.of(new ErrorReason(InternalErrorCode.PARSE_ERR,
                         ERR_PARSE_ERROR.formatErrorMsg(txnStatusChangeReasonStr)));
             default:
                 return Optional.empty();
@@ -1679,7 +1679,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         jobProperties.put("desireTaskConcurrentNum", String.valueOf(desireTaskConcurrentNum));
         jobProperties.put("taskConsumeSecond", String.valueOf(taskConsumeSecond));
         jobProperties.put("taskTimeoutSecond", String.valueOf(taskTimeoutSecond));
-        jobProperties.put("pauseOnParseError", String.valueOf(pauseOnParseError));
+        jobProperties.put("pauseOnFatalParseError", String.valueOf(pauseOnFatalParseError));
         jobProperties.putAll(this.jobProperties);
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         return gson.toJson(jobProperties);
@@ -2017,9 +2017,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             this.taskTimeoutSecond = Long.parseLong(
                     copiedJobProperties.remove(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND));
         }
-        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.PAUSE_ON_PARSE_ERROR)) {
-            this.pauseOnParseError = Boolean.parseBoolean(
-                    copiedJobProperties.remove(CreateRoutineLoadStmt.PAUSE_ON_PARSE_ERROR));
+        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR)) {
+            this.pauseOnFatalParseError = Boolean.parseBoolean(
+                    copiedJobProperties.remove(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR));
         }
 
         if (copiedJobProperties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
