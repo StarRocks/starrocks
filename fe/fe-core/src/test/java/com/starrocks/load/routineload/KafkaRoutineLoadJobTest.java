@@ -516,4 +516,59 @@ public class KafkaRoutineLoadJobTest {
         Assert.assertTrue(statistic.contains("\"receivedBytesRate\":10"));
         Assert.assertTrue(statistic.contains("\"loadRowsRate\":16"));
     }
+
+    @Test
+    public void testCreateStmtWithPauseOnParseError(@Mocked GlobalStateMgr globalStateMgr,
+                                                            @Injectable Database database,
+                                                            @Injectable OlapTable table) throws StarRocksException {
+        CreateRoutineLoadStmt createRoutineLoadStmt = initCreateRoutineLoadStmt();
+        RoutineLoadDesc routineLoadDesc =
+                new RoutineLoadDesc(columnSeparator, null, null, null, partitionNames);
+        Deencapsulation.setField(createRoutineLoadStmt, "routineLoadDesc", routineLoadDesc);
+        List<Pair<Integer, Long>> partitionIdToOffset = Lists.newArrayList();
+        for (String s : kafkaPartitionString.split(",")) {
+            partitionIdToOffset.add(new Pair<>(Integer.valueOf(s), 0L));
+        }
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaPartitionOffsets", partitionIdToOffset);
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaBrokerList", serverAddress);
+        Deencapsulation.setField(createRoutineLoadStmt, "kafkaTopic", topicName);
+        long dbId = 1L;
+        long tableId = 2L;
+
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableNameString);
+                minTimes = 0;
+                result = table;
+                database.getId();
+                minTimes = 0;
+                result = dbId;
+                table.getId();
+                minTimes = 0;
+                result = tableId;
+                table.isOlapOrCloudNativeTable();
+                minTimes = 0;
+                result = true;
+            }
+        };
+
+        new MockUp<KafkaUtil>() {
+            @Mock
+            public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
+                                                       ImmutableMap<String, String> properties) throws
+                    StarRocksException {
+                return Lists.newArrayList(1, 2, 3);
+            }
+        };
+
+        {
+            KafkaRoutineLoadJob kafkaRoutineLoadJob = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
+            Assert.assertTrue(Deencapsulation.getField(kafkaRoutineLoadJob, "pauseOnParseError"));
+        }
+        {
+            Deencapsulation.setField(createRoutineLoadStmt, "pauseOnParseError", false);
+            KafkaRoutineLoadJob kafkaRoutineLoadJob = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
+            Assert.assertFalse(Deencapsulation.getField(kafkaRoutineLoadJob, "pauseOnParseError"));
+        }
+    }
 }
