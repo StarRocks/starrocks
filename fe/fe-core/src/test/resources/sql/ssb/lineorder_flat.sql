@@ -53,7 +53,7 @@ PROPERTIES (
 "replication_num" = "1",
 "colocate_with" = "groupxx1",
 "in_memory" = "false",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 ); 

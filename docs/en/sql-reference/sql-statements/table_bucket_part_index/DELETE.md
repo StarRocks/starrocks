@@ -196,7 +196,7 @@ DISTRIBUTED BY HASH(`id`)
 PROPERTIES (
 "replication_num" = "3",
 "storage_format" = "DEFAULT",
-"enable_persistent_index" = "false"
+"enable_persistent_index" = "true"
 );
 
 INSERT INTO score_board VALUES
@@ -307,7 +307,7 @@ DISTRIBUTED BY HASH(`uid`)
 PROPERTIES (
 "replication_num" = "3",
 "storage_format" = "DEFAULT",
-"enable_persistent_index" = "false"
+"enable_persistent_index" = "true"
 );
 ```
 

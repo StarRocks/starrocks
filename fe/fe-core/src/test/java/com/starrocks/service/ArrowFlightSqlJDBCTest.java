@@ -51,7 +51,7 @@ public class ArrowFlightSqlJDBCTest {
                             "PROPERTIES (" +
                             "    'replication_num' = '1'," +
                             "    'in_memory' = 'false'," +
-                            "    'enable_persistent_index' = 'false'," +
+                            "    'enable_persistent_index' = 'true'," +
                             "    'replicated_storage' = 'true'," +
                             "    'fast_schema_evolution' = 'true'," +
                             "    'compression' = 'LZ4'" +

@@ -53,7 +53,7 @@ public class DictQueryFunctionTest {
                 "DISTRIBUTED BY HASH(`key_varchar`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
-                "    \"enable_persistent_index\" = \"false\",\n" +
+                "    \"enable_persistent_index\" = \"true\",\n" +
                 "    \"replicated_storage\" = \"true\"\n" +
                 ");";
 
@@ -69,7 +69,7 @@ public class DictQueryFunctionTest {
                 "DISTRIBUTED BY HASH(`key_varchar`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
-                "    \"enable_persistent_index\" = \"false\",\n" +
+                "    \"enable_persistent_index\" = \"true\",\n" +
                 "    \"replicated_storage\" = \"true\"\n" +
                 ");";
 
@@ -85,7 +85,7 @@ public class DictQueryFunctionTest {
                 "DISTRIBUTED BY HASH(`key_varchar`) BUCKETS 12\n" +
                 "PROPERTIES (\n" +
                 "    \"replication_num\" = \"1\",\n" +
-                "    \"enable_persistent_index\" = \"false\",\n" +
+                "    \"enable_persistent_index\" = \"true\",\n" +
                 "    \"replicated_storage\" = \"true\"\n" +
                 ");";
         starRocksAssert.withTable(dictTable);

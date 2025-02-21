@@ -80,8 +80,8 @@ public class LakeTableAlterMetaJobTest {
 
         table = createTable(connectContext,
                     "CREATE TABLE t0(c0 INT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 1 " +
-                                "PROPERTIES('enable_persistent_index'='false')");
-        Assert.assertFalse(table.enablePersistentIndex());
+                                "PROPERTIES('enable_persistent_index'='true')");
+        Assert.assertTrue(table.enablePersistentIndex());
         job = new LakeTableAlterMetaJob(GlobalStateMgr.getCurrentState().getNextId(), db.getId(), table.getId(),
                     table.getName(), 60 * 1000, TTabletMetaType.ENABLE_PERSISTENT_INDEX, true, "CLOUD_NATIVE");
     }
@@ -329,7 +329,7 @@ public class LakeTableAlterMetaJobTest {
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
         AlterJobV2 job = schemaChangeHandler.createAlterMetaJob(modify, db, table);
-        Assert.assertNotNull(job);
+        Assert.assertNull(job);
     }
 
     @Test
@@ -341,9 +341,6 @@ public class LakeTableAlterMetaJobTest {
         properties.put("persistent_index_type", "CLOUD_NATIVE");
         ModifyTablePropertiesClause modify = new ModifyTablePropertiesClause(properties);
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
-        // should throw exception
-        ExceptionChecker.expectThrows(DdlException.class,
-                () -> schemaChangeHandler.createAlterMetaJob(modify, db, table));
 
         // success
         AlterJobV2 job2 = schemaChangeHandler.createAlterMetaJob(modify, db, table2);

@@ -245,7 +245,7 @@ PROPERTIES (
 "replication_num" = "1",
 "bloom_filter_columns" = "c1,c2",
 "in_memory" = "false",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );

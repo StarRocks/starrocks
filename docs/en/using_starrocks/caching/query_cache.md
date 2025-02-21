@@ -274,7 +274,7 @@ PROPERTIES
     "replication_num" = "3",
     "colocate_with" = "groupxx1",
     "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false",
+    "enable_persistent_index" = "true",
     "compression" = "LZ4"
 );
 ```
@@ -571,7 +571,7 @@ The parameters in the preceding API operations are as follows:
    (
        "replication_num" = "3",
        "storage_format" = "DEFAULT",
-       "enable_persistent_index" = "false"
+       "enable_persistent_index" = "true"
    );
    ```
 

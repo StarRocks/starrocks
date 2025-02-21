@@ -111,7 +111,7 @@ public class MaterializedViewMultiJoinTest extends MaterializedViewTestBase {
                 "\"replication_num\"=\"1\",\n" +
                 "\"in_memory\"=\"false\",\n" +
                 "\"storage_format\"=\"DEFAULT\",\n" +
-                "\"enable_persistent_index\"=\"false\",\n" +
+                "\"enable_persistent_index\"=\"true\",\n" +
                 "\"compression\"=\"LZ4\"\n" +
                 ")");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW test_mv1 \n" +

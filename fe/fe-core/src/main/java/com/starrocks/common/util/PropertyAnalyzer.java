@@ -924,16 +924,13 @@ public class PropertyAnalyzer {
         return defaultVal;
     }
 
-    public static Pair<Boolean, Boolean> analyzeEnablePersistentIndex(Map<String, String> properties, boolean isPrimaryKey) {
+    public static boolean analyzeEnablePersistentIndex(Map<String, String> properties) {
         if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX)) {
             String val = properties.get(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX);
             properties.remove(PropertyAnalyzer.PROPERTIES_ENABLE_PERSISTENT_INDEX);
-            return Pair.create(Boolean.parseBoolean(val), true);
+            return Boolean.parseBoolean(val);
         } else {
-            if (isPrimaryKey) {
-                return Pair.create(Config.enable_persistent_index_by_default, false);
-            }
-            return Pair.create(false, false);
+            return true;
         }
     }
 
