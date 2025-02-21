@@ -63,6 +63,7 @@ under the License.
         <protobuf.version>3.25.1</protobuf.version>
         <grpc.version>1.63.0</grpc.version>
         <io.netty.version>4.1.118.Final</io.netty.version>
+        <puppycrawl.version>10.21.1</puppycrawl.version>
     </properties>
 
     <profiles>
