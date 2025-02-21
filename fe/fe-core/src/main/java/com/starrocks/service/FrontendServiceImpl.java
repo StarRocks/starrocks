@@ -130,8 +130,6 @@ import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.metric.TableMetricsEntity;
-import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.StreamLoadPlanner;
@@ -1385,7 +1383,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (null == tbl) {
             return;
         }
-        TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tbl.getId());
         StreamLoadTask streamLoadtask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
                 getSyncSteamLoadTaskByTxnId(request.getTxnId());
 
@@ -1394,15 +1391,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 if (!(attachment instanceof RLTaskTxnCommitAttachment)) {
                     break;
                 }
-                RLTaskTxnCommitAttachment routineAttachment = (RLTaskTxnCommitAttachment) attachment;
-                entity.counterRoutineLoadFinishedTotal.increase(1L);
-                entity.counterRoutineLoadBytesTotal.increase(routineAttachment.getReceivedBytes());
-                entity.counterRoutineLoadRowsTotal.increase(routineAttachment.getLoadedRows());
-                entity.counterRoutineLoadErrorRowsTotal.increase(routineAttachment.getFilteredRows());
-                entity.counterRoutineLoadUnselectedRowsTotal.increase(routineAttachment.getUnselectedRows());
 
                 if (streamLoadtask != null) {
-                    streamLoadtask.setLoadState(routineAttachment, "");
+                    streamLoadtask.setLoadState(attachment, "");
                 }
 
                 break;
@@ -1410,13 +1401,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 if (!(attachment instanceof ManualLoadTxnCommitAttachment)) {
                     break;
                 }
-                ManualLoadTxnCommitAttachment streamAttachment = (ManualLoadTxnCommitAttachment) attachment;
-                entity.counterStreamLoadFinishedTotal.increase(1L);
-                entity.counterStreamLoadBytesTotal.increase(streamAttachment.getReceivedBytes());
-                entity.counterStreamLoadRowsTotal.increase(streamAttachment.getLoadedRows());
 
                 if (streamLoadtask != null) {
-                    streamLoadtask.setLoadState(streamAttachment, "");
+                    streamLoadtask.setLoadState(attachment, "");
                 }
 
                 break;
