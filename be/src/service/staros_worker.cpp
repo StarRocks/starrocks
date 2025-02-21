@@ -345,17 +345,7 @@ StarOSWorker::new_shared_filesystem(std::string_view scheme, const Configuration
     std::shared_ptr<fslib::FileSystem> fs = std::move(fs_or).value();
 
     // Put the FileSysatem into LRU cache
-<<<<<<< HEAD
-    auto value = new CacheValue(fs);
-    handle = _fs_cache->insert(key, value, 1, cache_value_deleter);
-    if (handle == nullptr) {
-        delete value;
-    } else {
-        _fs_cache->release(handle);
-    }
-=======
     auto fs_cache_key = insert_fs_cache(cache_key, fs);
->>>>>>> 95955286d ([Enhancement] Using lru cache to limit the number of starlet filesystem instance (#55845))
 
     return std::make_pair(std::move(fs_cache_key), std::move(fs));
 }
@@ -383,7 +373,7 @@ std::shared_ptr<std::string> StarOSWorker::insert_fs_cache(const std::string& ke
 
     CacheKey cache_key(key);
     auto value = new CacheValue(fs_cache_key, fs);
-    auto handle = _fs_cache->insert(cache_key, value, 1, 1, cache_value_deleter);
+    auto handle = _fs_cache->insert(cache_key, value, 1, cache_value_deleter);
     if (handle == nullptr) {
         delete value;
         return nullptr;
