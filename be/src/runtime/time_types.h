@@ -215,7 +215,7 @@ public:
 
     inline static bool check(int year, int month, int day, int hour, int minute, int second, int microsecond);
 
-    inline static int get_offset_by_timezone(Timestamp timestamp, const cctz::time_zone &ctz);
+    inline static int get_offset_by_timezone(Timestamp timestamp, const cctz::time_zone& ctz);
 
     template <TimeUnit UNIT>
     static Timestamp add(Timestamp timestamp, int count);
@@ -367,7 +367,7 @@ bool timestamp::check(int year, int month, int day, int hour, int minute, int se
     return date::check(year, month, day) && check_time(hour, minute, second, microsecond);
 }
 
-int timestamp::get_offset_by_timezone(Timestamp timestamp, const cctz::time_zone &ctz) {
+int timestamp::get_offset_by_timezone(Timestamp timestamp, const cctz::time_zone& ctz) {
     int64_t days = timestamp::to_julian(timestamp);
     int64_t seconds_from_epoch = (days - date::UNIX_EPOCH_JULIAN) * SECS_PER_DAY;
 
