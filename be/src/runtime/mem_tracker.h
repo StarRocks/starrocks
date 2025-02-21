@@ -128,14 +128,38 @@ public:
     // TODO: use a better name?
     struct SimpleItem {
         std::string label;
-        std::string parent_label;
         size_t level = 0;
         int64_t limit = 0;
         int64_t cur_consumption = 0;
         int64_t peak_consumption = 0;
+        std::vector<SimpleItem*> childs;
+        SimpleItem* parent = nullptr;
+
+        std::string debug_string() const {
+            std::stringstream ss;
+            ss << "{";
+            ss << R"("label:")" << label << "\",";
+            ss << R"("level:")" << level << "\",";
+            ss << R"("limit:")" << limit << "\",";
+            ss << R"("cur_mem_usage:")" << cur_consumption << "\",";
+            ss << R"("peak_mem_usage:")" << peak_consumption << "\",";
+            ss << R"("child":[)";
+            for (size_t i = 0; i < childs.size(); i++) {
+                if (i != 0) {
+                    ss << ",";
+                }
+                ss << childs[i]->debug_string();
+            }
+            ss << "]}";
+            return ss.str();
+        }
     };
 
+    static void init_type_label_map();
+
+    static std::vector<std::pair<MemTrackerType, std::string>>& mem_types();
     static std::string type_to_label(MemTrackerType type);
+    static MemTrackerType label_to_type(const std::string& label);
 
     /// 'byte_limit' < 0 means no limit
     /// 'label' is the label used in the usage string (LogUsage())
@@ -152,6 +176,9 @@ public:
     explicit MemTracker(RuntimeProfile* profile, std::tuple<bool, bool, bool> attaching_info = {true, true, true},
                         const std::string& counter_name_prefix = std::string(), int64_t byte_limit = -1,
                         std::string label = std::string(), MemTracker* parent = nullptr);
+
+    void set_level(int64_t level) { _level = level; }
+    int64_t get_level() const { return _level; }
 
     ~MemTracker();
 
@@ -201,27 +228,8 @@ public:
 
     void release_without_root() { return release_without_root(consumption()); }
 
-    void list_mem_usage(std::vector<SimpleItem>* items, size_t cur_level, size_t upper_level) const {
-        SimpleItem item;
-        item.label = _label;
-        if (_parent != nullptr) {
-            item.parent_label = _parent->label();
-        } else {
-            item.parent_label = "";
-        }
-        item.level = cur_level;
-        item.limit = _limit;
-        item.cur_consumption = _consumption->current_value();
-        item.peak_consumption = _consumption->value();
-
-        (*items).emplace_back(item);
-
-        if (cur_level < upper_level) {
-            std::lock_guard<std::mutex> l(_child_trackers_lock);
-            for (const auto& child : _child_trackers) {
-                child->list_mem_usage(items, cur_level + 1, upper_level);
-            }
-        }
+    SimpleItem* get_snapshot(ObjectPool* pool, size_t upper_level) const {
+        return _get_snapshot_internal(pool, nullptr, upper_level);
     }
 
     /// Increases consumption of this tracker and its ancestors by 'bytes' only if
@@ -417,8 +425,11 @@ private:
         tracker->_child_tracker_it = _child_trackers.insert(_child_trackers.end(), tracker);
     }
 
+    SimpleItem* _get_snapshot_internal(ObjectPool* pool, SimpleItem* parent, size_t upper_level) const;
+
     MemTrackerType _type{MemTrackerType::NO_SET};
 
+    int64_t _level = 1;
     int64_t _limit;              // in bytes
     int64_t _reserve_limit = -1; // only used in spillable query
 
