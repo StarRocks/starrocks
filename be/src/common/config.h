@@ -1003,6 +1003,7 @@ CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
 // make starlet_fslib_s3client_request_timeout_ms as an alias of the object_storage_request_timeout_ms
 // NOTE: need to handle the negative value properly
 CONF_Alias(object_storage_request_timeout_ms, starlet_fslib_s3client_request_timeout_ms);
+CONF_mInt32(starlet_filesystem_instance_cache_capacity, "10000");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
