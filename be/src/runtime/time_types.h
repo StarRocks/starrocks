@@ -429,7 +429,9 @@ double timestamp::time_to_literal(double time) {
 Timestamp timestamp::of_epoch_second(int64_t seconds, int64_t nanoseconds) {
     int64_t second = seconds + timestamp::UNIX_EPOCH_SECONDS;
     JulianDate day = second / SECS_PER_DAY;
-    return timestamp::from_julian_and_time(day, second * USECS_PER_SEC + nanoseconds / NANOSECS_PER_USEC);
+
+    int64_t microseconds = (second % SECS_PER_DAY) * USECS_PER_SEC + nanoseconds / NANOSECS_PER_USEC;
+    return timestamp::from_julian_and_time(day, microseconds);
 }
 
 bool timestamp::check_time(int hour, int minute, int second, int microsecond) {
