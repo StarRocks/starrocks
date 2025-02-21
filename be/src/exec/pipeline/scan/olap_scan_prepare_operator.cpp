@@ -83,6 +83,8 @@ StatusOr<ChunkPtr> OlapScanPrepareOperator::pull_chunk(RuntimeState* state) {
     }
     _morsel_queue->set_tablet_rowsets(std::move(tablet_rowsets));
 
+    _morsel_queue->set_tablet_schema(tablets[0]->tablet_schema());
+
     DeferOp defer([&]() {
         _ctx->set_prepare_finished();
         _ctx->notify_observers();
