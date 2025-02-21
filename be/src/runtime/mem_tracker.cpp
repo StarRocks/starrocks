@@ -45,85 +45,71 @@ const std::string MemTracker::PEAK_MEMORY_USAGE = "PeakMemoryUsage";
 const std::string MemTracker::ALLOCATED_MEMORY_USAGE = "AllocatedMemoryUsage";
 const std::string MemTracker::DEALLOCATED_MEMORY_USAGE = "DeallocatedMemoryUsage";
 
+static std::vector<std::pair<MemTrackerType, std::string>> s_mem_types = {
+        {MemTrackerType::PROCESS, "process"},
+        {MemTrackerType::QUERY_POOL, "query_pool"},
+        {MemTrackerType::LOAD, "load"},
+        {MemTrackerType::CONSISTENCY, "consistency"},
+        {MemTrackerType::COMPACTION, "compaction"},
+        {MemTrackerType::SCHEMA_CHANGE, "schema_change"},
+        {MemTrackerType::JEMALLOC, "jemalloc_metadata"},
+        {MemTrackerType::PASSTHROUGH, "passthrough"},
+        {MemTrackerType::CONNECTOR_SCAN, "connector_scan"},
+        {MemTrackerType::METADATA, "metadata"},
+        {MemTrackerType::TABLET_METADATA, "tablet_metadata"},
+        {MemTrackerType::ROWSET_METADATA, "rowset_metadata"},
+        {MemTrackerType::SEGMENT_METADATA, "segment_metadata"},
+        {MemTrackerType::COLUMN_METADATA, "column_metadata"},
+        {MemTrackerType::TABLET_SCHEMA, "tablet_schema"},
+        {MemTrackerType::SEGMENT_ZONEMAP, "segment_zonemap"},
+        {MemTrackerType::SHORT_KEY_INDEX, "short_key_index"},
+        {MemTrackerType::COLUMN_ZONEMAP_INDEX, "column_zonemap_index"},
+        {MemTrackerType::ORDINAL_INDEX, "ordinal_index"},
+        {MemTrackerType::BITMAP_INDEX, "bitmap_index"},
+        {MemTrackerType::BLOOM_FILTER_INDEX, "bloom_filter_index"},
+        {MemTrackerType::PAGE_CACHE, "page_cache"},
+        {MemTrackerType::JIT_CACHE, "jit_cache"},
+        {MemTrackerType::UPDATE, "update"},
+        {MemTrackerType::CHUNK_ALLOCATOR, "chunk_allocator"},
+        {MemTrackerType::CLONE, "clone"},
+        {MemTrackerType::DATACACHE, "datacache"},
+        {MemTrackerType::POCO_CONNECTION_POOL, "poco_connection_pool"},
+        {MemTrackerType::REPLICATION, "replication"},
+        {MemTrackerType::ROWSET_UPDATE_STATE, "rowset_update_state"},
+        {MemTrackerType::INDEX_CACHE, "index_cache"},
+        {MemTrackerType::DEL_VEC_CACHE, "del_vec_cache"},
+        {MemTrackerType::COMPACTION_STATE, "compaction_state"},
+};
+
+static std::map<MemTrackerType, std::string> s_type_to_label_map;
+static std::map<std::string, MemTrackerType> s_label_to_type_map;
+
+std::vector<std::pair<MemTrackerType, std::string>>& MemTracker::mem_types() {
+    return s_mem_types;
+}
+
+void MemTracker::init_type_label_map() {
+    for (const auto& item : s_mem_types) {
+        s_type_to_label_map[item.first] = item.second;
+        s_label_to_type_map[item.second] = item.first;
+    }
+}
+
 std::string MemTracker::type_to_label(MemTrackerType type) {
-    switch (type) {
-    case MemTrackerType::NO_SET:
+    auto iter = s_type_to_label_map.find(type);
+    if (iter != s_type_to_label_map.end()) {
+        return iter->second;
+    } else {
         return "";
-    case MemTrackerType::PROCESS:
-        return "process";
-    case MemTrackerType::QUERY_POOL:
-        return "query_pool";
-    case MemTrackerType::LOAD:
-        return "load";
-    case MemTrackerType::CONSISTENCY:
-        return "consistency";
-    case MemTrackerType::COMPACTION:
-        return "compaction";
-    case MemTrackerType::SCHEMA_CHANGE:
-        return "schema_change";
-    case MemTrackerType::JEMALLOC:
-        return "jemalloc_metadata";
-    case MemTrackerType::PASSTHROUGH:
-        return "passthrough";
-    case MemTrackerType::CONNECTOR_SCAN:
-        return "connector_scan";
-    case MemTrackerType::METADATA:
-        return "metadata";
-    case MemTrackerType::TABLET_METADATA:
-        return "tablet_metadata";
-    case MemTrackerType::ROWSET_METADATA:
-        return "rowset_metadata";
-    case MemTrackerType::SEGMENT_METADATA:
-        return "segment_metadata";
-    case MemTrackerType::COLUMN_METADATA:
-        return "column_metadata";
-    case MemTrackerType::TABLET_SCHEMA:
-        return "tablet_schema";
-    case MemTrackerType::SEGMENT_ZONEMAP:
-        return "segment_zonemap";
-    case MemTrackerType::SHORT_KEY_INDEX:
-        return "short_key_index";
-    case MemTrackerType::COLUMN_ZONEMAP_INDEX:
-        return "column_zonemap_index";
-    case MemTrackerType::ORDINAL_INDEX:
-        return "ordinal_index";
-    case MemTrackerType::BITMAP_INDEX:
-        return "bitmap_index";
-    case MemTrackerType::BLOOM_FILTER_INDEX:
-        return "bloom_filter_index";
-    case MemTrackerType::PAGE_CACHE:
-        return "page_cache";
-    case MemTrackerType::JIT_CACHE:
-        return "jit_cache";
-    case MemTrackerType::UPDATE:
-        return "update";
-    case MemTrackerType::CHUNK_ALLOCATOR:
-        return "chunk_allocator";
-    case MemTrackerType::CLONE:
-        return "clone";
-    case MemTrackerType::DATACACHE:
-        return "datacache";
-    case MemTrackerType::POCO_CONNECTION_POOL:
-        return "poco_connection_pool";
-    case MemTrackerType::REPLICATION:
-        return "replication";
-    case MemTrackerType::ROWSET_UPDATE_STATE:
-        return "rowset_update_state";
-    case MemTrackerType::INDEX_CACHE:
-        return "index_cache";
-    case MemTrackerType::DEL_VEC_CACHE:
-        return "del_vec_cache";
-    case MemTrackerType::COMPACTION_STATE:
-        return "compaction_state";
-    case MemTrackerType::QUERY:
-    case MemTrackerType::RESOURCE_GROUP:
-    case MemTrackerType::RESOURCE_GROUP_BIG_QUERY:
-    case MemTrackerType::COMPACTION_TASK:
-    case MemTrackerType::SCHEMA_CHANGE_TASK:
-        // Use user-defined label
-        return "";
-    default:
-        return "";
+    }
+}
+
+MemTrackerType MemTracker::label_to_type(const std::string& label) {
+    auto iter = s_label_to_type_map.find(label);
+    if (iter != s_label_to_type_map.end()) {
+        return iter->second;
+    } else {
+        return MemTrackerType::NO_SET;
     }
 }
 
@@ -138,7 +124,10 @@ MemTracker::MemTracker(int64_t byte_limit, std::string label, MemTracker* parent
           _local_allocation_counter(TUnit::BYTES),
           _deallocation(&_local_deallocation_counter),
           _local_deallocation_counter(TUnit::BYTES) {
-    if (parent != nullptr) _parent->add_child_tracker(this);
+    if (parent != nullptr) {
+        _parent->add_child_tracker(this);
+        _level = _parent->_level + 1;
+    }
     Init();
 }
 
@@ -154,7 +143,10 @@ MemTracker::MemTracker(MemTrackerType type, int64_t byte_limit, std::string labe
           _local_allocation_counter(TUnit::BYTES),
           _deallocation(&_local_deallocation_counter),
           _local_deallocation_counter(TUnit::BYTES) {
-    if (parent != nullptr) _parent->add_child_tracker(this);
+    if (parent != nullptr) {
+        _parent->add_child_tracker(this);
+        _level = _parent->_level + 1;
+    }
     Init();
 }
 
@@ -181,7 +173,10 @@ MemTracker::MemTracker(RuntimeProfile* profile, std::tuple<bool, bool, bool> att
                                                        RuntimeProfile::Counter::create_strategy(TUnit::BYTES))
                                 : &_local_deallocation_counter),
           _local_deallocation_counter(TUnit::BYTES) {
-    if (parent != nullptr) _parent->add_child_tracker(this);
+    if (parent != nullptr) {
+        _parent->add_child_tracker(this);
+        _level = _parent->_level + 1;
+    }
     Init();
 }
 
@@ -214,6 +209,27 @@ Status MemTracker::check_mem_limit(const std::string& msg) const {
     }
 
     return Status::MemoryLimitExceeded(tracker->err_msg(msg));
+}
+
+MemTracker::SimpleItem* MemTracker::_get_snapshot_internal(ObjectPool* pool, SimpleItem* parent,
+                                                           size_t upper_level) const {
+    SimpleItem* item = pool->add(new SimpleItem());
+    item->label = _label;
+    item->parent = parent;
+    item->level = _level;
+    item->limit = _limit;
+    item->cur_consumption = _consumption->current_value();
+    item->peak_consumption = _consumption->value();
+
+    if (_level < upper_level) {
+        std::lock_guard<std::mutex> l(_child_trackers_lock);
+        item->childs.reserve(_child_trackers.size());
+        for (const auto& child : _child_trackers) {
+            item->childs.emplace_back(child->_get_snapshot_internal(pool, item, upper_level));
+        }
+    }
+
+    return item;
 }
 
 std::string MemTracker::err_msg(const std::string& msg, RuntimeState* state) const {
