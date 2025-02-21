@@ -307,19 +307,11 @@ insert into s2 select * from s2;
 -- !result
 [UC] analyze full table s1;
 -- result:
-<<<<<<< HEAD
 test_db_597f05742dee11efbc9b7b0d31512d80.s1	analyze	status	OK
 -- !result
 [UC] analyze full table s2;
 -- result:
 test_db_597f05742dee11efbc9b7b0d31512d80.s2	analyze	status	OK
-=======
-test_db_b2ce4f72f18e49288a5dbce50a0cb798.s1	analyze	status	OK
--- !result
-[UC] analyze full table s2;
--- result:
-test_db_b2ce4f72f18e49288a5dbce50a0cb798.s2	analyze	status	OK
->>>>>>> ecebd2cb06 ([BugFix] fix lambda rewrite low-cardinality expression bug (#55861))
 -- !result
 function: wait_global_dict_ready('v3', 's1')
 -- result:
