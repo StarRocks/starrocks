@@ -33,8 +33,8 @@ public class PaimonApiConverter {
         if (paimonNativeView.comment().isPresent()) {
             comment = paimonNativeView.comment().get();
         }
-        PaimonView view = new PaimonView(CONNECTOR_ID_GENERATOR.getNextId().asInt(), catalogName, dbName, viewName,
-                fullSchema, paimonNativeView.query(), catalogName, dbName, "");
+        PaimonView view = new PaimonView(CONNECTOR_ID_GENERATOR.getNextId().asInt(),
+                catalogName, dbName, viewName, fullSchema, paimonNativeView.query());
         view.setComment(comment);
         return view;
     }
