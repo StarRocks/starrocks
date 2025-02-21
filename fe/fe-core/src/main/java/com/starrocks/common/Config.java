@@ -2130,6 +2130,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true, comment = "If full analyze predicate columns instead of sample all columns")
     public static boolean statistic_auto_collect_use_full_predicate_column_for_sample = true;
 
+    @ConfField(mutable = true, comment = "max columns size of full analyze predicate columns instead of sample all columns")
+    public static int statistic_auto_collect_max_predicate_column_size_on_sample_strategy = 16;
+
     /**
      * Max row count in statistics collect per query
      */
