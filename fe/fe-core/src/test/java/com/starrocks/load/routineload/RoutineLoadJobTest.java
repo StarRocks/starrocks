@@ -101,7 +101,7 @@ public class RoutineLoadJobTest {
             }
         };
 
-        String txnStatusChangeReasonString = TransactionState.TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString();
+        String txnStatusChangeReasonString = TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString();
         RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
         routineLoadJob.afterAborted(transactionState, true, txnStatusChangeReasonString);
@@ -247,7 +247,7 @@ public class RoutineLoadJobTest {
             PulsarRoutineLoadJob routineLoadJob = new PulsarRoutineLoadJob();
             Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
             ErrorReason errorReason = new ErrorReason(InternalErrorCode.INTERNAL_ERR,
-                    TransactionState.TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString());
+                    TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString());
             Deencapsulation.setField(routineLoadJob, "pauseReason", errorReason);
 
             List<String> showInfo = routineLoadJob.getShowInfo();
@@ -261,7 +261,7 @@ public class RoutineLoadJobTest {
                     1L, "task1", 1, 1, "http://url", "task-1", "sub-1");
             Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
             ErrorReason errorReason = new ErrorReason(InternalErrorCode.INTERNAL_ERR,
-                    TransactionState.TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString());
+                    TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString());
             Deencapsulation.setField(routineLoadJob, "pauseReason", errorReason);
 
             List<String> showInfo = routineLoadJob.getShowInfo();
@@ -277,7 +277,7 @@ public class RoutineLoadJobTest {
             KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
             Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.PAUSED);
             ErrorReason errorReason = new ErrorReason(InternalErrorCode.INTERNAL_ERR,
-                    TransactionState.TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString());
+                    TxnStatusChangeReason.OFFSET_OUT_OF_RANGE.toString());
             Deencapsulation.setField(routineLoadJob, "pauseReason", errorReason);
 
             List<String> showInfo = routineLoadJob.getShowInfo();
@@ -804,7 +804,7 @@ public class RoutineLoadJobTest {
             Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
             Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
             routineLoadJob.afterAborted(transactionState, true,
-                    TransactionState.TxnStatusChangeReason.PARSE_ERROR.toString());
+                    TxnStatusChangeReason.PARSE_ERROR.toString());
             Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
             String errorMsg =
                     "ErrorReason{errCode = 106, msg='parse error. Check the 'TrackingSQL' field for detailed information.'}";
@@ -827,7 +827,7 @@ public class RoutineLoadJobTest {
             Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
             Deencapsulation.setField(routineLoadJob, "pauseOnParseError", false);
             routineLoadJob.afterAborted(transactionState, true,
-                    TransactionState.TxnStatusChangeReason.PARSE_ERROR.toString());
+                    TxnStatusChangeReason.PARSE_ERROR.toString());
             System.out.println(routineLoadJob.getPauseReason());
             Assert.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
         }
