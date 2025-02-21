@@ -23,7 +23,7 @@ namespace starrocks {
 
 class JsonParser {
 public:
-    JsonParser(simdjson::ondemand::parser* parser) : _parser(parser){};
+    JsonParser(simdjson::ondemand::parser* parser) : _parser(parser) {};
     virtual ~JsonParser() = default;
     // parse initiates the parser. The inner iterator would point to the first object to be returned.
     virtual Status parse(char* data, size_t len, size_t allocated) noexcept = 0;
@@ -99,7 +99,7 @@ private:
 // input: [{"key": 1}, {"key": 2}].
 class JsonArrayParser : public JsonParser {
 public:
-    JsonArrayParser(simdjson::ondemand::parser* parser) : JsonParser(parser){};
+    JsonArrayParser(simdjson::ondemand::parser* parser) : JsonParser(parser) {};
     Status parse(char* data, size_t len, size_t allocated) noexcept override;
     Status get_current(simdjson::ondemand::object* row) noexcept override;
     Status advance() noexcept override;
@@ -243,5 +243,7 @@ private:
     // _curr_ready denotes whether the _curr has been parsed.
     bool _curr_ready = false;
 };
+
+std::string format_json_parse_error_msg(const std::string& raw_error_msg);
 
 } // namespace starrocks
