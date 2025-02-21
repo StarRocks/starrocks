@@ -10,6 +10,64 @@ After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.
 
 :::
 
+## 3.3.10
+
+Release date: Febuary 21, 2025
+
+### New Features
+
+- Window functions support `max_by` and `min_by`. [#54961](https://github.com/StarRocks/starrocks/pull/54961)
+
+### Improvements
+
+- Supports pushdown for subfields of complex types in table functions. [#55425](https://github.com/StarRocks/starrocks/pull/55425)
+- Supports LDAP login for MariaDB clients. [#55720](https://github.com/StarRocks/starrocks/pull/55720)
+- Upgraded Paimon version to 1.0.1. [#54796](https://github.com/StarRocks/starrocks/pull/54796) [#55760](https://github.com/StarRocks/starrocks/pull/55760)
+- Eliminates unnecessary `unnest` computations during query execution to reduce overhead. [#55431](https://github.com/StarRocks/starrocks/pull/55431)
+- Supports enabling Compaction for source clusters that are in the shared-data mode during cross-cluster synchronization. [#54787](https://github.com/StarRocks/starrocks/pull/54787)
+- Brings high-cost operations like DECIMAL division forward in topN computations to reduce overhead. [#55417](https://github.com/StarRocks/starrocks/pull/55417)
+- Optimized performance under ARM architecture. [#55072](https://github.com/StarRocks/starrocks/pull/55072) [#55510](https://github.com/StarRocks/starrocks/pull/55510)
+- For Hive table-based materialized views, StarRocks will perform checks and refreshes on the updated partitions only instead of full table refreshes if the base table was dropped and recreated. [#45118](https://github.com/StarRocks/starrocks/pull/45118)
+- DELETE operations support partition pruning. [#55400](https://github.com/StarRocks/starrocks/pull/55400)
+- Optimized priority strategy for collecting internal table statistics to improve efficiency when there are excessive tables. [#55446](https://github.com/StarRocks/starrocks/pull/55446)
+- When data loading involves multiple partitions, StarRocks merges transaction logs to improve loading performance. [#55143](https://github.com/StarRocks/starrocks/pull/55143)
+- Optimized error messages for SQL Translation. [#55327](https://github.com/StarRocks/starrocks/pull/55327)
+- Added a session variable `parallel_merge_late_materialization_mode` to control parallel merge behavior. [#55082](https://github.com/StarRocks/starrocks/pull/55082)
+- Optimized error messages for generated columns. [#54949](https://github.com/StarRocks/starrocks/pull/54949)
+- Optimized performance of `SHOW MATERIALIZED VIEWS`. [#54374](https://github.com/StarRocks/starrocks/pull/54374)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- An error caused by pushing down LIMIT before predicates in CTE. [#55768](https://github.com/StarRocks/starrocks/pull/55768)
+- An error caused by table schema changes in Stream Load. [#55773](https://github.com/StarRocks/starrocks/pull/55773)
+- A privilege issue due to the execution plan of DELETE statements containing SELECT. [#55695](https://github.com/StarRocks/starrocks/pull/55695)
+- An issue caused by not aborting compaction tasks when shutting down CN. [#55503](https://github.com/StarRocks/starrocks/pull/55503)
+- Follower FE nodes unable to fetch updated loading statistics. [#55758](https://github.com/StarRocks/starrocks/pull/55758)
+- Incorrect capacity statistics for the spill directory. [#55703](https://github.com/StarRocks/starrocks/pull/55703)
+- Failed to create materialized views due to lack of sufficient partition checks for base tables with list partitions. [#55673](https://github.com/StarRocks/starrocks/pull/55673)
+- An issue caused by missing metadata locks in ALTER TABLE. [#55605](https://github.com/StarRocks/starrocks/pull/55605)
+- An error in `SHOW CREATE TABLE` caused by constraints. [#55592](https://github.com/StarRocks/starrocks/pull/55592)
+- OOM due to large ARRAY in Nestloop Join. [#55603](https://github.com/StarRocks/starrocks/pull/55603)
+- Lock issue with DROP PARTITION. [#55549](https://github.com/StarRocks/starrocks/pull/55549)
+- An issue with min/max window functions due to not supporting string types. [#55537](https://github.com/StarRocks/starrocks/pull/55537)
+- Parser performance degraded. [#54830](https://github.com/StarRocks/starrocks/pull/54830)
+- Column name case sensitivity issue during partial updates. [#55442](https://github.com/StarRocks/starrocks/pull/55442)
+- Import failures when Stream Load is scheduled on nodes with an "Alive" state of false. [#55371](https://github.com/StarRocks/starrocks/pull/55371)
+- Incorrect output column order in materialized views containing ORDER BY. [#55355](https://github.com/StarRocks/starrocks/pull/55355)
+- BE crashes due to disk failure. [#55042](https://github.com/StarRocks/starrocks/pull/55042)
+- Incorrect query results caused by Query Cache. [#55287](https://github.com/StarRocks/starrocks/pull/55287)
+- Parquet Writer fails to convert time zone when writing TIMESTAMP type with time zones. [#55194](https://github.com/StarRocks/starrocks/pull/55194)
+- Loading tasks hang due to ALTER job timeout. [#55207](https://github.com/StarRocks/starrocks/pull/55207)
+- An error caused by `date_format` function when input is in milliseconds. [#54854](https://github.com/StarRocks/starrocks/pull/54854)
+- Materialized view rewrite failure caused by Partition Key being of DATE type. [#54804](https://github.com/StarRocks/starrocks/pull/54804)
+
+### Behavior Changes
+
+- The UUID type in Iceberg now maps to BINARY. [#54978](https://github.com/StarRocks/starrocks/pull/54978)
+- Uses changed row count instead of the visible time of partitions to determine if statistics need to be recollected. [#55373](https://github.com/StarRocks/starrocks/pull/55373)
+
 ## 3.3.9
 
 Release date: January 12, 2025
