@@ -299,7 +299,7 @@ Cache::Handle* LRUCache::insert(const CacheKey& key, uint32_t hash, void* value,
     auto* e = reinterpret_cast<LRUHandle*>(malloc(sizeof(LRUHandle) - 1 + key.size()));
     e->value = value;
     e->deleter = deleter;
-    e->charge = charge;
+    e->charge = charge + key.size();
     e->key_length = key.size();
     e->hash = hash;
     e->refs = 2; // one for the returned handle, one for LRUCache.
