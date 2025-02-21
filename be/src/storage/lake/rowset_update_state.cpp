@@ -169,7 +169,7 @@ Status RowsetUpdateState::load_segment(uint32_t segment_id, const RowsetUpdateSt
         RETURN_IF_ERROR(_do_load_upserts(segment_id, params));
     }
 
-    if (!params.op_write.has_txn_meta() || params.op_write.txn_meta().has_merge_condition()) {
+    if (!params.op_write.has_txn_meta()) {
         return Status::OK();
     }
     if (has_partial_update_state(params)) {
@@ -489,7 +489,7 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
     // get rowset schema
     if (!params.op_write.has_txn_meta() || params.op_write.rewrite_segments_size() == 0 ||
-        rowset_meta.num_rows() == 0 || params.op_write.txn_meta().has_merge_condition()) {
+        rowset_meta.num_rows() == 0) {
         return Status::OK();
     }
     RETURN_ERROR_IF_FALSE(params.op_write.rewrite_segments_size() == rowset_meta.segments_size());
@@ -581,8 +581,7 @@ Status RowsetUpdateState::_resolve_conflict(uint32_t segment_id, const RowsetUpd
     _base_versions[segment_id] = base_version;
     TRACE_COUNTER_SCOPE_LATENCY_US("resolve_conflict_latency_us");
     // skip resolve conflict when not partial update happen.
-    if (!params.op_write.has_txn_meta() || params.op_write.rowset().segments_size() == 0 ||
-        params.op_write.txn_meta().has_merge_condition()) {
+    if (!params.op_write.has_txn_meta() || params.op_write.rowset().segments_size() == 0) {
         return Status::OK();
     }
 
