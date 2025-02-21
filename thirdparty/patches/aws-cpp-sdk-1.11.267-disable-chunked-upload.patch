@@ -1,0 +1,40 @@
+diff --git a/src/aws-cpp-sdk-core/source/auth/signer/AWSAuthV4Signer.cpp b/src/aws-cpp-sdk-core/source/auth/signer/AWSAuthV4Signer.cpp
+index ae5407ce76d..96f58aa85fc 100644
+--- a/src/aws-cpp-sdk-core/source/auth/signer/AWSAuthV4Signer.cpp
++++ b/src/aws-cpp-sdk-core/source/auth/signer/AWSAuthV4Signer.cpp
+@@ -37,7 +37,7 @@ static const char* X_AMZ_SIGNED_HEADERS = "X-Amz-SignedHeaders";
+ static const char* X_AMZ_ALGORITHM = "X-Amz-Algorithm";
+ static const char* X_AMZ_CREDENTIAL = "X-Amz-Credential";
+ static const char* UNSIGNED_PAYLOAD = "UNSIGNED-PAYLOAD";
+-static const char* STREAMING_UNSIGNED_PAYLOAD_TRAILER = "STREAMING-UNSIGNED-PAYLOAD-TRAILER";
++// static const char* STREAMING_UNSIGNED_PAYLOAD_TRAILER = "STREAMING-UNSIGNED-PAYLOAD-TRAILER";
+ static const char* X_AMZ_SIGNATURE = "X-Amz-Signature";
+ static const char* USER_AGENT = "user-agent";
+ static const char* EMPTY_STRING_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+@@ -263,15 +263,17 @@ bool AWSAuthV4Signer::SignRequest(Aws::Http::HttpRequest& request, const char* r
+                 << " http scheme=" << Http::SchemeMapper::ToString(request.GetUri().GetScheme()));
+         if (request.GetRequestHash().second != nullptr)
+         {
+-            payloadHash = STREAMING_UNSIGNED_PAYLOAD_TRAILER;
+-            Aws::String checksumHeaderValue = Aws::String("x-amz-checksum-") + request.GetRequestHash().first;
+-            request.DeleteHeader(checksumHeaderValue.c_str());
+-            request.SetHeaderValue(Http::AWS_TRAILER_HEADER, checksumHeaderValue);
+-            request.SetTransferEncoding(CHUNKED_VALUE);
+-            request.SetHeaderValue(Http::CONTENT_ENCODING_HEADER, Http::AWS_CHUNKED_VALUE);
+-            if (request.HasHeader(Http::CONTENT_LENGTH_HEADER)) {
+-                request.SetHeaderValue(Http::DECODED_CONTENT_LENGTH_HEADER, request.GetHeaderValue(Http::CONTENT_LENGTH_HEADER));
+-                request.DeleteHeader(Http::CONTENT_LENGTH_HEADER);
++            Aws::String checksumHeaderKey = Aws::String("x-amz-checksum-") + request.GetRequestHash().first;
++            const auto headers = request.GetHeaders();
++            if (!request.HasHeader(checksumHeaderKey.c_str()))
++            {
++                // if it is one of the other hashes, we must be careful if there is no content body
++                const auto& body = request.GetContentBody();
++                Aws::String checksumHeaderValue = (body)
++                    ? HashingUtils::Base64Encode(request.GetRequestHash().second->Calculate(*body).GetResult())
++                    : HashingUtils::Base64Encode(request.GetRequestHash().second->Calculate({}).GetResult());
++                request.SetHeaderValue(checksumHeaderKey, checksumHeaderValue);
++                request.SetRequestHash("", nullptr);
+             }
+         }
+     }
