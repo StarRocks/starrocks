@@ -353,7 +353,7 @@ Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx
 
     for (size_t i = 0; i < col->size(); i++) {
         int64_t days = timestamp::to_julian(data_col[i]._timestamp);
-        int64_t seconds_from_epoch = (days - 2440588) * 86400;
+        int64_t seconds_from_epoch = (days - date::UNIX_EPOCH_JULIAN) * 86400;
         std::chrono::system_clock::time_point tp = std::chrono::system_clock::from_time_t(seconds_from_epoch);
         auto _offset = _ctz.lookup(tp).offset;
 
