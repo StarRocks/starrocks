@@ -62,8 +62,11 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTableHelper;
+import com.starrocks.load.loadv2.ManualLoadTxnCommitAttachment;
 import com.starrocks.load.routineload.RLTaskTxnCommitAttachment;
 import com.starrocks.metric.MetricRepo;
+import com.starrocks.metric.TableMetricsEntity;
+import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
@@ -1296,6 +1299,7 @@ public class DatabaseTransactionMgr {
         GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
         GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(transactionState);
         LOG.info("finish transaction {} successfully", transactionState);
+        updateTransactionMetrics(transactionState);
     }
 
     protected void unprotectedCommitPreparedTransaction(TransactionState transactionState, Database db) {
@@ -1991,6 +1995,7 @@ public class DatabaseTransactionMgr {
         GlobalStateMgr.getCurrentState().getOperationListenerBus().onStreamJobTransactionFinish(transactionState);
         GlobalStateMgr.getCurrentState().getLocalMetastore().handleMVRepair(transactionState);
         LOG.info("finish transaction {} successfully", transactionState);
+        updateTransactionMetrics(transactionState);
     }
 
     public void finishTransactionBatch(TransactionStateBatch stateBatch, Set<Long> errorReplicaIds) {
@@ -2056,6 +2061,33 @@ public class DatabaseTransactionMgr {
         }
 
         LOG.info("finish transaction {} batch successfully", stateBatch);
+        for (TransactionState transactionState : stateBatch.getTransactionStates()) {
+            updateTransactionMetrics(transactionState);
+        }
+    }
+
+    private void updateTransactionMetrics(TransactionState txnState) {
+        if (txnState.getTableIdList().isEmpty()) {
+            return;
+        }
+        long tableId = txnState.getTableIdList().get(0);
+        TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
+        TxnCommitAttachment attachment = txnState.getTxnCommitAttachment();
+        if (attachment instanceof RLTaskTxnCommitAttachment) {
+            RLTaskTxnCommitAttachment routineAttachment = (RLTaskTxnCommitAttachment) attachment;
+            entity.counterRoutineLoadFinishedTotal.increase(1L);
+            entity.counterRoutineLoadBytesTotal.increase(routineAttachment.getReceivedBytes());
+            entity.counterRoutineLoadRowsTotal.increase(routineAttachment.getLoadedRows());
+            entity.counterRoutineLoadErrorRowsTotal.increase(routineAttachment.getFilteredRows());
+            entity.counterRoutineLoadUnselectedRowsTotal.increase(routineAttachment.getUnselectedRows());
+        }
+
+        if (attachment instanceof ManualLoadTxnCommitAttachment) {
+            ManualLoadTxnCommitAttachment streamAttachment = (ManualLoadTxnCommitAttachment) attachment;
+            entity.counterStreamLoadFinishedTotal.increase(1L);
+            entity.counterStreamLoadRowsTotal.increase(streamAttachment.getLoadedRows());
+            entity.counterStreamLoadBytesTotal.increase(streamAttachment.getLoadedBytes());
+        }
     }
 
     public String getTxnPublishTimeoutDebugInfo(long txnId) {
