@@ -1018,14 +1018,14 @@ void JsonParserTest::test_parse_error_msg_base(JsonParser* parser, std::string& 
 TEST_F(JsonParserTest, test_json_document_stream_parser_error) {
     simdjson::ondemand::parser simdjson_parser;
 
-    // get_current() error because it's an array
+    // get_current() error because doc is an array
     {
         std::string data = R"([{"key1": 1}])";
         std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParser(&simdjson_parser));
         test_parse_error_msg_base(parser.get(), data, "get_current", "The value is array type in json document stream");
     }
 
-    // get_current() error because it's a string
+    // get_current() error because doc is a string
     {
         std::string data = R"("invalid")";
         std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParser(&simdjson_parser));
@@ -1033,33 +1033,32 @@ TEST_F(JsonParserTest, test_json_document_stream_parser_error) {
                                   "The value should be object type in json document stream");
     }
 
-    // get_current() error because it's invalid
+    // get_current() error because json is invalid
     {
         std::string data = R"(:)";
         std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParser(&simdjson_parser));
-        test_parse_error_msg_base(parser.get(), data, "get_current",
-                                  "The value should be object type in json document stream");
+        test_parse_error_msg_base(parser.get(), data, "get_current", "Failed to iterate document stream as object");
     }
 }
 
 TEST_F(JsonParserTest, test_json_array_parser_error) {
     simdjson::ondemand::parser simdjson_parser;
 
-    // parse() error because it's invalid
+    // parse() error because json is invalid
     {
         std::string data = R"(:)";
         std::unique_ptr<JsonParser> parser(new JsonArrayParser(&simdjson_parser));
         test_parse_error_msg_base(parser.get(), data, "parse", "Failed to parse json as array");
     }
 
-    // parse() error because it's not an array
+    // parse() error because doc is not an array
     {
         std::string data = R"({"key1": 1})";
         std::unique_ptr<JsonParser> parser(new JsonArrayParser(&simdjson_parser));
         test_parse_error_msg_base(parser.get(), data, "parse", "the value should be array type");
     }
 
-    // get_current() error because it's an array
+    // get_current() error because the element is not a valid json
     {
         std::string data = R"(["key1": 1}])";
         std::unique_ptr<JsonParser> parser(new JsonArrayParser(&simdjson_parser));
@@ -1072,7 +1071,7 @@ TEST_F(JsonParserTest, test_json_document_stream_parser_with_root_error) {
     ASSERT_OK(JsonFunctions::parse_json_paths("$.root", &jsonroot));
     simdjson::ondemand::parser simdjson_parser;
 
-    // get_current() error because it's an array
+    // get_current() error because doc is an array
     {
         std::string data = R"({"root": []})";
         std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParserWithRoot(&simdjson_parser, jsonroot));
@@ -1080,7 +1079,7 @@ TEST_F(JsonParserTest, test_json_document_stream_parser_with_root_error) {
                                   "The value is array type in json document stream with json root");
     }
 
-    // get_current() error because it's an integer
+    // get_current() error because the root is an integer
     {
         std::string data = R"({"root": 123})";
         std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParserWithRoot(&simdjson_parser, jsonroot));
@@ -1088,9 +1087,9 @@ TEST_F(JsonParserTest, test_json_document_stream_parser_with_root_error) {
                                   "The value should be object type in json document stream with json root");
     }
 
-    // get_current() error because it's invalid
+    // get_current() error because the root is invalid
     {
-        std::string data = R"({"root": {:}})";
+        std::string data = R"({"root": :})";
         std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParserWithRoot(&simdjson_parser, jsonroot));
         test_parse_error_msg_base(parser.get(), data, "get_current",
                                   "Failed to iterate document stream as object with json root");
@@ -1102,7 +1101,7 @@ TEST_F(JsonParserTest, test_json_array_parser_with_root_error) {
     ASSERT_OK(JsonFunctions::parse_json_paths("$.root", &jsonroot));
     simdjson::ondemand::parser simdjson_parser;
 
-    // get_current() error because it's an array
+    // get_current() error because the root is an array
     {
         std::string data = R"([{"root": []}])";
         std::unique_ptr<JsonParser> parser(new JsonArrayParserWithRoot(&simdjson_parser, jsonroot));
@@ -1110,7 +1109,7 @@ TEST_F(JsonParserTest, test_json_array_parser_with_root_error) {
                                   "The value is array type in json array with json root");
     }
 
-    // get_current() error because it's an integer
+    // get_current() error because the root is not an object
     {
         std::string data = R"([{"root": 123}])";
         std::unique_ptr<JsonParser> parser(new JsonArrayParserWithRoot(&simdjson_parser, jsonroot));
@@ -1120,7 +1119,7 @@ TEST_F(JsonParserTest, test_json_array_parser_with_root_error) {
 
     // get_current() error because it's invalid
     {
-        std::string data = R"([{"root": {:}}])";
+        std::string data = R"([{"root": :}])";
         std::unique_ptr<JsonParser> parser(new JsonArrayParserWithRoot(&simdjson_parser, jsonroot));
         test_parse_error_msg_base(parser.get(), data, "get_current",
                                   "Failed to iterate json array as object with json root");
@@ -1132,7 +1131,7 @@ TEST_F(JsonParserTest, test_expanded_json_document_stream_parser_with_root_error
     ASSERT_OK(JsonFunctions::parse_json_paths("$.root", &jsonroot));
     simdjson::ondemand::parser simdjson_parser;
 
-    // parse() error because the root not an array
+    // parse() error because the root is not an array
     {
         std::string data = R"({"root": 1234})";
         std::unique_ptr<JsonParser> parser(new ExpandedJsonDocumentStreamParserWithRoot(&simdjson_parser, jsonroot));
@@ -1147,10 +1146,10 @@ TEST_F(JsonParserTest, test_expanded_json_document_stream_parser_with_root_error
                                   "Failed to iterate expanded document stream as object with json root");
     }
 
-    // get_current() error because the array element is not object
+    // get_current() error because the root array element is not object
     {
         std::string data = R"({"root": [123]})";
-        std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParserWithRoot(&simdjson_parser, jsonroot));
+        std::unique_ptr<JsonParser> parser(new ExpandedJsonDocumentStreamParserWithRoot(&simdjson_parser, jsonroot));
         test_parse_error_msg_base(parser.get(), data, "get_current",
                                   "the value should be object type in expanded json document stream with json root");
     }
@@ -1158,7 +1157,7 @@ TEST_F(JsonParserTest, test_expanded_json_document_stream_parser_with_root_error
     // advance() error because the second document is not an array
     {
         std::string data = R"({"root": [{"k1":1}]}{"root":123})";
-        std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParserWithRoot(&simdjson_parser, jsonroot));
+        std::unique_ptr<JsonParser> parser(new ExpandedJsonDocumentStreamParserWithRoot(&simdjson_parser, jsonroot));
         test_parse_error_msg_base(parser.get(), data, "advance", "the value under json root should be array type ");
     }
 }
@@ -1168,7 +1167,7 @@ TEST_F(JsonParserTest, test_expanded_json_array_parser_with_root_error) {
     ASSERT_OK(JsonFunctions::parse_json_paths("$.root", &jsonroot));
     simdjson::ondemand::parser simdjson_parser;
 
-    // parse() error because the root not an array
+    // parse() error because the root is not an array
     {
         std::string data = R"([{"root": 1234}])";
         std::unique_ptr<JsonParser> parser(new ExpandedJsonArrayParserWithRoot(&simdjson_parser, jsonroot));
@@ -1194,7 +1193,7 @@ TEST_F(JsonParserTest, test_expanded_json_array_parser_with_root_error) {
     // advance() error because the second document is not an array
     {
         std::string data = R"([{"root": [{"k1":1}]},{"root":123}])";
-        std::unique_ptr<JsonParser> parser(new JsonDocumentStreamParserWithRoot(&simdjson_parser, jsonroot));
+        std::unique_ptr<JsonParser> parser(new ExpandedJsonArrayParserWithRoot(&simdjson_parser, jsonroot));
         test_parse_error_msg_base(parser.get(), data, "advance", "the value under json root should be array type");
     }
 }

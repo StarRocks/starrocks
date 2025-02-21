@@ -1343,7 +1343,7 @@ TEST_F(JsonScannerTest, test_illegal_input) {
     ASSERT_OK(scanner->open());
     auto st = scanner->get_next().status();
     ASSERT_TRUE(st.is_data_quality_error());
-    ASSERT_TRUE(st.message().find("parse error. illegal json started with"));
+    ASSERT_TRUE(st.message().find("parse error. illegal json started with") != std::string::npos);
 }
 
 TEST_F(JsonScannerTest, test_illegal_input_with_jsonpath) {
