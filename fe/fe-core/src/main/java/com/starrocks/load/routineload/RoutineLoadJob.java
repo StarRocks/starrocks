@@ -1254,7 +1254,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     }
 
     private Optional<ErrorReason> shouldPauseOnTxnStateChange(String txnStatusChangeReasonStr) {
-        TransactionState.TxnStatusChangeReason reason = TransactionState.TxnStatusChangeReason.fromString(txnStatusChangeReasonStr);
+        TransactionState.TxnStatusChangeReason reason =
+                TransactionState.TxnStatusChangeReason.fromString(txnStatusChangeReasonStr);
         if (reason == null) {
             return Optional.empty();
         }
