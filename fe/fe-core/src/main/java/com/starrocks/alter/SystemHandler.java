@@ -275,7 +275,7 @@ public class SystemHandler extends AlterHandler {
         LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
         for (long dbId : localMetastore.getDbIds()) {
             Database db = localMetastore.getDb(dbId);
-            if (db == null) {
+            if (db == null || db.isStatisticsDatabase()) {
                 continue;
             }
             db.readLock();
