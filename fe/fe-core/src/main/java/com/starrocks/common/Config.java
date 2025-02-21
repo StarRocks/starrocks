@@ -824,6 +824,21 @@ public class Config extends ConfigBase {
     @ConfField
     public static int brpc_idle_wait_max_time = 10000;
 
+    @ConfField(mutable = true)
+    public static int brpc_send_plan_fragment_timeout_ms = 60000;
+
+    @ConfField
+    public static boolean brpc_reuse_addr = true;
+
+    @ConfField
+    public static int brpc_min_evictable_idle_time_ms = 120000;
+
+    @ConfField
+    public static boolean brpc_short_connection = false;
+
+    @ConfField
+    public static boolean brpc_inner_reuse_pool = true;
+
     /**
      * FE mysql server port
      */
