@@ -207,7 +207,7 @@ Status GlobalEnv::_init_mem_tracker() {
 
     // Metadata statistics memory statistics do not use new mem statistics framework with hook
     _metadata_mem_tracker = regist_tracker(MemTrackerType::METADATA, -1, nullptr);
-    _connector_scan_pool_mem_tracker->set_level(2);
+    _metadata_mem_tracker->set_level(2);
 
     _tablet_metadata_mem_tracker = regist_tracker(MemTrackerType::TABLET_METADATA, -1, metadata_mem_tracker());
     _rowset_metadata_mem_tracker = regist_tracker(MemTrackerType::ROWSET_METADATA, -1, metadata_mem_tracker());
@@ -231,10 +231,10 @@ Status GlobalEnv::_init_mem_tracker() {
     _jit_cache_mem_tracker = regist_tracker(MemTrackerType::JIT_CACHE, -1, process_mem_tracker());
     int32_t update_mem_percent = std::max(std::min(100, config::update_memory_limit_percent), 0);
     _update_mem_tracker = regist_tracker(MemTrackerType::UPDATE, bytes_limit * update_mem_percent / 100, nullptr);
-    _connector_scan_pool_mem_tracker->set_level(2);
+    _update_mem_tracker->set_level(2);
     _chunk_allocator_mem_tracker = regist_tracker(MemTrackerType::CHUNK_ALLOCATOR, -1, process_mem_tracker());
     _passthrough_mem_tracker = regist_tracker(MemTrackerType::PASSTHROUGH, -1, nullptr);
-    _connector_scan_pool_mem_tracker->set_level(2);
+    _passthrough_mem_tracker->set_level(2);
     _clone_mem_tracker = regist_tracker(MemTrackerType::CLONE, -1, process_mem_tracker());
     int64_t consistency_mem_limit = calc_max_consistency_memory(_process_mem_tracker->limit());
     _consistency_mem_tracker =
