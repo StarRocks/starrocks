@@ -564,11 +564,14 @@ TEST_F(ParquetFileWriterTest, TestWriteDatetimeCompatibleWithHiveReader) {
             data_column->append_datum(datum);
             datum.set_timestamp(TimestampValue::create(1999, 9, 11, 2, 2, 2));
             data_column->append_datum(datum);
+            // Daylight Saving Time value
+            datum.set_timestamp(TimestampValue::create(1986, 8, 25, 0, 0, 0));
+            data_column->append_datum(datum);
             data_column->append_default();
         }
 
         auto null_column = UInt8Column::create();
-        std::vector<uint8_t> nulls = {1, 0, 1, 0};
+        std::vector<uint8_t> nulls = {1, 0, 1, 0, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
         auto nullable_column = NullableColumn::create(data_column, null_column);
         chunk->append_column(nullable_column, chunk->num_columns());
@@ -579,11 +582,11 @@ TEST_F(ParquetFileWriterTest, TestWriteDatetimeCompatibleWithHiveReader) {
     auto result = writer->commit();
 
     ASSERT_TRUE(result.io_status.ok());
-    ASSERT_EQ(result.file_statistics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 5);
 
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
-    ASSERT_EQ(read_chunk->num_rows(), 4);
+    ASSERT_EQ(read_chunk->num_rows(), 5);
     parquet::Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
