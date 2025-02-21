@@ -206,7 +206,7 @@ void BackendInternalServiceImpl<T>::load_diagnose(google::protobuf::RpcControlle
                                                   const starrocks::PLoadDiagnoseRequest* request,
                                                   starrocks::PLoadDiagnoseResult* response,
                                                   google::protobuf::Closure* done) {
-    VLOG_RPC << "load diagnose, id=" << print_id(request->id()) << ", txn_id: " << request->txn_id();
+    VLOG_RPC << "load diagnose, id=" << print_id(request->id()) << ", txn_id=" << request->txn_id();
     PInternalServiceImplBase<T>::_exec_env->load_channel_mgr()->load_diagnose(
             static_cast<brpc::Controller*>(controller), request, response, done);
 }
