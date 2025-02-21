@@ -43,10 +43,6 @@ namespace starrocks {
 
 const int64_t MAX_ERROR_LOG_LENGTH = 64;
 
-static std::string format_parse_error_msg(const std::string& raw_error_msg) {
-    return fmt::format("parse error: {}", raw_error_msg);
-}
-
 JsonScanner::JsonScanner(RuntimeState* state, RuntimeProfile* profile, const TBrokerScanRange& scan_range,
                          ScannerCounter* counter)
         : FileScanner(state, profile, scan_range.params, counter),
@@ -98,7 +94,7 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
     } catch (simdjson::simdjson_error& e) {
         auto err_msg = "Unrecognized json format, stop json loader.";
         LOG(WARNING) << err_msg;
-        return Status::DataQualityError(format_parse_error_msg(err_msg));
+        return Status::DataQualityError(format_json_parse_error_msg(err_msg));
     }
     if (!status.ok()) {
         if (status.is_end_of_file()) {
@@ -243,7 +239,7 @@ Status JsonScanner::parse_json_paths(const std::string& jsonpath, std::vector<st
     } catch (simdjson::simdjson_error& e) {
         auto err_msg =
                 strings::Substitute("Invalid json path: $0, error: $1", jsonpath, simdjson::error_message(e.error()));
-        return Status::DataQualityError(format_parse_error_msg(err_msg));
+        return Status::DataQualityError(format_json_parse_error_msg(err_msg));
     }
 }
 
@@ -597,7 +593,7 @@ Status JsonReader::_construct_row_without_jsonpath(simdjson::ondemand::object* r
     } catch (simdjson::simdjson_error& e) {
         auto err_msg = strings::Substitute("construct row in object order failed, error: $0",
                                            simdjson::error_message(e.error()));
-        return Status::DataQualityError(format_parse_error_msg(err_msg));
+        return Status::DataQualityError(err_msg);
     }
 
     // append null to the column without data.
@@ -787,7 +783,8 @@ Status JsonReader::_check_ndjson() {
             break;
         } else {
             LOG(WARNING) << "illegal json started with [" << c << "]";
-            return Status::DataQualityError(format_parse_error_msg(fmt::format("illegal json started with {}", c)));
+            return Status::DataQualityError(
+                    format_json_parse_error_msg(fmt::format("illegal json started with {}", c)));
         }
     }
     return Status::OK();
