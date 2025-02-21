@@ -235,7 +235,8 @@ public class SystemHandler extends AlterHandler {
                         LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
                         for (long dbId : localMetastore.getDbIds()) {
                             Database db = localMetastore.getDb(dbId);
-                            if (db == null) {
+                            if (db == null || db.isStatisticsDatabase()) {
+                                // system database can handle the decommission by themselves
                                 continue;
                             }
                             Locker locker = new Locker();
