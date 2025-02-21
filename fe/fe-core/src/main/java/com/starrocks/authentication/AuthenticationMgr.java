@@ -15,15 +15,19 @@
 
 package com.starrocks.authentication;
 
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.StarRocksFE;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.UserPrivilegeCollectionV2;
 import com.starrocks.common.Config;
+import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.mysql.MysqlPassword;
+import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.MapEntryConsumer;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -50,6 +54,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 public class AuthenticationMgr {
@@ -62,47 +67,12 @@ public class AuthenticationMgr {
     // will be manually serialized one by one
     protected Map<UserIdentity, UserAuthenticationInfo> userToAuthenticationInfo;
 
-    private static class UserAuthInfoTreeMap extends TreeMap<UserIdentity, UserAuthenticationInfo> {
-        public UserAuthInfoTreeMap() {
-            super((o1, o2) -> {
-                // make sure that ip > domain > %
-                int compareHostScore = scoreUserIdentityHost(o1).compareTo(scoreUserIdentityHost(o2));
-                if (compareHostScore != 0) {
-                    return compareHostScore;
-                }
-                // host type is the same, compare host
-                int compareByHost = o1.getHost().compareTo(o2.getHost());
-                if (compareByHost != 0) {
-                    return compareByHost;
-                }
-                // compare user name
-                return o1.getUser().compareTo(o2.getUser());
-            });
-        }
-
-        /**
-         * If someone log in from 10.1.1.1 with name "test_user", the matching UserIdentity
-         * can be sorted in the below order,
-         * 1. test_user@10.1.1.1
-         * 2. test_user@["hostname"], in which "hostname" can be resolved to 10.1.1.1.
-         * If multiple hostnames match the login ip, just return one randomly.
-         * 3. test_user@%, as a fallback.
-         */
-        private static Integer scoreUserIdentityHost(UserIdentity userIdentity) {
-            // ip(1) > hostname(2) > %(3)
-            if (userIdentity.isDomain()) {
-                return 2;
-            }
-            if (userIdentity.getHost().equals(UserAuthenticationInfo.ANY_HOST)) {
-                return 3;
-            }
-            return 1;
-        }
-    }
-
     // For legacy reason, user property are set by username instead of full user identity.
     @SerializedName(value = "m")
     private Map<String, UserProperty> userNameToProperty = new HashMap<>();
+
+    @SerializedName("sim")
+    protected Map<String, SecurityIntegration> nameToSecurityIntegrationMap = new ConcurrentHashMap<>();
 
     // resolve hostname to ip
     private Map<String, Set<String>> hostnameToIpSet = new HashMap<>();
@@ -141,6 +111,44 @@ public class AuthenticationMgr {
         info.setPassword(MysqlPassword.EMPTY_PASSWORD);
         userToAuthenticationInfo.put(UserIdentity.ROOT, info);
         userNameToProperty.put(UserIdentity.ROOT.getUser(), new UserProperty());
+    }
+
+    private static class UserAuthInfoTreeMap extends TreeMap<UserIdentity, UserAuthenticationInfo> {
+        public UserAuthInfoTreeMap() {
+            super((o1, o2) -> {
+                // make sure that ip > domain > %
+                int compareHostScore = scoreUserIdentityHost(o1).compareTo(scoreUserIdentityHost(o2));
+                if (compareHostScore != 0) {
+                    return compareHostScore;
+                }
+                // host type is the same, compare host
+                int compareByHost = o1.getHost().compareTo(o2.getHost());
+                if (compareByHost != 0) {
+                    return compareByHost;
+                }
+                // compare user name
+                return o1.getUser().compareTo(o2.getUser());
+            });
+        }
+
+        /**
+         * If someone log in from 10.1.1.1 with name "test_user", the matching UserIdentity
+         * can be sorted in the below order,
+         * 1. test_user@10.1.1.1
+         * 2. test_user@["hostname"], in which "hostname" can be resolved to 10.1.1.1.
+         * If multiple hostnames match the login ip, just return one randomly.
+         * 3. test_user@%, as a fallback.
+         */
+        private static Integer scoreUserIdentityHost(UserIdentity userIdentity) {
+            // ip(1) > hostname(2) > %(3)
+            if (userIdentity.isDomain()) {
+                return 2;
+            }
+            if (userIdentity.getHost().equals(UserAuthenticationInfo.ANY_HOST)) {
+                return 3;
+            }
+            return 1;
+        }
     }
 
     private void readLock() {
@@ -254,8 +262,49 @@ public class AuthenticationMgr {
         return null;
     }
 
+    protected UserIdentity checkPasswordForNonNative(
+            String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString, String authMechanism) {
+        SecurityIntegration securityIntegration =
+                nameToSecurityIntegrationMap.getOrDefault(authMechanism, null);
+        if (securityIntegration == null) {
+            LOG.info("'{}' authentication mechanism not found", authMechanism);
+        } else {
+            try {
+                AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
+                UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
+                userAuthenticationInfo.extraInfo.put(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name(),
+                        securityIntegration);
+                provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
+                        userAuthenticationInfo);
+                // the ephemeral user is identified as 'username'@'auth_mechanism'
+                UserIdentity authenticatedUser = UserIdentity.createEphemeralUserIdent(remoteUser, authMechanism);
+                return authenticatedUser;
+            } catch (AuthenticationException e) {
+                LOG.debug("failed to authenticate, user: {}@{}, security integration: {}, error: {}",
+                        remoteUser, remoteHost, securityIntegration, e.getMessage());
+            }
+        }
+
+        return null;
+    }
+
     public UserIdentity checkPassword(String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
-        return checkPasswordForNative(remoteUser, remoteHost, remotePasswd, randomString);
+        String[] authChain = Config.authentication_chain;
+        UserIdentity authenticatedUser = null;
+        for (String authMechanism : authChain) {
+            if (authenticatedUser != null) {
+                break;
+            }
+
+            if (authMechanism.equals(ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
+                authenticatedUser = checkPasswordForNative(remoteUser, remoteHost, remotePasswd, randomString);
+            } else {
+                authenticatedUser = checkPasswordForNonNative(
+                        remoteUser, remoteHost, remotePasswd, randomString, authMechanism);
+            }
+        }
+
+        return authenticatedUser;
     }
 
     public UserIdentity checkPlainPassword(String remoteUser, String remoteHost, String remotePasswd) {
@@ -629,5 +678,83 @@ public class AuthenticationMgr {
         }
 
         return matchedUserIdentity.getKey();
+    }
+
+    //=========================================== Security Integration ==================================================
+
+    public void createSecurityIntegration(String name,
+                                          Map<String, String> propertyMap,
+                                          boolean isReplay) throws DdlException {
+        SecurityIntegration securityIntegration;
+        securityIntegration = SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
+        // atomic op
+        SecurityIntegration result = nameToSecurityIntegrationMap.putIfAbsent(name, securityIntegration);
+        if (result != null) {
+            throw new DdlException("security integration '" + name + "' already exists");
+        }
+        if (!isReplay) {
+            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logCreateSecurityIntegration(name, propertyMap);
+            LOG.info("finished to create security integration '{}'", securityIntegration.toString());
+        }
+    }
+
+    public void alterSecurityIntegration(String name, Map<String, String> alterProps,
+                                         boolean isReplay) throws DdlException {
+        SecurityIntegration securityIntegration = nameToSecurityIntegrationMap.get(name);
+        if (securityIntegration == null) {
+            throw new DdlException("security integration '" + name + "' not found");
+        } else {
+            // COW
+            Map<String, String> newProps = Maps.newHashMap(securityIntegration.getPropertyMap());
+            // update props
+            newProps.putAll(alterProps);
+            SecurityIntegration newSecurityIntegration;
+            newSecurityIntegration = SecurityIntegrationFactory.createSecurityIntegration(name, newProps);
+            // update map
+            nameToSecurityIntegrationMap.put(name, newSecurityIntegration);
+            if (!isReplay) {
+                EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+                editLog.logAlterSecurityIntegration(name, alterProps);
+                LOG.info("finished to alter security integration '{}' with updated properties {}",
+                        name, alterProps);
+            }
+        }
+    }
+
+    public void dropSecurityIntegration(String name, boolean isReplay) throws DdlException {
+        if (!nameToSecurityIntegrationMap.containsKey(name)) {
+            throw new DdlException("security integration '" + name + "' not found");
+        }
+
+        SecurityIntegration result = nameToSecurityIntegrationMap.remove(name);
+        if (!isReplay && result != null) {
+            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logDropSecurityIntegration(name);
+            LOG.info("finished to drop security integration '{}'", name);
+        }
+    }
+
+    public SecurityIntegration getSecurityIntegration(String name) {
+        return nameToSecurityIntegrationMap.get(name);
+    }
+
+    public Set<SecurityIntegration> getAllSecurityIntegrations() {
+        return new HashSet<>(nameToSecurityIntegrationMap.values());
+    }
+
+    public void replayCreateSecurityIntegration(String name, Map<String, String> propertyMap)
+            throws DdlException {
+        createSecurityIntegration(name, propertyMap, true);
+    }
+
+    public void replayAlterSecurityIntegration(String name, Map<String, String> alterProps)
+            throws DdlException {
+        alterSecurityIntegration(name, alterProps, true);
+    }
+
+    public void replayDropSecurityIntegration(String name)
+            throws DdlException {
+        dropSecurityIntegration(name, true);
     }
 }

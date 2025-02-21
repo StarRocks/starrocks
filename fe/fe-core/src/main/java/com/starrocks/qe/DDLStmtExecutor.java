@@ -19,6 +19,7 @@ import com.google.common.collect.Lists;
 import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.catalog.Database;
 import com.starrocks.common.AlreadyExistsException;
 import com.starrocks.common.Config;
@@ -587,22 +588,36 @@ public class DDLStmtExecutor {
             return null;
         }
 
-
         @Override
         public ShowResultSet visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement stmt,
                                                                      ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+                authenticationMgr.createSecurityIntegration(stmt.getName(), stmt.getPropertyMap(), false);
+            });
+
             return null;
         }
 
         @Override
         public ShowResultSet visitAlterSecurityIntegrationStatement(AlterSecurityIntegrationStatement stmt,
                                                                     ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+                authenticationMgr.alterSecurityIntegration(stmt.getName(), stmt.getProperties(), false);
+            });
+
             return null;
         }
 
         @Override
         public ShowResultSet visitDropSecurityIntegrationStatement(DropSecurityIntegrationStatement stmt,
                                                                    ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+                authenticationMgr.dropSecurityIntegration(stmt.getName(), false);
+            });
+
             return null;
         }
 

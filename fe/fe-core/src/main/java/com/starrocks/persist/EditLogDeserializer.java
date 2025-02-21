@@ -245,6 +245,9 @@ public class EditLogDeserializer {
             .put(OperationType.OP_CLUSTER_SNAPSHOT_LOG, ClusterSnapshotLog.class)
             .put(OperationType.OP_ADD_SQL_QUERY_BLACK_LIST, SqlBlackListPersistInfo.class)
             .put(OperationType.OP_DELETE_SQL_QUERY_BLACK_LIST, DeleteSqlBlackLists.class)
+            .put(OperationType.OP_CREATE_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
+            .put(OperationType.OP_ALTER_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
+            .put(OperationType.OP_DROP_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
             .build();
 
     public static Writable deserialize(Short opCode, DataInput in) throws IOException {
