@@ -321,6 +321,8 @@ public:
     // The left time of the merge window after writing the data to the plan
     int64_t mc_left_merge_time_nanos = -1;
 
+    uint64_t first_msg_timestamp = 0;
+
 public:
     bool is_channel_stream_load_context() { return channel_id != -1; }
     ExecEnv* exec_env() { return _exec_env; }

@@ -853,6 +853,11 @@ public final class MetricRepo {
         // collect starmgr related metrics as well
         StarMgrServer.getCurrentState().visitMetrics(visitor);
 
+        // collect routine load consume latency metrics
+        if (Config.enable_routine_load_latency_metrics) {
+            RoutineLoadLatencyMetricMgr.visitLatency();
+        }
+
         // node info
         visitor.getNodeInfo();
         return visitor.build();
