@@ -106,7 +106,6 @@ public enum ErrorCode {
     ERR_NO_SUCH_QUERY(1365, new byte[] {'4', '2', '0', '0', '0'}, "Unknown query id: %s"),
 
     ERR_CANNOT_USER(1396, new byte[] {'H', 'Y', '0', '0', '0'}, "Operation %s failed for %s"),
-    ERR_SECURE_TRANSPORT_REQUIRED(1403, new byte[] {'0', '8', '0', '0', '4'}, "Server rejected the insecure connection"),
     ERR_NON_INSERTABLE_TABLE(1471, new byte[] {'H', 'Y', '0', '0', '0'},
             "The target table %s of the %s is not insertable-into"),
     ERR_DROP_PARTITION_NON_EXISTENT(1507, new byte[] {'H', 'Y', '0', '0', '0'},
@@ -123,6 +122,8 @@ public enum ErrorCode {
     ERR_EMPTY_PARTITION_IN_TABLE(1748, new byte[] {'H', 'Y', '0', '0', '0'},
             "data cannot be inserted into table with empty partition. " +
                     "Use `SHOW PARTITIONS FROM %s` to see the currently partitions of this table. "),
+    ERR_SECURE_TRANSPORT_REQUIRED(3159, new byte[] {'H', 'Y', '0', '0', '0'},
+            "Connections using insecure transport are prohibited"),
 
     // Following is StarRocks's error code, which start from 5000
     ERR_WRONG_PROC_PATH(5001, new byte[] {'H', 'Y', '0', '0', '0'}, "Proc path '%s' doesn't exist"),
