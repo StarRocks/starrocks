@@ -2070,16 +2070,24 @@ public class DatabaseTransactionMgr {
         if (txnState.getTableIdList().isEmpty()) {
             return;
         }
-        TxnCommitAttachment attachment = txnState.getTxnCommitAttachment();
-        if (!(attachment instanceof ManualLoadTxnCommitAttachment)) {
-            return;
-        }
         long tableId = txnState.getTableIdList().get(0);
-        ManualLoadTxnCommitAttachment streamAttachment = (ManualLoadTxnCommitAttachment) attachment;
         TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
-        entity.counterStreamLoadFinishedTotal.increase(1L);
-        entity.counterStreamLoadRowsTotal.increase(streamAttachment.getLoadedRows());
-        entity.counterStreamLoadBytesTotal.increase(streamAttachment.getLoadedBytes());
+        TxnCommitAttachment attachment = txnState.getTxnCommitAttachment();
+        if (attachment instanceof RLTaskTxnCommitAttachment) {
+            RLTaskTxnCommitAttachment routineAttachment = (RLTaskTxnCommitAttachment) attachment;
+            entity.counterRoutineLoadFinishedTotal.increase(1L);
+            entity.counterRoutineLoadBytesTotal.increase(routineAttachment.getReceivedBytes());
+            entity.counterRoutineLoadRowsTotal.increase(routineAttachment.getLoadedRows());
+            entity.counterRoutineLoadErrorRowsTotal.increase(routineAttachment.getFilteredRows());
+            entity.counterRoutineLoadUnselectedRowsTotal.increase(routineAttachment.getUnselectedRows());
+        }
+
+        if (attachment instanceof ManualLoadTxnCommitAttachment) {
+            ManualLoadTxnCommitAttachment streamAttachment = (ManualLoadTxnCommitAttachment) attachment;
+            entity.counterStreamLoadFinishedTotal.increase(1L);
+            entity.counterStreamLoadRowsTotal.increase(streamAttachment.getLoadedRows());
+            entity.counterStreamLoadBytesTotal.increase(streamAttachment.getLoadedBytes());
+        }
     }
 
     public String getTxnPublishTimeoutDebugInfo(long txnId) {
