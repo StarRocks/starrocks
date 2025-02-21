@@ -512,7 +512,7 @@ public class CreateTableTest {
                         "PRIMARY KEY( k0, k1, k2) \n" +
                         "PARTITION BY RANGE (k1) (START (\"1970-01-01\") END (\"2022-09-30\") " +
                         "EVERY (INTERVAL 60 day)) DISTRIBUTED BY HASH(k0) BUCKETS 1 " +
-                        "PROPERTIES (\"replication_num\"=\"1\",\"enable_persistent_index\" = \"false\"," +
+                        "PROPERTIES (\"replication_num\"=\"1\",\"enable_persistent_index\" = \"true\"," +
                         "\"datacache.enable\" = \"true\",\"asd\" = \"true\");"));
 
         ExceptionChecker.expectThrowsWithMsg(DdlException.class,
@@ -559,7 +559,7 @@ public class CreateTableTest {
                         "\"dynamic_partition.history_partition_num\" = \"0\",\n" +
                         "\"in_memory\" = \"false\",\n" +
                         "\"storage_format\" = \"DEFAULT\",\n" +
-                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"enable_persistent_index\" = \"true\",\n" +
                         "\"compression\" = \"LZ4\"\n" +
                         ");"));
     }
@@ -1950,6 +1950,23 @@ public class CreateTableTest {
                 "\"colocate_with\" = \"ship_id_public\"" +
                 ");";
         Assert.assertThrows(AnalysisException.class, () -> starRocksAssert.withTable(sql1));
+    }
+
+    @Test
+    public void testPrimaryKeyDisableInMemoryIndex() {
+        StarRocksAssert starRocksAssert = new StarRocksAssert(connectContext);
+        starRocksAssert.useDatabase("test");
+        String sql1 = "CREATE TABLE test.disable_inmemory_index (\n" +
+                "ship_id int(11) NOT NULL COMMENT \" \",\n" +
+                "sub_ship_id bigint(20) NOT NULL COMMENT \" \"\n" +
+                ") ENGINE=OLAP\n" +
+                "PRIMARY KEY(ship_id) COMMENT \"OLAP\"\n" +
+                "DISTRIBUTED BY HASH(ship_id) " +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"enable_persistent_index\" = \"false\"" +
+                ");";
+        ExceptionChecker.expectThrows(DdlException.class, () -> starRocksAssert.withTable(sql1));
     }
 
     @Test

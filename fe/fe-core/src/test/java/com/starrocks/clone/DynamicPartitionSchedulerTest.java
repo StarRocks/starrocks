@@ -439,7 +439,7 @@ public class DynamicPartitionSchedulerTest {
                         "\"dynamic_partition.history_partition_num\" = \"0\",\n" +
                         "\"in_memory\" = \"false\",\n" +
                         "\"storage_format\" = \"DEFAULT\",\n" +
-                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"enable_persistent_index\" = \"true\",\n" +
                         "\"compression\" = \"LZ4\"\n" +
                         ");");
 

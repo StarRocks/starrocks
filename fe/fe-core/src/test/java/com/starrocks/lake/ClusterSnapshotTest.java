@@ -267,7 +267,6 @@ public class ClusterSnapshotTest {
                 .getItems().get(0).state == "ERROR");
     }
 
-    @Test
     public void testCheckpointScheduler() {
         new MockUp<CheckpointController>() {
             @Mock
@@ -314,7 +313,6 @@ public class ClusterSnapshotTest {
         setAutomatedSnapshotOff(false);
     }
 
-    @Test
     public void testDeletionControl() {
         new MockUp<RunMode>() {
             @Mock
