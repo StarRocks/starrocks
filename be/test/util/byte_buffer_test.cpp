@@ -15,11 +15,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
+#include "util/byte_buffer.h"
+
 #include <gtest/gtest.h>
 
 #include "common/logging.h"
 #include "testutil/assert.h"
-#include "util/byte_buffer.h"
 
 namespace starrocks {
 
@@ -63,6 +64,7 @@ TEST_F(ByteBufferTest, test_meta) {
     auto kafka_meta_st = ByteBufferMeta::create(ByteBufferMetaType::KAFKA);
     ASSERT_OK(kafka_meta_st.status());
     KafkaByteBufferMeta* kafka_meta = dynamic_cast<KafkaByteBufferMeta*>(kafka_meta_st.value());
+    DeferOp defer([&] { delete kafka_meta; });
     ASSERT_TRUE(kafka_meta != nullptr);
     ASSERT_EQ(ByteBufferMetaType::KAFKA, kafka_meta->type());
     ASSERT_EQ(-1, kafka_meta->partition());
