@@ -89,14 +89,7 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
         _cur_file_eof = false;
     }
 
-    Status status;
-    try {
-        status = _cur_file_reader->read_chunk(src_chunk.get(), _max_chunk_size);
-    } catch (simdjson::simdjson_error& e) {
-        auto err_msg = "Unrecognized json format, stop json loader.";
-        LOG(WARNING) << err_msg;
-        return Status::DataQualityError(format_json_parse_error_msg(err_msg));
-    }
+    Status status = _cur_file_reader->read_chunk(src_chunk.get(), _max_chunk_size);
     if (!status.ok()) {
         if (status.is_end_of_file()) {
             _cur_file_eof = true;
@@ -240,7 +233,7 @@ Status JsonScanner::parse_json_paths(const std::string& jsonpath, std::vector<st
     } catch (simdjson::simdjson_error& e) {
         auto err_msg =
                 strings::Substitute("Invalid json path: $0, error: $1", jsonpath, simdjson::error_message(e.error()));
-        return Status::DataQualityError(format_json_parse_error_msg(err_msg));
+        return json_parse_error(err_msg);
     }
 }
 
@@ -351,7 +344,11 @@ JsonReader::JsonReader(starrocks::RuntimeState* state, starrocks::ScannerCounter
 }
 
 Status JsonReader::open() {
-    RETURN_IF_ERROR(_read_and_parse_json());
+    Status st = _read_and_parse_json();
+    if (!st.ok()) {
+        _append_error_msg("", st.to_string());
+        return st;
+    }
     _empty_parser = false;
     _closed = false;
     return Status::OK();
@@ -368,6 +365,17 @@ Status JsonReader::close() {
     _file.reset();
     _closed = true;
     return Status::OK();
+}
+
+Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read) {
+    try {
+        return _read_chunk_with_except(chunk, rows_to_read);
+    } catch (simdjson::simdjson_error& e) {
+        auto err_msg = "Unrecognized json format, stop json loader.";
+        _append_error_msg("", err_msg);
+        LOG(WARNING) << err_msg;
+        return json_parse_error(err_msg);
+    }
 }
 
 /**
@@ -395,7 +403,7 @@ Status JsonReader::close() {
  *      value1     10
  *      value2     30
  */
-Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read) {
+Status JsonReader::_read_chunk_with_except(Chunk* chunk, int32_t rows_to_read) {
     int32_t rows_read = 0;
     while (rows_read < rows_to_read) {
         if (_empty_parser) {
@@ -411,7 +419,7 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read) {
                 }
                 // Parse error.
                 _counter->num_rows_filtered++;
-                _state->append_error_msg_to_file("", st.to_string());
+                _append_error_msg("", st.to_string());
                 return st;
             }
             _empty_parser = false;
@@ -468,9 +476,7 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
                 return st;
             }
             _counter->num_rows_filtered++;
-            _state->append_error_msg_to_file(
-                    fmt::format("parser current location: {}", parser->left_bytes_string(MAX_ERROR_LOG_LENGTH)),
-                    st.to_string());
+            _append_error_msg(parser->left_bytes_string(MAX_ERROR_LOG_LENGTH), st.to_string());
             return st;
         }
         size_t chunk_row_num = chunk->num_rows();
@@ -481,7 +487,7 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
                 // hence the number of error appended to the file should be limited.
                 std::string_view sv;
                 (void)!row.raw_json().get(sv);
-                _state->append_error_msg_to_file(std::string(sv.data(), sv.size()), st.to_string());
+                _append_error_msg(std::string(sv), st.to_string());
                 LOG(WARNING) << "failed to construct row: " << st;
             }
             if (_state->enable_log_rejected_record()) {
@@ -501,7 +507,7 @@ Status JsonReader::_read_rows(Chunk* chunk, int32_t rows_to_read, int32_t* rows_
                 return st;
             }
             _counter->num_rows_filtered++;
-            _state->append_error_msg_to_file("", st.to_string());
+            _append_error_msg("", st.to_string());
             return st;
         }
     }
@@ -701,10 +707,16 @@ Status JsonReader::_read_file_stream() {
     if (_file_stream_buffer->capacity < _file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING) {
         // For efficiency reasons, simdjson requires a string with a few bytes (simdjson::SIMDJSON_PADDING) at the end.
         // Hence, a re-allocation is needed if the space is not enough.
-        ASSIGN_OR_RETURN(auto buf, ByteBuffer::allocate_with_tracker(_file_stream_buffer->remaining() +
-                                                                     simdjson::SIMDJSON_PADDING));
+        ASSIGN_OR_RETURN(auto buf, ByteBuffer::allocate_with_tracker(
+                                           _file_stream_buffer->remaining() + simdjson::SIMDJSON_PADDING,
+                                           _file_stream_buffer->meta()->type()));
         buf->put_bytes(_file_stream_buffer->ptr, _file_stream_buffer->remaining());
         buf->flip();
+        // copying meta fail should not affect the scan
+        Status copy_st = buf->meta()->copy_from(_file_stream_buffer->meta());
+        if (!copy_st.ok()) {
+            LOG_EVERY_N(WARNING, 1000) << "failed to copy meta when reading file stream, " << copy_st;
+        }
         std::swap(buf, _file_stream_buffer);
     }
 
@@ -784,9 +796,9 @@ Status JsonReader::_check_ndjson() {
             _is_ndjson = true;
             break;
         } else {
-            LOG(WARNING) << "illegal json started with [" << c << "]";
-            return Status::DataQualityError(
-                    format_json_parse_error_msg(fmt::format("illegal json started with {}", c)));
+            std::string error_msg = fmt::format("illegal json started with [{}]", c);
+            LOG(WARNING) << error_msg;
+            return json_parse_error(error_msg);
         }
     }
     return Status::OK();
@@ -841,6 +853,16 @@ Status JsonReader::_read_and_parse_json() {
 Status JsonReader::_construct_column(simdjson::ondemand::value& value, Column* column, const TypeDescriptor& type_desc,
                                      const std::string& col_name) {
     return add_adaptive_nullable_column(column, type_desc, col_name, &value, !_strict_mode);
+}
+
+void JsonReader::_append_error_msg(std::string&& row, const std::string& error_msg) {
+    std::string row_with_meta;
+    if (_file_stream_buffer == nullptr || _file_stream_buffer->meta()->type() == ByteBufferMetaType::NONE) {
+        row_with_meta = std::move(row);
+    } else {
+        row_with_meta = fmt::format("{} [meta: {}]", row, _file_stream_buffer->meta()->to_string());
+    }
+    _state->append_error_msg_to_file(row_with_meta, error_msg);
 }
 
 } // namespace starrocks
