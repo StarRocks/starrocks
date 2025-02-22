@@ -128,6 +128,8 @@ private:
 
     Status _check_ndjson();
 
+    void _append_error_msg(std::string&& row, const std::string& error_msg);
+
 private:
     RuntimeState* _state = nullptr;
     ScannerCounter* _counter = nullptr;
