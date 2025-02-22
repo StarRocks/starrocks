@@ -366,6 +366,17 @@ Status JsonReader::close() {
     return Status::OK();
 }
 
+Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read) {
+    try {
+        return _read_chunk_with_except(chunk, rows_to_read);
+    } catch (simdjson::simdjson_error& e) {
+        auto err_msg = "Unrecognized json format, stop json loader.";
+        _append_error_msg("", err_msg);
+        LOG(WARNING) << err_msg;
+        return json_parse_error(err_msg);
+    }
+}
+
 /**
  * Case 1 : Json without JsonPath
  * For example:
@@ -391,72 +402,65 @@ Status JsonReader::close() {
  *      value1     10
  *      value2     30
  */
-Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read) {
-    try {
-        int32_t rows_read = 0;
-        while (rows_read < rows_to_read) {
-            if (_empty_parser) {
-                auto st = _read_and_parse_json();
-                if (!st.ok()) {
-                    if (st.is_end_of_file()) {
-                        // all data has been exhausted.
-                        return st;
-                    }
-                    if (st.is_time_out()) {
-                        // read time out
-                        return st;
-                    }
-                    // Parse error.
-                    _counter->num_rows_filtered++;
-                    _append_error_msg("", st.to_string());
+Status JsonReader::_read_chunk_with_except(Chunk* chunk, int32_t rows_to_read) {
+    int32_t rows_read = 0;
+    while (rows_read < rows_to_read) {
+        if (_empty_parser) {
+            auto st = _read_and_parse_json();
+            if (!st.ok()) {
+                if (st.is_end_of_file()) {
+                    // all data has been exhausted.
                     return st;
                 }
-                _empty_parser = false;
+                if (st.is_time_out()) {
+                    // read time out
+                    return st;
+                }
+                // Parse error.
+                _counter->num_rows_filtered++;
+                _append_error_msg("", st.to_string());
+                return st;
             }
+            _empty_parser = false;
+        }
 
-            Status st;
-            // Eliminates virtual function call.
-            if (!_scanner->_root_paths.empty()) {
-                // With json root set, expand the outer array automatically.
-                // The strip_outer_array determines whether to expand the sub-array of json root.
-                if (_scanner->_strip_outer_array) {
-                    // Expand outer array automatically according to _is_ndjson.
-                    if (_is_ndjson) {
-                        st = _read_rows<ExpandedJsonDocumentStreamParserWithRoot>(chunk, rows_to_read, &rows_read);
-                    } else {
-                        st = _read_rows<ExpandedJsonArrayParserWithRoot>(chunk, rows_to_read, &rows_read);
-                    }
+        Status st;
+        // Eliminates virtual function call.
+        if (!_scanner->_root_paths.empty()) {
+            // With json root set, expand the outer array automatically.
+            // The strip_outer_array determines whether to expand the sub-array of json root.
+            if (_scanner->_strip_outer_array) {
+                // Expand outer array automatically according to _is_ndjson.
+                if (_is_ndjson) {
+                    st = _read_rows<ExpandedJsonDocumentStreamParserWithRoot>(chunk, rows_to_read, &rows_read);
                 } else {
-                    if (_is_ndjson) {
-                        st = _read_rows<JsonDocumentStreamParserWithRoot>(chunk, rows_to_read, &rows_read);
-                    } else {
-                        st = _read_rows<JsonArrayParserWithRoot>(chunk, rows_to_read, &rows_read);
-                    }
+                    st = _read_rows<ExpandedJsonArrayParserWithRoot>(chunk, rows_to_read, &rows_read);
                 }
             } else {
-                // Without json root set, the strip_outer_array determines whether to expand outer array.
-                if (_scanner->_strip_outer_array) {
-                    st = _read_rows<JsonArrayParser>(chunk, rows_to_read, &rows_read);
+                if (_is_ndjson) {
+                    st = _read_rows<JsonDocumentStreamParserWithRoot>(chunk, rows_to_read, &rows_read);
                 } else {
-                    st = _read_rows<JsonDocumentStreamParser>(chunk, rows_to_read, &rows_read);
+                    st = _read_rows<JsonArrayParserWithRoot>(chunk, rows_to_read, &rows_read);
                 }
             }
-
-            if (st.is_end_of_file()) {
-                // the parser is exhausted.
-                _empty_parser = true;
-            } else if (!st.ok()) {
-                return st;
+        } else {
+            // Without json root set, the strip_outer_array determines whether to expand outer array.
+            if (_scanner->_strip_outer_array) {
+                st = _read_rows<JsonArrayParser>(chunk, rows_to_read, &rows_read);
+            } else {
+                st = _read_rows<JsonDocumentStreamParser>(chunk, rows_to_read, &rows_read);
             }
         }
 
-        return Status::OK();
-    } catch (simdjson::simdjson_error& e) {
-        auto err_msg = "Unrecognized json format, stop json loader.";
-        _append_error_msg("", err_msg);
-        LOG(WARNING) << err_msg;
-        return json_parse_error(err_msg);
+        if (st.is_end_of_file()) {
+            // the parser is exhausted.
+            _empty_parser = true;
+        } else if (!st.ok()) {
+            return st;
+        }
     }
+
+    return Status::OK();
 }
 
 template <typename ParserType>
