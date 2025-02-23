@@ -210,6 +210,7 @@ absl::Status StarOSWorker::update_worker_info(const staros::starlet::WorkerInfo&
 
 absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_filesystem(ShardId id,
                                                                                       const Configuration& conf) {
+    ShardInfo shard_info;
     { // shared_lock, check if the filesystem already created
         std::shared_lock l(_mtx);
         auto it = _shards.find(id);
@@ -223,16 +224,21 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
         if (fs != nullptr) {
             return fs;
         }
+        shard_info = it->second.shard_info;
     }
 
+    // Build the filesystem under no lock, so the op won't hold the lock for a long time.
+    // It is possible that multiple filesystems are built for the same shard from multiple threads under no lock here.
+    auto fs_or = build_filesystem_from_shard_info(shard_info, conf);
+    if (!fs_or.ok()) {
+        return fs_or.status();
+    }
     {
         std::unique_lock l(_mtx);
         auto shard_iter = _shards.find(id);
         // could be possibly shards removed or fs get created during unlock-lock
         if (shard_iter == _shards.end()) {
-            // unlock the lock and try best to build the filesystem with remote rpc call
-            l.unlock();
-            return build_filesystem_on_demand(id, conf);
+            return fs_or->second;
         }
 
         auto fs = lookup_fs_cache(shard_iter->second.fs_cache_key);
@@ -240,10 +246,6 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
             return fs;
         }
 
-        auto fs_or = build_filesystem_from_shard_info(shard_iter->second.shard_info, conf);
-        if (!fs_or.ok()) {
-            return fs_or.status();
-        }
         shard_iter->second.fs_cache_key = std::move(fs_or->first);
         return fs_or->second;
     }
@@ -353,6 +355,9 @@ StarOSWorker::new_shared_filesystem(std::string_view scheme, const Configuration
     std::shared_ptr<fslib::FileSystem> fs = std::move(fs_or).value();
 
     // Put the FileSysatem into LRU cache
+    //
+    // TODO: need to handle the race condition properly by double check if the key exists
+    // before insert under lock protection.
     auto fs_cache_key = insert_fs_cache(cache_key, fs);
 
     return std::make_pair(std::move(fs_cache_key), std::move(fs));
