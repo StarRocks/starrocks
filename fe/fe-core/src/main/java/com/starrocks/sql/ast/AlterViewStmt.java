@@ -14,19 +14,33 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.sql.parser.NodePosition;
+
+import java.util.Map;
 
 // Alter view statement
 public class AlterViewStmt extends DdlStmt {
     private final TableName tableName;
     private final boolean security;
+    private final AlterDialectType alterDialect;
+    private final Map<String, String> properties;
     private final AlterClause alterClause;
 
-    public AlterViewStmt(TableName tableName, boolean security, AlterClause alterClause, NodePosition pos) {
+    public enum AlterDialectType {
+        NONE,
+        ADD,
+        MODIFY
+    }
+
+    public AlterViewStmt(TableName tableName, boolean security, AlterDialectType alterDialect, Map<String, String> properties,
+                         AlterClause alterClause, NodePosition pos) {
         super(pos);
         this.tableName = tableName;
         this.security = security;
+        this.alterDialect = alterDialect;
+        this.properties = properties;
         this.alterClause = alterClause;
     }
 
@@ -36,7 +50,20 @@ public class AlterViewStmt extends DdlStmt {
         alterViewClause.setInlineViewDef(stmt.getInlineViewDef());
         alterViewClause.setColumns(stmt.getColumns());
         alterViewClause.setComment(stmt.getComment());
-        return new AlterViewStmt(stmt.getTableName(), stmt.isSecurity(), alterViewClause, NodePosition.ZERO);
+        return new AlterViewStmt(stmt.getTableName(), stmt.isSecurity(), AlterDialectType.NONE, Maps.newHashMap(),
+                alterViewClause, NodePosition.ZERO);
+    }
+
+    public String getCatalog() {
+        return tableName.getCatalog();
+    }
+
+    public String getDbName() {
+        return tableName.getDb();
+    }
+
+    public String getTable() {
+        return tableName.getTbl();
     }
 
     public TableName getTableName() {
@@ -45,6 +72,18 @@ public class AlterViewStmt extends DdlStmt {
 
     public boolean isSecurity() {
         return security;
+    }
+
+    public boolean isAlterDialect() {
+        return alterDialect == AlterDialectType.ADD || alterDialect == AlterDialectType.MODIFY;
+    }
+
+    public AlterDialectType getAlterDialectType() {
+        return alterDialect;
+    }
+
+    public Map<String, String> getProperties() {
+        return properties;
     }
 
     public AlterClause getAlterClause() {

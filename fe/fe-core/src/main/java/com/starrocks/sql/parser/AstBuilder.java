@@ -1664,18 +1664,22 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (!context.columnNameWithComment().isEmpty()) {
             colWithComments = visit(context.columnNameWithComment(), ColWithComment.class);
         }
+
         boolean isSecurity = false;
+        Map<String, String> properties = new HashMap<>();
         if (context.queryStatement() != null) {
+            AlterViewStmt.AlterDialectType alterDialectType = context.ADD() != null ? AlterViewStmt.AlterDialectType.ADD :
+                    context.MODIFY() != null ? AlterViewStmt.AlterDialectType.MODIFY : AlterViewStmt.AlterDialectType.NONE;
             QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
-            AlterClause alterClause = new AlterViewClause(colWithComments, queryStatement, createPos(context));
-            return new AlterViewStmt(targetTableName, isSecurity, alterClause, createPos(context));
+            AlterViewClause alterClause = new AlterViewClause(colWithComments, queryStatement, createPos(context));
+            return new AlterViewStmt(targetTableName, isSecurity, alterDialectType, properties, alterClause, createPos(context));
         } else {
             if (context.applyMaskingPolicyClause() != null) {
-                return new AlterViewStmt(targetTableName, isSecurity, (AlterClause) visit(context.applyMaskingPolicyClause()),
-                        createPos(context));
+                return new AlterViewStmt(targetTableName, isSecurity, AlterViewStmt.AlterDialectType.NONE, properties,
+                        (AlterClause) visit(context.applyMaskingPolicyClause()), createPos(context));
             } else if (context.applyRowAccessPolicyClause() != null) {
-                return new AlterViewStmt(targetTableName, isSecurity, (AlterClause) visit(context.applyRowAccessPolicyClause()),
-                        createPos(context));
+                return new AlterViewStmt(targetTableName, isSecurity, AlterViewStmt.AlterDialectType.NONE, properties,
+                        (AlterClause) visit(context.applyRowAccessPolicyClause()), createPos(context));
             } else if (context.SECURITY() != null) {
                 if (context.NONE() != null) {
                     isSecurity = false;
@@ -1683,7 +1687,15 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                     isSecurity = true;
                 }
 
-                return new AlterViewStmt(targetTableName, isSecurity, null, createPos(context));
+                return new AlterViewStmt(targetTableName, isSecurity, AlterViewStmt.AlterDialectType.NONE, properties,
+                        null, createPos(context));
+            } else if  (context.properties() != null) {
+                List<Property> propertyList = visit(context.properties().property(), Property.class);
+                for (Property property : propertyList) {
+                    properties.put(property.getKey(), property.getValue());
+                }
+                return new AlterViewStmt(targetTableName, isSecurity, AlterViewStmt.AlterDialectType.NONE, properties,
+                        null, createPos(context));
             } else {
                 throw new ParsingException("Not support statement", createPos(context));
             }

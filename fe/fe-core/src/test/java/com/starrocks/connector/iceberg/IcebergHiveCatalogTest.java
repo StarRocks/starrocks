@@ -25,6 +25,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
+import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.parser.NodePosition;
@@ -172,5 +173,46 @@ public class IcebergHiveCatalogTest {
         IcebergView icebergView = (IcebergView) table;
         Assert.assertEquals("select * from table", icebergView.getInlineViewDef());
         Assert.assertEquals("mocked", icebergView.getComment());
+    }
+
+    @Test
+    public void testAlterViewProperties(@Mocked HiveCatalog hiveCatalog, @Mocked BaseView baseView,
+                               @Mocked ImmutableSQLViewRepresentation representation) throws Exception {
+        IcebergMetadata metadata = buildIcebergMetadata(hiveCatalog);
+
+        new Expectations() {
+            {
+                hiveCatalog.loadNamespaceMetadata(Namespace.of("db"));
+                result = ImmutableMap.of("location", "xxxxx");
+                minTimes = 1;
+
+                representation.sql();
+                result = "select * from table";
+                minTimes = 1;
+
+                baseView.sqlFor("starrocks");
+                result = representation;
+                minTimes = 1;
+
+                baseView.properties();
+                result = ImmutableMap.of("comment", "mocked");
+                minTimes = 1;
+            }
+        };
+
+        AlterViewStmt alterViewStmt = new AlterViewStmt(new TableName("catalog", "db", "view"), false,
+                AlterViewStmt.AlterDialectType.NONE, Map.of("comment", "no comment"), null, NodePosition.ZERO);
+        metadata.alterView(alterViewStmt);
+
+        new Expectations() {
+            {
+                baseView.properties();
+                result = ImmutableMap.of("comment", "no comment");
+                minTimes = 1;
+            }
+        };
+
+        Table table = metadata.getView("db", "view");
+        Assert.assertEquals("no comment", table.getComment());
     }
 }
