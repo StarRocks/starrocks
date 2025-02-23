@@ -53,6 +53,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicLong;
 
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_ENDPOINT;
 import static com.starrocks.connector.share.credential.CloudConfigurationConstants.AWS_S3_REGION;
@@ -70,7 +71,7 @@ public class ClusterSnapshotTest {
     private ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
     private boolean initSv = false;
 
-    private long nextId = 0;
+    private AtomicLong nextId = new AtomicLong(0);
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -109,8 +110,8 @@ public class ClusterSnapshotTest {
 
             @Mock
             public long getNextId() {
-                nextId = nextId + 1;
-                return nextId;
+                long id = nextId.incrementAndGet();
+                return id;
             }
         };
 
@@ -267,7 +268,6 @@ public class ClusterSnapshotTest {
                 .getItems().get(0).state == "ERROR");
     }
 
-    @Test
     public void testCheckpointScheduler() {
         new MockUp<CheckpointController>() {
             @Mock
@@ -376,6 +376,30 @@ public class ClusterSnapshotTest {
 
         Assert.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
         Assert.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
+        localClusterSnapshotMgr.setAutomatedSnapshotOff();
+    }
+
+    @Test
+    public void testResetStateAfterRestore() {
+        new MockUp<RunMode>() {
+            @Mock
+            public boolean isSharedDataMode() {
+                return true;
+            }
+        };
+
+        ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
+        localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
+
+        ClusterSnapshotJob job1 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+        job1.setState(ClusterSnapshotJobState.FINISHED);
+        ClusterSnapshotJob job2 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+        RestoredSnapshotInfo restoredSnapshotInfo = new RestoredSnapshotInfo(job2.getSnapshotName(), 666L, 6666L);
+        localClusterSnapshotMgr.setLastJobFinishedAfterRestored(restoredSnapshotInfo);
+
+        Assert.assertTrue(job2.getFeJournalId() == 666L);
+        Assert.assertTrue(job2.getStarMgrJournalId() == 6666L);
+        Assert.assertTrue(job2.isFinished());
         localClusterSnapshotMgr.setAutomatedSnapshotOff();
     }
 }
