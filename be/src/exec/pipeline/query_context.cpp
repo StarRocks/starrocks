@@ -108,6 +108,13 @@ FragmentContextManager* QueryContext::fragment_mgr() {
 
 void QueryContext::cancel(const Status& status) {
     _is_cancelled = true;
+    if (_cancelled_status.load() != nullptr) {
+        return;
+    }
+    Status* old_status = nullptr;
+    if (_cancelled_status.compare_exchange_strong(old_status, &_s_status)) {
+        _s_status = status;
+    }
     _fragment_mgr->cancel(status);
 }
 
@@ -344,17 +351,17 @@ QueryContextManager::~QueryContextManager() {
     }
 }
 
-#define RETURN_NULL_IF_CTX_CANCELLED(query_ctx) \
-    if (query_ctx->is_cancelled()) {            \
-        return nullptr;                         \
-    }                                           \
-    query_ctx->increment_num_fragments();       \
-    if (query_ctx->is_cancelled()) {            \
-        query_ctx->rollback_inc_fragments();    \
-        return nullptr;                         \
+#define RETURN_CANCELLED_STATUS_IF_CTX_CANCELLED(query_ctx) \
+    if (query_ctx->is_cancelled()) {                        \
+        return query_ctx->get_cancelled_status();           \
+    }                                                       \
+    query_ctx->increment_num_fragments();                   \
+    if (query_ctx->is_cancelled()) {                        \
+        query_ctx->rollback_inc_fragments();                \
+        return query_ctx->get_cancelled_status();           \
     }
 
-QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
+StatusOr<QueryContext*> QueryContextManager::get_or_register(const TUniqueId& query_id) {
     size_t i = _slot_idx(query_id);
     auto& mutex = _mutexes[i];
     auto& context_map = _context_maps[i];
@@ -365,7 +372,7 @@ QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
         // lookup query context in context_map
         auto it = context_map.find(query_id);
         if (it != context_map.end()) {
-            RETURN_NULL_IF_CTX_CANCELLED(it->second);
+            RETURN_CANCELLED_STATUS_IF_CTX_CANCELLED(it->second);
             return it->second.get();
         }
     }
@@ -375,14 +382,19 @@ QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
         auto it = context_map.find(query_id);
         auto sc_it = sc_map.find(query_id);
         if (it != context_map.end()) {
-            RETURN_NULL_IF_CTX_CANCELLED(it->second);
+            RETURN_CANCELLED_STATUS_IF_CTX_CANCELLED(it->second);
             return it->second.get();
         } else {
             // lookup query context for the second chance in sc_map
             if (sc_it != sc_map.end()) {
                 auto ctx = std::move(sc_it->second);
+<<<<<<< HEAD
                 RETURN_NULL_IF_CTX_CANCELLED(ctx);
                 sc_map.erase(sc_it);
+=======
+                sc_map.erase(sc_it);
+                RETURN_CANCELLED_STATUS_IF_CTX_CANCELLED(ctx);
+>>>>>>> 836e4cd89f ([BugFix]return root cause when query is cancelled (#56157))
                 auto* raw_ctx_ptr = ctx.get();
                 context_map.emplace(query_id, std::move(ctx));
                 return raw_ctx_ptr;
