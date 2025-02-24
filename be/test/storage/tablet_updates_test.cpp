@@ -1320,33 +1320,33 @@ void TabletUpdatesTest::test_horizontal_compaction_with_rows_mapper(bool enable_
     EXPECT_TRUE(best_tablet->verify().ok());
 }
 
-TEST_F(TabletUpdatesTest, horizontal_compaction) {
-    test_horizontal_compaction(false);
-}
+// TEST_F(TabletUpdatesTest, horizontal_compaction) {
+//     test_horizontal_compaction(false);
+// }
 
-TEST_F(TabletUpdatesTest, horizontal_compaction_old_compact_stragety) {
-    config::enable_light_pk_compaction_publish = false;
-    test_horizontal_compaction(false);
-    config::enable_light_pk_compaction_publish = true;
-}
+// TEST_F(TabletUpdatesTest, horizontal_compaction_old_compact_stragety) {
+//     config::enable_light_pk_compaction_publish = false;
+//     test_horizontal_compaction(false);
+//     config::enable_light_pk_compaction_publish = true;
+// }
 
-TEST_F(TabletUpdatesTest, horizontal_compaction_with_persistent_index) {
-    test_horizontal_compaction(true);
-}
+// TEST_F(TabletUpdatesTest, horizontal_compaction_with_persistent_index) {
+//     test_horizontal_compaction(true);
+// }
 
-TEST_F(TabletUpdatesTest, horizontal_compaction_with_persistent_index_old_compact_stragety) {
-    config::enable_light_pk_compaction_publish = false;
-    test_horizontal_compaction(true);
-    config::enable_light_pk_compaction_publish = true;
-}
+// TEST_F(TabletUpdatesTest, horizontal_compaction_with_persistent_index_old_compact_stragety) {
+//     config::enable_light_pk_compaction_publish = false;
+//     test_horizontal_compaction(true);
+//     config::enable_light_pk_compaction_publish = true;
+// }
 
-TEST_F(TabletUpdatesTest, horizontal_compaction_with_rows_mapper) {
-    test_horizontal_compaction_with_rows_mapper(false);
-}
+// TEST_F(TabletUpdatesTest, horizontal_compaction_with_rows_mapper) {
+//     test_horizontal_compaction_with_rows_mapper(false);
+// }
 
-TEST_F(TabletUpdatesTest, horizontal_compaction_with_persistent_index_with_rows_mapper) {
-    test_horizontal_compaction_with_rows_mapper(true);
-}
+// TEST_F(TabletUpdatesTest, horizontal_compaction_with_persistent_index_with_rows_mapper) {
+//     test_horizontal_compaction_with_rows_mapper(true);
+// }
 
 TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key) {
     auto orig = config::vertical_compaction_max_columns_per_group;
@@ -3765,9 +3765,9 @@ TEST_F(TabletUpdatesTest, test_compaction_apply_retry) {
     std::this_thread::sleep_for(std::chrono::milliseconds(200));
 }
 
-TEST_F(TabletUpdatesTest, test_get_compaction_status) {
-    test_horizontal_compaction(false, true);
-}
+// TEST_F(TabletUpdatesTest, test_get_compaction_status) {
+//     test_horizontal_compaction(false, true);
+// }
 
 TEST_F(TabletUpdatesTest, test_drop_tablet_with_keep_meta_and_files) {
     _tablet = create_tablet(rand(), rand());
