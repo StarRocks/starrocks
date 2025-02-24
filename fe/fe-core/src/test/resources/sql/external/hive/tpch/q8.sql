@@ -9,9 +9,9 @@ distribution type: GATHER
 cardinality: 2
 column statistics:
 * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-* sum-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE
+* sum-->[0.0, 104949.5, 0.0, 16.0, 2.0] ESTIMATE
 * sum-->[810.9, 104949.5, 0.0, 16.0, 2.0] ESTIMATE
-* expr-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE
+* expr-->[0.0, 129.42348008385744, 0.0, 16.0, 2.0] ESTIMATE
 
 PLAN FRAGMENT 1(F19)
 
@@ -25,9 +25,9 @@ OutPut Exchange Id: 38
 |  cardinality: 2
 |  column statistics:
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE
+|  * sum-->[0.0, 104949.5, 0.0, 16.0, 2.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 16.0, 2.0] ESTIMATE
-|  * expr-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE
+|  * expr-->[0.0, 129.42348008385744, 0.0, 16.0, 2.0] ESTIMATE
 |
 36:Project
 |  output columns:
@@ -36,7 +36,7 @@ OutPut Exchange Id: 38
 |  cardinality: 2
 |  column statistics:
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * expr-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE
+|  * expr-->[0.0, 129.42348008385744, 0.0, 16.0, 2.0] ESTIMATE
 |
 35:AGGREGATE (merge finalize)
 |  aggregate: sum[([65: sum, DECIMAL128(38,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true], sum[([64: sum, DECIMAL128(38,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
@@ -44,9 +44,9 @@ OutPut Exchange Id: 38
 |  cardinality: 2
 |  column statistics:
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE
+|  * sum-->[0.0, 104949.5, 0.0, 16.0, 2.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 16.0, 2.0] ESTIMATE
-|  * expr-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE
+|  * expr-->[0.0, 129.42348008385744, 0.0, 16.0, 2.0] ESTIMATE
 |
 34:EXCHANGE
 distribution type: SHUFFLE
@@ -66,7 +66,7 @@ OutPut Exchange Id: 34
 |  cardinality: 2
 |  column statistics:
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
-|  * sum-->[-Infinity, Infinity, 0.0, 16.0, 2.0] ESTIMATE
+|  * sum-->[0.0, 104949.5, 0.0, 16.0, 2.0] ESTIMATE
 |  * sum-->[810.9, 104949.5, 0.0, 16.0, 2.0] ESTIMATE
 |
 32:Project
@@ -84,7 +84,7 @@ OutPut Exchange Id: 34
 |  column statistics:
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 16.0, 242842.78223700626] ESTIMATE
-|  * case-->[-Infinity, Infinity, 0.0, 16.0, 242843.78223700626] ESTIMATE
+|  * case-->[0.0, 104949.5, 0.0, 16.0, 242843.78223700626] ESTIMATE
 |
 31:HASH JOIN
 |  join op: INNER JOIN (BROADCAST)
@@ -102,7 +102,7 @@ OutPut Exchange Id: 34
 |  * r_regionkey-->[0.0, 4.0, 0.0, 4.0, 1.0] ESTIMATE
 |  * year-->[1995.0, 1996.0, 0.0, 2.0, 2.0] ESTIMATE
 |  * expr-->[810.9, 104949.5, 0.0, 16.0, 242842.78223700626] ESTIMATE
-|  * case-->[-Infinity, Infinity, 0.0, 16.0, 242843.78223700626] ESTIMATE
+|  * case-->[0.0, 104949.5, 0.0, 16.0, 242843.78223700626] ESTIMATE
 |
 |----30:EXCHANGE
 |       distribution type: BROADCAST
