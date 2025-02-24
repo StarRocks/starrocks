@@ -20,6 +20,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
+import com.starrocks.http.HttpConnectContext;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -60,18 +61,15 @@ public class RepoExecutor {
     public void executeDML(String sql) {
         ConnectContext prev = ConnectContext.get();
         try {
-            ConnectContext context = createConnectContext();
-
+            ConnectContext context = createHttpConnectContext();
             StatementBase parsedStmt = SqlParser.parseOneWithStarRocksDialect(sql, context.getSessionVariable());
             Preconditions.checkState(parsedStmt instanceof DmlStmt, "the statement should be dml");
-            DmlStmt dmlStmt = (DmlStmt) parsedStmt;
-            ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.HTTP_PROTOCAL);
             StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
             AuditLog.getInternalAudit().info("RepoExecutor execute SQL | Query_id {} | SQL {}",
                     DebugUtil.printId(context.getQueryId()), sql);
-            executor.handleDMLStmt(execPlan, dmlStmt);
+            executor.execute();
         } catch (Exception e) {
             LOG.error("RepoExecutor execute SQL {} failed: {}", sql, e.getMessage(), e);
             throw new SemanticException(String.format("execute sql failed: %s", e.getMessage()), e);
@@ -131,6 +129,14 @@ public class RepoExecutor {
 
     private static ConnectContext createConnectContext() {
         ConnectContext context = StatisticUtils.buildConnectContext();
+        context.setThreadLocalInfo();
+        context.setNeedQueued(false);
+        return context;
+    }
+
+    private static HttpConnectContext createHttpConnectContext() {
+        HttpConnectContext context =
+                (HttpConnectContext) StatisticUtils.buildConnectContext(TResultSinkType.HTTP_PROTOCAL);
         context.setThreadLocalInfo();
         context.setNeedQueued(false);
         return context;
