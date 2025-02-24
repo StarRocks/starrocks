@@ -76,6 +76,38 @@ public:
     }
 };
 
+class ChunkToRecordBatchConverterImpl : public ChunkToRecordBatchConverter {
+public:
+    ChunkToRecordBatchConverterImpl(const std::shared_ptr<Schema>& sr_schema,
+                                    const std::shared_ptr<arrow::Schema>& arrow_schema, arrow::MemoryPool* pool)
+            : ChunkToRecordBatchConverter(sr_schema, arrow_schema, pool) {}
+
+    arrow::Result<std::shared_ptr<arrow::RecordBatch>> convert(const Chunk* chunk) override {
+        if (chunk == nullptr) {
+            return nullptr;
+        }
+
+        size_t column_size = chunk->num_columns();
+        if (column_size != _arrow_schema->num_fields()) {
+            return arrow::Status::Invalid("Field number in chunk is ", column_size, ", expected ",
+                                          _arrow_schema->num_fields());
+        }
+
+        std::vector<std::shared_ptr<arrow::Array>> arrays(column_size);
+        for (size_t idx = 0; idx < column_size; ++idx) {
+            ARROW_ASSIGN_OR_RAISE(arrays[idx], _converters[idx]->toArrowArray(chunk->columns()[idx]));
+        }
+
+        return arrow::RecordBatch::Make(_arrow_schema, chunk->num_rows(), std::move(arrays));
+    }
+};
+
+arrow::Result<std::shared_ptr<ChunkToRecordBatchConverter>> ChunkToRecordBatchConverter::create(
+        const std::shared_ptr<Schema>& sr_schema, const std::shared_ptr<arrow::Schema>& arrow_schema,
+        arrow::MemoryPool* pool) {
+    return std::make_shared<ChunkToRecordBatchConverterImpl>(sr_schema, arrow_schema, pool);
+}
+
 arrow::Result<std::shared_ptr<RecordBatchToChunkConverter>> RecordBatchToChunkConverter::create(
         const std::shared_ptr<Schema>& sr_schema, const std::shared_ptr<arrow::Schema>& arrow_schema,
         arrow::MemoryPool* pool) {

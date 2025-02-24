@@ -27,6 +27,7 @@
 #include "column/column.h"
 #include "column/column_helper.h"
 #include "column/field.h"
+#include "format/format_utils.h"
 #include "types/logical_type.h"
 #include "util/json.h"
 #include "util/slice.h"
@@ -98,6 +99,55 @@ public:
             }
         }
         return arrow::Status::OK();
+    }
+
+    arrow::Result<std::shared_ptr<arrow::Array>> toArrowArray(const std::shared_ptr<Column>& column) override {
+        using ArrowBuilderType = typename arrow::TypeTraits<ArrowType>::BuilderType;
+
+        std::unique_ptr<ArrowBuilderType> builder =
+                std::make_unique<ArrowBuilderType>(_arrow_type, const_cast<arrow::MemoryPool*>(_pool));
+        size_t num_rows = column->size();
+        ARROW_RETURN_NOT_OK(builder->Reserve(num_rows));
+        for (size_t i = 0; i < num_rows; ++i) {
+            if (column->is_null(i)) {
+                ARROW_RETURN_NOT_OK(builder->AppendNull());
+                continue;
+            }
+
+            auto* data_column = ColumnHelper::get_data_column(column.get());
+            const SrCppType* column_data = down_cast<const SrColumnType*>(data_column)->get_data().data();
+            if constexpr (SR_TYPE == TYPE_CHAR || SR_TYPE == TYPE_VARCHAR || SR_TYPE == TYPE_VARBINARY) {
+                Slice slice = column_data[i];
+                ARROW_RETURN_NOT_OK(builder->Append(slice.data, slice.size));
+            } else if constexpr (SR_TYPE == TYPE_LARGEINT) {
+                SrCppType sr_value = column_data[i];
+                std::string value =
+                        DecimalV3Cast::to_string<int128_t>(sr_value, starrocks::decimal_precision_limit<int128_t>, 0);
+                ARROW_RETURN_NOT_OK(builder->Append(value));
+            } else if constexpr (SR_TYPE == TYPE_JSON) {
+                auto item = down_cast<const SrColumnType*>(data_column)->get_object(i);
+                FORMAT_ASSIGN_OR_RAISE_ARROW_STATUS(auto json_value, item->to_string());
+                ARROW_RETURN_NOT_OK(builder->Append(json_value));
+            } else if constexpr (SR_TYPE == TYPE_OBJECT) { // bitmap column
+                auto item = down_cast<const SrColumnType*>(data_column)->get_object(i);
+                std::string buf;
+                size_t serialize_size = item->get_size_in_bytes();
+                buf.resize(serialize_size);
+                item->write(buf.data());
+                ARROW_RETURN_NOT_OK(builder->Append(buf.data(), serialize_size));
+            } else if constexpr (SR_TYPE == TYPE_HLL) { // hll column
+                auto item = down_cast<const SrColumnType*>(data_column)->get_object(i);
+                std::string buf;
+                size_t serialize_size = item->max_serialized_size();
+                buf.resize(serialize_size);
+                size_t size = item->serialize(reinterpret_cast<uint8_t*>(buf.data()));
+                ARROW_RETURN_NOT_OK(builder->Append(buf.data(), size));
+            } else {
+                return arrow::Status::TypeError("Can't convert starrocks type ", _sr_field->type()->type(),
+                                                " to arrow binary.");
+            }
+        }
+        return builder->Finish();
     }
 };
 

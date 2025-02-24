@@ -11,20 +11,12 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-#pragma once
 
-namespace starrocks::lake::format {
+package com.starrocks.format;
 
-constexpr const char* SR_FORMAT_WRITER_TYPE = "starrocks.format.writer_type";
+@FunctionalInterface
+public interface ThrowingFunction<T, R, E extends Exception> {
 
-constexpr const char* SR_FORMAT_ROWS_PER_SEGMENT = "starrocks.format.rows_per_segment";
+    R apply(T t) throws E;
 
-constexpr const char* SR_FORMAT_CHUNK_SIZE = "starrocks.format.chunk_size";
-
-constexpr const char* SR_FORMAT_USING_COLUMN_UID = "starrocks.format.using_column_uid";
-
-constexpr const char* SR_FORMAT_QUERY_PLAN = "starrocks.format.query_plan";
-
-constexpr const char* SR_FORMAT_COLUMN_ID = "starrocks.format.column.id";
-
-} // namespace starrocks::lake::format
+}
