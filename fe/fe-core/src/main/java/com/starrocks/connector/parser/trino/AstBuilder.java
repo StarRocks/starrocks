@@ -70,6 +70,7 @@ import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DescribeOutputStmt;
 import com.starrocks.sql.ast.ExceptRelation;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.IntersectRelation;
@@ -116,6 +117,7 @@ import io.trino.sql.tree.CurrentUser;
 import io.trino.sql.tree.DataType;
 import io.trino.sql.tree.DateTimeDataType;
 import io.trino.sql.tree.DereferenceExpression;
+import io.trino.sql.tree.DescribeOutput;
 import io.trino.sql.tree.DoubleLiteral;
 import io.trino.sql.tree.Except;
 import io.trino.sql.tree.ExistsPredicate;
@@ -272,6 +274,9 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     protected ParseNode visitNode(Node node, ParseTreeContext context) {
         if (node instanceof JsonArrayElement) {
             return visit(((JsonArrayElement) node).getValue(), context);
+        }
+        if (node instanceof DescribeOutput) {
+            return visit((DescribeOutput) node, context);
         } else {
             throw trinoParserUnsupportedException(String.format("Unsupported node [%s]", node.toString()));
         }
@@ -680,6 +685,11 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitExcept(Except node, ParseTreeContext context) {
         return visitSetOperation(node, context);
+    }
+
+    @Override
+    protected ParseNode visitDescribeOutput(DescribeOutput node, ParseTreeContext context) {
+        return new DescribeOutputStmt(node.getName().toString());
     }
 
     @Override

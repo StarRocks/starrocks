@@ -112,6 +112,7 @@ import com.starrocks.sql.ast.DelBackendBlackListStmt;
 import com.starrocks.sql.ast.DelSqlBlackListStmt;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DescStorageVolumeStmt;
+import com.starrocks.sql.ast.DescribeOutputStmt;
 import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.DropDbStmt;
@@ -1677,6 +1678,11 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.ANY.name(), ObjectType.TABLE.name(), statement.getDbTableName().getTbl());
         }
+        return null;
+    }
+
+    @Override
+    public Void visitDescOutputStmt(DescribeOutputStmt statement, ConnectContext context) {
         return null;
     }
 
