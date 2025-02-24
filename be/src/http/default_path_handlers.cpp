@@ -112,6 +112,7 @@ void MemTrackerWebPageHandler::handle(MemTracker* mem_tracker, const WebPageHand
                                       std::stringstream* output) {
     (*output) << "<h1>Memory Usage Detail</h1>\n";
     (*output) << "<table data-toggle='table' "
+                 "       data-page-size='25' "
                  "       data-pagination='true' "
                  "       data-search='true' "
                  "       class='table table-striped'>\n";
