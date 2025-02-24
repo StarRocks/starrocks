@@ -25,15 +25,18 @@ import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
 import com.starrocks.task.TabletMetadataUpdateAgentTaskFactory;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.ListUtils;
 
+import java.io.DataOutput;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -60,6 +63,8 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
     @SerializedName(value = "schemaInfos")
     private List<IndexSchemaInfo> schemaInfos;
     private Set<String> partitionsWithSchemaFile = new HashSet<>();
+    // for reduce length of the edit log
+    private boolean hasWriteSchema = false;
 
     // for deserialization
     public LakeTableAsyncFastSchemaChangeJob() {
@@ -152,10 +157,28 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
 
     @Override
     protected void restoreState(LakeTableAlterMetaJobBase job) {
-        this.schemaInfos = new ArrayList<>(((LakeTableAsyncFastSchemaChangeJob) job).schemaInfos);
+        List<IndexSchemaInfo> schemaInfos = ((LakeTableAsyncFastSchemaChangeJob) job).schemaInfos;
+        if (schemaInfos != null && !schemaInfos.isEmpty()) {
+            this.schemaInfos = new ArrayList<>(schemaInfos);
+        }
     }
 
+    @Override
+    public void write(DataOutput out) throws IOException {
+        String json;
 
+        if (!hasWriteSchema) {
+            hasWriteSchema = true;
+            json = GsonUtils.GSON.toJson(this);
+        } else {
+            List<IndexSchemaInfo> tmpSchemaInfos = this.schemaInfos;
+            this.schemaInfos = null;
+            json = GsonUtils.GSON.toJson(this);
+            this.schemaInfos = tmpSchemaInfos;
+        }
+
+        Text.writeString(out, json);
+    }
 
     private static class IndexSchemaInfo {
         @SerializedName("indexId")
