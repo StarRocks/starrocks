@@ -714,6 +714,13 @@ public class ArrayTypeTest extends PlanTestBase {
         assertCContains(plan, "array_slice[([5: d_2, ARRAY<DECIMAL64(4,3)>, true], 1, 3); " +
                 "args: INVALID_TYPE,BIGINT,BIGINT; result: ARRAY<DECIMAL64(4,3)>;");
 
+        sql = "select array_contains([null], null), array_position([null], null)";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  |  output columns:\n" +
+                "  |  2 <-> array_contains[([NULL], NULL); " +
+                "args: INVALID_TYPE,BOOLEAN; result: BOOLEAN; args nullable: true; result nullable: true]\n" +
+                "  |  3 <-> array_position[([NULL], NULL); " +
+                "args: INVALID_TYPE,BOOLEAN; result: INT; args nullable: true; result nullable: true]");
     }
 
     @Test

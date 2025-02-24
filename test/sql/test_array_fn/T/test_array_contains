@@ -538,3 +538,5 @@ SELECT id, array_position(array_struct, row(10, 'hello')) FROM test_array_contai
 SELECT id, array_position(array_struct, row(20, 'world')) FROM test_array_contains_complex_type ORDER BY id;
 SELECT id, array_position(array_struct, row(40, 'database')) FROM test_array_contains_complex_type ORDER BY id;
 SELECT id, array_position(array_struct, NULL) FROM test_array_contains_complex_type ORDER BY id;
+
+select array_contains([null], null), array_position([null], null);
