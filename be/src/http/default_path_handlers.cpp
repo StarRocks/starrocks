@@ -94,6 +94,7 @@ void config_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* 
 void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
     (*output) << "<h1>Memory Usage Detail</h1>\n";
     (*output) << "<table data-toggle='table' "
+                 "       data-page-size='25' "
                  "       data-pagination='true' "
                  "       data-search='true' "
                  "       class='table table-striped'>\n";
