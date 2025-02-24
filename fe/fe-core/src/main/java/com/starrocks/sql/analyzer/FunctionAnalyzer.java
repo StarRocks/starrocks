@@ -845,6 +845,14 @@ public class FunctionAnalyzer {
                 newFn.setUserVisible(fn.isUserVisible());
                 fn = newFn;
             }
+        } else if (FunctionSet.ARRAY_CONTAINS.equalsIgnoreCase(fnName) || FunctionSet.ARRAY_POSITION.equalsIgnoreCase(fnName)) {
+            Preconditions.checkState(argumentTypes.length == 2);
+            if (argumentTypes[1].isNull() &&
+                    argumentTypes[0].isArrayType() && ((ArrayType) argumentTypes[0]).getItemType().isNull()) {
+                argumentTypes[0] = Type.ARRAY_BOOLEAN;
+                argumentTypes[1] = Type.BOOLEAN;
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
+            }
         }
         // add new argument types
         Arrays.stream(argumentTypes).forEach(newArgumentTypes::add);
