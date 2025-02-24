@@ -270,6 +270,8 @@ message VacuumResponse {
     optional int64 vacuumed_files = 2;
     // The total size of files vacuumed, value undefined if status is not ok.
     optional int64 vacuumed_file_size = 3;
+    // The versions before vacuumed_version are vacuumed
+    optional int64 vacuumed_version = 4;
 }
 
 message VacuumFullRequest {

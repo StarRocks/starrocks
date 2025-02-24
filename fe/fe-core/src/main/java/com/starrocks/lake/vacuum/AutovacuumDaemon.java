@@ -22,6 +22,7 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -68,6 +69,9 @@ public class AutovacuumDaemon extends FrontendDaemon {
 
     @Override
     protected void runAfterCatalogReady() {
+        if (FeConstants.runningUnitTest) {
+            return;
+        }
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds();
         for (Long dbId : dbIds) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
@@ -88,20 +92,45 @@ public class AutovacuumDaemon extends FrontendDaemon {
         }
     }
 
+    public boolean shouldVacuum(PhysicalPartition partition) {
+        long current = System.currentTimeMillis();
+        long staleTime = current - Config.lake_autovacuum_stale_partition_threshold * MILLISECONDS_PER_HOUR;
+
+        if (partition.getVisibleVersionTime() <= staleTime) {
+            return false;
+        }
+        // empty parition
+        if (partition.getVisibleVersion() <= 1) {
+            return false;
+        }
+        // prevent vacuum too frequent
+        if (current < partition.getLastVacuumTime() + Config.lake_autovacuum_partition_naptime_seconds * 1000) {
+            return false;
+        }
+        if (Config.lake_autovacuum_detect_vaccumed_version) {
+            long minRetainVersion = partition.getMinRetainVersion();
+            if (minRetainVersion <= 0) {
+                minRetainVersion = Math.max(1, partition.getVisibleVersion() - Config.lake_autovacuum_max_previous_versions);
+            }
+            // the file before minRetainVersion vacuum success
+            if (partition.getLastSuccVacuumVersion() >= minRetainVersion) {
+                return false;
+            }
+        }
+        // TODO(zhangqiang)
+        // add partition data size and storage size on S3 to decide vacuum or not
+        return true;
+    }
+
     private void vacuumTable(Database db, Table baseTable) {
         OlapTable table = (OlapTable) baseTable;
         List<PhysicalPartition> partitions;
-        long current = System.currentTimeMillis();
-        long staleTime = current - Config.lake_autovacuum_stale_partition_threshold * MILLISECONDS_PER_HOUR;
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(baseTable.getId()), LockType.READ);
         try {
             partitions = table.getPhysicalPartitions().stream()
-                    .filter(p -> p.getVisibleVersionTime() > staleTime)
-                    .filter(p -> p.getVisibleVersion() > 1) // filter out empty partition
-                    .filter(p -> current >=
-                            p.getLastVacuumTime() + Config.lake_autovacuum_partition_naptime_seconds * 1000)
+                    .filter(p -> shouldVacuum(p))
                     .collect(Collectors.toList());
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(baseTable.getId()), LockType.READ);
@@ -157,6 +186,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         boolean hasError = false;
         long vacuumedFiles = 0;
         long vacuumedFileSize = 0;
+        long vacuumedVersion = Long.MAX_VALUE;
         boolean needDeleteTxnLog = true;
         List<Future<VacuumResponse>> responseFutures = Lists.newArrayListWithCapacity(nodeToTablets.size());
         for (Map.Entry<ComputeNode, List<Long>> entry : nodeToTablets.entrySet()) {
@@ -195,6 +225,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
                 } else {
                     vacuumedFiles += response.vacuumedFiles;
                     vacuumedFileSize += response.vacuumedFileSize;
+                    vacuumedVersion = Math.min(vacuumedVersion, response.vacuumedVersion);
                 }
             } catch (InterruptedException e) {
                 LOG.warn("thread interrupted");
@@ -208,10 +239,16 @@ public class AutovacuumDaemon extends FrontendDaemon {
         }
 
         partition.setLastVacuumTime(startTime);
+        if (!hasError && vacuumedVersion > partition.getLastSuccVacuumVersion()) {
+            // hasError is false means that the vacuum operation on all tablets was successful.
+            // the vacuumedVersion isthe minimum success vacuum version among all tablets within the partition which
+            // means that all the garbage files before the vacuumVersion have been deleted.
+            partition.setLastSuccVacuumVersion(vacuumedVersion);
+        }
         LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} " +
-                        "visibleVersion={} minRetainVersion={} minActiveTxnId={} cost={}ms",
+                        "visibleVersion={} minRetainVersion={} minActiveTxnId={} vacuumVersion={} cost={}ms",
                 db.getFullName(), table.getName(), partition.getId(), hasError, vacuumedFiles, vacuumedFileSize,
-                visibleVersion, minRetainVersion, minActiveTxnId, System.currentTimeMillis() - startTime);
+                visibleVersion, minRetainVersion, minActiveTxnId, vacuumedVersion, System.currentTimeMillis() - startTime);
     }
 
     private static long computeMinActiveTxnId(Database db, Table table) {
@@ -219,5 +256,9 @@ public class AutovacuumDaemon extends FrontendDaemon {
         Optional<Long> b =
                 GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getActiveTxnIdOfTable(table.getId());
         return Math.min(a, b.orElse(Long.MAX_VALUE));
+    }
+
+    public void testVacuumPartitionImpl(Database db, OlapTable table, PhysicalPartition partition) {
+        vacuumPartitionImpl(db, table, partition);
     }
 }
