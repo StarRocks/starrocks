@@ -565,18 +565,49 @@ ALTER TABLE orders ORDER BY (dt,revenue,state);
 
 ```sql
 -- 增加字段
-ALTER TABLE [<db_name>.]<tbl_name>
-MODIFY COLUMN <column_name> ADD FIELD <field_name>  <field_type> [AFTER <prior_field_name> |FIRST]
+ALTER TABLE [<db_name>.]<tbl_name> MODIFY COLUMN <column_name>
+ADD FIELD field_path field_desc
 
 -- 删除字段
-ALTER TABLE [<db_name>.]<tbl_name>
-MODIFY COLUMN <column_name> DROP FIELD <field_name>
+ALTER TABLE [<db_name>.]<tbl_name> MODIFY COLUMN <column_name>
+DROP FIELD field_path
+
+field_path ::= [ { <field_name>. | [*]. } [ ... ] ]<field_name>
+
+  -- 请注意，此处的 `[*]` 整体是一个预定义符号，不可拆分，
+  -- 用于在添加或删除嵌套在 ARRAY 类型中的 STRUCT 类型的字段时，代表 ARRAY 字段中的所有元素。
+  -- 有关详细信息，请参阅以下 `field_path` 的参数说明和示例。
+
+field_desc ::= <field_type> [ AFTER <prior_field_name> | FIRST ]
 ```
 
 参数：
 
-- `field_name`：需要增加或删除字段的名称。可以是单独的字段名，表示第一层级的字段，例如 `new_field_name`。也可以是 Column Access Path，用以表示嵌套层级的字段，例如 `lv1_k1.lv2_k2.new_field_name`。
-- `prior_field_name`：新增字段的前一个字段。与 AFTER 关键字合用，可以表示新加字段的顺序。如果指定 FIRST 关键字，表示新增第一个字段，则无需指定该参数。`prior_field_name` 的层级由 `field_name` 决定，无需手动指定。
+- `field_path`：需要增加或删除字段。可以是单独的字段名，表示第一层级的字段，例如 `new_field_name`。也可以是 Column Access Path，用以表示嵌套层级的字段，例如 `lv1_k1.lv2_k2.[*].new_field_name`。
+- `[*]`：当 ARRAY 和 STRUCT 类型发生嵌套时，`[*]` 代表操作 ARRAY 字段中的所有元素，用于在 ARRAY 类型字段下嵌套的每个 STRUCT 类型字段中添加或删除子字段。
+- `prior_field_name`：新增字段的前一个字段。与 AFTER 关键字合用，可以表示新加字段的顺序。如果指定 FIRST 关键字，表示新增第一个字段，则无需指定该参数。`prior_field_name` 的层级由 `field_path` 决定，无需手动指定（也即是 `new_field_name` 之前的部分 `level1_k1.level2_k2.[*]`）。
+
+`field_path` 示例：
+
+- 向嵌套 STRUCT 类型中添加或删除子字段。
+
+  假设向列 `fx stuct<c1 int, c2 struct <v1 int, v2 int>>` 中的 `c2` 字段下增加新字段 `v3`, 对应的语法为：
+
+  ```SQL
+  ALTER TABLE tbl MODIFY COLUMN fx ADD FIELD c2.v3 INT
+  ```
+
+  操作后该列变为 `fx stuct<c1 int, c2 struct <v1 int, v2 int, v3 int>>`。
+
+- 向 ARRAY 类型下嵌套的 STRUCT 类型中添加或删除子字段。
+
+  假设有列 `fx struct<c1 int, c2 array<struct <v1 int, v2 int>>>`, `fx` 列中 `c2` 字段是 ARRAY 类型，其下嵌套 STRUCT 类型元素 `v1` 和 `v2` 两个字段。当向 `c2` 中的 STRUCT 类型元素添加一个新字段 `v3` 时，对应的语法为：
+
+  ```SQL
+  ALTER TABLE tbl MODIFY COLUMN fx ADD FIELD c2.[*].v3 INT
+  ```
+
+  操作后该列变为 `fx struct<c1 int, c2 array<struct <v1 int, v2 int, v3 int>>>`。
 
 有关示例，参考 [示例 - Column -14](#column)。
 

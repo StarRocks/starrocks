@@ -573,18 +573,49 @@ Syntax:
 
 ```sql
 -- Add a field
-ALTER TABLE [<db_name>.]<tbl_name>
-MODIFY COLUMN <column_name> ADD FIELD <field_name> <field_type> [AFTER <prior_field_name> |FIRST]
+ALTER TABLE [<db_name>.]<tbl_name> MODIFY COLUMN <column_name>
+ADD FIELD field_path field_desc
 
 -- Drop a field
-ALTER TABLE [<db_name>.]<tbl_name>
-MODIFY COLUMN <column_name> DROP FIELD <field_name>
+ALTER TABLE [<db_name>.]<tbl_name> MODIFY COLUMN <column_name>
+DROP FIELD field_path
+
+field_path ::= [ { <field_name>. | [*]. } [ ... ] ]<field_name>
+
+  -- Note that here `[*]` as a whole is a pre-defined symbol and represents all elements in the ARRAY field 
+  -- when adding or removing a field in a STRUCT type nested within an ARRAY type.
+  -- For detailed information, see the parameter description and examples of `field_path`.
+
+field_desc ::= <field_type> [ AFTER <prior_field_name> | FIRST ]
 ```
 
 Parameters:
 
-- `field_name`: The name of the field to be added or removed. This can be a simple field name, indicating a top-dimension field, for example, `new_field_name`, or a Column Access Path, representing a nested field, for example, `lv1_k1.lv2_k2.new_field_name`.
-- `prior_field_name`: The field preceding the newly added field. Used in conjunction with the AFTER keyword to specify the order of the new field. You do not need to specify this parameter if the FIRST keyword is used, indicating the new field should be the first field. The dimension of `prior_field_name` is determined by `field_name` and does not need to be specified explicitly.
+- `field_path`: The field to be added or removed. This can be a simple field name, indicating a top-dimension field, for example, `new_field_name`, or a Column Access Path that represents a nested field, for example, `lv1_k1.lv2_k2.[*].new_field_name`.
+- `[*]`: When a STRUCT type is nested within an ARRAY type, `[*]` represents all elements in the ARRAY field. It is used to add or remove a field in all STRUCT elements nested under the ARRAY field.
+- `prior_field_name`: The field preceding the newly added field. Used in conjunction with the AFTER keyword to specify the order of the new field. You do not need to specify this parameter if the FIRST keyword is used, indicating the new field should be the first field. The dimension of `prior_field_name` is determined by `field_path` (specifically, the part preceding `new_field_name`, that is, `level1_k1.level2_k2.[*]`) and does not need to be specified explicitly.
+
+Examples of `field_path`:
+
+- Add or drop a sub-field in a STRUCT field nested within a STRUCT column.
+
+  Suppose there is a column `fx stuct<c1 int, c2 struct <v1 int, v2 int>>`. The syntax to add a `v3` field under `c2` is:
+
+  ```SQL
+  ALTER TABLE tbl MODIFY COLUMN fx ADD FIELD c2.v3 INT
+  ```
+
+  After the operation, the column becomes `fx stuct<c1 int, c2 struct <v1 int, v2 int, v3 int>>`.
+
+- Add or drop a sub-field in every STRUCT field nested within a ARRAY field.
+
+  Suppose there is a column `fx struct<c1 int, c2 array<struct <v1 int, v2 int>>>`. The field `c2` is an ARRAY type, which contains a STRUCT with two fields `v1` and `v2`. The syntax to add a `v3` field to the nested STRUCT is:
+
+  ```SQL
+  ALTER TABLE tbl MODIFY COLUMN fx ADD FIELD c2.[*].v3 INT
+  ```
+
+  After the operation, the column becomes `fx struct<c1 int, c2 array<struct <v1 int, v2 int, v3 int>>>`.
 
 For more usage instructions, see [Example - Column -14](#column).
 
