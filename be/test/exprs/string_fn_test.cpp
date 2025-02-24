@@ -1427,7 +1427,7 @@ PARALLEL_TEST(VecStringFunctionsTest, upperTest) {
     Columns columns;
     auto str = BinaryColumn::create();
     for (int j = 0; j < 20; ++j) {
-        str->append("abcd" + std::to_string(j));
+        str->append("abcdвв" + std::to_string(j));
     }
 
     columns.emplace_back(str);
@@ -1438,7 +1438,7 @@ PARALLEL_TEST(VecStringFunctionsTest, upperTest) {
     auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
 
     for (int k = 0; k < 20; ++k) {
-        ASSERT_EQ("ABCD" + std::to_string(k), v->get_data()[k].to_string());
+        ASSERT_EQ("ABCDВВ" + std::to_string(k), v->get_data()[k].to_string());
     }
 }
 
