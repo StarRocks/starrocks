@@ -312,7 +312,7 @@ private:
 
         ASSIGN_OR_RETURN(ColumnPtr case_column, _children[0]->evaluate_checked(context, chunk));
         if (ColumnHelper::count_nulls(case_column) == case_column->size()) {
-            return Column::mutate(std::move(else_column));
+            return else_column->clone();
         }
 
         int loop_end = _children.size() - 1;
@@ -338,7 +338,7 @@ private:
         }
 
         if (when_columns.empty()) {
-            return Column::mutate(std::move(else_column));
+            return else_column->clone();
         }
         then_columns.emplace_back(else_column);
         size_t size = when_columns[0]->size();
@@ -489,7 +489,7 @@ private:
 
             // direct return if first when is all true
             if (when_viewers.empty() && trues_count == when_column->size()) {
-                return Column::mutate(std::move(then_column));
+                return then_column->clone();
             }
 
             when_columns.emplace_back(when_column);
@@ -498,7 +498,7 @@ private:
         }
 
         if (when_viewers.empty()) {
-            return Column::mutate(std::move(else_column));
+            return else_column->clone();
         }
         then_columns.emplace_back(else_column);
 
