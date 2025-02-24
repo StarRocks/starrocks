@@ -31,7 +31,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
             TUniqueId query_id;
             query_id.hi = 100;
             query_id.lo = i;
-            auto* query_ctx = query_ctx_mgr->get_or_register(query_id);
+            ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
             ASSERT_TRUE(query_ctx != nullptr);
             query_ctx->set_delivery_expire_seconds(60);
             query_ctx->set_query_expire_seconds(300);
@@ -71,7 +71,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         TUniqueId query_id;
         query_id.hi = 100;
         query_id.lo = 1;
-        auto* query_ctx = query_ctx_mgr->get_or_register(query_id);
+        ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
         query_ctx->set_total_fragments(8);
         query_ctx->set_delivery_expire_seconds(60);
         query_ctx->set_query_expire_seconds(300);
@@ -81,7 +81,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
 
         for (int i = 0; i < 7; ++i) {
-            auto* tmp_query_ctx = query_ctx_mgr->get_or_register(query_id);
+            ASSIGN_OR_ASSERT_FAIL(auto* tmp_query_ctx, query_ctx_mgr->get_or_register(query_id));
             tmp_query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
             ASSERT_TRUE(tmp_query_ctx != nullptr);
         }
@@ -100,7 +100,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         TUniqueId query_id;
         query_id.hi = 100;
         query_id.lo = 2;
-        auto* query_ctx = query_ctx_mgr->get_or_register(query_id);
+        ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
         query_ctx->set_total_fragments(8);
         query_ctx->set_delivery_expire_seconds(60);
         query_ctx->set_query_expire_seconds(300);
@@ -110,7 +110,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
 
         for (int i = 0; i < 3; ++i) {
-            auto* tmp_query_ctx = query_ctx_mgr->get_or_register(query_id);
+            ASSIGN_OR_ASSERT_FAIL(auto* tmp_query_ctx, query_ctx_mgr->get_or_register(query_id));
             tmp_query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
             ASSERT_TRUE(tmp_query_ctx != nullptr);
         }
@@ -122,7 +122,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         query_ctx_mgr->remove(query_id);
         ASSERT_TRUE(query_ctx_mgr->get(query_id) != nullptr);
         for (int i = 0; i < 3; ++i) {
-            auto* tmp_query_ctx = query_ctx_mgr->get_or_register(query_id);
+            ASSIGN_OR_ASSERT_FAIL(auto* tmp_query_ctx, query_ctx_mgr->get_or_register(query_id));
             tmp_query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
             ASSERT_TRUE(query_ctx != nullptr);
             tmp_query_ctx->count_down_fragments();
@@ -131,7 +131,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
             ASSERT_FALSE(tmp_query_ctx->is_dead());
             ASSERT_TRUE(query_ctx_mgr->get(query_id) != nullptr);
         }
-        query_ctx = query_ctx_mgr->get_or_register(query_id);
+        ASSIGN_OR_ASSERT_FAIL(query_ctx, query_ctx_mgr->get_or_register(query_id));
         query_ctx->count_down_fragments();
         query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
         ASSERT_TRUE(query_ctx->is_dead());
@@ -145,7 +145,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         TUniqueId query_id;
         query_id.hi = 100;
         query_id.lo = 3;
-        auto* query_ctx = query_ctx_mgr->get_or_register(query_id);
+        ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
         query_ctx->set_total_fragments(8);
         query_ctx->set_delivery_expire_seconds(60);
         query_ctx->set_query_expire_seconds(300);
@@ -154,7 +154,7 @@ TEST(QueryContextManagerTest, testSingleThreadOperations) {
         query_ctx->count_down_fragments();
         query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
         for (int i = 0; i < 3; ++i) {
-            auto* tmp_query_ctx = query_ctx_mgr->get_or_register(query_id);
+            ASSIGN_OR_ASSERT_FAIL(auto* tmp_query_ctx, query_ctx_mgr->get_or_register(query_id));
             tmp_query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
             ASSERT_TRUE(tmp_query_ctx != nullptr);
         }
@@ -180,7 +180,7 @@ TEST(QueryContextManagerTest, testMulitiThreadOperations) {
     TUniqueId query_id;
     query_id.lo = 100;
     query_id.hi = 2;
-    auto* query_ctx = query_ctx_mgr->get_or_register(query_id);
+    ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
     query_ctx->set_total_fragments(202);
     query_ctx->set_delivery_expire_seconds(60);
     query_ctx->set_query_expire_seconds(300);
@@ -197,7 +197,7 @@ TEST(QueryContextManagerTest, testMulitiThreadOperations) {
             std::random_device rd;
             std::uniform_int_distribution<int> dist(1, 100);
             for (int k = 0; k < 20; ++k) {
-                auto* query_ctx = query_ctx_mgr->get_or_register(query_id);
+                ASSIGN_OR_ASSERT_FAIL(auto* query_ctx, query_ctx_mgr->get_or_register(query_id));
                 query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
                 ASSERT_TRUE(query_ctx != nullptr);
                 ASSERT_FALSE(query_ctx->is_delivery_expired());
@@ -213,7 +213,7 @@ TEST(QueryContextManagerTest, testMulitiThreadOperations) {
         threads[i].join();
     }
 
-    query_ctx = query_ctx_mgr->get_or_register(query_id);
+    ASSIGN_OR_ASSERT_FAIL(query_ctx, query_ctx_mgr->get_or_register(query_id));
     query_ctx->count_down_fragments();
     query_ctx->init_mem_tracker(parent_mem_tracker->limit(), parent_mem_tracker.get());
     ASSERT_TRUE(query_ctx->is_dead());
@@ -228,7 +228,11 @@ QueryContext* gen_query_ctx(MemTracker* parent_mem_tracker, QueryContextManager*
     query_id.hi = query_id_hi;
     query_id.lo = query_id_lo;
 
-    auto* query_ctx = query_ctx_mgr->get_or_register(query_id);
+    auto res = query_ctx_mgr->get_or_register(query_id);
+    if (!res.ok()) {
+        return nullptr;
+    }
+    auto* query_ctx = res.value();
     query_ctx->set_total_fragments(total_fragments);
     query_ctx->set_delivery_expire_seconds(delivery_expire_seconds);
     query_ctx->set_query_expire_seconds(query_expire_seconds);
@@ -261,7 +265,7 @@ TEST(QueryContextManagerTest, testSetWorkgroup) {
     ASSERT_EQ(1, wg->concurrency_overflow_count());
     // All the fragments comes.
     for (int i = 1; i < query_ctx1->total_fragments(); ++i) {
-        auto* cur_query_ctx = query_ctx_mgr->get_or_register(query_id1);
+        ASSIGN_OR_ASSERT_FAIL(auto* cur_query_ctx, query_ctx_mgr->get_or_register(query_id1));
         ASSERT_EQ(query_ctx1, cur_query_ctx);
     }
     while (!query_ctx1->has_no_active_instances()) {
@@ -281,7 +285,7 @@ TEST(QueryContextManagerTest, testSetWorkgroup) {
     ASSERT_OK(query_ctx2->init_query_once(wg.get(), false)); // None-first invocations have no side-effects.
     ASSERT_EQ(1, wg->num_running_queries());
     for (int i = 2; i < query_ctx2->total_fragments(); ++i) {
-        auto* cur_query_ctx = query_ctx_mgr->get_or_register(query_id2);
+        ASSIGN_OR_ASSERT_FAIL(auto* cur_query_ctx, query_ctx_mgr->get_or_register(query_id2));
         ASSERT_EQ(query_ctx2, cur_query_ctx);
     }
     while (!query_ctx2->has_no_active_instances()) {

@@ -89,6 +89,11 @@ public:
 
     bool is_cancelled() const { return _is_cancelled; }
 
+    Status get_cancelled_status() const {
+        auto* status = _cancelled_status.load();
+        return status == nullptr ? Status::Cancelled("Query has been cancelled") : *status;
+    }
+
     bool is_dead() const { return _num_active_fragments == 0 && (_num_fragments == _total_fragments || _is_cancelled); }
     // add expired seconds to deadline
     void extend_delivery_lifetime() {
@@ -311,6 +316,8 @@ private:
     std::shared_ptr<starrocks::debug::QueryTrace> _query_trace;
     std::atomic_bool _is_prepared = false;
     std::atomic_bool _is_cancelled = false;
+    std::atomic<Status*> _cancelled_status = nullptr;
+    Status _s_status;
 
     std::once_flag _init_query_once;
     int64_t _query_begin_time = 0;
@@ -376,7 +383,7 @@ public:
     QueryContextManager(size_t log2_num_slots);
     ~QueryContextManager();
     Status init();
-    QueryContext* get_or_register(const TUniqueId& query_id);
+    StatusOr<QueryContext*> get_or_register(const TUniqueId& query_id);
     QueryContextPtr get(const TUniqueId& query_id, bool need_prepared = false);
     size_t size();
     bool remove(const TUniqueId& query_id);
