@@ -17,6 +17,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.starrocks.analysis.TypeDef;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
@@ -33,7 +34,6 @@ import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.epack.authentication.LDAPSecurityIntegration;
-import com.starrocks.epack.authentication.SecurityIntegration;
 import com.starrocks.epack.authorization.AuthorizerEPack;
 import com.starrocks.epack.authorization.DbUID;
 import com.starrocks.epack.authorization.LDAPRoleMapping;
@@ -49,12 +49,10 @@ import com.starrocks.epack.sql.ast.PolicyName;
 import com.starrocks.epack.sql.ast.PolicyType;
 import com.starrocks.epack.sql.ast.ShowCreatePasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
-import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ShowFailoverGroupsStmt;
 import com.starrocks.epack.sql.ast.ShowPasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowRoleMappingStatement;
-import com.starrocks.epack.sql.ast.ShowSecurityIntegrationStatement;
 import com.starrocks.epack.warehouse.Cluster;
 import com.starrocks.epack.warehouse.LocalWarehouse;
 import com.starrocks.qe.ConnectContext;
@@ -292,57 +290,6 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
                 .collect(Collectors.toList());
 
         return new ShowResultSet(statement.getMetaData(), sortedList);
-    }
-
-    @Override
-    public ShowResultSet visitShowSecurityIntegrationStatement(ShowSecurityIntegrationStatement statement,
-                                                               ConnectContext context) {
-        AuthenticationMgrEPack authenticationManager =
-                (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-        Set<SecurityIntegration> securityIntegrations = authenticationManager.getAllSecurityIntegrations();
-        List<List<String>> infos = new ArrayList<>();
-        for (SecurityIntegration securityIntegration : securityIntegrations) {
-            List<String> info = new ArrayList<>();
-            info.add(securityIntegration.getName());
-            info.add(securityIntegration.getType());
-            if (securityIntegration.getComment().isEmpty()) {
-                info.add(FeConstants.NULL_STRING);
-            } else {
-                info.add(securityIntegration.getComment());
-            }
-            infos.add(info);
-        }
-
-        // sort by type, then by name
-        List<List<String>> sortedList = infos.stream()
-                .sorted(
-                        Comparator.comparing((List<String> sublist) -> sublist.get(1))
-                                .thenComparing((List<String> sublist) -> sublist.get(0))
-                )
-                .collect(Collectors.toList());
-
-        return new ShowResultSet(statement.getMetaData(), sortedList);
-    }
-
-    @Override
-    public ShowResultSet visitShowCreateSecurityIntegrationStatement(ShowCreateSecurityIntegrationStatement statement,
-                                                                     ConnectContext context) {
-        AuthenticationMgrEPack authenticationManager =
-                (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-
-        String name = statement.getName();
-        List<List<String>> infos = new ArrayList<>();
-        SecurityIntegration securityIntegration = authenticationManager.getSecurityIntegration(name);
-        if (securityIntegration != null) {
-            Map<String, String> propertyMap = securityIntegration.getPropertyMap();
-            String propString = propertyMap.entrySet().stream()
-                    .map(entry -> "\"" + entry.getKey() + "\" = \"" + entry.getValue() + "\"")
-                    .collect(Collectors.joining(",\n"));
-            infos.add(Lists.newArrayList(name,
-                    "CREATE SECURITY INTEGRATION `" + name +
-                            "` PROPERTIES (\n" + propString + "\n)"));
-        }
-        return new ShowResultSet(statement.getMetaData(), infos);
     }
 
     @Override

@@ -14,8 +14,8 @@
 
 package com.starrocks.epack.authorization;
 
+import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authorization.PrivilegeException;
-import com.starrocks.epack.authentication.SecurityIntegration;
 
 import java.util.Map;
 import java.util.Objects;

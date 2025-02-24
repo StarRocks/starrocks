@@ -10,24 +10,20 @@ import com.starrocks.epack.sql.ast.AlterFailoverGroupResumeStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupSetStmt;
 import com.starrocks.epack.sql.ast.AlterFailoverGroupSuspendStmt;
 import com.starrocks.epack.sql.ast.AlterPolicyStmt;
-import com.starrocks.epack.sql.ast.AlterSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.AstVisitorEPack;
 import com.starrocks.epack.sql.ast.CreatePasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePolicyStmt;
 import com.starrocks.epack.sql.ast.CreatePrimaryFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.CreateRoleMappingStatement;
 import com.starrocks.epack.sql.ast.CreateSecondaryFailoverGroupStmt;
-import com.starrocks.epack.sql.ast.CreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.DescribeFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DropFailoverGroupStmt;
 import com.starrocks.epack.sql.ast.DropPasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.DropPolicyStmt;
 import com.starrocks.epack.sql.ast.DropRoleMappingStatement;
-import com.starrocks.epack.sql.ast.DropSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.SetPasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowCreatePolicyStmt;
-import com.starrocks.epack.sql.ast.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.epack.sql.ast.ShowFailoverGroupsStmt;
 import com.starrocks.epack.sql.ast.ShowPasswordPolicyStmt;
 import com.starrocks.epack.sql.ast.ShowPolicyStmt;
@@ -156,34 +152,6 @@ public class AnalyzerVisitorEPack extends Analyzer.AnalyzerVisitor implements As
     }
 
     // ---------------------------------------- Security Integration Statement -------------------------------------
-
-    @Override
-    public Void visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement,
-                                                        ConnectContext context) {
-        SecurityIntegrationStatementAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
-    public Void visitAlterSecurityIntegrationStatement(AlterSecurityIntegrationStatement statement,
-                                                       ConnectContext context) {
-        SecurityIntegrationStatementAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
-    public Void visitDropSecurityIntegrationStatement(DropSecurityIntegrationStatement statement,
-                                                      ConnectContext context) {
-        SecurityIntegrationStatementAnalyzer.analyze(statement, context);
-        return null;
-    }
-
-    @Override
-    public Void visitShowCreateSecurityIntegrationStatement(ShowCreateSecurityIntegrationStatement statement,
-                                                            ConnectContext context) {
-        SecurityIntegrationStatementAnalyzer.analyze(statement, context);
-        return null;
-    }
 
     @Override
     public Void visitCreateRoleMappingStatement(CreateRoleMappingStatement statement, ConnectContext context) {

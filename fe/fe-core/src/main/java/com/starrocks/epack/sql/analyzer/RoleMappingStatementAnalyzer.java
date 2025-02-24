@@ -2,8 +2,8 @@
 
 package com.starrocks.epack.sql.analyzer;
 
+import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.epack.authentication.AuthenticationMgrEPack;
-import com.starrocks.epack.authentication.SecurityIntegration;
 import com.starrocks.epack.authorization.LDAPRoleMapping;
 import com.starrocks.epack.authorization.RoleMapping;
 import com.starrocks.epack.sql.ast.AlterRoleMappingStatement;

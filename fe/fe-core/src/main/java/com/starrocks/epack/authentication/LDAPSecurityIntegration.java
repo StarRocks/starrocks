@@ -18,9 +18,11 @@ import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.AuthenticationProviderFactory;
+import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.common.Pair;
 import com.starrocks.epack.security.SslUtils;
 import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -28,10 +30,13 @@ import org.apache.logging.log4j.Logger;
 import java.io.File;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Hashtable;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.naming.Context;
@@ -72,6 +77,12 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
     private static final String LDAPS_SERVER_SSL_DEFAULT_PORT = "636";
 
     private static final Pattern URL_PATTERN = Pattern.compile("://([\\w.]+):(\\d+)");
+
+    final Set<String> requiredProperties = new HashSet<>(Arrays.asList(
+            SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY,
+            LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_BASE_DN_KEY,
+            LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_ROOT_DN_KEY,
+            LDAPSecurityIntegration.LDAP_SEC_INTEGRATION_PROP_ROOT_PWD_KEY));
 
     /**
      * last refresh time of group membership for all role
@@ -252,5 +263,76 @@ public class LDAPSecurityIntegration extends SecurityIntegration {
 
         // 2. Create dir context and return.
         return new InitialDirContext(environment);
+    }
+
+    @Override
+    public void checkProperty() throws SemanticException {
+        requiredProperties.forEach(s -> {
+            if (!propertyMap.containsKey(s)) {
+                throw new SemanticException("missing required property: " + s);
+            }
+        });
+
+        if (propertyMap.containsKey(LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY)) {
+            try {
+                String val = propertyMap.get(LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY);
+                int interval = Integer.parseInt(val);
+                if (interval < 10) {
+                    throw new NumberFormatException("current value of '" +
+                            LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY + "' is less than 10");
+                }
+            } catch (NumberFormatException e) {
+                throw new SemanticException("invalid '" +
+                        LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY +
+                        "' property value, error: " + e.getMessage(), e);
+            }
+        }
+
+        validateIntegerProp(propertyMap, LDAP_SEC_INTEGRATION_PROP_CACHE_REFRESH_INTERVAL_KEY,
+                1, 86400 /* max one day in sec */);
+        validateIntegerProp(propertyMap, LDAP_SEC_INTEGRATION_PROP_CONN_TIMEOUT_MS_KEY,
+                10, Integer.MAX_VALUE);
+        validateIntegerProp(propertyMap, LDAP_SEC_INTEGRATION_PROP_CONN_READ_TIMEOUT_MS_KEY,
+                10, Integer.MAX_VALUE);
+        validateBooleanProp(propertyMap, LDAP_SEC_INTEGRATION_PROP_USE_MEMBER_UID_KEY);
+        validateBooleanProp(propertyMap, LDAP_SEC_INTEGRATION_PROP_SSL_CONN_ALLOW_INSECURE);
+
+        if (propertyMap.containsKey(LDAP_SEC_INTEGRATION_GROUP_MATCH_ATTR_KEY)) {
+            String value = propertyMap.get(LDAP_SEC_INTEGRATION_GROUP_MATCH_ATTR_KEY);
+            if (value.startsWith("regex:") && value.split(":").length < 2) {
+                throw new SemanticException("invalid '" +
+                        LDAP_SEC_INTEGRATION_GROUP_MATCH_ATTR_KEY +
+                        "' property value: " + value);
+            }
+        }
+    }
+
+    private void validateIntegerProp(Map<String, String> propertyMap, String key, int min, int max)
+            throws SemanticException {
+        if (propertyMap.containsKey(key)) {
+            String val = propertyMap.get(key);
+            try {
+                int intVal = Integer.parseInt(val);
+                if (intVal < min || intVal > max) {
+                    throw new NumberFormatException("current value of '" +
+                            key + "' is invalid, value: " + intVal +
+                            ", should be in range [" + min + ", " + max + "]");
+                }
+            } catch (NumberFormatException e) {
+                throw new SemanticException("invalid '" +
+                        key + "' property value: " + val + ", error: " + e.getMessage(), e);
+            }
+        }
+    }
+
+    private void validateBooleanProp(Map<String, String> propertyMap, String key) throws SemanticException {
+        if (propertyMap.containsKey(key)) {
+            String val = propertyMap.get(key);
+            if (!val.equalsIgnoreCase("true") && !val.equalsIgnoreCase("false")) {
+                throw new SemanticException("invalid '" +
+                        key + "' property value, expected 'true' or 'false'");
+            }
+        }
+
     }
 }

@@ -94,26 +94,6 @@ public interface AstVisitorEPack<R, C> extends AstVisitor<R, C> {
 
     // ---------------------------------------- Authz Statement ----------------------------------------------------
 
-    default R visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    default R visitDropSecurityIntegrationStatement(DropSecurityIntegrationStatement statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    default R visitAlterSecurityIntegrationStatement(AlterSecurityIntegrationStatement statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    default R visitShowCreateSecurityIntegrationStatement(ShowCreateSecurityIntegrationStatement statement, C context) {
-        return visitStatement(statement, context);
-    }
-
-    default R visitShowSecurityIntegrationStatement(ShowSecurityIntegrationStatement statement, C context) {
-        return visitStatement(statement, context);
-    }
-
     default R visitCreateRoleMappingStatement(CreateRoleMappingStatement statement, C context) {
         return visitStatement(statement, context);
     }

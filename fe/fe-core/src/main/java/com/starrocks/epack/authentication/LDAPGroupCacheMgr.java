@@ -18,6 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.common.util.FrontendDaemon;
 import org.apache.logging.log4j.LogManager;

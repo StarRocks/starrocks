@@ -14,21 +14,21 @@
 
 package com.starrocks.authentication;
 
+import com.google.common.collect.Maps;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.StarRocksFE;
 import com.starrocks.authorization.AuthorizationMgr;
-import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.UserPrivilegeCollectionV2;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
-import com.starrocks.epack.authentication.SecurityIntegration;
 import com.starrocks.epack.authorization.PasswordPolicy;
 import com.starrocks.epack.sql.ast.UserPasswordOption;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
+import com.starrocks.persist.EditLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.MapEntryConsumer;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
@@ -36,7 +36,6 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -57,7 +56,6 @@ import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -76,6 +74,37 @@ public class AuthenticationMgr {
     // user identity -> all the authentication information
     // will be manually serialized one by one
     protected Map<UserIdentity, UserAuthenticationInfo> userToAuthenticationInfo;
+
+    // For legacy reason, user property are set by username instead of full user identity.
+    @SerializedName(value = "m")
+    private Map<String, UserProperty> userNameToProperty = new HashMap<>();
+
+    @SerializedName("sim")
+    protected Map<String, SecurityIntegration> nameToSecurityIntegrationMap = new ConcurrentHashMap<>();
+
+    // resolve hostname to ip
+    private Map<String, Set<String>> hostnameToIpSet = new HashMap<>();
+    private final ReentrantReadWriteLock hostnameToIpLock = new ReentrantReadWriteLock();
+
+    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
+    // set by load() to distinguish brand-new environment with upgraded environment
+    private boolean isLoaded = false;
+
+    public AuthenticationMgr() {
+        // default user
+        userToAuthenticationInfo = new UserAuthInfoTreeMap();
+        UserAuthenticationInfo info = new UserAuthenticationInfo();
+        try {
+            info.setOrigUserHost(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
+        } catch (AuthenticationException e) {
+            throw new RuntimeException("should not happened!", e);
+        }
+        info.setAuthPlugin(PlainPasswordAuthenticationProvider.PLUGIN_NAME);
+        info.setPassword(MysqlPassword.EMPTY_PASSWORD);
+        userToAuthenticationInfo.put(UserIdentity.ROOT, info);
+        userNameToProperty.put(UserIdentity.ROOT.getUser(), new UserProperty());
+    }
 
     private static class UserAuthInfoTreeMap extends TreeMap<UserIdentity, UserAuthenticationInfo> {
         public UserAuthInfoTreeMap() {
@@ -113,37 +142,6 @@ public class AuthenticationMgr {
             }
             return 1;
         }
-    }
-
-    // For legacy reason, user property are set by username instead of full user identity.
-    @SerializedName(value = "m")
-    private Map<String, UserProperty> userNameToProperty = new HashMap<>();
-
-    // resolve hostname to ip
-    private Map<String, Set<String>> hostnameToIpSet = new HashMap<>();
-    private final ReentrantReadWriteLock hostnameToIpLock = new ReentrantReadWriteLock();
-
-    private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
-
-    // set by load() to distinguish brand-new environment with upgraded environment
-    private boolean isLoaded = false;
-
-    @SerializedName("sim")
-    protected Map<String, SecurityIntegration> nameToSecurityIntegrationMap = new ConcurrentHashMap<>();
-
-    public AuthenticationMgr() {
-        // default user
-        userToAuthenticationInfo = new UserAuthInfoTreeMap();
-        UserAuthenticationInfo info = new UserAuthenticationInfo();
-        try {
-            info.setOrigUserHost(ROOT_USER, UserAuthenticationInfo.ANY_HOST);
-        } catch (AuthenticationException e) {
-            throw new RuntimeException("should not happened!", e);
-        }
-        info.setAuthPlugin(PlainPasswordAuthenticationProvider.PLUGIN_NAME);
-        info.setPassword(MysqlPassword.EMPTY_PASSWORD);
-        userToAuthenticationInfo.put(UserIdentity.ROOT, info);
-        userNameToProperty.put(UserIdentity.ROOT.getUser(), new UserProperty());
     }
 
     protected void readLock() {
@@ -298,11 +296,6 @@ public class AuthenticationMgr {
                         userAuthenticationInfo);
                 // the ephemeral user is identified as 'username'@'auth_mechanism'
                 UserIdentity authenticatedUser = UserIdentity.createEphemeralUserIdent(remoteUser, authMechanism);
-                ConnectContext currentContext = ConnectContext.get();
-                if (currentContext != null) {
-                    currentContext.setCurrentRoleIds(new HashSet<>(
-                            Collections.singletonList(PrivilegeBuiltinConstants.ROOT_ROLE_ID)));
-                }
                 return authenticatedUser;
             } catch (AuthenticationException e) {
                 LOG.debug("failed to authenticate, user: {}@{}, security integration: {}, error: {}",
@@ -752,5 +745,83 @@ public class AuthenticationMgr {
                 alterUser(userIdentity, null, null, new UserLockOption(true), null);
             }
         }
+    }
+
+    //=========================================== Security Integration ==================================================
+
+    public void createSecurityIntegration(String name,
+                                          Map<String, String> propertyMap,
+                                          boolean isReplay) throws DdlException {
+        SecurityIntegration securityIntegration;
+        securityIntegration = SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
+        // atomic op
+        SecurityIntegration result = nameToSecurityIntegrationMap.putIfAbsent(name, securityIntegration);
+        if (result != null) {
+            throw new DdlException("security integration '" + name + "' already exists");
+        }
+        if (!isReplay) {
+            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logCreateSecurityIntegration(name, propertyMap);
+            LOG.info("finished to create security integration '{}'", securityIntegration.toString());
+        }
+    }
+
+    public void alterSecurityIntegration(String name, Map<String, String> alterProps,
+                                         boolean isReplay) throws DdlException {
+        SecurityIntegration securityIntegration = nameToSecurityIntegrationMap.get(name);
+        if (securityIntegration == null) {
+            throw new DdlException("security integration '" + name + "' not found");
+        } else {
+            // COW
+            Map<String, String> newProps = Maps.newHashMap(securityIntegration.getPropertyMap());
+            // update props
+            newProps.putAll(alterProps);
+            SecurityIntegration newSecurityIntegration;
+            newSecurityIntegration = SecurityIntegrationFactory.createSecurityIntegration(name, newProps);
+            // update map
+            nameToSecurityIntegrationMap.put(name, newSecurityIntegration);
+            if (!isReplay) {
+                EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+                editLog.logAlterSecurityIntegration(name, alterProps);
+                LOG.info("finished to alter security integration '{}' with updated properties {}",
+                        name, alterProps);
+            }
+        }
+    }
+
+    public void dropSecurityIntegration(String name, boolean isReplay) throws DdlException {
+        if (!nameToSecurityIntegrationMap.containsKey(name)) {
+            throw new DdlException("security integration '" + name + "' not found");
+        }
+
+        SecurityIntegration result = nameToSecurityIntegrationMap.remove(name);
+        if (!isReplay && result != null) {
+            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logDropSecurityIntegration(name);
+            LOG.info("finished to drop security integration '{}'", name);
+        }
+    }
+
+    public SecurityIntegration getSecurityIntegration(String name) {
+        return nameToSecurityIntegrationMap.get(name);
+    }
+
+    public Set<SecurityIntegration> getAllSecurityIntegrations() {
+        return new HashSet<>(nameToSecurityIntegrationMap.values());
+    }
+
+    public void replayCreateSecurityIntegration(String name, Map<String, String> propertyMap)
+            throws DdlException {
+        createSecurityIntegration(name, propertyMap, true);
+    }
+
+    public void replayAlterSecurityIntegration(String name, Map<String, String> alterProps)
+            throws DdlException {
+        alterSecurityIntegration(name, alterProps, true);
+    }
+
+    public void replayDropSecurityIntegration(String name)
+            throws DdlException {
+        dropSecurityIntegration(name, true);
     }
 }

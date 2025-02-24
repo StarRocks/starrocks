@@ -14,10 +14,10 @@
 
 package com.starrocks.epack.system;
 
+import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.common.Pair;
 import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.epack.authentication.LDAPSecurityIntegration;
-import com.starrocks.epack.authentication.SecurityIntegration;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.PortConnectivityChecker;
 import org.apache.logging.log4j.LogManager;

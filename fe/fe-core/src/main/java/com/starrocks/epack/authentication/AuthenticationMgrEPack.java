@@ -2,22 +2,19 @@
 
 package com.starrocks.epack.authentication;
 
-import com.google.common.collect.Maps;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.common.DdlException;
-import com.starrocks.epack.persist.EditLogEPack;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 
 public class AuthenticationMgrEPack extends AuthenticationMgr {
@@ -96,55 +93,6 @@ public class AuthenticationMgrEPack extends AuthenticationMgr {
         }
     }
 
-    public void createSecurityIntegration(String name,
-                                          Map<String, String> propertyMap,
-                                          boolean isReplay) throws DdlException {
-        SecurityIntegration securityIntegration;
-        try {
-            securityIntegration =
-                    SecurityIntegrationFactory.createSecurityIntegration(name, propertyMap);
-        } catch (DdlException e) {
-            throw new DdlException("failed to create security integration, error: " + e.getMessage(), e);
-        }
-        // atomic op
-        SecurityIntegration result = nameToSecurityIntegrationMap.putIfAbsent(name, securityIntegration);
-        if (result != null) {
-            throw new DdlException("security integration '" + name + "' already exists");
-        }
-        if (!isReplay) {
-            EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
-            editLogEPack.logCreateSecurityIntegration(name, propertyMap);
-            LOG.info("finished to create security integration '{}'", securityIntegration.toString());
-        }
-    }
-
-    public void alterSecurityIntegration(String name, Map<String, String> alterProps,
-                                         boolean isReplay) throws DdlException {
-        SecurityIntegration securityIntegration = nameToSecurityIntegrationMap.get(name);
-        if (securityIntegration == null) {
-            throw new DdlException("security integration '" + name + "' not found");
-        } else {
-            // COW
-            Map<String, String> newProps = Maps.newHashMap(securityIntegration.getPropertyMap());
-            // update props
-            newProps.putAll(alterProps);
-            SecurityIntegration newSecurityIntegration;
-            try {
-                newSecurityIntegration = SecurityIntegrationFactory.createSecurityIntegration(name, newProps);
-            } catch (DdlException e) {
-                throw new DdlException("failed to alter security integration, error: " + e.getMessage(), e);
-            }
-            // update map
-            nameToSecurityIntegrationMap.put(name, newSecurityIntegration);
-            if (!isReplay) {
-                EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
-                editLogEPack.logAlterSecurityIntegration(name, alterProps);
-                LOG.info("finished to alter security integration '{}' with updated properties {}",
-                        name, alterProps);
-            }
-        }
-    }
-
     public void dropSecurityIntegration(String name, boolean isReplay) throws DdlException {
         AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
         Set<String> associatedRoleMappings =
@@ -154,38 +102,6 @@ public class AuthenticationMgrEPack extends AuthenticationMgr {
                     name + "' security integration, need to drop those role mappings first"));
         }
 
-        if (!nameToSecurityIntegrationMap.containsKey(name)) {
-            throw new DdlException("security integration '" + name + "' not found");
-        }
-
-        SecurityIntegration result = nameToSecurityIntegrationMap.remove(name);
-        if (!isReplay && result != null) {
-            EditLogEPack editLogEPack = (EditLogEPack) GlobalStateMgr.getCurrentState().getEditLog();
-            editLogEPack.logDropSecurityIntegration(name);
-            LOG.info("finished to drop security integration '{}'", name);
-        }
-    }
-
-    public SecurityIntegration getSecurityIntegration(String name) {
-        return nameToSecurityIntegrationMap.get(name);
-    }
-
-    public Set<SecurityIntegration> getAllSecurityIntegrations() {
-        return new HashSet<>(nameToSecurityIntegrationMap.values());
-    }
-
-    public void replayCreateSecurityIntegration(String name, Map<String, String> propertyMap)
-            throws DdlException {
-        createSecurityIntegration(name, propertyMap, true);
-    }
-
-    public void replayAlterSecurityIntegration(String name, Map<String, String> alterProps)
-            throws DdlException {
-        alterSecurityIntegration(name, alterProps, true);
-    }
-
-    public void replayDropSecurityIntegration(String name)
-            throws DdlException {
-        dropSecurityIntegration(name, true);
+        super.dropSecurityIntegration(name, isReplay);
     }
 }

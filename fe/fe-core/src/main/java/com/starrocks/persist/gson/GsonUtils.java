@@ -70,6 +70,8 @@ import com.starrocks.alter.OnlineOptimizeJobV2;
 import com.starrocks.alter.OptimizeJobV2;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
+import com.starrocks.authentication.OIDCSecurityIntegration;
+import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authorization.CatalogPEntryObject;
 import com.starrocks.authorization.DbPEntryObject;
 import com.starrocks.authorization.FunctionPEntryObject;
@@ -136,7 +138,6 @@ import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
 import com.starrocks.encryption.EncryptionKeyPBAdapter;
 import com.starrocks.epack.authentication.LDAPSecurityIntegration;
-import com.starrocks.epack.authentication.SecurityIntegration;
 import com.starrocks.epack.authorization.FailoverGroupPEntryObject;
 import com.starrocks.epack.authorization.LDAPRoleMapping;
 import com.starrocks.epack.authorization.PolicyPEntryObject;
@@ -357,6 +358,7 @@ public class GsonUtils {
 
     private static final RuntimeTypeAdapterFactory<SecurityIntegration> SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(SecurityIntegration.class, "clazz")
+                    .registerSubtype(OIDCSecurityIntegration.class, "OIDCSecurityIntegration")
                     .registerSubtype(LDAPSecurityIntegration.class, "LDAPSecurityIntegration");
 
     private static final RuntimeTypeAdapterFactory<Warehouse> WAREHOUSE_TYPE_ADAPTER_FACTORY = RuntimeTypeAdapterFactory

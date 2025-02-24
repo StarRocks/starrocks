@@ -37,7 +37,6 @@ package com.starrocks.common;
 import com.starrocks.StarRocksFE;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Replica;
-import com.starrocks.epack.authentication.SecurityIntegration;
 
 import static java.lang.Math.max;
 import static java.lang.Runtime.getRuntime;
@@ -1837,7 +1836,7 @@ public class Config extends ConfigBase {
      * its authentication info is stored in SR metadata.
      * <p>
      * For more information about security integration, you can refer to
-     * {@link SecurityIntegration}
+     * {@link com.starrocks.authentication.SecurityIntegration}
      */
     @ConfField(mutable = true)
     public static String[] authentication_chain = {AUTHENTICATION_CHAIN_MECHANISM_NATIVE};

@@ -29,21 +29,6 @@ public class EditLogEPack extends EditLog {
         super(journalQueue);
     }
 
-    public void logCreateSecurityIntegration(String name, Map<String, String> propertyMap) {
-        SecurityIntegrationPersistInfo info = new SecurityIntegrationPersistInfo(name, propertyMap);
-        logEdit(OperationTypeEPack.OP_CREATE_SECURITY_INTEGRATION, info);
-    }
-
-    public void logAlterSecurityIntegration(String name, Map<String, String> alterProps) {
-        SecurityIntegrationPersistInfo info = new SecurityIntegrationPersistInfo(name, alterProps);
-        logEdit(OperationTypeEPack.OP_ALTER_SECURITY_INTEGRATION, info);
-    }
-
-    public void logDropSecurityIntegration(String name) {
-        SecurityIntegrationPersistInfo info = new SecurityIntegrationPersistInfo(name, null);
-        logEdit(OperationTypeEPack.OP_DROP_SECURITY_INTEGRATION, info);
-    }
-
     public void logCreateRoleMapping(String name, Map<String, String> propertyMap) {
         RoleMappingPersistInfo info = new RoleMappingPersistInfo(name, propertyMap);
         logEdit(OperationTypeEPack.OP_CREATE_ROLE_MAPPING, info);

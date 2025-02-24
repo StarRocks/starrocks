@@ -12,12 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-package com.starrocks.epack.authentication;
+package com.starrocks.authentication;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.authentication.AuthenticationException;
-import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.Map;
 
@@ -36,7 +34,7 @@ public abstract class SecurityIntegration {
     @SerializedName(value = "m")
     protected Map<String, String> propertyMap;
 
-    SecurityIntegration(String name, Map<String, String> propertyMap) {
+    public SecurityIntegration(String name, Map<String, String> propertyMap) {
         this.name = name;
         this.propertyMap = propertyMap;
     }
@@ -62,4 +60,6 @@ public abstract class SecurityIntegration {
     public Map<String, String> getPropertyMapWithMasking() {
         return propertyMap;
     }
+
+    public abstract void checkProperty() throws SemanticException;
 }
