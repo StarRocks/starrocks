@@ -25,6 +25,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.anyInt;
 import static org.mockito.Mockito.when;
 
@@ -53,7 +54,8 @@ public class CatalogUtilsTest {
         when(olapTable.getPartitionInfo()).thenReturn(partitionInfo);
         when(partitionInfo.isPartitioned()).thenReturn(false);
 
-        int bucketNum = CatalogUtils.calAvgBucketNumOfRecentPartitions(olapTable, 5, true);
+        int bucketNum = CatalogUtils.calAvgBucketNumOfRecentPartitions(olapTable, 5, true,
+                "");
 
         assertEquals(FeConstants.DEFAULT_UNPARTITIONED_TABLE_BUCKET_NUM, bucketNum);
     }
@@ -63,12 +65,13 @@ public class CatalogUtilsTest {
         List<Partition> partitions = new ArrayList<>();
         partitions.add(partition);
         when(olapTable.getPartitions()).thenReturn(partitions);
-        when(olapTable.getRecentPartitions(anyInt())).thenReturn(partitions);
+        when(olapTable.getRecentPartitions(anyInt(), anyString())).thenReturn(partitions);
         when(partition.getDefaultPhysicalPartition()).thenReturn(physicalPartition);
         when(physicalPartition.getVisibleVersion()).thenReturn(2L);
         when(partition.getDataSize()).thenReturn(2L * FeConstants.AUTO_DISTRIBUTION_UNIT);
 
-        int bucketNum = CatalogUtils.calAvgBucketNumOfRecentPartitions(olapTable, 1, true);
+        int bucketNum = CatalogUtils.calAvgBucketNumOfRecentPartitions(olapTable, 1, true,
+                "");
 
         assertEquals(2, bucketNum); // 2 tablets based on 2GB size
     }
