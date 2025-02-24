@@ -249,7 +249,7 @@ public class TextMatchBasedRewriteRule extends Rule {
                 final MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
                         mv, mvPlanContext, mvUpdateInfo, queryTables);
                 final LogicalOlapScanOperator mvScanOperator = mvContext.getScanMvOperator();
-                final List<ColumnRefOperator>  mvPlanOutputColumns = MvUtils.getMvScanOutputColumnRefs(mv, mvScanOperator);
+                final List<ColumnRefOperator>  mvScanOutputColumns = MvUtils.getMvScanOutputColumnRefs(mv, mvScanOperator);
 
                 // if mv is partitioned, and some partitions are outdated, then compensate it
                 final Set<String> partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
@@ -260,12 +260,12 @@ public class TextMatchBasedRewriteRule extends Rule {
                     logMVRewrite(context, this, "Partitioned MV {} is outdated which " +
                                     "contains some partitions to be refreshed: {}, and cannot compensate it to predicate",
                             mv.getName(), partitionNamesToRefresh);
-                    mvCompensatePlan = MvPartitionCompensator.getMvTransparentPlan(mvContext, input, mvPlanOutputColumns);
+                    mvCompensatePlan = MvPartitionCompensator.getMvTransparentPlan(mvContext, input, mvScanOutputColumns);
                 }
 
                 // do text based rewrite
-                OptExpression rewritten = doTextMatchBasedRewrite(context, mvPlanContext, mvPlanOutputColumns, mvCompensatePlan,
-                        input);
+                OptExpression rewritten = doTextMatchBasedRewrite(context, mvPlanContext, mvPlan,
+                        mvScanOutputColumns, mvCompensatePlan, input);
                 if (rewritten != null) {
                     IMaterializedViewMetricsEntity mvEntity =
                             MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
@@ -304,7 +304,8 @@ public class TextMatchBasedRewriteRule extends Rule {
     //  - support query is subset of mv's output
     private OptExpression doTextMatchBasedRewrite(OptimizerContext context,
                                                   MvPlanContext mvPlanContext,
-                                                  List<ColumnRefOperator> mvPlanOutputColumns,
+                                                  OptExpression mvPlan,
+                                                  List<ColumnRefOperator> mvScanOutputColumns,
                                                   OptExpression rewrittenPlan,
                                                   OptExpression input) {
         MvUtils.deriveLogicalProperty(rewrittenPlan);
@@ -312,12 +313,14 @@ public class TextMatchBasedRewriteRule extends Rule {
 
         // mv's output column refs may be not the same with query's output column refs.
         // TODO: How to determine OptExpression's define outputs better?
+        final List<ColumnRefOperator> mvPlanOutputColumns =
+                mvPlan.getOutputColumns().getColumnRefOperators(mvPlanContext.getRefFactory());
         final List<ColumnRefOperator> queryPlanOutputColumns =
                 input.getOutputColumns().getColumnRefOperators(context.getColumnRefFactory());
         Preconditions.checkState(queryPlanOutputColumns.size() == mvPlanOutputColumns.size());
 
         final List<Integer> indexes = getOrderedOutputIndexes(mvPlanContext);
-        final LogicalProjectOperator logicalProjectOperator = getReorderProjection(mvPlanOutputColumns,
+        final LogicalProjectOperator logicalProjectOperator = getReorderProjection(mvScanOutputColumns,
                 queryPlanOutputColumns, indexes);
         final OptExpression mvProjectExpression = OptExpression.create(logicalProjectOperator, rewrittenPlan);
 
@@ -335,28 +338,30 @@ public class TextMatchBasedRewriteRule extends Rule {
 
     private List<Integer> getOrderedOutputIndexes(MvPlanContext mvPlanContext) {
         final OptExpression mvLogicalPlan = mvPlanContext.getLogicalPlan();
+
+        // mv's real output columns, reorder output columns by user's define
+        // eg: 2, 1, 5 order by user's define but may contain duplicated outputs
+        final List<ColumnRefOperator> mvPlanRealOutputColumns = mvPlanContext.getOutputColumns();
+        final Map<ColumnRefOperator, Integer> mvPlanColRefOrderMap = IntStream.range(0, mvPlanRealOutputColumns.size())
+                .boxed()
+                .collect(Collectors.toMap(i -> mvPlanRealOutputColumns.get(i), i -> i, (oldV, newV) -> oldV));
         // eg: 1, 2, 5 order by col-ref id
         final List<ColumnRefOperator> mvPlanOutputColumns =
                 mvLogicalPlan.getOutputColumns().getColumnRefOperators(mvPlanContext.getRefFactory());
-        final Map<ColumnRefOperator, Integer> mvPlanColRefOrderMap = IntStream.range(0, mvPlanOutputColumns.size())
-                .boxed()
-                .collect(Collectors.toMap(i -> mvPlanOutputColumns.get(i), i -> i));
-        // eg: 2, 1, 5 order by user's define
-        final List<ColumnRefOperator> mvPlanRealOutputColumns = mvPlanContext.getOutputColumns();
-        return mvPlanRealOutputColumns.stream()
+        Preconditions.checkArgument(mvPlanOutputColumns.size() == mvPlanColRefOrderMap.size());
+        return mvPlanOutputColumns.stream()
                 .map(colRef -> mvPlanColRefOrderMap.get(colRef))
+                .distinct()
                 .collect(Collectors.toList());
     }
 
     private LogicalProjectOperator getReorderProjection(List<ColumnRefOperator> mvPlanOutputColumns,
                                                         List<ColumnRefOperator> queryPlanOutputColumns,
                                                         List<Integer> indexes) {
-        Preconditions.checkArgument(mvPlanOutputColumns.size() == queryPlanOutputColumns.size());
-        Preconditions.checkArgument(indexes.size() == queryPlanOutputColumns.size());
         final Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = IntStream.range(0, indexes.size())
                 .boxed()
                 .map(i -> Pair.create(indexes.get(i), i))
-                .map(p -> Pair.create(queryPlanOutputColumns.get(p.first), mvPlanOutputColumns.get(p.second)))
+                .map(p -> Pair.create(queryPlanOutputColumns.get(p.second), mvPlanOutputColumns.get(p.first)))
                 .collect(Collectors.toMap(p -> p.first, p -> p.second));
         return new LogicalProjectOperator(newColumnRefMap);
     }
