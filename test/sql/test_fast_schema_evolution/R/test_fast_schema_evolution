@@ -337,7 +337,7 @@ function: manual_compact("meta_scan", "reproducex4")
 -- result:
 None
 -- !result
-select dict_merge(v2) from reproducex4 [_META_];
+select dict_merge(v2, 255) from reproducex4 [_META_];
 -- result:
 {"2":{"lst":["str",2,"LTEwMDA","OQ"]},"3":{"lst":["i32",2,1,2]}}
 -- !result
@@ -401,7 +401,7 @@ function: manual_compact("meta_scan", "reproducex4")
 -- result:
 None
 -- !result
-select dict_merge(v2) from reproducex4 [_META_];
+select dict_merge(v2, 255) from reproducex4 [_META_];
 -- result:
 {"2":{"lst":["str",2,"LTEwMDA","OQ"]},"3":{"lst":["i32",2,1,2]}}
 -- !result
