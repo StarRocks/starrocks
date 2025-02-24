@@ -4,8 +4,8 @@ create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", 
 
 create view if not exists iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_${uuid0} as select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.day_partition;
 
-select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view;
+select * from iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_${uuid0};
 
-drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view;
+drop view iceberg_sql_test_${uuid0}.iceberg_ci_db.test_iceberg_view_${uuid0};
 
 drop catalog iceberg_sql_test_${uuid0};
