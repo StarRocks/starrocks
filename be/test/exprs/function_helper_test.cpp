@@ -38,7 +38,7 @@ TEST_F(FunctionHelperTest, testMergeOnlyNullColumnMergeWithNullColumn) {
 TEST_F(FunctionHelperTest, testMergeConstColumnMergeWithNullColumn) {
     auto data_column = Decimal128Column::create(38, 10);
     data_column->append((int128_t)111);
-    auto const_column = ConstColumn::create(data_column, 10);
+    auto const_column = ConstColumn::create(std::move(data_column), 10);
     auto null_column = NullColumn::create();
     null_column->reserve(10);
     for (int i = 0; i < 10; ++i) {

@@ -75,7 +75,7 @@ Status CompactionState::_load_segments(Rowset* rowset, uint32_t segment_id) {
 
     Schema pkey_schema = ChunkHelper::convert_schema(schema, pk_columns);
 
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true));
 
     RowsetReleaseGuard guard(rowset->shared_from_this());

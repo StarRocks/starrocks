@@ -40,7 +40,7 @@ StatusOr<ColumnPtr> PercentileFunctions::percentile_hash(FunctionContext* contex
     }
 
     if (ColumnHelper::is_all_const(columns)) {
-        return ConstColumn::create(percentile_column, columns[0]->size());
+        return ConstColumn::create(std::move(percentile_column), columns[0]->size());
     } else {
         return percentile_column;
     }

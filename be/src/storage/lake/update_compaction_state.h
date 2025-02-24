@@ -44,7 +44,7 @@ public:
 
     std::string to_string() const;
 
-    std::vector<ColumnUniquePtr> pk_cols;
+    std::vector<MutableColumnPtr> pk_cols;
 
 private:
     Status _load_segments(Rowset* rowset, const TabletSchemaCSPtr& tablet_schema, uint32_t segment_id);

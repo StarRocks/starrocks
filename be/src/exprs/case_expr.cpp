@@ -350,7 +350,7 @@ private:
                     res_nullable = true;
                 }
             }
-            ColumnPtr res = ColumnHelper::create_column(this->type(), res_nullable);
+            MutableColumnPtr res = ColumnHelper::create_column(this->type(), res_nullable);
 
             for (auto& then_column : then_columns) {
                 then_column = ColumnHelper::unpack_and_duplicate_const_column(size, then_column);
@@ -517,7 +517,7 @@ private:
                     res_nullable = true;
                 }
             }
-            ColumnPtr res = ColumnHelper::create_column(this->type(), res_nullable);
+            MutableColumnPtr res = ColumnHelper::create_column(this->type(), res_nullable);
 
             for (auto& then_column : then_columns) {
                 then_column = ColumnHelper::unpack_and_duplicate_const_column(size, then_column);

@@ -169,19 +169,19 @@ void ObjectColumn<T>::update_rows(const Column& src, const uint32_t* indexes) {
 }
 
 template <typename T>
-uint32_t ObjectColumn<T>::serialize(size_t idx, uint8_t* pos) {
+uint32_t ObjectColumn<T>::serialize(size_t idx, uint8_t* pos) const {
     return static_cast<uint32_t>(get_object(idx)->serialize(pos));
 }
 
 template <typename T>
-uint32_t ObjectColumn<T>::serialize_default(uint8_t* pos) {
+uint32_t ObjectColumn<T>::serialize_default(uint8_t* pos) const {
     DCHECK(false) << "Don't support object column serialize";
     return 0;
 }
 
 template <typename T>
 void ObjectColumn<T>::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                                      uint32_t max_one_row_size) {
+                                      uint32_t max_one_row_size) const {
     for (size_t i = 0; i < chunk_size; ++i) {
         slice_sizes[i] += serialize(i, dst + i * max_one_row_size + slice_sizes[i]);
     }
@@ -300,13 +300,6 @@ void ObjectColumn<T>::_build_slices() const {
 
 template <typename T>
 MutableColumnPtr ObjectColumn<T>::clone() const {
-    auto p = clone_empty();
-    p->append(*this, 0, size());
-    return p;
-}
-
-template <typename T>
-ColumnPtr ObjectColumn<T>::clone_shared() const {
     auto p = clone_empty();
     p->append(*this, 0, size());
     return p;

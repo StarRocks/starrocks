@@ -128,9 +128,9 @@ struct DecimalBinaryFunction {
         const auto rhs_scale = rhs_column->scale();
         auto [precision, scale, adjust_scale] = compute_decimal_result_type<ResultCppType, Op>(lhs_scale, rhs_scale);
 
-        auto result_column = ResultColumnType::create(precision, scale, num_rows);
-        auto result_data = &ColumnHelper::cast_to_raw<ResultType>(result_column)->get_data().front();
-        NullColumnPtr null_column;
+        typename ResultColumnType::MutablePtr result_column = ResultColumnType::create(precision, scale, num_rows);
+        auto result_data = &ColumnHelper::cast_to_raw<ResultType>(result_column.get())->get_data().front();
+        NullColumn::MutablePtr null_column;
         NullColumn::ValueType* nulls = nullptr;
         bool has_null = false;
         [[maybe_unused]] bool all_null = false;
@@ -196,10 +196,10 @@ struct DecimalBinaryFunction {
                 // all the elements of the result are overflow, return const null column
                 return ColumnHelper::create_const_null_column(num_rows);
             }
-            ColumnBuilder<ResultType> builder(result_column, null_column, has_null);
+            ColumnBuilder<ResultType> builder(std::move(result_column), std::move(null_column), has_null);
             return builder.build(lhs_is_const && rhs_is_const);
         } else if constexpr (lhs_is_const && rhs_is_const) {
-            return ConstColumn::create(result_column, 1);
+            return ConstColumn::create(std::move(result_column), 1);
         } else {
             return result_column;
         }

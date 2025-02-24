@@ -98,7 +98,7 @@ Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& s
 
 Status HdfsScanner::_build_scanner_context() {
     HdfsScannerContext& ctx = _scanner_ctx;
-    std::vector<ColumnPtr>& partition_values = ctx.partition_values;
+    Columns& partition_values = ctx.partition_values;
 
     // evaluate partition values.
     for (size_t i = 0; i < _scanner_params.partition_slots.size(); i++) {
@@ -110,7 +110,7 @@ Status HdfsScanner::_build_scanner_context() {
     }
 
     // evaluate extended column values
-    std::vector<ColumnPtr>& extended_values = ctx.extended_values;
+    Columns& extended_values = ctx.extended_values;
     for (size_t i = 0; i < _scanner_params.extended_col_slots.size(); i++) {
         int extended_col_idx = _scanner_params.index_in_extended_columns[i];
         ASSIGN_OR_RETURN(auto extended_value_column,
@@ -625,7 +625,7 @@ void HdfsScannerContext::append_or_update_extended_column_to_chunk(ChunkPtr* chu
 
 void HdfsScannerContext::append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count,
                                                           const std::vector<ColumnInfo>& columns,
-                                                          const std::vector<ColumnPtr>& values) {
+                                                          const Columns& values) {
     if (columns.size() == 0) return;
 
     ChunkPtr& ck = (*chunk);

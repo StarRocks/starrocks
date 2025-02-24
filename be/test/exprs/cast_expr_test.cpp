@@ -82,7 +82,7 @@ TEST_F(VectorizedCastExprTest, IntCastToDate) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -102,7 +102,7 @@ TEST_F(VectorizedCastExprTest, BigIntCastToTimestamp) {
 
         ASSERT_TRUE(ptr->is_timestamp());
 
-        auto v = std::static_pointer_cast<TimestampColumn>(ptr);
+        auto v = TimestampColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -110,7 +110,7 @@ TEST_F(VectorizedCastExprTest, BigIntCastToTimestamp) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -138,7 +138,7 @@ TEST_F(VectorizedCastExprTest, BigIntCastToTimestampError) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<TimestampColumn>(ptr));
+        ASSERT_EQ(nullptr, TimestampColumn::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -159,7 +159,7 @@ TEST_F(VectorizedCastExprTest, dateCastToBoolean) {
         ASSERT_TRUE(ptr->is_numeric());
 
         // right cast
-        auto v = std::static_pointer_cast<BooleanColumn>(ptr);
+        auto v = BooleanColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -167,7 +167,7 @@ TEST_F(VectorizedCastExprTest, dateCastToBoolean) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -188,7 +188,7 @@ TEST_F(VectorizedCastExprTest, timestampCastToBoolean) {
         ASSERT_TRUE(ptr->is_numeric());
 
         // right cast
-        auto v = std::static_pointer_cast<BooleanColumn>(ptr);
+        auto v = BooleanColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -196,7 +196,7 @@ TEST_F(VectorizedCastExprTest, timestampCastToBoolean) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -217,7 +217,7 @@ TEST_F(VectorizedCastExprTest, stringLiteralTrueCastToBoolean) {
         ASSERT_TRUE(ptr->is_numeric());
 
         // right cast
-        auto v = std::static_pointer_cast<BooleanColumn>(ptr);
+        auto v = BooleanColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -225,7 +225,7 @@ TEST_F(VectorizedCastExprTest, stringLiteralTrueCastToBoolean) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -246,7 +246,7 @@ TEST_F(VectorizedCastExprTest, stringLiteralFalseCastToBoolean) {
         ASSERT_TRUE(ptr->is_numeric());
 
         // right cast
-        auto v = std::static_pointer_cast<BooleanColumn>(ptr);
+        auto v = BooleanColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -254,7 +254,7 @@ TEST_F(VectorizedCastExprTest, stringLiteralFalseCastToBoolean) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -275,7 +275,7 @@ TEST_F(VectorizedCastExprTest, stringLiteralIntCastToBoolean) {
         ASSERT_TRUE(ptr->is_numeric());
 
         // right cast
-        auto v = std::static_pointer_cast<BooleanColumn>(ptr);
+        auto v = BooleanColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -283,7 +283,7 @@ TEST_F(VectorizedCastExprTest, stringLiteralIntCastToBoolean) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -387,7 +387,7 @@ TEST_F(VectorizedCastExprTest, intCastSelfExpr) {
             ASSERT_TRUE(ptr->is_numeric());
 
             // right cast
-            auto v = std::static_pointer_cast<Int32Column>(ptr);
+            auto v = Int32Column::static_pointer_cast(ptr);
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
@@ -395,7 +395,7 @@ TEST_F(VectorizedCastExprTest, intCastSelfExpr) {
             }
 
             // error cast
-            ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+            ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
         });
     }
 }
@@ -418,7 +418,7 @@ TEST_F(VectorizedCastExprTest, intToFloatCastExpr) {
             ASSERT_TRUE(ptr->is_numeric());
 
             // right cast
-            auto v = std::static_pointer_cast<FloatColumn>(ptr);
+            auto v = FloatColumn::static_pointer_cast(ptr);
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
@@ -426,7 +426,7 @@ TEST_F(VectorizedCastExprTest, intToFloatCastExpr) {
             }
 
             // error cast
-            ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+            ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
         });
     }
 }
@@ -448,7 +448,7 @@ TEST_F(VectorizedCastExprTest, intToInt8CastExpr) {
             ASSERT_TRUE(ptr->is_numeric());
 
             // right cast
-            auto v = std::static_pointer_cast<Int8Column>(ptr);
+            auto v = Int8Column::static_pointer_cast(ptr);
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
@@ -456,7 +456,7 @@ TEST_F(VectorizedCastExprTest, intToInt8CastExpr) {
             }
 
             // error cast
-            ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+            ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
         });
     }
 }
@@ -479,7 +479,7 @@ TEST_F(VectorizedCastExprTest, intToBigIntCastExpr) {
             ASSERT_TRUE(ptr->is_numeric());
 
             // right cast
-            auto v = std::static_pointer_cast<Int64Column>(ptr);
+            auto v = Int64Column::static_pointer_cast(ptr);
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
@@ -487,7 +487,7 @@ TEST_F(VectorizedCastExprTest, intToBigIntCastExpr) {
             }
 
             // error cast
-            ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int8Column>(ptr));
+            ASSERT_EQ(nullptr, Int8Column::dynamic_pointer_cast(ptr));
         });
     }
 }
@@ -512,8 +512,7 @@ TEST_F(VectorizedCastExprTest, NullableBooleanCastExpr) {
             ASSERT_TRUE(ptr->is_nullable());
 
             // right cast
-            auto v = std::static_pointer_cast<BooleanColumn>(
-                    std::static_pointer_cast<NullableColumn>(ptr)->data_column());
+            auto v = BooleanColumn::static_pointer_cast(NullableColumn::static_pointer_cast(ptr)->data_column());
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
@@ -521,7 +520,7 @@ TEST_F(VectorizedCastExprTest, NullableBooleanCastExpr) {
             }
 
             // error cast
-            ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+            ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
         });
     }
 }
@@ -545,7 +544,7 @@ TEST_F(VectorizedCastExprTest, dateCastToDecimalV2) {
         ASSERT_TRUE(ptr->is_decimal());
 
         // right cast
-        auto v = std::static_pointer_cast<DecimalColumn>(ptr);
+        auto v = DecimalColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -553,7 +552,7 @@ TEST_F(VectorizedCastExprTest, dateCastToDecimalV2) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -574,7 +573,7 @@ TEST_F(VectorizedCastExprTest, decimalV2CastToTimestamp) {
         ASSERT_TRUE(ptr->is_timestamp());
 
         // right cast
-        auto v = std::static_pointer_cast<TimestampColumn>(ptr);
+        auto v = TimestampColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -582,7 +581,7 @@ TEST_F(VectorizedCastExprTest, decimalV2CastToTimestamp) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -603,7 +602,7 @@ TEST_F(VectorizedCastExprTest, dateCastToTimestamp) {
         ASSERT_TRUE(ptr->is_timestamp());
 
         // right cast
-        auto v = std::static_pointer_cast<TimestampColumn>(ptr);
+        auto v = TimestampColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -611,7 +610,7 @@ TEST_F(VectorizedCastExprTest, dateCastToTimestamp) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -633,7 +632,7 @@ TEST_F(VectorizedCastExprTest, decimalCastString) {
         ASSERT_TRUE(ptr->is_binary());
 
         // right cast
-        auto v = std::static_pointer_cast<BinaryColumn>(ptr);
+        auto v = BinaryColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -641,7 +640,7 @@ TEST_F(VectorizedCastExprTest, decimalCastString) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -663,7 +662,7 @@ TEST_F(VectorizedCastExprTest, intCastString) {
         ASSERT_TRUE(ptr->is_binary());
 
         // right cast
-        auto v = std::static_pointer_cast<BinaryColumn>(ptr);
+        auto v = BinaryColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -671,7 +670,7 @@ TEST_F(VectorizedCastExprTest, intCastString) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -693,7 +692,7 @@ TEST_F(VectorizedCastExprTest, booleanCastString) {
         ASSERT_TRUE(ptr->is_binary());
 
         // right cast
-        auto v = std::static_pointer_cast<BinaryColumn>(ptr);
+        auto v = BinaryColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -701,7 +700,7 @@ TEST_F(VectorizedCastExprTest, booleanCastString) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -723,7 +722,7 @@ TEST_F(VectorizedCastExprTest, timestmapCastString) {
         ASSERT_TRUE(ptr->is_binary());
 
         // right cast
-        auto v = std::static_pointer_cast<BinaryColumn>(ptr);
+        auto v = BinaryColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -731,7 +730,7 @@ TEST_F(VectorizedCastExprTest, timestmapCastString) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -762,7 +761,7 @@ TEST_F(VectorizedCastExprTest, stringCastInt) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -793,7 +792,7 @@ TEST_F(VectorizedCastExprTest, stringCastIntError) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -824,7 +823,7 @@ TEST_F(VectorizedCastExprTest, stringCastDouble) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -856,7 +855,7 @@ TEST_F(VectorizedCastExprTest, stringCastDoubleError) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -890,7 +889,7 @@ TEST_F(VectorizedCastExprTest, stringCastDecimal) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -924,7 +923,7 @@ TEST_F(VectorizedCastExprTest, stringCastDecimalError) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -955,7 +954,7 @@ TEST_F(VectorizedCastExprTest, stringCastDate) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -986,7 +985,7 @@ TEST_F(VectorizedCastExprTest, stringCastDate2) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -1017,7 +1016,7 @@ TEST_F(VectorizedCastExprTest, stringCastDateError) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -1040,7 +1039,7 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap) {
         ASSERT_TRUE(ptr->is_timestamp());
 
         // right cast
-        auto v = std::static_pointer_cast<TimestampColumn>(ptr);
+        auto v = TimestampColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -1048,7 +1047,7 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -1070,7 +1069,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapFailed0) {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
         // right cast
-        auto v = std::static_pointer_cast<BitmapColumn>(ptr);
+        auto v = BitmapColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -1106,7 +1105,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapFailed1) {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
         // right cast
-        auto v = std::static_pointer_cast<BitmapColumn>(ptr);
+        auto v = BitmapColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -1137,7 +1136,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSingle) {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
         // right cast
-        auto v = std::static_pointer_cast<BitmapColumn>(ptr);
+        auto v = BitmapColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         Buffer<int64_t> expect_array;
@@ -1178,7 +1177,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSingleFailed) {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
         // right cast
-        auto v = std::static_pointer_cast<BitmapColumn>(ptr);
+        auto v = BitmapColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -1210,7 +1209,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSet) {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
         // right cast
-        auto v = std::static_pointer_cast<BitmapColumn>(ptr);
+        auto v = BitmapColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         Buffer<int64_t> expect_array;
@@ -1253,7 +1252,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapSetFailed) {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
         // right cast
-        auto v = std::static_pointer_cast<BitmapColumn>(ptr);
+        auto v = BitmapColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -1287,7 +1286,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapMap) {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
         // right cast
-        auto v = std::static_pointer_cast<BitmapColumn>(ptr);
+        auto v = BitmapColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         Buffer<int64_t> expect_array;
@@ -1332,7 +1331,7 @@ TEST_F(VectorizedCastExprTest, stringCastBitmapMapFailed) {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
         // right cast
-        auto v = std::static_pointer_cast<BitmapColumn>(ptr);
+        auto v = BitmapColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -1360,7 +1359,7 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap2) {
         ASSERT_TRUE(ptr->is_timestamp());
 
         // right cast
-        auto v = std::static_pointer_cast<TimestampColumn>(ptr);
+        auto v = TimestampColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -1368,7 +1367,7 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap2) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -1391,7 +1390,7 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap3) {
         ASSERT_TRUE(ptr->is_timestamp());
 
         // right cast
-        auto v = std::static_pointer_cast<TimestampColumn>(ptr);
+        auto v = TimestampColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -1399,7 +1398,7 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap3) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -1422,7 +1421,7 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap4) {
         ASSERT_TRUE(ptr->is_timestamp());
 
         // right cast
-        auto v = std::static_pointer_cast<TimestampColumn>(ptr);
+        auto v = TimestampColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -1430,7 +1429,7 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmap4) {
         }
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -1457,7 +1456,7 @@ TEST_F(VectorizedCastExprTest, stringCastTimestmapError) {
         ASSERT_EQ(10, v->size());
 
         // error cast
-        ASSERT_EQ(nullptr, std::dynamic_pointer_cast<Int64Column>(ptr));
+        ASSERT_EQ(nullptr, Int64Column::dynamic_pointer_cast(ptr));
     }
 }
 
@@ -1505,7 +1504,7 @@ TEST_F(VectorizedCastExprTest, BigIntCastToInt2) {
             ASSERT_TRUE(ptr->is_numeric());
 
             // right cast
-            auto v = std::static_pointer_cast<Int32Column>(ptr);
+            auto v = Int32Column::static_pointer_cast(ptr);
             ASSERT_EQ(10, v->size());
 
             for (int j = 0; j < v->size(); ++j) {
@@ -1557,7 +1556,7 @@ TEST_F(VectorizedCastExprTest, stringCastToTime) {
         ColumnPtr ptr = expr->evaluate(nullptr, nullptr);
 
         // right cast
-        auto v = std::static_pointer_cast<DoubleColumn>(ptr);
+        auto v = DoubleColumn::static_pointer_cast(ptr);
         ASSERT_EQ(10, v->size());
 
         for (int j = 0; j < v->size(); ++j) {
@@ -2181,7 +2180,7 @@ TEST_F(VectorizedCastExprTest, string_to_array_with_const_input) {
     cast_expr.__isset.child_type = true;
 
     // const null
-    auto src = ColumnHelper::create_const_null_column(2);
+    ColumnPtr src = ColumnHelper::create_const_null_column(2);
     auto result = cast_string_to_array_ptr(cast_expr, TYPE_VARCHAR, src);
     DCHECK_EQ(result->size(), 2);
     DCHECK(result->is_constant());
@@ -2328,28 +2327,28 @@ TEST_F(VectorizedCastExprTest, json_to_array_with_const_input) {
     cast_expr.__isset.child_type = true;
 
     // const null
-    auto src = ColumnHelper::create_const_null_column(2);
-    auto result = cast_json_to_array_ptr(cast_expr, TYPE_JSON, src);
+    ColumnPtr src = ColumnHelper::create_const_null_column(2);
+    auto result = cast_json_to_array_ptr(cast_expr, TYPE_JSON, std::move(src));
     DCHECK_EQ(result->size(), 2);
     DCHECK(result->is_constant());
     DCHECK(result->only_null());
 
     // const json
     src = create_json_const_column(R"(["a","b"])", 2);
-    result = cast_json_to_array_ptr(cast_expr, TYPE_JSON, src);
+    result = cast_json_to_array_ptr(cast_expr, TYPE_JSON, std::move(src));
     DCHECK(result->is_constant());
     DCHECK_EQ(result->size(), 2);
     EXPECT_EQ("CONST: [\"a\",\"b\"]", result->debug_item(0));
 
     // const json: multi-dims
     src = create_json_const_column(R"([{"a": 1}, {"a": 2}])", 2);
-    result = cast_json_to_array_ptr(cast_expr, TYPE_JSON, src);
+    result = cast_json_to_array_ptr(cast_expr, TYPE_JSON, std::move(src));
     DCHECK(result->is_constant());
     DCHECK_EQ(result->size(), 2);
     EXPECT_EQ("CONST: [{\"a\": 1},{\"a\": 2}]", result->debug_item(0));
 
     src = create_json_const_column(R"( [null, {"a": 2}] )", 2);
-    result = cast_json_to_array_ptr(cast_expr, TYPE_JSON, src);
+    result = cast_json_to_array_ptr(cast_expr, TYPE_JSON, std::move(src));
     DCHECK(result->is_constant());
     DCHECK_EQ(result->size(), 2);
     EXPECT_EQ("CONST: [null,{\"a\": 2}]", result->debug_item(0));

@@ -35,7 +35,7 @@ public:
         // TODO: support more types.
         DCHECK_EQ(TYPE_INT, type_desc.type);
 
-        ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
+        MutableColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
         std::vector<int32_t> elements(num_rows);
         std::iota(elements.begin(), elements.end(), 0);
         for (auto& x : elements) {
@@ -48,7 +48,7 @@ public:
                                           size_t min_length = 0) {
         using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
         using PoissonInt = std::poisson_distribution<std::mt19937::result_type>;
-        ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
+        MutableColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
 
         std::random_device dev;
         std::mt19937 rng(dev());

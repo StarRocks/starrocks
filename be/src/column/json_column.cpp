@@ -90,7 +90,7 @@ std::string JsonColumn::get_name() const {
 
 MutableColumnPtr JsonColumn::clone() const {
     if (this->is_flat_json()) {
-        auto p = this->create_mutable();
+        auto p = this->create();
         p->_flat_column_paths = this->_flat_column_paths;
         p->_flat_column_types = this->_flat_column_types;
         p->_path_to_index = this->_path_to_index;
@@ -100,25 +100,6 @@ MutableColumnPtr JsonColumn::clone() const {
         return p;
     } else {
         return BaseClass::clone();
-    }
-}
-
-MutableColumnPtr JsonColumn::clone_empty() const {
-    return this->create_mutable();
-}
-
-ColumnPtr JsonColumn::clone_shared() const {
-    if (this->is_flat_json()) {
-        auto p = this->create_mutable();
-        p->_flat_column_paths = this->_flat_column_paths;
-        p->_flat_column_types = this->_flat_column_types;
-        p->_path_to_index = this->_path_to_index;
-        for (auto& f : this->_flat_columns) {
-            p->_flat_columns.emplace_back(f->clone_shared());
-        }
-        return p;
-    } else {
-        return BaseClass::clone_shared();
     }
 }
 
@@ -133,12 +114,12 @@ uint32_t JsonColumn::serialize_size(size_t idx) const {
     return static_cast<uint32_t>(get_object(idx)->serialize_size());
 }
 
-uint32_t JsonColumn::serialize(size_t idx, uint8_t* pos) {
+uint32_t JsonColumn::serialize(size_t idx, uint8_t* pos) const {
     return static_cast<uint32_t>(get_object(idx)->serialize(pos));
 }
 
 void JsonColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                                 uint32_t max_one_row_size) {
+                                 uint32_t max_one_row_size) const {
     for (size_t i = 0; i < chunk_size; ++i) {
         slice_sizes[i] += serialize(i, dst + i * max_one_row_size + slice_sizes[i]);
     }
@@ -205,12 +186,17 @@ void JsonColumn::set_flat_columns(const std::vector<std::string>& paths, const s
                 _flat_columns[i]->append(*flat_columns[i], 0, flat_columns[i]->size());
             }
         } else {
-            _flat_columns = flat_columns;
+            // change column ptr to wrapper ptr
+            _flat_columns.reserve(flat_columns.size());
+            _flat_columns.assign(flat_columns.begin(), flat_columns.end());
         }
     } else {
         _flat_column_paths = paths;
         _flat_column_types = types;
-        _flat_columns = flat_columns;
+        // change column ptr to wrapper ptr
+        _flat_columns.reserve(flat_columns.size());
+        _flat_columns.assign(flat_columns.begin(), flat_columns.end());
+
         for (size_t i = 0; i < _flat_column_paths.size(); i++) {
             _path_to_index[_flat_column_paths[i]] = i;
         }
@@ -271,7 +257,8 @@ void JsonColumn::append_selective(const Column& src, const uint32_t* indexes, ui
     if (other_json->is_flat_json() && !is_flat_json()) {
         // only hit in AggregateIterator (Aggregate mode in storage)
         DCHECK_EQ(0, this->size());
-        std::vector<ColumnPtr> copy;
+        Columns copy;
+        copy.reserve(other_json->_flat_columns.size());
         for (const auto& col : other_json->_flat_columns) {
             copy.emplace_back(col->clone_empty());
         }
@@ -352,7 +339,7 @@ void JsonColumn::append(const Column& src, size_t offset, size_t count) {
     if (other_json->is_flat_json() && !is_flat_json()) {
         // only hit in AggregateIterator (Aggregate mode in storage)
         DCHECK_EQ(0, this->size());
-        std::vector<ColumnPtr> copy;
+        Columns copy;
         for (const auto& col : other_json->_flat_columns) {
             copy.emplace_back(col->clone_empty());
         }
