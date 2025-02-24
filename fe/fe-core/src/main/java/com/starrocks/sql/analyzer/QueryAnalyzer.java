@@ -165,18 +165,35 @@ public class QueryAnalyzer {
             }
 
             // 2. rewrite(rename slotRef) generated column expression(unAnalyzed) using alias in current scope
-            Map<String, String> slotRefToAlias = new HashMap<>();
+            // For view relation, column alias may recorded in scope but not SelectListItem in SelectList
+            Map<String, String> viewRefAlias = new HashMap<>();
+            if (scope.getRelationId().getSourceNode() instanceof ViewRelation) {
+                for (Field f : scope.getRelationFields().getAllFields()) {
+                    if (f.getOriginExpression() instanceof SlotRef) {
+                        viewRefAlias.put(((SlotRef) f.getOriginExpression()).getColumnName(), f.getName());
+                    }
+                }
+            }
+
+            Map<SlotRef, String> slotRefToAlias = new HashMap<>();
             for (SelectListItem item : childSelectRelation.getSelectList().getItems()) {
                 if (item.isStar()) {
                     slotRefToAlias.clear();
                     break;
                 }
 
-                if (!(item.getExpr() instanceof SlotRef) || (item.getAlias() == null || item.getAlias().isEmpty())) {
+                if (!(item.getExpr() instanceof SlotRef)) {
                     continue;
                 }
 
-                slotRefToAlias.put(((SlotRef) item.getExpr()).toSql(), item.getAlias());
+                if (!viewRefAlias.isEmpty()) {
+                    String nameKey = ((SlotRef) item.getExpr()).getColumnName();
+                    if (viewRefAlias.containsKey(nameKey)) {
+                        slotRefToAlias.put((SlotRef) item.getExpr(), viewRefAlias.get(nameKey));
+                    }
+                } else if (item.getAlias() != null && !item.getAlias().isEmpty()) {
+                    slotRefToAlias.put((SlotRef) item.getExpr(), item.getAlias());
+                }
             }
             List<SlotRef> allRefSlotRefs = new ArrayList<>();
             for (Map.Entry<Expr, SlotRef> entry : generatedExprToColumnRef.entrySet()) {
@@ -188,7 +205,7 @@ public class QueryAnalyzer {
             }
             for (SlotRef slotRef : allRefSlotRefs) {
                 if (!slotRefToAlias.isEmpty()) {
-                    String alias = slotRefToAlias.get(slotRef.toSql());
+                    String alias = slotRefToAlias.get(slotRef);
                     if (alias != null) {
                         slotRef.setColumnName(alias);
                     }
@@ -223,7 +240,7 @@ public class QueryAnalyzer {
             for (Column column : table.getBaseSchema()) {
                 Expr generatedColumnExpression = column.getGeneratedColumnExpr(table.getIdToColumn());
                 if (generatedColumnExpression != null) {
-                    SlotRef slotRef = new SlotRef(null, column.getName());
+                    SlotRef slotRef = new SlotRef(null, column.getName(), column.getName());
                     ExpressionAnalyzer.analyzeExpression(generatedColumnExpression, new AnalyzeState(), scope, session);
                     ExpressionAnalyzer.analyzeExpression(slotRef, new AnalyzeState(), scope, session);
                     generatedExprToColumnRef.put(generatedColumnExpression, slotRef);
@@ -262,6 +279,10 @@ public class QueryAnalyzer {
         public Void visitView(ViewRelation node, Scope scope) {
             QueryRelation queryRelation = node.getQueryStatement().getQueryRelation();
             if (queryRelation instanceof SubqueryRelation) {
+                // use scope for view relation to analyze subqueryRelation, clear the pre-analyzed
+                // information first.
+                queryRelation.getGeneratedExprToColumnRef().clear();
+                visitSubquery((SubqueryRelation) queryRelation, scope);
                 node.setGeneratedExprToColumnRef(queryRelation.getGeneratedExprToColumnRef());
             } else if (queryRelation instanceof SelectRelation) {
                 SelectRelation childSelectRelation = (SelectRelation) queryRelation;
