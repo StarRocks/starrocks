@@ -157,6 +157,7 @@ public:
     std::shared_ptr<MemTracker> get_mem_tracker_by_type(MemTrackerType type);
     std::vector<std::shared_ptr<MemTracker>> mem_trackers() const;
 
+    void init_storage_page_cache();
     int64_t get_storage_page_cache_size();
     int64_t check_storage_page_cache_size(int64_t storage_cache_limit);
     static int64_t calc_max_query_memory(int64_t process_mem_limit, int64_t percent);
@@ -167,7 +168,6 @@ private:
     Status _init_mem_tracker();
     void _reset_tracker();
 
-    void _init_storage_page_cache();
 
     std::shared_ptr<MemTracker> regist_tracker(MemTrackerType type, int64_t bytes_limit, MemTracker* parent);
 
