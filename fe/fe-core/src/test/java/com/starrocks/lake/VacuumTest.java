@@ -184,7 +184,7 @@ public class VacuumTest {
         partition.setLastSuccVacuumVersion(10L);
         Assert.assertFalse(autovacuumDaemon.shouldVacuum(partition));
         // disable
-        Config.lake_autovacuum_by_version = false;
+        Config.lake_autovacuum_detect_vaccumed_version = false;
         Assert.assertTrue(autovacuumDaemon.shouldVacuum(partition));
     }
 }

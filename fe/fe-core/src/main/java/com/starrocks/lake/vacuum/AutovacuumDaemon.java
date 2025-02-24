@@ -107,7 +107,7 @@ public class AutovacuumDaemon extends FrontendDaemon {
         if (current < partition.getLastVacuumTime() + Config.lake_autovacuum_partition_naptime_seconds * 1000) {
             return false;
         }
-        if (Config.lake_autovacuum_by_version) {
+        if (Config.lake_autovacuum_detect_vaccumed_version) {
             long minRetainVersion = partition.getMinRetainVersion();
             if (minRetainVersion <= 0) {
                 minRetainVersion = Math.max(1, partition.getVisibleVersion() - Config.lake_autovacuum_max_previous_versions);
@@ -240,6 +240,9 @@ public class AutovacuumDaemon extends FrontendDaemon {
 
         partition.setLastVacuumTime(startTime);
         if (!hasError && vacuumedVersion > partition.getLastSuccVacuumVersion()) {
+            // hasError is false means that the vacuum operation on all tablets was successful.
+            // the vacuumedVersion isthe minimum success vacuum version among all tablets within the partition which
+            // means that all the garbage files before the vacuumVersion have been deleted.
             partition.setLastSuccVacuumVersion(vacuumedVersion);
         }
         LOG.info("Vacuumed {}.{}.{} hasError={} vacuumedFiles={} vacuumedFileSize={} " +

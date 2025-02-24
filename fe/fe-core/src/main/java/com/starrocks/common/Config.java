@@ -2906,7 +2906,7 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = 
             "Determine whether a vacuum operation needs to be initiated based on the vacuum version.\n")
-    public static boolean lake_autovacuum_by_version = true;
+    public static boolean lake_autovacuum_detect_vaccumed_version = true;
 
     @ConfField(mutable = true, comment =
             "Whether enable throttling ingestion speed when compaction score exceeds the threshold.\n" +
