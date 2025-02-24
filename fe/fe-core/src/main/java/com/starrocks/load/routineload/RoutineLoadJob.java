@@ -389,6 +389,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             jobProperties.put(CreateRoutineLoadStmt.TRIMSPACE, stmt.isTrimspace() ? "true" : "false");
             jobProperties.put(CreateRoutineLoadStmt.ENCLOSE, Byte.toString(stmt.getEnclose()));
             jobProperties.put(CreateRoutineLoadStmt.ESCAPE, Byte.toString(stmt.getEscape()));
+            jobProperties.put(CreateRoutineLoadStmt.FILL_MISMATCH_COLUMN_WITH, stmt.getMisMatchFillValue());
         } else if (stmt.getFormat().equals("json")) {
             jobProperties.put(CreateRoutineLoadStmt.FORMAT, "json");
             if (!Strings.isNullOrEmpty(stmt.getJsonPaths())) {
@@ -509,6 +510,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public byte getEscape() {
         return Byte.parseByte(jobProperties.getOrDefault(CreateRoutineLoadStmt.ESCAPE, "0"));
+    }
+
+    public String getMisMatchFillValue() {
+        return jobProperties.getOrDefault(CreateRoutineLoadStmt.FILL_MISMATCH_COLUMN_WITH, "NONE");
     }
 
     public String getName() {

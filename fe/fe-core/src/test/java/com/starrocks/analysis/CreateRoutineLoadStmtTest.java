@@ -236,6 +236,29 @@ public class CreateRoutineLoadStmtTest {
     }
 
     @Test
+    public void testFillMismatch() {
+        String sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1"
+                + " PROPERTIES( \"desired_concurrent_number\"=\"3\",\n"
+                + "\"max_batch_interval\" = \"20\",\n"
+                + "\"strict_mode\" = \"false\",\n"
+                + "\"fill_mismatch_column_with\" = \"abc\"\n"
+                + ")\n"
+                + "FROM KAFKA\n"
+                + "(\n"
+                + "\"kafka_broker_list\" = \"kafkahost1:9092,kafkahost2:9092\",\n"
+                + "\"kafka_topic\" = \"topictest\"\n"
+                + ");";
+        List<StatementBase> stmts = com.starrocks.sql.parser.SqlParser.parse(sql, 32);
+        CreateRoutineLoadStmt createRoutineLoadStmt = (CreateRoutineLoadStmt)stmts.get(0);
+        try {
+            CreateRoutineLoadAnalyzer.analyze(createRoutineLoadStmt, connectContext);
+        } catch (Exception e) {
+            Assert.assertEquals(true, e.getMessage().contains("fill_mismatch_column_with"));
+            return;
+        }
+        Assert.assertEquals(true, false);
+    }
+    @Test
     public void testTaskTimeout() {
         {
             String sql = "CREATE ROUTINE LOAD testdb.routine_name ON table1"
