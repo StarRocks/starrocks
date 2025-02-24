@@ -1,5 +1,7 @@
 -- name: test_partitions_meta
-CREATE TABLE `partitions_meta_test` (
+create database db_${uuid0};
+use db_${uuid0};
+CREATE TABLE `partitions_meta_test1` (
   `k` int(11) NOT NULL COMMENT "",
   `v` int(11) NOT NULL COMMENT ""
 )engine=olap
@@ -8,8 +10,24 @@ PARTITION BY RANGE(`v`)
 (PARTITION p1 VALUES [("-2147483648"), ("0")),
 PARTITION p2 VALUES [("0"), ("10")),
 PARTITION p3 VALUES [("10"), ("2147483647")))
-DISTRIBUTED BY HASH(`k`) BUCKETS 2
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1"
 );
-select TABLE_NAME, PARTITION_NAME, DATA_VERSION, VERSION_TXN_TYPE from INFORMATION_SCHEMA.PARTITIONS_META where table_name like '%partitions_meta_test%' order by partition_name;
+CREATE TABLE `partitions_meta_test2` (
+  `k` int(11) NOT NULL COMMENT "",
+  `v` int(11) NOT NULL COMMENT ""
+)engine=olap
+DUPLICATE KEY(`k`)
+PARTITION BY RANGE(`v`)
+(PARTITION p1 VALUES [("-2147483648"), ("0")),
+PARTITION p2 VALUES [("0"), ("10")),
+PARTITION p3 VALUES [("10"), ("2147483647")))
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
+admin set frontend config("max_get_partitions_meta_result_count"="1");
+select TABLE_NAME, PARTITION_NAME, DATA_VERSION, VERSION_TXN_TYPE from INFORMATION_SCHEMA.PARTITIONS_META where table_name like '%partitions_meta_test%' order by table_name asc, partition_name asc;
+admin set frontend config("max_get_partitions_meta_result_count"="100000");
+drop database db_${uuid0};
