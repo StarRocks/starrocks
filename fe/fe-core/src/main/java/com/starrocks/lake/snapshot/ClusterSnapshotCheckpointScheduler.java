@@ -44,6 +44,11 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
     }
 
     @Override
+    public long getInterval() {
+        return Config.automated_cluster_snapshot_interval_seconds * 1000L;
+    }
+
+    @Override
     protected void runAfterCatalogReady() {
         if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isAutomatedSnapshotOn()) {
             return;
