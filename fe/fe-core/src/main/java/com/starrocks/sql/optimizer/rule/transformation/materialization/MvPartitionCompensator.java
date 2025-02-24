@@ -587,7 +587,7 @@ public class MvPartitionCompensator {
                             .findFirst();
             // compensate nothing if there is no partition column predicate in the scan node.
             if (!partitionColumn.isPresent()) {
-                return null;
+                return partitionPredicates;
             }
 
             ExpressionMapping mapping =
