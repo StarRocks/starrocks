@@ -12,3 +12,195 @@ explain select * from orders_new where ts=20200101;
 -- result:
 [REGEX].*partitions=1/2.*
 -- !result
+
+-- name: test_range_prune
+CREATE TABLE ts (
+	ts INT NOT NULL,
+        id BIGINT NOT NULL,
+	city STRING NOT NULL )
+PARTITION BY date_trunc('month', str_to_date(CAST(ts as STRING),'%Y%m%d'));
+-- result:
+-- !result
+insert into ts values('20200201',1,'cd');
+-- result:
+-- !result
+insert into ts values('20200101',1,'cd');
+-- result:
+-- !result
+insert into ts values('20200301',1,'cd');
+-- result:
+-- !result
+insert into ts values('20200401',1,'cd');
+-- result:
+-- !result
+explain select * from ts where ts>20200201;
+-- result:
+[REGEX].*partitions=3/4.*
+-- !result
+CREATE TABLE o (
+    ts BIGINT NOT NULL,
+    id BIGINT NOT NULL,
+    city STRING NOT NULL
+)
+PARTITION BY from_unixtime(ts,'%Y%m%d');
+-- result:
+-- !result
+insert into o values(1727224687,1,'cd');
+-- result:
+-- !result
+insert into o values(1737234687,1,'cd');
+-- result:
+-- !result
+insert into o values(1747244687,1,'cd');
+-- result:
+-- !result
+insert into o values(1757254687,1,'cd');
+-- result:
+-- !result
+explain select * from o where ts>1737234687;
+-- result:
+[REGEX].*partitions=3/4.*
+-- !result
+CREATE TABLE t (
+	ts INT NOT NULL,
+        id BIGINT NOT NULL,
+	city STRING NOT NULL )
+PARTITION BY id, date_trunc('month', str_to_date(CAST(ts as STRING),'%Y%m%d'));
+-- result:
+-- !result
+insert into t values('20200201',1,'cd');
+-- result:
+-- !result
+insert into t values('20200101',1,'cd');
+-- result:
+-- !result
+insert into t values('20200301',1,'cd');
+-- result:
+-- !result
+insert into t values('20200401',1,'cd');
+-- result:
+-- !result
+insert into t values('20200201',2,'cd');
+-- result:
+-- !result
+insert into t values('20200101',2,'cd');
+-- result:
+-- !result
+insert into t values('20200301',3,'cd');
+-- result:
+-- !result
+insert into t values('20200401',3,'cd');
+-- result:
+-- !result
+explain select * from t where ts>20200201;
+-- result:
+[REGEX].*partitions=6/8.*
+-- !result
+explain select * from t where id>1;
+-- result:
+[REGEX].*partitions=4/8.*
+-- !result
+explain select * from t where id>1 and ts>20200201;
+-- result:
+[REGEX].*partitions=3/8.*
+-- !result
+
+-- name: test_prune_value_function
+CREATE TABLE o (
+    ts BIGINT NOT NULL,
+    id BIGINT NOT NULL,
+    city STRING NOT NULL
+)
+PARTITION BY from_unixtime(ts,'%Y%m%d');
+-- result:
+-- !result
+insert into o values(unix_timestamp(),1,'cd');
+-- result:
+-- !result
+insert into o values(unix_timestamp()+1000000,1,'cd');
+-- result:
+-- !result
+insert into o values(unix_timestamp()-1000000,1,'cd');
+-- result:
+-- !result
+explain select * from o where ts>unix_timestamp();
+-- result:
+[REGEX].*partitions=2/3.*
+-- !result
+
+-- name: test_prune_cast
+CREATE TABLE o (
+    ts STRING NOT NULL,
+    id BIGINT NOT NULL,
+    city STRING NOT NULL
+)
+PARTITION BY from_unixtime(cast(ts as INT) + 3600);
+-- result:
+-- !result
+insert into o values(unix_timestamp(),1,'cd');
+-- result:
+-- !result
+insert into o values(unix_timestamp()+1000000,1,'cd');
+-- result:
+-- !result
+insert into o values(unix_timestamp()-1000000,1,'cd');
+-- result:
+-- !result
+explain select * from o where ts>cast(unix_timestamp() as STRING);
+-- result:
+[REGEX].*partitions=1/3.*
+-- !result
+explain select * from o where ts>'1740108713';
+-- result:
+[REGEX].*partitions=2/3.*
+-- !result
+
+-- name: test_prune_convert_tz
+CREATE TABLE ts (
+	ts DATETIME NOT NULL,
+        id BIGINT NOT NULL,
+	city STRING NOT NULL )
+PARTITION BY date_trunc('hour', convert_tz(ts, 'Asia/Shanghai', 'America/Los_Angeles'));
+-- result:
+-- !result
+insert into ts values('2020-01-01 00:00:00',1,'cd');
+-- result:
+-- !result
+insert into ts values('2020-02-01 00:00:00',1,'cd');
+-- result:
+-- !result
+insert into ts values('2020-03-01 00:00:00',1,'cd');
+-- result:
+-- !result
+insert into ts values('2020-04-01 00:00:00',1,'cd');
+-- result:
+-- !result
+explain select * from ts where ts > '2020-03-01 00:00:00';
+-- result:
+[REGEX].*partitions=4/4.*
+-- !result
+
+-- name: test_prune_if
+CREATE TABLE ts (
+        dt STRING NOT NULL,
+        id BIGINT NOT NULL,
+	city STRING NOT NULL )
+PARTITION BY date_trunc('month', if(length(dt) = 6, str2date(dt, '%y%m%d'), str2date(dt, '%Y%m%d')));
+-- result:
+-- !result
+insert into ts values('20200201',1,'cd');
+-- result:
+-- !result
+insert into ts values('20200101',1,'cd');
+-- result:
+-- !result
+insert into ts values('200301',1,'cd');
+-- result:
+-- !result
+insert into ts values('20200401',1,'cd');
+-- result:
+-- !result
+explain select * from ts where dt>20200201;
+-- result:
+[REGEX].*partitions=4/4.*
+-- !result
