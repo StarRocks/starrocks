@@ -67,6 +67,7 @@ import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
+import com.starrocks.journal.LeaderTransferException;
 import com.starrocks.journal.SerializeException;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteMgr;
@@ -1231,13 +1232,16 @@ public class EditLog {
                 result = task.get();
                 break;
             } catch (InterruptedException | ExecutionException e) {
+                if (e.getCause() != null && e.getCause() instanceof LeaderTransferException) {
+                    throw (LeaderTransferException) (e.getCause());
+                }
                 LOG.warn("failed to wait, wait and retry {} times..: {}", cnt, e);
                 cnt++;
             }
         }
 
         // for now if journal writer fails, it will exit directly, so this property should always be true.
-        assert (result);
+        Preconditions.checkState(result);
         if (MetricRepo.hasInit) {
             MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - startTimeNano) / 1000000);
         }
