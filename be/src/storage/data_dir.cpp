@@ -154,7 +154,8 @@ void DataDir::health_check() {
         bool all_failed = true;
         for (int i = 0; i < retry_times; i++) {
             Status res = _read_and_write_test_file();
-            if (res.ok() || !is_io_error(res)) {
+            // If the disk is full, we should not set the state to OFFLINE.
+            if (res.ok() || !is_io_error(res) || is_disk_full_error(res)) {
                 all_failed = false;
                 break;
             } else {

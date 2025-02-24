@@ -109,6 +109,10 @@ inline bool is_io_error(const Status& status) {
     return status.is_io_error();
 }
 
+inline bool is_disk_full_error(const Status& status) {
+    return status.is_io_error() && status.message().find("No space left on device") != std::string::npos;
+}
+
 // check if int8_t, int16_t, int32_t, int64_t value is overflow
 template <typename T>
 bool valid_signed_number(const std::string& value_str) {
