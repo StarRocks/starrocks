@@ -61,8 +61,8 @@ public:
     // ====================================
     static Status fill_runtime_bloom_filter(const ColumnPtr& column, LogicalType type, RuntimeFilter* filter,
                                             size_t column_offset, bool eq_null);
-    static Status fill_runtime_bloom_filter(const std::vector<ColumnPtr>& column, LogicalType type,
-                                            RuntimeFilter* filter, size_t column_offset, bool eq_null);
+    static Status fill_runtime_bloom_filter(const Columns& column, LogicalType type, RuntimeFilter* filter,
+                                            size_t column_offset, bool eq_null);
     static Status fill_runtime_bloom_filter(const starrocks::pipeline::RuntimeBloomFilterBuildParam& param,
                                             LogicalType type, RuntimeFilter* filter, size_t column_offset);
     static StatusOr<ExprContext*> rewrite_runtime_filter_in_cross_join_node(ObjectPool* pool, ExprContext* conjunct,

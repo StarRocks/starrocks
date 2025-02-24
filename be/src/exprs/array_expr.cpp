@@ -41,7 +41,7 @@ public:
         }
 
         bool all_const = true;
-        std::vector<ColumnPtr> element_columns(num_elements);
+        Columns element_columns(num_elements);
         for (size_t i = 0; i < num_elements; i++) {
             ASSIGN_OR_RETURN(auto col, _children[i]->evaluate_checked(context, chunk));
             output_rows = std::max(output_rows, col->size());

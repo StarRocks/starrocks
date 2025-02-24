@@ -170,7 +170,7 @@ TEST_F(MapApplyExprTest, test_map_int_int) {
     type_map_int_int.children.emplace_back(TypeDescriptor(LogicalType::TYPE_INT));
 
     create_lambda_expr(type_map_int_int);
-    auto column = ColumnHelper::create_column(type_map_int_int, true);
+    ColumnPtr column = ColumnHelper::create_column(type_map_int_int, true);
 
     DatumMap map1;
     map1[(int32_t)1] = (int32_t)44;
@@ -270,7 +270,7 @@ TEST_F(MapApplyExprTest, test_map_varchar_int) {
     type_varchar.len = 10;
     create_lambda_expr(type_map_varchar_int);
 
-    auto column = ColumnHelper::create_column(type_map_varchar_int, false);
+    ColumnPtr column = ColumnHelper::create_column(type_map_varchar_int, false);
 
     DatumMap map;
     map[(Slice) "a"] = (int32_t)11;

@@ -39,7 +39,7 @@ struct SelectIfOP {
         [[maybe_unused]] auto* input_data0 = ColumnHelper::get_data_column(value0.get());
         [[maybe_unused]] auto* input_data1 = ColumnHelper::get_data_column(value1.get());
 
-        ColumnPtr res = ColumnHelper::create_column(type_desc, false);
+        MutableColumnPtr res = ColumnHelper::create_column(type_desc, false);
         auto* res_col = down_cast<RunTimeColumnType<Type>*>(res.get());
         auto& res_data = res_col->get_data();
         res_data.resize(select_vec.size());
@@ -81,12 +81,12 @@ public:
 
         int null_count = ColumnHelper::count_nulls(lhs);
         if (null_count == 0) {
-            return lhs->clone();
+            return Column::mutate(std::move(lhs));
         }
 
         ASSIGN_OR_RETURN(auto rhs, _children[1]->evaluate_checked(context, ptr));
         if (null_count == lhs->size()) {
-            return rhs->clone();
+            return Column::mutate(std::move(rhs));
         }
 
         Columns list = {lhs, rhs};
@@ -127,7 +127,7 @@ private:
         NullColumnPtr null = nullptr;
 
         if (columns[0]->is_nullable()) {
-            null = down_cast<NullableColumn*>(columns[0].get())->null_column();
+            null = down_cast<const NullableColumn*>(columns[0].get())->null_column();
         }
 
         for (int row = 0; row < num_rows; ++row) {
@@ -155,7 +155,7 @@ public:
 
         ASSIGN_OR_RETURN(auto rhs, _children[1]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(rhs) == rhs->size()) {
-            return lhs->clone();
+            return Column::mutate(std::move(lhs));
         }
 
         Columns list = {lhs, rhs};
@@ -227,16 +227,16 @@ public:
 
         ASSIGN_OR_RETURN(auto lhs, _children[1]->evaluate_checked(context, ptr));
         if (true_count == bhs->size()) {
-            return lhs->clone();
+            return Column::mutate(std::move(lhs));
         }
 
         ASSIGN_OR_RETURN(auto rhs, _children[2]->evaluate_checked(context, ptr));
         if (true_count == 0) {
-            return rhs->clone();
+            return Column::mutate(std::move(rhs));
         }
 
         if (lhs->only_null() && rhs->only_null()) {
-            return lhs->clone();
+            return Column::mutate(std::move(lhs));
         }
 
         Columns list = {bhs, lhs, rhs};
@@ -349,7 +349,7 @@ private:
             columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
         }
         ColumnViewer<TYPE_BOOLEAN> bhs_viewer(columns[0]);
-        ColumnPtr res = ColumnHelper::create_column(this->type(), true);
+        MutableColumnPtr res = ColumnHelper::create_column(this->type(), true);
         res->reserve(num_rows);
         if constexpr (check_null) {
             for (int row = 0; row < num_rows; ++row) {
@@ -378,7 +378,7 @@ public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedCoalesceExpr);
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
-        std::vector<ColumnPtr> columns;
+        Columns columns;
         for (int i = 0; i < _children.size(); ++i) {
             ASSIGN_OR_RETURN(auto value, _children[i]->evaluate_checked(context, ptr));
             auto null_count = ColumnHelper::count_nulls(value);
@@ -388,7 +388,7 @@ public:
             // 3.don't need check if value is all null
             if (null_count == 0) {
                 if (columns.size() == 0) {
-                    return value->clone();
+                    return Column::mutate(std::move(value));
                 }
 
                 // There is a column all not null.
@@ -408,8 +408,8 @@ public:
 
         // direct return if only one
         if (columns.size() == 1) {
-            // TODO: don't copy column if chunk support copy on write
-            return columns[0]->clone();
+            // don't copy column if chunk support copy on write
+            return Column::mutate(std::move(columns[0]));
         }
 
         if constexpr (lt_is_collection<Type>) {

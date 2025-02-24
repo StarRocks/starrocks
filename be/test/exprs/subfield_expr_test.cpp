@@ -44,7 +44,7 @@ protected:
     void SetUp() override {}
     void TearDown() override { _objpool.clear(); }
 
-    FakeConstExpr* new_fake_const_expr(ColumnPtr value, const TypeDescriptor& type) {
+    FakeConstExpr* new_fake_const_expr(MutableColumnPtr&& value, const TypeDescriptor& type) {
         TExprNode node;
         node.__set_node_type(TExprNodeType::INT_LITERAL);
         node.__set_num_children(0);
@@ -80,7 +80,7 @@ TEST_F(SubfieldExprTest, subfield_test) {
 
     {
         std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), {"id"});
-        expr->add_child(new_fake_const_expr(column, struct_type));
+        expr->add_child(new_fake_const_expr(column->clone(), struct_type));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
         auto subfield_column = ColumnHelper::get_data_column(result.get());
@@ -92,7 +92,7 @@ TEST_F(SubfieldExprTest, subfield_test) {
 
     {
         std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), {"name"});
-        expr->add_child(new_fake_const_expr(column, struct_type));
+        expr->add_child(new_fake_const_expr(column->clone(), struct_type));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
         auto subfield_column = ColumnHelper::get_data_column(result.get());
@@ -126,7 +126,7 @@ TEST_F(SubfieldExprTest, subfield_null_test) {
         column->append_datum(datum_struct_3);
 
         std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), {"id"});
-        expr->add_child(new_fake_const_expr(column, struct_type));
+        expr->add_child(new_fake_const_expr(std::move(column), struct_type));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
         auto subfield_column = ColumnHelper::get_data_column(result.get());
@@ -153,7 +153,7 @@ TEST_F(SubfieldExprTest, subfield_null_test) {
         column->append_datum(datum_struct_3);
 
         std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), {"id"});
-        expr->add_child(new_fake_const_expr(column, struct_type));
+        expr->add_child(new_fake_const_expr(std::move(column), struct_type));
         auto result = expr->evaluate(nullptr, nullptr);
         EXPECT_TRUE(result->is_nullable());
         auto subfield_column = ColumnHelper::get_data_column(result.get());
@@ -187,7 +187,7 @@ TEST_F(SubfieldExprTest, subfield_clone_test) {
     column->append_datum(datum_struct_3);
 
     std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), {"id"});
-    expr->add_child(new_fake_const_expr(column, struct_type));
+    expr->add_child(new_fake_const_expr(column->clone(), struct_type));
     auto result = expr->evaluate(nullptr, nullptr);
     EXPECT_TRUE(result->is_nullable());
     auto subfield_column = ColumnHelper::get_data_column(result.get());
@@ -230,7 +230,7 @@ TEST_F(SubfieldExprTest, subfield_multi_level_test) {
     column->append_datum(datum_struct_3_level1);
 
     std::unique_ptr<Expr> expr = create_subfield_expr(TypeDescriptor(LogicalType::TYPE_INT), {"level1", "level2"});
-    expr->add_child(new_fake_const_expr(column, struct_type));
+    expr->add_child(new_fake_const_expr(std::move(column), struct_type));
     auto result = expr->evaluate(nullptr, nullptr);
     EXPECT_TRUE(result->is_nullable());
     EXPECT_EQ(3, result->size());

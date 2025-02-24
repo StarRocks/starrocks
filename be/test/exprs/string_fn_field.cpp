@@ -40,8 +40,8 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldStringTest) {
         str2->append("test" + std::to_string(j % 10));
     }
 
-    columns.emplace_back(str1);
-    columns.emplace_back(str2);
+    columns.emplace_back(std::move(str1));
+    columns.emplace_back(std::move(str2));
 
     ColumnPtr result = StringFunctions::field<TYPE_VARCHAR>(ctx.get(), columns).value();
 
@@ -85,9 +85,9 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldIntTest) {
     auto param2 = paramBuilder2.build_nullable_column();
     auto param3 = paramBuilder3.build_nullable_column();
 
-    columns.emplace_back(param1);
-    columns.emplace_back(param2);
-    columns.emplace_back(param3);
+    columns.emplace_back(std::move(param1));
+    columns.emplace_back(std::move(param2));
+    columns.emplace_back(std::move(param3));
     int res[] = {0, 1, 2, 0, 0};
     ctx->set_function_state(FunctionContext::FRAGMENT_LOCAL, nullptr);
     ColumnPtr result = StringFunctions::field<TYPE_INT>(ctx.get(), columns).value();
@@ -141,9 +141,9 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldDecTest) {
     DecimalV3Cast::from_string<int64_t>(&data3[i], precision, scale, s.c_str(), s.size());
     int res[] = {0, 2, 1};
 
-    columns.emplace_back(param1);
-    columns.emplace_back(param2);
-    columns.emplace_back(param3);
+    columns.emplace_back(std::move(param1));
+    columns.emplace_back(std::move(param2));
+    columns.emplace_back(std::move(param3));
     ColumnPtr result = StringFunctions::field<TYPE_DECIMAL64>(ctx.get(), columns).value();
 
     ASSERT_TRUE(result->is_numeric());
@@ -186,9 +186,9 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldIntTest2) {
     auto param2 = paramBuilder2.build(true);
     auto param3 = paramBuilder3.build(true);
 
-    columns.emplace_back(param1);
-    columns.emplace_back(param2);
-    columns.emplace_back(param3);
+    columns.emplace_back(std::move(param1));
+    columns.emplace_back(std::move(param2));
+    columns.emplace_back(std::move(param3));
     int res[] = {0, 0, 0, 0, 0};
     ctx->set_constant_columns(columns);
     ASSERT_TRUE(StringFunctions::field_prepare<TYPE_INT>(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
@@ -221,9 +221,9 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldIntTest3) {
     auto param2 = paramBuilder2.build(true);
     auto param3 = paramBuilder3.build(true);
 
-    columns.emplace_back(param1);
-    columns.emplace_back(param2);
-    columns.emplace_back(param3);
+    columns.emplace_back(std::move(param1));
+    columns.emplace_back(std::move(param2));
+    columns.emplace_back(std::move(param3));
     int res[] = {0, 0, 0, 0, 0};
     ctx->set_constant_columns(columns);
     ASSERT_TRUE(StringFunctions::field_prepare<TYPE_INT>(ctx.get(), FunctionContext::FRAGMENT_LOCAL).ok());
@@ -268,9 +268,9 @@ PARALLEL_TEST(VecFieldFunctionsTest, fieldIntTest4) {
     auto param2 = paramBuilder2.build(true);
     auto param3 = paramBuilder3.build(true);
 
-    columns.emplace_back(param1);
-    columns.emplace_back(param2);
-    columns.emplace_back(param3);
+    columns.emplace_back(std::move(param1));
+    columns.emplace_back(std::move(param2));
+    columns.emplace_back(std::move(param3));
     int res[] = {2, 0, 0, 0, 0};
     ctx->set_constant_columns(columns);
     ASSERT_TRUE(StringFunctions::field_prepare<TYPE_INT>(ctx.get(), FunctionContext::THREAD_LOCAL).ok());

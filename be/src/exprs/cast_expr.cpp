@@ -83,7 +83,7 @@ struct CastFn {
 #define SELF_CAST(FROM_TYPE)                                                    \
     template <bool AllowThrowException>                                         \
     struct CastFn<FROM_TYPE, FROM_TYPE, AllowThrowException> {                  \
-        static ColumnPtr cast_fn(ColumnPtr& column) { return column->clone(); } \
+        static ColumnPtr cast_fn(ColumnPtr& column) { return Column::mutate(std::move(column)); } \
     };
 
 #define UNARY_FN_CAST(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                        \
@@ -436,7 +436,7 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
         }
         return NullableColumn::create(std::move(res_data_column), std::move(null_column));
     } else {
-        NullColumnPtr null_column = NullColumn::create(sz);
+        NullColumn::MutablePtr null_column = NullColumn::create(sz);
         auto& null_data = null_column->get_data();
         auto* data_column = down_cast<BinaryColumn*>(column.get());
 
@@ -883,8 +883,8 @@ static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
     auto& res_data = res_data_column->get_data();
 
     if (column->is_nullable()) {
-        const auto* input_column = down_cast<NullableColumn*>(column.get());
-        const auto* data_column = down_cast<BinaryColumn*>(input_column->data_column().get());
+        auto* input_column = down_cast<NullableColumn*>(column.get());
+        auto* data_column = down_cast<BinaryColumn*>(input_column->data_column().get());
 
         NullColumnPtr null_column = ColumnHelper::as_column<NullColumn>(input_column->null_column()->clone());
         auto& null_data = down_cast<NullColumn*>(null_column.get())->get_data();
@@ -905,7 +905,7 @@ static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
         return NullableColumn::create(std::move(res_data_column), std::move(null_column));
     } else {
         auto* data_column = down_cast<BinaryColumn*>(column.get());
-        NullColumnPtr null_column = NullColumn::create(num_rows);
+        NullColumn::MutablePtr null_column = NullColumn::create(num_rows);
         auto& null_data = null_column->get_data();
 
         bool has_null = false;
@@ -1114,7 +1114,7 @@ public:
                         column, to_type.precision, to_type.scale);
             }
         } else if constexpr (lt_is_string<FromType> && lt_is_binary<ToType>) {
-            result_column = column->clone();
+            result_column = Column::mutate(std::move(column));
         } else {
             result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(column);
         }
@@ -1343,7 +1343,7 @@ public:
         }
 
         if constexpr (Type == TYPE_VARBINARY) {
-            return column->clone();
+            return Column::mutate(std::move(column));
         }
 
         if constexpr (lt_is_decimal<Type>) {
@@ -1429,7 +1429,7 @@ private:
     //    length of char.
     // In SR, behaviors of both cast(string as varchar(n)) and cast(string as char(n)) keep the same: neglect
     // of the length of char/varchar and return input column directly.
-    ColumnPtr _evaluate_string(ExprContext* context, const ColumnPtr& column) { return column->clone(); }
+    ColumnPtr _evaluate_string(ExprContext* context, ColumnPtr& column) { return Column::mutate(std::move(column)); }
 
     ColumnPtr _evaluate_time(ExprContext* context, const ColumnPtr& column) {
         ColumnViewer<TYPE_TIME> viewer(column);
@@ -1547,7 +1547,7 @@ StatusOr<ColumnPtr> MustNullExpr::evaluate_checked(ExprContext* context, Chunk* 
     // only null
     auto column = ColumnHelper::create_column(_type, true);
     column->append_nulls(1);
-    auto only_null = ConstColumn::create(column, 1);
+    auto only_null = ConstColumn::create(std::move(column), 1);
     if (ptr != nullptr) {
         only_null->resize(ptr->num_rows());
     }

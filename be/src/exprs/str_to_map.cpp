@@ -180,8 +180,8 @@ StatusOr<ColumnPtr> StringFunctions::str_to_map_v1(FunctionContext* context, con
     }
 
     auto map = MapColumn::create(keys_builder.build_nullable_column(), values_builder.build_nullable_column(),
-                                 res_offsets);
-    return NullableColumn::create(std::move(map), res_null);
+                                 std::move(res_offsets));
+    return NullableColumn::create(std::move(map), std::move(res_null));
 }
 
 } // namespace starrocks

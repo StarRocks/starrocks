@@ -207,7 +207,7 @@ Status PartitionedHashJoinProberImpl::push_probe_chunk(RuntimeState* state, Chun
     size_t num_partitions = probers.size();
     size_t num_partition_cols = partition_keys.size();
 
-    std::vector<ColumnPtr> partition_columns(num_partition_cols);
+    Columns partition_columns(num_partition_cols);
     for (size_t i = 0; i < num_partition_cols; ++i) {
         ASSIGN_OR_RETURN(partition_columns[i], partition_keys[i]->evaluate(chunk.get()));
     }
@@ -642,7 +642,7 @@ Status AdaptivePartitionHashJoinBuilder::_append_chunk_to_partitions(const Chunk
     size_t num_partitions = _builders.size();
     size_t num_partition_cols = build_partition_keys.size();
 
-    std::vector<ColumnPtr> partition_columns(num_partition_cols);
+    Columns partition_columns(num_partition_cols);
     for (size_t i = 0; i < num_partition_cols; ++i) {
         ASSIGN_OR_RETURN(partition_columns[i], build_partition_keys[i]->evaluate(chunk.get()));
     }

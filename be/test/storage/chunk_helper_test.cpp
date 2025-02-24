@@ -300,7 +300,7 @@ ChunkPtr ChunkPipelineAccumulatorTest::_generate_chunk(size_t rows, size_t cols,
     auto chunk = std::make_shared<Chunk>();
     for (size_t i = 0; i < cols; i++) {
         auto col = Int8Column::create(rows, reserve_size);
-        chunk->append_column(col, i);
+        chunk->append_column(std::move(col), i);
     }
     return chunk;
 }

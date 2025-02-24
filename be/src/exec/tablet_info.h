@@ -222,8 +222,8 @@ private:
         bool is_l_null = lc->is_null(l_idx);
         bool is_r_null = rc->is_null(r_idx);
         if (!is_l_null && !is_r_null) {
-            Column* ldc = ColumnHelper::get_data_column(lc.get());
-            Column* rdc = ColumnHelper::get_data_column(rc.get());
+            const Column* ldc = ColumnHelper::get_data_column(lc.get());
+            const Column* rdc = ColumnHelper::get_data_column(rc.get());
             return ldc->compare_at(l_idx, r_idx, *rdc, -1);
         } else {
             if (is_l_null && is_r_null) {

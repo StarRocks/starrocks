@@ -37,7 +37,7 @@ Status Chunk::upgrade_if_overflow() {
         if (!ret.ok()) {
             return ret.status();
         } else if (ret.value() != nullptr) {
-            column = ret.value();
+            column = std::move(ret.value());
         } else {
             continue;
         }
@@ -114,8 +114,7 @@ void Chunk::set_num_rows(size_t count) {
 void Chunk::update_rows(const Chunk& src, const uint32_t* indexes) {
     DCHECK(_columns.size() == src.num_columns());
     for (int i = 0; i < _columns.size(); i++) {
-        ColumnPtr& c = _columns[i];
-        c->update_rows(*src.columns()[i], indexes);
+        _columns[i]->update_rows(*src.columns()[i], indexes);
     }
 }
 
@@ -181,7 +180,7 @@ void Chunk::insert_column(size_t idx, ColumnPtr column, const FieldPtr& field) {
 }
 
 void Chunk::append_default() {
-    for (const auto& column : _columns) {
+    for (auto& column : _columns) {
         column->append_default();
     }
 }
@@ -275,7 +274,7 @@ std::unique_ptr<Chunk> Chunk::clone_empty_with_schema(size_t size) const {
 std::unique_ptr<Chunk> Chunk::clone_unique() const {
     std::unique_ptr<Chunk> chunk = clone_empty(0);
     for (size_t idx = 0; idx < _columns.size(); idx++) {
-        ColumnPtr column = _columns[idx]->clone_shared();
+        ColumnPtr column = _columns[idx]->clone();
         chunk->_columns[idx] = std::move(column);
     }
     chunk->_owner_info = _owner_info;
