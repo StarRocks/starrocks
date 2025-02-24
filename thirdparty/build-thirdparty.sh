@@ -1351,13 +1351,19 @@ build_tenann() {
 build_icu() {
     check_if_source_exist $ICU_SOURCE
     cd $TP_SOURCE_DIR/$ICU_SOURCE/source
+
     sed -i 's/\r$//' ./runConfigureICU
     sed -i 's/\r$//' ./config.*
     sed -i 's/\r$//' ./configure
     sed -i 's/\r$//' ./mkinstalldirs
+
+    unset CPPFLAGS
+    unset CXXFLAGS
+
     ./runConfigureICU Linux/gcc --prefix=$TP_INSTALL_DIR --enable-static --disable-shared
     make -j$PARALLEL
     make install
+    restore_compile_flags
 }
 
 # restore cxxflags/cppflags/cflags to default one
