@@ -24,7 +24,7 @@ public class PaimonRemoteFileDesc extends RemoteFileDesc {
         this.paimonSplitsInfo = paimonSplitsInfo;
     }
 
-    public static PaimonRemoteFileDesc createPamonRemoteFileDesc(PaimonSplitsInfo paimonSplitsInfo) {
+    public static PaimonRemoteFileDesc createPaimonRemoteFileDesc(PaimonSplitsInfo paimonSplitsInfo) {
         return new PaimonRemoteFileDesc(paimonSplitsInfo);
     }
 
