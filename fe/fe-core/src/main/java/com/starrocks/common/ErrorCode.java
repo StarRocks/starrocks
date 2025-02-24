@@ -333,6 +333,8 @@ public enum ErrorCode {
             "%s column: %s has no matching %s column"),
     ERR_FAILED_WHEN_INSERT(5609, new byte[] {'2', '2', '0', '0', '0'}, "Failed when executing INSERT : '%s'"),
     ERR_LOAD_HAS_FILTERED_DATA(5610, new byte[] {'2', '2', '0', '0', '0'}, "Insert has filtered data : %s"),
+    ERR_PARSE_ERROR(5611, new byte[] {'2', '2', '0', '0', '0'},
+            "%s. Check the 'TrackingSQL' field for detailed information."),
 
     /**
      * 5700 - 5799: Partition
