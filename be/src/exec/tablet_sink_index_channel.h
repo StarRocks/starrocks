@@ -189,6 +189,10 @@ private:
     void _reset_cur_chunk(Chunk* input);
     void _append_data_to_cur_chunk(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size);
 
+    void _try_diagnose(const std::string& error_text);
+    bool _is_diagnose_done();
+    void _wait_diagnose(RuntimeState* state);
+
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 
     OlapTableSink* _parent = nullptr;
@@ -265,6 +269,7 @@ private:
     ExprContext* _where_clause = nullptr;
 
     bool _has_primary_replica = false;
+    std::unique_ptr<RefCountClosure<PLoadDiagnoseResult>> _diagnose_closure;
 };
 
 class IndexChannel {

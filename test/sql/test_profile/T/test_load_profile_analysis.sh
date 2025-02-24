@@ -31,7 +31,7 @@ function check_keywords() {
 }
 
 sql=$(cat << EOF
-SELECT get_query_profile(PROFILE_ID) AS result FROM information_schema.loads WHERE LABEL = '${label}';
+SELECT get_query_profile(regexp_split(PROFILE_ID, ",")[1]) AS result FROM information_schema.loads WHERE LABEL = '${label}';
 EOF
 )
 

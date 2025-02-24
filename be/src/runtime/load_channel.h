@@ -122,6 +122,8 @@ public:
 
     void report_profile(PTabletWriterAddBatchResult* result, bool print_profile);
 
+    void diagnose(const PLoadDiagnoseRequest* request, PLoadDiagnoseResult* response);
+
 private:
     void _add_chunk(Chunk* chunk, const MonotonicStopWatch* watch, const PTabletWriterAddChunkRequest& request,
                     PTabletWriterAddBatchResult* response);
@@ -129,6 +131,7 @@ private:
     Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
     bool _should_enable_profile();
     std::vector<std::shared_ptr<TabletsChannel>> _get_all_channels();
+    Status _update_and_serialize_profile(std::string* serialized_profile, bool print_profile);
 
     LoadChannelMgr* _load_mgr;
     LakeTabletManager* _lake_tablet_mgr;

@@ -1,0 +1,63 @@
+-- name: test_load_brpc_reached_timeout @sequential
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE `t0` (
+  `v1` int(11) NOT NULL,
+  `v2` int(11) NOT NULL,
+  `v3` int(11) NOT NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`v1`)
+DISTRIBUTED BY HASH(`v1`) BUCKETS 10
+PROPERTIES (
+ "replication_num" = "1"
+);
+
+CREATE MATERIALIZED VIEW `mv1` AS
+SELECT `v1`, SUM(`v2`) FROM `t0`
+GROUP BY `v1`;
+
+function: wait_materialized_view_finish()
+
+CREATE MATERIALIZED VIEW `mv2` AS
+SELECT `v1`, MAX(`v3`) FROM `t0`
+GROUP BY `v1`;
+
+function: wait_materialized_view_finish()
+
+admin enable failpoint "node_channel_set_brpc_timeout";
+admin enable failpoint "tablets_channel_add_chunk_wait_write_block";
+update information_schema.be_configs set value = "0" where name= "load_diagnose_small_rpc_timeout_threshold_ms";
+update information_schema.be_configs set value = "30000" where name= "load_diagnose_send_rpc_timeout_ms";
+update information_schema.be_configs set value = "2000" where name= "load_fp_brpc_timeout_ms";
+update information_schema.be_configs set value = "10000" where name= "load_fp_tablets_channel_add_chunk_block_ms";
+
+SET enable_async_profile=false;
+[UC]insert into t0 WITH LABEL label_${uuid0} values (1, 2, 3);
+select instr(error_msg, '[E1008]Reached timeout=2000ms') > 0 from information_schema.loads where label="label_${uuid0}";
+shell: env mysql_cmd="${mysql_cmd} -Ddb_${uuid0}" label="label_${uuid0}" bash ${root_path}/sql/test_profile/T/test_load_profile_analysis.sh
+
+[UC]shell: curl --location-trusted -u root: -H "Expect:100-continue" -H "label: "label_${uuid1}"" -H "column_separator: ," -d '1,2,3' -X PUT ${url}/api/db_${uuid0}/t0/_stream_load
+select instr(error_msg, '[E1008]Reached timeout=2000ms') > 0 from information_schema.loads where label="label_${uuid1}";
+shell: env mysql_cmd="${mysql_cmd} -Ddb_${uuid0}" label="label_${uuid1}" bash ${root_path}/sql/test_profile/T/test_load_profile_analysis.sh
+
+shell: ossutil64 cp ./sql/test_profile/data/brpc_reached_timeout.csv oss://${oss_bucket}/test_profile/test_load_brpc_reached_timeout/${uuid0}/brpc_reached_timeout.csv >/dev/null
+LOAD LABEL label_${uuid2} (
+    DATA INFILE("oss://${oss_bucket}/test_profile/test_load_brpc_reached_timeout/${uuid0}/brpc_reached_timeout.csv")
+    INTO TABLE t0
+    COLUMNS TERMINATED BY ","
+) WITH BROKER (
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+)
+PROPERTIES
+(
+    "timeout" = "3600"
+);
+function: wait_load_finish("label_${uuid2}")
+select instr(error_msg, '[E1008]Reached timeout=2000ms') > 0 from information_schema.loads where label="label_${uuid2}";
+shell: env mysql_cmd="${mysql_cmd} -Ddb_${uuid0}" label="label_${uuid2}" bash ${root_path}/sql/test_profile/T/test_load_profile_analysis.sh
+
+admin disable failpoint "node_channel_set_brpc_timeout";
+admin disable failpoint "tablets_channel_add_chunk_wait_write_block";
