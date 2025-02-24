@@ -616,7 +616,7 @@ TEST(ColumnAggregator, testArrayReplace) {
     // first chunk column
     NullableColumn::Ptr elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     UInt32Column::Ptr offsets = UInt32Column::create();
-    ArrayColumn::Ptr src = ArrayColumn::create(std::move(elements), std::move(offsets));
+    ArrayColumn::Ptr src = ArrayColumn::create(elements, offsets);
     for (int i = 0; i < 10; ++i) {
         elements->append_datum(Slice(std::to_string(i)));
     }
