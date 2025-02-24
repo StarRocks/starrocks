@@ -254,6 +254,26 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         Assert.assertEquals(5550000, sampler.getSampleInfo(pid).getSampleRowCount());
     }
 
+    @Test
+    public void testHyperQueryJobContextStartTime() {
+        Pair<List<String>, List<Type>> pair = initColumn(List.of("c1", "c2", "c3"));
+
+        new MockUp<SampleInfo>() {
+            @Mock
+            public List<TabletStats> getMediumHighWeightTablets() {
+                return List.of(new TabletStats(1, pid, 5000000));
+            }
+        };
+
+        List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(connectContext, db, table, pair.first,
+                pair.second, List.of(pid), 1, sampler);
+        long startTime = connectContext.getStartTime();
+        for (HyperQueryJob job : jobs) {
+            job.queryStatistics();
+            Assert.assertNotEquals(startTime, connectContext.getStartTime());
+        }
+    }
+
     @AfterClass
     public static void afterClass() {
         FeConstants.runningUnitTest = false;
