@@ -464,7 +464,7 @@ public class StatisticsCollectJobFactory {
         // Use predicate columns if suitable
         TableName tableName = new TableName(db.getOriginName(), table.getName());
         int numColumns = table.getColumns().size();
-        List<String> predicateColumnNames = null;
+        List<String> predicateColNames = null;
         boolean existsPredicateColumns = false;
         boolean enablePredicateColumnStrategy = false;
         if (basicStatsMeta != null && !basicStatsMeta.isInitJobMeta() && useBasicStats &&
@@ -473,7 +473,7 @@ public class StatisticsCollectJobFactory {
             List<ColumnUsage> predicateColumns = PredicateColumnsMgr.getInstance().queryPredicateColumns(tableName);
             if (CollectionUtils.isNotEmpty(predicateColumns) && predicateColumns.size() < numColumns) {
                 OlapTable olap = (OlapTable) table;
-                predicateColumnNames = predicateColumns.stream().map(x -> x.getOlapColumnName(olap)).toList();
+                predicateColNames = predicateColumns.stream().map(x -> x.getOlapColumnName(olap)).toList();
                 existsPredicateColumns = true;
                 if (numColumns > Config.statistic_auto_collect_predicate_columns_threshold) {
                     enablePredicateColumnStrategy = true;
@@ -533,7 +533,8 @@ public class StatisticsCollectJobFactory {
             if (job.getAnalyzeType() != StatsConstants.AnalyzeType.HISTOGRAM &&
                     healthy < Config.statistic_auto_collect_sample_threshold &&
                     sumDataSize > Config.statistic_auto_collect_small_table_size) {
-                if (!(Config.statistic_auto_collect_use_full_predicate_column_for_sample && existsPredicateColumns)) {
+                if (!(Config.statistic_auto_collect_use_full_predicate_column_for_sample && existsPredicateColumns &&
+                        predicateColNames.size() < Config.statistic_auto_collect_max_predicate_column_size_on_sample_strategy)) {
                     LOG.debug("statistics job choose sample on real-time update table: {}" +
                                     ", last collect time: {}, current healthy: {}, full collect healthy limit: {}, " +
                                     ", update data size: {}MB, full collect healthy data size limit: <{}MB",
@@ -550,8 +551,8 @@ public class StatisticsCollectJobFactory {
             }
         }
 
-        if (enablePredicateColumnStrategy && CollectionUtils.isNotEmpty(predicateColumnNames)) {
-            columnNames = predicateColumnNames;
+        if (enablePredicateColumnStrategy && CollectionUtils.isNotEmpty(predicateColNames)) {
+            columnNames = predicateColNames;
             columnTypes = columnNames.stream().map(col -> table.getColumn(col).getType()).collect(Collectors.toList());
         }
 
