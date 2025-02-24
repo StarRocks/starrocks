@@ -60,6 +60,7 @@ import com.starrocks.analysis.SubfieldExpr;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TimestampArithmeticExpr;
+import com.starrocks.analysis.TryExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
 import com.starrocks.authorization.AuthorizationMgr;
@@ -1519,6 +1520,11 @@ public class ExpressionAnalyzer {
 
         @Override
         public Void visitCloneExpr(CloneExpr node, Scope context) {
+            return null;
+        }
+
+        @Override
+        public Void visitTryExpr(TryExpr node, Scope context) {
             return null;
         }
 

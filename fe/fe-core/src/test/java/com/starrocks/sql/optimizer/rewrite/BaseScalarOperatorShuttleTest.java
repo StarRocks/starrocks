@@ -40,6 +40,7 @@ import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.MultiInPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
+import com.starrocks.sql.optimizer.operator.scalar.TryOperator;
 import com.starrocks.sql.optimizer.rewrite.scalar.NegateFilterShuttle;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -325,6 +326,21 @@ class BaseScalarOperatorShuttleTest {
         {
             ScalarOperator newOperator = shuttle2.visitCloneOperator(clone, null);
             assertEquals(clone, newOperator);
+        }
+    }
+
+    @Test
+    void visitTryOperator() {
+        BinaryPredicateOperator binary1 = new BinaryPredicateOperator(BinaryType.EQ,
+                new ColumnRefOperator(1, INT, "id", true), ConstantOperator.createInt(1));
+        TryOperator tryOperator = new TryOperator(binary1);
+        {
+            ScalarOperator newOperator = shuttle.visitTryOperator(tryOperator, null);
+            assertEquals(tryOperator, newOperator);
+        }
+        {
+            ScalarOperator newOperator = shuttle2.visitTryOperator(tryOperator, null);
+            assertEquals(tryOperator, newOperator);
         }
     }
 

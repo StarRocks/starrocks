@@ -42,6 +42,7 @@ import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
+import com.starrocks.sql.optimizer.operator.scalar.TryOperator;
 
 import java.util.List;
 import java.util.Map;
@@ -126,6 +127,7 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
                     LambdaFunctionOperator lambda = (LambdaFunctionOperator) op;
                     return new LambdaFunctionOperator(lambda.getRefColumns(), childOps.get(0), lambda.getType()); })
                 .put(CloneOperator.class, (op, childOps) -> new CloneOperator(childOps.get(0)))
+                .put(TryOperator.class, (op, childOps) -> new TryOperator(childOps.get(0)))
                 .build();
     }
 
@@ -257,6 +259,11 @@ public class BaseScalarOperatorShuttle extends ScalarOperatorVisitor<ScalarOpera
 
     @Override
     public ScalarOperator visitCloneOperator(CloneOperator operator, Void context) {
+        return shuttleIfUpdate(operator);
+    }
+
+    @Override
+    public ScalarOperator visitTryOperator(TryOperator operator, Void context) {
         return shuttleIfUpdate(operator);
     }
 
