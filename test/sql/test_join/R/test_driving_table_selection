@@ -1,0 +1,24 @@
+-- name: test_driving_table_selection
+create table T (a int, b int, c int) properties("replication_num"="1");
+-- result:
+-- !result
+insert into T values(1,1,1);
+-- result:
+-- !result
+create table T0  properties("replication_num"="1")  as select * from T;
+-- result:
+-- !result
+create table T1  properties("replication_num"="1")  as select * from T;
+-- result:
+-- !result
+create table T2  properties("replication_num"="1")  as select * from T;
+-- result:
+-- !result
+select *  from T where T.a = (select a from T0) or T.b = (select b from T1) or T.c = (select c from T2);
+-- result:
+1	1	1
+-- !result
+select *  from T where T.a = (select a from T0) and T.b = (select b from T1) or T.c = (select c from T2);
+-- result:
+1	1	1
+-- !result
