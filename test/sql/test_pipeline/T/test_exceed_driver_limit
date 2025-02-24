@@ -1,4 +1,4 @@
--- name: test_exceed_driver_limit @sequential
+-- name: test_exceed_driver_limit @sequential @slow
 
 CREATE TABLE `t1` (
   `k1` bigint(20) NULL COMMENT ""
@@ -13,7 +13,7 @@ insert into t1 values (1);
 
 
 -- This query will exceed the driver limit in BEs.
-select /*+SET_VAR(pipeline_dop=10240)*/ * from t1 UNION ALL
+select /*+SET_VAR(pipeline_dop=163841)*/ * from t1 UNION ALL
 select * from t1 UNION ALL
 select * from t1 UNION ALL
 select * from t1 UNION ALL
