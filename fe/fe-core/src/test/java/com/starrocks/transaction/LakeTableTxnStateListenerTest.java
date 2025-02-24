@@ -121,7 +121,7 @@ public class LakeTableTxnStateListenerTest extends LakeTableTestHelper {
         long currentTimeMs = System.currentTimeMillis();
         CompactionMgr compactionMgr = GlobalStateMgr.getCurrentState().getCompactionMgr();
         compactionMgr.handleLoadingFinished(new PartitionIdentifier(dbId, tableId, partitionId), 3, currentTimeMs,
-                Quantiles.compute(Lists.newArrayList(Config.lake_ingest_slowdown_threshold + 10.0)));
+                Quantiles.compute(Lists.newArrayList(Config.lake_ingest_slowdown_threshold + 10.0)), 0);
     }
 
     private static Stream<Arguments> dataProvider() {

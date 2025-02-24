@@ -83,7 +83,7 @@ public class CompactionSchedulerTest {
                         GlobalStateMgr.getCurrentState().getGlobalTransactionMgr(), GlobalStateMgr.getCurrentState(), "");
         PartitionIdentifier partitionIdentifier = new PartitionIdentifier(dbId, 2, 3);
         try {
-            assertEquals(transactionId, compactionScheduler.beginTransaction(partitionIdentifier));
+            assertEquals(transactionId, compactionScheduler.beginTransaction(partitionIdentifier, 0));
         } catch (Exception e) {
             Assert.fail("Transaction failed for lake compaction");
         }
