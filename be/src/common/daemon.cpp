@@ -36,7 +36,6 @@
 
 #include <gflags/gflags.h>
 
-#include "cache/block_cache/block_cache.h"
 #include "column/column_helper.h"
 #include "common/config.h"
 #include "common/minidump.h"
@@ -48,7 +47,6 @@
 #include "fs/encrypt_file.h"
 #include "gutil/cpu.h"
 #include "jemalloc/jemalloc.h"
-#include "runtime/memory/mem_chunk_allocator.h"
 #include "runtime/time_types.h"
 #include "runtime/user_function_cache.h"
 #include "service/backend_options.h"
@@ -57,7 +55,6 @@
 #include "util/cpu_info.h"
 #include "util/debug_util.h"
 #include "util/disk_info.h"
-#include "util/gc_helper.h"
 #include "util/logging.h"
 #include "util/mem_info.h"
 #include "util/misc.h"
@@ -136,23 +133,6 @@ void calculate_metrics(void* arg_this) {
                                                                                 &lst_net_receive_bytes);
         }
 
-        // update datacache mem_tracker
-        int64_t datacache_mem_bytes = 0;
-        auto datacache_mem_tracker = GlobalEnv::GetInstance()->datacache_mem_tracker();
-        if (datacache_mem_tracker) {
-            BlockCache* block_cache = BlockCache::instance();
-            if (block_cache->is_initialized()) {
-                auto datacache_metrics = block_cache->cache_metrics();
-                datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;
-            }
-#ifdef USE_STAROS
-            if (!config::datacache_unified_instance_enable) {
-                datacache_mem_bytes += staros::starlet::fslib::star_cache_get_memory_usage();
-            }
-#endif
-            datacache_mem_tracker->set(datacache_mem_bytes);
-        }
-
         auto* mem_metrics = StarRocksMetrics::instance()->system_metrics()->memory_metrics();
 
         LOG(INFO) << fmt::format(
@@ -165,8 +145,8 @@ void calculate_metrics(void* arg_this) {
                 mem_metrics->compaction_mem_bytes.value(), mem_metrics->schema_change_mem_bytes.value(),
                 mem_metrics->storage_page_cache_mem_bytes.value(), mem_metrics->update_mem_bytes.value(),
                 mem_metrics->chunk_allocator_mem_bytes.value(), mem_metrics->passthrough_mem_bytes.value(),
-                mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value(), datacache_mem_bytes,
-                mem_metrics->jit_cache_mem_bytes.value());
+                mem_metrics->clone_mem_bytes.value(), mem_metrics->consistency_mem_bytes.value(),
+                mem_metrics->datacache_mem_bytes.value(), mem_metrics->jit_cache_mem_bytes.value());
 
         StarRocksMetrics::instance()->table_metrics_mgr()->cleanup();
         nap_sleep(15, [daemon] { return daemon->stopped(); });
