@@ -32,7 +32,7 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
 
     private final CheckpointController feController;
     private final CheckpointController starMgrController;
-    // cluster snapshot infomation used for start
+    // cluster snapshot information used for start
     private final RestoredSnapshotInfo restoredSnapshotInfo;
 
     private boolean firstRun;

@@ -236,9 +236,9 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
             return;
         }
 
-        String restoredSnapshotName = restoredSnapshotInfo.getRestoredSnapshotName();
-        long feJournalId = restoredSnapshotInfo.getRestoredFEJournalIds();
-        long starMgrJournalId = restoredSnapshotInfo.getRestoredStarMgrJournalIds();
+        String restoredSnapshotName = restoredSnapshotInfo.getSnapshotName();
+        long feJournalId = restoredSnapshotInfo.getFeJournalId();
+        long starMgrJournalId = restoredSnapshotInfo.getStarMgrJournalId();
         if (restoredSnapshotName == null) {
             return;
         }

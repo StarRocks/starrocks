@@ -48,13 +48,13 @@ public class RestoreClusterSnapshotMgr {
     private boolean oldResetElectionGroup;
     private RestoredSnapshotInfo restoredSnapshotInfo;
 
-    private RestoreClusterSnapshotMgr(String clusterSnapshotYamlFile) throws StarRocksException {
+    private RestoreClusterSnapshotMgr(String clusterSnapshotYamlFile) throws StarRocksException, IOException {
         config = ClusterSnapshotConfig.load(clusterSnapshotYamlFile);
         downloadSnapshot();
         updateConfig();
     }
 
-    public static void init(String clusterSnapshotYamlFile, String[] args) throws StarRocksException {
+    public static void init(String clusterSnapshotYamlFile, String[] args) throws StarRocksException, IOException {
         for (String arg : args) {
             if (arg.equalsIgnoreCase("-cluster_snapshot")) {
                 LOG.info("FE start to restore from a cluster snapshot (-cluster_snapshot)");
@@ -123,7 +123,7 @@ public class RestoreClusterSnapshotMgr {
         Config.bdbje_reset_election_group = oldResetElectionGroup;
     }
 
-    private void downloadSnapshot() throws StarRocksException {
+    private void downloadSnapshot() throws StarRocksException, IOException {
         ClusterSnapshotConfig.ClusterSnapshot clusterSnapshot = config.getClusterSnapshot();
         if (clusterSnapshot == null) {
             return;
@@ -146,23 +146,19 @@ public class RestoreClusterSnapshotMgr {
         collectSnapshotInfoAfterDownload(snapshotImagePath, localImagePath);
     }
 
-    private void collectSnapshotInfoAfterDownload(String snapshotImagePath, String localImagePath) {
+    private void collectSnapshotInfoAfterDownload(String snapshotImagePath, String localImagePath) throws IOException {
         String restoredSnapshotName = null;
         long feImageJournalId = 0L;
         long starMgrImageJournalId = 0L;
-        try {
-            Storage storageFe = new Storage(localImagePath);
-            Storage storageStarMgr = new Storage(localImagePath + StarMgrServer.IMAGE_SUBDIR);
-            // get image version
-            feImageJournalId = storageFe.getImageJournalId();
-            starMgrImageJournalId = storageStarMgr.getImageJournalId();
 
-            LOG.info("Download cluster snapshot successfully with FE image version: {}, StarMgr image version: {}",
-                     feImageJournalId, starMgrImageJournalId);
-        } catch (IOException e) {
-            LOG.error("Failed to get image version info for cluster snapshot", e);
-            return;
-        }
+        Storage storageFe = new Storage(localImagePath);
+        Storage storageStarMgr = new Storage(localImagePath + StarMgrServer.IMAGE_SUBDIR);
+        // get image version
+        feImageJournalId = storageFe.getImageJournalId();
+        starMgrImageJournalId = storageStarMgr.getImageJournalId();
+
+        LOG.info("Download cluster snapshot successfully with FE image version: {}, StarMgr image version: {}",
+                 feImageJournalId, starMgrImageJournalId);
 
         String normalizePath = snapshotImagePath.replaceAll("/+$", "");
         int lastSlashIndex = normalizePath.lastIndexOf('/');

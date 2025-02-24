@@ -63,12 +63,12 @@ public class RestoreClusterSnapshotMgrTest {
             } // IOException
         };
 
-        RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot2.yaml",
+        RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot.yaml",
                 new String[] { "-cluster_snapshot" });
-        Assert.assertTrue(RestoreClusterSnapshotMgr.getRestoredSnapshotInfo().getRestoredSnapshotName()
+        Assert.assertTrue(RestoreClusterSnapshotMgr.getRestoredSnapshotInfo().getSnapshotName()
                 .equals("automated_cluster_snapshot_1704038400000"));
-        Assert.assertTrue(RestoreClusterSnapshotMgr.getRestoredSnapshotInfo().getRestoredFEJournalIds() == 10L);
-        Assert.assertTrue(RestoreClusterSnapshotMgr.getRestoredSnapshotInfo().getRestoredStarMgrJournalIds() == 10L);
+        Assert.assertTrue(RestoreClusterSnapshotMgr.getRestoredSnapshotInfo().getFeJournalId() == 10L);
+        Assert.assertTrue(RestoreClusterSnapshotMgr.getRestoredSnapshotInfo().getStarMgrJournalId() == 10L);
         Assert.assertTrue(RestoreClusterSnapshotMgr.isRestoring());
 
         for (ClusterSnapshotConfig.StorageVolume sv : RestoreClusterSnapshotMgr.getConfig().getStorageVolumes()) {

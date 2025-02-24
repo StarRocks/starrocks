@@ -16,25 +16,25 @@ package com.starrocks.lake.snapshot;
 
 // save the infomation parsed from the cluster snapshot when start in restore mode
 public class RestoredSnapshotInfo {
-    private String restoredSnapshotName;
+    private String snapshotName;
     private long feJournalId;
     private long starMgrJournalId;
 
-    public RestoredSnapshotInfo(String restoredSnapshotName, long feJournalId, long starMgrJournalId) {
-        this.restoredSnapshotName = restoredSnapshotName;
+    public RestoredSnapshotInfo(String snapshotName, long feJournalId, long starMgrJournalId) {
+        this.snapshotName = snapshotName;
         this.feJournalId = feJournalId;
         this.starMgrJournalId = starMgrJournalId;
     }
 
-    public String getRestoredSnapshotName() {
-        return restoredSnapshotName;
+    public String getSnapshotName() {
+        return snapshotName;
     }
 
-    public long getRestoredFEJournalIds() {
+    public long getFeJournalId() {
         return feJournalId;
     }
 
-    public long getRestoredStarMgrJournalIds() {
+    public long getStarMgrJournalId() {
         return starMgrJournalId;
     }
 }
