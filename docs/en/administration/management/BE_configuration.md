@@ -3777,16 +3777,18 @@ When this value is set to less than `0`, the system uses the product of its abso
 - Introduced in: -
 -->
 
-<!--
 ##### loop_count_wait_fragments_finish
 
-- Default: 0
+- Default:
+  - 2: v3.4+
+  - 0: < v3.4
 - Type: Int
-- Unit:
-- Is mutable: No
-- Description:
-- Introduced in: -
--->
+- Unit: loops, each loop is 10 seconds
+- Is mutable:
+  - Yes: v3.4+
+  - No: < v3.4
+- Description: The number of loops to be waited when BE/CN process exit. Each loop is a fixed 10 seconds. Set to `0` to disable the loop wait.
+- Introduced in: v2.5
 
 ### Data Lake
 
