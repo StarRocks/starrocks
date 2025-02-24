@@ -83,9 +83,13 @@ public class ExchangeNode extends PlanNode {
     // Offset after which the exchange begins returning rows. Currently valid
     // only if mergeInfo_ is non-null, i.e. this is a merging exchange node.
     private long offset;
-
+    // partitionType is used for BE's exchange source node to specify the input partition type
+    // exchange source then decide whether local shuffle is needed
+    // to be set in ExecutionDAG::connectXXXFragmentToDestFragments
     private TPartitionType partitionType;
+    // this is the same as input fragment's output dataPartition, right now only used for explain
     private DataPartition dataPartition;
+    // distributionType is used for plan fragment builder to decide join's DistributionMode(broadcast,colocate,etc)
     private DistributionSpec.DistributionType distributionType;
     // Specify the columns which need to send, work on CTE, and keep empty in other sense
     private List<Integer> receiveColumns;
