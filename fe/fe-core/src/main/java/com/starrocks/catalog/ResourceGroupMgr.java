@@ -454,7 +454,12 @@ public class ResourceGroupMgr implements Writable {
         try {
             String name = stmt.getName();
             if (!resourceGroupMap.containsKey(name)) {
-                throw new DdlException("RESOURCE_GROUP(" + name + ") does not exist");
+                String message = "RESOURCE_GROUP(" + name + ") does not exist";
+                if (!stmt.isSetIfExists()) {
+                    throw new DdlException(message);
+                }
+                LOG.info(message);
+                return;
             }
             dropResourceGroupUnlocked(name);
         } finally {
