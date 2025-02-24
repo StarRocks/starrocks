@@ -335,7 +335,8 @@ public class QueryOptimizer extends Optimizer {
 
         // TODO(stephen): enable agg push down when query exists related mvs.
         if (context.getQueryMaterializationContext() != null &&
-                !context.getQueryMaterializationContext().getValidCandidateMVs().isEmpty()) {
+                context.getQueryMaterializationContext().getValidCandidateMVs().stream().anyMatch(
+                        MaterializationContext::hasMultiTables)) {
             context.getSessionVariable().setCboPushDownAggregateMode(-1);
         }
     }
