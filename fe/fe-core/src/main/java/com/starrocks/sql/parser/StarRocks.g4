@@ -684,7 +684,7 @@ showMaterializedViewsStatement
     ;
 
 dropMaterializedViewStatement
-    : DROP MATERIALIZED VIEW (IF EXISTS)? mvName=qualifiedName
+    : DROP MATERIALIZED VIEW (IF EXISTS)? mvName=qualifiedName FORCE?
     ;
 
 alterMaterializedViewStatement
