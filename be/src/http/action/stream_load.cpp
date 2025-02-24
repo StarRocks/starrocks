@@ -81,6 +81,7 @@
 #include "util/thrift_rpc_helper.h"
 #include "util/time.h"
 #include "util/uid_util.h"
+#include "util/url_coding.h"
 
 namespace starrocks {
 
@@ -233,9 +234,30 @@ int StreamLoadAction::on_header(HttpRequest* req) {
     ctx->load_type = TLoadType::MANUAL_LOAD;
     ctx->load_src_type = TLoadSourceType::RAW;
 
-    ctx->db = req->param(HTTP_DB_KEY);
-    ctx->table = req->param(HTTP_TABLE_KEY);
     ctx->label = req->header(HTTP_LABEL_KEY);
+    auto& db_param = req->param(HTTP_DB_KEY);
+    auto decode_st = url_decode_slice(db_param.c_str(), db_param.size(), &ctx->db);
+    if (!decode_st.ok()) {
+        std::string error_msg = fmt::format("failed to decode db parameter. uri={}, db param={}, label={}, error={}",
+                                            req->uri(), db_param, ctx->label, decode_st.message());
+        LOG(WARNING) << error_msg;
+        ctx->status = Status::InvalidArgument(error_msg);
+        _send_reply(req, error_msg);
+        return -1;
+    }
+
+    auto& table_param = req->param(HTTP_TABLE_KEY);
+    decode_st = url_decode_slice(table_param.c_str(), table_param.size(), &ctx->table);
+    if (!decode_st.ok()) {
+        std::string error_msg =
+                fmt::format("failed to decode table parameter. uri={}, table param={}, label={}, error={}", req->uri(),
+                            table_param, ctx->label, decode_st.message());
+        LOG(WARNING) << error_msg;
+        ctx->status = Status::InvalidArgument(error_msg);
+        _send_reply(req, error_msg);
+        return -1;
+    }
+
     if (ctx->label.empty()) {
         ctx->label = generate_uuid_string();
     }
@@ -482,7 +504,15 @@ Status StreamLoadAction::_process_put(HttpRequest* http_req, StreamLoadContext* 
         ctx->body_sink = file_sink;
     }
     if (!http_req->header(HTTP_COLUMNS).empty()) {
-        request.__set_columns(http_req->header(HTTP_COLUMNS));
+        auto& columns_param = http_req->header(HTTP_COLUMNS);
+        std::string columns;
+        auto st = url_decode_slice(columns_param.c_str(), columns_param.size(), &columns);
+        if (!st.ok()) {
+            std::string error_msg =
+                    fmt::format("failed to decode columns parameter. uri={}, columns param={}, label={}, error={}",
+                                http_req->uri(), columns_param, ctx->label, st.message());
+        }
+        request.__set_columns(columns);
     }
     if (!http_req->header(HTTP_WHERE).empty()) {
         request.__set_where(http_req->header(HTTP_WHERE));
