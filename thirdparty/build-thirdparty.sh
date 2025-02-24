@@ -1348,6 +1348,18 @@ build_tenann() {
     cp -r $TP_SOURCE_DIR/$TENANN_SOURCE/lib/libtenann-bundle-avx2.a $TP_INSTALL_DIR/lib/
 }
 
+build_icu() {
+    check_if_source_exist $ICU_SOURCE
+    cd $TP_SOURCE_DIR/$ICU_SOURCE/source
+    sed -i 's/\r$//' ./runConfigureICU
+    sed -i 's/\r$//' ./config.*
+    sed -i 's/\r$//' ./configure
+    sed -i 's/\r$//' ./mkinstalldirs
+    ./runConfigureICU Linux --prefix=$TP_INSTALL_DIR --enable-static --disable-shared
+    make -j$PARALLEL
+    make install
+}
+
 # restore cxxflags/cppflags/cflags to default one
 restore_compile_flags() {
     # c preprocessor flags
@@ -1442,6 +1454,7 @@ build_llvm
 build_clucene
 build_simdutf
 build_poco
+build_icu
 
 if [[ "${MACHINE_TYPE}" != "aarch64" ]]; then
     build_breakpad

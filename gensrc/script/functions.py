@@ -294,9 +294,12 @@ vectorized_functions = [
 
     [30140, 'lower', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::lower'],
     [30141, 'lcase', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::lower'],
+    [30142, 'lower_utf8', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::lower_utf8'],
+
 
     [30150, 'upper', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::upper'],
     [30151, 'ucase', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::upper'],
+    [30152, 'upper_utf8', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::upper_utf8'],
 
     [30160, 'reverse', True, False, 'VARCHAR', ['VARCHAR'], 'StringFunctions::reverse'],
 
