@@ -148,4 +148,21 @@ TEST_F(InternalServiceTest, test_tablet_writer_add_chunk_via_http) {
     }
 }
 
+TEST_F(InternalServiceTest, test_load_diagnose) {
+    BackendInternalServiceImpl<PInternalService> service(ExecEnv::GetInstance());
+    PLoadDiagnoseRequest request;
+    request.set_txn_id(1);
+    request.mutable_id()->set_hi(0);
+    request.mutable_id()->set_lo(0);
+    request.set_profile(true);
+    PLoadDiagnoseResult response;
+    brpc::Controller cntl;
+    MockClosure closure;
+    service.load_diagnose(&cntl, &request, &response, &closure);
+    ASSERT_TRUE(response.has_profile_status());
+    auto st = Status(response.profile_status());
+    ASSERT_FALSE(st.ok());
+    ASSERT_TRUE(st.message().find("can't find the load channel") != std::string::npos);
+}
+
 } // namespace starrocks
