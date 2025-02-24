@@ -180,7 +180,8 @@ Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* st
             [this, state](size_t partition_idx) {
                 _chunks_sorters.emplace_back(std::make_shared<ChunksSorterTopn>(
                         state, &_sort_exprs, &_is_asc_order, &_is_null_first, _sort_keys, _offset, _partition_limit,
-                        _topn_type, ChunksSorterTopn::tunning_buffered_chunks(_partition_limit)));
+                        _topn_type, ChunksSorterTopn::kDefaultMaxBufferRows, ChunksSorterTopn::kDefaultMaxBufferBytes,
+                        ChunksSorterTopn::tunning_buffered_chunks(_partition_limit)));
                 // create agg state for new partition
                 if (_enable_pre_agg) {
                     AggDataPtr agg_states = _mem_pool->allocate_aligned(_pre_agg->_agg_states_total_size,

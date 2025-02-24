@@ -273,6 +273,23 @@ Status MergeCursorsCascade::consume_all(const ChunkConsumer& consumer) {
     return Status::OK();
 }
 
+Status MergeCursorsCascade::consume_all_with_limit(const ChunkConsumer& consumer, size_t limit) {
+    while (!is_eos()) {
+        ChunkUniquePtr chunk = try_get_next();
+        if (!!chunk) {
+            size_t num_rows = chunk->num_rows();
+            if (limit >= num_rows) {
+                limit -= num_rows;
+            } else {
+                chunk->set_num_rows(num_rows - limit);
+                limit = 0;
+            }
+            RETURN_IF_ERROR(consumer(std::move(chunk)));
+        }
+    }
+    return Status::OK();
+}
+
 Status merge_sorted_cursor_two_way(const SortDescs& sort_desc, std::unique_ptr<SimpleChunkSortCursor> left_cursor,
                                    std::unique_ptr<SimpleChunkSortCursor> right_cursor, const ChunkConsumer& output) {
     MergeTwoCursor merger(sort_desc, std::move(left_cursor), std::move(right_cursor));

@@ -231,7 +231,8 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
         } else {
             _chunks_sorter = std::make_unique<ChunksSorterTopn>(
                     state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first, _sort_keys,
-                    _offset, _limit, TTopNType::ROW_NUMBER, ChunksSorterTopn::tunning_buffered_chunks(_limit));
+                    _offset, _limit, TTopNType::ROW_NUMBER, ChunksSorterTopn::kDefaultMaxBufferRows,
+                    ChunksSorterTopn::kDefaultMaxBufferBytes, ChunksSorterTopn::tunning_buffered_chunks(_limit));
         }
 
     } else {
