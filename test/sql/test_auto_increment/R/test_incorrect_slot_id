@@ -5,7 +5,15 @@ create database test_incorrect_slot_id;
 use test_incorrect_slot_id;
 -- result:
 -- !result
-create table t_incorrect_slot_id (val BIGINT NOT NULL, auto_inc_id  BIGINT AUTO_INCREMENT) ENGINE = olap DUPLICATE KEY(val) PROPERTIES ("compression" = "LZ4", "replication_num" = "1");
+create table t_incorrect_slot_id (
+    val BIGINT NOT NULL,
+    auto_inc_id  BIGINT AUTO_INCREMENT
+) ENGINE = olap
+DUPLICATE KEY(val)
+PROPERTIES (
+"compression" = "LZ4",
+"replication_num" = "1"
+);
 -- result:
 -- !result
 insert into t_incorrect_slot_id(val) SELECT $1 as val FROM FILES(
@@ -19,7 +27,7 @@ insert into t_incorrect_slot_id(val) SELECT $1 as val FROM FILES(
 -- !result
 select * from t_incorrect_slot_id;
 -- result:
-839123   1
+839123	1
 -- !result
 drop table t_incorrect_slot_id;
 -- result:
