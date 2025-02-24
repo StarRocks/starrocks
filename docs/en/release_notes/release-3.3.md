@@ -10,6 +10,64 @@ After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.
 
 :::
 
+## 3.3.10
+
+Release date: Febuary 21, 2025
+
+### New Features
+
+- Window functions support `max_by` and `min_by`. [#54961](https://github.com/StarRocks/starrocks/pull/54961)
+
+### Improvements
+
+- Supports pushdown for subfields of complex types in table functions. [#55425](https://github.com/StarRocks/starrocks/pull/55425)
+- Supports LDAP login for MariaDB clients. [#55720](https://github.com/StarRocks/starrocks/pull/55720)
+- Upgraded Paimon version to 1.0.1. [#54796](https://github.com/StarRocks/starrocks/pull/54796) [#55760](https://github.com/StarRocks/starrocks/pull/55760)
+- Eliminates unnecessary `unnest` computations during query execution to reduce overhead. [#55431](https://github.com/StarRocks/starrocks/pull/55431)
+- Supports enabling Compaction for source clusters that are in the shared-data mode during cross-cluster synchronization. [#54787](https://github.com/StarRocks/starrocks/pull/54787)
+- Brings high-cost operations like DECIMAL division forward in topN computations to reduce overhead. [#55417](https://github.com/StarRocks/starrocks/pull/55417)
+- Optimized performance under ARM architecture. [#55072](https://github.com/StarRocks/starrocks/pull/55072) [#55510](https://github.com/StarRocks/starrocks/pull/55510)
+- For Hive table-based materialized views, StarRocks will perform checks and refreshes on the updated partitions only instead of full table refreshes if the base table was dropped and recreated. [#45118](https://github.com/StarRocks/starrocks/pull/45118)
+- DELETE operations support partition pruning. [#55400](https://github.com/StarRocks/starrocks/pull/55400)
+- Optimized priority strategy for collecting internal table statistics to improve efficiency when there are excessive tables. [#55446](https://github.com/StarRocks/starrocks/pull/55446)
+- When data loading involves multiple partitions, StarRocks merges transaction logs to improve loading performance. [#55143](https://github.com/StarRocks/starrocks/pull/55143)
+- Optimized error messages for SQL Translation. [#55327](https://github.com/StarRocks/starrocks/pull/55327)
+- Added a session variable `parallel_merge_late_materialization_mode` to control parallel merge behavior. [#55082](https://github.com/StarRocks/starrocks/pull/55082)
+- Optimized error messages for generated columns. [#54949](https://github.com/StarRocks/starrocks/pull/54949)
+- Optimized performance of `SHOW MATERIALIZED VIEWS`. [#54374](https://github.com/StarRocks/starrocks/pull/54374)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- An error caused by pushing down LIMIT before predicates in CTE. [#55768](https://github.com/StarRocks/starrocks/pull/55768)
+- An error caused by table schema changes in Stream Load. [#55773](https://github.com/StarRocks/starrocks/pull/55773)
+- A privilege issue due to the execution plan of DELETE statements containing SELECT. [#55695](https://github.com/StarRocks/starrocks/pull/55695)
+- An issue caused by not aborting compaction tasks when shutting down CN. [#55503](https://github.com/StarRocks/starrocks/pull/55503)
+- Follower FE nodes unable to fetch updated loading statistics. [#55758](https://github.com/StarRocks/starrocks/pull/55758)
+- Incorrect capacity statistics for the spill directory. [#55703](https://github.com/StarRocks/starrocks/pull/55703)
+- Failed to create materialized views due to lack of sufficient partition checks for base tables with list partitions. [#55673](https://github.com/StarRocks/starrocks/pull/55673)
+- An issue caused by missing metadata locks in ALTER TABLE. [#55605](https://github.com/StarRocks/starrocks/pull/55605)
+- An error in `SHOW CREATE TABLE` caused by constraints. [#55592](https://github.com/StarRocks/starrocks/pull/55592)
+- OOM due to large ARRAY in Nestloop Join. [#55603](https://github.com/StarRocks/starrocks/pull/55603)
+- Lock issue with DROP PARTITION. [#55549](https://github.com/StarRocks/starrocks/pull/55549)
+- An issue with min/max window functions due to not supporting string types. [#55537](https://github.com/StarRocks/starrocks/pull/55537)
+- Parser performance degraded. [#54830](https://github.com/StarRocks/starrocks/pull/54830)
+- Column name case sensitivity issue during partial updates. [#55442](https://github.com/StarRocks/starrocks/pull/55442)
+- Import failures when Stream Load is scheduled on nodes with an "Alive" state of false. [#55371](https://github.com/StarRocks/starrocks/pull/55371)
+- Incorrect output column order in materialized views containing ORDER BY. [#55355](https://github.com/StarRocks/starrocks/pull/55355)
+- BE crashes due to disk failure. [#55042](https://github.com/StarRocks/starrocks/pull/55042)
+- Incorrect query results caused by Query Cache. [#55287](https://github.com/StarRocks/starrocks/pull/55287)
+- Parquet Writer fails to convert time zone when writing TIMESTAMP type with time zones. [#55194](https://github.com/StarRocks/starrocks/pull/55194)
+- Loading tasks hang due to ALTER job timeout. [#55207](https://github.com/StarRocks/starrocks/pull/55207)
+- An error caused by `date_format` function when input is in milliseconds. [#54854](https://github.com/StarRocks/starrocks/pull/54854)
+- Materialized view rewrite failure caused by Partition Key being of DATE type. [#54804](https://github.com/StarRocks/starrocks/pull/54804)
+
+### Behavior Changes
+
+- The UUID type in Iceberg now maps to BINARY. [#54978](https://github.com/StarRocks/starrocks/pull/54978)
+- Uses changed row count instead of the visible time of partitions to determine if statistics need to be recollected. [#55373](https://github.com/StarRocks/starrocks/pull/55373)
+
 ## 3.3.9
 
 Release date: January 12, 2025
@@ -433,10 +491,10 @@ Release date: June 21, 2024
 
 #### Shared-data Cluster
 
-- Optimized the performance of Schema Evolution in shared-data clusters, reducing the time consumption of DDL changes to a sub-second level. For more information, see [Schema Evolution](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE/#set-fast-schema-evolution).
+- Optimized the performance of Schema Evolution in shared-data clusters, reducing the time consumption of DDL changes to a sub-second level. For more information, see [Schema Evolution](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE/#set-fast-schema-evolution).
 - To satisfy the requirement for data migration from shared-nothing clusters to shared-data clusters, the community officially released the [StarRocks Data Migration Tool](https://docs.starrocks.io/docs/administration/data_migration_tool/). It can also be used for data synchronization and disaster recovery between shared-nothing clusters.
-- [Preview] AWS Express One Zone Storage can be used as storage volumes, significantly improving read and write performance. For more information, see [CREATE STORAGE VOLUME](https://docs.starrocks.io/docs/sql-reference/sql-statements/Administration/CREATE_STORAGE_VOLUME/#properties).
-- Optimized the garbage collection (GC) mechanism in shared-data clusters. Supports manual compaction for data in object storage. For more information, see [Manual Compaction](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/ALTER_TABLE/#manual-compaction-from-31).
+- [Preview] AWS Express One Zone Storage can be used as storage volumes, significantly improving read and write performance. For more information, see [CREATE STORAGE VOLUME](https://docs.starrocks.io/docs/sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME/#properties).
+- Optimized the garbage collection (GC) mechanism in shared-data clusters. Supports manual compaction for data in object storage. For more information, see [Manual Compaction](https://docs.starrocks.io/docs/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE/#manual-compaction-from-31).
 - Optimized the Publish execution of Compaction transactions for Primary Key tables in shared-data clusters, reducing I/O and memory overhead by avoiding reading primary key indexes.
 - Supports Internal Parallel Scan within tablets. This optimizes query performance in scenarios where there are very few buckets in the table, which limits query parallelism to the number of tablets. Users can enable the Parallel Scan feature by setting the following system variables:
 
@@ -459,7 +517,7 @@ Release date: June 21, 2024
   - Optimized the processing logic for ORC tiny stripes.
 - **Iceberg table format enhancements**
   - Significantly improved the metadata access performance of the Iceberg Catalog by refactoring the parallel Scan logic. Resolved the single-threaded I/O bottleneck in the native Iceberg SDK when handling large volumes of metadata files. As a result, queries with metadata bottlenecks now experience more than a 10-fold performance increase.
-  - Queries on Parquet-formatted Iceberg v2 tables support [equality deletes](https://docs.starrocks.io/docs/data_source/catalog/iceberg_catalog/#usage-notes).
+  - Queries on Parquet-formatted Iceberg v2 tables support [equality deletes](https://docs.starrocks.io/docs/data_source/catalog/iceberg/iceberg_catalog/#usage-notes).
 - **[Experimental] Paimon Catalog enhancements**
   - Materialized views created based on the Paimon external tables now support automatic query rewriting.
   - Optimized Scan Range scheduling for queries against the Paimon Catalog, improving I/O concurrency.
@@ -484,7 +542,7 @@ Release date: June 21, 2024
 - **Supports more indexes.**
   - [Preview] Supports [full-text inverted index](https://docs.starrocks.io/docs/table_design/indexes/inverted_index/) to accelerate full-text searches.
   - [Preview] Supports [N-Gram bloom filter index](https://docs.starrocks.io/docs/table_design/indexes/Ngram_Bloom_Filter_Index/) to speed up `LIKE` queries and the computation speed of `ngram_search` and `ngram_search_case_insensitive` functions.
-- Improved the performance and memory usage of Bitmap functions. Added the capability to export Bitmap data to Hive by using [Hive Bitmap UDFs](https://docs.starrocks.io/docs/integrations/hive_bitmap_udf/).
+- Improved the performance and memory usage of Bitmap functions. Added the capability to export Bitmap data to Hive by using [Hive Bitmap UDFs](https://docs.starrocks.io/docs/sql-reference/sql-functions/hive_bitmap_udf/).
 - **[Preview] Supports [Flat JSON](https://docs.starrocks.io/docs/using_starrocks/Flat_json/).** This feature automatically detects JSON data during data loading, extracts common fields from the JSON data, and stores these fields in a columnar manner. This improves JSON query performance, comparable to querying STRUCT data.
 - **[Preview] Optimized global dictionary.** Provides a dictionary object to store the mapping of key-value pairs from a dictionary table in the BE memory. A new `dictionary_get()` function is now used to directly query the dictionary object in the BE memory, accelerating the speed of querying the dictionary table compared to using the `dict_mapping()` function. Furthermore, the dictionary object can also serve as a dimension table. Dimension values can be obtained by directly querying the dictionary object using `dictionary_get()`, resulting in faster query speeds than the original method of performing JOIN operations on the dimension table to obtain dimension values.
 - [Preview] Supports Colocate Group Execution. Significantly reduces memory usage for executing Join and Agg operators on the colocate tables, which ensures that large queries can be executed more stably.
@@ -508,22 +566,22 @@ Release date: June 21, 2024
 
 #### Materialized Views
 
-- **Supports view-based query rewrite.** With this feature enabled, queries against views can be rewritten to materialized views created upon those views. For more information, see [View-based materialized view rewrite](https://docs.starrocks.io/docs/using_starrocks/query_rewrite_with_materialized_views/#view-based-materialized-view-rewrite).
-- **Supports text-based query rewrite.** With this feature enabled, queries (or their sub-queries) that have the same abstract syntax trees (AST) as the materialized views can be transparently rewritten. For more information, see [Text-based materialized view rewrite](https://docs.starrocks.io/docs/using_starrocks/query_rewrite_with_materialized_views/#text-based-materialized-view-rewrite).
-- **[Preview] Supports setting transparent rewrite mode for queries directly against the materialized view.** When the `transparent_mv_rewrite_mode` property is enabled, StarRocks will automatically rewrite queries to materialized views. It will merge data from refreshed materialized view partitions with the raw data corresponding to the unrefreshed partitions using an automatic UNION operation. This mode is suitable for modeling scenarios where data consistency must be maintained while also aiming to control refresh frequency and reduce refresh costs. For more information, see [CREATE MATERIALIZED VIEW](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW/#parameters-1).
-- Supports aggregation pushdown for materialized view query rewrite: When the `enable_materialized_view_agg_pushdown_rewrite` variable is enabled, users can use single-table asynchronous materialized views with [Aggregation Rollup](https://docs.starrocks.io/docs/using_starrocks/query_rewrite_with_materialized_views/#aggregation-rollup-rewrite) to accelerate multi-table join scenarios. Aggregate functions will be pushed down to the Scan Operator during query execution and rewritten by the materialized view before the Join Operator is executed, significantly improving query efficiency. For more information, see [Aggregation pushdown](https://docs.starrocks.io/docs/using_starrocks/query_rewrite_with_materialized_views/#aggregation-pushdown).
-- **Supports a new property to control materialized view rewrite.** Users can set the `enable_query_rewrite` property to `false` to disable query rewrite based on a specific materialized view, reducing query rewrite overhead. If a materialized view is used only for direct query after modeling and not for query rewrite, users can disable query rewrite for this materialized view. For more information, see [CREATE MATERIALIZED VIEW](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW/#parameters-1).
+- **Supports view-based query rewrite.** With this feature enabled, queries against views can be rewritten to materialized views created upon those views. For more information, see [View-based materialized view rewrite](https://docs.starrocks.io/docs/using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views/#view-based-materialized-view-rewrite).
+- **Supports text-based query rewrite.** With this feature enabled, queries (or their sub-queries) that have the same abstract syntax trees (AST) as the materialized views can be transparently rewritten. For more information, see [Text-based materialized view rewrite](https://docs.starrocks.io/docs/using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views/#text-based-materialized-view-rewrite).
+- **[Preview] Supports setting transparent rewrite mode for queries directly against the materialized view.** When the `transparent_mv_rewrite_mode` property is enabled, StarRocks will automatically rewrite queries to materialized views. It will merge data from refreshed materialized view partitions with the raw data corresponding to the unrefreshed partitions using an automatic UNION operation. This mode is suitable for modeling scenarios where data consistency must be maintained while also aiming to control refresh frequency and reduce refresh costs. For more information, see [CREATE MATERIALIZED VIEW](https://docs.starrocks.io/docs/sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW/#parameters-1).
+- Supports aggregation pushdown for materialized view query rewrite: When the `enable_materialized_view_agg_pushdown_rewrite` variable is enabled, users can use single-table asynchronous materialized views with [Aggregation Rollup](https://docs.starrocks.io/docs/using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views/#aggregation-rollup-rewrite) to accelerate multi-table join scenarios. Aggregate functions will be pushed down to the Scan Operator during query execution and rewritten by the materialized view before the Join Operator is executed, significantly improving query efficiency. For more information, see [Aggregation pushdown](https://docs.starrocks.io/docs/using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views/#aggregation-pushdown).
+- **Supports a new property to control materialized view rewrite.** Users can set the `enable_query_rewrite` property to `false` to disable query rewrite based on a specific materialized view, reducing query rewrite overhead. If a materialized view is used only for direct query after modeling and not for query rewrite, users can disable query rewrite for this materialized view. For more information, see [CREATE MATERIALIZED VIEW](https://docs.starrocks.io/docs/sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW/#parameters-1).
 - **Optimized the cost of materialized view rewrite.** Supports specifying the number of candidate materialized views and enhanced the filter algorithms. Introduced materialized view plan cache to reduce the time consumption of the Optimizer at the query rewrite phase. For more information, see `cbo_materialized_view_rewrite_related_mvs_limit`.
-- **Optimized materialized views created upon Iceberg catalogs.** Materialized views based on Iceberg catalogs now support incremental refresh triggered by partition updates and partition alignment for Iceberg tables using Partition Transforms. For more information, see [Data lake query acceleration with materialized views](https://docs.starrocks.io/docs/using_starrocks/data_lake_query_acceleration_with_materialized_views/#choose-a-suitable-refresh-strategy).
+- **Optimized materialized views created upon Iceberg catalogs.** Materialized views based on Iceberg catalogs now support incremental refresh triggered by partition updates and partition alignment for Iceberg tables using Partition Transforms. For more information, see [Data lake query acceleration with materialized views](https://docs.starrocks.io/docs/using_starrocks/async_mv/use_cases/data_lake_query_acceleration_with_materialized_views/#choose-a-suitable-refresh-strategy).
 - **Enhanced the observability of materialized views.** Improved the monitoring and management of materialized views for better system insights. For more information, see [Metrics for asynchronous materialized views](https://docs.starrocks.io/docs/administration/management/monitoring/metrics/#metrics-for-asynchronous-materialized-views).
 - **Improved the efficiency of large-scale materialized view refresh.** Supports global FIFO scheduling, optimized the cascading refresh strategy for nested materialized views, and fixed some issues that occur in high-frequency refresh scenarios.
-- **Supports refresh triggered by multiple fact tables.** Materialized views created upon multiple fact tables now support partition-level incremental refresh when data in any of the fact tables is updated, increasing data management flexibility. For more information, see [Align partitions with multiple base tables](https://docs.starrocks.io/docs/using_starrocks/create_partitioned_materialized_view/#align-partitions-with-multiple-base-tables).
+- **Supports refresh triggered by multiple fact tables.** Materialized views created upon multiple fact tables now support partition-level incremental refresh when data in any of the fact tables is updated, increasing data management flexibility. For more information, see [Align partitions with multiple base tables](https://docs.starrocks.io/docs/using_starrocks/async_mv/use_cases/create_partitioned_materialized_view/#align-partitions-with-multiple-base-tables).
 
 #### SQL Functions
 
 - DATETIME fields support microsecond precision. The new time unit is supported in related time functions and during data loading.
 - Added the following functions:
-  - [String functions](https://docs.starrocks.io/docs/cover_pages/functions_string/): crc32, url_extract_host, ngram_search
+  - [String functions](https://docs.starrocks.io/docs/category/string-1/): crc32, url_extract_host, ngram_search
   - Array functions: [array_contains_seq](https://docs.starrocks.io/docs/sql-reference/sql-functions/array-functions/array_contains_seq/)
   - Date and time functions: [yearweek](https://docs.starrocks.io/docs/sql-reference/sql-functions/date-time-functions/yearweek/)
   - Math functions: [cbrt](https://docs.starrocks.io/docs/sql-reference/sql-functions/math-functions/cbrt/)
@@ -558,7 +616,7 @@ Release date: June 21, 2024
 - The default value of the materialized view property `partition_refresh_num` has been changed from `-1` to `1`. When a partitioned materialized view needs to be refreshed, instead of refreshing all partitions in a single task, the new behavior will incrementally refresh one partition at a time. This change is intended to prevent excessive resource consumption caused by the original behavior. The default behavior can be adjusted using the FE configuration `default_mv_partition_refresh_number`.
 - Originally, the database consistency checker was scheduled based on GMT+8 time zone. Database consistency checker is scheduled based on the local time zone now. [#45748](https://github.com/StarRocks/starrocks/issues/45748)
 - By default, Data Cache is enabled to accelerate data lake queries. Users can manually disable it by executing `SET enable_scan_datacache = false`. 
-- If users want to re-use the cached data in Data Cache after downgrading a shared-data cluster from v3.3 to v3.2.8 and earlier, they need to manually rename the Blockfile in the directory **starlet_cache** by changing the file name format from `blockfile_{n}.{version}` to `blockfile_{n}`, that is, to remove the suffix of version information. For more information, refer to the [Data Cache Usage Notes](https://docs.starrocks.io/docs/using_starrocks/block_cache/#usage-notes). v3.2.9 and later versions are compatible with the file name format in v3.3, so users do not need to perform this operation manually.
+- If users want to re-use the cached data in Data Cache after downgrading a shared-data cluster from v3.3 to v3.2.8 and earlier, they need to manually rename the Blockfile in the directory **starlet_cache** by changing the file name format from `blockfile_{n}.{version}` to `blockfile_{n}`, that is, to remove the suffix of version information. For more information, refer to the [Data Cache Usage Notes](https://docs.starrocks.io/docs/using_starrocks/caching/block_cache/#usage-notes). v3.2.9 and later versions are compatible with the file name format in v3.3, so users do not need to perform this operation manually.
 - Supports dynamically modifying FE parameter `sys_log_level`. [#45062](https://github.com/StarRocks/starrocks/issues/45062)
 - The default value of the Hive Catalog property `metastore_cache_refresh_interval_sec` is changed from `7200` (two hours) to `60` (one minute). [#46681](https://github.com/StarRocks/starrocks/pull/46681)
 

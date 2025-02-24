@@ -314,14 +314,8 @@ public abstract class LoadJob extends AbstractTxnStateChangeCallback implements 
         return createTimestamp + timeoutSecond * 1000;
     }
 
-    public void reset() {
-        if (ConnectContext.get() != null) {
-            ConnectContext.get().setStartTime();
-            this.createTimestamp = ConnectContext.get().getStartTime();
-        } else {
-            // only for test used
-            this.createTimestamp = System.currentTimeMillis();
-        }
+    protected void reset() {
+        createTimestamp = System.currentTimeMillis();
         idToTasks.clear();
         finishedTaskIds.clear();
         loadingStatus.reset();

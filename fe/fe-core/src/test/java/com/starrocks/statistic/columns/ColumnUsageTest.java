@@ -15,12 +15,24 @@
 package com.starrocks.statistic.columns;
 
 import com.google.common.base.Splitter;
+import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
+import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.scheduler.history.TableKeeper;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.plan.PlanTestBase;
+import com.starrocks.statistic.AnalyzeJob;
+import com.starrocks.statistic.AnalyzeMgr;
+import com.starrocks.statistic.BasicStatsMeta;
+import com.starrocks.statistic.NativeAnalyzeJob;
+import com.starrocks.statistic.StatisticsCollectJob;
+import com.starrocks.statistic.StatisticsCollectJobFactory;
 import com.starrocks.statistic.StatisticsMetaManager;
+import com.starrocks.statistic.StatsConstants;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
@@ -28,7 +40,9 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.mockito.Mockito;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -41,6 +55,7 @@ class ColumnUsageTest extends PlanTestBase {
         TableKeeper keeper = PredicateColumnsStorage.createKeeper();
         keeper.run();
         FeConstants.runningUnitTest = true;
+        Config.statistic_partition_healthy_v2 = false;
     }
 
     @BeforeEach
@@ -163,5 +178,69 @@ class ColumnUsageTest extends PlanTestBase {
                 StringUtils.isNotEmpty(expectedColumns) ? Splitter.on(",").splitToList(expectedColumns) : List.of();
         Assertions.assertEquals(expect.stream().sorted().collect(Collectors.toList()),
                 stmt.getColumnNames().stream().sorted().collect(Collectors.toList()));
+    }
+
+    @Test
+    public void testAutoAnalyzePredicateColumns() throws Exception {
+        AnalyzeTestUtil.init();
+        Table table = starRocksAssert.getTable(connectContext.getDatabase(), "t0");
+        setTableStatistics((OlapTable) table, Config.statistic_auto_collect_small_table_rows + 1);
+        setPartitionStatistics((OlapTable) table, "t0", Config.statistic_auto_collect_small_table_rows + 1);
+
+        starRocksAssert.query("select * from t0 where v1 > 1").explainQuery();
+        starRocksAssert.getCtx().executeSql("analyze table t0 predicate columns with sync mode");
+
+        String analyzeSql = "create analyze table t0";
+        starRocksAssert.ddl(analyzeSql);
+
+        List<AnalyzeJob> allAnalyzeJobList =
+                starRocksAssert.getCtx().getGlobalStateMgr().getAnalyzeMgr().getAllAnalyzeJobList()
+                        .stream().filter(x -> {
+                            try {
+                                return x.getTableName().equalsIgnoreCase("t0");
+                            } catch (MetaNotFoundException e) {
+                                return false;
+                            }
+                        })
+                        .collect(Collectors.toList());
+        NativeAnalyzeJob analyzeJob = (NativeAnalyzeJob) allAnalyzeJobList.get(0);
+        AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+
+        // mock a small table, with staled stats
+        LocalDateTime mockUpdate = LocalDateTime.now().minusDays(1);
+        BasicStatsMeta statsMeta = analyzeMgr.getTableBasicStatsMeta(table.getId());
+        statsMeta = Mockito.mock(BasicStatsMeta.class);
+        Mockito.when(statsMeta.getTableId()).thenReturn(table.getId());
+        analyzeMgr.addBasicStatsMeta(statsMeta);
+
+        Mockito.when(statsMeta.getUpdateTime()).thenReturn(mockUpdate);
+        Mockito.when(statsMeta.isUpdatedAfterLoad(Mockito.any())).thenReturn(false);
+        Mockito.when(statsMeta.getHealthy()).thenReturn(0.1);
+
+        // enable the predicate-columns strategy
+        {
+            int defaultValue = Config.statistic_auto_collect_predicate_columns_threshold;
+            Config.statistic_auto_collect_predicate_columns_threshold = 2;
+
+            List<StatisticsCollectJob> collectJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(analyzeJob);
+            Assertions.assertEquals(1, collectJobs.size());
+            StatisticsCollectJob job0 = collectJobs.get(0);
+            Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, job0.getType());
+            Assertions.assertEquals(List.of("v1"), job0.getColumnNames());
+
+            Config.statistic_auto_collect_predicate_columns_threshold = defaultValue;
+        }
+
+        // disable the strategy
+        {
+            int defaultValue = Config.statistic_auto_collect_predicate_columns_threshold;
+            Config.statistic_auto_collect_predicate_columns_threshold = 0;
+            List<StatisticsCollectJob> collectJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(analyzeJob);
+            Assertions.assertEquals(1, collectJobs.size());
+            StatisticsCollectJob job0 = collectJobs.get(0);
+            Assertions.assertEquals(StatsConstants.AnalyzeType.FULL, job0.getType());
+            Assertions.assertEquals(List.of("v1", "v2", "v3"), job0.getColumnNames());
+            Config.statistic_auto_collect_predicate_columns_threshold = defaultValue;
+        }
     }
 }

@@ -79,14 +79,20 @@ import com.starrocks.transaction.DatabaseTransactionMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.lang.management.ManagementFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.SortedMap;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
+import javax.management.Attribute;
+import javax.management.AttributeList;
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
 
 public final class MetricRepo {
     private static final Logger LOG = LogManager.getLogger(MetricRepo.class);
@@ -162,6 +168,10 @@ public final class MetricRepo {
     public static LongCounterMetric COUNTER_ROUTINE_LOAD_PAUSED;
     public static LongCounterMetric COUNTER_SHORTCIRCUIT_QUERY;
     public static LongCounterMetric COUNTER_SHORTCIRCUIT_RPC;
+    public static LongCounterMetric COUNTER_BACKEND_SERVICE_RPC;
+    public static LongCounterMetric COUNTER_LAKE_SERVICE_RPC;
+    public static LongCounterMetric COUNTER_BRPC_EXEC_PLAN_FRAGMENT;
+    public static LongCounterMetric COUNTER_BRPC_EXEC_PLAN_FRAGMENT_ERROR;
 
     public static Histogram HISTO_QUERY_LATENCY;
     public static Histogram HISTO_EDIT_LOG_WRITE_LATENCY;
@@ -169,6 +179,7 @@ public final class MetricRepo {
     public static Histogram HISTO_JOURNAL_WRITE_BATCH;
     public static Histogram HISTO_JOURNAL_WRITE_BYTES;
     public static Histogram HISTO_SHORTCIRCUIT_RPC_LATENCY;
+    public static Histogram HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY;
 
     // following metrics will be updated by metric calculator
     public static GaugeMetricImpl<Double> GAUGE_QUERY_PER_SECOND;
@@ -492,6 +503,24 @@ public final class MetricRepo {
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SHORTCIRCUIT_QUERY);
         COUNTER_SHORTCIRCUIT_RPC = new LongCounterMetric("shortcircuit_rpc", MetricUnit.REQUESTS, "total shortcircuit rpc");
         STARROCKS_METRIC_REGISTER.addMetric(COUNTER_SHORTCIRCUIT_RPC);
+        COUNTER_BACKEND_SERVICE_RPC = new LongCounterMetric("brpc_backend_service", MetricUnit.REQUESTS,
+                "total backend service rpc");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_BACKEND_SERVICE_RPC);
+        COUNTER_LAKE_SERVICE_RPC = new LongCounterMetric("brpc_lake_service", MetricUnit.REQUESTS, "total lake service rpc");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_LAKE_SERVICE_RPC);
+        GaugeMetric<Long> brpcTotal = (GaugeMetric<Long>) new GaugeMetric<Long>("brpc_total", MetricUnit.REQUESTS, "total brpc") {
+            @Override
+            public Long getValue() {
+                return COUNTER_BACKEND_SERVICE_RPC.getValue() + COUNTER_LAKE_SERVICE_RPC.getValue();
+            }
+        };
+        STARROCKS_METRIC_REGISTER.addMetric(brpcTotal);
+        COUNTER_BRPC_EXEC_PLAN_FRAGMENT = new LongCounterMetric(
+                "brpc_exec_plan_fragment", MetricUnit.REQUESTS, "total brpc exec plan fragment");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_BRPC_EXEC_PLAN_FRAGMENT);
+        COUNTER_BRPC_EXEC_PLAN_FRAGMENT_ERROR = new LongCounterMetric(
+                "brpc_exec_plan_fragment_error", MetricUnit.REQUESTS, "total brpc exec plan fragment error");
+        STARROCKS_METRIC_REGISTER.addMetric(COUNTER_BRPC_EXEC_PLAN_FRAGMENT_ERROR);
 
         COUNTER_QUERY_ANALYSIS_ERR = new LongCounterMetric("query_analysis_err", MetricUnit.REQUESTS,
                                                            "total analysis error query");
@@ -556,6 +585,8 @@ public final class MetricRepo {
         HISTO_JOURNAL_WRITE_BYTES =
                 METRIC_REGISTER.histogram(MetricRegistry.name("journal", "write", "bytes"));
         HISTO_SHORTCIRCUIT_RPC_LATENCY = METRIC_REGISTER.histogram(MetricRegistry.name("shortcircuit", "latency", "ms"));
+        HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY = METRIC_REGISTER.histogram(
+                MetricRegistry.name("deploy_plan_fragments", "latency", "ms"));
 
         // init system metrics
         initSystemMetrics();
@@ -853,6 +884,9 @@ public final class MetricRepo {
         // collect starmgr related metrics as well
         StarMgrServer.getCurrentState().visitMetrics(visitor);
 
+        // collect brpc pool metrics
+        collectBrpcMetrics(visitor);
+
         // node info
         visitor.getNodeInfo();
         return visitor.build();
@@ -939,6 +973,49 @@ public final class MetricRepo {
         }
         databaseNum.setValue(dbNum);
         visitor.visit(databaseNum);
+    }
+
+    private static void collectBrpcMetrics(MetricVisitor visitor) {
+        try {
+            MBeanServer mBeanServer = ManagementFactory.getPlatformMBeanServer();
+            ObjectName pattern = new ObjectName("org.apache.commons.pool2:type=GenericObjectPool,name=*");
+            Set<ObjectName> objectNames = mBeanServer.queryNames(pattern, null);
+            if (objectNames.size() == 0) {
+                LOG.warn("failed to get GenericObjectPoolMXBean");
+                return;
+            }
+            String[] attrNames = new String[] {"NumActive", "NumIdle", "NumWaiters", "BorrowedCount",
+                    "ReturnedCount", "CreatedCount", "DestroyedCount", "MeanActiveTimeMillis", "MeanIdleTimeMillis",
+                    "MeanBorrowWaitTimeMillis"};
+            for (ObjectName objectName : objectNames) {
+                String name = objectName.getKeyProperty("name");
+                AttributeList attrs = mBeanServer.getAttributes(objectName, attrNames);
+                if (attrs.size() != attrNames.length) {
+                    LOG.warn("failed to get GenericObjectPoolMXBean attributes, attrs.size={}, attrNames.size={}",
+                            attrs.size(), attrNames.length);
+                    return;
+                }
+                for (int i = 0; i < attrs.size(); i++) {
+                    String attrName = attrNames[i];
+                    Object attr = ((Attribute) attrs.get(i)).getValue();
+                    if (attr instanceof Integer) {
+                        GaugeMetricImpl<Integer> metric = new GaugeMetricImpl<>(
+                                "brpc_pool_" + attrName.toLowerCase(), MetricUnit.NOUNIT, "brpc pool " + attrName);
+                        metric.addLabel(new MetricLabel("name", name));
+                        metric.setValue((Integer) attr);
+                        visitor.visit(metric);
+                    } else if (attr instanceof Long) {
+                        GaugeMetricImpl<Long> metric = new GaugeMetricImpl<>(
+                                "brpc_pool_" + attrName.toLowerCase(), MetricUnit.NOUNIT, "brpc pool " + attrName);
+                        metric.addLabel(new MetricLabel("name", name));
+                        metric.setValue((Long) attr);
+                        visitor.visit(metric);
+                    }
+                }
+            }
+        } catch (Throwable e) {
+            LOG.warn("failed to collect brpc metrics", e);
+        }
     }
 
     private static void collectRoutineLoadProcessMetrics(MetricVisitor visitor) {

@@ -3929,11 +3929,11 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### datacache_enable
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description: Whether to enable Data Cache. `true` indicates Data Cache is enabled, and `false` indicates Data Cache is disabled.
+- Description: Whether to enable Data Cache. `true` indicates Data Cache is enabled, and `false` indicates Data Cache is disabled. The default value is changed to `true` from v3.3.
 - Introduced in: -
 
 ##### datacache_mem_size
@@ -4028,7 +4028,7 @@ When this value is set to less than `0`, the system uses the product of its abso
 
 ##### datacache_tiered_cache_enable
 
-- Default: true
+- Default: false 
 - Type: Boolean
 - Unit: -
 - Is mutable: No

@@ -91,6 +91,7 @@ set(EXEC_FILES
         ./exec/parquet_scanner_test.cpp
         ./exec/repeat_node_test.cpp
         ./exec/sorting_test.cpp
+        ./exec/tablet_sink_index_channel_test.cpp
         ./exec/table_function_node_test.cpp
         ./exec/olap_scan_prepare_test.cpp
         ./exprs/agg/json_each_test.cpp
@@ -202,10 +203,10 @@ set(EXEC_FILES
         ./formats/parquet/parquet_cli_reader_test.cpp
         ./formats/parquet/parquet_ut_base.cpp
         ./formats/parquet/page_index_test.cpp
-        ./formats/parquet/statistics_helper_test.cpp
         ./formats/disk_range_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
+        ./http/default_path_handlers_test.cpp
         ./http/http_client_test.cpp
         ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
@@ -499,14 +500,14 @@ set(EXEC_FILES
         ./storage/lake/replication_txn_manager_test.cpp
         ./storage/lake/persistent_index_sstable_test.cpp
         ./storage/lake/write_combined_txn_log_test.cpp
-        ./block_cache/datacache_utils_test.cpp
-        ./block_cache/block_cache_hit_rate_counter_test.cpp
+        ./cache/block_cache/datacache_utils_test.cpp
+        ./cache/block_cache/block_cache_hit_rate_counter_test.cpp
         ./util/thrift_rpc_helper_test.cpp
         )
 
 if ("${WITH_STARCACHE}" STREQUAL "ON")
-    list(APPEND EXEC_FILES ./block_cache/block_cache_test.cpp)
-    list(APPEND EXEC_FILES ./block_cache/disk_space_monitor_test.cpp)
+    list(APPEND EXEC_FILES ./cache/block_cache/block_cache_test.cpp)
+    list(APPEND EXEC_FILES ./cache/block_cache/disk_space_monitor_test.cpp)
     list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)
 endif ()
 

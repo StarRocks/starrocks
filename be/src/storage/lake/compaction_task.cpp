@@ -27,7 +27,7 @@ CompactionTask::CompactionTask(VersionedTablet tablet, std::vector<std::shared_p
         : _txn_id(context->txn_id),
           _tablet(std::move(tablet)),
           _input_rowsets(std::move(input_rowsets)),
-          _mem_tracker(std::make_unique<MemTracker>(MemTracker::COMPACTION, -1,
+          _mem_tracker(std::make_unique<MemTracker>(MemTrackerType::COMPACTION_TASK, -1,
                                                     "Compaction-" + std::to_string(_tablet.metadata()->id()),
                                                     GlobalEnv::GetInstance()->compaction_mem_tracker())),
           _context(context),

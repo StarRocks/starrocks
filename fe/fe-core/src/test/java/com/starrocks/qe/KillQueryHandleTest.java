@@ -31,8 +31,8 @@ import org.apache.spark.internal.config.R;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.xnio.StreamConnection;
 
-import java.nio.channels.SocketChannel;
 import java.util.UUID;
 
 public class KillQueryHandleTest {
@@ -50,9 +50,9 @@ public class KillQueryHandleTest {
     }
 
     @Test
-    public void testKillStmt(@Mocked SocketChannel socketChannel) throws Exception {
+    public void testKillStmt(@Mocked StreamConnection connection) throws Exception {
         // test killing query successfully
-        ConnectContext ctx1 = prepareConnectContext(socketChannel);
+        ConnectContext ctx1 = prepareConnectContext(connection);
 
         Assert.assertFalse(ctx1.isKilled());
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), false);
@@ -68,7 +68,7 @@ public class KillQueryHandleTest {
     }
 
     @Test
-    public void testKillStmt2(@Mocked SocketChannel socketChannel, @Mocked TMasterOpResult result)
+    public void testKillStmt2(@Mocked StreamConnection connection, @Mocked TMasterOpResult result)
             throws Exception {
         // test killing query is forwarded to fe and query is successfully killed
         new MockUp(ThriftRPCRequestExecutor.class) {
@@ -81,7 +81,7 @@ public class KillQueryHandleTest {
                 return (T) result;
             }
         };
-        ConnectContext ctx1 = prepareConnectContext(socketChannel);
+        ConnectContext ctx1 = prepareConnectContext(connection);
 
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
         Assert.assertEquals(QueryState.MysqlStateType.OK, ctx.getState().getStateType());
@@ -90,10 +90,10 @@ public class KillQueryHandleTest {
     }
 
     @Test
-    public void testKillStmtWhenQueryIdNotFound(@Mocked SocketChannel socketChannel)
+    public void testKillStmtWhenQueryIdNotFound(@Mocked StreamConnection connection)
             throws Exception {
         // test killing query but query not found
-        ConnectContext ctx1 = prepareConnectContext(socketChannel);
+        ConnectContext ctx1 = prepareConnectContext(connection);
 
         ConnectContext ctx = kill("xxx", false);
         Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
@@ -103,7 +103,7 @@ public class KillQueryHandleTest {
     }
 
     @Test
-    public void testKillStmtWhenQueryIdNotFound2(@Mocked SocketChannel socketChannel, @Mocked TMasterOpResult result)
+    public void testKillStmtWhenQueryIdNotFound2(@Mocked StreamConnection connection, @Mocked TMasterOpResult result)
             throws Exception {
         // test killing query is forwarded to fe and query not found
         new MockUp<TMasterOpResult>() {
@@ -127,7 +127,7 @@ public class KillQueryHandleTest {
                 return (T) result;
             }
         };
-        ConnectContext ctx1 = prepareConnectContext(socketChannel);
+        ConnectContext ctx1 = prepareConnectContext(connection);
 
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
         Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
@@ -137,9 +137,9 @@ public class KillQueryHandleTest {
     }
 
     @Test
-    public void testKillStmtWhenConnectionFail(@Mocked SocketChannel socketChannel) throws Exception {
+    public void testKillStmtWhenConnectionFail(@Mocked StreamConnection connection) throws Exception {
         // test killing query is forwarded to fe but fe is down
-        ConnectContext ctx1 = prepareConnectContext(socketChannel);
+        ConnectContext ctx1 = prepareConnectContext(connection);
 
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
         Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
@@ -149,7 +149,7 @@ public class KillQueryHandleTest {
     }
 
     @Test
-    public void testKillStmtWhenForwardWithUnknownError(@Mocked SocketChannel socketChannel) throws Exception {
+    public void testKillStmtWhenForwardWithUnknownError(@Mocked StreamConnection connection) throws Exception {
         // test killing query is forwarded to fe with unexpected error
         new MockUp(ThriftRPCRequestExecutor.class) {
             @Mock
@@ -160,7 +160,7 @@ public class KillQueryHandleTest {
                 throw new Exception("Unknown error x");
             }
         };
-        ConnectContext ctx1 = prepareConnectContext(socketChannel);
+        ConnectContext ctx1 = prepareConnectContext(connection);
 
         ConnectContext ctx = kill(ctx1.getQueryId().toString(), true);
         Assert.assertEquals(QueryState.MysqlStateType.ERR, ctx.getState().getStateType());
@@ -171,9 +171,9 @@ public class KillQueryHandleTest {
     }
 
     @Test
-    public void testKillStmtWithCustomQueryId(@Mocked SocketChannel socketChannel) throws Exception {
+    public void testKillStmtWithCustomQueryId(@Mocked StreamConnection connection) throws Exception {
         // test killing query successfully
-        ConnectContext ctx1 = prepareConnectContext(socketChannel);
+        ConnectContext ctx1 = prepareConnectContext(connection);
         ctx1.getSessionVariable().setCustomQueryId("a_custom_query_id");
 
         Assert.assertFalse(ctx1.isKilled());
@@ -185,8 +185,8 @@ public class KillQueryHandleTest {
         ctx1.getConnectScheduler().unregisterConnection(ctx1);
     }
 
-    private ConnectContext prepareConnectContext(SocketChannel socketChannel) {
-        ConnectContext ctx1 = new ConnectContext(socketChannel) {
+    private ConnectContext prepareConnectContext(StreamConnection connection) {
+        ConnectContext ctx1 = new ConnectContext(connection) {
             @Override
             public void kill(boolean killConnection, String cancelledMessage) {
                 super.isKilled = true;

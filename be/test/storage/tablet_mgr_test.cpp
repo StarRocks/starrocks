@@ -516,4 +516,18 @@ TEST_F(TabletMgrTest, RemoveTabletInDiskDisable) {
     StorageEngine::instance()->tablet_manager()->drop_tablets_on_error_root_path(tablet_info_vec);
 }
 
+TEST_F(TabletMgrTest, GetTabletReportInfo) {
+    TTabletId tablet_id = 4251234666;
+    TSchemaHash schema_hash = 3929134666;
+    TCreateTabletReq create_tablet_req = get_create_tablet_request(tablet_id, schema_hash);
+    Status create_st = StorageEngine::instance()->create_tablet(create_tablet_req);
+    ASSERT_TRUE(create_st.ok());
+
+    TReportRequest request;
+    request.__isset.tablets = true;
+    Status st_report = StorageEngine::instance()->tablet_manager()->report_all_tablets_info(&request.tablets);
+    ASSERT_TRUE(st_report.ok());
+    ASSERT_TRUE(request.tablets.size() == 1);
+}
+
 } // namespace starrocks

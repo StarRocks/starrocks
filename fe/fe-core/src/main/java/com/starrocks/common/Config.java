@@ -843,6 +843,21 @@ public class Config extends ConfigBase {
     @ConfField
     public static int brpc_idle_wait_max_time = 10000;
 
+    @ConfField(mutable = true)
+    public static int brpc_send_plan_fragment_timeout_ms = 60000;
+
+    @ConfField
+    public static boolean brpc_reuse_addr = true;
+
+    @ConfField
+    public static int brpc_min_evictable_idle_time_ms = 120000;
+
+    @ConfField
+    public static boolean brpc_short_connection = false;
+
+    @ConfField
+    public static boolean brpc_inner_reuse_pool = true;
+
     /**
      * FE mysql server port
      */
@@ -856,12 +871,6 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int mysql_nio_backlog_num = 1024;
-
-    /**
-     * mysql service nio option.
-     */
-    @ConfField
-    public static boolean mysql_service_nio_enabled = true;
 
     /**
      * num of thread to handle io events in mysql.
@@ -1261,12 +1270,6 @@ public class Config extends ConfigBase {
      */
     @ConfField
     public static int qe_max_connection = 4096;
-
-    /**
-     * Maximal number of thread in connection-scheduler-pool.
-     */
-    @ConfField
-    public static int max_connection_scheduler_threads_num = 4096;
 
     /**
      * Used to limit element num of InPredicate in delete statement.
@@ -1830,6 +1833,24 @@ public class Config extends ConfigBase {
     public static boolean enable_starrocks_external_table_auth_check = true;
 
     /**
+     * The authentication_chain configuration specifies the sequence of security integrations
+     * that will be used to authenticate a user. Each security integration in the chain will be
+     * tried in the order they are defined until one of them successfully authenticates the user.
+     * The configuration should specify a list of names of the security integrations
+     * that will be used in the chain.
+     * <p>
+     * For example, if user specifies the value with {"ldap", "native"}, SR will first try to authenticate
+     * a user whose authentication info may exist in a ldap server, if failed, SR will continue trying to
+     * authenticate the user to check whether it's a native user in SR,  i.e. it's created by SR and
+     * its authentication info is stored in SR metadata.
+     * <p>
+     * For more information about security integration, you can refer to
+     * {@link com.starrocks.authentication.SecurityIntegration}
+     */
+    @ConfField(mutable = true)
+    public static String[] authentication_chain = {AUTHENTICATION_CHAIN_MECHANISM_NATIVE};
+
+    /**
      * If set to true, the granularity of auth check extends to the column level
      */
     @ConfField(mutable = true)
@@ -2103,13 +2124,16 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long statistic_auto_collect_small_table_rows = 10000000; // 10M
 
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "If the number of columns of table exceeds it, use predicate-columns strategy")
+    public static int statistic_auto_collect_predicate_columns_threshold = 32;
+
+    @ConfField(mutable = true, comment = "The interval of auto stats for small tables")
     public static long statistic_auto_collect_small_table_interval = 0; // unit: second, default 0
 
     @ConfField(mutable = true, comment = "The interval of auto collecting histogram statistics")
     public static long statistic_auto_collect_histogram_interval = 3600L * 1; // 1h
 
-    @ConfField(mutable = true)
+    @ConfField(mutable = true, comment = "The interval of auto stats for large tables")
     public static long statistic_auto_collect_large_table_interval = 3600L * 12; // unit: second, default 12h
 
     /**
@@ -2117,6 +2141,9 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long statistic_max_full_collect_data_size = 100L * 1024 * 1024 * 1024; // 100G
+
+    @ConfField(mutable = true, comment = "If full analyze predicate columns instead of sample all columns")
+    public static boolean statistic_auto_collect_use_full_predicate_column_for_sample = true;
 
     /**
      * Max row count in statistics collect per query
@@ -2500,6 +2527,11 @@ public class Config extends ConfigBase {
     //============================== Plan Feature Extraction BEGIN ========================================//
     @ConfField(mutable = true, comment = "Collect features of query plan into a log file")
     public static boolean enable_plan_feature_collection = false;
+    @ConfField(mutable = true)
+    public static boolean enable_query_cost_prediction = false;
+    @ConfField(mutable = true)
+    public static String query_cost_prediction_service_address = "http://localhost:5000";
+
     @ConfField
     public static String feature_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
     @ConfField
@@ -3446,8 +3478,42 @@ public class Config extends ConfigBase {
     public static int query_deploy_threadpool_size = max(50, getRuntime().availableProcessors() * 10);
 
     @ConfField(mutable = true)
-    public static long automated_cluster_snapshot_interval_seconds = 1800;
+    public static long automated_cluster_snapshot_interval_seconds = 600;
 
     @ConfField(mutable = false)
     public static int max_historical_automated_cluster_snapshot_jobs = 100;
+
+    /**
+     * The URL to a JWKS service or a local file in the conf dir
+     */
+    @ConfField(mutable = false)
+    public static String oidc_jwks_url = "";
+
+    /**
+     * String to identify the field in the JWT that identifies the subject of the JWT.
+     * The default value is sub.
+     * The value of this field must be the same as the user specified when logging into StarRocks.
+     */
+    @ConfField(mutable = false)
+    public static String oidc_principal_field = "sub";
+
+    /**
+     * Specifies a string that must match the value of the JWT’s issuer (iss) field in order to consider this JWT valid.
+     * The iss field in the JWT identifies the principal that issued the JWT.
+     */
+    @ConfField(mutable = false)
+    public static String oidc_required_issuer = "";
+
+    /**
+     * Specifies a string that must match the value of the JWT’s Audience (aud) field in order to consider this JWT valid.
+     * The aud field in the JWT identifies the recipients that the JWT is intended for.
+     */
+    @ConfField(mutable = false)
+    public static String oidc_required_audience = "";
+
+    @ConfField(mutable = true)
+    public static boolean transaction_state_print_partition_info = true;
+
+    @ConfField(mutable = true)
+    public static int max_show_proc_transactions_entry = 2000;
 }

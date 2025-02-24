@@ -59,6 +59,7 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.datacache.DataCacheSelectMetrics;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
@@ -167,6 +168,7 @@ public class DefaultCoordinator extends Coordinator {
     private boolean isShortCircuit = false;
     private boolean isBinaryRow = false;
 
+    private long estimatedMemCost;
     private ExecutionSchedule scheduler;
 
     public static class Factory implements Coordinator.Factory {
@@ -404,6 +406,15 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
+    public void setPredictedCost(long memBytes) {
+        this.estimatedMemCost = memBytes;
+    }
+
+    public long getPredictedCost() {
+        return estimatedMemCost;
+    }
+
+    @Override
     public void clearExportStatus() {
         lock.lock();
         try {
@@ -578,7 +589,10 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public String getSchedulerExplain() {
-        return executionDAG.getFragmentsInPreorder().stream()
+        String predict = Config.enable_query_cost_prediction ?
+                "predicted memory cost: " + getPredictedCost() + "\n" : "";
+        return predict +
+                executionDAG.getFragmentsInPreorder().stream()
                 .map(ExecutionFragment::getExplainString)
                 .collect(Collectors.joining("\n"));
     }
@@ -658,6 +672,7 @@ public class DefaultCoordinator extends Coordinator {
                             this::handleErrorExecution, option.doDeploy);
             scheduler.prepareSchedule(this, deployer, executionDAG);
             this.scheduler.schedule(option);
+            MetricRepo.HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY.update(ignored.getTotalTime());
             queryProfile.attachExecutionProfiles(executionDAG.getExecutions());
         } finally {
             unlock();

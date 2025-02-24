@@ -44,6 +44,7 @@
 #include "exec/query_cache/cache_manager.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "runtime/base_load_path_mgr.h"
+#include "runtime/mem_tracker.h"
 #include "storage/options.h"
 #include "util/threadpool.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
@@ -64,7 +65,6 @@ class LoadStreamMgr;
 class StreamContextMgr;
 class TransactionMgr;
 class BatchWriteMgr;
-class MemTracker;
 class MetricRegistry;
 class StorageEngine;
 class ThreadPool;
@@ -154,7 +154,8 @@ public:
     MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
     MemTracker* poco_connection_pool_mem_tracker() { return _poco_connection_pool_mem_tracker.get(); }
     MemTracker* jemalloc_metadata_traker() { return _jemalloc_metadata_tracker.get(); }
-    std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
+    std::shared_ptr<MemTracker> get_mem_tracker_by_type(MemTrackerType type);
+    std::vector<std::shared_ptr<MemTracker>> mem_trackers() const;
 
     int64_t get_storage_page_cache_size();
     int64_t check_storage_page_cache_size(int64_t storage_cache_limit);
@@ -168,8 +169,7 @@ private:
 
     void _init_storage_page_cache();
 
-    template <class... Args>
-    std::shared_ptr<MemTracker> regist_tracker(Args&&... args);
+    std::shared_ptr<MemTracker> regist_tracker(MemTrackerType type, int64_t bytes_limit, MemTracker* parent);
 
     // root process memory tracker
     std::shared_ptr<MemTracker> _process_mem_tracker;
@@ -233,7 +233,7 @@ private:
     // The memory used for poco connection pool
     std::shared_ptr<MemTracker> _poco_connection_pool_mem_tracker;
 
-    std::vector<std::shared_ptr<MemTracker>> _mem_trackers;
+    std::map<MemTrackerType, std::shared_ptr<MemTracker>> _mem_tracker_map;
 };
 
 // Execution environment for queries/plan fragments.

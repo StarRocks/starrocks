@@ -48,6 +48,7 @@ private:
 
     TUniqueId _query_id;
     std::atomic<uint64_t> _next_container_id = 0;
+    std::string _last_created_container_dir;
 
     DirManager* _dir_mgr = nullptr;
 };

@@ -201,9 +201,6 @@ CONF_Int32(be_service_threads, "64");
 // key=value pair of default query options for StarRocks, separated by ','
 CONF_String(default_query_options, "");
 
-// If non-zero, StarRocks will output memory usage every log_mem_usage_interval'th fragment completion.
-// CONF_Int32(log_mem_usage_interval, "0");
-
 // Controls the number of threads to run work per core.  It's common to pick 2x
 // or 3x the number of cores.  This keeps the cores busy without causing excessive
 // thrashing.
@@ -1050,6 +1047,7 @@ CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
 // NOTE: need to handle the negative value properly
 CONF_Alias(object_storage_request_timeout_ms, starlet_fslib_s3client_request_timeout_ms);
 CONF_mInt32(starlet_delete_files_max_key_in_batch, "1000");
+CONF_mInt32(starlet_filesystem_instance_cache_capacity, "10000");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
@@ -1084,6 +1082,9 @@ CONF_mBool(lake_clear_corrupted_cache, "true");
 // The maximum number of files which need to rebuilt in cloud native pk index.
 // If files which need to rebuilt larger than this, we will flush memtable immediately.
 CONF_mInt32(cloud_native_pk_index_rebuild_files_threshold, "50");
+// if set to true, CACHE SELECT will only read file, save CPU time
+// if set to false, CACHE SELECT will behave like SELECT
+CONF_mBool(lake_cache_select_in_physical_way, "true");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -1183,7 +1184,7 @@ CONF_Double(datacache_scheduler_threads_per_cpu, "0.125");
 // If false, the raw data will be written to disk directly and read from disk without promotion.
 // For object data, such as parquet footer object, which can only be cached in memory are not affected
 // by this configuration.
-CONF_Bool(datacache_tiered_cache_enable, "true");
+CONF_Bool(datacache_tiered_cache_enable, "false");
 // Whether to persist cached data
 CONF_Bool(datacache_persistence_enable, "true");
 // DataCache engines, alternatives: starcache.
@@ -1566,4 +1567,6 @@ CONF_mInt32(json_parse_many_batch_size, "1000000");
 CONF_mBool(enable_dynamic_batch_size_for_json_parse_many, "true");
 CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
 CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
+// used to control whether the metrics/ interface collects table metrics
+CONF_mBool(enable_collect_table_metrics, "true");
 } // namespace starrocks::config

@@ -12,7 +12,7 @@ PARTITION BY date_trunc('day', event_day)
 DISTRIBUTED BY HASH(event_day, site_id) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -171,7 +171,7 @@ PARTITION BY (`dt`,`city`)
 DISTRIBUTED BY HASH(`id`)
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "fast_schema_evolution" = "true",
 "partition_live_number" = "1",

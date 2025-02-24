@@ -17,6 +17,7 @@ package com.starrocks.mysql;
 public enum NegotiateState {
     OK("ok"),
     READ_FIRST_AUTH_PKG_FAILED("read first auth package failed"),
+    READ_AUTH_SWITCH_PKG_FAILED("read auth switch package failed"),
     ENABLE_SSL_FAILED("enable ssl failed"),
     READ_SSL_AUTH_PKG_FAILED("read ssl auth package failed"),
     NOT_SUPPORTED_AUTH_MODE("not supported auth mode"),

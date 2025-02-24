@@ -95,6 +95,8 @@ public class JobSpec {
 
     private boolean incrementalScanRanges = false;
 
+    private boolean isSyncStreamLoad = false;
+
     public static class Factory {
         private Factory() {
         }
@@ -303,6 +305,7 @@ public class JobSpec {
                     .enablePipeline(false)
                     .resourceGroup(null)
                     .warehouseId(planner.getWarehouseId())
+                    .setSyncStreamLoad()
                     .build();
         }
 
@@ -523,7 +526,7 @@ public class JobSpec {
                 return true;
             }
         }
-        return false;
+        return isSyncStreamLoad;
     }
 
     public static class Builder {
@@ -618,6 +621,11 @@ public class JobSpec {
 
         private Builder setPlanProtocol(String planProtocol) {
             instance.planProtocol = StringUtils.lowerCase(planProtocol);
+            return this;
+        }
+
+        private Builder setSyncStreamLoad() {
+            instance.isSyncStreamLoad = true;
             return this;
         }
 

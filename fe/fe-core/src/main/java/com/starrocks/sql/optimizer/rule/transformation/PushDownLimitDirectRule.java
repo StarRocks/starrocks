@@ -38,7 +38,8 @@ public class PushDownLimitDirectRule extends TransformationRule {
 
     public PushDownLimitDirectRule() {
         super(RuleType.TF_PUSH_DOWN_LIMIT, Pattern.create(OperatorType.LOGICAL_LIMIT)
-                .addChildren(MultiOpPattern.of(SUPPORTED_OPERATOR)));
+                .addChildren(MultiOpPattern.of(SUPPORTED_OPERATOR)
+                        .addChildren(Pattern.create(OperatorType.PATTERN_LEAF))));
     }
 
     @Override

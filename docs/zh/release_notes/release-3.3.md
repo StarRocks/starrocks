@@ -10,6 +10,64 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.10
+
+发布日期：2025 年 2 月 21 日
+
+### 新增功能
+
+- 窗口函数支持 `max_by` 和 `min_by`。[#54961](https://github.com/StarRocks/starrocks/pull/54961)
+
+### 功能优化
+
+- 支持复杂类型的子列在表函数中下推。[#55425](https://github.com/StarRocks/starrocks/pull/55425)
+- 支持 MariaDB 客户端的 LDAP 用户登陆。[#55720](https://github.com/StarRocks/starrocks/pull/55720)
+- Paimon 版本升级到 1.0.1。[#54796](https://github.com/StarRocks/starrocks/pull/54796) [#55760](https://github.com/StarRocks/starrocks/pull/55760)
+- 查询执行过程中消除非必要的 `unnest` 计算，降低开销。[#55431](https://github.com/StarRocks/starrocks/pull/55431)
+- 跨集群同步过程中存算分离源集群支持开启 Compaction。[#54787](https://github.com/StarRocks/starrocks/pull/54787)
+- 当 DECIMAL 类型的除法这类代价较高出现在在 topN 计算之下时，将其提前至 topN 之上降低开销。[#55417](https://github.com/StarRocks/starrocks/pull/55417)
+- 基于 ARM 架构的性能提升。[#55072](https://github.com/StarRocks/starrocks/pull/55072) [#55510](https://github.com/StarRocks/starrocks/pull/55510)
+- 基于 Hive 外表的物化视图，如基表删除重建，刷新时会检查实际的分区更新而非全表重刷。[#45118](https://github.com/StarRocks/starrocks/pull/45118)
+- DELETE 操作支持分区裁剪。[#55400](https://github.com/StarRocks/starrocks/pull/55400)
+- 优化内表统计信息收集的优先级策略，以优化在表数量较多时的效率。[#55446](https://github.com/StarRocks/starrocks/pull/55446)
+- 导入任务涉及多个分区时，合并记录 Transaction Log 以提高导入性能。[#55143](https://github.com/StarRocks/starrocks/pull/55143)
+- 优化 Translate SQL 的报错信息。[#55327](https://github.com/StarRocks/starrocks/pull/55327)
+- 增加 Session 变量 `parallel_merge_late_materialization_mode` 控制并行合并行为。[#55082](https://github.com/StarRocks/starrocks/pull/55082)
+- 优化生成列的报错信息。[#54949](https://github.com/StarRocks/starrocks/pull/54949)
+- 优化 SHOW MATERIALIZED VIEWS 命令的性能。[#54374](https://github.com/StarRocks/starrocks/pull/54374)
+
+### 问题修复
+
+修复了如下问题：
+
+- CTE 优先下推 LIMIT 再下推谓词导致的错误。[#55768](https://github.com/StarRocks/starrocks/pull/55768)
+- Stream Load 因表 Schema Change 导致的错误。[#55773](https://github.com/StarRocks/starrocks/pull/55773)
+- DELETE 语句的执行计划包含 SELECT 导致的权限问题。[#55695](https://github.com/StarRocks/starrocks/pull/55695)
+- CN 下线时未停止 Compaction 任务导致的问题。[#55503](https://github.com/StarRocks/starrocks/pull/55503)
+- Follower FE 节点无法获取更新的导入信息。[#55758](https://github.com/StarRocks/starrocks/pull/55758)
+- 落盘路径容量统计错误。[#55703](https://github.com/StarRocks/starrocks/pull/55703)
+- 因缺少足够分区检查导致 List 分区的物化视图创建失败。[#55673](https://github.com/StarRocks/starrocks/pull/55673)
+- ALTER TABLE 因缺少元数据锁导致的问题。[#55605](https://github.com/StarRocks/starrocks/pull/55605)
+- SHOW CREATE TABLE 因 constraints 导致的错误。[#55592](https://github.com/StarRocks/starrocks/pull/55592)
+- Nestloop Join 因大 ARRAY 导致的 OOM。[#55603](https://github.com/StarRocks/starrocks/pull/55603)
+- DROP PARTITION 的锁问题。[#55549](https://github.com/StarRocks/starrocks/pull/55549)
+- min/max 窗口函数因未支持字符串类型导致的问题。[#55537](https://github.com/StarRocks/starrocks/pull/55537)
+- Parser 性能回退问题。[#54830](https://github.com/StarRocks/starrocks/pull/54830)
+- 部分更新时列名大小写敏感问题。[#55442](https://github.com/StarRocks/starrocks/pull/55442)
+- Stream Load 调度到 Alive 状态为 false 的节点时，导入失败。[#55371](https://github.com/StarRocks/starrocks/pull/55371)
+- 物化视图包含 ORDER BY，但输出列顺序错误。[#55355](https://github.com/StarRocks/starrocks/pull/55355)
+- 磁盘故障导致 BE Crash。[#55042](https://github.com/StarRocks/starrocks/pull/55042)
+- Query Cache 导致的结果错误。[#55287](https://github.com/StarRocks/starrocks/pull/55287)
+- Parquet Writer 写入包含时区的 TIMESTAMP 类型时未能进行时区转换的问题。[#55194](https://github.com/StarRocks/starrocks/pull/55194)
+- 因 ALTER 任务超时而导致导入任务卡住。[#55207](https://github.com/StarRocks/starrocks/pull/55207)
+- `date_format` 函数输入毫秒时间类型导致的错误。[#54854](https://github.com/StarRocks/starrocks/pull/54854)
+- 分区键为 DATE 类型导致的物化视图改写失败。[#54804](https://github.com/StarRocks/starrocks/pull/54804)
+
+### 行为变更
+
+- Iceberg 中 UUID 类型的映射更改为 BINARY。[#54978](https://github.com/StarRocks/starrocks/pull/54978)
+- 使用分区变更的行数而非分区可见时间来判断是否需要重新收集统计信息。[#55373](https://github.com/StarRocks/starrocks/pull/55373)
+
 ## 3.3.9
 
 发布日期：2025 年 1 月 12 日
@@ -429,10 +487,10 @@ displayed_sidebar: docs
 
 #### 存算分离
 
-- 优化了存算分离集群的 Fast Schema Evolution 能力，DDL 变更降低到秒级别。具体信息，参考 [设置 Fast Schema Evolution](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE/#设置-fast-schema-evolution)。
+- 优化了存算分离集群的 Fast Schema Evolution 能力，DDL 变更降低到秒级别。具体信息，参考 [设置 Fast Schema Evolution](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE/#设置-fast-schema-evolution)。
 - 为了满足从存算一体到存算分离架构的数据迁移需求，社区正式发布 [StarRocks 数据迁移工具](https://docs.starrocks.io/zh/docs/administration/data_migration_tool/)。该工具同样可用于实现存算一体集群之间的数据同步和容灾方案。
-- [Preview] 存算分离集群存储卷适配 AWS Express One Zone Storage，提升数倍读写性能。具体信息，参考 [CREATE STORAGE VOLUME](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/Administration/CREATE_STORAGE_VOLUME/#参数说明)。
-- 优化了存算分离集群的垃圾回收机制，支持手动 Manual Compaction，可以更高效的回收对象存储上的数据。具体信息，参考 [手动 Compaction](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/ALTER_TABLE/#手动-compaction31-版本起)。
+- [Preview] 存算分离集群存储卷适配 AWS Express One Zone Storage，提升数倍读写性能。具体信息，参考 [CREATE STORAGE VOLUME](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME/#参数说明)。
+- 优化了存算分离集群的垃圾回收机制，支持手动 Manual Compaction，可以更高效的回收对象存储上的数据。具体信息，参考 [手动 Compaction](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE/#手动-compaction31-版本起)。
 - 优化存算分离集群下主键表的 Compaction 事务 Publish 执行逻辑，通过避免读取主键索引，降低执行过程中的 I/O 和内存开销。
 - 存算分离集群支持 Tablet 内并行 Scan，优化在建表时 Bucket 较少场景下，查询的并行度受限于 Tablet 数量的问题，提升查询性能。用户可以通过设置以下系统变量启用并行 Scan 功能。
 
@@ -455,7 +513,7 @@ displayed_sidebar: docs
   - 优化 ORC Tiny Stripe 处理逻辑。
 - **Iceberg 文件格式能力升级：**
   - 大幅提升 Iceberg Catalog 的元数据访问性能，重构并行 Scan 逻辑，解决了 Iceberg 原生 SDK 在处理大量元数据文件时的单线程 I/O 瓶颈，在执行有元数据瓶颈的查询时带来 10 倍以上的性能提升。
-  - Parquet 格式的 Iceberg v2 表查询支持 [equality-delete](https://docs.starrocks.io/zh/docs/data_source/catalog/iceberg_catalog/#使用说明)。
+  - Parquet 格式的 Iceberg v2 表查询支持 [equality-delete](https://docs.starrocks.io/zh/docs/data_source/catalog/iceberg/iceberg_catalog#使用说明)。
 - **[Experimental] Paimon Catalog 优化：**
   - 基于 Paimon 外表创建的物化视图支持自动查询改写。
   - 优化针对 Paimon Catalog 查询的 Scan Range 调度，提高 I/O 并发。
@@ -482,7 +540,7 @@ displayed_sidebar: docs
 - **支持更多索引**：
   - [Preview] 支持[全文倒排索引](https://docs.starrocks.io/zh/docs/table_design/indexes/inverted_index/)，以加速全文检索。
   - [Preview] 支持 [N-Gram bloom filter 索引](https://docs.starrocks.io/zh/docs/table_design/indexes/Ngram_Bloom_Filter_Index/)，以加速 `LIKE` 查询或 `ngram_search` 和 `ngram_search_case_insensitive` 函数的运算速度。
-- 提升 Bitmap 系列函数的性能并优化内存占用，补充了 Bitmap 导出到 Hive 的能力以及配套的 [Hive Bitmap UDF](https://docs.starrocks.io/zh/docs/integrations/hive_bitmap_udf/)。
+- 提升 Bitmap 系列函数的性能并优化内存占用，补充了 Bitmap 导出到 Hive 的能力以及配套的 [Hive Bitmap UDF](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/hive_bitmap_udf/)。
 - **[Preview] 支持 [Flat JSON](https://docs.starrocks.io/zh/docs/using_starrocks/Flat_json/)**：导入时自动检测 JSON 数据并提取公共字段，自动创建 JSON 的列式存储结构，JSON 查询性能达到 Struct 的水平。
 - **[Preview] 优化全局字典**：提供字典对象，将字典表中的键值对映射关系存在各个 BE 节点的内存中。通过 `dictionary_get()` 函数直接查询 BE 内存中的字典对象，相对于原先使用 `dict_mapping` 函数查询字典表，查询速度更快。并且字典对象还可以作为维度表，可以通过 `dictionary_get()` 函数直接查询字典对象来获取维度值，相对于原先通过 JOIN 维度表来获取维度值，查询速度更快。
 - [Preview] 支持 Colocate Group Execution: 大幅降低在 colocated 表上执行 Join 和 Agg 算子时的内存占用，能够更稳定的执行大查询。
@@ -506,22 +564,22 @@ displayed_sidebar: docs
 
 #### 物化视图
 
-- **基于视图的改写**：针对视图的查询，支持改写至基于视图创建的物化视图上。具体信息，参考 [基于视图的物化视图查询改写](https://docs.starrocks.io/zh/docs/using_starrocks/query_rewrite_with_materialized_views/#基于视图的物化视图查询改写)。
-- **基于文本的改写**：引入基于文本的改写能力，用于改写具有相同抽象语法树的查询（或其子查询）。具体信息，参考 [基于文本的物化视图改写](https://docs.starrocks.io/zh/docs/using_starrocks/query_rewrite_with_materialized_views/#基于文本的物化视图改写)。
-- **[Preview] 支持为直接针对物化视图的查询指定透明改写模式**：开启物化视图属性 `transparent_mv_rewrite_mode` 后，当用户直接查询物化视图时，StarRocks 会自动改写查询，将已经刷新的物化视图分区中的数据和未刷新分区对应的原始数据做自动 Union 合并。该模式适用于建模场景下，需要保证数据一致，但同时还希望控制刷新频率降低刷新成本的场景。具体信息，参考 [CREATE MATERIALIZED VIEW](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW/#参数-1)。
-- 支持物化视图聚合下推：开启系统变量 `enable_materialized_view_agg_pushdown_rewrite` 后，用户可以利用单表[聚合上卷](https://docs.starrocks.io/zh/docs/using_starrocks/query_rewrite_with_materialized_views/#聚合上卷改写)类的物化视图来加速多表关联场景，把聚合下推到 Join 以下的 Scan 层来显著提升查询效率。具体信息，参考 [聚合下推](https://docs.starrocks.io/zh/docs/using_starrocks/query_rewrite_with_materialized_views/#聚合下推)。
-- **物化视图改写控制的新属性**：通过 `enable_query_rewrite` 属性实现禁用查询改写，减少整体开销。如果物化视图仅用于建模后直接查询，没有改写需求，则禁用改写。具体信息，参考 [CREATE MATERIALIZED VIEW](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-definition/CREATE_MATERIALIZED_VIEW/#参数-1)。
+- **基于视图的改写**：针对视图的查询，支持改写至基于视图创建的物化视图上。具体信息，参考 [基于视图的物化视图查询改写](https://docs.starrocks.io/zh/docs/using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views/#基于视图的物化视图查询改写)。
+- **基于文本的改写**：引入基于文本的改写能力，用于改写具有相同抽象语法树的查询（或其子查询）。具体信息，参考 [基于文本的物化视图改写](https://docs.starrocks.io/zh/docs/using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views/#基于文本的物化视图改写)。
+- **[Preview] 支持为直接针对物化视图的查询指定透明改写模式**：开启物化视图属性 `transparent_mv_rewrite_mode` 后，当用户直接查询物化视图时，StarRocks 会自动改写查询，将已经刷新的物化视图分区中的数据和未刷新分区对应的原始数据做自动 Union 合并。该模式适用于建模场景下，需要保证数据一致，但同时还希望控制刷新频率降低刷新成本的场景。具体信息，参考 [CREATE MATERIALIZED VIEW](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW/#参数-1)。
+- 支持物化视图聚合下推：开启系统变量 `enable_materialized_view_agg_pushdown_rewrite` 后，用户可以利用单表[聚合上卷](https://docs.starrocks.io/zh/docs/using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views/#聚合上卷改写)类的物化视图来加速多表关联场景，把聚合下推到 Join 以下的 Scan 层来显著提升查询效率。具体信息，参考 [聚合下推](https://docs.starrocks.io/zh/docs/using_starrocks/async_mv/use_cases/query_rewrite_with_materialized_views/#聚合下推)。
+- **物化视图改写控制的新属性**：通过 `enable_query_rewrite` 属性实现禁用查询改写，减少整体开销。如果物化视图仅用于建模后直接查询，没有改写需求，则禁用改写。具体信息，参考 [CREATE MATERIALIZED VIEW](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/materialized_view/CREATE_MATERIALIZED_VIEW/#参数-1)。
 - **物化视图改写代价优化**：增加候选物化视图个数的控制，以及更好的筛选算法。增加 MV plan cache。从而整体降低改写阶段 Optimizer 耗时。具体信息，参考 `cbo_materialized_view_rewrite_related_mvs_limit`。
-- **Iceberg 物化视图更新**：Iceberg 物化视图现支持分区更新触发的增量刷新和 Iceberg Partition Transforms。具体信息，参考 [使用物化视图加速数据湖查询](https://docs.starrocks.io/zh/docs/using_starrocks/data_lake_query_acceleration_with_materialized_views/#选择合适的刷新策略)。
+- **Iceberg 物化视图更新**：Iceberg 物化视图现支持分区更新触发的增量刷新和 Iceberg Partition Transforms。具体信息，参考 [使用物化视图加速数据湖查询](https://docs.starrocks.io/zh/docs/using_starrocks/async_mv/use_cases/data_lake_query_acceleration_with_materialized_views/#选择合适的刷新策略)。
 - **增强的物化视图可观测性**：改进物化视图的监控和管理，以获得更好的系统洞察。具体信息，参考 [异步物化视图监控项](https://docs.starrocks.io/zh/docs/administration/management/monitoring/metrics/#异步物化视图监控项)。
 - **提升大规模物化视图刷新的效率**：支持全局 FIFO 调度，优化嵌套物化视图级联刷新策略，修复高频刷新场景下部分问题。
-- **多事实表分区刷新**：基于多事实表创建的物化视图支持任意事实表更新后，物化视图都可以进行分区级别增量刷新，增加数据管理的灵活性。具体信息，参考 [多基表对齐分区](https://docs.starrocks.io/zh/docs/using_starrocks/create_partitioned_materialized_view/#多基表对齐分区)。
+- **多事实表分区刷新**：基于多事实表创建的物化视图支持任意事实表更新后，物化视图都可以进行分区级别增量刷新，增加数据管理的灵活性。具体信息，参考 [多基表对齐分区](https://docs.starrocks.io/zh/docs/using_starrocks/async_mv/use_cases/create_partitioned_materialized_view/#多基表对齐分区)。
 
 #### 函数支持
 
 - DATETIME 完整支持微秒（Microsecond），相关的时间函数和导入均支持了新的单位。
 - 新增如下函数：
-  - [字符串函数](https://docs.starrocks.io/zh/docs/cover_pages/functions_string/)：crc32、url_extract_host、ngram_search
+  - [字符串函数](https://docs.starrocks.io/zh/docs/category/string-1/)：crc32、url_extract_host、ngram_search
   - Array 函数：[array_contains_seq](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/array-functions/array_contains_seq/)
   - 时间日期函数：[yearweek](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/date-time-functions/yearweek/)
   - 数学函数：[crbt](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/math-functions/cbrt/)
@@ -556,7 +614,7 @@ displayed_sidebar: docs
 - 物化视图属性 `partition_refresh_num` 默认值从 `-1` 调整为 `1`，当物化视图有多个分区需要刷新时，原来在一个刷新任务重刷新所有的分区，当前会一个分区一个分区增量刷新，避免先前行为消耗过多资源。可以通过 FE 参数 `default_mv_partition_refresh_number` 调整默认行为。
 - 系统原先按照 GMT+8 时区的时间调度数据库一致性检查，现在将按照当地时区的时间进行调度。[#45748](https://github.com/StarRocks/starrocks/issues/45748)
 - 默认启用 Data Cache 来加速数据湖查询。用户也可通过 `SET enable_scan_datacache = false` 手动关闭 Data Cache。
-- 对于存算分离场景，在降级到 v3.2.8 及其之前版本时，如需复用先前 Data Cache 中的缓存数据，需要手动修改 **starlet_cache** 目录下 Blockfile 文件名，将文件名格式从 `blockfile_{n}.{version}` 改为 `blockfile_{n}`，即去掉版本后缀。具体可参考 [Data Cache 使用说明](https://docs.starrocks.io/zh/docs/using_starrocks/block_cache/#使用说明)。v3.2.9 及以后版本自动兼容 v3.3 文件名，无需手动执行该操作。
+- 对于存算分离场景，在降级到 v3.2.8 及其之前版本时，如需复用先前 Data Cache 中的缓存数据，需要手动修改 **starlet_cache** 目录下 Blockfile 文件名，将文件名格式从 `blockfile_{n}.{version}` 改为 `blockfile_{n}`，即去掉版本后缀。具体可参考 [Data Cache 使用说明](https://docs.starrocks.io/zh/docs/using_starrocks/caching/block_cache/#使用说明)。v3.2.9 及以后版本自动兼容 v3.3 文件名，无需手动执行该操作。
 - 支持动态修改 FE 参数 `sys_log_level`。[#45062](https://github.com/StarRocks/starrocks/issues/45062)
 - Hive Catalog 属性 `metastore_cache_refresh_interval_sec` 默认值由 `7200` (两小时) 变为 `60` (一分钟)。 [#46681](https://github.com/StarRocks/starrocks/pull/46681)
 

@@ -11,7 +11,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -27,7 +27,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "light_schema_change" = "true",
 "compression" = "LZ4"
@@ -422,3 +422,8 @@ as ( select S_NAME, mx_addr from agged_supplier_2 l group by S_NAME,mx_addr ),
 agged_supplier_5 as ( select l.S_NAME, l.mx_addr from agged_supplier_4 l join supplier r where r.s_suppkey=10 ) 
 select l.S_NAME,l.mx_addr from agged_supplier_5 l right join [shuffle] supplier z on l.S_NAME = z.S_NAME and l.mx_addr = z.s_region order by 2 nulls last,1 limit 10;
  with a as ( select s_region, S_NAME from supplier where S_SUPPKEY < 10 limit 10 ), b as ( select max(upper(s_region)) as mx from a group by S_NAME ), c as ( select lower(mx) = lower('lw') from b )select *from c;
+
+
+select s_region, array_map(x -> concat(x, date_format(cast(concat('202001', s_region) as datetime), "%Y%m")), ['a', 'b', 'c']) 
+from supplier where s_suppkey > 4093;
+

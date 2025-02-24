@@ -91,9 +91,9 @@ import org.apache.commons.collections4.MapUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.xnio.StreamConnection;
 
 import java.io.IOException;
-import java.nio.channels.SocketChannel;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -221,6 +221,9 @@ public class ConnectContext {
     protected boolean isMetadataContext = false;
     protected boolean needQueued = true;
 
+    // Bypass the authorizer check for certain cases
+    protected boolean bypassAuthorizerCheck = false;
+
     protected DumpInfo dumpInfo;
 
     // The related db ids for current sql
@@ -304,7 +307,7 @@ public class ConnectContext {
         this(null);
     }
 
-    public ConnectContext(SocketChannel channel) {
+    public ConnectContext(StreamConnection connection) {
         closed = false;
         state = new QueryState();
         returnRows = 0;
@@ -316,15 +319,15 @@ public class ConnectContext {
         command = MysqlCommand.COM_SLEEP;
         queryDetail = null;
 
-        mysqlChannel = new MysqlChannel(channel);
-        if (channel != null) {
-            remoteIP = mysqlChannel.getRemoteIp();
-        }
-
         if (shouldDumpQuery()) {
             this.dumpInfo = new QueryDumpInfo(this);
         }
         this.sessionId = UUIDUtil.genUUID();
+
+        mysqlChannel = new MysqlChannel(connection);
+        if (connection != null) {
+            remoteIP = mysqlChannel.getRemoteIp();
+        }
     }
 
     /**
@@ -404,17 +407,10 @@ public class ConnectContext {
         this.useConnectorMetadataCache = useConnectorMetadataCache;
     }
 
-    /**
-     * Set this connect to thread-local if not exists
-     *
-     * @return set or not
-     */
-    public boolean setThreadLocalInfoIfNotExists() {
-        if (threadLocalInfo.get() == null) {
-            threadLocalInfo.set(this);
-            return true;
-        }
-        return false;
+    public static ConnectContext exchangeThreadLocalInfo(ConnectContext ctx) {
+        ConnectContext prev = threadLocalInfo.get();
+        threadLocalInfo.set(ctx);
+        return prev;
     }
 
     public void setGlobalStateMgr(GlobalStateMgr globalStateMgr) {
@@ -870,7 +866,7 @@ public class ConnectContext {
             return WarehouseManager.DEFAULT_WAREHOUSE_ID;
         }
 
-        Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouse(warehouseName);
+        Warehouse warehouse = globalStateMgr.getWarehouseMgr().getWarehouseAllowNull(warehouseName);
         if (warehouse == null) {
             throw new SemanticException("Warehouse " + warehouseName + " not exist");
         }
@@ -930,6 +926,14 @@ public class ConnectContext {
         this.needQueued = needQueued;
     }
 
+    public boolean isBypassAuthorizerCheck() {
+        return bypassAuthorizerCheck;
+    }
+
+    public void setBypassAuthorizerCheck(boolean value) {
+        this.bypassAuthorizerCheck = value;
+    }
+
     public ConnectContext getParent() {
         return parent;
     }
@@ -965,6 +969,22 @@ public class ConnectContext {
 
     public void setQueryMVContext(QueryMaterializationContext queryMVContext) {
         this.queryMVContext = queryMVContext;
+    }
+
+    public void startAcceptQuery(ConnectProcessor connectProcessor) {
+        mysqlChannel.startAcceptQuery(this, connectProcessor);
+    }
+
+    public void suspendAcceptQuery() {
+        mysqlChannel.suspendAcceptQuery();
+    }
+
+    public void resumeAcceptQuery() {
+        mysqlChannel.resumeAcceptQuery();
+    }
+
+    public void stopAcceptQuery() throws IOException {
+        mysqlChannel.stopAcceptQuery();
     }
 
     // kill operation with no protect.
@@ -1117,8 +1137,15 @@ public class ConnectContext {
         return executor;
     }
 
+    /**
+     * Bind the context to current scope, exchange the context if it's already existed
+     * Sample usage:
+     * try (var guard = context.bindScope()) {
+     * ......
+     * }
+     */
     public ScopeGuard bindScope() {
-        return ScopeGuard.setIfNotExists(this);
+        return ScopeGuard.bind(this);
     }
 
     // Change current catalog of this session, and reset current database.
@@ -1269,20 +1296,29 @@ public class ConnectContext {
     public static class ScopeGuard implements AutoCloseable {
 
         private boolean set = false;
+        private ConnectContext prev;
 
         private ScopeGuard() {
         }
 
-        public static ScopeGuard setIfNotExists(ConnectContext session) {
+        private static ScopeGuard bind(ConnectContext session) {
             ScopeGuard res = new ScopeGuard();
-            res.set = session.setThreadLocalInfoIfNotExists();
+            res.prev = exchangeThreadLocalInfo(session);
+            res.set = true;
             return res;
+        }
+
+        public ConnectContext prev() {
+            return prev;
         }
 
         @Override
         public void close() {
             if (set) {
                 ConnectContext.remove();
+            }
+            if (prev != null) {
+                prev.setThreadLocalInfo();
             }
         }
     }

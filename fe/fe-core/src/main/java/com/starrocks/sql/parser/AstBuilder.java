@@ -469,6 +469,11 @@ import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ShowPlanAdvisorStmt;
+import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
+import com.starrocks.sql.ast.integration.CreateSecurityIntegrationStatement;
+import com.starrocks.sql.ast.integration.DropSecurityIntegrationStatement;
+import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
+import com.starrocks.sql.ast.integration.ShowSecurityIntegrationStatement;
 import com.starrocks.sql.ast.pipe.AlterPipeClause;
 import com.starrocks.sql.ast.pipe.AlterPipeClauseRetry;
 import com.starrocks.sql.ast.pipe.AlterPipePauseResume;
@@ -844,9 +849,17 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         if (context.functionCall() != null) {
             FunctionCallExpr functionCallExpr = (FunctionCallExpr) visit(context.functionCall());
             String functionName = functionCallExpr.getFnName().getFunction();
-            // except date_trunc, time_slice, str_to_date use generated column as partition column
+            // except date_trunc, time_slice use generated column as partition column
             if (!FunctionSet.DATE_TRUNC.equals(functionName) && !FunctionSet.TIME_SLICE.equals(functionName)
                     && !FunctionSet.STR2DATE.equals(functionName)) {
+                return generateMulitListPartitionDesc(context, Lists.newArrayList(functionCallExpr));
+            }
+            // If simple single expression partitioning is not supported,
+            // use the more general expression partitioning based on generated columns.
+            List<String> columnList = null;
+            try {
+                columnList = AnalyzerUtils.checkAndExtractPartitionCol(functionCallExpr, columnDefs);
+            } catch (Exception e) {
                 return generateMulitListPartitionDesc(context, Lists.newArrayList(functionCallExpr));
             }
             String currentGranularity = null;
@@ -866,7 +879,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 }
                 partitionDescList.add(rangePartitionDesc);
             }
-            List<String> columnList = AnalyzerUtils.checkAndExtractPartitionCol(functionCallExpr, columnDefs);
             AnalyzerUtils.checkAutoPartitionTableLimit(functionCallExpr, currentGranularity);
             RangePartitionDesc rangePartitionDesc = new RangePartitionDesc(columnList, partitionDescList);
             rangePartitionDesc.setAutoPartitionTable(true);
@@ -1647,6 +1659,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         boolean isSecurity = false;
+        Map<String, String> properties = new HashMap<>();
         if (context.SECURITY() != null) {
             if (context.NONE() != null) {
                 isSecurity = false;
@@ -1654,12 +1667,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 isSecurity = true;
             }
 
-            return new AlterViewStmt(targetTableName, isSecurity, null, createPos(context));
+            return new AlterViewStmt(targetTableName, isSecurity, AlterViewStmt.AlterDialectType.NONE, properties,
+                    null, createPos(context));
+        } else if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+            return new AlterViewStmt(targetTableName, isSecurity, AlterViewStmt.AlterDialectType.NONE, properties,
+                    null, createPos(context));
         } else {
+            AlterViewStmt.AlterDialectType alterDialectType = context.ADD() != null ? AlterViewStmt.AlterDialectType.ADD :
+                    context.MODIFY() != null ? AlterViewStmt.AlterDialectType.MODIFY : AlterViewStmt.AlterDialectType.NONE;
             QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
-            AlterClause alterClause = new AlterViewClause(colWithComments, queryStatement, createPos(context));
-
-            return new AlterViewStmt(targetTableName, isSecurity, alterClause, createPos(context));
+            AlterViewClause alterClause = new AlterViewClause(colWithComments, queryStatement, createPos(context));
+            return new AlterViewStmt(targetTableName, isSecurity, alterDialectType, properties, alterClause, createPos(context));
         }
     }
 
@@ -2046,11 +2068,13 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             throw new ParsingException(PARSER_ERROR_MSG.feConfigDisable("enable_experimental_mv"), NodePosition.ZERO);
         }
 
+        String currentDBName = ConnectContext.get() == null ? null : ConnectContext.get().getDatabase();
         return new CreateMaterializedViewStatement(tableName, ifNotExist, colWithComments,
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
                 comment,
                 refreshSchemeDesc,
                 partitionByExprs, distributionDesc, sortKeys, properties, queryStatement, queryStartIndex,
+                currentDBName,
                 createPos(context));
     }
 
@@ -2491,7 +2515,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     @Override
     public ParseNode visitAdminSetConfigStatement(StarRocksParser.AdminSetConfigStatementContext context) {
         Property config = (Property) visitProperty(context.property());
-        return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, config, createPos(context));
+        boolean persistent = context.PERSISTENT() != null;
+        return new AdminSetConfigStmt(AdminSetConfigStmt.ConfigType.FRONTEND, config, persistent, createPos(context));
     }
 
     @Override
@@ -6612,6 +6637,54 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
         grantRevokePrivilegeObjects.setPrivilegeObjectNameTokensList(objectNameList);
         return grantRevokePrivilegeObjects;
+    }
+
+    // ---------------------------------------- Security Integration Statement --------------------------------------
+
+    @Override
+    public ParseNode visitCreateSecurityIntegrationStatement(
+            StarRocksParser.CreateSecurityIntegrationStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        Map<String, String> propertyMap = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                propertyMap.put(property.getKey(), property.getValue());
+            }
+        }
+        return new CreateSecurityIntegrationStatement(name, propertyMap, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitAlterSecurityIntegrationStatement(
+            StarRocksParser.AlterSecurityIntegrationStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        Map<String, String> properties = new HashMap<>();
+        List<Property> propertyList = visit(context.propertyList().property(), Property.class);
+        for (Property property : propertyList) {
+            properties.put(property.getKey(), property.getValue());
+        }
+        return new AlterSecurityIntegrationStatement(name, properties, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropSecurityIntegrationStatement(
+            StarRocksParser.DropSecurityIntegrationStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        return new DropSecurityIntegrationStatement(name, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowCreateSecurityIntegrationStatement(
+            StarRocksParser.ShowCreateSecurityIntegrationStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        return new ShowCreateSecurityIntegrationStatement(name, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowSecurityIntegrationStatement(
+            StarRocksParser.ShowSecurityIntegrationStatementContext context) {
+        return new ShowSecurityIntegrationStatement(createPos(context));
     }
 
     // ------------------------------------------- Expression ----------------------------------------------------------

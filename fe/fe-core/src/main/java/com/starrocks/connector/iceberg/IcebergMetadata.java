@@ -67,6 +67,7 @@ import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.DropTableStmt;
@@ -307,6 +308,28 @@ public class IcebergMetadata implements ConnectorMetadata {
 
         ConnectorViewDefinition viewDefinition = ConnectorViewDefinition.fromCreateViewStmt(stmt);
         icebergCatalog.createView(catalogName, viewDefinition, stmt.isReplace());
+    }
+
+    @Override
+    public void alterView(AlterViewStmt stmt) throws StarRocksException {
+        String dbName = stmt.getDbName();
+        String viewName = stmt.getTable();
+
+        Database db = getDb(stmt.getDbName());
+        if (db == null) {
+            ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
+        }
+        if (getView(dbName, viewName) == null) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, dbName + "." + viewName);
+        }
+
+        ConnectorViewDefinition viewDefinition = ConnectorViewDefinition.fromAlterViewStmt(stmt);
+        View currentView = icebergCatalog.getView(dbName, viewName);
+        if (!stmt.getProperties().isEmpty() || stmt.isAlterDialect()) {
+            icebergCatalog.alterView(currentView, viewDefinition);
+        } else {
+            throw new DdlException("ALTER VIEW <viewName> AS is not supported. Use CREATE OR REPLACE VIEW instead");
+        }
     }
 
     @Override
@@ -812,7 +835,7 @@ public class IcebergMetadata implements ConnectorMetadata {
         Expression icebergPredicate = new ScalarOperatorToIcebergExpr().convert(scalarOperators, icebergContext);
         RemoteFileInfoSource baseSource = buildRemoteInfoSource(icebergTable, icebergPredicate, snapshotId.get());
 
-        List<IcebergMORParams> tableFullMORParams = param.getTableFullMORParams();
+        IcebergTableMORParams tableFullMORParams = param.getTableFullMORParams();
         if (tableFullMORParams.isEmpty()) {
             return baseSource;
         } else {
@@ -820,7 +843,8 @@ public class IcebergMetadata implements ConnectorMetadata {
             String dbName = icebergTable.getCatalogDBName();
             String tableName = icebergTable.getCatalogTableName();
             IcebergRemoteFileInfoSourceKey remoteFileInfoSourceKey = IcebergRemoteFileInfoSourceKey.of(
-                    dbName, tableName, snapshotId.get(), param.getPredicate(), param.getMORParams());
+                    dbName, tableName, snapshotId.get(), param.getPredicate(), tableFullMORParams.getMORId(),
+                    param.getMORParams());
 
             if (!remoteFileInfoSources.containsKey(remoteFileInfoSourceKey)) {
                 IcebergRemoteSourceTrigger trigger = new IcebergRemoteSourceTrigger(baseSource, tableFullMORParams);
@@ -828,9 +852,9 @@ public class IcebergMetadata implements ConnectorMetadata {
                 // split scan nodes from one table scan node is one by one. And in the IcebergRemoteSourceTrigger,
                 // multiple queues need to be filled according to different iceberg mor params when executing iceberg planing.
                 // Therefore, here we initialize the remoteFileInfoSource of all iceberg mor params for the first time.
-                for (IcebergMORParams morParams : tableFullMORParams) {
+                for (IcebergMORParams morParams : tableFullMORParams.getMorParamsList()) {
                     IcebergRemoteFileInfoSourceKey key = IcebergRemoteFileInfoSourceKey.of(
-                            dbName, tableName, snapshotId.get(), param.getPredicate(), morParams);
+                            dbName, tableName, snapshotId.get(), param.getPredicate(), tableFullMORParams.getMORId(), morParams);
                     Deque<RemoteFileInfo> remoteFileInfoDeque = trigger.getQueue(morParams);
                     remoteFileInfoSources.put(key, new QueueIcebergRemoteFileInfoSource(trigger, remoteFileInfoDeque));
                 }

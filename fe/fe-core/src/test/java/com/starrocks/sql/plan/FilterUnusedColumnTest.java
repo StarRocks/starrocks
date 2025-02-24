@@ -50,7 +50,7 @@ public class FilterUnusedColumnTest extends PlanTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\"\n" +
+                "\"enable_persistent_index\" = \"true\"\n" +
                 ");");
         // for primary key table
         starRocksAssert.withTable("CREATE TABLE `primary_table` ( \n" +

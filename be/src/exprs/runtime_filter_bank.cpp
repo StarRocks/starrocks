@@ -40,13 +40,15 @@ namespace starrocks {
 
 struct FilterBuilder {
     template <LogicalType ltype>
-    RuntimeFilter* operator()() {
-        return new RuntimeBloomFilter<ltype>();
+    RuntimeFilter* operator()(int8_t join_mode) {
+        auto rf = new ComposedRuntimeFilter<ltype>();
+        rf->get_bloom_filter()->set_join_mode(join_mode);
+        return rf;
     }
 };
 
-RuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool, LogicalType type) {
-    RuntimeFilter* filter = type_dispatch_filter(type, (RuntimeFilter*)nullptr, FilterBuilder());
+RuntimeFilter* RuntimeFilterHelper::create_join_runtime_filter(ObjectPool* pool, LogicalType type, int8_t join_mode) {
+    RuntimeFilter* filter = type_dispatch_filter(type, (RuntimeFilter*)nullptr, FilterBuilder(), join_mode);
     if (pool != nullptr && filter != nullptr) {
         return pool->add(filter);
     } else {
@@ -98,7 +100,7 @@ int RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, RuntimeFil
     memcpy(&type, data + offset, sizeof(type));
     LogicalType ltype = thrift_to_type(type);
 
-    RuntimeFilter* filter = create_join_runtime_filter(pool, ltype);
+    RuntimeFilter* filter = create_join_runtime_filter(pool, ltype, TJoinDistributionMode::NONE);
     DCHECK(filter != nullptr);
     if (filter != nullptr) {
         offset += filter->deserialize(version, data + offset);
@@ -108,16 +110,10 @@ int RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, RuntimeFil
     return version;
 }
 
-RuntimeFilter* RuntimeFilterHelper::create_runtime_bloom_filter(ObjectPool* pool, LogicalType type) {
-    RuntimeFilter* filter = create_join_runtime_filter(pool, type);
-    return filter;
-}
-
 struct FilterIniter {
     template <LogicalType ltype>
     auto operator()(const ColumnPtr& column, size_t column_offset, RuntimeFilter* expr, bool eq_null) {
-        using ColumnType = typename RunTimeTypeTraits<ltype>::ColumnType;
-        auto* filter = (RuntimeBloomFilter<ltype>*)(expr);
+        auto* filter = down_cast<ComposedRuntimeFilter<ltype>*>(expr);
 
         if (column->is_nullable()) {
             auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
@@ -194,22 +190,6 @@ StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join
     auto expr = pool->add(new ExprContext(new_expr));
     expr->set_build_from_only_in_filter(true);
     return expr;
-}
-
-struct FilterZoneMapWithMinMaxOp {
-    template <LogicalType ltype>
-    bool operator()(const RuntimeFilter* expr, const Column* min_column, const Column* max_column) {
-        using CppType = RunTimeCppType<ltype>;
-        auto* filter = (RuntimeBloomFilter<ltype>*)(expr);
-        const CppType* min_value = ColumnHelper::unpack_cpp_data_one_value<ltype>(min_column);
-        const CppType* max_value = ColumnHelper::unpack_cpp_data_one_value<ltype>(max_column);
-        return filter->filter_zonemap_with_min_max(min_value, max_value);
-    }
-};
-
-bool RuntimeFilterHelper::filter_zonemap_with_min_max(LogicalType type, const RuntimeFilter* filter,
-                                                      const Column* min_column, const Column* max_column) {
-    return type_dispatch_filter(type, false, FilterZoneMapWithMinMaxOp(), filter, min_column, max_column);
 }
 
 Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilterDescription& desc,
@@ -391,9 +371,14 @@ void RuntimeFilterProbeCollector::close(RuntimeState* state) {
 // do_evaluate is reentrant, can be called concurrently by multiple operators that shared the same
 // RuntimeFilterProbeCollector.
 void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeBloomFilterEvalContext& eval_context) {
-    if ((eval_context.input_chunk_nums++ & 31) == 0) {
+    if (eval_context.mode == RuntimeBloomFilterEvalContext::Mode::M_ONLY_TOPN) {
         update_selectivity(chunk, eval_context);
         return;
+    } else {
+        if ((eval_context.input_chunk_nums++ & 31) == 0) {
+            update_selectivity(chunk, eval_context);
+            return;
+        }
     }
 
     auto& seletivity_map = eval_context.selectivity;
@@ -409,7 +394,8 @@ void RuntimeFilterProbeCollector::do_evaluate(Chunk* chunk, RuntimeBloomFilterEv
     for (auto& kv : seletivity_map) {
         RuntimeFilterProbeDescriptor* rf_desc = kv.second;
         const RuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
-        if (filter == nullptr || filter->always_true()) {
+        bool skip_topn = eval_context.mode == RuntimeBloomFilterEvalContext::Mode::M_WITHOUT_TOPN;
+        if ((skip_topn && rf_desc->is_topn_filter()) || filter == nullptr || filter->always_true()) {
             continue;
         }
         auto* ctx = rf_desc->probe_expr_ctx();
@@ -586,9 +572,18 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeBloomF
     for (auto& kv : _descriptors) {
         RuntimeFilterProbeDescriptor* rf_desc = kv.second;
         const RuntimeFilter* filter = rf_desc->runtime_filter(eval_context.driver_sequence);
-        if (filter == nullptr || filter->always_true()) {
+        bool should_use =
+                eval_context.mode == RuntimeBloomFilterEvalContext::Mode::M_ONLY_TOPN && rf_desc->is_topn_filter();
+        if (filter == nullptr || (!should_use && filter->always_true())) {
             continue;
         }
+        if (eval_context.mode == RuntimeBloomFilterEvalContext::Mode::M_WITHOUT_TOPN && rf_desc->is_topn_filter()) {
+            continue;
+        } else if (eval_context.mode == RuntimeBloomFilterEvalContext::Mode::M_ONLY_TOPN &&
+                   !rf_desc->is_topn_filter()) {
+            continue;
+        }
+
         auto& selection = eval_context.running_context.use_merged_selection
                                   ? eval_context.running_context.merged_selection
                                   : eval_context.running_context.selection;
@@ -630,6 +625,8 @@ void RuntimeFilterProbeCollector::update_selectivity(Chunk* chunk, RuntimeBloomF
                     dest[j] = src[j] & dest[j];
                 }
             }
+        } else if (rf_desc->is_topn_filter() && eval_context.mode == RuntimeBloomFilterEvalContext::Mode::M_ONLY_TOPN) {
+            seletivity_map.emplace(selectivity, rf_desc);
         }
     }
     if (!seletivity_map.empty()) {
