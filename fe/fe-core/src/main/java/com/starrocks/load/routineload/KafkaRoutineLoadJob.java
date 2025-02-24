@@ -734,6 +734,8 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             Text.writeString(out, "property." + property.getKey());
             Text.writeString(out, property.getValue());
         }
+
+        Text.writeString(out, confluentSchemaRegistryUrl);
     }
 
     public void readFields(DataInput in) throws IOException {
@@ -752,6 +754,12 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             if (propertyKey.startsWith("property.")) {
                 this.customProperties.put(propertyKey.substring(propertyKey.indexOf(".") + 1), propertyValue);
             }
+        }
+
+        try {
+            confluentSchemaRegistryUrl = Text.readString(in);
+        } catch (IOException e) {
+            // for incompatibility purpose
         }
     }
 
