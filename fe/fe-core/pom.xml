@@ -40,7 +40,7 @@ under the License.
         <jacoco.version>0.8.7</jacoco.version>
         <iceberg.version>1.4.2</iceberg.version>
         <paimon.version>0.8.1</paimon.version>
-        <staros.version>3.2.6</staros.version>
+        <staros.version>3.2.7</staros.version>
         <python>python</python>
     </properties>
 
