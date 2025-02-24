@@ -374,9 +374,21 @@ public:
     // Compute fvn hash, mainly used by shuffle column data
     // Note: shuffle hash function should be different from Aggregate and Join Hash map hash function
     virtual void fnv_hash(uint32_t* seed, uint32_t from, uint32_t to) const = 0;
+    virtual void fnv_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const {
+        throw std::runtime_error("not support fnv_hash_with_selection");
+    }
+    virtual void fnv_hash_selective(uint32_t* seed, uint16_t* sel, uint16_t sel_size) const {
+        throw std::runtime_error("not support fnv_hash_selective: " + get_name());
+    }
 
     // used by data loading compute tablet bucket
     virtual void crc32_hash(uint32_t* seed, uint32_t from, uint32_t to) const = 0;
+    virtual void crc32_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const {
+        throw std::runtime_error("not support crc32_hash_with_selection");
+    }
+    virtual void crc32_hash_selective(uint32_t* seed, uint16_t* sel, uint16_t sel_size) const {
+        throw std::runtime_error("not support crc32_hash_selective: " + get_name());
+    }
 
     virtual void crc32_hash_at(uint32_t* seed, uint32_t idx) const { crc32_hash(seed - idx, idx, idx + 1); }
 

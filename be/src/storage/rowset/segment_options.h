@@ -25,6 +25,7 @@
 #include "storage/disjunctive_predicates.h"
 #include "storage/options.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/runtime_filter_predicate.h"
 #include "storage/runtime_range_pruner.h"
 #include "storage/seek_range.h"
 #include "storage/tablet_schema.h"
@@ -57,6 +58,7 @@ public:
 
     PredicateTree pred_tree;
     PredicateTree pred_tree_for_zone_map;
+    RuntimeFilterPredicates runtime_filter_preds;
 
     DisjunctivePredicates delete_predicates;
 
@@ -116,6 +118,8 @@ public:
     // 1. Regular block smapling: Bernoulli sampling on page-id
     // 2. Partial-Sorted block: leverage data ordering to improve the evenness
     TTableSampleOptions sample_options;
+
+    bool enable_join_runtime_filter_pushdown = false;
 
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;
