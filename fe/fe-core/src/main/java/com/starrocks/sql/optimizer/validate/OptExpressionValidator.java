@@ -138,8 +138,11 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
                 Type outputType = resultCols.get(i).getType();
                 Type inputType = childCols.get(i).getType();
                 if (outputType.getPrimitiveType() != inputType.getPrimitiveType()) {
+                    String errorMsg = String.format("index: %d input cols type not equal with output cols type," +
+                                    " input name: %s type: %s, output name: %s type: %s",
+                            i, childCols.get(i).getName(), inputType, resultCols.get(i).getName(), outputType);
                     ErrorReport.reportValidateException(ErrorCode.ERR_PLAN_VALIDATE_ERROR,
-                            ErrorType.INTERNAL_ERROR, optExpression, "input cols type not equal with output cols type");
+                            ErrorType.INTERNAL_ERROR, optExpression, errorMsg);
                 }
             }
         }
