@@ -30,13 +30,16 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
+import com.starrocks.connector.parser.BaseComplexFunctionCallTransformer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.MapExpr;
 
 import java.util.Collections;
 
-public class ComplexFunctionCallTransformer {
-    public static Expr transform(String functionName, Expr... args) {
+public class ComplexFunctionCallTransformer extends BaseComplexFunctionCallTransformer {
+
+    @Override
+    public Expr transform(String functionName, Expr... args) {
         if (functionName.equalsIgnoreCase("date_add")) {
             if (args.length == 3 && args[0] instanceof StringLiteral) {
                 StringLiteral unit = (StringLiteral) args[0];

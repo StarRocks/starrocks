@@ -732,7 +732,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         List<Expr> arguments = visit(node.getArguments(), context, Expr.class);
 
         Expr callExpr;
-        Expr convertedFunctionCall = Trino2SRFunctionCallTransformer.convert(node.getName().toString(), arguments);
+        Trino2SRFunctionCallTransformer trino2SRFunctionCallTransformer = new Trino2SRFunctionCallTransformer();
+        Expr convertedFunctionCall = trino2SRFunctionCallTransformer.convert(node.getName().toString(), arguments);
         if (convertedFunctionCall != null) {
             callExpr = convertedFunctionCall;
         } else if (DISTINCT_FUNCTION.contains(node.getName().toString())) {
@@ -1022,7 +1023,8 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
     @Override
     protected ParseNode visitExtract(Extract node, ParseTreeContext context) {
         String fieldString = node.getField().toString().toLowerCase();
-        Expr expr = Trino2SRFunctionCallTransformer.convert(fieldString,
+        Trino2SRFunctionCallTransformer trino2SRFunctionCallTransformer = new Trino2SRFunctionCallTransformer();
+        Expr expr = trino2SRFunctionCallTransformer.convert(fieldString,
                 Lists.newArrayList((Expr) visit(node.getExpression(), context)));
         return Objects.requireNonNullElseGet(expr, () -> new FunctionCallExpr(fieldString,
                 new FunctionParams(Lists.newArrayList((Expr) visit(node.getExpression(), context)))));
