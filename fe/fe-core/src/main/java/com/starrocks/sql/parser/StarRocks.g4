@@ -229,6 +229,12 @@ statement
     | showSecurityIntegrationStatement
     | showCreateSecurityIntegrationStatement
 
+    // Group Provider Statement
+    | createGroupProviderStatement
+    | dropGroupProviderStatement
+    | showGroupProvidersStatement
+    | showCreateGroupProviderStatement
+
     // Backup Restore Statement
     | backupStatement
     | cancelBackupStatement
@@ -1801,6 +1807,24 @@ showSecurityIntegrationStatement
 
 showCreateSecurityIntegrationStatement
     : SHOW CREATE SECURITY INTEGRATION identifier
+    ;
+
+// ------------------------------------------- Group Provider Statement ------------------------------------------
+
+createGroupProviderStatement
+    : CREATE GROUP PROVIDER identifier properties
+    ;
+
+dropGroupProviderStatement
+    : DROP GROUP PROVIDER identifier
+    ;
+
+showGroupProvidersStatement
+    : SHOW GROUP PROVIDERS
+    ;
+
+showCreateGroupProviderStatement
+    : SHOW CREATE GROUP PROVIDER identifier
     ;
 
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------

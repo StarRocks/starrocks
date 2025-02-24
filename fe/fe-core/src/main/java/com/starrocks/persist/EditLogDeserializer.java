@@ -248,6 +248,8 @@ public class EditLogDeserializer {
             .put(OperationType.OP_CREATE_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
             .put(OperationType.OP_ALTER_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
             .put(OperationType.OP_DROP_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
+            .put(OperationType.OP_CREATE_GROUP_PROVIDER, GroupProviderLog.class)
+            .put(OperationType.OP_DROP_GROUP_PROVIDER, GroupProviderLog.class)
             .build();
 
     public static Writable deserialize(Short opCode, DataInput in) throws IOException {

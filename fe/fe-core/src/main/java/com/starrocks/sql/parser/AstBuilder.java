@@ -469,6 +469,9 @@ import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ShowPlanAdvisorStmt;
+import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
+import com.starrocks.sql.ast.group.DropGroupProviderStmt;
+import com.starrocks.sql.ast.group.ShowGroupProvidersStmt;
 import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
 import com.starrocks.sql.ast.integration.CreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.integration.DropSecurityIntegrationStatement;
@@ -6685,6 +6688,41 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowSecurityIntegrationStatement(
             StarRocksParser.ShowSecurityIntegrationStatementContext context) {
         return new ShowSecurityIntegrationStatement(createPos(context));
+    }
+
+    // ---------------------------------------- Group Provider Statement --------------------------------------
+
+    @Override
+    public ParseNode visitCreateGroupProviderStatement(StarRocksParser.CreateGroupProviderStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        Map<String, String> propertyMap = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                propertyMap.put(property.getKey(), property.getValue());
+            }
+        }
+        return new CreateGroupProviderStmt(name, propertyMap, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropGroupProviderStatement(
+            StarRocksParser.DropGroupProviderStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        return new DropGroupProviderStmt(name, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowCreateGroupProviderStatement(
+            StarRocksParser.ShowCreateGroupProviderStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        return new ShowCreateSecurityIntegrationStatement(name, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowGroupProvidersStatement(
+            StarRocksParser.ShowGroupProvidersStatementContext context) {
+        return new ShowGroupProvidersStmt(createPos(context));
     }
 
     // ------------------------------------------- Expression ----------------------------------------------------------
