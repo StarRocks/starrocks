@@ -187,6 +187,16 @@ public class QueryPlannerTest {
                 connectContext.getState().getErrorMessage());
         connectContext.getState().setError("");
 
+        // for ctas
+        String sqlWithCtas = "create table ctas_test properties(\"replication_num\"=\"1\") as select k1 from test.baseall";
+        statement = SqlParser.parseSingleStatement(sqlWithCtas,
+                connectContext.getSessionVariable().getSqlMode());
+        StmtExecutor stmtExecutor5 = new StmtExecutor(connectContext, statement);
+        stmtExecutor5.execute();
+        Assert.assertEquals("Access denied; This sql is in blacklist, please contact your admin",
+                connectContext.getState().getErrorMessage());
+        connectContext.getState().setError("");
+
         String deleteBlackListSql = "delete sqlblacklist " + String.valueOf(id);
         statement = SqlParser.parseSingleStatement(deleteBlackListSql,
                 connectContext.getSessionVariable().getSqlMode());
