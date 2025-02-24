@@ -15,6 +15,9 @@
 
 package com.starrocks.sql.analyzer;
 
+import com.starrocks.analysis.CastExpr;
+import com.starrocks.analysis.DateLiteral;
+import com.starrocks.catalog.Type;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.ast.CreateViewStmt;
 import com.starrocks.sql.ast.SetStmt;
@@ -172,5 +175,19 @@ public class AST2StringBuilderTest {
                         "WHERE (NOT FALSE) IS NOT NULL)", viewStmt.getInlineViewDef());
         statementBase = SqlParser.parse(sql, new SessionVariable());
         Assert.assertEquals(1, statementBase.size());
+    }
+
+    @Test
+    public void testVisitCastExpr() {
+        DateLiteral dateLiteral = new DateLiteral(2024, 12, 26, 12, 0, 0, 0);
+        // 这个节点的targetTypeDef为null
+        CastExpr castExpr = new CastExpr(Type.DATE, dateLiteral);
+        castExpr.setImplicit(false);
+        AstToStringBuilder.AST2StringBuilderVisitor visitor = new AstToStringBuilder.AST2StringBuilderVisitor(false, false, true);
+        String castRet = castExpr.accept(visitor, null);
+        // "CAST(" + printWithParentheses(node.getChild(0))
+        //                        + " AS " + node.getType().toString() + ")"
+        // Assert.assertEquals();
+        System.out.println("ret is: " + castRet);
     }
 }
