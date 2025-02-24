@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
@@ -244,7 +245,13 @@ public interface IcebergCatalog extends MemoryTrackable {
         PartitionsTable partitionsTable = (PartitionsTable) MetadataTableUtils.
                 createMetadataTableInstance(nativeTable, MetadataTableType.PARTITIONS);
         TableScan tableScan = partitionsTable.newScan();
+        // NOTE: if there is an exception raise because of snapshot id is not the latest one, it's expected
+        // using partition metadata table scan is more  efficient than doing file scan, but limitation is
+        // it only supports the latest snapshot id.
         if (snapshotId != -1) {
+            Preconditions.checkArgument(nativeTable.currentSnapshot().snapshotId() == snapshotId,
+                    "Ignore this error if snapshot id does not match. Iceberg partition metadata table only supports latest " +
+                            "snapshot. current = " + nativeTable.currentSnapshot().snapshotId() + ", expect = " + snapshotId);
             tableScan = tableScan.useSnapshot(snapshotId);
         }
         if (executorService != null) {

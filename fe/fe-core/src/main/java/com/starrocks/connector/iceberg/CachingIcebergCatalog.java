@@ -271,28 +271,33 @@ public class CachingIcebergCatalog implements IcebergCatalog {
                 invalidateCache(icebergTableName);
                 return;
             }
+
             if (!currentLocation.equals(updateLocation)) {
                 LOG.info("Refresh iceberg caching catalog table {}.{} from {} to {}",
                         dbName, tableName, currentLocation, updateLocation);
-                long baseSnapshotId = currentOps.current().currentSnapshot().snapshotId();
-                refreshTable(updateTable, baseSnapshotId, dbName, tableName, executorService);
+                refreshTable(currentTable, updateTable, dbName, tableName, executorService);
                 LOG.info("Finished to refresh iceberg table {}.{}", dbName, tableName);
             }
         }
     }
 
-    private void refreshTable(BaseTable updatedTable, long baseSnapshotId,
+    private void refreshTable(BaseTable currentTable, BaseTable updatedTable,
                               String dbName, String tableName, ExecutorService executorService) {
+        long baseSnapshotId = currentTable.currentSnapshot().snapshotId();
         long updatedSnapshotId = updatedTable.currentSnapshot().snapshotId();
         IcebergTableName baseIcebergTableName = new IcebergTableName(dbName, tableName, baseSnapshotId);
         IcebergTableName updatedIcebergTableName = new IcebergTableName(dbName, tableName, updatedSnapshotId);
         long latestRefreshTime = tableLatestRefreshTime.computeIfAbsent(new IcebergTableName(dbName, tableName), ignore -> -1L);
 
-        partitionCache.invalidate(baseIcebergTableName);
-        partitionCache.getUnchecked(updatedIcebergTableName);
+        // update tables before refresh partition cache
+        // so when refreshing partition cache, `getTables` can return the latest one.
+        // another way to fix is to call `delegate.getTables` when refreshing partition cache.
         synchronized (this) {
             tables.put(updatedIcebergTableName, updatedTable);
         }
+
+        partitionCache.invalidate(baseIcebergTableName);
+        partitionCache.getUnchecked(updatedIcebergTableName);
 
         TableMetadata updatedTableMetadata = updatedTable.operations().current();
         List<ManifestFile> manifestFiles = updatedTable.currentSnapshot().dataManifests(updatedTable.io()).stream()
