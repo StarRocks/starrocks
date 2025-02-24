@@ -254,4 +254,35 @@ TEST_F(AgentTaskTest, clone_task_under_dropping) {
     tablet->set_is_dropping(false);
 }
 
+TEST_F(AgentTaskTest, create_tablet_task_timeout) {
+    TCreateTabletReq create_tablet_req = get_create_tablet_request(10010, 368169791, 2);
+    create_tablet_req.__set_timeout_ms(2000);
+
+    TAgentTaskRequest agent_task_request;
+    agent_task_request.__set_task_type(TTaskType::CREATE);
+    agent_task_request.__set_signature(1902);
+    agent_task_request.__set_create_tablet_req(create_tablet_req);
+    auto agent_task =
+            std::make_shared<CreateTabletAgentTaskRequest>(agent_task_request, agent_task_request.create_tablet_req, 1);
+
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("AgentTask::run_create_tablet_task::time");
+        SyncPoint::GetInstance()->ClearCallBack("FinishAgentTask::input");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("AgentTask::run_create_tablet_task::time",
+                                          [](void* arg) { *((int64_t*)arg) = 4; });
+    SyncPoint::GetInstance()->SetCallBack("FinishAgentTask::input", [](void* arg) {
+        TFinishTaskRequest* request = (TFinishTaskRequest*)arg;
+        auto status = request->task_status;
+        EXPECT_EQ(TStatusCode::RUNTIME_ERROR, request->task_status.status_code);
+        EXPECT_EQ(1, request->task_status.error_msgs.size());
+        EXPECT_EQ("create tablet failed. the task waits too long in the queue. timeout: 2000 ms, elapsed: 3000 ms",
+                  request->task_status.error_msgs[0]);
+    });
+    run_create_tablet_task(agent_task, nullptr);
+}
+
 } // namespace starrocks
