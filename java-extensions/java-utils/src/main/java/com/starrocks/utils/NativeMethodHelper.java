@@ -27,6 +27,10 @@ public final class NativeMethodHelper {
     // return byteAddr
     public static native long resizeStringData(long columnAddr, int byteSize);
 
+    public static native void resize(long columnAddr, int size);
+
+    public static native int getColumnLogicalType(long columnAddr);
+
     // [nullAddr, dataAddr]
     public static native long[] getAddrs(long columnAddr);
 }
