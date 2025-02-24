@@ -1,0 +1,25 @@
+-- name: test_incorrect_slot_id
+create database test_incorrect_slot_id;
+use test_incorrect_slot_id;
+create table t_incorrect_slot_id (
+    val BIGINT NOT NULL,
+    auto_inc_id  BIGINT AUTO_INCREMENT
+) ENGINE = olap
+DUPLICATE KEY(val)
+PROPERTIES (
+"compression" = "LZ4",
+"replication_num" = "1"
+);
+
+insert into t_incorrect_slot_id(val) SELECT $1 as val FROM FILES(
+    "path"="file://${root_path}/lib/../common/data/files/test_auto_increment_incorrect_slot_id.csv",
+    "format"="csv",
+    "csv.column_separator"=",",
+    "csv.enclose"="\"",
+    "csv.escape"="\\"
+);
+
+select * from t_incorrect_slot_id;
+
+drop table t_incorrect_slot_id;
+drop database test_incorrect_slot_id;
