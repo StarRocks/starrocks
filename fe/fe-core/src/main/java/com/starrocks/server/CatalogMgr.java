@@ -216,7 +216,11 @@ public class CatalogMgr {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
                 }
 
-                catalog.getConfig().put("ranger.plugin.hive.service.name", serviceName);
+                catalog.getConfig().putAll(properties);
+                if (serviceName == null && !properties.isEmpty()) {
+                    LOG.info("Altering catalog properties (excluding `ranger.plugin.hive.service.name`) " +
+                            "requires restarting all FE nodes to take effect");
+                }
 
                 AlterCatalogLog alterCatalogLog = new AlterCatalogLog(catalogName, properties);
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterCatalog(alterCatalogLog);
@@ -365,7 +369,7 @@ public class CatalogMgr {
             }
 
             Catalog catalog = catalogs.get(catalogName);
-            catalog.getConfig().put("ranger.plugin.hive.service.name", serviceName);
+            catalog.getConfig().putAll(properties);
         } finally {
             writeUnLock();
         }

@@ -18,6 +18,7 @@ import com.google.common.base.Strings;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateCatalogStmt;
@@ -27,8 +28,10 @@ import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UseCatalogStmt;
+import org.apache.hadoop.util.Sets;
 
 import java.util.Map;
+import java.util.Set;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static com.starrocks.sql.ast.CreateCatalogStmt.TYPE;
@@ -37,6 +40,11 @@ public class CatalogAnalyzer {
     private static final String CATALOG = "CATALOG";
 
     private static final String WHITESPACE = "\\s+";
+
+    private static final Set<String> NOT_SUPPORT_ALTER_PROPERTIES = Sets.newHashSet(
+            "type",
+            "hive.metastore.type"
+    );
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new CatalogAnalyzerVisitor().visit(stmt, session);
@@ -125,8 +133,15 @@ public class CatalogAnalyzer {
                         (ModifyTablePropertiesClause) statement.getAlterClause();
                 Map<String, String> properties = modifyTablePropertiesClause.getProperties();
 
+                String catalogType = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogType(statement.getCatalogName());
                 for (Map.Entry<String, String> property : properties.entrySet()) {
-                    if (!property.getKey().equals("ranger.plugin.hive.service.name")) {
+                    String confName = property.getKey();
+
+                    if (("hive".equals(catalogType) || "hudi".equals(catalogType))) {
+                        if (NOT_SUPPORT_ALTER_PROPERTIES.contains(confName)) {
+                            throw new SemanticException("Not support alter hive/hudi catalog property " + property.getKey());
+                        }
+                    } else if (!"ranger.plugin.hive.service.name".equals(confName)) {
                         throw new SemanticException("Not support alter catalog property " + property.getKey());
                     }
                 }
