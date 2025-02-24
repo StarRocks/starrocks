@@ -477,7 +477,7 @@ void JoinHashTable::_init_build_column(const HashTableParam& param) {
             }
 
             _table_items->build_slots.emplace_back(hash_table_slot);
-            ColumnPtr column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
+            MutableColumnPtr column = ColumnHelper::create_column(slot->type(), slot->is_nullable());
             if (slot->is_nullable()) {
                 auto* nullable_column = ColumnHelper::as_raw_column<NullableColumn>(column);
                 nullable_column->append_default_not_null_value();
@@ -518,7 +518,7 @@ void JoinHashTable::_init_join_keys() {
         } else {
             auto key_column = ColumnHelper::create_column(*key_desc.type, false);
             key_column->append_default();
-            _table_items->key_columns.emplace_back(key_column);
+            _table_items->key_columns.emplace_back(std::move(key_column));
         }
     }
 }
@@ -628,7 +628,7 @@ Status JoinHashTable::probe_remain(RuntimeState* state, ChunkPtr* chunk, bool* e
 }
 
 void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_columns) {
-    Columns& columns = _table_items->build_chunk->columns();
+    auto& columns = _table_items->build_chunk->columns();
 
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         SlotDescriptor* slot = _table_items->build_slots[i].slot;
@@ -661,8 +661,8 @@ void JoinHashTable::append_chunk(const ChunkPtr& chunk, const Columns& key_colum
 void JoinHashTable::merge_ht(const JoinHashTable& ht) {
     _table_items->row_count += ht._table_items->row_count;
 
-    Columns& columns = _table_items->build_chunk->columns();
-    Columns& other_columns = ht._table_items->build_chunk->columns();
+    auto& columns = _table_items->build_chunk->columns();
+    auto& other_columns = ht._table_items->build_chunk->columns();
 
     for (size_t i = 0; i < _table_items->build_column_count; i++) {
         if (!columns[i]->is_nullable() && other_columns[i]->is_nullable()) {

@@ -20,9 +20,9 @@
 
 namespace starrocks {
 
-NullColumnPtr FunctionHelper::union_nullable_column(const ColumnPtr& v1, const ColumnPtr& v2) {
+NullColumn::MutablePtr FunctionHelper::union_nullable_column(const ColumnPtr& v1, const ColumnPtr& v2) {
     // union nullable column
-    ColumnPtr result;
+    MutableColumnPtr result;
     if (v1->is_nullable() && v2->is_nullable()) {
         const auto& n1 = ColumnHelper::as_raw_column<NullableColumn>(v1)->null_column();
         const auto& n2 = ColumnHelper::as_raw_column<NullableColumn>(v2)->null_column();
@@ -41,7 +41,7 @@ NullColumnPtr FunctionHelper::union_nullable_column(const ColumnPtr& v1, const C
         return nullptr;
     }
 
-    return ColumnHelper::cast_to<TYPE_NULL>(result);
+    return NullColumn::static_pointer_cast(std::move(result));
 }
 
 void FunctionHelper::union_produce_nullable_column(const ColumnPtr& v1, const ColumnPtr& v2,
@@ -49,7 +49,7 @@ void FunctionHelper::union_produce_nullable_column(const ColumnPtr& v1, const Co
     auto* result = (*produce_null_column)->get_data().data();
 
     if (v1->has_null()) {
-        auto* null1 = down_cast<NullableColumn*>(v1.get())->null_column()->get_data().data();
+        auto* null1 = down_cast<const NullableColumn*>(v1.get())->null_column()->get_data().data();
 
         int size = v1->size();
         for (int i = 0; i < size; ++i) {
@@ -58,7 +58,7 @@ void FunctionHelper::union_produce_nullable_column(const ColumnPtr& v1, const Co
     }
 
     if (v2->has_null()) {
-        auto* null2 = down_cast<NullableColumn*>(v2.get())->null_column()->get_data().data();
+        auto* null2 = down_cast<const NullableColumn*>(v2.get())->null_column()->get_data().data();
 
         int size = v2->size();
         for (int i = 0; i < size; ++i) {
@@ -71,7 +71,7 @@ void FunctionHelper::union_produce_nullable_column(const ColumnPtr& v1, NullColu
     auto* result = (*produce_null_column)->get_data().data();
 
     if (v1->has_null()) {
-        auto* null1 = down_cast<NullableColumn*>(v1.get())->null_column()->get_data().data();
+        auto* null1 = down_cast<const NullableColumn*>(v1.get())->null_column()->get_data().data();
 
         int size = v1->size();
         for (int i = 0; i < size; ++i) {
@@ -127,13 +127,13 @@ MFV_DEFAULT(void union_null_column_impl(uint8_t* dest, const uint8_t* v1, const 
     }
 })
 
-NullColumnPtr FunctionHelper::union_null_column(const NullColumnPtr& v1, const NullColumnPtr& v2) {
+NullColumn::MutablePtr FunctionHelper::union_null_column(const NullColumnPtr& v1, const NullColumnPtr& v2) {
     // union null column
     auto null1_begin = (uint8_t*)v1->get_data().data();
     auto null2_begin = (uint8_t*)v2->get_data().data();
 
     const size_t row_num = v1->size();
-    NullColumnPtr null_result = NullColumn::create();
+    NullColumn::MutablePtr null_result = NullColumn::create();
 
     auto& result_data = null_result->get_data();
     raw::make_room(&result_data, row_num);
@@ -157,7 +157,7 @@ ColumnPtr FunctionHelper::merge_column_and_null_column(ColumnPtr&& column, NullC
         DCHECK_EQ(column->size(), null_column->size());
         auto* nullable_column = down_cast<NullableColumn*>(column.get());
         auto new_null_column = union_null_column(nullable_column->null_column(), null_column);
-        return NullableColumn::create(std::move(nullable_column->data_column()), new_null_column);
+        return NullableColumn::create(std::move(nullable_column->data_column()), std::move(new_null_column));
     } else {
         return NullableColumn::create(std::move(column), std::move(null_column));
     }

@@ -50,7 +50,7 @@ Status VectorIndexWriter::append(const Column& src) {
                 RETURN_IF_ERROR(_prepare_index_builder());
             } else {
                 if (_buffer_column == nullptr) {
-                    _buffer_column = src.clone_shared();
+                    _buffer_column = src.clone();
                 } else {
                     _buffer_column->append(src, 0, src.size());
                 }

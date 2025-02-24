@@ -63,7 +63,7 @@ template <LogicalType LT>
 struct HistogramState {
     HistogramState() {
         auto data = RunTimeColumnType<LT>::create();
-        column = NullableColumn::create(data, NullColumn::create());
+        column = NullableColumn::create(std::move(data), NullColumn::create());
     }
 
     ColumnPtr column;

@@ -1905,7 +1905,7 @@ TEST_F(LakeServiceTest, test_abort_txn2) {
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        Chunk chunk({c0, c1}, schema);
+        Chunk chunk({std::move(c0), std::move(c1)}, schema);
         chunk.set_slot_id_to_index(0, 0);
         chunk.set_slot_id_to_index(1, 1);
         return chunk;

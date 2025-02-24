@@ -178,18 +178,19 @@ private:
 
             ColumnPtr string_col = _translate_string(element, element->size());
             string_col = ColumnHelper::unfold_const_column(stringType, element->size(), string_col);
-            return ConstColumn::create(ArrayColumn::create(string_col, offsets), num_rows);
+            return ConstColumn::create(ArrayColumn::create(std::move(string_col), std::move(offsets)), num_rows);
         } else if (array->is_nullable()) {
             auto nullable = down_cast<NullableColumn*>(array.get());
             array_col = down_cast<ArrayColumn*>(nullable->data_column().get());
-            NullColumnPtr array_null = NullColumn::create(*nullable->null_column());
+            NullColumn::MutablePtr array_null = NullColumn::create(*nullable->null_column());
 
             auto element = array_col->elements_column();
             auto offsets = UInt32Column::create(array_col->offsets());
 
             ColumnPtr string_col = _translate_string(element, element->size());
             string_col = ColumnHelper::unfold_const_column(stringType, element->size(), string_col);
-            return NullableColumn::create(ArrayColumn::create(string_col, offsets), array_null);
+            return NullableColumn::create(ArrayColumn::create(std::move(string_col), std::move(offsets)),
+                                          std::move(array_null));
         } else {
             array_col = down_cast<ArrayColumn*>(array.get());
             auto element = array_col->elements_column();
@@ -197,7 +198,7 @@ private:
 
             ColumnPtr string_col = _translate_string(element, element->size());
             string_col = ColumnHelper::unfold_const_column(stringType, element->size(), string_col);
-            return ArrayColumn::create(string_col, offsets);
+            return ArrayColumn::create(std::move(string_col), std::move(offsets));
         }
     }
 

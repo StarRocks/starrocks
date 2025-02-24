@@ -312,7 +312,7 @@ private:
 
         ASSIGN_OR_RETURN(ColumnPtr case_column, _children[0]->evaluate_checked(context, chunk));
         if (ColumnHelper::count_nulls(case_column) == case_column->size()) {
-            return else_column->clone();
+            return Column::mutate(std::move(else_column));
         }
 
         int loop_end = _children.size() - 1;
@@ -338,7 +338,7 @@ private:
         }
 
         if (when_columns.empty()) {
-            return else_column->clone();
+            return Column::mutate(std::move(else_column));
         }
         then_columns.emplace_back(else_column);
         size_t size = when_columns[0]->size();
@@ -350,7 +350,7 @@ private:
                     res_nullable = true;
                 }
             }
-            ColumnPtr res = ColumnHelper::create_column(this->type(), res_nullable);
+            MutableColumnPtr res = ColumnHelper::create_column(this->type(), res_nullable);
 
             for (auto& then_column : then_columns) {
                 then_column = ColumnHelper::unpack_and_duplicate_const_column(size, then_column);
@@ -489,7 +489,7 @@ private:
 
             // direct return if first when is all true
             if (when_viewers.empty() && trues_count == when_column->size()) {
-                return then_column->clone();
+                return Column::mutate(std::move(then_column));
             }
 
             when_columns.emplace_back(when_column);
@@ -498,7 +498,7 @@ private:
         }
 
         if (when_viewers.empty()) {
-            return else_column->clone();
+            return Column::mutate(std::move(else_column));
         }
         then_columns.emplace_back(else_column);
 
@@ -517,7 +517,7 @@ private:
                     res_nullable = true;
                 }
             }
-            ColumnPtr res = ColumnHelper::create_column(this->type(), res_nullable);
+            MutableColumnPtr res = ColumnHelper::create_column(this->type(), res_nullable);
 
             for (auto& then_column : then_columns) {
                 then_column = ColumnHelper::unpack_and_duplicate_const_column(size, then_column);

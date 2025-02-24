@@ -126,7 +126,7 @@ public:
             }
         } // while
         offsets->append(res->size());
-        return std::make_pair(Columns{res}, offsets);
+        return std::make_pair(Columns{std::move(res)}, std::move(offsets));
     }
 
 private:
