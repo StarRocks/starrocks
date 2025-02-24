@@ -114,6 +114,7 @@ public class SystemId {
     public static final long MEMORY_USAGE_ID = 106L;
     public static final long PIPE_FILES_ID = 120L;
     public static final long PIPES_ID = 121L;
+    public static final long RECYCLEBIN_CATALOGS = 122L;
     public static final long BE_DATACACHE_METRICS = 130L;
     // Remain for other datacache manage table
 
