@@ -734,18 +734,30 @@ public class DefaultCoordinator extends Coordinator {
         return updatedStates;
     }
 
+    private boolean isInternalCancelError(String errMsg) {
+        return errMsg.equals(FeConstants.LIMIT_REACH_ERROR) || errMsg.equals(FeConstants.QUERY_FINISHED_ERROR);
+    }
+
     private void handleErrorExecution(Status status, FragmentInstanceExecState execution, Throwable failure)
             throws StarRocksException, RpcException {
-        cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
         switch (Objects.requireNonNull(status.getErrorCode())) {
             case TIMEOUT:
+                cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
                 throw new StarRocksException("query timeout. backend id: " + execution.getWorker().getId());
             case THRIFT_RPC_ERROR:
+                cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
                 SimpleScheduler.addToBlocklist(execution.getWorker().getId());
                 throw new RpcException(
                         String.format("rpc failed with %s: %s", execution.getWorker().getHost(), status.getErrorMsg()),
                         failure);
+            case CANCELLED:
+                if (isInternalCancelError(status.getErrorMsg())) {
+                    // ignore the internal cancel error message
+                    break;
+                }
+                // fallthrough
             default:
+                cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
                 dealStatusToTryRetry(status);
         }
     }
