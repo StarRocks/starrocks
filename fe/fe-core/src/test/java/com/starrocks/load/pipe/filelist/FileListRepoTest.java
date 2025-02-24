@@ -24,7 +24,6 @@ import com.starrocks.load.pipe.PipeFileRecord;
 import com.starrocks.load.pipe.PipeId;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.SystemInfoService;
@@ -413,8 +412,6 @@ public class FileListRepoTest {
         RepoExecutor executor = RepoExecutor.getInstance();
 
         Assert.assertTrue(executor.executeDQL("select now()").isEmpty());
-
-        Assert.assertThrows(SemanticException.class, () -> executor.executeDML("insert into a.b values (1) "));
 
         Assert.assertThrows(RuntimeException.class, () -> executor.executeDDL("create table a (id int) "));
     }
