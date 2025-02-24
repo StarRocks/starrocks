@@ -565,11 +565,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         DecodeInfo info = new DecodeInfo();
         for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
             // Condition 1:
-            if (!supportLowCardinality(column.getType())) {
-                continue;
-            }
-
-            if (!sessionVariable.isEnableArrayLowCardinalityOptimize() && column.getType().isArrayType()) {
+            if (!supportAndEnabledLowCardinality(column.getType())) {
                 continue;
             }
 
@@ -615,11 +611,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     private Pair<Boolean, Optional<ColumnDict>> checkConnectorGlobalDict(Table table, ColumnRefOperator column) {
         // Condition 1:
-        if (!supportLowCardinality(column.getType())) {
-            return new Pair<>(false, Optional.empty());
-        }
-
-        if (!sessionVariable.isEnableArrayLowCardinalityOptimize() && column.getType().isArrayType()) {
+        if (!supportAndEnabledLowCardinality(column.getType())) {
             return new Pair<>(false, Optional.empty());
         }
 
@@ -813,6 +805,16 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     private static boolean supportLowCardinality(Type type) {
         return type.isVarchar() || (type.isArrayType() && ((ArrayType) type).getItemType().isVarchar());
+    }
+
+    private boolean supportAndEnabledLowCardinality(Type type) {
+        if (!supportLowCardinality(type)) {
+            return false;
+        } else if (type.isArrayType()) {
+            return sessionVariable.isEnableArrayLowCardinalityOptimize();
+        } else {
+            return true;
+        }
     }
 
     @TestOnly
