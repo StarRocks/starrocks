@@ -14,6 +14,8 @@
 
 #pragma once
 
+#include <cctz/time_zone.h>
+
 #include <cstdint>
 #include <string>
 
@@ -214,6 +216,8 @@ public:
 
     inline static bool check(int year, int month, int day, int hour, int minute, int second, int microsecond);
 
+    inline static int get_offset_by_timezone(Timestamp timestamp, const cctz::time_zone& ctz);
+
     template <TimeUnit UNIT>
     static Timestamp add(Timestamp timestamp, int count);
 
@@ -364,6 +368,14 @@ bool timestamp::check(int year, int month, int day, int hour, int minute, int se
     return date::check(year, month, day) && check_time(hour, minute, second, microsecond);
 }
 
+int timestamp::get_offset_by_timezone(Timestamp timestamp, const cctz::time_zone& ctz) {
+    int64_t days = timestamp::to_julian(timestamp);
+    int64_t seconds_from_epoch = (days - date::UNIX_EPOCH_JULIAN) * SECS_PER_DAY;
+
+    std::chrono::system_clock::time_point tp = std::chrono::system_clock::from_time_t(seconds_from_epoch);
+    return ctz.lookup(tp).offset;
+}
+
 inline void timestamp::to_time(Timestamp timestamp, int* hour, int* minute, int* second, int* microsecond) {
     Timestamp time = to_time(timestamp);
 
@@ -417,7 +429,9 @@ double timestamp::time_to_literal(double time) {
 Timestamp timestamp::of_epoch_second(int64_t seconds, int64_t nanoseconds) {
     int64_t second = seconds + timestamp::UNIX_EPOCH_SECONDS;
     JulianDate day = second / SECS_PER_DAY;
-    return timestamp::from_julian_and_time(day, second * USECS_PER_SEC + nanoseconds / NANOSECS_PER_USEC);
+
+    int64_t microseconds = (second % SECS_PER_DAY) * USECS_PER_SEC + nanoseconds / NANOSECS_PER_USEC;
+    return timestamp::from_julian_and_time(day, microseconds);
 }
 
 bool timestamp::check_time(int hour, int minute, int second, int microsecond) {
