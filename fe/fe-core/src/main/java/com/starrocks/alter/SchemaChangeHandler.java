@@ -805,6 +805,7 @@ public class SchemaChangeHandler extends AlterHandler {
             schemaForFinding.set(modColIndex, modColumn);
         }
 
+        List<Column> otherIndexModifiedColumn = new ArrayList<>();
         // check if column being mod
         if (!modColumn.equals(oriColumn)) {
             // column is mod. we have to mod this column in all indices
@@ -880,6 +881,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     } else {
                         otherCol.setAggregationType(null, oldCol.isAggregationTypeImplicit());
                     }
+                    otherIndexModifiedColumn.add(otherCol);
                     otherIndexSchema.set(modColIndex, otherCol);
                 }
             }
@@ -891,9 +893,21 @@ public class SchemaChangeHandler extends AlterHandler {
         if (modColumn.isKey() || !modColumn.getType().isScalarType()
                 || oriColumn.isKey()
                 || !oriColumn.getType().isScalarType()
+<<<<<<< HEAD
                 || oriColumn.getType().isDecimalOfAnyVersion()) {
             fastSchemaEvolution = false;
+=======
+                || oriColumn.getType().isDecimalOfAnyVersion()
+                || oriColumn.isGeneratedColumn()) {
+            return false;
+>>>>>>> 52d784cd9 ([BugFix] Fix can not modify column with sync mv in shared data (#56171))
         }
+        for (Column column : otherIndexModifiedColumn) {
+            if (column.isKey()) {
+                return false;
+            }
+        }
+
         return fastSchemaEvolution;
     }
 
