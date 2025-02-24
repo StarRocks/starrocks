@@ -15,11 +15,14 @@
 package com.starrocks.connector.paimon;
 
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PaimonTable;
+import com.starrocks.catalog.PaimonView;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.DdlException;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
@@ -29,12 +32,16 @@ import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.server.MetadataMgr;
+import com.starrocks.sql.ast.ColWithComment;
+import com.starrocks.sql.ast.CreateViewStmt;
+import com.starrocks.sql.ast.DropTableStmt;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
+import com.starrocks.sql.parser.NodePosition;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -82,6 +89,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import static com.starrocks.catalog.Table.TableType.PAIMON_VIEW;
+import static com.starrocks.catalog.Type.INT;
 import static org.apache.paimon.io.DataFileMeta.DUMMY_LEVEL;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MIN_KEY;
@@ -189,6 +198,8 @@ public class PaimonMetadataTest {
             {
                 paimonNativeCatalog.getTable(identifier);
                 result = new Catalog.TableNotExistException(identifier);
+                paimonNativeCatalog.getView(identifier);
+                result = new Catalog.ViewNotExistException(identifier);
             }
         };
         Assert.assertFalse(metadata.tableExists("nonexistentDb", "nonexistentTbl"));
@@ -460,5 +471,47 @@ public class PaimonMetadataTest {
         rule0.transform(scan, OptimizerFactory.mockContext(new ColumnRefFactory()));
         assertEquals(1, ((LogicalPaimonScanOperator) scan.getOp()).getScanOperatorPredicates()
                 .getSelectedPartitionIds().size());
+    }
+
+    @Test
+    public void testView(@Mocked org.apache.paimon.view.View paimonView) throws Exception {
+        //test createview
+        new Expectations() {
+            {
+                paimonNativeCatalog.getView((org.apache.paimon.catalog.Identifier) any);
+                result = new Catalog.ViewNotExistException(new Identifier("test", "ViewNotExist"));
+            }
+        };
+        CreateViewStmt stmt = new CreateViewStmt(false, false, new TableName("paimon_catalog", "db", "test_view"),
+                Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", false, null, NodePosition.ZERO);
+        stmt.setColumns(Lists.newArrayList(new Column("k1", INT)));
+        metadata.createView(stmt);
+
+        //test getview
+        new Expectations() {
+            {
+                paimonNativeCatalog.getView((Identifier) any);
+                result = paimonView;
+                paimonView.query();
+                result = "select * from table";
+            }
+        };
+        PaimonView view = (PaimonView) metadata.getView("db", "test_view");
+        Assert.assertEquals(PAIMON_VIEW, view.getType());
+        Assert.assertEquals("test_view", view.getName());
+        Assert.assertEquals("select * from table", view.getInlineViewDef());
+
+        //test drop normal
+        DropTableStmt dropStmt = new DropTableStmt(true, new TableName("paimon_catalog", "db", "test_view"), true, true);
+        metadata.dropTable(dropStmt);
+
+        //test drop not exist
+        new Expectations() {
+            {
+                paimonNativeCatalog.dropView((Identifier) any, true);
+                result = new Catalog.ViewNotExistException(new Identifier("test", "ViewNotExist"));
+            }
+        };
+        Assert.assertThrows(DdlException.class, () -> metadata.dropTable(dropStmt));
     }
 }
