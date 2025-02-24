@@ -1,0 +1,144 @@
+FEs: FE
+BEs: BE
+Data loading: データロード
+Data unloading: データアンロード
+load: ロード
+native table: 内部テーブル
+Cloud-native table: クラウドネイティブテーブル
+External Table: 外部テーブル
+File External Table: ファイル外部テーブル
+Hive external table: Hive 外部テーブル
+hierarchy of data objects: データオブジェクトの階層
+storage layering: ストレージ階層化
+separation of storage and compute: ストレージとコンピュートの分離
+shared-data mode: 共有データモード
+shared-nothing mode: 共有なしモード
+shared-data cluster: 共有データクラスタ
+shared-nothing cluster: 共有なしクラスタ
+zero-migration: ゼロマイグレーション
+native vectorized engine: ネイティブベクトル化エンジン
+query federation/federated query: フェデレーションクエリ
+columnar storage: 列指向（カラムナ）ストレージ
+row storage: 行指向（ロウ）ストレージ
+intelligent materialized view: インテリジェントなマテリアライズドビュー
+base table: ベーステーブル
+materialized view: マテリアライズドビュー
+synchronous materialized view: 同期マテリアライズドビュー
+asynchronous materialized view: 非同期マテリアライズドビュー
+unified batch and streaming, batch-stream integrated: バッチストリーム統合
+high availability: 高可用性
+high scalability: 高拡張性
+data ingestion: データ取り込み
+denormalized table/flat table: 非正規化テーブル
+pre-aggregation: 事前集計
+aggregate query: 集計クエリ
+star schema: スタースキーマ
+snowflake schema: スノーフレークスキーマ
+point query: ポイントクエリ
+table type: テーブルタイプ
+Duplicate Key table: 重複キーテーブル
+Aggregate table: 集計テーブル
+Primary Key table: 主キーテーブル
+Unique Key table: ユニークキーテーブル
+data cleaning: データクレンジング
+global dictionary: グローバル辞書
+global dictionary for low-cardinality optimization: 低基数最適化のためのグローバル辞書
+low cardinality: 低基数
+warehousing logistics: データウェアハウスのロジスティクス
+query performance: クエリパフォーマンス
+data acquisition: データ取得
+multi-table join query: 複数テーブルジョインクエリ
+cost-based optimizer: コストベースオプティマイザ
+separation of storage and compute: ストレージとコンピュートの分離
+cost estimation: コスト推定
+binary tree: 二分木
+data analytics: データ分析
+data lake analytics: データレイク分析
+detailed data: 詳細データ
+distinct count: 重複排除カウント
+exact distinct count: 正確な重複排除カウント
+approximate distinct count: 近似重複排除カウント
+table schema: テーブルスキーマ
+sort key: ソートキー
+bucketing key: バケッティングキー
+partitioning column: パーティション列
+partition key: パーティションキー
+random bucketing: ランダムバケット法
+partitioning method: パーティション化の手法
+automatic partitioning: 自動パーティション化
+dynamic partitioning: 動的パーティション化
+expression partitioning: 式に基づくパーティション化
+list partitioning: リストパーティション化
+replica: レプリカ
+user profiling: ユーザープロファイリング
+user retention: ユーザーリテンション
+precision marketing: 精密マーケティング
+group analysis: グループ分析
+late materialization: 後期実体化
+data locality: データのローカル性
+prefix index: プレフィックスインデックス
+suffix column: サフィックス列 
+prefix column: プレフィックス列 
+tiered storage: 階層型ストレージ
+inverted indexing: 転置インデックス
+approximation algorithm: 近似アルゴリズム
+nested query: ネストクエリ
+memory leak: メモリリーク
+memory bloat: メモリ肥大化
+secondary partitioning: セカンダリパーティション
+pruning: プルーニング
+partition file: パーティションファイル
+abstract syntax tree: 抽象構文ツリー
+constant folding: 定数畳み込み
+constant propagation: 定数伝搬
+pessimistic locking: 悲観ロック
+optimistic locking: 楽観ロック
+rolling update: ローリングアップデート
+stratified search: 層化検索
+unified search: 統合検索
+populate a table: テーブルにデータを投入
+working directory: 作業ディレクトリ
+compute node: コンピュートノード
+compute engine: コンピュートエンジン
+equi-height histogram: 等高ヒストグラム
+equi-width histogram: 等幅ヒストグラム
+paginated query: ページングクエリ
+correlated column: 相関列
+literal: リテラル
+generated column: 生成列
+auto increment: 自動増分列
+cloud-native: クラウドネイティブ
+persistent index: 永続性インデックス
+utility function: ユーティリティ関数
+aggregate function: 集計関数
+spill to disk: ディスクへのスピル
+query rewrite: クエリの書き換え
+data re-distribution: データ再配布
+local disk: ローカルディスク
+automatic cooldown: 自動クールダウン
+storage medium: 記憶媒体
+garbage collection: ガーベジコレクション
+session variable: セッション変数
+global variable: グローバル変数
+big query: 大規模クエリ
+classifier: クラシファイア（分類器）
+storage volume: ストレージボリューム
+remote storage: リモートストレージ
+cardinality-preserving join: 基数保持ジョイン
+parallelism: 並行性
+partial update: 部分更新
+conditional update: 条件付き更新
+higher-order function: 高階関数
+async refresh: 非同期リフレッシュ
+query acceleration: クエリアクセラレーション
+segment file: セグメントファイル
+Hybrid row-column storage: 行と列のハイブリッドストレージ
+List Partitioning: リストパーティション化
+Range Partitioning: レンジパーティション化
+Bitmap index: ビットマップインデックス
+Bloom filter index: ブルームフィルターインデックス
+shared-data: 共有データ
+shared-nothing: 共有なし
+object storage: オブジェクトストレージ
+logical view: ビュー
+join: ジョイン
