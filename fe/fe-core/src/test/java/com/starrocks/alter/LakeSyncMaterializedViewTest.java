@@ -734,4 +734,45 @@ public class LakeSyncMaterializedViewTest {
         starRocksAssert.dropMaterializedView("mv1");
         starRocksAssert.dropTable("t1");
     }
+
+    public void testModifyColumnWithMV() throws Exception {
+        starRocksAssert.useDatabase("test");
+        starRocksAssert.withTable("CREATE TABLE `t1` " +
+                "( `k1`  date, " +
+                "`k2`  datetime, " +
+                "`k3`  char(20), " +
+                "`k4`  varchar(20), " +
+                "`k5`  boolean, " +
+                "`k6`  tinyint, " +
+                "`k7`  smallint, " +
+                "`k8`  int, " +
+                "`k9`  bigint, " +
+                "`k10` largeint, " +
+                "`k11` float, " +
+                "`k12` double, " +
+                "`k13` decimal(27,9) ) " +
+                "DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) " +
+                "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`)");
+        {
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1\n" +
+                    " AS\n" +
+                    " SELECT\n" +
+                    "   k6,\n" +
+                    "   k7,\n" +
+                    "   k8,\n" +
+                    "   k9,\n" +
+                    "   k10,\n" +
+                    "   k11,\n" +
+                    "   k12,\n" +
+                    "   k13\n" +
+                    " FROM t1;");
+
+            starRocksAssert.alterTable("ALTER TABLE t1 MODIFY COLUMN k7 VARCHAR(20);");
+            starRocksAssert.checkSchemaChangeJob();
+
+            starRocksAssert.dropTable("t1");
+            starRocksAssert.dropMaterializedView("mv1");
+        }
+
+    }
 }
