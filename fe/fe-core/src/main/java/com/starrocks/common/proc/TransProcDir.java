@@ -37,6 +37,7 @@ package com.starrocks.common.proc;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.Config;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.transaction.GlobalTransactionMgr;
 
@@ -60,8 +61,6 @@ public class TransProcDir implements ProcDirInterface {
             .add("ErrMsg")
             .build();
 
-    public static final int MAX_SHOW_ENTRIES = 2000;
-
     private long dbId;
     private String state;
 
@@ -75,7 +74,8 @@ public class TransProcDir implements ProcDirInterface {
         BaseProcResult result = new BaseProcResult();
         result.setNames(TITLE_NAMES);
         GlobalTransactionMgr transactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
-        List<List<String>> infos = transactionMgr.getDbTransInfo(dbId, state.equals("running"), MAX_SHOW_ENTRIES);
+        List<List<String>> infos = transactionMgr.getDbTransInfo(dbId, state.equals("running"),
+                Config.max_show_proc_transactions_entry);
         result.setRows(infos);
         return result;
     }
