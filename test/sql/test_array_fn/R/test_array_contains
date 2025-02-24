@@ -2351,3 +2351,7 @@ SELECT id, array_position(array_struct, NULL) FROM test_array_contains_complex_t
 3	None
 4	0
 -- !result
+select array_contains([null], null), array_position([null], null);
+-- result:
+1	1
+-- !result
