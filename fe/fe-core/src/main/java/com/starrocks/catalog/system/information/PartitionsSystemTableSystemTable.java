@@ -40,6 +40,7 @@ public class PartitionsSystemTableSystemTable {
                         .column("PARTITION_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("SUBPARTITION_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("PARTITION_ORDINAL_POSITION", ScalarType.createType(PrimitiveType.BIGINT))
+                        .column("SUBPARTITION_ORDINAL_POSITION", ScalarType.createType(PrimitiveType.BIGINT))
                         .column("PARTITION_METHOD", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("SUBPARTITION_METHOD", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("PARTITION_EXPRESSION", ScalarType.createVarchar(NAME_CHAR_LEN))

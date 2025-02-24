@@ -603,8 +603,8 @@ public class Table extends MetaObject implements Writable, GsonPostProcessable, 
             case SCHEMA:
                 return "SYSTEM VIEW";
             default:
-                // external table also returns "BASE TABLE" for BI compatibility
-                return "BASE TABLE";
+                // external table also returns "TABLE" for BI compatibility
+                return "TABLE";
         }
     }
 
