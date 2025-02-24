@@ -1805,7 +1805,7 @@ class StarrocksSQLApiLib(object):
             time.sleep(2)
             times += 2
         tools.assert_equal(expect_state, state, "check routine load state error, timeout %s" % timeout_sec)
-        tools.assert_true((expect_msg_key_words in msg, "check routine load msg error, timeout %s" % timeout_sec))
+        tools.assert_true(expect_msg_key_words in msg, "check routine load msg error, timeout %s" % timeout_sec)
 
     def check_index_progress(self):
         load_finished = False
