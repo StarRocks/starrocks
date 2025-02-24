@@ -252,7 +252,7 @@ int64_t ColumnHelper::find_first_not_equal(const Column* column, int64_t target,
 // Nullable(int8), but required return type is nullable(string), so col need align return type to nullable(string).
 ColumnPtr ColumnHelper::align_return_type(const ColumnPtr& old_col, const TypeDescriptor& type_desc, size_t num_rows,
                                           const bool is_nullable) {
-    MutableColumnPtr new_column = Column::mutate(old_col);
+    MutableColumnPtr new_column = old_col->clone();
     if (old_col->only_null()) {
         new_column = ColumnHelper::create_column(type_desc, true);
         new_column->append_nulls(num_rows);

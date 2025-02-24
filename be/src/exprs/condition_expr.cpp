@@ -81,12 +81,12 @@ public:
 
         int null_count = ColumnHelper::count_nulls(lhs);
         if (null_count == 0) {
-            return Column::mutate(std::move(lhs));
+            return lhs->clone();
         }
 
         ASSIGN_OR_RETURN(auto rhs, _children[1]->evaluate_checked(context, ptr));
         if (null_count == lhs->size()) {
-            return Column::mutate(std::move(rhs));
+            return rhs->clone();
         }
 
         Columns list = {lhs, rhs};
@@ -155,7 +155,7 @@ public:
 
         ASSIGN_OR_RETURN(auto rhs, _children[1]->evaluate_checked(context, ptr));
         if (ColumnHelper::count_nulls(rhs) == rhs->size()) {
-            return Column::mutate(std::move(lhs));
+            return lhs->clone();
         }
 
         Columns list = {lhs, rhs};
@@ -227,16 +227,16 @@ public:
 
         ASSIGN_OR_RETURN(auto lhs, _children[1]->evaluate_checked(context, ptr));
         if (true_count == bhs->size()) {
-            return Column::mutate(std::move(lhs));
+            return lhs->clone();
         }
 
         ASSIGN_OR_RETURN(auto rhs, _children[2]->evaluate_checked(context, ptr));
         if (true_count == 0) {
-            return Column::mutate(std::move(rhs));
+            return rhs->clone();
         }
 
         if (lhs->only_null() && rhs->only_null()) {
-            return Column::mutate(std::move(lhs));
+            return lhs->clone();
         }
 
         Columns list = {bhs, lhs, rhs};
@@ -388,7 +388,7 @@ public:
             // 3.don't need check if value is all null
             if (null_count == 0) {
                 if (columns.size() == 0) {
-                    return Column::mutate(std::move(value));
+                    return value->clone();
                 }
 
                 // There is a column all not null.
@@ -409,7 +409,7 @@ public:
         // direct return if only one
         if (columns.size() == 1) {
             // don't copy column if chunk support copy on write
-            return Column::mutate(std::move(columns[0]));
+            return columns[0]->clone();
         }
 
         if constexpr (lt_is_collection<Type>) {
