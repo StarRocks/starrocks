@@ -74,7 +74,7 @@ public class AggregateWithUKFKTest extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
-                "     table: test_agg_group_single_unique_key, rollup: test_agg_group_single_unique_key\n" +
+                "     TABLE: test_agg_group_single_unique_key, rollup: test_agg_group_single_unique_key\n" +
                 "     preAggregation: off. Reason: None aggregate function\n");
 
         sql = "SELECT \n" +
@@ -115,7 +115,7 @@ public class AggregateWithUKFKTest extends PlanTestBase {
                 "  |  cardinality: 1\n" +
                 "  |  \n" +
                 "  0:OlapScanNode\n" +
-                "     table: test_agg_group_multi_unique_key, rollup: test_agg_group_multi_unique_key\n" +
+                "     TABLE: test_agg_group_multi_unique_key, rollup: test_agg_group_multi_unique_key\n" +
                 "     preAggregation: off. Reason: None aggregate function\n");
 
         sql = "SELECT\n" +

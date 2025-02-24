@@ -156,7 +156,7 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         String sql = "select array_min(S_ADDRESS), S_ADDRESS from supplier_nullable where S_ADDRESS[0] = 'a'";
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan, plan.contains("  0:OlapScanNode\n" +
-                "     table: supplier_nullable, rollup: supplier_nullable\n" +
+                "     TABLE: supplier_nullable, rollup: supplier_nullable\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: DictDecode(10: S_ADDRESS, [<place-holder> = 'a'], 10: S_ADDRESS[0])"));
     }
@@ -166,7 +166,7 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         String sql = "select array_min(S_ADDRESS), S_ADDRESS from supplier_nullable where S_ADDRESS = ['a', 'b']";
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan, plan.contains(" 0:OlapScanNode\n" +
-                "     table: supplier_nullable, rollup: supplier_nullable\n" +
+                "     TABLE: supplier_nullable, rollup: supplier_nullable\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: DictDecode(10: S_ADDRESS, [<place-holder>]) = ['a','b']"));
         Assert.assertTrue(plan, plan.contains("  |  output columns:\n" +
@@ -190,7 +190,7 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         String sql = "select S_ADDRESS from supplier_nullable where S_ADDRESS = ['a', 'b']";
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan, plan.contains("  0:OlapScanNode\n" +
-                "     table: supplier_nullable, rollup: supplier_nullable\n" +
+                "     TABLE: supplier_nullable, rollup: supplier_nullable\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: [3: S_ADDRESS, ARRAY<VARCHAR(40)>, true] = ['a','b']"));
     }
@@ -200,7 +200,7 @@ public class LowCardinalityArrayTest extends PlanTestBase {
         String sql = "select array_min(S_ADDRESS), S_ADDRESS from supplier_nullable where S_ADDRESS[0] = 'a'";
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan, plan.contains("  0:OlapScanNode\n" +
-                "     table: supplier_nullable, rollup: supplier_nullable\n" +
+                "     TABLE: supplier_nullable, rollup: supplier_nullable\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: DictDecode(10: S_ADDRESS, [<place-holder> = 'a'], 10: S_ADDRESS[0])\n" +
                 "     dict_col=S_ADDRESS\n" +
@@ -475,7 +475,7 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "ARRAY<INT>; args nullable: true; result nullable: true]\n" +
                 "  |  cardinality: 1");
         assertContains(plan, "0:OlapScanNode\n" +
-                "     table: supplier_nullable, rollup: supplier_nullable\n" +
+                "     TABLE: supplier_nullable, rollup: supplier_nullable\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: DictDecode(35: S_ADDRESS, [<place-holder> = 'a'], 35: S_ADDRESS[0])");
     }
@@ -531,7 +531,7 @@ public class LowCardinalityArrayTest extends PlanTestBase {
                 "where S_ADDRESS[0] = 'a' or S_ADDRESS[1] = 'b'";
         String plan = getVerboseExplain(sql);
         Assert.assertTrue(plan, plan.contains("  0:OlapScanNode\n" +
-                "     table: supplier_nullable, rollup: supplier_nullable\n" +
+                "     TABLE: supplier_nullable, rollup: supplier_nullable\n" +
                 "     preAggregation: on\n" +
                 "     Predicates: (DictDecode(10: S_ADDRESS, [<place-holder> = 'a'], 10: S_ADDRESS[0]))" +
                 " OR (DictDecode(10: S_ADDRESS, [<place-holder> = 'b'], 10: S_ADDRESS[1]))\n" +
