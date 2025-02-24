@@ -11,9 +11,9 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package com.starrocks.epack.persist;
 
-import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
@@ -71,29 +71,6 @@ public class EditLogEPack extends EditLog {
         short opCode = journal.opCode();
         try {
             switch (opCode) {
-                case OperationTypeEPack.OP_CREATE_SECURITY_INTEGRATION: {
-                    SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.data();
-                    AuthenticationMgrEPack authenticationMgr =
-                            (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-                    authenticationMgr.replayCreateSecurityIntegration(
-                            info.name, info.propertyMap);
-                    break;
-                }
-                case OperationTypeEPack.OP_ALTER_SECURITY_INTEGRATION: {
-                    SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.data();
-                    AuthenticationMgrEPack authenticationMgr =
-                            (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-                    authenticationMgr.replayAlterSecurityIntegration(
-                            info.name, info.propertyMap);
-                    break;
-                }
-                case OperationTypeEPack.OP_DROP_SECURITY_INTEGRATION: {
-                    SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.data();
-                    AuthenticationMgrEPack authenticationMgr =
-                            (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-                    authenticationMgr.replayDropSecurityIntegration(info.name);
-                    break;
-                }
                 case OperationTypeEPack.OP_CREATE_ROLE_MAPPING: {
                     RoleMappingPersistInfo info = (RoleMappingPersistInfo) journal.data();
                     globalStateMgr.getAuthorizationMgr().getRoleMappingMetaMgr().replayCreateRoleMapping(
