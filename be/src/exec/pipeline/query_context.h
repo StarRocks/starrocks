@@ -273,6 +273,8 @@ private:
     std::shared_ptr<starrocks::debug::QueryTrace> _query_trace;
     std::atomic_bool _is_prepared = false;
     std::atomic_bool _is_cancelled = false;
+    std::atomic<Status*> _cancelled_status = nullptr;
+    Status _s_status;
 
     std::atomic_bool _cancelled_by_fe = false;
     std::atomic<Status*> _cancelled_status = nullptr;
