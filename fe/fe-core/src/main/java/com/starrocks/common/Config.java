@@ -3443,7 +3443,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long automated_cluster_snapshot_interval_seconds = 600;
 
-    @ConfField(mutable = false)
+    @ConfField(mutable = true)
     public static int max_historical_automated_cluster_snapshot_jobs = 100;
 
     @ConfField(mutable = true)
