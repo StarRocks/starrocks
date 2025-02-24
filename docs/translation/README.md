@@ -1,5 +1,7 @@
 # Translating docs with GPT
 
+This README describes using GPT-4o to translate from Chinese to English, or from English to Chinese or Japanese. The system used is specific to Docusaurus Markdown and MDX. We are using code provided by Weights and Biases, as they also use Docusaurus and have expertise with LLMs.
+
 ## 1. Build the Docker image
 
   See the [README in the `DanRoscigno/gpt-translate` repo](https://github.com/DanRoscigno/gpt_translate/blob/main/README.md). Build the Docker image from there.
@@ -68,7 +70,14 @@ The entries in the file should be relative to the `starrocks/docs/translation/` 
 </tr>
 </table>
 
-This README describes using GPT-4o to translate from Chinese to English, or from English to Chinese. The system used is specific to Docusaurus Markdown and MDX. We are using code provided by Weights and Biases, as they also use Docusaurus and have expertise with LLMs.
+> Tip:
+>
+> Use `find` to get all of the Markdown files under a directory. For example, to translate alll of the include files under `docs/en/_assets/`:
+>
+> ```bash
+> find ../en/_assets -type f -name "*\.md*" > files.txt
+> ```
+
 
 > Note:
 >
