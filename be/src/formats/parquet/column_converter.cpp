@@ -93,11 +93,12 @@ private:
     // into UTC time, and when it reads data out, it should be converted to the time
     // according to session variable "time_zone".
     [[nodiscard]] Timestamp _utc_to_local(Timestamp timestamp) const {
-        return timestamp::add<TimeUnit::SECOND>(timestamp, _offset);
+        int offset = timestamp::get_offset_by_timezone(timestamp, _ctz);
+        return timestamp::add<TimeUnit::SECOND>(timestamp, offset);
     }
 
 private:
-    int _offset = 0;
+    cctz::time_zone _ctz;
 };
 
 class Int64ToDateTimeConverter final : public ColumnConverter {
@@ -628,14 +629,9 @@ Status parquet::Int32ToDateTimeConverter::convert(const ColumnPtr& src, Column* 
 }
 
 Status Int96ToDateTimeConverter::init(const std::string& timezone) {
-    cctz::time_zone ctz;
-    if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {
+    if (!TimezoneUtils::find_cctz_time_zone(timezone, _ctz)) {
         return Status::InternalError(strings::Substitute("can not find cctz time zone $0", timezone));
     }
-
-    const auto tp = std::chrono::system_clock::now();
-    const cctz::time_zone::absolute_lookup al = ctz.lookup(tp);
-    _offset = al.offset;
 
     return Status::OK();
 }
@@ -744,9 +740,12 @@ Status Int64ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
         if (!src_null_data[i]) {
             int64_t seconds = src_data[i] / _second_mask;
             int64_t nanoseconds = (src_data[i] % _second_mask) * _scale_to_nano_factor;
-            TimestampValue ep;
-            ep.from_unixtime(seconds, nanoseconds / 1000, _ctz);
-            dst_data[i].set_timestamp(ep.timestamp());
+
+            std::chrono::system_clock::time_point tp = std::chrono::system_clock::from_time_t(seconds);
+            int offset = _ctz.lookup(tp).offset;
+            seconds += offset;
+
+            dst_data[i].set_timestamp(timestamp::of_epoch_second(seconds, nanoseconds));
         }
     }
     dst_nullable_column->set_has_null(src_nullable_column->has_null());
