@@ -37,6 +37,9 @@ set enable_plan_analyzer=true;
 use iceberg_catalog_${uuid0}.iceberg_db_${uuid0};
 -- result:
 -- !result
+set low_cardinality_optimize_on_lake = false;
+-- result:
+-- !result
 set catalog default_catalog;
 -- result:
 -- !result

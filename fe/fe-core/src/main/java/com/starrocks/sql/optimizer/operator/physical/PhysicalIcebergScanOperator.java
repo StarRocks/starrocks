@@ -14,6 +14,9 @@
 
 package com.starrocks.sql.optimizer.operator.physical;
 
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.starrocks.common.Pair;
 import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -23,15 +26,31 @@ import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.ScanOperatorPredicates;
 import com.starrocks.sql.optimizer.operator.logical.LogicalIcebergScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.ColumnDict;
+
+import java.util.List;
+import java.util.Map;
 
 public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
     private ScanOperatorPredicates predicates;
     private IcebergTableMORParams tableFullMORParams = IcebergTableMORParams.EMPTY;
     private IcebergMORParams morParams = IcebergMORParams.EMPTY;
 
+    private List<Pair<Integer, ColumnDict>> globalDicts = Lists.newArrayList();
+    private Map<Integer, ScalarOperator> globalDictsExpr = Maps.newHashMap();
+
     public PhysicalIcebergScanOperator(LogicalIcebergScanOperator scanOperator) {
         super(OperatorType.PHYSICAL_ICEBERG_SCAN, scanOperator);
         this.predicates = scanOperator.getScanOperatorPredicates();
+    }
+
+    private PhysicalIcebergScanOperator() {
+        super(OperatorType.PHYSICAL_ICEBERG_SCAN);
+    }
+
+    public static PhysicalIcebergScanOperator.Builder builder() {
+        return new PhysicalIcebergScanOperator.Builder();
     }
 
     @Override
@@ -60,6 +79,14 @@ public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
         this.morParams = morParams;
     }
 
+    public List<Pair<Integer, ColumnDict>> getGlobalDicts() {
+        return globalDicts;
+    }
+
+    public Map<Integer, ScalarOperator> getGlobalDictsExpr() {
+        return globalDictsExpr;
+    }
+
     @Override
     public <R, C> R accept(OperatorVisitor<R, C> visitor, C context) {
         return visitor.visitPhysicalIcebergScan(this, context);
@@ -78,5 +105,37 @@ public class PhysicalIcebergScanOperator extends PhysicalScanOperator {
         predicates.getMinMaxConjuncts().forEach(d -> refs.union(d.getUsedColumns()));
         predicates.getMinMaxColumnRefMap().keySet().forEach(refs::union);
         return refs;
+    }
+
+    public static class Builder
+            extends PhysicalScanOperator.Builder<PhysicalIcebergScanOperator, PhysicalScanOperator.Builder> {
+        @Override
+        protected PhysicalIcebergScanOperator newInstance() {
+            return new PhysicalIcebergScanOperator();
+        }
+
+        @Override
+        public PhysicalIcebergScanOperator.Builder withOperator(PhysicalIcebergScanOperator operator) {
+            super.withOperator(operator);
+            builder.predicates = operator.predicates;
+            builder.tableFullMORParams = operator.tableFullMORParams;
+            builder.morParams = operator.morParams;
+            return this;
+        }
+
+        public PhysicalIcebergScanOperator.Builder setScanPredicates(ScanOperatorPredicates predicates) {
+            builder.predicates = predicates;
+            return this;
+        }
+
+        public PhysicalIcebergScanOperator.Builder setGlobalDicts(List<Pair<Integer, ColumnDict>> globalDicts) {
+            builder.globalDicts = globalDicts;
+            return this;
+        }
+
+        public PhysicalIcebergScanOperator.Builder setGlobalDictsExpr(Map<Integer, ScalarOperator> globalDictsExpr) {
+            builder.globalDictsExpr = globalDictsExpr;
+            return this;
+        }
     }
 }
