@@ -2,18 +2,18 @@
 displayed_sidebar: docs
 ---
 
-# Helmを使用してStarRocksをデプロイする
+# Deploy StarRocks with Helm
 
-[Helm](https://helm.sh/) は、Kubernetes のパッケージマネージャーです。[Helm Chart](https://helm.sh/docs/topics/charts/) は Helm パッケージであり、Kubernetes クラスター上でアプリケーションを実行するために必要なすべてのリソース定義を含んでいます。このトピックでは、Helm を使用して Kubernetes クラスター上に StarRocks クラスターを自動的にデプロイする方法について説明します。
+[Helm](https://helm.sh/) は Kubernetes のパッケージマネージャーです。[Helm Chart](https://helm.sh/docs/topics/charts/) は Helm パッケージであり、Kubernetes クラスタ上でアプリケーションを実行するために必要なすべてのリソース定義を含んでいます。このトピックでは、Helm を使用して Kubernetes クラスタ上に StarRocks クラスタを自動的にデプロイする方法について説明します。
 
 ## 始める前に
 
-- [Kubernetes クラスターを作成する](./sr_operator.md#create-kubernetes-cluster)。
+- [Kubernetes クラスタを作成する](./sr_operator.md#create-kubernetes-cluster)。
 - [Helm をインストールする](https://helm.sh/docs/intro/quickstart/)。
 
 ## 手順
 
-1. StarRocks の Helm Chart リポジトリを追加します。Helm Chart には、StarRocks Operator とカスタムリソース StarRocksCluster の定義が含まれています。
+1. StarRocks 用の Helm Chart リポジトリを追加します。Helm Chart には StarRocks Operator とカスタムリソース StarRocksCluster の定義が含まれています。
    1. Helm Chart リポジトリを追加します。
 
       ```Bash
@@ -36,22 +36,22 @@ displayed_sidebar: docs
       starrocks/starrocks           1.8.0            3.1-latest   A Helm chart for StarRocks cluster
       ```
 
-2. Helm Chart のデフォルトの **[values.yaml](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/values.yaml)** を使用して StarRocks Operator と StarRocks クラスターをデプロイするか、YAML ファイルを作成してデプロイメント設定をカスタマイズします。
+2. Helm Chart のデフォルト **[values.yaml](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/values.yaml)** を使用して StarRocks Operator と StarRocks クラスタをデプロイするか、YAML ファイルを作成してデプロイメント設定をカスタマイズします。
    1. デフォルト設定でのデプロイメント
 
-      次のコマンドを実行して、1つの FE と 1つの BE からなる StarRocks Operator と StarRocks クラスターをデプロイします。
+      次のコマンドを実行して、1 つの FE と 1 つの BE からなる StarRocks Operator と StarRocks クラスタをデプロイします。
    > ヒント
    >
    > デフォルトの `values.yaml` は次のように設定されています:
    > - オペレーターポッドは 1/2CPU と 0.8GB RAM
-   > - 1つの FE は 4GB RAM、4コア、15Gi ディスク
-   > - 1つの BE は 4GB RAM、4コア、1Ti ディスク
+   > - 1 つの FE は 4GB RAM、4 コア、15Gi ディスク
+   > - 1 つの BE は 4GB RAM、4 コア、1Ti ディスク
    >
-   > これらのリソースが Kubernetes クラスターで利用できない場合は、**カスタム設定でのデプロイメント** セクションに進み、リソースを調整してください。
+   > これらのリソースが Kubernetes クラスタで利用できない場合は、**カスタム設定でのデプロイメント** セクションに進み、リソースを調整してください。
 
       ```Bash
       $ helm install starrocks starrocks/kube-starrocks
-      # 次の結果が返された場合、StarRocks Operator と StarRocks クラスターがデプロイ中です。
+      # 次の結果が返された場合、StarRocks Operator と StarRocks クラスタがデプロイされています。
       NAME: starrocks
       LAST DEPLOYED: Tue Aug 15 15:12:00 2023
       NAMESPACE: starrocks
@@ -61,8 +61,8 @@ displayed_sidebar: docs
       ```
 
 3. カスタム設定でのデプロイメント
-   - 例えば **my-values.yaml** という YAML ファイルを作成し、その中で StarRocks Operator と StarRocks クラスターの設定をカスタマイズします。サポートされているパラメータと説明については、Helm Chart のデフォルト **[values.yaml](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/values.yaml)** のコメントを参照してください。
-   - 次のコマンドを実行して、**my-values.yaml** のカスタム設定で StarRocks Operator と StarRocks クラスターをデプロイします。
+   - 例えば **my-values.yaml** という YAML ファイルを作成し、その中で StarRocks Operator と StarRocks クラスタの設定をカスタマイズします。サポートされているパラメータと説明については、Helm Chart のデフォルト **[values.yaml](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/helm-charts/charts/kube-starrocks/values.yaml)** のコメントを参照してください。
+   - 次のコマンドを実行して、**my-values.yaml** のカスタム設定で StarRocks Operator と StarRocks クラスタをデプロイします。
 
      ```bash
      helm install -f my-values.yaml starrocks starrocks/kube-starrocks
@@ -95,14 +95,14 @@ displayed_sidebar: docs
 
 ## 次のステップ
 
-- StarRocks クラスターにアクセスする
+- StarRocks クラスタにアクセスする
 
-  Kubernetes クラスターの内外から StarRocks クラスターにアクセスできます。詳細な手順については、[Access StarRocks Cluster](./sr_operator.md#access-starrocks-cluster) を参照してください。
+  Kubernetes クラスタの内外から StarRocks クラスタにアクセスできます。詳細な手順については、[Access StarRocks Cluster](./sr_operator.md#access-starrocks-cluster) を参照してください。
 
-- StarRocks operator と StarRocks クラスターを管理する
+- StarRocks operator と StarRocks クラスタを管理する
 
-  - StarRocks operator と StarRocks クラスターの設定を更新する必要がある場合は、[Helm Upgrade](https://helm.sh/docs/helm/helm_upgrade/) を参照してください。
-  - StarRocks Operator と StarRocks クラスターをアンインストールする必要がある場合は、次のコマンドを実行します。
+  - StarRocks operator と StarRocks クラスタの設定を更新する必要がある場合は、[Helm Upgrade](https://helm.sh/docs/helm/helm_upgrade/) を参照してください。
+  - StarRocks Operator と StarRocks クラスタをアンインストールする必要がある場合は、次のコマンドを実行してください。
 
     ```bash
     helm uninstall starrocks
@@ -112,23 +112,23 @@ displayed_sidebar: docs
 
 - GitHub リポジトリのアドレス: [starrocks-kubernetes-operator and kube-starrocks Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator)。
 
-- GitHub リポジトリのドキュメントには、さらに詳しい情報が記載されています。例えば:
+- GitHub リポジトリのドキュメントには、さらに詳しい情報が提供されています。例えば:
 
-  - Kubernetes API を介して StarRocks クラスターのようなオブジェクトを管理する必要がある場合は、[API reference](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/api.md) を参照してください。
+  - Kubernetes API を介して StarRocks クラスタのようなオブジェクトを管理する必要がある場合は、[API reference](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/api.md) を参照してください。
 
-  - FE および BE ポッドに永続ボリュームをマウントして、FE メタデータとログ、BE データとログを保存する必要がある場合は、[Mount Persistent Volumes by Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/mount_persistent_volume_howto.md#2-mounting-persistent-volumes-by-helm-chart) を参照してください。
+  - FE と BE ポッドに永続ボリュームをマウントして、FE のメタデータとログ、および BE のデータとログを保存する必要がある場合は、[Mount Persistent Volumes by Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/mount_persistent_volume_howto.md#2-mounting-persistent-volumes-by-helm-chart) を参照してください。
 
     :::danger
 
-    永続ボリュームがマウントされていない場合、StarRocks Operator は emptyDir を使用して FE メタデータとログ、BE データとログを保存します。コンテナが再起動すると、データは失われます。
+    永続ボリュームがマウントされていない場合、StarRocks Operator は emptyDir を使用して FE のメタデータとログ、および BE のデータとログを保存します。コンテナが再起動すると、データは失われます。
 
     :::
 
   - ルートユーザーのパスワードを設定する必要がある場合:
 
-    - StarRocks クラスターをデプロイした後に手動でルートユーザーのパスワードを設定するには、[Change root user password HOWTO](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/change_root_password_howto.md) を参照してください。
+    - StarRocks クラスタをデプロイした後に手動でルートユーザーのパスワードを設定するには、[Change root user password HOWTO](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/change_root_password_howto.md) を参照してください。
 
-    - StarRocks クラスターをデプロイする際にルートユーザーのパスワードを自動的に設定するには、[Initialize root user password](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/initialize_root_password_howto.md) を参照してください。
+    - StarRocks クラスタをデプロイする際にルートユーザーのパスワードを自動的に設定するには、[Initialize root user password](https://github.com/StarRocks/starrocks-kubernetes-operator/blob/main/doc/initialize_root_password_howto.md) を参照してください。
 
 - StarRocks 共有データクラスタで CREATE TABLE ステートメントを実行した後に発生する次のエラーを解決する方法。
 
@@ -140,6 +140,6 @@ displayed_sidebar: docs
 
   - **解決策**
 
-       これは、StarRocks 存算分离集群に BE が1つしか存在せず、1つの副本しかサポートしていないためかもしれません。しかし、デフォルトの副本数は3です。副本数を1に変更するには、PROPERTIES で `PROPERTIES( "replication_num" = "1" )` のように設定できます。
+       これは、StarRocks 共有データクラスタに 1 つの BE しか存在せず、1 つのレプリカのみをサポートしているためかもしれません。しかし、デフォルトのレプリカ数は 3 です。PROPERTIES でレプリカ数を 1 に変更することができます。例えば、`PROPERTIES( "replication_num" = "1" )` のようにします。
 
 - Artifact Hub 上で StarRocks によって維持されている Helm Chart のアドレス: [kube-starrocks](https://artifacthub.io/packages/helm/kube-starrocks/kube-starrocks)。

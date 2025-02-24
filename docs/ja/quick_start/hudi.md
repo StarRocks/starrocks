@@ -11,8 +11,8 @@ import TabItem from '@theme/TabItem';
 
 ## 概要
 
-- Docker compose を使用して、オブジェクトストレージ、Apache Spark、Hudi、StarRocks をデプロイ
-- Apache Spark を使用して小さなデータセットを Hudi にロード
+- Docker compose を使用して、オブジェクトストレージ、Apache Spark、Hudi、および StarRocks をデプロイ
+- Apache Spark を使用して Hudi に小さなデータセットをロード
 - StarRocks を設定して、external catalog を使用して Hive Metastore にアクセス
 - データが存在する場所で StarRocks を使用してデータをクエリ
 
@@ -28,7 +28,7 @@ import TabItem from '@theme/TabItem';
 
 ### Docker
 
-- Docker セットアップ: Mac の場合は、[Install Docker Desktop on Mac](https://docs.docker.com/desktop/install/mac-install/) に定義されている手順に従ってください。Spark-SQL クエリを実行するには、Docker に少なくとも 5 GB のメモリと 4 つの CPU が割り当てられていることを確認してください (Docker → Preferences → Advanced を参照)。そうしないと、メモリの問題で Spark-SQL クエリが終了する可能性があります。
+- Docker セットアップ: Mac の場合は、[Install Docker Desktop on Mac](https://docs.docker.com/desktop/install/mac-install/) に定義されている手順に従ってください。Spark-SQL クエリを実行するには、少なくとも 5 GB のメモリと 4 つの CPU を Docker に割り当ててください (Docker → Preferences → Advanced を参照)。そうしないと、メモリの問題で Spark-SQL クエリが終了される可能性があります。
 - Docker に割り当てられた 20 GB の空きディスクスペース
 
 ### SQL クライアント
@@ -37,18 +37,18 @@ Docker 環境で提供される SQL クライアントを使用するか、シ�
 
 ## 設定
 
-`demo/documentation-samples/hudi` ディレクトリに移動し、ファイルを確認します。これは Hudi のチュートリアルではないため、すべての設定ファイルが説明されるわけではありませんが、どのように設定されているかを確認するためにどこを見ればよいかを知っておくことが重要です。`hudi/` ディレクトリには、Docker でサービスを起動および設定するために使用される `docker-compose.yml` ファイルがあります。以下はそれらのサービスと簡単な説明のリストです。
+`demo/documentation-samples/hudi` ディレクトリに移動し、ファイルを確認します。これは Hudi のチュートリアルではないため、すべての設定ファイルについて説明するわけではありませんが、どのように設定されているかを確認するためにどこを見ればよいかを知っておくことが重要です。`hudi/` ディレクトリには、Docker でサービスを起動および設定するために使用される `docker-compose.yml` ファイルがあります。これらのサービスとその簡単な説明のリストを以下に示します。
 
 ### Docker サービス
 
 | サービス                  | 責任                                                         |
-|--------------------------|--------------------------------------------------------------|
+|--------------------------|---------------------------------------------------------------------|
 | **`starrocks-fe`**       | メタデータ管理、クライアント接続、クエリプランとスケジューリング |
-| **`starrocks-be`**       | クエリプランの実行                                           |
-| **`metastore_db`**       | Hive メタデータを保存するために使用される Postgres DB        |
-| **`hive_metastore`**     | Apache Hive メタストアを提供                                 |
-| **`minio`** と **`mc`**  | MinIO オブジェクトストレージと MinIO コマンドラインクライアント |
-| **`spark-hudi`**         | 分散コンピューティングとトランザクションデータレイクプラットフォーム |
+| **`starrocks-be`**       | クエリプランの実行                                                 |
+| **`metastore_db`**       | Hive メタデータを保存するために使用される Postgres DB             |
+| **`hive_metastore`**     | Apache Hive メタストアを提供                                       |
+| **`minio`** と **`mc`**  | MinIO オブジェクトストレージと MinIO コマンドラインクライアント    |
+| **`spark-hudi`**         | 分散コンピューティングとトランザクショナルデータレイクプラットフォーム |
 
 ### 設定ファイル
 
@@ -56,7 +56,7 @@ Docker 環境で提供される SQL クライアントを使用するか、シ�
 
 ##### `core-site.xml`
 
-このファイルには、オブジェクトストレージ関連の設定が含まれています。詳細情報はこのドキュメントの最後にあります。
+このファイルには、オブジェクトストレージに関連する設定が含まれています。詳細はこのドキュメントの最後にあります。
 
 ##### `spark-defaults.conf`
 
@@ -74,9 +74,9 @@ Hive、MinIO、および Spark SQL の設定。
 
 `spark-shell` の警告を抑制するために使用される空のファイル。
 
-## デモクラスターの立ち上げ
+## デモクラスターの起動
 
-このデモシステムは、StarRocks、Hudi、MinIO、および Spark サービスで構成されています。Docker compose を実行してクラスターを立ち上げます。
+このデモシステムは、StarRocks、Hudi、MinIO、および Spark サービスで構成されています。Docker compose を実行してクラスターを起動します。
 
 ```bash
 docker compose up --detach --wait --wait-timeout 60
@@ -155,11 +155,11 @@ val basePath = "s3a://huditest/hudi_coders"
 
 ### MinIO に認証
 
-ブラウザを開いて [http://localhost:9000/](http://localhost:9000/) にアクセスし、認証します。ユーザー名とパスワードは `docker-compose.yml` に指定されており、`admin` と `password` です。
+ブラウザを開いて [http://localhost:9000/](http://localhost:9000/) にアクセスし、認証します。ユーザー名とパスワードは `docker-compose.yml` に指定されており、それぞれ `admin` と `password` です。
 
 ### バケットの作成
 
-左側のナビゲーションで **Buckets** を選択し、**Create Bucket +** を選択します。バケット名を `huditest` とし、**Create Bucket** を選択します。
+左側のナビゲーションで **Buckets** を選択し、次に **Create Bucket +** を選択します。バケット名を `huditest` とし、**Create Bucket** を選択します。
 
 ![Create bucket huditest](../_assets/quick-start/hudi-test-bucket.png)
 
@@ -167,7 +167,7 @@ val basePath = "s3a://huditest/hudi_coders"
 
 :::tip
 
-このコマンドや他の `docker compose` コマンドは、`docker-compose.yml` ファイルを含むディレクトリから実行してください。
+このコマンドおよび他の `docker compose` コマンドは、`docker-compose.yml` ファイルを含むディレクトリから実行してください。
 :::
 
 `spark-hudi` サービスで `spark-shell` を開きます。
@@ -177,12 +177,12 @@ docker compose exec spark-hudi spark-shell
 ```
 
 :::note
-`spark-shell` が起動するときに不正なリフレクティブアクセスに関する警告が表示されますが、これらの警告は無視してかまいません。
+`spark-shell` の起動時に不正なリフレクティブアクセスに関する警告が表示されますが、これらの警告は無視して構いません。
 :::
 
-`scala>` プロンプトで次のコマンドを実行して:
+`scala>` プロンプトで次のコマンドを実行して、以下を行います。
 
-- この Spark セッションを設定し、データをロード、処理、書き込み
+- この Spark セッションを設定してデータをロード、処理、書き込み
 - データフレームを作成し、それを Hudi テーブルに書き込み
 - Hive Metastore に同期
 
@@ -241,7 +241,7 @@ Metadata table was not found at path
 s3a://huditest/hudi_coders/.hoodie/metadata
 ```
 
-これは無視してかまいません。このファイルはこの `spark-shell` セッション中に自動的に作成されます。
+これは無視して構いません。このファイルは、この `spark-shell` セッション中に自動的に作成されます。
 
 また、次の警告も表示されます。
 
@@ -255,13 +255,13 @@ This is unsupported
 この警告は、オブジェクトストレージを使用している場合、書き込み中のログファイルの同期がサポートされていないことを示しています。ファイルは閉じられたときにのみ同期されます。詳細は [Stack Overflow](https://stackoverflow.com/a/74886836/10424890) を参照してください。
 :::
 
-上記の spark-shell セッションの最後のコマンドはコンテナを終了するはずです。終了しない場合は、Enter キーを押すと終了します。
+上記の spark-shell セッションの最後のコマンドはコンテナを終了するはずですが、終了しない場合は Enter キーを押すと終了します。
 
 ## StarRocks の設定
 
 ### StarRocks に接続
 
-`starrocks-fe` サービスによって提供される MySQL クライアントを使用して StarRocks に接続するか、お気に入りの SQL クライアントを使用して、MySQL プロトコルを使用して `localhost:9030` に接続するように設定します。
+提供された `starrocks-fe` サービスの MySQL クライアントを使用して StarRocks に接続するか、お気に入りの SQL クライアントを使用して、MySQL プロトコルを使用して `localhost:9030` に接続するように設定します。
 
 ```bash
 docker compose exec starrocks-fe \
@@ -270,7 +270,7 @@ docker compose exec starrocks-fe \
 
 ### StarRocks と Hudi のリンクを作成
 
-このガイドの最後に external catalog に関する詳細情報へのリンクがあります。このステップで作成される external catalog は、Docker で実行されている Hive Metastore (HMS) へのリンクとして機能します。
+external catalog に関する詳細情報は、このガイドの最後にリンクがあります。このステップで作成される external catalog は、Docker で実行されている Hive Metastore (HMS) へのリンクとして機能します。
 
 ```sql
 CREATE EXTERNAL CATALOG hudi_catalog_hms
@@ -345,14 +345,14 @@ SHOW TABLES;
 
 ### StarRocks で Hudi のデータをクエリ
 
-このクエリを2回実行します。最初の実行はデータがまだ StarRocks にキャッシュされていないため、完了までに約5秒かかる場合があります。2回目のクエリは非常に速くなります。
+このクエリを 2 回実行します。最初のクエリは、StarRocks にデータがまだキャッシュされていないため、完了するのに約 5 秒かかる場合があります。2 回目のクエリは非常に迅速に完了します。
 
 ```sql
 SELECT * from hudi_coders_hive\G
 ```
 
 :::tip
-StarRocks ドキュメントの一部の SQL クエリは、セミコロンの代わりに `\G` で終わります。`\G` は mysql CLI にクエリ結果を縦に表示させます。
+StarRocks のドキュメントにある一部の SQL クエリは、セミコロンの代わりに `\G` で終わります。`\G` は、mysql CLI にクエリ結果を縦に表示させます。
 
 多くの SQL クライアントは縦のフォーマット出力を解釈しないため、mysql CLI を使用していない場合は `\G` を `;` に置き換える必要があります。
 :::
@@ -390,20 +390,20 @@ _hoodie_partition_path: language=Python
 
 ## まとめ
 
-このチュートリアルでは、StarRocks external catalog を使用して、Hudi external catalog を使用してデータをそのままクエリできることを示しました。他にも Iceberg、Delta Lake、JDBC カタログを使用した多くの統合が利用可能です。
+このチュートリアルでは、StarRocks external catalog を使用して、Hudi external catalog を使用してデータをその場でクエリできることを示しました。Iceberg、Delta Lake、JDBC カタログを使用した他の多くの統合が利用可能です。
 
-このチュートリアルでは以下を行いました。
+このチュートリアルで行ったこと:
 
 - Docker で StarRocks と Hudi/Spark/MinIO 環境をデプロイ
-- Apache Spark を使用して小さなデータセットを Hudi にロード
-- Hudi カタログへのアクセスを提供する StarRocks external catalog を設定
+- Apache Spark を使用して Hudi に小さなデータセットをロード
+- Hudi カタログへのアクセスを提供するために StarRocks external catalog を設定
 - データレイクからデータをコピーせずに StarRocks で SQL を使用してデータをクエリ
 
 ## 詳細情報
 
 [StarRocks Catalogs](../data_source/catalog/catalog_overview.md)
 
-[Apache Hudi quickstart](https://hudi.apache.org/docs/quick-start-guide/) (includes Spark)
+[Apache Hudi quickstart](https://hudi.apache.org/docs/quick-start-guide/) (Spark を含む)
 
 [Apache Hudi S3 configuration](https://hudi.apache.org/docs/s3_hoodie/)
 
