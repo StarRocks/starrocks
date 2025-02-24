@@ -1322,6 +1322,62 @@ TEST_F(TimeFunctionsTest, fromUnixToDatetimeWithConstFormat) {
                                                    FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
                             .ok());
     }
+
+    // Test format string is "yyyy-MM-dd"
+    {
+        Columns columns;
+        auto tc1 = Int32Column::create();
+        tc1->append(24 * 60 * 60);
+        tc1->append(1565080737);
+        auto tc2 = ColumnHelper::create_const_column<TYPE_VARCHAR>("yyyy-MM-dd", 1);
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(tc2);
+
+        _utils->get_fn_ctx()->set_constant_columns(columns);
+
+        ASSERT_TRUE(TimeFunctions::from_unix_prepare(_utils->get_fn_ctx(),
+                                                     FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+
+        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format_32(_utils->get_fn_ctx(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ("1970-01-01", v->get_data()[0]);
+        ASSERT_EQ("2019-08-06", v->get_data()[1]);
+
+        ASSERT_TRUE(TimeFunctions::from_unix_close(_utils->get_fn_ctx(),
+                                                   FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+    }
+
+    // Test format string is "yyyy-MM-dd HH:mm"
+    {
+        Columns columns;
+        auto tc1 = Int32Column::create();
+        tc1->append(24 * 60 * 60);
+        tc1->append(1565080737);
+        auto tc2 = ColumnHelper::create_const_column<TYPE_VARCHAR>("yyyy-MM-dd HH:mm", 1);
+
+        columns.emplace_back(tc1);
+        columns.emplace_back(tc2);
+
+        _utils->get_fn_ctx()->set_constant_columns(columns);
+
+        ASSERT_TRUE(TimeFunctions::from_unix_prepare(_utils->get_fn_ctx(),
+                                                     FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+
+        ColumnPtr result = TimeFunctions::from_unix_to_datetime_with_format_32(_utils->get_fn_ctx(), columns).value();
+
+        auto v = ColumnHelper::cast_to<TYPE_VARCHAR>(result);
+        ASSERT_EQ("1970-01-01 16:00", v->get_data()[0]);
+        ASSERT_EQ("2019-08-06 01:38", v->get_data()[1]);
+
+        ASSERT_TRUE(TimeFunctions::from_unix_close(_utils->get_fn_ctx(),
+                                                   FunctionContext::FunctionContext::FunctionStateScope::FRAGMENT_LOCAL)
+                            .ok());
+    }
 }
 
 TEST_F(TimeFunctionsTest, from_days) {
