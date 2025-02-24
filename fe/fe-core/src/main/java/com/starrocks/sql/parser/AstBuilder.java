@@ -2082,17 +2082,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowMaterializedViewsStatement(
             StarRocksParser.ShowMaterializedViewsStatementContext context) {
         String database = null;
+        String catalog = null;
         NodePosition pos = createPos(context);
         if (context.qualifiedName() != null) {
-            database = getQualifiedName(context.qualifiedName()).toString();
+            QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+            List<String> parts = qualifiedName.getParts();
+            if (parts.size() == 2) {
+                catalog = qualifiedName.getParts().get(0);
+                database = qualifiedName.getParts().get(1);
+            } else if (parts.size() == 1) {
+                database = qualifiedName.getParts().get(0);
+            }
         }
         if (context.pattern != null) {
             StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-            return new ShowMaterializedViewsStmt(database, stringLiteral.getValue(), null, pos);
+            return new ShowMaterializedViewsStmt(catalog, database, stringLiteral.getValue(), null, pos);
         } else if (context.expression() != null) {
-            return new ShowMaterializedViewsStmt(database, null, (Expr) visit(context.expression()), pos);
+            return new ShowMaterializedViewsStmt(catalog, database, null, (Expr) visit(context.expression()), pos);
         } else {
-            return new ShowMaterializedViewsStmt(database, null, null, pos);
+            return new ShowMaterializedViewsStmt(catalog, database, null, null, pos);
         }
     }
 
