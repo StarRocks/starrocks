@@ -230,6 +230,7 @@ public:
      * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(lower);
+    DEFINE_VECTORIZED_FN(lower_utf8);
 
     /**
      * @param: [string_value]
@@ -237,6 +238,7 @@ public:
      * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(upper);
+    DEFINE_VECTORIZED_FN(upper_utf8);
 
     /**
      * @param: [string_value]
