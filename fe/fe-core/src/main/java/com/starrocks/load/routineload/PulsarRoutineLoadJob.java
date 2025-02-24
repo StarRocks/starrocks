@@ -138,6 +138,12 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
+    protected String getSourceLagString(String progressJsonStr) {
+        // empty implement.
+        return "";
+    }
+
+    @Override
     public void prepare() throws StarRocksException {
         super.prepare();
         // should reset converted properties each time the job being prepared.
