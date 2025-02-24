@@ -433,8 +433,27 @@ void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print
     if (!should_report) {
         return;
     }
-
     _last_report_time_ns.store(now);
+    Status status = _update_and_serialize_profile(result->mutable_load_channel_profile(), print_profile);
+    if (!status.ok()) {
+        result->clear_load_channel_profile();
+    }
+}
+
+void LoadChannel::diagnose(const PLoadDiagnoseRequest* request, PLoadDiagnoseResult* result) {
+    if (request->has_profile() && request->profile()) {
+        Status st = _update_and_serialize_profile(result->mutable_profile_data(), config::pipeline_print_profile);
+        result->mutable_profile_status()->set_status_code(st.code());
+        result->mutable_profile_status()->add_error_msgs(st.to_string());
+        if (!st.ok()) {
+            result->clear_profile_data();
+        }
+        VLOG(2) << "load channel diagnose profile, load_id: " << _load_id << ", txn_id: " << _txn_id
+                << ", status: " << st;
+    }
+}
+
+Status LoadChannel::_update_and_serialize_profile(std::string* result, bool print_profile) {
     COUNTER_UPDATE(_profile_report_count, 1);
     SCOPED_TIMER(_profile_report_timer);
 
@@ -460,9 +479,11 @@ void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print
     if (!st.ok()) {
         LOG(ERROR) << "Failed to serialize LoadChannel profile, load_id: " << _load_id << ", txn_id: " << _txn_id
                    << ", status: " << st;
-        return;
+        return Status::InternalError("Failed to serialize profile, error: " + st.to_string());
     }
     COUNTER_UPDATE(_profile_serialized_size, len);
-    result->set_load_channel_profile((char*)buf, len);
+    result->append((char*)buf, len);
+    VLOG(2) << "report profile, load_id: " << _load_id << ", txn_id: " << _txn_id << ", size: " << len;
+    return Status::OK();
 }
 } // namespace starrocks

@@ -39,6 +39,8 @@ public:
 
     void test_load_channel_profile_base(RuntimeState* runtime_state, const PLoadChannelProfileConfig& expect_config);
 
+    void test_load_diagnose_base(const std::string& error_text, bool should_diagnose);
+
 protected:
     std::unique_ptr<RuntimeState> _build_runtime_state(TQueryOptions& query_options) {
         TUniqueId fragment_id;
@@ -109,6 +111,22 @@ protected:
         TDataSink data_sink;
         data_sink.__set_olap_table_sink(table_sink);
         return data_sink;
+    }
+
+    void _serialize_load_profile(std::string* result) {
+        auto profile = std::make_shared<RuntimeProfile>("LoadChannel");
+        profile->add_info_string("LoadId", print_id(_data_sink.olap_table_sink.load_id));
+        profile->add_info_string("TxnId", std::to_string(_txn_id));
+        auto sub_profile =
+                profile->create_child(fmt::format("Channel (host={})", BackendOptions::get_localhost()), true);
+        ADD_COUNTER(sub_profile, "IndexNum", TUnit::UNIT)->update(1);
+        TRuntimeProfileTree thrift_profile;
+        profile->to_thrift(&thrift_profile);
+        uint8_t* buf = nullptr;
+        uint32_t len = 0;
+        ThriftSerializer ser(false, 4096);
+        ASSERT_OK(ser.serialize(&thrift_profile, &len, &buf));
+        result->append((char*)buf, len);
     }
 
     int64_t _db_id;
@@ -210,6 +228,95 @@ TEST_F(TabletSinkIndexChannelTest, pipeline_load_channel_profile) {
     expect_config.set_big_query_profile_threshold_ns(10 * 1e9);
     expect_config.set_runtime_profile_report_interval_ns(5 * 1e9);
     test_load_channel_profile_base(runtime_state.get(), expect_config);
+}
+
+using RpcOpenPair = std::pair<PTabletWriterOpenRequest*, RefCountClosure<PTabletWriterOpenResult>*>;
+using RpcAddChunkPair = std::pair<PTabletWriterAddChunksRequest*, ReusableClosure<PTabletWriterAddBatchResult>*>;
+using RpcLoadDisagnosePair = std::pair<PLoadDiagnoseRequest*, RefCountClosure<PLoadDiagnoseResult>*>;
+
+void TabletSinkIndexChannelTest::test_load_diagnose_base(const std::string& error_text, bool should_diagnose) {
+    TQueryOptions query_options;
+    // let query_timeout / 2 > load_diagnose_small_rpc_timeout_threshold_ms
+    query_options.__set_query_timeout(300);
+    auto runtime_state = _build_runtime_state(query_options);
+    DescriptorTbl* desc_tbl = nullptr;
+    ASSERT_OK(DescriptorTbl::create(runtime_state.get(), _object_pool.get(), _desc_tbl, &desc_tbl,
+                                    config::vector_chunk_size));
+    runtime_state->set_desc_tbl(desc_tbl);
+    auto sink = std::make_unique<OlapTableSink>(_object_pool.get(), std::vector<TExpr>(), nullptr, runtime_state.get());
+    ASSERT_OK(sink->init(_data_sink, runtime_state.get()));
+    ASSERT_OK(sink->prepare(runtime_state.get()));
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::open_send");
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::open_join");
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::add_chunk_send");
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::add_chunk_join");
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::load_diagnose_send");
+        SyncPoint::GetInstance()->ClearCallBack("NodeChannel::rpc::load_diagnose_join");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::open_send", [&](void* arg) {
+        RpcOpenPair* rpc_pair = (RpcOpenPair*)arg;
+        RefCountClosure<PTabletWriterOpenResult>* closure = rpc_pair->second;
+        closure->result.mutable_status()->set_status_code(TStatusCode::OK);
+        closure->Run();
+    });
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::open_join", [&](void* arg) {
+        RefCountClosure<PTabletWriterOpenResult>* closure = (RefCountClosure<PTabletWriterOpenResult>*)arg;
+        EXPECT_FALSE(closure->cntl.Failed());
+        EXPECT_EQ(TStatusCode::OK, closure->result.status().status_code());
+    });
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_send", [&](void* arg) {
+        RpcAddChunkPair* rpc_pair = (RpcAddChunkPair*)arg;
+        ReusableClosure<PTabletWriterAddBatchResult>* closure = rpc_pair->second;
+        closure->cntl.SetFailed(error_text);
+        closure->Run();
+    });
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::add_chunk_join", [&](void* arg) {
+        std::pair<ReusableClosure<PTabletWriterAddBatchResult>*, bool*>* rpc_pair =
+                (std::pair<ReusableClosure<PTabletWriterAddBatchResult>*, bool*>*)arg;
+        ReusableClosure<PTabletWriterAddBatchResult>* closure = rpc_pair->first;
+        EXPECT_TRUE(closure->cntl.Failed());
+        EXPECT_TRUE(closure->cntl.ErrorText().find(error_text) != std::string::npos);
+        *rpc_pair->second = true;
+    });
+
+    int32_t num_diagnose = 0;
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::load_diagnose_send", [&](void* arg) {
+        RpcLoadDisagnosePair* rpc_pair = (RpcLoadDisagnosePair*)arg;
+        RefCountClosure<PLoadDiagnoseResult>* closure = rpc_pair->second;
+        closure->result.mutable_profile_status()->set_status_code(TStatusCode::OK);
+        _serialize_load_profile(closure->result.mutable_profile_data());
+        closure->Run();
+    });
+    SyncPoint::GetInstance()->SetCallBack("NodeChannel::rpc::load_diagnose_join", [&](void* arg) {
+        RefCountClosure<PLoadDiagnoseResult>* closure = (RefCountClosure<PLoadDiagnoseResult>*)arg;
+        EXPECT_EQ(TStatusCode::OK, closure->result.profile_status().status_code());
+        num_diagnose += 1;
+    });
+
+    ASSERT_OK(sink->open(runtime_state.get()));
+    auto tuple_desc = runtime_state->desc_tbl().get_tuple_descriptor(_desc_tbl.tupleDescriptors[0].id);
+    ChunkUniquePtr chunk = ChunkHelper::new_chunk(*tuple_desc, 1);
+    chunk->get_column_by_index(0)->append_datum(Datum(1));
+    chunk->get_column_by_index(1)->append_datum(Datum(1L));
+    ASSERT_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
+    ASSERT_FALSE(sink->close(runtime_state.get(), Status::OK()).ok());
+    if (should_diagnose) {
+        ASSERT_EQ(1, num_diagnose);
+        ASSERT_EQ(1, runtime_state->load_channel_profile()->num_children());
+    } else {
+        ASSERT_EQ(0, num_diagnose);
+        ASSERT_EQ(0, runtime_state->load_channel_profile()->num_children());
+    }
+}
+
+TEST_F(TabletSinkIndexChannelTest, load_diagnose) {
+    test_load_diagnose_base("[E1008]Reached timeout 150000ms@10.128.8.78:8060", true);
+    test_load_diagnose_base("artificial failure", false);
 }
 
 } // namespace starrocks
