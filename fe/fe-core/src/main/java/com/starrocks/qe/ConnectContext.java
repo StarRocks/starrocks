@@ -758,8 +758,7 @@ public class ConnectContext {
     }
 
     public boolean needMergeProfile() {
-        return isProfileEnabled() &&
-                sessionVariable.getPipelineProfileLevel() < TPipelineProfileLevel.DETAIL.getValue();
+        return sessionVariable.getPipelineProfileLevel() < TPipelineProfileLevel.DETAIL.getValue();
     }
 
     public byte[] getAuthDataSalt() {

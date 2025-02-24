@@ -241,12 +241,12 @@ public class LoadLoadingTask extends LoadTask {
         curCoordinator.setExecPlan(loadPlanner.getExecPlan());
         curCoordinator.setTopProfileSupplier(this::buildRunningTopLevelProfile);
 
+        long beginTimeInNanoSecond = TimeUtils.getStartTime();
         try {
             QeProcessorImpl.INSTANCE.registerQuery(loadId, curCoordinator);
-            long beginTimeInNanoSecond = TimeUtils.getStartTime();
             actualExecute(curCoordinator);
-
-            if (context.getSessionVariable().isEnableProfile()
+        } finally {
+            if (context.getSessionVariable().isEnableProfile() || LoadErrorUtils.enableProfileAfterError(curCoordinator)
                     || ProfileManager.getInstance().hasProfile(DebugUtil.printId(loadId))) {
                 RuntimeProfile profile = buildFinishedTopLevelProfile();
 
@@ -263,7 +263,6 @@ public class LoadLoadingTask extends LoadTask {
                     context.getQueryDetail().setProfile(profileContent);
                 }
             }
-        } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
     }

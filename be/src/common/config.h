@@ -468,6 +468,27 @@ CONF_Int32(make_snapshot_rpc_timeout_ms, "20000");
 // OlapTableSink sender's send interval, should be less than the real response time of a tablet writer rpc.
 CONF_mInt32(olap_table_sink_send_interval_ms, "10");
 
+<<<<<<< HEAD
+=======
+// If load rpc timeout is larger than this value, slow log will be printed every time,
+// if smaller than this value, will reduce slow log print frequency.
+// 0 is print slow log every time.
+CONF_mInt32(load_rpc_slow_log_frequency_threshold_seconds, "60");
+// Whether to enable load diagnose. The diagnosis is initiated by OlapTableSink when meeting brpc timeout
+// from LoadChannel. It will send rpc to LoadChannel to check the status.
+CONF_mBool(enable_load_diagnose, "true");
+// If the rpc timeout exceeds this threshold, then diagnostics will be performed every time a timeout occurs;
+// if it is below this threshold, diagnostics will be performed once every 20 timeouts. This is used to avoid
+// frequent diagnostics for real-time loads which have a smaller brpc timeout.
+CONF_mInt32(load_diagnose_small_rpc_timeout_threshold_ms, "60000");
+// The timeout of the diagnosis rpc sent from OlapTableSink to LoadChannel
+CONF_mInt32(load_diagnose_send_rpc_timeout_ms, "2000");
+// Used in load fail point. The brpc timeout used to simulate brpc exception "[E1008]Reached timeout"
+CONF_mInt32(load_fp_brpc_timeout_ms, "-1");
+// Used in load fail point. The block time to simulate TabletsChannel::add_chunk spends much time
+CONF_mInt32(load_fp_tablets_channel_add_chunk_block_ms, "-1");
+
+>>>>>>> 706c6dd06 ([Enhancement] Report load profile if brpc reaches timeout (#55494))
 CONF_Bool(enable_load_segment_parallel, "false");
 CONF_Int32(load_segment_thread_pool_num_max, "128");
 CONF_Int32(load_segment_thread_pool_queue_size, "10240");

@@ -122,10 +122,18 @@ public:
 
     void report_profile(PTabletWriterAddBatchResult* result, bool print_profile);
 
+    void diagnose(const PLoadDiagnoseRequest* request, PLoadDiagnoseResult* response);
+
 private:
     void _add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response);
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
     Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
+<<<<<<< HEAD
+=======
+    bool _should_enable_profile();
+    std::vector<std::shared_ptr<TabletsChannel>> _get_all_channels();
+    Status _update_and_serialize_profile(std::string* serialized_profile, bool print_profile);
+>>>>>>> 706c6dd06 ([Enhancement] Report load profile if brpc reaches timeout (#55494))
 
     LoadChannelMgr* _load_mgr;
     LakeTabletManager* _lake_tablet_mgr;

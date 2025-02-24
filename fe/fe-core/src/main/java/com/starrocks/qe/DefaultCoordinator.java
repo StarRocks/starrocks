@@ -361,6 +361,10 @@ public class DefaultCoordinator extends Coordinator {
         return queryStatus;
     }
 
+    public QueryRuntimeProfile getQueryRuntimeProfile() {
+        return queryProfile;
+    }
+
     @Override
     public RuntimeProfile getQueryProfile() {
         return queryProfile.getQueryProfile();
