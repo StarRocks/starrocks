@@ -19,10 +19,12 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.fs.HdfsUtil;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.journal.bdbje.BDBEnvironment;
+import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.NodeMgr;
 import com.starrocks.server.StorageVolumeMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.Frontend;
@@ -32,6 +34,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 
@@ -43,14 +46,15 @@ public class RestoreClusterSnapshotMgr {
     private ClusterSnapshotConfig config;
     private boolean oldStartWithIncompleteMeta;
     private boolean oldResetElectionGroup;
+    private RestoredSnapshotInfo restoredSnapshotInfo;
 
-    private RestoreClusterSnapshotMgr(String clusterSnapshotYamlFile) throws StarRocksException {
+    private RestoreClusterSnapshotMgr(String clusterSnapshotYamlFile) throws StarRocksException, IOException {
         config = ClusterSnapshotConfig.load(clusterSnapshotYamlFile);
         downloadSnapshot();
         updateConfig();
     }
 
-    public static void init(String clusterSnapshotYamlFile, String[] args) throws StarRocksException {
+    public static void init(String clusterSnapshotYamlFile, String[] args) throws StarRocksException, IOException {
         for (String arg : args) {
             if (arg.equalsIgnoreCase("-cluster_snapshot")) {
                 LOG.info("FE start to restore from a cluster snapshot (-cluster_snapshot)");
@@ -95,6 +99,14 @@ public class RestoreClusterSnapshotMgr {
         }
     }
 
+    public static RestoredSnapshotInfo getRestoredSnapshotInfo() {
+        RestoreClusterSnapshotMgr self = instance;
+        if (self == null) {
+            return null;
+        }
+        return self.restoredSnapshotInfo;
+    }
+
     private void updateConfig() {
         // Save the old config
         oldStartWithIncompleteMeta = Config.start_with_incomplete_meta;
@@ -111,7 +123,7 @@ public class RestoreClusterSnapshotMgr {
         Config.bdbje_reset_election_group = oldResetElectionGroup;
     }
 
-    private void downloadSnapshot() throws StarRocksException {
+    private void downloadSnapshot() throws StarRocksException, IOException {
         ClusterSnapshotConfig.ClusterSnapshot clusterSnapshot = config.getClusterSnapshot();
         if (clusterSnapshot == null) {
             return;
@@ -131,6 +143,32 @@ public class RestoreClusterSnapshotMgr {
 
         LOG.info("Download cluster snapshot {} to local dir {}", snapshotImagePath, localImagePath);
         HdfsUtil.copyToLocal(snapshotImagePath, localImagePath, clusterSnapshot.getStorageVolume().getProperties());
+        collectSnapshotInfoAfterDownload(snapshotImagePath, localImagePath);
+    }
+
+    private void collectSnapshotInfoAfterDownload(String snapshotImagePath, String localImagePath) throws IOException {
+        String restoredSnapshotName = null;
+        long feImageJournalId = 0L;
+        long starMgrImageJournalId = 0L;
+
+        Storage storageFe = new Storage(localImagePath);
+        Storage storageStarMgr = new Storage(localImagePath + StarMgrServer.IMAGE_SUBDIR);
+        // get image version
+        feImageJournalId = storageFe.getImageJournalId();
+        starMgrImageJournalId = storageStarMgr.getImageJournalId();
+
+        LOG.info("Download cluster snapshot successfully with FE image version: {}, StarMgr image version: {}",
+                 feImageJournalId, starMgrImageJournalId);
+
+        String normalizePath = snapshotImagePath.replaceAll("/+$", "");
+        int lastSlashIndex = normalizePath.lastIndexOf('/');
+        if (lastSlashIndex != -1) {
+            restoredSnapshotName = normalizePath.substring(lastSlashIndex + 1);
+        }
+
+        if (restoredSnapshotName != null) {
+            restoredSnapshotInfo = new RestoredSnapshotInfo(restoredSnapshotName, feImageJournalId, starMgrImageJournalId);
+        }
     }
 
     private void updateFrontends() throws StarRocksException {
