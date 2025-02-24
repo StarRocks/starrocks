@@ -1355,7 +1355,7 @@ build_icu() {
     sed -i 's/\r$//' ./config.*
     sed -i 's/\r$//' ./configure
     sed -i 's/\r$//' ./mkinstalldirs
-    ./runConfigureICU Linux --prefix=$TP_INSTALL_DIR --enable-static --disable-shared
+    ./runConfigureICU Linux/gcc --prefix=$TP_INSTALL_DIR --enable-static --disable-shared
     make -j$PARALLEL
     make install
 }
