@@ -174,7 +174,7 @@ private:
     TypeDescriptor _type_desc;
     ::parquet::schema::NodePtr _root;
     std::string _timezone;
-    int _offset{0};
+    cctz::time_zone _ctz;
     bool _use_legacy_decimal_encoding = false;
     bool _use_int96_timestamp_encoding = false;
 };
