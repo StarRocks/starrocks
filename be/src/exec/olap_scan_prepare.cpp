@@ -424,7 +424,7 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
             ValueType value;
             ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
             bool ok =
-                    get_predicate_value<Negative>(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
+                    get_predicate_value<Negative>(_opts.obj_pool, slot, expr_context->root(), expr_context, &value, &op, &status);
             if (ok && range->add_fixed_values(FILTER_IN, std::set<RangeValueType>{value}).ok()) {
                 _normalized_exprs[i] = true;
             }
@@ -535,7 +535,7 @@ requires lt_is_date<SlotType> Status ChunkPredicateBuilder<E, Type>::normalize_i
             DateValue value{0};
             ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
             bool ok =
-                    get_predicate_value<Negative>(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
+                    get_predicate_value<Negative>(_opts.obj_pool, slot, expr_context->root(), expr_context, &value, &op, &status);
             if (ok && range->add_fixed_values(FILTER_IN, std::set<DateValue>{value}).ok()) {
                 _normalized_exprs[i] = true;
             }
@@ -568,7 +568,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_binary_predicate(const SlotDesc
         SQLFilterOp op;
         ValueType value;
         ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
-        bool ok = get_predicate_value<Negative>(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
+        bool ok = get_predicate_value<Negative>(_opts.obj_pool, slot, expr_context->root(), expr_context, &value, &op, &status);
         if (ok && range->add_range(op, static_cast<RangeValueType>(value)).ok()) {
             _normalized_exprs[i] = true;
         }
@@ -772,7 +772,7 @@ Status ChunkPredicateBuilder<E, Type>::normalize_not_in_or_not_equal_predicate(
             ValueType value;
             ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
             bool ok =
-                    get_predicate_value<Negative>(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
+                    get_predicate_value<Negative>(_opts.obj_pool, slot, expr_context->root(), expr_context, &value, &op, &status);
             if (ok && range->add_fixed_values(FILTER_NOT_IN, std::set<RangeValueType>{value}).ok()) {
                 _normalized_exprs[i] = true;
             }
