@@ -202,6 +202,11 @@ public class ConnectProcessor {
                 .setStmtId(ctx.getStmtId())
                 .setIsForwardToLeader(isForwardToLeader)
                 .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString());
+        // Sometimes, error msg will be set in EOF state, such as query with limit,
+        // so here we only add error messages for query on ERROR status
+        if (ctx.getState().isError()) {
+            ctx.getAuditEventBuilder().setErrorMsg(ctx.getState().getErrorMessage());
+        }
         if (statistics != null) {
             ctx.getAuditEventBuilder().setScanBytes(statistics.scanBytes);
             ctx.getAuditEventBuilder().setScanRows(statistics.scanRows);
