@@ -805,6 +805,7 @@ public class SchemaChangeHandler extends AlterHandler {
             schemaForFinding.set(modColIndex, modColumn);
         }
 
+        List<Column> otherIndexModifiedColumn = new ArrayList<>();
         // check if column being mod
         if (!modColumn.equals(oriColumn)) {
             // column is mod. we have to mod this column in all indices
@@ -880,6 +881,7 @@ public class SchemaChangeHandler extends AlterHandler {
                     } else {
                         otherCol.setAggregationType(null, oldCol.isAggregationTypeImplicit());
                     }
+                    otherIndexModifiedColumn.add(otherCol);
                     otherIndexSchema.set(modColIndex, otherCol);
                 }
             }
@@ -893,8 +895,14 @@ public class SchemaChangeHandler extends AlterHandler {
                 || !oriColumn.getType().isScalarType()
                 || oriColumn.getType().isDecimalOfAnyVersion()
                 || oriColumn.isGeneratedColumn()) {
-            fastSchemaEvolution = false;
+            return false;
         }
+        for (Column column : otherIndexModifiedColumn) {
+            if (column.isKey()) {
+                return false;
+            }
+        }
+
         return fastSchemaEvolution;
     }
 
