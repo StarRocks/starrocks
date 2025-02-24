@@ -56,7 +56,7 @@ public class AuditEvent {
         CONNECTION,
         DISCONNECTION,
         BEFORE_QUERY,
-        AFTER_QUERY
+        AFTER_QUERY,
     }
 
     @Retention(RetentionPolicy.RUNTIME)
@@ -139,6 +139,9 @@ public class AuditEvent {
     public String candidateMvs;
     @AuditField(value = "HitMvs", ignore_zero = true)
     public String hitMVs;
+
+    @AuditField(value = "Features", ignore_zero = true)
+    public String features;
 
     @AuditField(value = "IsForwardToLeader")
     public boolean isForwardToLeader = false;
@@ -284,6 +287,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setPlanMemCosts(double memCosts) {
             auditEvent.planMemCosts = memCosts;
+            return this;
+        }
+
+        public AuditEventBuilder setPlanFeatures(String features) {
+            auditEvent.features = features;
             return this;
         }
 
