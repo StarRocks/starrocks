@@ -2508,6 +2508,11 @@ public class Config extends ConfigBase {
     //============================== Plan Feature Extraction BEGIN ========================================//
     @ConfField(mutable = true, comment = "Collect features of query plan into a log file")
     public static boolean enable_plan_feature_collection = false;
+    @ConfField(mutable = true)
+    public static boolean enable_query_cost_prediction = false;
+    @ConfField(mutable = true)
+    public static String query_cost_prediction_service_address = "http://localhost:5000";
+
     @ConfField
     public static String feature_log_dir = StarRocksFE.STARROCKS_HOME_DIR + "/log";
     @ConfField

@@ -168,6 +168,7 @@ public class DefaultCoordinator extends Coordinator {
     private boolean isShortCircuit = false;
     private boolean isBinaryRow = false;
 
+    private long estimatedMemCost;
     private ExecutionSchedule scheduler;
 
     public static class Factory implements Coordinator.Factory {
@@ -400,6 +401,15 @@ public class DefaultCoordinator extends Coordinator {
     }
 
     @Override
+    public void setPredictedCost(long memBytes) {
+        this.estimatedMemCost = memBytes;
+    }
+
+    public long getPredictedCost() {
+        return estimatedMemCost;
+    }
+
+    @Override
     public void clearExportStatus() {
         lock.lock();
         try {
@@ -574,7 +584,10 @@ public class DefaultCoordinator extends Coordinator {
 
     @Override
     public String getSchedulerExplain() {
-        return executionDAG.getFragmentsInPreorder().stream()
+        String predict = Config.enable_query_cost_prediction ?
+                "predicted memory cost: " + getPredictedCost() + "\n" : "";
+        return predict +
+                executionDAG.getFragmentsInPreorder().stream()
                 .map(ExecutionFragment::getExplainString)
                 .collect(Collectors.joining("\n"));
     }
