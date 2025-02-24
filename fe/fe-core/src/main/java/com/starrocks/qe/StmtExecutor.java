@@ -813,25 +813,25 @@ public class StmtExecutor {
             // this exception shows the connection is gone
             context.getState().setError(e.getMessage());
         } catch (StarRocksException e) {
-            String sql = originStmt != null ? originStmt.originStmt : "";
-            // analysis exception only print message, not print the stack
-            LOG.info("execute Exception, sql: {}, error: {}", sql, e.getMessage());
-            context.getState().setError(e.getMessage());
-            if (parsedStmt instanceof KillStmt) {
-                // ignore kill stmt execute err(not monitor it)
-                context.getState().setErrType(QueryState.ErrType.IGNORE_ERR);
-            } else if (e instanceof TimeoutException) {
-                context.getState().setErrType(QueryState.ErrType.EXEC_TIME_OUT);
-            } else if (e instanceof NoAliveBackendException) {
-                context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
-            } else {
-                // TODO: some StarRocksException doesn't belong to analysis error
-                // we should set such error type to internal error
-                context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
-            }
-
             if (context.isLeaderTransferred() && !isInternalStmt) {
                 forwardToLeader();
+            } else {
+                String sql = originStmt != null ? originStmt.originStmt : "";
+                // analysis exception only print message, not print the stack
+                LOG.info("execute Exception, sql: {}, error: {}", sql, e.getMessage());
+                context.getState().setError(e.getMessage());
+                if (parsedStmt instanceof KillStmt) {
+                    // ignore kill stmt execute err(not monitor it)
+                    context.getState().setErrType(QueryState.ErrType.IGNORE_ERR);
+                } else if (e instanceof TimeoutException) {
+                    context.getState().setErrType(QueryState.ErrType.EXEC_TIME_OUT);
+                } else if (e instanceof NoAliveBackendException) {
+                    context.getState().setErrType(QueryState.ErrType.INTERNAL_ERR);
+                } else {
+                    // TODO: some StarRocksException doesn't belong to analysis error
+                    // we should set such error type to internal error
+                    context.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
+                }
             }
         } catch (Throwable e) {
             if (e instanceof LeaderTransferException && !isInternalStmt) {

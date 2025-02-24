@@ -113,8 +113,8 @@ public class LeaderOpExecutor {
 
     public void execute() throws Exception {
         forward();
-        if (GracefulExitFlag.isGracefulExit()) {
-            LOG.info("forwarding to master get result max journal id: {}", result.maxJournalId);
+        if (!GracefulExitFlag.isGracefulExit()) {
+            LOG.info("forwarding to leader get result max journal id: {}", result.maxJournalId);
             ctx.getGlobalStateMgr().getJournalObservable().waitOn(result.maxJournalId, waitTimeoutMs);
         }
 
