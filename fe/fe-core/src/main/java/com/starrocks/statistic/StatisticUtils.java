@@ -102,7 +102,7 @@ public class StatisticUtils {
                 context = ConnectContext.buildInner();
                 break;
             case HTTP_PROTOCAL:
-                context = HttpConnectContext.build();
+                context = new HttpConnectContext();
                 break;
             case ARROW_FLIGHT_PROTOCAL:
                 context = new ArrowFlightSqlConnectContext();
