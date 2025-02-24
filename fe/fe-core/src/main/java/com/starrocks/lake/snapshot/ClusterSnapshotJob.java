@@ -52,11 +52,14 @@ public class ClusterSnapshotJob implements Writable {
     private ClusterSnapshotJobState state;
     @SerializedName(value = "errMsg")
     private String errMsg;
+    @SerializedName(value = "detailInfo")
+    private String detailInfo;
 
     public ClusterSnapshotJob(long id, String snapshotName, String storageVolumeName, long createdTimeMs) {
         this.snapshot = new ClusterSnapshot(id, snapshotName, storageVolumeName, createdTimeMs, -1, 0, 0);
         this.state = ClusterSnapshotJobState.INITIALIZING;
         this.errMsg = "";
+        this.detailInfo = "";
     }
 
     public void setState(ClusterSnapshotJobState state) {
@@ -118,6 +121,10 @@ public class ClusterSnapshotJob implements Writable {
                 state == ClusterSnapshotJobState.UPLOADING;
     }
 
+    public boolean isInitializing() {
+        return state == ClusterSnapshotJobState.INITIALIZING;
+    }
+
     public boolean isError() {
         return state == ClusterSnapshotJobState.ERROR;
     }
@@ -138,6 +145,10 @@ public class ClusterSnapshotJob implements Writable {
         return state == ClusterSnapshotJobState.DELETED || state == ClusterSnapshotJobState.ERROR;
     }
 
+    public void setDetailInfo(String detailInfo) {
+        this.detailInfo = detailInfo;
+    }
+
     public void logJob() {
         ClusterSnapshotLog log = new ClusterSnapshotLog();
         log.setSnapshotJob(this);
@@ -151,7 +162,7 @@ public class ClusterSnapshotJob implements Writable {
         item.setCreated_time(getCreatedTimeMs() / 1000);
         item.setFinished_time(getFinishedTimeMs() / 1000);
         item.setState(state.name());
-        item.setDetail_info("");
+        item.setDetail_info(detailInfo);
         item.setError_message(errMsg);
         return item;
     }

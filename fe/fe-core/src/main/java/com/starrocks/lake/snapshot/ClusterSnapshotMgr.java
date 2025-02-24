@@ -42,6 +42,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.NavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
@@ -224,12 +225,39 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         return automatedSnapshotJobs;
     }
 
-    public void resetAutomatedJobsStateForTheFirstRun() {
+    public void resetSnapshotJobsStateAfterRestarted(RestoredSnapshotInfo restoredSnapshotInfo) {
+        setLastJobFinishedAfterRestored(restoredSnapshotInfo);
         resetLastUnFinishedAutomatedSnapshotJob();
-        clearFinishedAutomatedClusterSnapshotExceptLastFinished();
+        clearFinishedAutomatedClusterSnapshotExceptLast();
     }
 
-    public void clearFinishedAutomatedClusterSnapshotExceptLastFinished() {
+    public void setLastJobFinishedAfterRestored(RestoredSnapshotInfo restoredSnapshotInfo) {
+        if (restoredSnapshotInfo == null) {
+            return;
+        }
+
+        String restoredSnapshotName = restoredSnapshotInfo.getSnapshotName();
+        long feJournalId = restoredSnapshotInfo.getFeJournalId();
+        long starMgrJournalId = restoredSnapshotInfo.getStarMgrJournalId();
+        if (restoredSnapshotName == null) {
+            return;
+        }
+
+        Entry<Long, ClusterSnapshotJob> entry = automatedSnapshotJobs.lastEntry();
+        if (entry != null) {
+            ClusterSnapshotJob job = entry.getValue();
+            // Last snapshot may in init state, because the last snapshot checkpoint does not include the
+            // editlog for the state transtition after ClusterSnapshotJobState.INITIALIZING
+            if (job.getSnapshotName().equals(restoredSnapshotName) && job.isInitializing()) {
+                job.setJournalIds(feJournalId, starMgrJournalId);
+                job.setState(ClusterSnapshotJobState.FINISHED);
+                job.setDetailInfo("Finished time was reset after cluster restored");
+                job.logJob();
+            }
+        }
+    }
+
+    public void clearFinishedAutomatedClusterSnapshotExceptLast() {
         ClusterSnapshotJob lastFinishedJob = getLastFinishedAutomatedClusterSnapshotJob();
         if (lastFinishedJob != null) {
             clearFinishedAutomatedClusterSnapshot(lastFinishedJob.getSnapshotName());
@@ -237,8 +265,9 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     }
 
     public void resetLastUnFinishedAutomatedSnapshotJob() {
-        if (!automatedSnapshotJobs.isEmpty()) {
-            ClusterSnapshotJob job = automatedSnapshotJobs.lastEntry().getValue();
+        Entry<Long, ClusterSnapshotJob> entry = automatedSnapshotJobs.lastEntry();
+        if (entry != null) {
+            ClusterSnapshotJob job = entry.getValue();
             if (job.isUnFinishedState()) {
                 job.setErrMsg("Snapshot job has been failed because of FE restart or leader change");
                 job.setState(ClusterSnapshotJobState.ERROR);
