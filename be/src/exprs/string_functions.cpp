@@ -1993,8 +1993,13 @@ void utf8_case_toggle(const Bytes& src_bytes, const Offsets& src_offsets, Bytes*
                                             dst_bytes->size() - current_offset, src_data, src_len, &err_code);
         }
         if (err_code == U_BUFFER_OVERFLOW_ERROR || err_code == U_STRING_NOT_TERMINATED_WARNING) {
-            current_dst_size += dst_size;
+            // Some unicode characters occupy different numbers of bytes after case conversion.
+            // When this happens, we need to expand the capacity.
+            // Considering that there are not many such characters, we will not reserve additional memory during resize.
+            // If necessary, we can make some strategies for reserving memory in the future.
+            current_dst_size += dst_size - src_len + 1;
             dst_bytes->resize(current_dst_size);
+            dst_data = dst_bytes->data() + current_offset;
 
             err_code = U_ZERO_ERROR;
             if constexpr (to_upper) {
@@ -2055,7 +2060,7 @@ public:
                 vectorized_toggle_case<'A', 'Z'>(&src_bytes, &dst_bytes);
             }
         } else {
-            dst_bytes.resize(src_offsets.back() + src_offsets.size());
+            dst_bytes.resize(src_offsets.back());
             dst_offsets.resize(src_offsets.size());
             utf8_case_toggle<to_upper>(src_bytes, src_offsets, &dst_bytes, &dst_offsets);
         }
