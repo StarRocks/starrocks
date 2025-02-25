@@ -239,6 +239,8 @@ public class IcebergScanNode extends ScanNode {
 
         if (detailLevel == TExplainLevel.VERBOSE) {
             HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
+            // for global dict
+            output.append(explainColumnDict(prefix));
 
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
