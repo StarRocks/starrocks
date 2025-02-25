@@ -41,9 +41,16 @@ public class CatalogAnalyzer {
 
     private static final String WHITESPACE = "\\s+";
 
-    private static final Set<String> NOT_SUPPORT_ALTER_PROPERTIES = Sets.newHashSet(
-            "type",
-            "hive.metastore.type"
+    private static final Set<String> SUPPORT_ALTER_PROPERTIES = Sets.newHashSet(
+            "ranger.plugin.hive.service.name",
+            "hive.metastore.uris",
+            "enable_metastore_cache",
+            "enable_remote_file_cache",
+            "metastore_cache_refresh_interval_sec",
+            "remote_file_cache_refresh_interval_sec",
+            "metastore_cache_ttl_sec",
+            "remote_file_cache_ttl_sec",
+            "enable_cache_list_names"
     );
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
@@ -138,7 +145,7 @@ public class CatalogAnalyzer {
                     String confName = property.getKey();
 
                     if (("hive".equals(catalogType) || "hudi".equals(catalogType))) {
-                        if (NOT_SUPPORT_ALTER_PROPERTIES.contains(confName)) {
+                        if (!SUPPORT_ALTER_PROPERTIES.contains(confName)) {
                             throw new SemanticException("Not support alter hive/hudi catalog property " + property.getKey());
                         }
                     } else if (!"ranger.plugin.hive.service.name".equals(confName)) {
