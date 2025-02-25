@@ -24,10 +24,13 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnAccessPath;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HiveTable;
+import com.starrocks.catalog.IcebergTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
 import com.starrocks.connector.hive.HiveStorageFormat;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
@@ -37,6 +40,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
@@ -76,6 +80,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.analysis.BinaryType.EQ_FOR_NULL;
+import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT;
+import static org.apache.iceberg.TableProperties.DEFAULT_FILE_FORMAT_DEFAULT;
 
 /*
  * For compute all string columns that can benefit from low-cardinality optimization by bottom-up
@@ -559,11 +565,7 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         DecodeInfo info = new DecodeInfo();
         for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
             // Condition 1:
-            if (!supportLowCardinality(column.getType())) {
-                continue;
-            }
-
-            if (!sessionVariable.isEnableArrayLowCardinalityOptimize() && column.getType().isArrayType()) {
+            if (!supportAndEnabledLowCardinality(column.getType())) {
                 continue;
             }
 
@@ -607,6 +609,44 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         return info;
     }
 
+    private Pair<Boolean, Optional<ColumnDict>> checkConnectorGlobalDict(Table table, ColumnRefOperator column) {
+        // Condition 1:
+        if (!supportAndEnabledLowCardinality(column.getType())) {
+            return new Pair<>(false, Optional.empty());
+        }
+
+        // Condition 2: the varchar column is low cardinality string column
+        ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .getConnectorTableStatistics(table, List.of(column.getName())).get(0).getColumnStatistic();
+
+        if (!columnStatistic.isUnknown() &&
+                columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD) {
+            LOG.debug("{} isn't low cardinality string column", column.getName());
+            return new Pair<>(false, Optional.empty());
+        }
+
+        boolean alwaysCollectDict = sessionVariable.isAlwaysCollectDictOnLake();
+        if (!alwaysCollectDict && !FeConstants.USE_MOCK_DICT_MANAGER && columnStatistic.isUnknown()) {
+            LOG.debug("{} isn't low cardinality string column", column.getName());
+            return new Pair<>(false, Optional.empty());
+        }
+
+        // Condition 3: the varchar column has collected global dict
+        if (!IRelaxDictManager.getInstance().hasGlobalDict(table.getUUID(), column.getName())) {
+            LOG.debug("{} doesn't have global dict", column.getName());
+            return new Pair<>(false, Optional.empty());
+        }
+
+        Optional<ColumnDict> dict = IRelaxDictManager.getInstance().getGlobalDict(table.getUUID(),
+                column.getName());
+        // cache reaches capacity limit, randomly eliminate some keys
+        // then we will get an empty dictionary.
+        if (dict.isEmpty() || dict.get().getVersion() > CacheRelaxDictManager.PERIOD_VERSION_THRESHOLD) {
+            return new Pair<>(false, Optional.empty());
+        }
+        return new Pair<>(true, dict);
+    }
+
     @Override
     public DecodeInfo visitPhysicalHiveScan(OptExpression optExpression, DecodeInfo context) {
         if (!canBlockingOutput || !sessionVariable.isUseLowCardinalityOptimizeOnLake() || !isQuery) {
@@ -623,51 +663,54 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
         // check dict column
         DecodeInfo info = new DecodeInfo();
         for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
-            // Condition 1:
-            if (!supportLowCardinality(column.getType())) {
-                continue;
-            }
-
-            if (!sessionVariable.isEnableArrayLowCardinalityOptimize() && column.getType().isArrayType()) {
-                continue;
-            }
-
             // don't collect partition columns
             if (table.getPartitionColumnNames().contains(column.getName())) {
                 continue;
             }
 
-            // Condition 2: the varchar column is low cardinality string column
-            ColumnStatistic columnStatistic = GlobalStateMgr.getCurrentState().getStatisticStorage()
-                    .getConnectorTableStatistics(table, List.of(column.getName())).get(0).getColumnStatistic();
-
-            if (!columnStatistic.isUnknown() &&
-                    columnStatistic.getDistinctValuesCount() > CacheDictManager.LOW_CARDINALITY_THRESHOLD) {
-                LOG.debug("{} isn't low cardinality string column", column.getName());
+            Pair<Boolean, Optional<ColumnDict>> res = checkConnectorGlobalDict(table, column);
+            if (!res.first) {
                 continue;
             }
 
-            boolean alwaysCollectDict = sessionVariable.isAlwaysCollectDictOnLake();
-            if (!alwaysCollectDict && !FeConstants.USE_MOCK_DICT_MANAGER && columnStatistic.isUnknown()) {
-                LOG.debug("{} isn't low cardinality string column", column.getName());
+            markedAsGlobalDictOpt(info, column, res.second.get());
+        }
+
+        if (info.outputStringColumns.isEmpty()) {
+            return DecodeInfo.EMPTY;
+        }
+
+        return info;
+    }
+
+    @Override
+    public DecodeInfo visitPhysicalIcebergScan(OptExpression optExpression, DecodeInfo context) {
+        if (!canBlockingOutput || !sessionVariable.isUseLowCardinalityOptimizeOnLake() || !isQuery) {
+            return DecodeInfo.EMPTY;
+        }
+
+        PhysicalIcebergScanOperator scan = optExpression.getOp().cast();
+        IcebergTable table = (IcebergTable) scan.getTable();
+
+        // only support parquet
+        if (!table.getNativeTable().properties().getOrDefault(DEFAULT_FILE_FORMAT, DEFAULT_FILE_FORMAT_DEFAULT).
+                equalsIgnoreCase("parquet")) {
+            return DecodeInfo.EMPTY;
+        }
+
+        // check dict column
+        DecodeInfo info = new DecodeInfo();
+        for (ColumnRefOperator column : scan.getColRefToColumnMetaMap().keySet()) {
+            if (table.getPartitionColumnNames().contains(column.getName())) {
                 continue;
             }
 
-            // Condition 3: the varchar column has collected global dict
-            if (!IRelaxDictManager.getInstance().hasGlobalDict(table.getUUID(), column.getName())) {
-                LOG.debug("{} doesn't have global dict", column.getName());
+            Pair<Boolean, Optional<ColumnDict>> res = checkConnectorGlobalDict(table, column);
+            if (!res.first) {
                 continue;
             }
 
-            Optional<ColumnDict> dict = IRelaxDictManager.getInstance().getGlobalDict(table.getUUID(),
-                    column.getName());
-            // cache reaches capacity limit, randomly eliminate some keys
-            // then we will get an empty dictionary.
-            if (dict.isEmpty() || dict.get().getVersion() > CacheRelaxDictManager.PERIOD_VERSION_THRESHOLD) {
-                continue;
-            }
-
-            markedAsGlobalDictOpt(info, column, dict.get());
+            markedAsGlobalDictOpt(info, column, res.second.get());
         }
 
         if (info.outputStringColumns.isEmpty()) {
@@ -762,6 +805,16 @@ public class DecodeCollector extends OptExpressionVisitor<DecodeInfo, DecodeInfo
 
     private static boolean supportLowCardinality(Type type) {
         return type.isVarchar() || (type.isArrayType() && ((ArrayType) type).getItemType().isVarchar());
+    }
+
+    private boolean supportAndEnabledLowCardinality(Type type) {
+        if (!supportLowCardinality(type)) {
+            return false;
+        } else if (type.isArrayType()) {
+            return sessionVariable.isEnableArrayLowCardinalityOptimize();
+        } else {
+            return true;
+        }
     }
 
     @TestOnly

@@ -1470,6 +1470,9 @@ public class PlanFragmentBuilder {
                 PhysicalIcebergScanOperator op = node.cast();
                 icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, planNodeName,
                         op.getTableFullMORParams(), op.getMORParams());
+                icebergScanNode.updateAppliedDictStringColumns(
+                        ((PhysicalIcebergScanOperator) node).getGlobalDicts().stream()
+                                .map(entry -> entry.first).collect(Collectors.toSet()));
             } else {
                 PhysicalIcebergEqualityDeleteScanOperator op = node.cast();
                 icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, planNodeName,
@@ -1512,6 +1515,11 @@ public class PlanFragmentBuilder {
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), icebergScanNode, DataPartition.RANDOM);
+            if (!isEqDeleteScan) {
+                fragment.setQueryGlobalDicts(((PhysicalIcebergScanOperator) node).getGlobalDicts());
+                fragment.setQueryGlobalDictExprs(
+                        getGlobalDictsExprs(((PhysicalIcebergScanOperator) node).getGlobalDictsExpr(), context));
+            }
             context.getFragments().add(fragment);
             return fragment;
         }

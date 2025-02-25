@@ -41,8 +41,10 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHiveScanOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalIcebergScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -334,20 +336,7 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
 
         Map<ColumnRefOperator, Column> newRefToMetaMap = Maps.newHashMap();
         List<Pair<Integer, ColumnDict>> dicts = Lists.newArrayList();
-        for (ColumnRefOperator ref : scanOperator.getColRefToColumnMetaMap().keySet()) {
-            Column meta = scanOperator.getColRefToColumnMetaMap().get(ref);
-
-            if (!info.inputStringColumns.contains(ref.getId())) {
-                newRefToMetaMap.put(ref, meta);
-                continue;
-            }
-
-            ColumnRefOperator dictRef = context.stringRefToDictRefMap.get(ref);
-            Column newMeta = new Column(meta);
-            newMeta.setType(dictRef.getType());
-            newRefToMetaMap.put(dictRef, newMeta);
-            dicts.add(new Pair<>(dictRef.getId(), context.stringRefToDicts.get(ref.getId())));
-        }
+        rewriteColumnRefToMetaMap(scanOperator, info, newRefToMetaMap, dicts);
 
         PhysicalOlapScanOperator.Builder builder = PhysicalOlapScanOperator.builder();
         builder.withOperator(scanOperator);
@@ -373,22 +362,31 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
 
         Map<ColumnRefOperator, Column> newRefToMetaMap = Maps.newHashMap();
         List<Pair<Integer, ColumnDict>> dicts = Lists.newArrayList();
-        for (ColumnRefOperator ref : scanOperator.getColRefToColumnMetaMap().keySet()) {
-            Column meta = scanOperator.getColRefToColumnMetaMap().get(ref);
-
-            if (!info.inputStringColumns.contains(ref.getId())) {
-                newRefToMetaMap.put(ref, meta);
-                continue;
-            }
-
-            ColumnRefOperator dictRef = context.stringRefToDictRefMap.get(ref);
-            Column newMeta = new Column(meta);
-            newMeta.setType(dictRef.getType());
-            newRefToMetaMap.put(dictRef, newMeta);
-            dicts.add(new Pair<>(dictRef.getId(), context.stringRefToDicts.get(ref.getId())));
-        }
+        rewriteColumnRefToMetaMap(scanOperator, info, newRefToMetaMap, dicts);
 
         PhysicalHiveScanOperator.Builder builder = PhysicalHiveScanOperator.builder();
+        builder.withOperator(scanOperator);
+        builder.setColRefToColumnMetaMap(newRefToMetaMap);
+        builder.setScanPredicates(
+                rewriteScanPredicate(
+                        scanOperator.getScanOperatorPredicates(), newRefToMetaMap, info.inputStringColumns));
+        builder.setGlobalDicts(dicts).setGlobalDictsExpr(computeDictExpr(fragmentUseDictExprs));
+
+        builder.setPredicate(rewritePredicate(scanOperator.getPredicate(), info.inputStringColumns));
+        builder.setProjection(rewriteProjection(scanOperator.getProjection(), info.inputStringColumns));
+        return rewriteOptExpression(optExpression, builder.build(), info.outputStringColumns);
+    }
+
+    @Override
+    public OptExpression visitPhysicalIcebergScan(OptExpression optExpression, ColumnRefSet fragmentUseDictExprs) {
+        PhysicalIcebergScanOperator scanOperator = (PhysicalIcebergScanOperator) optExpression.getOp();
+        DecodeInfo info = context.operatorDecodeInfo.get(scanOperator);
+
+        Map<ColumnRefOperator, Column> newRefToMetaMap = Maps.newHashMap();
+        List<Pair<Integer, ColumnDict>> dicts = Lists.newArrayList();
+        rewriteColumnRefToMetaMap(scanOperator, info, newRefToMetaMap, dicts);
+
+        PhysicalIcebergScanOperator.Builder builder = PhysicalIcebergScanOperator.builder();
         builder.withOperator(scanOperator);
         builder.setColRefToColumnMetaMap(newRefToMetaMap);
         builder.setScanPredicates(
@@ -444,6 +442,26 @@ public class DecodeRewriter extends OptExpressionVisitor<OptExpression, ColumnRe
             }
         }
         return newPredicates;
+    }
+
+    private void rewriteColumnRefToMetaMap(PhysicalScanOperator scanOperator,
+                                           DecodeInfo info,
+                                           Map<ColumnRefOperator, Column> newRefToMetaMap,
+                                           List<Pair<Integer, ColumnDict>> dicts) {
+        for (ColumnRefOperator ref : scanOperator.getColRefToColumnMetaMap().keySet()) {
+            Column meta = scanOperator.getColRefToColumnMetaMap().get(ref);
+
+            if (!info.inputStringColumns.contains(ref.getId())) {
+                newRefToMetaMap.put(ref, meta);
+                continue;
+            }
+
+            ColumnRefOperator dictRef = context.stringRefToDictRefMap.get(ref);
+            Column newMeta = new Column(meta);
+            newMeta.setType(dictRef.getType());
+            newRefToMetaMap.put(dictRef, newMeta);
+            dicts.add(new Pair<>(dictRef.getId(), context.stringRefToDicts.get(ref.getId())));
+        }
     }
 
     private ScalarOperator rewritePredicate(ScalarOperator predicate, ColumnRefSet inputs) {
