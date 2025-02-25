@@ -61,13 +61,7 @@ under the License.
         <kudu.version>1.17.0</kudu.version>
         <hikaricp.version>3.4.5</hikaricp.version>
         <kafka-clients.version>3.4.0</kafka-clients.version>
-<<<<<<< HEAD
-=======
-        <arrow.version>18.0.0</arrow.version>
-        <protobuf.version>3.25.1</protobuf.version>
-        <grpc.version>1.63.0</grpc.version>
         <io.netty.version>4.1.118.Final</io.netty.version>
->>>>>>> b398a35785 ([BugFix] fix io.netty CVE-2025-24970 (#56216))
     </properties>
 
     <profiles>
@@ -868,67 +862,6 @@ under the License.
                 <artifactId>odps-sdk-table-api</artifactId>
                 <version>${odps.version}</version>
             </dependency>
-<<<<<<< HEAD
-=======
-            <dependency>
-                <groupId>io.grpc</groupId>
-                <artifactId>grpc-api</artifactId>
-                <version>${grpc.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>io.grpc</groupId>
-                <artifactId>grpc-netty-shaded</artifactId>
-                <version>${grpc.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>io.grpc</groupId>
-                <artifactId>grpc-protobuf</artifactId>
-                <version>${grpc.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>io.grpc</groupId>
-                <artifactId>grpc-stub</artifactId>
-                <version>${grpc.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>io.grpc</groupId>
-                <artifactId>grpc-core</artifactId>
-                <version>${grpc.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.arrow</groupId>
-                <artifactId>arrow-vector</artifactId>
-                <version>${arrow.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.arrow</groupId>
-                <artifactId>arrow-memory-netty</artifactId>
-                <version>${arrow.version}</version>
-            </dependency>
-
-            <dependency>
-                <groupId>org.apache.arrow</groupId>
-                <artifactId>flight-sql</artifactId>
-                <version>${arrow.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.arrow</groupId>
-                <artifactId>flight-core</artifactId>
-                <version>${arrow.version}</version>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.arrow</groupId>
-                <artifactId>flight-sql-jdbc-driver</artifactId>
-                <version>${arrow.version}</version>
-                <scope>test</scope>
-            </dependency>
-            <dependency>
-                <groupId>org.apache.arrow</groupId>
-                <artifactId>arrow-jdbc</artifactId>
-                <version>${arrow.version}</version>
-            </dependency>
->>>>>>> b398a35785 ([BugFix] fix io.netty CVE-2025-24970 (#56216))
 
             <!-- https://mvnrepository.com/artifact/org.owasp.encoder/encoder -->
             <dependency>
