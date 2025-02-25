@@ -147,8 +147,8 @@ public:
 
         ConcreteColumn2(const ConcreteColumn2& col) {
             std::cerr << "ConcreteColumn copy constructor" << std::endl;
-            this->_inner = col._inner.clone();
-            this->_null_column = col._null_column.clone();
+            this->_inner = col._inner->clone();
+            this->_null_column = MNullColumn::static_pointer_cast(col._null_column->clone());
         }
 
     public:
@@ -479,20 +479,18 @@ TEST_F(COWTest, TestCOW) {
     EXPECT_TRUE(y_ptr != y.get());
 }
 
-TEST_F(ColumnTest, TestColumnMutate) {
+TEST_F(COWTest, TestColumnMutate) {
     ConcreteColumn::MutablePtr x = ConcreteColumn::create(1);
-    {
-        auto y = (std::move(*x)).mutate();
-        y->set(2);
-        std::cout << "x:" << x->get() << ", use_count:" << x->use_count() << std::endl;
-        std::cout << "y:" << y->get() << ", use_count:" << y->use_count() << std::endl;
+    auto y = (std::move(*x)).mutate();
+    y->set(2);
+    std::cout << "x:" << x->get() << ", use_count:" << x->use_count() << std::endl;
+    std::cout << "y:" << y->get() << ", use_count:" << y->use_count() << std::endl;
 
-        auto z = (std::move(*x)).mutate();
-        z->set(3);
-        std::cout << "x:" << x->get() << ", use_count:" << x->use_count() << std::endl;
-        std::cout << "y:" << y->get() << ", use_count:" << y->use_count() << std::endl;
-        std::cout << "z:" << z->get() << ", use_count:" << z->use_count() << std::endl;
-    }
+    auto z = (std::move(*x)).mutate();
+    z->set(3);
+    std::cout << "x:" << x->get() << ", use_count:" << x->use_count() << std::endl;
+    std::cout << "y:" << y->get() << ", use_count:" << y->use_count() << std::endl;
+    std::cout << "z:" << z->get() << ", use_count:" << z->use_count() << std::endl;
 }
 
 } // namespace starrocks
