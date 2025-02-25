@@ -1444,6 +1444,8 @@ struct TTableConfigInfo {
 
 struct TGetPartitionsMetaRequest {
     1: optional TAuthInfo auth_info
+    // get partitions where table id >= start_table_id_offset
+    2: optional i64 start_table_id_offset;
 }
 
 struct TGetPartitionsMetaResponse {
@@ -1481,6 +1483,15 @@ struct TPartitionMetaInfo {
     28: optional Types.TTxnType version_txn_type = Types.TTxnType.TXN_NORMAL
 }
 
+<<<<<<< HEAD
+=======
+struct TGetPartitionsMetaResponse {
+    1: optional list<TPartitionMetaInfo> partitions_meta_infos
+    // max table id in partitions_meta_infos + 1, if set to 0, it means reaches end
+    2: optional i64 next_table_id_offset;
+}
+
+>>>>>>> 9b123d6027 ([BugFix] fix rpc error for partitions_meta when partitions are too many (#56217))
 struct TGetTablesInfoRequest {
     1: optional TAuthInfo auth_info
     2: optional string table_name;
