@@ -826,7 +826,7 @@ crontab ::= * <hour> <day-of-the-month> <month> <day-of-the-week>
 
 `partition_retention_condition`：用于声明动态保留分区的表达式。不符合表达式中条件的分区将被定期删除。
 - 表达式只能包含分区列和常量。不支持非分区列。
-- 常用分区表达式处理 List 分区和 Range 分区的方式不同：
+- 通用分区表达式处理 List 分区和 Range 分区的方式不同：
   - 对于 List 分区表，StarRocks 支持通过通用分区表达式过滤删除分区。
   - 对于 Range 分区表，StarRocks 只能基于 FE 的分区裁剪功能过滤删除分区。对于分区裁剪不支持的谓词，StarRocks 无法过滤删除对应的分区。
 
