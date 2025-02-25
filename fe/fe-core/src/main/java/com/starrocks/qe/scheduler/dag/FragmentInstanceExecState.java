@@ -376,7 +376,8 @@ public class FragmentInstanceExecState {
                     jobSpec.getQueryId(), instanceId, cancelReason,
                     jobSpec.isEnablePipeline());
         } catch (RpcException e) {
-            LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(), brpcAddress.getPort(), e);
+            LOG.warn("cancel plan fragment get a exception, address={}:{}", brpcAddress.getHostname(),
+                    brpcAddress.getPort(), e);
             SimpleScheduler.addToBlocklist(worker.getId());
             return false;
         }
