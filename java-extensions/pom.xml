@@ -42,6 +42,7 @@
         <jni-connector.version>1.0.0</jni-connector.version>
         <hadoop-ext.version>1.0.0</hadoop-ext.version>
         <java-utils.version>1.0.0</java-utils.version>
+        <io.netty.version>4.1.118.Final</io.netty.version>
     </properties>
 
     <dependencyManagement>
@@ -70,6 +71,12 @@
             </dependency>
             <!-- java utils -->
 
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-all</artifactId>
+                <version>${io.netty.version}</version>
+            </dependency>
+
             <!-- hadoop -->
             <dependency>
                 <groupId>org.apache.hadoop</groupId>
@@ -83,6 +90,16 @@
                     <exclusion>
                         <groupId>org.apache.avro</groupId>
                         <artifactId>avro</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <!-- exclude io.netty, use our provided netty version to address CVE issue -->
+                        <groupId>io.netty</groupId>
+                        <artifactId>netty-handler</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <!-- exclude io.netty, use our provided netty version to address CVE issue -->
+                        <groupId>io.netty</groupId>
+                        <artifactId>netty-transport-native-epoll</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>

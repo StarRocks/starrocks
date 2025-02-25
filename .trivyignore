@@ -6,5 +6,3 @@ CVE-2024-47554
 CVE-2024-47561
 # ingore nimbus-jose-jwt-9.31.jar
 CVE-2023-52428
-# ingore io.netty:netty-common (netty-common-4.1.100.Final.jar) 
-CVE-2024-47535
