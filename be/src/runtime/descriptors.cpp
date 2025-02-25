@@ -332,6 +332,9 @@ PaimonTableDescriptor::PaimonTableDescriptor(const TTableDescriptor& tdesc, Obje
     _paimon_native_table = tdesc.paimonTable.paimon_native_table;
     _time_zone = tdesc.paimonTable.time_zone;
     _t_paimon_schema = tdesc.paimonTable.paimon_schema;
+    _paimon_options = tdesc.paimonTable.paimon_options;
+    _primary_keys = tdesc.paimonTable.primary_keys;
+    _partition_keys = tdesc.paimonTable.partition_keys;
 }
 
 const std::string& PaimonTableDescriptor::get_paimon_native_table() const {
@@ -340,6 +343,18 @@ const std::string& PaimonTableDescriptor::get_paimon_native_table() const {
 
 const std::string& PaimonTableDescriptor::get_time_zone() const {
     return _time_zone;
+}
+
+const std::map<std::string, std::string>& PaimonTableDescriptor::get_paimon_options() const {
+    return _paimon_options;
+}
+
+const std::vector<std::string>& PaimonTableDescriptor::get_primary_keys() const {
+    return _primary_keys;
+}
+
+const std::vector<std::string>& PaimonTableDescriptor::get_partition_keys() const {
+    return _partition_keys;
 }
 
 OdpsTableDescriptor::OdpsTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool)

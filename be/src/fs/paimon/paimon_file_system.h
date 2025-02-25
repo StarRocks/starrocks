@@ -92,6 +92,7 @@ public:
 private:
     Status delete_internal(const std::string& path, bool is_dir, bool recursive) const;
     FSOptions from_map();
+
     std::map<std::string, std::string> _options;
     std::unique_ptr<starrocks::FileSystem> _fs;
 };
@@ -101,6 +102,13 @@ public:
     static const std::string IDENTIFIER;
     const std::string& Identifier() const override;
     std::unique_ptr<paimon::FileSystem> Create(const std::map<std::string, std::string>& options) const override;
+};
+
+class PaimonOptions {
+public:
+    // The value of ROOT_PATH should be referred to
+    // https://github.com/apache/paimon/blob/master/paimon-common/src/main/java/org/apache/paimon/CoreOptions.java#L158
+    static const std::string ROOT_PATH;
 };
 
 } // namespace starrocks

@@ -36,6 +36,7 @@ namespace arrow {
 class Array;
 class RecordBatch;
 class Status;
+class DataType;
 } // namespace arrow
 
 namespace starrocks {
@@ -47,11 +48,14 @@ namespace starrocks {
             return to_status(_status_);  \
         }                                \
     } while (false)
+struct TypeDescriptor;
 
 // Pretty print a arrow RecordBatch.
 Status arrow_pretty_print(const arrow::RecordBatch& rb, std::ostream* os);
 Status arrow_pretty_print(const arrow::Array& rb, std::ostream* os);
 
 Status to_status(const arrow::Status& status);
+
+StatusOr<std::shared_ptr<arrow::DataType>> starrocks_type_to_arrow(const TypeDescriptor& type);
 
 } // namespace starrocks

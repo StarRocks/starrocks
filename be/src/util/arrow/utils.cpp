@@ -21,7 +21,10 @@
 #include <arrow/record_batch.h>
 #include <arrow/type.h>
 
+#include "common/statusor.h"
+#include "fmt/format.h"
 #include "gutil/strings/substitute.h"
+#include "runtime/types.h"
 
 namespace starrocks {
 
@@ -43,6 +46,50 @@ Status arrow_pretty_print(const arrow::RecordBatch& rb, std::ostream* os) {
 Status arrow_pretty_print(const arrow::Array& arr, std::ostream* os) {
     arrow::PrettyPrintOptions opts(4);
     return to_status(arrow::PrettyPrint(arr, opts, os));
+}
+
+StatusOr<std::shared_ptr<arrow::DataType>> starrocks_type_to_arrow(const TypeDescriptor& type) {
+    switch (type.type) {
+    case TYPE_TINYINT:
+        return std::make_shared<arrow::Int8Type>();
+    case TYPE_UNSIGNED_TINYINT:
+        return std::make_shared<arrow::UInt8Type>();
+    case TYPE_SMALLINT:
+        return std::make_shared<arrow::Int16Type>();
+    case TYPE_UNSIGNED_SMALLINT:
+        return std::make_shared<arrow::UInt16Type>();
+    case TYPE_INT:
+        return std::make_shared<arrow::Int32Type>();
+    case TYPE_UNSIGNED_INT:
+        return std::make_shared<arrow::UInt32Type>();
+    case TYPE_BIGINT:
+        return std::make_shared<arrow::Int64Type>();
+    case TYPE_UNSIGNED_BIGINT:
+        return std::make_shared<arrow::UInt64Type>();
+    case TYPE_FLOAT:
+        return std::make_shared<arrow::FloatType>();
+    case TYPE_DOUBLE:
+        return std::make_shared<arrow::DoubleType>();
+    case TYPE_CHAR:
+    case TYPE_VARCHAR:
+        return std::make_shared<arrow::StringType>();
+    case TYPE_DATE_V1:
+    case TYPE_DATE:
+    case TYPE_DATETIME_V1:
+    case TYPE_DATETIME:
+        return std::make_shared<arrow::Date64Type>();
+    case TYPE_DECIMAL:
+    case TYPE_DECIMALV2:
+    case TYPE_DECIMAL32:
+    case TYPE_DECIMAL64:
+    case TYPE_DECIMAL128:
+        return std::make_shared<arrow::Decimal128Type>(type.precision, type.scale);
+    case TYPE_BINARY:
+    case TYPE_VARBINARY:
+        return std::make_shared<arrow::BinaryType>();
+    default:
+        return Status::NotSupported(fmt::format("Unsupported Arrow type: {}", type_to_string_v2(type.type)));
+    }
 }
 
 } // namespace starrocks

@@ -17,12 +17,13 @@
 #include "column/chunk.h"
 #include "common/logging.h"
 #include "common/status.h"
+#include "exec/paimon_writer.h"
 #include "hdfs_scanner.h"
 #include "jni.h"
 #include "runtime/runtime_state.h"
 
 namespace starrocks {
-class JniWriter {
+class JniWriter : public PaimonWriter {
 public:
     JniWriter(std::string factory_class, std::map<std::string, std::string> params,
               std::vector<ExprContext*> output_expr, std::vector<std::string> data_column_types)
@@ -30,22 +31,24 @@ public:
               _data_column_types(std::move(data_column_types)),
               _jni_writer_factory_class(std::move(factory_class)),
               _jni_writer_params(std::move(params)) {}
-    ~JniWriter() = default;
+    ~JniWriter() override = default;
 
-    Status do_init(RuntimeState* runtime_state);
+    Status do_init(RuntimeState* runtime_state) override;
 
-    Status write(RuntimeState* runtime_state, const ChunkPtr& chunk);
-    Status commit(RuntimeState* runtime_state);
-    void close(RuntimeState* runtime_state) noexcept;
-    void set_output_expr(std::vector<ExprContext*> output_expr) { _output_expr = output_expr; };
+    Status write(RuntimeState* runtime_state, const ChunkPtr& chunk) override;
+    Status commit(RuntimeState* runtime_state) override;
+    void close(RuntimeState* runtime_state) noexcept override;
+    void set_output_expr(std::vector<ExprContext*> output_expr) override { _output_expr = output_expr; };
 
-    std::string _json_mess_list;
+    std::string get_commit_message() override;
 
 private:
     Status _init_jni_table_writer(JNIEnv* jni_env, RuntimeState* runtime_state);
     Status _init_jni_method(JNIEnv* jni_env);
     std::string jstring_to_string(JNIEnv* jni_env, jstring jstr);
     std::string int128_to_string(int128_t value);
+
+    std::string _json_mess_list;
 
     JNIEnv* _jni_env;
     std::vector<ExprContext*> _output_expr;

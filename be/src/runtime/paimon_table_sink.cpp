@@ -63,6 +63,7 @@ Status PaimonTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operato
     TableDescriptor* table_desc =
             runtime_state->desc_tbl().get_table_descriptor(thrift_sink.paimon_table_sink.target_table_id);
     const auto& t_paimon_sink = thrift_sink.paimon_table_sink;
+    auto column_names = t_paimon_sink.data_column_names;
     auto column_types = t_paimon_sink.data_column_types;
 
     auto* paimon_table_desc = down_cast<PaimonTableDescriptor*>(table_desc);
@@ -83,7 +84,7 @@ Status PaimonTableSink::decompose_to_pipeline(pipeline::OpFactories prev_operato
 
     auto op = std::make_shared<pipeline::PaimonTableSinkOperatorFactory>(
             context->next_operator_id(), fragment_ctx, paimon_table_desc, thrift_sink.paimon_table_sink, output_exprs,
-            partition_expr_ctxs, output_expr_ctxs, column_types);
+            partition_expr_ctxs, output_expr_ctxs, column_names, column_types, t_paimon_sink.use_native_writer);
 
     size_t sink_dop = context->data_sink_dop();
 

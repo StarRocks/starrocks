@@ -179,6 +179,7 @@ struct TSpillOptions {
 
 // Query options with their respective defaults
 struct TQueryOptions {
+  1: optional string paimon_native_commit_user;
   2: optional i32 max_errors = 0
   4: optional i32 batch_size = 0
 

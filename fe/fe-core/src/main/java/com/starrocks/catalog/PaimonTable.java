@@ -23,6 +23,7 @@ import com.aliyun.datalake.paimon.fs.DlfPaimonFileIO;
 import com.aliyun.datalake.paimon.table.DlfPaimonTable;
 import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.util.DlfUtil;
 import com.starrocks.common.util.TimeUtils;
@@ -44,12 +45,12 @@ import org.apache.paimon.table.DataTable;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
@@ -60,6 +61,10 @@ import static com.starrocks.connector.share.credential.CloudConfigurationConstan
 public class PaimonTable extends Table {
     private static final Logger LOG = LogManager.getLogger(PaimonTable.class);
     public static final String FILE_FORMAT = "file.format";
+
+    private static final Set<String> NATIVE_SUPPORT_FILE_FORMAT = ImmutableSet.of("aliorc");
+    private static final Set<String> SUPPORT_INSERT_FORMAT = ImmutableSet.of("parquet", "orc", "avro", "aliorc");
+
     private String catalogName;
     private String databaseName;
     private String tableName;
@@ -171,7 +176,18 @@ public class PaimonTable extends Table {
         if (Strings.isNullOrEmpty(format)) {
             format = CoreOptions.FILE_FORMAT.defaultValue();
         }
-        return Arrays.asList("parquet", "orc", "avro").contains(format.toLowerCase());
+        return SUPPORT_INSERT_FORMAT.contains(format.toLowerCase());
+    }
+
+    public boolean supportNativeWriter() {
+        if (!paimonNativeTable.primaryKeys().isEmpty()) {
+            return false;
+        }
+        String format = paimonNativeTable.options().get(FILE_FORMAT);
+        if (Strings.isNullOrEmpty(format)) {
+            format = CoreOptions.FILE_FORMAT.defaultValue();
+        }
+        return NATIVE_SUPPORT_FILE_FORMAT.contains(format.toLowerCase());
     }
 
     @Override
@@ -244,11 +260,14 @@ public class PaimonTable extends Table {
             }
         }
         String encodedTable = PaimonScanNode.encodeObjectToString(paimonNativeTable);
+        tPaimonTable.setPaimon_options(paimonNativeTable.options());
         tPaimonTable.setPaimon_native_table(encodedTable);
         tPaimonTable.setTime_zone(TimeUtils.getSessionTimeZone());
 
         tPaimonTable.setPaimon_schema(PaimonUtils.getTPaimonSchema(this.paimonNativeTable.rowType()));
 
+        tPaimonTable.setPrimary_keys(paimonNativeTable.primaryKeys());
+        tPaimonTable.setPartition_keys(paimonNativeTable.partitionKeys());
         TTableDescriptor tTableDescriptor = new TTableDescriptor(id, TTableType.PAIMON_TABLE,
                 fullSchema.size(), 0, tableName, databaseName);
         tTableDescriptor.setPaimonTable(tPaimonTable);

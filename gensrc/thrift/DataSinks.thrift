@@ -282,6 +282,7 @@ struct TPaimonTableSink {
     6: optional Types.TCompressionType compression_type
     7: optional bool is_static_partition_sink
     8: optional CloudConfiguration.TCloudConfiguration cloud_configuration
+    9: optional bool use_native_writer
 }
 
 struct TDataSink {

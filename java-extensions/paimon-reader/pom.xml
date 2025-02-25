@@ -77,6 +77,12 @@
 
         <dependency>
             <groupId>org.apache.paimon</groupId>
+            <artifactId>paimon-ali-format</artifactId>
+            <version>${paimon.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-jindo</artifactId>
             <version>${paimon.version}</version>
         </dependency>

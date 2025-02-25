@@ -484,6 +484,8 @@ public class ConnectProcessor {
             parsedStmt.setOrigStmt(new OriginStatement(originStmt, i));
             Tracers.init(ctx, parsedStmt.getTraceMode(), parsedStmt.getTraceModule());
 
+            ctx.getSessionVariable().setPaimonNativeCommitUser(ctx.getCurrentUserIdentity().getUser());
+
             if (ctx.getTxnId() != 0 && ExplicitTxnStatementValidator.validate(parsedStmt, ctx)) {
                 ctx.getState().setErrType(QueryState.ErrType.ANALYSIS_ERR);
                 return new QueryAttemptResult(allStatementsAreSet, true);

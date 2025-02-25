@@ -207,6 +207,10 @@ Status JniWriter::commit(RuntimeState* runtime_state) {
     return Status::OK();
 }
 
+std::string JniWriter::get_commit_message() {
+    return _json_mess_list;
+}
+
 Status JniWriter::_init_jni_table_writer(JNIEnv* jni_env, RuntimeState* runtime_state) {
     jclass writer_factory_class = jni_env->FindClass(_jni_writer_factory_class.c_str());
     jmethodID writer_factory_constructor = jni_env->GetMethodID(writer_factory_class, "<init>", "()V");
@@ -357,7 +361,8 @@ void JniWriter::close(RuntimeState* runtime_state) noexcept {
 
 std::string JniWriter::jstring_to_string(JNIEnv* jni_env, jstring jstr) {
     const char* cstr = jni_env->GetStringUTFChars(jstr, nullptr);
-    std::string str(cstr);
+    size_t length = jni_env->GetStringUTFLength(jstr);
+    std::string str(cstr, length);
     jni_env->ReleaseStringUTFChars(jstr, cstr);
     return str;
 }

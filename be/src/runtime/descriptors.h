@@ -314,11 +314,17 @@ public:
     const std::string& get_paimon_native_table() const;
     const std::string& get_time_zone() const;
     const TIcebergSchema* get_paimon_schema() const { return &_t_paimon_schema; }
+    const std::map<std::string, std::string>& get_paimon_options() const;
+    const std::vector<std::string>& get_primary_keys() const;
+    const std::vector<std::string>& get_partition_keys() const;
 
 private:
+    std::map<std::string, std::string> _paimon_options;
     std::string _paimon_native_table;
     std::string _time_zone;
     TIcebergSchema _t_paimon_schema;
+    std::vector<std::string> _primary_keys;
+    std::vector<std::string> _partition_keys;
 };
 
 class OdpsTableDescriptor : public HiveTableDescriptor {

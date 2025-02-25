@@ -88,6 +88,7 @@ set(EXEC_FILES
     orc_scanner.cpp
     jni_scanner.cpp
     jni_writer.cpp
+    paimon_native_writer.cpp
     arrow_to_starrocks_converter.cpp
     arrow_to_json_converter.cpp
     parquet_scanner.cpp

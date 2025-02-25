@@ -575,7 +575,7 @@ struct THudiTable {
 
 struct TPaimonTable {
     // paimon table options
-    1: optional string paimon_options
+    1: optional map<string, string> paimon_options
     // paimon table
     2: optional string paimon_native_table
 
@@ -584,6 +584,9 @@ struct TPaimonTable {
 
     // reuse iceberg schema here, used to support schema evolution
     4: optional TIcebergSchema paimon_schema
+
+    5: optional list<string> primary_keys
+    6: optional list<string> partition_keys
 }
 
 struct TDeltaLakeTable {

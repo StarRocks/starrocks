@@ -20,6 +20,7 @@
 namespace starrocks {
 
 const std::string PaimonFileSystemFactory::IDENTIFIER = "paimon";
+const std::string PaimonOptions::ROOT_PATH = "path";
 
 const std::string& PaimonFileSystemFactory::Identifier() const {
     return IDENTIFIER;
@@ -52,10 +53,11 @@ PaimonFileStatus::PaimonFileStatus(uint64_t len, int64_t last_modification_time,
 PaimonFileStatus::~PaimonFileStatus() = default;
 
 PaimonFileSystem::PaimonFileSystem(const std::map<std::string, std::string>& options) : _options(options) {
-    std::string_view path = _options["root_path"];
+    std::string path = _options[PaimonOptions::ROOT_PATH];
     FSOptions fs_options = std::move(from_map());
     auto st = starrocks::FileSystem::CreateUniqueFromString(path, fs_options);
     if (!st.ok()) {
+        // It looks like no scenario can reach this code path, but just in case.
         LOG(ERROR) << "Failed to create delegate file system, reason: " << st.status().detailed_message();
         throw std::runtime_error("Failed to create delegate file system");
     }

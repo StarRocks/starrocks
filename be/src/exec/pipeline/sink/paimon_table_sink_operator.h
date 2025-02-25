@@ -14,15 +14,14 @@
 
 #pragma once
 
-#include <gen_cpp/DataSinks_types.h>
-
 #include <utility>
 
 #include "common/logging.h"
 #include "exec/jni_writer.h"
+#include "exec/paimon_writer.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exec/pipeline/operator.h"
-#include "fs/fs.h"
+#include "gen_cpp/DataSinks_types.h"
 
 namespace starrocks::pipeline {
 
@@ -30,11 +29,14 @@ class PaimonTableSinkOperator final : public Operator {
 public:
     PaimonTableSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id,
                             PaimonTableDescriptor* paimon_table, int32_t driver_sequence,
-                            std::vector<ExprContext*> output_expr_ctxs, std::vector<std::string> data_column_types)
+                            std::vector<ExprContext*> output_expr_ctxs, std::vector<std::string> data_column_names,
+                            std::vector<std::string> data_column_types, bool use_native_writer)
             : Operator(factory, id, "paimon_table_sink", plan_node_id, false, driver_sequence),
               _paimon_table(paimon_table),
               _output_expr(std::move(output_expr_ctxs)),
-              _data_column_types(std::move(data_column_types)) {}
+              _data_column_names(std::move(data_column_names)),
+              _data_column_types(std::move(data_column_types)),
+              _use_native_writer(use_native_writer) {}
 
     ~PaimonTableSinkOperator() override = default;
 
@@ -60,9 +62,20 @@ public:
 
     Status do_commit(RuntimeState* state);
 
-    void add_paimon_commit_info(std::string paimon_commit_info, RuntimeState* state);
+    void add_paimon_commit_info(const std::string& paimon_commit_info, RuntimeState* state);
 
 private:
+#define RETURN_AND_SET_IF_ERROR(stmt)                                                                 \
+    do {                                                                                              \
+        auto&& status__ = (stmt);                                                                     \
+        if (UNLIKELY(!status__.ok())) {                                                               \
+            _error = true;                                                                            \
+            return to_status(status__).clone_and_append_context(__FILE__, __LINE__, AS_STRING(stmt)); \
+        }                                                                                             \
+    } while (false)
+
+    Status init_profile();
+
     std::string _location;
     std::string _file_format;
     TCompressionType::type _compression_codec;
@@ -74,12 +87,22 @@ private:
     std::atomic<bool> _is_finished = false;
     bool _is_static_partition_insert = false;
     std::vector<std::string> _partition_column_names;
+    std::vector<std::string> _data_column_names;
     std::vector<std::string> _data_column_types;
+    bool _use_native_writer = false;
+
+    RuntimeProfile::Counter* _init_timer = nullptr;
+    RuntimeProfile::Counter* _write_timer = nullptr;
+    RuntimeProfile::Counter* _convert_timer = nullptr;
+    RuntimeProfile::Counter* _commit_timer = nullptr;
+
     bool _closed = false;
     int _num_chunk = 0;
-    inline static thread_local std::unique_ptr<JniWriter> _writer = nullptr;
+    std::atomic_bool _error{false};
+    std::unique_ptr<PaimonWriter> _writer = nullptr;
 
-    std::unique_ptr<JniWriter> create_paimon_jni_writer();
+    std::unique_ptr<PaimonWriter> create_paimon_writer();
+    std::unique_ptr<PaimonWriter> create_paimon_jni_writer();
 };
 
 class PaimonTableSinkOperatorFactory final : public OperatorFactory {
@@ -87,7 +110,9 @@ public:
     PaimonTableSinkOperatorFactory(int32_t id, FragmentContext* fragment_ctx, PaimonTableDescriptor* paimon_table,
                                    const TPaimonTableSink& t_paimon_table_sink, vector<TExpr> t_output_expr,
                                    std::vector<ExprContext*> partition_expr_ctxs,
-                                   std::vector<ExprContext*> output_expr_ctxs, std::vector<std::string> column_types);
+                                   std::vector<ExprContext*> output_expr_ctxs,
+                                   std::vector<std::string> data_column_names,
+                                   std::vector<std::string> data_column_types, bool use_native_writer);
 
     ~PaimonTableSinkOperatorFactory() override = default;
 
@@ -102,7 +127,9 @@ private:
     std::vector<ExprContext*> _output_expr_ctxs;
     std::vector<ExprContext*> _partition_expr_ctxs;
     PaimonTableDescriptor* _paimon_table;
+    std::vector<std::string> _data_column_names;
     std::vector<std::string> _data_column_types;
+    bool _use_native_writer = false;
 };
 
 } // namespace starrocks::pipeline

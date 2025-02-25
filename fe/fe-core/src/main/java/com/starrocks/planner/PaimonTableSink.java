@@ -70,6 +70,7 @@ public class PaimonTableSink extends DataSink {
     private final boolean isStaticPartitionSink;
     private final String tableIdentifier;
     private CloudConfiguration cloudConfiguration;
+    private final boolean useNativeWriter;
 
     public PaimonTableSink(PaimonTable paimonTable, TupleDescriptor desc, boolean isStaticPartitionSink, SessionVariable sessionVariable) {
         this.paimonNativeTable = paimonTable.getNativeTable();
@@ -88,7 +89,7 @@ public class PaimonTableSink extends DataSink {
         Preconditions.checkState(connector != null,
                 String.format("connector of catalog %s should not be null", catalogName));
         this.cloudConfiguration = connector.getMetadata().getCloudConfiguration();
-
+        this.useNativeWriter = sessionVariable.isEnablePaimonNativeWriter() && paimonTable.supportNativeWriter();
     }
 
     @Override
@@ -97,6 +98,7 @@ public class PaimonTableSink extends DataSink {
         strBuilder.append(prefix + "Paimon TABLE SINK\n");
         strBuilder.append(prefix + "  TABLE: " + tableIdentifier + "\n");
         strBuilder.append(prefix + "  TUPLE ID: " + desc.getId() + "\n");
+        strBuilder.append(prefix + "  NATIVE WRITER: " + useNativeWriter + "\n");
         strBuilder.append(prefix + "  " + DataPartition.RANDOM.getExplainString(explainLevel));
         return strBuilder.toString();
     }
@@ -136,6 +138,7 @@ public class PaimonTableSink extends DataSink {
         tPaimonTableSink.setCloud_configuration(tCloudConfiguration);
         tPaimonTableSink.setData_column_names(columnNames);
         tPaimonTableSink.setData_column_types(columnTypes);
+        tPaimonTableSink.setUse_native_writer(useNativeWriter);
         tDataSink.setPaimon_table_sink(tPaimonTableSink);
 
         return tDataSink;
