@@ -143,6 +143,7 @@ Status DictColumnRuntimeFilterPredicate::prepare() {
 
     RuntimeFilter::RunningContext ctx;
     ctx.use_merged_selection = false;
+    ctx.compatibility = false;
     ctx.selection.assign(_dict_words.size(), 1);
 
     if (_rf->num_hash_partitions() > 0) {
