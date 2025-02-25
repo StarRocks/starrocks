@@ -339,8 +339,8 @@ protected:
         const T& operator*() const { return *value; }
         T& operator*() { return *(value->template assume_mutable_ptr<T>()); }
 
-        operator const immutable_ptr<T>&() const { return value; }
-        operator immutable_ptr<T>&() { return value; }
+        operator const immutable_ptr<T> &() const { return value; }
+        operator immutable_ptr<T> &() { return value; }
 
         /// Get internal immutable ptr. Does not change internal use counter.
         immutable_ptr<T> detach() && { return std::move(value); }
@@ -359,12 +359,11 @@ public:
 
 protected:
     MutablePtr shallow_mutate() const {
-#ifndef NDEBUG
-        VLOG(1) << "[COW] shallow_mutate, use_count=" << this->use_count();
-#endif
         if (this->use_count() > 1) {
+            VLOG(1) << "[COW] trigger COW: " << this << ", use_count=" << this->use_count() << ", try to deep clone";
             return derived()->clone();
         } else {
+            VLOG(1) << "[COW] trigger COW: " << this << ", use_count=" << this->use_count() << ", try to shadow clone";
             return assume_mutable();
         }
     }
