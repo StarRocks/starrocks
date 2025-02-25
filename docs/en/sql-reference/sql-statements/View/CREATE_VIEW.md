@@ -41,7 +41,7 @@ AS <query_statement>
 | view_name       | The name of the view. For the naming conventions, see [System limits](../../System_limit.md).             |
 | column_name     | The name of the column(s) in the view. Note that the columns in the view and the columns queried in the `query_statement` must agree in number. |
 | COMMENT         | The comment on the column in the view or the view itself.    |
-| SECURITY        | Specifies the security context to be used when checking access privileges at view invocation time. Valid values: <ul><li>`NONE`(Default): Users with the SELECT on the view only can query the view.</li><lu>`INVOKER`: Only users with the SELECT on both the view and the base tables it referenced can query the view.</li></ul> |
+| SECURITY        | Specifies the security context to be used when checking access privileges at view invocation time. Valid values: <ul><li>`NONE`(Default): Users with the SELECT on the view only can query the view.</li><li>`INVOKER`: Only users with the SELECT on both the view and the base tables it referenced can query the view.</li></ul> |
 | query_statement | The query statement used to create the view. It can be any query statement supported by StarRocks. |
 
 ## Usage notes
