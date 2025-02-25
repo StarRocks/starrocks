@@ -889,18 +889,15 @@ bool TabletUpdates::_is_retryable(Status& status) {
 }
 
 bool TabletUpdates::_is_breakpoint(Status& status) {
-    std::string_view msg;
-    std::string lower_msg;
-
-    switch (status.code()) {
-    case TStatusCode::ABORTED:
-        msg = status.message();
+    if (status.code() == TStatusCode::ABORTED) {
+        std::string_view msg = status.message();
+        std::string lower_msg;
         lower_msg.reserve(msg.size());
         for (char ch : msg) {
             lower_msg.push_back(std::tolower(static_cast<unsigned char>(ch)));
         }
         return lower_msg.find(kBreakpointMsg) != std::string::npos;
-    default:
+    } else {
         return false;
     }
 }
