@@ -353,7 +353,10 @@ under the License.
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-all</artifactId>
+<<<<<<< HEAD
             <version>4.1.114.Final</version>
+=======
+>>>>>>> b398a35785 ([BugFix] fix io.netty CVE-2025-24970 (#56216))
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java -->
@@ -923,6 +926,55 @@ under the License.
             <version>2.3.2</version>
         </dependency>
 
+<<<<<<< HEAD
+=======
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-netty-shaded</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-protobuf</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-stub</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-vector</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-memory-netty</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>flight-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>flight-sql</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>flight-sql-jdbc-driver</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.apache.arrow</groupId>
+            <artifactId>arrow-jdbc</artifactId>
+        </dependency>
+
+>>>>>>> b398a35785 ([BugFix] fix io.netty CVE-2025-24970 (#56216))
     </dependencies>
 
     <build>

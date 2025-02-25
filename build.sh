@@ -559,6 +559,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/log4j-1.2.17.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/log4j-1.2.17.jar
 
+<<<<<<< HEAD
     # remove zookeeper
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/zookeeper-3.5.6.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/zookeeper-3.6.3.jar
@@ -572,6 +573,15 @@ if [ ${BUILD_BE} -eq 1 ]; then
     rm -f ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib/zookeeper-3.8.3.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/iceberg-reader-lib/zookeeper-3.8.3.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/kudu-reader-lib/zookeeper-3.8.3.jar
+=======
+    # https://avd.aquasec.com/nvd/2025/cve-2025-24970, replace 4.1.100.Final with 4.1.118.Final
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/netty-*-4.1.100.Final*.jar
+    cp -f ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib/netty-*-4.1.118.Final*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/
+    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/netty-*-4.1.100.Final*.jar
+    cp -f ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib/netty-*-4.1.118.Final*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/
+
+    cp -r -p ${STARROCKS_HOME}/be/extension/python-udf/src/flight_server.py ${STARROCKS_OUTPUT}/be/lib/py-packages
+>>>>>>> b398a35785 ([BugFix] fix io.netty CVE-2025-24970 (#56216))
 
     MSG="${MSG} √ ${MSG_BE}"
 fi
