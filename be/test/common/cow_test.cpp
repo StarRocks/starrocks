@@ -27,7 +27,6 @@ public:
     class IColumn : public COW<IColumn> {
     private:
         friend class COW<IColumn>;
-        virtual MutablePtr deepMutate() const { return shallow_mutate(); }
 
     public:
         IColumn() { std::cerr << "IColumn constructor" << std::endl; }
@@ -35,10 +34,27 @@ public:
         virtual ~IColumn() = default;
 
         virtual MutablePtr clone() const = 0;
-        virtual int get() const = 0;
-        virtual void set(int value) = 0;
+        virtual int get() const { return 0; };
+        virtual void set(int value){};
 
-        static MutablePtr mutate(Ptr ptr) { return ptr->deepMutate(); }
+        /// If the column contains subcolumns (such as Array, Nullable, etc), do callback on them.
+        /// Shallow: doesn't do recursive calls; don't do call for itself.
+        using ColumnCallback = std::function<void(WrappedPtr&)>;
+        virtual void for_each_subcolumn(ColumnCallback) {}
+
+        MutablePtr mutate() const&& {
+            MutablePtr res = shallow_mutate();
+            res->for_each_subcolumn([](WrappedPtr& subcolumn) { subcolumn = std::move(*subcolumn).mutate(); });
+            return res;
+        }
+
+        [[nodiscard]] static MutablePtr mutate(Ptr ptr) {
+            MutablePtr res = ptr->shallow_mutate(); /// Now use_count is 2.
+            ptr.reset();                            /// Reset use_count to 1.
+            res->for_each_subcolumn(
+                    [](WrappedPtr& subcolumn) { subcolumn = IColumn::mutate(std::move(subcolumn).detach()); });
+            return res;
+        }
     };
 
     using ColumnPtr = IColumn::Ptr;
@@ -92,6 +108,33 @@ public:
     using ConcreteColumnMutablePtr = ConcreteColumn::MutablePtr;
     using ConcreteColumnWrappedPtr = ConcreteColumn::DerivedWrappedPtr;
 
+    template <typename T>
+    class MFixedLengthColumnBase
+            : public COWHelper<ColumnFactory<IColumn, MFixedLengthColumnBase<T>>, MFixedLengthColumnBase<T>> {
+        friend class COWHelper<ColumnFactory<IColumn, MFixedLengthColumnBase<T>>, MFixedLengthColumnBase<T>>;
+
+    public:
+        using ValueType = T;
+    };
+
+    template <typename T>
+    class MFixedLengthColumn final : public COWHelper<ColumnFactory<MFixedLengthColumnBase<T>, MFixedLengthColumn<T>>,
+                                                      MFixedLengthColumn<T>, IColumn> {
+        friend class COWHelper<ColumnFactory<MFixedLengthColumnBase<T>, MFixedLengthColumn<T>>, MFixedLengthColumn<T>,
+                               IColumn>;
+
+        MFixedLengthColumn(const MFixedLengthColumn& col) {
+            std::cerr << "MFixedLengthColumn copy constructor" << std::endl;
+        }
+
+    public:
+        using ValueType = T;
+        using SuperClass = COWHelper<ColumnFactory<MFixedLengthColumnBase<T>, MFixedLengthColumn<T>>,
+                                     MFixedLengthColumn<T>, IColumn>;
+        MFixedLengthColumn() = default;
+    };
+    using MNullColumn = MFixedLengthColumn<uint8_t>;
+
     class ConcreteColumn2 final : public COWHelper<ColumnFactory<IColumn, ConcreteColumn2>, ConcreteColumn2> {
     private:
         friend class COWHelper<ColumnFactory<IColumn, ConcreteColumn2>, ConcreteColumn2>;
@@ -102,12 +145,27 @@ public:
             _inner = ConcreteColumn::static_pointer_cast(std::move(ptr));
         }
 
+        ConcreteColumn2(const ConcreteColumn2& col) {
+            std::cerr << "ConcreteColumn copy constructor" << std::endl;
+            this->_inner = col._inner.clone();
+            this->_null_column = col._null_column.clone();
+        }
+
     public:
         int get() const override { return _inner->get(); }
         void set(int value) override { _inner->set(value); }
 
+        void for_each_subcolumn(ColumnCallback callback) override {
+            callback(_inner);
+            // callback(_null_column);
+            MNullColumn::WrappedPtr null_column = MNullColumn::static_pointer_cast(std::move(_null_column).detach());
+            callback(null_column);
+            _null_column = MNullColumn::static_pointer_cast(std::move(null_column));
+        }
+
     private:
         ConcreteColumnWrappedPtr _inner;
+        MNullColumn::DerivedWrappedPtr _null_column;
     };
 
     MutableColumnPtr move_func1(MutableColumnPtr&& col) { return std::move(col); }
@@ -419,6 +477,22 @@ TEST_F(COWTest, TestCOW) {
     EXPECT_TRUE(x->use_count() == 1 && y->use_count() == 1);
     EXPECT_TRUE(x.get() != y.get());
     EXPECT_TRUE(y_ptr != y.get());
+}
+
+TEST_F(ColumnTest, TestColumnMutate) {
+    ConcreteColumn::MutablePtr x = ConcreteColumn::create(1);
+    {
+        auto y = (*std::move(x)).mutate();
+        y->set(2);
+        std::cout << "x:" << x->get() << ", use_count:" << x->use_count() << std::endl;
+        std::cout << "y:" << y->get() << ", use_count:" << y->use_count() << std::endl;
+
+        auto z = (*std::move(x)).mutate();
+        z->set(3);
+        std::cout << "x:" << x->get() << ", use_count:" << x->use_count() << std::endl;
+        std::cout << "y:" << y->get() << ", use_count:" << y->use_count() << std::endl;
+        std::cout << "z:" << z->get() << ", use_count:" << z->use_count() << std::endl;
+    }
 }
 
 } // namespace starrocks
