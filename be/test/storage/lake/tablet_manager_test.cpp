@@ -649,7 +649,7 @@ TEST_F(LakeTabletManagerTest, test_get_schema_file_concurrently) {
     auto bthreads = std::vector<bthread_t>{};
     bthreads.reserve(10);
     for (int i = 0; i < 10; i++) {
-        ASSIGN_OR_ABORT(au·ck(bid);
+        ASSIGN_OR_ABORT(auto bid, bthreads::start_bthread(fn_read_schema));
     }
 
     for (auto&& t : pthreads) {
