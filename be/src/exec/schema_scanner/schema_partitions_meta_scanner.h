@@ -34,8 +34,8 @@ private:
     Status fill_chunk(ChunkPtr* chunk);
 
     cctz::time_zone _ctz;
-    int _partitions_meta_index;
-    TGetPartitionsMetaResponse _partitions_meta_response;
+    size_t _partitions_meta_index;
+    std::vector<TPartitionMetaInfo> _partitions_meta_vec;
 
     static SchemaScanner::ColumnDesc _s_columns[];
 };

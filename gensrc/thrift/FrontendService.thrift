@@ -1476,6 +1476,8 @@ struct TGetTablesConfigResponse {
 
 struct TGetPartitionsMetaRequest {
     1: optional TAuthInfo auth_info
+    // get partitions where table id >= start_table_id_offset
+    2: optional i64 start_table_id_offset;
 }
 
 struct TPartitionMetaInfo {
@@ -1511,6 +1513,8 @@ struct TPartitionMetaInfo {
 
 struct TGetPartitionsMetaResponse {
     1: optional list<TPartitionMetaInfo> partitions_meta_infos
+    // max table id in partitions_meta_infos + 1, if set to 0, it means reaches end
+    2: optional i64 next_table_id_offset;
 }
 
 struct TGetTablesInfoRequest {

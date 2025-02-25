@@ -1,5 +1,11 @@
 -- name: test_partitions_meta
-CREATE TABLE `partitions_meta_test` (
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `partitions_meta_test1` (
   `k` int(11) NOT NULL COMMENT "",
   `v` int(11) NOT NULL COMMENT ""
 )engine=olap
@@ -14,9 +20,36 @@ PROPERTIES (
 );
 -- result:
 -- !result
-select TABLE_NAME, PARTITION_NAME, DATA_VERSION, VERSION_TXN_TYPE from INFORMATION_SCHEMA.PARTITIONS_META where table_name like '%partitions_meta_test%' order by partition_name;
+CREATE TABLE `partitions_meta_test2` (
+  `k` int(11) NOT NULL COMMENT "",
+  `v` int(11) NOT NULL COMMENT ""
+)engine=olap
+DUPLICATE KEY(`k`)
+PARTITION BY RANGE(`v`)
+(PARTITION p1 VALUES [("-2147483648"), ("0")),
+PARTITION p2 VALUES [("0"), ("10")),
+PARTITION p3 VALUES [("10"), ("2147483647")))
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1"
+);
 -- result:
-partitions_meta_test	p1	1	TXN_NORMAL
-partitions_meta_test	p2	1	TXN_NORMAL
-partitions_meta_test	p3	1	TXN_NORMAL
+-- !result
+admin set frontend config("max_get_partitions_meta_result_count"="1");
+-- result:
+-- !result
+select TABLE_NAME, PARTITION_NAME, DATA_VERSION, VERSION_TXN_TYPE from INFORMATION_SCHEMA.PARTITIONS_META where table_name like '%partitions_meta_test%' order by table_name asc, partition_name asc;
+-- result:
+partitions_meta_test1	p1	1	TXN_NORMAL
+partitions_meta_test1	p2	1	TXN_NORMAL
+partitions_meta_test1	p3	1	TXN_NORMAL
+partitions_meta_test2	p1	1	TXN_NORMAL
+partitions_meta_test2	p2	1	TXN_NORMAL
+partitions_meta_test2	p3	1	TXN_NORMAL
+-- !result
+admin set frontend config("max_get_partitions_meta_result_count"="100000");
+-- result:
+-- !result
+drop database db_${uuid0};
+-- result:
 -- !result
