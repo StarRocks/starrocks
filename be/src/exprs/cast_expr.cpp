@@ -83,7 +83,7 @@ struct CastFn {
 #define SELF_CAST(FROM_TYPE)                                                    \
     template <bool AllowThrowException>                                         \
     struct CastFn<FROM_TYPE, FROM_TYPE, AllowThrowException> {                  \
-        static ColumnPtr cast_fn(ColumnPtr& column) { return column->clone(); } \
+        static ColumnPtr cast_fn(ColumnPtr& column) { return Column::mutate(std::move(column)); } \
     };
 
 #define UNARY_FN_CAST(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                        \
@@ -1114,7 +1114,7 @@ public:
                         column, to_type.precision, to_type.scale);
             }
         } else if constexpr (lt_is_string<FromType> && lt_is_binary<ToType>) {
-            result_column = column->clone();
+            result_column = Column::mutate(std::move(column));
         } else {
             result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(column);
         }
@@ -1343,7 +1343,7 @@ public:
         }
 
         if constexpr (Type == TYPE_VARBINARY) {
-            return column->clone();
+            return Column::mutate(std::move(column));
         }
 
         if constexpr (lt_is_decimal<Type>) {
@@ -1429,7 +1429,7 @@ private:
     //    length of char.
     // In SR, behaviors of both cast(string as varchar(n)) and cast(string as char(n)) keep the same: neglect
     // of the length of char/varchar and return input column directly.
-    ColumnPtr _evaluate_string(ExprContext* context, ColumnPtr& column) { return column->clone(); }
+    ColumnPtr _evaluate_string(ExprContext* context, ColumnPtr& column) { return Column::mutate(std::move(column)); }
 
     ColumnPtr _evaluate_time(ExprContext* context, const ColumnPtr& column) {
         ColumnViewer<TYPE_TIME> viewer(column);

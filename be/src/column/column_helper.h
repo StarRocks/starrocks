@@ -256,7 +256,7 @@ public:
     static MutableColumnPtr clone_column(const TypeDescriptor& dst_type_desc, bool dst_nullable,
                                          const ColumnPtr& src_column, int num_rows) {
         auto dst_column = update_column_nullable(dst_nullable, src_column, num_rows);
-        return dst_column->clone();
+        return Column::mutate(std::move(dst_column));
     }
 
     // Create an empty column
