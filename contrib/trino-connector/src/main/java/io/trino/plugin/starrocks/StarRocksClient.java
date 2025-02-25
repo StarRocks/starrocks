@@ -1012,7 +1012,7 @@ public class StarRocksClient
             return handle.createQuery("" +
                             "SELECT TABLE_ROWS FROM INFORMATION_SCHEMA.TABLES " +
                             "WHERE TABLE_SCHEMA = :schema AND TABLE_NAME = :table_name " +
-                            "AND TABLE_TYPE = 'BASE TABLE' ")
+                            "AND TABLE_TYPE = 'TABLE' ")
                     .bind("schema", remoteTableName.getCatalogName().orElse(null))
                     .bind("table_name", remoteTableName.getTableName())
                     .mapTo(Long.class)

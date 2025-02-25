@@ -34,7 +34,6 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.cluster.ClusterNamespace;
-import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -88,11 +87,11 @@ public class InformationSchemaDataSource {
     private static AuthDbRequestResult getAuthDbRequestResult(TAuthInfo authInfo) throws TException {
         List<String> authorizedDbs = Lists.newArrayList();
         PatternMatcher matcher = null;
-        boolean caseSensitive = CaseSensibility.DATABASE.getCaseSensibility();
+        boolean caseSensitive = false;
         if (authInfo.isSetPattern()) {
             try {
                 matcher = PatternMatcher.createMysqlPattern(authInfo.getPattern(),
-                        CaseSensibility.DATABASE.getCaseSensibility());
+                        caseSensitive);
             } catch (SemanticException e) {
                 throw new TException("Pattern is in bad format: " + authInfo.getPattern());
             }

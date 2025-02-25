@@ -52,7 +52,7 @@ public class ExternalCatalogTableBasicInfo implements BasicTable {
 
     @Override
     public String getMysqlType() {
-        return "BASE TABLE";
+        return "TABLE";
     }
 
     @Override

@@ -48,6 +48,8 @@ public class StatisticsSystemTable {
                         .column("INDEX_TYPE", ScalarType.createVarchar(16))
                         .column("COMMENT", ScalarType.createVarchar(16))
                         .column("INDEX_COMMENT", ScalarType.createVarchar(1024))
+                        .column("IS_VISIBLE", ScalarType.createVarchar(3))
+                        .column("EXPRESSION", ScalarType.createVarchar(1024))
                         .build(), TSchemaTableType.SCH_STATISTICS);
     }
 }

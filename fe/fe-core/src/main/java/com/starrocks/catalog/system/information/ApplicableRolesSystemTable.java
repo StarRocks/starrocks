@@ -19,25 +19,28 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
 
+import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
-public class TableConstraintsSystemTable {
-    private static final String NAME = "table_constraints";
+public class ApplicableRolesSystemTable {
+    private static final String NAME = "applicable_roles";
 
     public static SystemTable create(String catalogName) {
         return new SystemTable(
                 catalogName,
-                SystemId.TABLE_CONSTRAINTS_ID,
+                SystemId.APPLICABLE_ROLES_ID,
                 NAME,
                 Table.TableType.SCHEMA,
                 builder()
-                        .column("CONSTRAINT_CATALOG", ScalarType.createVarchar(512))
-                        .column("CONSTRAINT_SCHEMA", ScalarType.createVarchar(64))
-                        .column("CONSTRAINT_NAME", ScalarType.createVarchar(64))
-                        .column("TABLE_SCHEMA", ScalarType.createVarchar(64))
-                        .column("TABLE_NAME", ScalarType.createVarchar(64))
-                        .column("CONSTRAINT_TYPE", ScalarType.createVarchar(64))
-                        .column("ENFORCED", ScalarType.createVarchar(3))
-                        .build(), TSchemaTableType.SCH_TABLE_CONSTRAINTS);
+                        .column("USER", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("HOST", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("GRANTEE", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("GRANTEE_HOST", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("ROLE_NAME", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("ROLE_HOST", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("IS_GRANTABLE", ScalarType.createVarchar(3))
+                        .column("IS_DEFAULT", ScalarType.createVarchar(3))
+                        .column("IS_MANDATORY", ScalarType.createVarchar(3))
+                        .build(), TSchemaTableType.SCH_APPLICABLE_ROLES);
     }
 }
