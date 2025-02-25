@@ -48,7 +48,7 @@ WHERE JobName = <job_name>
 | CreateTime           | ロードタスクが作成された日時。            |
 | LastScheduledTime    | ロードタスクが最後にスケジュールされた日時。     |
 | ExecuteStartTime     | ロードタスクが実行された日時。           |
-| Timeout              | FE パラメータ [`routine_load_task_timeout_second`](../../../../administration/management/FE_configuration.md#routine_load_task_timeout_second) と [job_properties](./CREATE_ROUTINE_LO../../data-manipulation/CREATE_ROUTINE_LOAD.md) の `task_timeout_second` パラメータによって制御されるロードタスクのタイムアウト期間。 |
+| Timeout              | FE パラメータ [`routine_load_task_timeout_second`](../../../../administration/management/FE_configuration.md#routine_load_task_timeout_second) と [job_properties](./CREATE_ROUTINE_LOAD.md) の `task_timeout_second` パラメータによって制御されるロードタスクのタイムアウト期間。 |
 | BeId                 | ロードタスクを実行する BE の ID。                    |
 | DataSourceProperties | トピックのパーティション内のメッセージを消費するロードタスクの進捗状況（オフセットで測定）。 |
 | Message              | タスクエラー情報を含むロードタスクに対して返される情報。 |
