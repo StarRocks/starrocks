@@ -1622,7 +1622,7 @@ Status Tablet::rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uin
 
 void Tablet::on_shutdown() {
     if (_updates) {
-        _updates->_stop_and_wait_apply_done();
+        _updates->stop_and_wait_apply_done();
     }
 }
 

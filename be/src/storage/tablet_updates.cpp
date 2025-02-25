@@ -84,7 +84,7 @@ std::string EditVersion::to_string() const {
 TabletUpdates::TabletUpdates(Tablet& tablet) : _tablet(tablet), _unused_rowsets(UINT64_MAX) {}
 
 TabletUpdates::~TabletUpdates() {
-    _stop_and_wait_apply_done();
+    stop_and_wait_apply_done();
 }
 
 template <class Itr1, class Itr2>
@@ -994,13 +994,15 @@ void TabletUpdates::do_apply() {
         if (config::enable_retry_apply && _is_tolerable(apply_st) && !apply_st.ok()) {
             //reset pk index, reset rowset_update_states, reset compaction_state
             _reset_apply_status(*version_info_apply);
-            auto time_point =
-                    std::chrono::steady_clock::now() + std::chrono::seconds(config::retry_apply_interval_second);
-            StorageEngine::instance()->add_schedule_apply_task(_tablet.tablet_id(), time_point);
-            std::string msg = strings::Substitute("apply tablet: $0 failed and retry later, status: $1",
-                                                  _tablet.tablet_id(), apply_st.to_string());
-            LOG(WARNING) << msg;
-            _apply_schedule.store(true);
+            if (!_apply_stopped) {
+                auto time_point =
+                        std::chrono::steady_clock::now() + std::chrono::seconds(config::retry_apply_interval_second);
+                StorageEngine::instance()->add_schedule_apply_task(_tablet.tablet_id(), time_point);
+                std::string msg = strings::Substitute("apply tablet: $0 failed and retry later, status: $1",
+                                                      _tablet.tablet_id(), apply_st.to_string());
+                LOG(WARNING) << msg;
+                _apply_schedule.store(true);
+            }
             break;
         } else {
             if (!apply_st.ok()) {
@@ -1028,9 +1030,18 @@ void TabletUpdates::_wait_apply_done() {
     }
 }
 
-void TabletUpdates::_stop_and_wait_apply_done() {
+void TabletUpdates::stop_and_wait_apply_done() {
     _apply_stopped = true;
     _wait_apply_done();
+}
+
+Status TabletUpdates::breakpoint_check() {
+    if (_apply_stopped) {
+        // apply stopped, return timeout status, so apply retry mechanism can be triggered
+        return Status::Timeout("PK apply stopped");
+    } else {
+        return Status::OK();
+    }
 }
 
 Status TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_version) {
@@ -1871,6 +1882,7 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
 Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
                                  const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
                                  DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema) {
+    RETURN_IF_ERROR(breakpoint_check());
     if (condition_column >= 0) {
         auto tablet_column = tablet_schema->column(condition_column);
         std::vector<uint32_t> read_column_ids;
@@ -2353,6 +2365,7 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
         max_src_rssid = max_rowset_id + rowset->num_segments() - 1;
 
         for (size_t i = 0; i < _compaction_state->pk_cols.size(); i++) {
+            RETURN_IF_ERROR(breakpoint_check());
             st = _compaction_state->load_segments(output_rowset, i);
             FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_load_segments_failed,
                                        { st = Status::InternalError("inject tablet_apply_load_segments_failed"); });
@@ -4912,7 +4925,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
             RETURN_IF_ERROR(check_rowset_files(rowset_meta_pb));
         }
         // Stop apply thread.
-        _stop_and_wait_apply_done();
+        stop_and_wait_apply_done();
 
         DeferOp defer([&]() {
             if (!_error.load()) {
@@ -5644,7 +5657,7 @@ Status TabletUpdates::recover() {
     }
     LOG(INFO) << "Tablet " << _tablet.tablet_id() << " begin do recover: " << _error_msg;
     // Stop apply thread.
-    _stop_and_wait_apply_done();
+    stop_and_wait_apply_done();
 
     DeferOp defer([&]() {
         if (!_error.load()) {
