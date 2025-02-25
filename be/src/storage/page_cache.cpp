@@ -86,8 +86,7 @@ void StoragePageCache::prune() {
     _cache->prune();
 }
 
-StoragePageCache::StoragePageCache(MemTracker* mem_tracker, size_t capacity)
-        : _mem_tracker(mem_tracker), _cache(new_lru_cache(capacity)) {}
+StoragePageCache::StoragePageCache(MemTracker* mem_tracker, size_t capacity) : _cache(new_lru_cache(capacity)) {}
 
 StoragePageCache::~StoragePageCache() = default;
 
@@ -130,7 +129,7 @@ void StoragePageCache::insert(const CacheKey& key, const Slice& data, PageCacheH
     int64_t mem_size = data.size;
 #endif
 
-    auto deleter = [](const starrocks::CacheKey& key, void* value) { delete[](uint8_t*) value; };
+    auto deleter = [](const starrocks::CacheKey& key, void* value) { delete[] (uint8_t*)value; };
 
     CachePriority priority = CachePriority::NORMAL;
     if (in_memory) {
