@@ -42,7 +42,7 @@ AS <query_statement>
 | view_name       | 视图名。命名要求参见[系统限制](../../System_limit.md)。           |
 | column_name     | 视图中的列名。请注意，视图中的列和 `query_statement` 中查询的列的数量必须一致。 |
 | COMMENT         | 视图中的列或视图本身的注释。                                 |
-| SECURITY        | 指定在视图调用的访问权限检查时使用的安全上下文。有效值：<ul><li>`NONE`（默认）：拥有视图 SELECT 权限的用户即可查询视图。</li><lu>`INVOKER`：仅同时拥有视图和其所引用的基表的 SELECT 权限的用户可查询视图。</li></ul> |
+| SECURITY        | 指定在视图调用的访问权限检查时使用的安全上下文。有效值：<ul><li>`NONE`（默认）：拥有视图 SELECT 权限的用户即可查询视图。</li><li>`INVOKER`：仅同时拥有视图和其所引用的基表的 SELECT 权限的用户可查询视图。</li></ul> |
 | query_statement | 用于创建视图的查询语句。可以为 StarRocks 支持的任意查询语句。 |
 
 ## 使用说明
