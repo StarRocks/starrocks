@@ -1359,8 +1359,9 @@ build_icu() {
 
     unset CPPFLAGS
     unset CXXFLAGS
+    unset CFLAGS
 
-    ./runConfigureICU Linux/gcc --prefix=$TP_INSTALL_DIR --enable-static --disable-shared
+    ./runConfigureICU Linux --prefix=$TP_INSTALL_DIR --enable-static --disable-shared
     make -j$PARALLEL
     make install
     restore_compile_flags
