@@ -4,7 +4,7 @@ create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", 
 -- !result
 show create table iceberg_sql_test_${uuid0}.iceberg_ci_db.partition_transform_table;
 -- result:
-partition_transform_table	CREATE TABLE `partition_transform_table` (
+partition_transform_table	CREATE TABLE `iceberg_sql_test_${uuid0}`.`iceberg_ci_db`.`partition_transform_table` (
   `k1` int(11) DEFAULT NULL,
   `t1` datetime DEFAULT NULL,
   `t2` datetime DEFAULT NULL,
