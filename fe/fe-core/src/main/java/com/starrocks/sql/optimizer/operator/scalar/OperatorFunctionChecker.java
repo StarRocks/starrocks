@@ -42,6 +42,12 @@ public class OperatorFunctionChecker {
         }
 
         public Pair<Boolean, String> visitCall(CallOperator call, Void context) {
+            for (ScalarOperator child : call.getChildren()) {
+                Pair<Boolean, String> result = child.accept(this, null);
+                if (!result.first) {
+                    return result;
+                }
+            }
             if (predicate.test(call)) {
                 return Pair.create(true, "");
             } else {
