@@ -430,7 +430,6 @@ under the License.
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-all</artifactId>
-            <version>4.1.115.Final</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java -->
@@ -1119,6 +1118,7 @@ under the License.
         <dependency>
             <groupId>org.apache.arrow</groupId>
             <artifactId>flight-sql-jdbc-driver</artifactId>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.arrow</groupId>
