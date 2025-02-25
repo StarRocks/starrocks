@@ -16,6 +16,10 @@
 
 #include <string>
 
+#ifdef __SSE4_1__
+#include <smmintrin.h> // SSE4.1 intrinsics
+#endif
+
 #include "gutil/strings/substitute.h"
 #include "util/raw_container.h"
 
@@ -300,137 +304,40 @@ bool date::from_string(const char* date_str, size_t len, int* year, int* month, 
         }
     }
 
-    return true;
-}
-
-// Get date base on format "%Y-%m-%d", where '-' means any char.
-// compare every char.
-// Note that this method does not check whether the parsed year, month, and day are in valid range.
-bool date::from_string_to_date_internal(const char* ptr, int* pyear, int* pmonth, int* pday) {
-    const bool is_valid = isdigit(ptr[0]) && isdigit(ptr[1]) && isdigit(ptr[2]) && isdigit(ptr[3]) &&
-                          !isdigit(ptr[4]) && isdigit(ptr[5]) && isdigit(ptr[6]) && !isdigit(ptr[7]) &&
-                          isdigit(ptr[8]) && isdigit(ptr[9]);
-    if (!is_valid) {
+    // Validate that the date values are within valid ranges
+    if (*year > 9999 || *month < 1 || *month > 12 || *day < 1 ||
+        *day > DAYS_IN_MONTH[is_leap(*year)][*month]) {
         return false;
     }
 
-    const int year = ptr[0] * 1000 + ptr[1] * 100 + ptr[2] * 10 + ptr[3] - static_cast<int>('0') * 1111;
-    const int month = ptr[5] * 10 + ptr[6] - static_cast<int>('0') * 11;
-    const int day = ptr[8] * 10 + ptr[9] - static_cast<int>('0') * 11;
-
-    *pyear = year;
-    *pmonth = month;
-    *pday = day;
+    // Validate time values if present
+    if (num_field > 3 && (*hour > 23 || *minute > 59 || *second > 59 || *microsecond >= 1000000)) {
+        return false;
+    }
 
     return true;
 }
 
-// try to obtain date base on format "%Y-%m-%d", if failed use uncommon approach to process.
 bool date::from_string_to_date(const char* date_str, size_t len, int* year, int* month, int* day) {
-    const char* ptr = date_str;
-    const char* end = date_str + len;
-    // Skip space character
-    while (ptr < end && is_space(*ptr)) {
-        ++ptr;
-    }
-    // Skip space character
-    while (ptr < end && is_space(*(end - 1))) {
-        --end;
+    // We can use from_string_to_datetime and just extract the date components
+    ToDatetimeResult result;
+    auto [is_valid, _] = from_string_to_datetime(date_str, len, &result);
+
+    if (is_valid) {
+        *year = result.year;
+        *month = result.month;
+        *day = result.day;
+        return true;
     }
 
-    int length = end - ptr;
-    // maybe It like "%Y-%m-%d".
-    if (length == 10) {
-        bool result = date::from_string_to_date_internal(ptr, year, month, day);
-        if (!result) {
-            int hour, minute, second, microsecond;
-            return from_string(date_str, len, year, month, day, &hour, &minute, &second, &microsecond);
-        }
-        return result;
-    } else {
-        // se uncommon approach.
-        int hour, minute, second, microsecond;
-        return from_string(date_str, len, year, month, day, &hour, &minute, &second, &microsecond);
-    }
-}
-
-// if format string has at least 19 chars we guess
-// It like "%Y-%m-%d %H:%i:%s",
-// and if 10th char is T and 11th is digit or
-// if there is some space between first 10 chars and last 8 chars, return true.
-// else return false;
-bool date::is_standard_datetime_format(const char* ptr, int length, const char** ptr_time) {
-    if (length >= 19) {
-        if (isdigit(ptr[9])) {
-            if (ptr[10] == 'T' && isdigit(ptr[11]) && length == 19) {
-                *ptr_time = ptr + 11;
-                return true;
-            }
-            const char* local_ptr = ptr + 10;
-            length -= 18;
-            for (int i = 0; i < length; ++i) {
-                if (!is_space(local_ptr[i])) {
-                    return false;
-                }
-            }
-            *ptr_time = local_ptr + length;
-            return true;
-        }
-    }
     return false;
 }
 
-// process string based on format like "%Y-%m-%d %H:%i:%s",
-// if successful return true;
+// If format string has at least 19 chars we guess
+// is it like "%Y-%m-%d %H:%i:%s" or "%Y-%m-%dT%H:%i:%s[.f+]Z",
+// and if 10th char is T and 11th is digit followed by time format and optional microseconds and Z
+// or if there is some space between first 10 chars and last 8 chars, return true.
 // else return false;
-bool date::from_string_to_datetime_internal(const char* ptr_date, const char* ptr_time, int* year, int* month, int* day,
-                                            int* hour, int* minute, int* second, int* microsecond) {
-    uint8_t year1;
-    uint8_t year2;
-    uint8_t year3;
-    uint8_t year4;
-    uint8_t month1;
-    uint8_t month2;
-    uint8_t day1;
-    uint8_t day2;
-
-    uint8_t hour1;
-    uint8_t hour2;
-    uint8_t minute1;
-    uint8_t minute2;
-    uint8_t second1;
-    uint8_t second2;
-    if (char_to_digit(ptr_date, 0, &year1) || char_to_digit(ptr_date, 1, &year2) ||
-        char_to_digit(ptr_date, 2, &year3) || char_to_digit(ptr_date, 3, &year4) || isdigit(ptr_date[4]) ||
-        char_to_digit(ptr_date, 5, &month1) || char_to_digit(ptr_date, 6, &month2) || isdigit(ptr_date[7]) ||
-        char_to_digit(ptr_date, 8, &day1) || char_to_digit(ptr_date, 9, &day2) || char_to_digit(ptr_time, 0, &hour1) ||
-        char_to_digit(ptr_time, 1, &hour2) || isdigit(ptr_time[2]) || char_to_digit(ptr_time, 3, &minute1) ||
-        char_to_digit(ptr_time, 4, &minute2) || isdigit(ptr_time[5]) || char_to_digit(ptr_time, 6, &second1) ||
-        char_to_digit(ptr_time, 7, &second2)) {
-        return false;
-    }
-
-    *year = year1 * 1000 + year2 * 100 + year3 * 10 + year4;
-    *month = month1 * 10 + month2;
-    *day = day1 * 10 + day2;
-    *hour = hour1 * 10 + hour2;
-    *minute = minute1 * 10 + minute2;
-    *second = second1 * 10 + second2;
-    *microsecond = 0;
-    if (*month > 12 || (*day > DAYS_IN_MONTH[is_leap(*year)][*month]) || *hour > 23 || *minute > 59 || *second > 59) {
-        return false;
-    }
-
-    return true;
-}
-// if string content is 10 chars try to process based on "%Y-%m-%d",
-//    if successful return result;
-//    else failed use uncommon approach.
-// if string content is like "%Y-%m-%d %H:%i:%s" try to process based on %Y-%m-%d %H:%i:%s,
-//    if successful return result;
-//    else failed use uncommon approach.
-// else use uncommon approach.
-//
 // @return <is_valid, is_only_date>
 //     is_valid is true if the date_str is valid datetime string.
 //     is_only_date is true if the date_str only contains date part.
@@ -438,9 +345,13 @@ bool date::from_string_to_datetime_internal(const char* ptr_date, const char* pt
 std::pair<bool, bool> date::from_string_to_datetime(const char* date_str, size_t len, ToDatetimeResult* res) {
     auto& [year, month, day, hour, minute, second, microsecond] = *res;
 
+    // Reset result values
+    hour = minute = second = microsecond = 0;
+
+    // Skip leading and trailing spaces
     const char* ptr = date_str;
     const char* end = date_str + len;
-    // Skip space character
+
     while (ptr < end && is_space(*ptr)) {
         ++ptr;
     }
@@ -449,26 +360,237 @@ std::pair<bool, bool> date::from_string_to_datetime(const char* date_str, size_t
     }
 
     int length = end - ptr;
-    if (length == 10) {
-        const bool is_valid = from_string_to_date_internal(ptr, &year, &month, &day);
-        if (is_valid) {
-            return {true, true};
-        }
+
+    // Exit early if string is too short to contain a date
+    if (length < 10) {
+        // Fall back to generic parser as last resort
         return {from_string(date_str, len, &year, &month, &day, &hour, &minute, &second, &microsecond), false};
     }
 
-    const char* ptr_date = ptr;
-    const char* ptr_time = nullptr;
-    if (is_standard_datetime_format(ptr, length, &ptr_time)) {
-        const bool is_valid = from_string_to_datetime_internal(ptr_date, ptr_time, &year, &month, &day, &hour, &minute,
-                                                               &second, &microsecond);
-        if (is_valid) {
-            return {true, false};
+    //
+    // STEP 1: Parse the date part (YYYY-MM-DD)
+    //
+
+    bool separators_valid = false;
+    bool digits_valid = false;
+
+#ifdef __SSE4_1__
+    __m128i date_chars = _mm_loadu_si128(reinterpret_cast<const __m128i*>(ptr));
+
+    // Check positions 4 and 7 are '-' (or other separators)
+    separators_valid = !isdigit(ptr[4]) && !isdigit(ptr[7]);
+
+    if (separators_valid) {
+        // Check digit positions (0-3, 5-6, 8-9)
+        __m128i is_digit = _mm_and_si128(
+            _mm_cmpgt_epi8(date_chars, _mm_set1_epi8('0'-1)),
+            _mm_cmplt_epi8(date_chars, _mm_set1_epi8('9'+1))
+        );
+
+        // Create mask for digit positions
+        const __m128i digit_mask = _mm_set_epi8(0,0,0,0,0,0,1,0,1,1,0,1,1,0,1,1);
+
+        // Check if all digit positions contain digits
+        digits_valid = _mm_testc_si128(
+                _mm_cmpeq_epi8(_mm_and_si128(is_digit, digit_mask), digit_mask),
+                digit_mask);
+    }
+#else
+    // Non-SIMD validation
+    separators_valid = !isdigit(ptr[4]) && !isdigit(ptr[7]);
+    digits_valid = isdigit(ptr[0]) && isdigit(ptr[1]) && isdigit(ptr[2]) && isdigit(ptr[3]) &&
+                  isdigit(ptr[5]) && isdigit(ptr[6]) && isdigit(ptr[8]) && isdigit(ptr[9]);
+#endif
+
+    if (separators_valid && digits_valid) {
+        // Extract date values directly
+        year = (ptr[0] - '0') * 1000 + (ptr[1] - '0') * 100 +
+               (ptr[2] - '0') * 10 + (ptr[3] - '0');
+        month = (ptr[5] - '0') * 10 + (ptr[6] - '0');
+        day = (ptr[8] - '0') * 10 + (ptr[9] - '0');
+
+        bool date_valid = (month > 0 && month <= 12 &&
+                          day > 0 && day <= DAYS_IN_MONTH[is_leap(year)][month]);
+
+        // If date parsing failed, fall back to generic parser
+        if (!date_valid) {
+            return {from_string(date_str, len, &year, &month, &day, &hour, &minute, &second, &microsecond), false};
         }
-        return {from_string(date_str, len, &year, &month, &day, &hour, &minute, &second, &microsecond), false};
     } else {
+        // If validation failed, fall back to generic parser
         return {from_string(date_str, len, &year, &month, &day, &hour, &minute, &second, &microsecond), false};
     }
+
+    // Date is valid - if we're at the end of the string, return date-only result
+    if (length == 10) {
+        return {true, true};
+    }
+
+    //
+    // STEP 2: Check for time separator ('T' or space)
+    //
+
+    const char* time_ptr = nullptr;
+
+    // Check for 'T' separator (ISO 8601)
+    if (ptr[10] == 'T') {
+        time_ptr = ptr + 11;
+    }
+    // Check for space separator(s)
+    else if (is_space(ptr[10])) {
+        // Skip all spaces
+        time_ptr = ptr + 10;
+        while (time_ptr < end && is_space(*time_ptr)) {
+            time_ptr++;
+        }
+    }
+
+    // If no valid separator or not enough chars for time part, return date-only
+    if (time_ptr == nullptr || (end - time_ptr) < 8) {
+        return {true, true};
+    }
+
+    //
+    // STEP 3: Parse time part (HH:MM:SS)
+    //
+
+    bool time_separators_valid = false;
+    bool time_digits_valid = false;
+
+#ifdef __SSE4_1__
+    // Use SIMD to validate time format
+    if ((end - time_ptr) >= 8) {
+        // Load 8 chars of time part
+        __m128i time_chars = _mm_loadu_si128(reinterpret_cast<const __m128i*>(time_ptr));
+
+        // Check separator positions (2 and 5 should be ':')
+        time_separators_valid = (time_ptr[2] == ':' && time_ptr[5] == ':');
+
+        if (time_separators_valid) {
+            // Create mask for digit positions (0,1,3,4,6,7 should be digits)
+            const __m128i time_digit_mask = _mm_set_epi8(0,0,0,0,0,0,0,0,1,1,0,1,1,0,1,1);
+
+            // Check which positions contain digits
+            __m128i is_time_digit = _mm_and_si128(
+                _mm_cmpgt_epi8(time_chars, _mm_set1_epi8('0'-1)),
+                _mm_cmplt_epi8(time_chars, _mm_set1_epi8('9'+1))
+            );
+
+            // Check if all digit positions contain digits
+            time_digits_valid = _mm_testc_si128(
+                _mm_cmpeq_epi8(_mm_and_si128(is_time_digit, time_digit_mask), time_digit_mask),
+                time_digit_mask);
+        }
+    }
+#else
+    // Non-SIMD time validation
+    time_separators_valid = (time_ptr[2] == ':' && time_ptr[5] == ':');
+    time_digits_valid = isdigit(time_ptr[0]) && isdigit(time_ptr[1]) &&
+                        isdigit(time_ptr[3]) && isdigit(time_ptr[4]) &&
+                        isdigit(time_ptr[6]) && isdigit(time_ptr[7]);
+#endif
+
+    if (time_separators_valid && time_digits_valid) {
+        // Extract time components
+        hour = (time_ptr[0] - '0') * 10 + (time_ptr[1] - '0');
+        minute = (time_ptr[3] - '0') * 10 + (time_ptr[4] - '0');
+        second = (time_ptr[6] - '0') * 10 + (time_ptr[7] - '0');
+
+        // Validate time ranges
+        bool time_valid = (hour <= 23 && minute <= 59 && second <= 59);
+
+        // If time parsing failed, return date-only
+        if (!time_valid) {
+            return {true, true};
+        }
+    } else {
+        // If validation failed, return date-only
+        return {true, true};
+    }
+
+    //
+    // STEP 4: Check for optional microseconds or 'Z' timezone indicator
+    //
+
+    const char* microsec_ptr = time_ptr + 8;
+
+    // For ISO 8601 format with 'Z'
+    if (microsec_ptr < end && microsec_ptr[0] == 'Z') {
+        // Valid ISO format with Z, no microseconds
+        return {true, false};
+    }
+
+    // Check for microseconds (.uuu or .uuuZ)
+    if (microsec_ptr < end && microsec_ptr[0] == '.') {
+        const char* digit_ptr = microsec_ptr + 1;
+        int micro_val = 0;
+        int digit_count = 0;
+
+#ifdef __SSE4_1__
+        // Optimize microsecond digit counting with SIMD if we have at least 6 digits
+        if ((end - digit_ptr) >= 6) {
+            __m128i micro_chars = _mm_loadu_si128(reinterpret_cast<const __m128i*>(digit_ptr));
+
+            // Check which positions contain digits
+            __m128i is_micro_digit = _mm_and_si128(
+                _mm_cmpgt_epi8(micro_chars, _mm_set1_epi8('0'-1)),
+                _mm_cmplt_epi8(micro_chars, _mm_set1_epi8('9'+1))
+            );
+
+            // Create a mask for up to 6 positions
+            const __m128i micro_mask = _mm_set_epi8(0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1);
+
+            // Find the first non-digit position
+            __m128i not_digit = _mm_andnot_si128(is_micro_digit, micro_mask);
+            int mask = _mm_movemask_epi8(not_digit & micro_mask);
+
+            // Count leading digits (up to 6)
+            digit_count = mask ? __builtin_ctz(mask) : 6;
+
+            // Use the actual digits for parsing (handled outside the ifdef)
+        }
+#endif
+
+        // Standard parsing for microseconds - used for both SIMD and non-SIMD paths
+        digit_ptr = microsec_ptr + 1;
+        micro_val = 0;
+
+        if (digit_count <= 0) {
+            digit_count = 0;
+        }
+
+        int i = 0;
+        while (digit_ptr < end && isdigit(*digit_ptr) && i < (digit_count > 0 ? digit_count : 6)) {
+            micro_val = micro_val * 10 + (*digit_ptr - '0');
+            digit_ptr++;
+            if (digit_count == 0) {
+                digit_count++;
+            }
+            i++;
+        }
+
+        // Scale up for fewer than 6 digits
+        if (digit_count > 0 && digit_count < 6) {
+            micro_val *= LOG_10_INT[6 - digit_count];
+        }
+
+        microsecond = micro_val;
+
+        // Check for 'Z' after microseconds (ISO 8601)
+        if (digit_ptr < end && *digit_ptr == 'Z') {
+            return {true, false};
+        }
+
+        if (digit_ptr == end) {
+            return {true, false};
+        }
+    } else if (microsec_ptr == end) {
+        // End of string, valid datetime without microseconds
+        return {true, false};
+    }
+
+    // If we're here, the microsecond format is invalid - fall back to generic parser
+    return {from_string(date_str, len, &year, &month, &day, &hour, &minute, &second, &microsecond), false};
 }
 
 JulianDate date::from_date(int year, int month, int day) {

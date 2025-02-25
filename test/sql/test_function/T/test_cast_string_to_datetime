@@ -18,22 +18,22 @@ CREATE TABLE __row_util (
 DUPLICATE KEY(`k1`)
 DISTRIBUTED BY HASH(`k1`) BUCKETS 32;
 insert into __row_util select generate_series from TABLE(generate_series(0, 10000 - 1));
-insert into __row_util select k1 + 20000 from __row_util; 
-insert into __row_util select k1 + 40000 from __row_util; 
-insert into __row_util select k1 + 80000 from __row_util; 
+insert into __row_util select k1 + 20000 from __row_util;
+insert into __row_util select k1 + 40000 from __row_util;
+insert into __row_util select k1 + 80000 from __row_util;
 
 -- ## 1.2 Insert valid date and datetime with/without whitespace.
 insert into t1
-select 
-    cast(random() *2e9 as int), 
+select
+    cast(random() *2e9 as int),
     cast(cast(date_add('2020-01-01', INTERVAL row_number() over() DAY) as date) as varchar),
-    concat(cast(cast(date_add('2020-01-01', INTERVAL row_number() over() DAY) as date) as varchar), ' 01:02:03'), 
-    concat('  ', cast(cast(date_add('2020-01-01', INTERVAL row_number() over() DAY) as date) as varchar), '  '), 
+    concat(cast(cast(date_add('2020-01-01', INTERVAL row_number() over() DAY) as date) as varchar), ' 01:02:03'),
+    concat('  ', cast(cast(date_add('2020-01-01', INTERVAL row_number() over() DAY) as date) as varchar), '  '),
     concat('   ', cast(cast(date_add('2020-01-01', INTERVAL row_number() over() DAY) as date) as varchar), ' 01:02:03  ')
 from __row_util;
 
 insert into t1 (date_str)
-values 
+values
     ("20200101"),
     ("20200101010203"),
     ("20200101T010203"),
@@ -57,7 +57,7 @@ values
     ("20200101T0102033  "),
     ("  20200101T010203.123    \n"),
     ("  20200101T010203.123    \n \t \v \f \r "),
-    
+
     ("2020.13.29"),
     ("2020.13.61"),
 
@@ -84,12 +84,24 @@ values
     ("2100.0?.28"),
     ("2100.02928"),
     ("2100.02.?8"),
-    ("2100.02.2?");
-    
+    ("2100.02.2?"),
+    ("2020-01-01T01:02:03Z"),            -- Basic Z format
+    ("2020-01-01T01:02:03.123Z"),        -- Z with 3 microseconds
+    ("2020-01-01T01:02:03.123456Z"),     -- Z with 6 microseconds
+    ("2020-01-01T01:02:03.1Z"),          -- Z with 1 microsecond
+    ("  2020-01-01T01:02:03Z  "),        -- Z with whitespace
+    ("  2020-01-01T01:02:03.123Z  "),    -- Z with microseconds and whitespace
+
+    -- Invalid Z format tests:
+    ("2020-01-01T01:02:03z"),            -- lowercase z
+    ("2020-01-01T01:02:03Zextra"),       -- extra chars after Z
+    ("2020-01-01T01:02:03.Z"),           -- decimal but no microseconds
+    ("2020-01-01T01:02:03.1234567Z");    -- too many microsecond digits;
+
 -- # 2. Query.
 
 -- ## 2.1 Query without null row.
-select 
+select
     ifnull(sum(murmur_hash3_32(
         cast(date_str as datetime)
     )), 0) +
@@ -106,12 +118,12 @@ from t1;
 
 -- ## 2.2 Query with null row.
 insert into t1
-select 
-    cast(random() *2e9 as int), 
+select
+    cast(random() *2e9 as int),
     null, null, null ,null
 from __row_util;
-    
-select 
+
+select
     ifnull(sum(murmur_hash3_32(
         cast(date_str as datetime)
     )), 0) +
@@ -151,7 +163,7 @@ select cast(column_0 as datetime) from (values ("  20200101T010203")) as tmp;
 select cast(column_0 as datetime) from (values ("20200101T0102033  ")) as tmp;
 select cast(column_0 as datetime) from (values ("  20200101T010203.123    \n")) as tmp;
 select cast(column_0 as datetime) from (values ("  20200101T010203.123    \n \t \v \f \r ")) as tmp;
-    
+
 select cast(column_0 as datetime) from (values ("2020.13.29")) as tmp;
 select cast(column_0 as datetime) from (values ("2020.13.61")) as tmp;
 
@@ -179,4 +191,16 @@ select cast(column_0 as datetime) from (values ("2100.02928")) as tmp;
 select cast(column_0 as datetime) from (values ("2100.02.?8")) as tmp;
 select cast(column_0 as datetime) from (values ("2100.02.2?")) as tmp;
 
+-- Add to "2.3 Query constants" section:
+select cast(column_0 as datetime) from (values ("2020-01-01T01:02:03Z")) as tmp;
+select cast(column_0 as datetime) from (values ("2020-01-01T01:02:03.123Z")) as tmp;
+select cast(column_0 as datetime) from (values ("2020-01-01T01:02:03.123456Z")) as tmp;
+select cast(column_0 as datetime) from (values ("2020-01-01T01:02:03.1Z")) as tmp;
+select cast(column_0 as datetime) from (values ("  2020-01-01T01:02:03Z  ")) as tmp;
+select cast(column_0 as datetime) from (values ("  2020-01-01T01:02:03.123Z  ")) as tmp;
 
+-- Invalid cases:
+select cast(column_0 as datetime) from (values ("2020-01-01T01:02:03z")) as tmp;
+select cast(column_0 as datetime) from (values ("2020-01-01T01:02:03Zextra")) as tmp;
+select cast(column_0 as datetime) from (values ("2020-01-01T01:02:03.Z")) as tmp;
+select cast(column_0 as datetime) from (values ("2020-01-01T01:02:03.1234567Z")) as tmp;

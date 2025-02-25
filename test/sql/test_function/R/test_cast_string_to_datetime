@@ -20,22 +20,22 @@ DISTRIBUTED BY HASH(`k1`) BUCKETS 32;
 insert into __row_util select generate_series from TABLE(generate_series(0, 10000 - 1));
 -- result:
 -- !result
-insert into __row_util select k1 + 20000 from __row_util; 
-insert into __row_util select k1 + 40000 from __row_util; 
-insert into __row_util select k1 + 80000 from __row_util; 
+insert into __row_util select k1 + 20000 from __row_util;
+insert into __row_util select k1 + 40000 from __row_util;
+insert into __row_util select k1 + 80000 from __row_util;
 
 insert into t1
-select 
-    cast(random() *2e9 as int), 
+select
+    cast(random() *2e9 as int),
     cast(cast(date_add('2020-01-01', INTERVAL row_number() over() DAY) as date) as varchar),
-    concat(cast(cast(date_add('2020-01-01', INTERVAL row_number() over() DAY) as date) as varchar), ' 01:02:03'), 
-    concat('  ', cast(cast(date_add('2020-01-01', INTERVAL row_number() over() DAY) as date) as varchar), '  '), 
+    concat(cast(cast(date_add('2020-01-01', INTERVAL row_number() over() DAY) as date) as varchar), ' 01:02:03'),
+    concat('  ', cast(cast(date_add('2020-01-01', INTERVAL row_number() over() DAY) as date) as varchar), '  '),
     concat('   ', cast(cast(date_add('2020-01-01', INTERVAL row_number() over() DAY) as date) as varchar), ' 01:02:03  ')
 from __row_util;
 -- result:
 -- !result
 insert into t1 (date_str)
-values 
+values
     ("20200101"),
     ("20200101010203"),
     ("20200101T010203"),
@@ -59,7 +59,7 @@ values
     ("20200101T0102033  "),
     ("  20200101T010203.123    \n"),
     ("  20200101T010203.123    \n \t \v \f \r "),
-    
+
     ("2020.13.29"),
     ("2020.13.61"),
 
@@ -85,12 +85,24 @@ values
     ("2100.0?.28"),
     ("2100.02928"),
     ("2100.02.?8"),
-    ("2100.02.2?");
+    ("2100.02.2?"),
+    ("2020-01-01T01:02:03Z"),            -- Basic Z format
+    ("2020-01-01T01:02:03.123Z"),        -- Z with 3 microseconds
+    ("2020-01-01T01:02:03.123456Z"),     -- Z with 6 microseconds
+    ("2020-01-01T01:02:03.1Z"),          -- Z with 1 microsecond
+    ("  2020-01-01T01:02:03Z  "),        -- Z with whitespace
+    ("  2020-01-01T01:02:03.123Z  "),    -- Z with microseconds and whitespace
+
+    -- Invalid Z format tests:
+    ("2020-01-01T01:02:03z"),            -- lowercase z
+    ("2020-01-01T01:02:03Zextra"),       -- extra chars after Z
+    ("2020-01-01T01:02:03.Z"),           -- decimal but no microseconds
+    ("2020-01-01T01:02:03.1234567Z");    -- too many microsecond digits;
 -- result:
 -- !result
-    
 
-select 
+
+select
     ifnull(sum(murmur_hash3_32(
         cast(date_str as datetime)
     )), 0) +
@@ -105,17 +117,17 @@ select
     )), 0)
 from t1;
 -- result:
--1390046567746
+-1393555439605
 -- !result
 insert into t1
-select 
-    cast(random() *2e9 as int), 
+select
+    cast(random() *2e9 as int),
     null, null, null ,null
 from __row_util;
 -- result:
 -- !result
-    
-select 
+
+select
     ifnull(sum(murmur_hash3_32(
         cast(date_str as datetime)
     )), 0) +
@@ -130,7 +142,7 @@ select
     )), 0)
 from t1;
 -- result:
--1390046567746
+-1393555439605
 -- !result
 select cast(NULL as datetime);
 -- result:
@@ -216,7 +228,7 @@ select cast("  20200101T010203.123    \n \t \v \f \r " as datetime);
 -- result:
 2020-01-01 01:02:03.123000
 -- !result
-    
+
 select cast("2020.13.29" as datetime);
 -- result:
 None
@@ -300,4 +312,46 @@ select cast("2100.02.?8" as datetime);
 select cast("2100.02.2?" as datetime);
 -- result:
 2100-02-02 00:00:00
+-- !result
+select cast("2020-01-01T01:02:03Z" as datetime);
+-- result:
+2020-01-01 01:02:03
+-- !result
+select cast("2020-01-01T01:02:03.123Z" as datetime);
+-- result:
+2020-01-01 01:02:03.123000
+-- !result
+select cast("2020-01-01T01:02:03.123456Z" as datetime);
+-- result:
+2020-01-01 01:02:03.123456
+-- !result
+select cast("2020-01-01T01:02:03.1Z" as datetime);
+-- result:
+2020-01-01 01:02:03.100000
+-- !result
+select cast("  2020-01-01T01:02:03Z  " as datetime);
+-- result:
+2020-01-01 01:02:03
+-- !result
+select cast("  2020-01-01T01:02:03.123Z  " as datetime);
+-- result:
+2020-01-01 01:02:03.123000
+-- !result
+
+-- Invalid cases but still supported:
+select cast("2020-01-01T01:02:03z" as datetime);
+-- result:
+2020-01-01 01:02:03
+-- !result
+select cast("2020-01-01T01:02:03Zextra" as datetime);
+-- result:
+2020-01-01 01:02:03
+-- !result
+select cast("2020-01-01T01:02:03.Z" as datetime);
+-- result:
+2020-01-01 01:02:03
+-- !result
+select cast("2020-01-01T01:02:03.1234567Z" as datetime);
+-- result:
+2020-01-01 01:02:03.123456
 -- !result

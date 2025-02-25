@@ -105,21 +105,13 @@ bool TimestampValue::from_string(const char* date_str, size_t len) {
         return false;
     }
 
-    auto process = [&](int year, int month, int day, int hour, int minute, int second, int microsecond) {
-        if (!timestamp::check(year, month, day, hour, minute, second, microsecond)) {
-            return false;
-        }
-        from_timestamp(year, month, day, hour, minute, second, microsecond);
-        return true;
-    };
+    // The from_string_to_datetime function already validates parsed values
+    // in both SIMD and generic parsing paths, so no need for redundant checks
+    _timestamp = is_only_date
+        ? timestamp::from_datetime(res.year, res.month, res.day, 0, 0, 0, 0)
+        : timestamp::from_datetime(res.year, res.month, res.day, res.hour, res.minute, res.second, res.microsecond);
 
-    // If `date_str` only contains date part, then pass constant zero for hour/minute/second/usec
-    // to make compiler eliminate some compution logic.
-    if (is_only_date) {
-        return process(res.year, res.month, res.day, 0, 0, 0, 0);
-    } else {
-        return process(res.year, res.month, res.day, res.hour, res.minute, res.second, res.microsecond);
-    }
+    return true;
 }
 
 // process string content based on format like "%Y-%m-%d". '-' means any char.
