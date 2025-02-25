@@ -1357,6 +1357,7 @@ TEST_P(LakeVacuumTest, test_vacuumed_version) {
                 "data_size": 4096
             }
         ],
+        "prev_garbage_version": 0,
         "commit_time": 1687331159
         }
         )DEL")));
@@ -1419,6 +1420,21 @@ TEST_P(LakeVacuumTest, test_vacuumed_version) {
         request.add_tablet_ids(10001);
         request.add_tablet_ids(10002);
         request.set_min_retain_version(4);
+        request.set_grace_timestamp(1687331158);
+        request.set_min_active_txn_id(12344);
+        vacuum(_tablet_mgr.get(), request, &response);
+        ASSERT_TRUE(response.has_status());
+        EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+        EXPECT_EQ(0, response.vacuumed_version());
+    }
+
+    {
+        VacuumRequest request;
+        VacuumResponse response;
+        request.set_delete_txn_log(true);
+        request.add_tablet_ids(10001);
+        request.add_tablet_ids(10002);
+        request.set_min_retain_version(4);
         request.set_grace_timestamp(1687331161);
         request.set_min_active_txn_id(12344);
         vacuum(_tablet_mgr.get(), request, &response);
@@ -1439,7 +1455,7 @@ TEST_P(LakeVacuumTest, test_vacuumed_version) {
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(4, response.vacuumed_version());
+        EXPECT_EQ(3, response.vacuumed_version());
     }
 }
 
