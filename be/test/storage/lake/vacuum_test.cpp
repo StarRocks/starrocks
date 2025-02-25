@@ -515,7 +515,7 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
 
         ensure_all_files_exist();
     }
-    // Invalid request: "tablet_ids()" is empty
+    // Invalid request: "tablet_ids()" and "tablet_infos" are empty
     {
         VacuumRequest request;
         VacuumResponse response;
@@ -526,7 +526,7 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         ASSERT_NE(0, response.status().status_code());
-        EXPECT_TRUE(MatchPattern(response.status().error_msgs(0), "*tablet_ids is empty*"))
+        EXPECT_TRUE(MatchPattern(response.status().error_msgs(0), "*both tablet_ids and tablet_infos are empty*"))
                 << response.status().error_msgs(0);
         EXPECT_EQ(0, response.vacuumed_files());
         EXPECT_EQ(0, response.vacuumed_file_size());
