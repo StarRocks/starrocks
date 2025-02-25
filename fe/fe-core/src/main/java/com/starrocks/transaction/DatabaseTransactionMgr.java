@@ -365,7 +365,15 @@ public class DatabaseTransactionMgr {
                 txnSpan.setAttribute("num_partition", numPartitions);
                 unprotectedCommitSpan.end();
                 // after state transform
+<<<<<<< HEAD
                 transactionState.afterStateTransform(TransactionStatus.PREPARED, txnOperated, callback, null);
+=======
+                try {
+                    transactionState.afterStateTransform(TransactionStatus.PREPARED, txnOperated, null);
+                } catch (Throwable t) {
+                    LOG.warn("transaction after state transform failed: {}", transactionState, t);
+                }
+>>>>>>> 59aaa47239 ([BugFix] fix inconsistent transaction process if exception thrown (#56153))
             }
             if (writeEditLog) {
                 persistTxnStateInTxnLevelLock(transactionState);
@@ -448,8 +456,7 @@ public class DatabaseTransactionMgr {
 
             writeLock();
             try {
-                unprotectedCommitPreparedTransaction(transactionState, db);
-                txnOperated = true;
+                txnOperated = unprotectedCommitPreparedTransaction(transactionState, db);
             } finally {
                 writeUnlock();
                 int numPartitions = 0;
@@ -459,7 +466,18 @@ public class DatabaseTransactionMgr {
                 txnSpan.setAttribute("num_partition", numPartitions);
                 unprotectedCommitSpan.end();
                 // after state transform
+<<<<<<< HEAD
                 transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, callback, null);
+=======
+                try {
+                    transactionState.afterStateTransform(TransactionStatus.COMMITTED, txnOperated, null);
+                } catch (Throwable t) {
+                    LOG.warn("transaction after state transform failed: {}", transactionState, t);
+                }
+            }
+            if (!txnOperated) {
+                return null;
+>>>>>>> 59aaa47239 ([BugFix] fix inconsistent transaction process if exception thrown (#56153))
             }
 
             persistTxnStateInTxnLevelLock(transactionState);
@@ -543,10 +561,20 @@ public class DatabaseTransactionMgr {
                 txnOperated = unprotectAbortTransaction(transactionId, abortPrepared, reason);
             } finally {
                 writeUnlock();
+<<<<<<< HEAD
                 transactionState.afterStateTransform(TransactionStatus.ABORTED, txnOperated, callback, reason);
+=======
+                try {
+                    transactionState.afterStateTransform(TransactionStatus.ABORTED, txnOperated, reason);
+                } catch (Throwable t) {
+                    LOG.warn("transaction after state transform failed: {}", transactionState, t);
+                }
+>>>>>>> 59aaa47239 ([BugFix] fix inconsistent transaction process if exception thrown (#56153))
             }
 
-            persistTxnStateInTxnLevelLock(transactionState);
+            if (txnOperated) {
+                persistTxnStateInTxnLevelLock(transactionState);
+            }
         } finally {
             transactionState.writeUnlock();
         }
@@ -1201,7 +1229,15 @@ public class DatabaseTransactionMgr {
                     LOG.debug("after set transaction {} to visible", transactionState);
                 } finally {
                     writeUnlock();
+<<<<<<< HEAD
                     transactionState.afterStateTransform(TransactionStatus.VISIBLE, txnOperated);
+=======
+                    try {
+                        transactionState.afterStateTransform(TransactionStatus.VISIBLE, txnOperated, "");
+                    } catch (Throwable t) {
+                        LOG.warn("transaction after state transform failed: {}", transactionState, t);
+                    }
+>>>>>>> 59aaa47239 ([BugFix] fix inconsistent transaction process if exception thrown (#56153))
                 }
 
                 persistTxnStateInTxnLevelLock(transactionState);
@@ -1232,10 +1268,10 @@ public class DatabaseTransactionMgr {
         updateTransactionMetrics(transactionState);
     }
 
-    protected void unprotectedCommitPreparedTransaction(TransactionState transactionState, Database db) {
+    protected boolean unprotectedCommitPreparedTransaction(TransactionState transactionState, Database db) {
         // transaction state is modified during check if the transaction could be committed
         if (transactionState.getTransactionStatus() != TransactionStatus.PREPARED) {
-            return;
+            return false;
         }
         // commit timestamps needs to be strictly monotonically increasing
         long commitTs = Math.max(System.currentTimeMillis(), maxCommitTs + 1);
@@ -1338,7 +1374,12 @@ public class DatabaseTransactionMgr {
         }
 
         // persist transactionState
+<<<<<<< HEAD
         unprotectUpsertTransactionState(transactionState, false);
+=======
+        unprotectUpsertTransactionState(transactionState);
+        return true;
+>>>>>>> 59aaa47239 ([BugFix] fix inconsistent transaction process if exception thrown (#56153))
     }
 
     // for add/update/delete TransactionState
@@ -1904,7 +1945,15 @@ public class DatabaseTransactionMgr {
                     txnOperated = true;
                 } finally {
                     writeUnlock();
+<<<<<<< HEAD
                     transactionState.afterStateTransform(TransactionStatus.VISIBLE, txnOperated);
+=======
+                    try {
+                        transactionState.afterStateTransform(TransactionStatus.VISIBLE, txnOperated, "");
+                    } catch (Throwable t) {
+                        LOG.warn("transaction after state transform failed: {}", transactionState, t);
+                    }
+>>>>>>> 59aaa47239 ([BugFix] fix inconsistent transaction process if exception thrown (#56153))
                 }
                 persistTxnStateInTxnLevelLock(transactionState);
 
