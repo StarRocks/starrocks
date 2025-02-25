@@ -40,6 +40,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.MockedStatic;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.concurrent.Future;
 
@@ -118,6 +119,7 @@ public class VacuumTest {
         mockResponse.vacuumedFiles = 10L;
         mockResponse.vacuumedFileSize = 1024L;
         mockResponse.vacuumedVersion = 5L;
+        mockResponse.tabletInfos = new ArrayList<>();
 
         Future<VacuumResponse> mockFuture = mock(Future.class);
         when(mockFuture.get()).thenReturn(mockResponse);
@@ -151,6 +153,7 @@ public class VacuumTest {
         mockResponse.vacuumedFiles = 10L;
         mockResponse.vacuumedFileSize = 1024L;
         mockResponse.vacuumedVersion = 5L;
+        mockResponse.tabletInfos = new ArrayList<>();
 
         Future<VacuumResponse> mockFuture = mock(Future.class);
         when(mockFuture.get()).thenReturn(mockResponse);
