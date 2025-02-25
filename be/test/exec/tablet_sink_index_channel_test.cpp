@@ -236,7 +236,7 @@ using RpcLoadDisagnosePair = std::pair<PLoadDiagnoseRequest*, RefCountClosure<PL
 
 void TabletSinkIndexChannelTest::test_load_diagnose_base(const std::string& error_text, bool should_diagnose) {
     TQueryOptions query_options;
-    // let query_timeout / 2 > load_diagnose_small_rpc_timeout_threshold_ms
+    // let query_timeout / 2 > load_diagnose_rpc_timeout_profile_threshold_ms
     query_options.__set_query_timeout(300);
     auto runtime_state = _build_runtime_state(query_options);
     DescriptorTbl* desc_tbl = nullptr;

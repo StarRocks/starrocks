@@ -790,7 +790,7 @@ TEST_F(LoadChannelTestForLakeTablet, test_load_diagnose) {
     diagnose_request.set_profile(true);
 
     PLoadDiagnoseResult diagnose_result;
-    _load_channel->diagnose(&diagnose_request, &diagnose_result);
+    _load_channel->diagnose("192.168.0.1", &diagnose_request, &diagnose_result);
 
     ASSERT_TRUE(diagnose_result.has_profile_status());
     ASSERT_OK(Status(diagnose_result.profile_status()));

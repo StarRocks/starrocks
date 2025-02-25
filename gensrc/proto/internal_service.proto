@@ -308,19 +308,24 @@ message PTabletWriterCancelRequest {
 message PTabletWriterCancelResult {
 };
 
-// TODO only diagnose from profile currently, and can support more diagnostic methods in the future
 message PLoadDiagnoseRequest {
     optional PUniqueId id = 1;
     optional int64 txn_id = 2;
     // whether to use profile as the diagnose method.
     // If true, will return the profile in the response
     optional bool profile = 3;
+    // whether to use stack trace as the diagnose method.
+    optional bool stack_trace = 4;
 };
 
 message PLoadDiagnoseResult {
-    // The result of the profile diagnose
+    // The result of the profile
     optional StatusPB profile_status = 1;
     optional bytes profile_data = 2;
+    // The result of stack trace. stack trace will be performed asynchronously
+    // and stored on the target BE. The Status::OK only indicates the target
+    // receives the request and will execute it.
+    optional StatusPB stack_trace_status = 3;
 };
 
 message PExecPlanFragmentRequest {
