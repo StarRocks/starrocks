@@ -170,8 +170,10 @@ import com.starrocks.sql.ast.AlterViewClause;
 import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.AnalyzeBasicDesc;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
+import com.starrocks.sql.ast.AnalyzeMultiColumnDesc;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
+import com.starrocks.sql.ast.AnalyzeTypeDesc;
 import com.starrocks.sql.ast.ArrayExpr;
 import com.starrocks.sql.ast.AsyncRefreshSchemeDesc;
 import com.starrocks.sql.ast.BackupStmt;
@@ -2728,6 +2730,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             // noop
         } else if (context instanceof StarRocksParser.AllColumnsContext) {
             // noop
+        } else if (context instanceof StarRocksParser.CombinedMultiColumnsContext) {
+            StarRocksParser.CombinedMultiColumnsContext combinedMultiColumnsContext =
+                    (StarRocksParser.CombinedMultiColumnsContext) context;
+            List<QualifiedName> names = combinedMultiColumnsContext.qualifiedName().stream()
+                    .map(this::getQualifiedName).collect(toList());
+            columns = getAnalyzeColumns(names);
         } else if (context instanceof StarRocksParser.PredicateColumnsContext) {
             usePredicateColumns = true;
         } else if (context instanceof StarRocksParser.RegularColumnsContext) {
@@ -2751,7 +2759,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         TableName tableName = qualifiedNameToTableName(getQualifiedName(context.tableName().qualifiedName()));
-        Pair<Boolean, List<Expr>> analyzeColumn = visitAnalyzeColumnClause(context.analyzeColumnClause());
 
         Map<String, String> properties = new HashMap<>();
         if (context.properties() != null) {
@@ -2761,18 +2768,33 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             }
         }
 
+        boolean isSample = context.SAMPLE() != null;
+        boolean isAsync = context.ASYNC() != null;
+
+        Pair<Boolean, List<Expr>> analyzeColumn = visitAnalyzeColumnClause(context.analyzeColumnClause());
+        AnalyzeTypeDesc analyzeTypeDesc = new AnalyzeBasicDesc();
+        if (context.analyzeColumnClause() instanceof StarRocksParser.CombinedMultiColumnsContext) {
+            List<StatsConstants.StatisticsType> statisticsTypes = Lists.newArrayList();
+            statisticsTypes.add(StatsConstants.StatisticsType.MCDISTINCT);
+
+            // we use sample strategy to collect multi-column combined statistics as default.
+            isSample = context.FULL() == null;
+            isAsync = false;
+            analyzeTypeDesc = new AnalyzeMultiColumnDesc(statisticsTypes);
+        }
+
         return new AnalyzeStmt(tableName, analyzeColumn.second, partitionNames, properties,
-                context.SAMPLE() != null,
-                context.ASYNC() != null,
+                isSample,
+                isAsync,
                 analyzeColumn.first,
-                new AnalyzeBasicDesc(), createPos(context));
+                analyzeTypeDesc, createPos(context));
     }
 
     @Override
     public ParseNode visitDropStatsStatement(StarRocksParser.DropStatsStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName tableName = qualifiedNameToTableName(qualifiedName);
-        return new DropStatsStmt(tableName, createPos(context));
+        return new DropStatsStmt(tableName, context.MULTI_COLUMN() != null, createPos(context));
     }
 
     @Override

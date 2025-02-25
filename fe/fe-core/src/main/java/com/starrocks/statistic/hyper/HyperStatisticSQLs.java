@@ -108,6 +108,27 @@ public class HyperStatisticSQLs {
             ", cast($collectionSizeFunction as BIGINT)" + // BIGINT, collection_size
             " FROM base_cte_table ";
 
+    public static final String FULL_MULTI_COLUMN_STATISTICS_SELECT_TEMPLATE =
+            "SELECT cast($version as INT), $columnIdsStr, cast($ndvFunction as BIGINT) from `$dbName`.`$tableName`";
+
+    public static final String SAMPLE_MULTI_COLUMN_STATISTICS_SELECT_TMEPLATE = "$base_cte_table " +
+            "SELECT\n" +
+            "    cast($version as INT),\n" +
+            "    $columnIdsStr,\n" +
+            "    cast($ndvFunction as BIGINT)\n" +
+            "FROM (\n" +
+            "    SELECT\n" +
+            "        t0.`column_key`,\n" +
+            "        COUNT(1) as count\n" +
+            "    FROM (\n" +
+            "        SELECT\n" +
+            "            combined_column_key AS column_key\n" +
+            "        FROM\n" +
+            "            `base_cte_table`\n" +
+            "    ) as t0\n" +
+            "    GROUP BY t0.column_key \n" +
+            ") AS t1;";
+
     public static String build(VelocityContext context, String template) {
         StringWriter sw = new StringWriter();
         DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", template);

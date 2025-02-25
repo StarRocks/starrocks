@@ -61,33 +61,44 @@ public abstract class StatisticsCollectJob {
     protected final List<String> columnNames;
     protected final List<Type> columnTypes;
 
-    protected final StatsConstants.AnalyzeType type;
+    protected final StatsConstants.AnalyzeType analyzeType;
+
+    // statistics types are empty on single column statistics jobs.
+    protected List<StatsConstants.StatisticsType> statisticsTypes;
     protected final StatsConstants.ScheduleType scheduleType;
     protected final Map<String, String> properties;
     protected Priority priority;
 
+    // for multi-column combined statistics job.
+    // Using group is to support automatic collection of all predicate columns of a table in the future.
+    protected final List<List<String>> columnGroups;
+
     protected StatisticsCollectJob(Database db, Table table, List<String> columnNames,
-                                   StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
+                                   StatsConstants.AnalyzeType analyzeType, StatsConstants.ScheduleType scheduleType,
                                    Map<String, String> properties) {
-        this.db = db;
-        this.table = table;
-        this.columnNames = columnNames;
-        this.columnTypes = columnNames.stream().map(table::getColumn).map(Column::getType).collect(Collectors.toList());
-        this.type = type;
-        this.scheduleType = scheduleType;
-        this.properties = properties;
+        this(db, table, columnNames, columnNames.stream().map(table::getColumn).map(Column::getType).collect(Collectors.toList()),
+                analyzeType, scheduleType, properties, List.of(), List.of());
     }
 
     protected StatisticsCollectJob(Database db, Table table, List<String> columnNames, List<Type> columnTypes,
-                                   StatsConstants.AnalyzeType type, StatsConstants.ScheduleType scheduleType,
+                                   StatsConstants.AnalyzeType analyzeType, StatsConstants.ScheduleType scheduleType,
                                    Map<String, String> properties) {
+        this(db, table, columnNames, columnTypes, analyzeType, scheduleType, properties, List.of(), List.of());
+    }
+
+    protected StatisticsCollectJob(Database db, Table table, List<String> columnNames, List<Type> columnTypes,
+                                   StatsConstants.AnalyzeType analyzeType, StatsConstants.ScheduleType scheduleType,
+                                   Map<String, String> properties, List<StatsConstants.StatisticsType> statisticsTypes,
+                                   List<List<String>> columnGroups) {
         this.db = db;
         this.table = table;
         this.columnNames = columnNames;
         this.columnTypes = columnTypes;
-        this.type = type;
+        this.analyzeType = analyzeType;
         this.scheduleType = scheduleType;
         this.properties = properties;
+        this.statisticsTypes = statisticsTypes;
+        this.columnGroups = columnGroups;
     }
 
     protected static final VelocityEngine DEFAULT_VELOCITY_ENGINE;
@@ -120,8 +131,8 @@ public abstract class StatisticsCollectJob {
         return columnNames;
     }
 
-    public StatsConstants.AnalyzeType getType() {
-        return type;
+    public StatsConstants.AnalyzeType getAnalyzeType() {
+        return analyzeType;
     }
 
     public StatsConstants.ScheduleType getScheduleType() {
@@ -142,6 +153,18 @@ public abstract class StatisticsCollectJob {
 
     public Priority getPriority() {
         return this.priority;
+    }
+
+    public boolean isMultiColumnStatsJob() {
+        return !statisticsTypes.isEmpty();
+    }
+
+    public List<StatsConstants.StatisticsType> getStatisticsTypes() {
+        return statisticsTypes;
+    }
+
+    public List<List<String>> getColumnGroups() {
+        return columnGroups;
     }
 
     protected void setDefaultSessionVariable(ConnectContext context) {
@@ -246,7 +269,7 @@ public abstract class StatisticsCollectJob {
     @Override
     public String toString() {
         final StringBuilder sb = new StringBuilder("StatisticsCollectJob{");
-        sb.append("type=").append(type);
+        sb.append("type=").append(analyzeType);
         sb.append(", scheduleType=").append(scheduleType);
         sb.append(", db=").append(db);
         sb.append(", table=").append(table);
