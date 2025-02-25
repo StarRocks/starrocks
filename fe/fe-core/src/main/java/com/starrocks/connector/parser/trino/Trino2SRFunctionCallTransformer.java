@@ -232,8 +232,6 @@ public class Trino2SRFunctionCallTransformer {
         // last_day_of_month(x)  -> last_day(x,'month')
         registerFunctionTransformer("last_day_of_month", 1, new FunctionCallExpr("last_day",
                 List.of(new PlaceholderExpr(1, Expr.class), new StringLiteral("month"))));
-<<<<<<< HEAD
-=======
 
         // year_of_week(x) -> floor(divide(yearweek('x', 1),100))
         registerFunctionTransformer("year_of_week", 1,
@@ -262,7 +260,6 @@ public class Trino2SRFunctionCallTransformer {
         // from_iso8601_timestamp -> timestamp
         registerFunctionTransformer("from_iso8601_timestamp", 1, "timestamp",
                 List.of(Expr.class));
->>>>>>> f4d36ee1e4 ([Enhancement] Convert Trino function from_iso8601_timestamp -> timestamp (#55573))
     }
 
     private static void registerStringFunctionTransformer() {
