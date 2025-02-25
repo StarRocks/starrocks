@@ -482,12 +482,12 @@ TEST_F(COWTest, TestCOW) {
 TEST_F(ColumnTest, TestColumnMutate) {
     ConcreteColumn::MutablePtr x = ConcreteColumn::create(1);
     {
-        auto y = (*std::move(x)).mutate();
+        auto y = (std::move(*x)).mutate();
         y->set(2);
         std::cout << "x:" << x->get() << ", use_count:" << x->use_count() << std::endl;
         std::cout << "y:" << y->get() << ", use_count:" << y->use_count() << std::endl;
 
-        auto z = (*std::move(x)).mutate();
+        auto z = (std::move(*x)).mutate();
         z->set(3);
         std::cout << "x:" << x->get() << ", use_count:" << x->use_count() << std::endl;
         std::cout << "y:" << y->get() << ", use_count:" << y->use_count() << std::endl;
