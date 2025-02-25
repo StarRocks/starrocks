@@ -1393,42 +1393,45 @@ public class StmtExecutor {
             }
         }
 
-        if (batch != null) {
-            processQueryStatisticsFromResult(batch, execPlan, isOutfileQuery);
-        }
+        processQueryStatisticsFromResult(batch, execPlan, isOutfileQuery);
     }
 
     /**
      * The query result batch will piggyback query statistics in it
      */
     private void processQueryStatisticsFromResult(RowBatch batch, ExecPlan execPlan, boolean isOutfileQuery) {
-        statisticsForAuditLog = batch.getQueryStatistics();
-        if (!isOutfileQuery) {
-            context.getState().setEof();
-        } else {
-            context.getState().setOk(statisticsForAuditLog.returnedRows, 0, "");
-        }
+        if (batch != null) {
+            statisticsForAuditLog = batch.getQueryStatistics();
+            if (!isOutfileQuery) {
+                context.getState().setEof();
+            } else {
+                context.getState().setOk(statisticsForAuditLog.returnedRows, 0, "");
+            }
 
-        if (null != statisticsForAuditLog) {
-            analyzePlanWithExecStats(execPlan);
-        }
+            if (null != statisticsForAuditLog) {
+                analyzePlanWithExecStats(execPlan);
+            }
 
-        if (null == statisticsForAuditLog || null == statisticsForAuditLog.statsItems ||
-                statisticsForAuditLog.statsItems.isEmpty()) {
-            return;
-        }
+            if (null == statisticsForAuditLog || null == statisticsForAuditLog.statsItems ||
+                    statisticsForAuditLog.statsItems.isEmpty()) {
+                return;
+            }
 
-        // collect table-level metrics
-        Set<Long> tableIds = Sets.newHashSet();
-        for (QueryStatisticsItemPB item : statisticsForAuditLog.statsItems) {
-            TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(item.tableId);
-            entity.counterScanRowsTotal.increase(item.scanRows);
-            entity.counterScanBytesTotal.increase(item.scanBytes);
-            tableIds.add(item.tableId);
-        }
-        for (Long tableId : tableIds) {
-            TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
-            entity.counterScanFinishedTotal.increase(1L);
+            // collect table-level metrics
+            Set<Long> tableIds = Sets.newHashSet();
+            for (QueryStatisticsItemPB item : statisticsForAuditLog.statsItems) {
+                if (item == null) {
+                    continue;
+                }
+                TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(item.tableId);
+                entity.counterScanRowsTotal.increase(item.scanRows);
+                entity.counterScanBytesTotal.increase(item.scanBytes);
+                tableIds.add(item.tableId);
+            }
+            for (Long tableId : tableIds) {
+                TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tableId);
+                entity.counterScanFinishedTotal.increase(1L);
+            }
         }
     }
 
@@ -2883,6 +2886,7 @@ public class StmtExecutor {
                 }
             } while (!batch.isEos());
             context.getState().setEof();
+            processQueryStatisticsFromResult(batch, plan, false);
         } catch (Exception e) {
             LOG.error("Failed to execute metadata collection job", e);
             if (coord.getExecStatus().ok()) {
