@@ -49,7 +49,7 @@ public enum TxnStatusChangeReason {
             case FILTERED_ROWS:
                 return "too many filtered rows";
             case PARSE_ERROR:
-                return  "parse error";
+                return "parse error";
             default:
                 return this.name();
         }
