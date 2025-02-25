@@ -305,8 +305,7 @@ bool date::from_string(const char* date_str, size_t len, int* year, int* month, 
     }
 
     // Validate that the date values are within valid ranges
-    if (*year > 9999 || *month < 1 || *month > 12 || *day < 1 ||
-        *day > DAYS_IN_MONTH[is_leap(*year)][*month]) {
+    if (*year > 9999 || *month < 1 || *month > 12 || *day < 1 || *day > DAYS_IN_MONTH[is_leap(*year)][*month]) {
         return false;
     }
 
@@ -382,35 +381,29 @@ std::pair<bool, bool> date::from_string_to_datetime(const char* date_str, size_t
 
     if (separators_valid) {
         // Check digit positions (0-3, 5-6, 8-9)
-        __m128i is_digit = _mm_and_si128(
-            _mm_cmpgt_epi8(date_chars, _mm_set1_epi8('0'-1)),
-            _mm_cmplt_epi8(date_chars, _mm_set1_epi8('9'+1))
-        );
+        __m128i is_digit = _mm_and_si128(_mm_cmpgt_epi8(date_chars, _mm_set1_epi8('0' - 1)),
+                                         _mm_cmplt_epi8(date_chars, _mm_set1_epi8('9' + 1)));
 
         // Create mask for digit positions
-        const __m128i digit_mask = _mm_set_epi8(0,0,0,0,0,0,1,0,1,1,0,1,1,0,1,1);
+        const __m128i digit_mask = _mm_set_epi8(0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1);
 
         // Check if all digit positions contain digits
-        digits_valid = _mm_testc_si128(
-                _mm_cmpeq_epi8(_mm_and_si128(is_digit, digit_mask), digit_mask),
-                digit_mask);
+        digits_valid = _mm_testc_si128(_mm_cmpeq_epi8(_mm_and_si128(is_digit, digit_mask), digit_mask), digit_mask);
     }
 #else
     // Non-SIMD validation
     separators_valid = !isdigit(ptr[4]) && !isdigit(ptr[7]);
-    digits_valid = isdigit(ptr[0]) && isdigit(ptr[1]) && isdigit(ptr[2]) && isdigit(ptr[3]) &&
-                  isdigit(ptr[5]) && isdigit(ptr[6]) && isdigit(ptr[8]) && isdigit(ptr[9]);
+    digits_valid = isdigit(ptr[0]) && isdigit(ptr[1]) && isdigit(ptr[2]) && isdigit(ptr[3]) && isdigit(ptr[5]) &&
+                   isdigit(ptr[6]) && isdigit(ptr[8]) && isdigit(ptr[9]);
 #endif
 
     if (separators_valid && digits_valid) {
         // Extract date values directly
-        year = (ptr[0] - '0') * 1000 + (ptr[1] - '0') * 100 +
-               (ptr[2] - '0') * 10 + (ptr[3] - '0');
+        year = (ptr[0] - '0') * 1000 + (ptr[1] - '0') * 100 + (ptr[2] - '0') * 10 + (ptr[3] - '0');
         month = (ptr[5] - '0') * 10 + (ptr[6] - '0');
         day = (ptr[8] - '0') * 10 + (ptr[9] - '0');
 
-        bool date_valid = (month > 0 && month <= 12 &&
-                          day > 0 && day <= DAYS_IN_MONTH[is_leap(year)][month]);
+        bool date_valid = (month > 0 && month <= 12 && day > 0 && day <= DAYS_IN_MONTH[is_leap(year)][month]);
 
         // If date parsing failed, fall back to generic parser
         if (!date_valid) {
@@ -468,26 +461,22 @@ std::pair<bool, bool> date::from_string_to_datetime(const char* date_str, size_t
 
         if (time_separators_valid) {
             // Create mask for digit positions (0,1,3,4,6,7 should be digits)
-            const __m128i time_digit_mask = _mm_set_epi8(0,0,0,0,0,0,0,0,1,1,0,1,1,0,1,1);
+            const __m128i time_digit_mask = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 1, 1);
 
             // Check which positions contain digits
-            __m128i is_time_digit = _mm_and_si128(
-                _mm_cmpgt_epi8(time_chars, _mm_set1_epi8('0'-1)),
-                _mm_cmplt_epi8(time_chars, _mm_set1_epi8('9'+1))
-            );
+            __m128i is_time_digit = _mm_and_si128(_mm_cmpgt_epi8(time_chars, _mm_set1_epi8('0' - 1)),
+                                                  _mm_cmplt_epi8(time_chars, _mm_set1_epi8('9' + 1)));
 
             // Check if all digit positions contain digits
             time_digits_valid = _mm_testc_si128(
-                _mm_cmpeq_epi8(_mm_and_si128(is_time_digit, time_digit_mask), time_digit_mask),
-                time_digit_mask);
+                    _mm_cmpeq_epi8(_mm_and_si128(is_time_digit, time_digit_mask), time_digit_mask), time_digit_mask);
         }
     }
 #else
     // Non-SIMD time validation
     time_separators_valid = (time_ptr[2] == ':' && time_ptr[5] == ':');
-    time_digits_valid = isdigit(time_ptr[0]) && isdigit(time_ptr[1]) &&
-                        isdigit(time_ptr[3]) && isdigit(time_ptr[4]) &&
-                        isdigit(time_ptr[6]) && isdigit(time_ptr[7]);
+    time_digits_valid = isdigit(time_ptr[0]) && isdigit(time_ptr[1]) && isdigit(time_ptr[3]) && isdigit(time_ptr[4]) &&
+                         isdigit(time_ptr[6]) && isdigit(time_ptr[7]);
 #endif
 
     if (time_separators_valid && time_digits_valid) {
@@ -532,13 +521,11 @@ std::pair<bool, bool> date::from_string_to_datetime(const char* date_str, size_t
             __m128i micro_chars = _mm_loadu_si128(reinterpret_cast<const __m128i*>(digit_ptr));
 
             // Check which positions contain digits
-            __m128i is_micro_digit = _mm_and_si128(
-                _mm_cmpgt_epi8(micro_chars, _mm_set1_epi8('0'-1)),
-                _mm_cmplt_epi8(micro_chars, _mm_set1_epi8('9'+1))
-            );
+            __m128i is_micro_digit = _mm_and_si128(_mm_cmpgt_epi8(micro_chars, _mm_set1_epi8('0' - 1)),
+                                                   _mm_cmplt_epi8(micro_chars, _mm_set1_epi8('9' + 1)));
 
             // Create a mask for up to 6 positions
-            const __m128i micro_mask = _mm_set_epi8(0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1);
+            const __m128i micro_mask = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1);
 
             // Find the first non-digit position
             __m128i not_digit = _mm_andnot_si128(is_micro_digit, micro_mask);
