@@ -32,7 +32,7 @@ public class PartitionUpdate {
     private final String name;
     private UpdateMode updateMode;
     private final Path writePath;
-    private final Path targetPath;
+    private Path targetPath;
     private final List<String> fileNames;
     private final long rowCount;
     private final long totalSizeInBytes;
@@ -81,6 +81,11 @@ public class PartitionUpdate {
 
     public PartitionUpdate setUpdateMode(UpdateMode updateMode) {
         this.updateMode = updateMode;
+        return this;
+    }
+
+    public PartitionUpdate updateTargetPathFromMeta(Path targetPath) {
+        this.targetPath = targetPath;
         return this;
     }
 

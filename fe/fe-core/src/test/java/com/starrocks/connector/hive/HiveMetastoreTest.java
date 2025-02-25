@@ -483,11 +483,13 @@ public class HiveMetastoreTest {
         }
 
         public Partition getPartition(String dbName, String tableName, List<String> partitionValues) {
+            String hdfsPath = "hdfs://127.0.0.1:10000/hive.db/hive_tbl/";
             StorageDescriptor sd = new StorageDescriptor();
             sd.setInputFormat("org.apache.hadoop.hive.ql.io.orc.OrcInputFormat");
             SerDeInfo serDeInfo = new SerDeInfo();
             serDeInfo.setParameters(ImmutableMap.of());
             sd.setSerdeInfo(serDeInfo);
+            sd.setLocation(MockedPartitionLocationProvider.getInstance().get(hdfsPath, partitionValues));
 
             Partition partition = new Partition();
             partition.setSd(sd);
@@ -512,7 +514,8 @@ public class HiveMetastoreTest {
                 SerDeInfo serDeInfo = new SerDeInfo();
                 serDeInfo.setParameters(ImmutableMap.of());
                 sd.setSerdeInfo(serDeInfo);
-                sd.setLocation(hdfsPath + partitionName);
+                List<String> partitionValues = PartitionUtil.toPartitionValues(partitionName);
+                sd.setLocation(MockedPartitionLocationProvider.getInstance().get(hdfsPath, partitionValues));
 
                 Partition partition = new Partition();
                 partition.setSd(sd);
@@ -571,5 +574,30 @@ public class HiveMetastoreTest {
 
             return res;
         }
+    }
+}
+
+class MockedPartitionLocationProvider {
+    private List<String> colNames = Lists.newArrayList("col1");
+
+    private static MockedPartitionLocationProvider instance;
+
+    private MockedPartitionLocationProvider() {
+    }
+
+    public static synchronized MockedPartitionLocationProvider getInstance() {
+        if (instance == null) {
+            instance = new MockedPartitionLocationProvider();
+        }
+        return instance;
+    }
+
+    public void updateColNames(List<String> colNames) {
+        this.colNames = colNames;
+    }
+
+    public String get(String tableLocation, List<String> partitionValues) {
+        String location = PartitionUtil.toHivePartitionName(colNames, partitionValues);
+        return tableLocation + location;
     }
 }

@@ -105,6 +105,7 @@ public class HiveMetadataTest {
     private static ConnectContext connectContext;
     private static OptimizerContext optimizerContext;
     private static ColumnRefFactory columnRefFactory;
+    private MockedPartitionLocationProvider mockedPartitionLocationProvider;
 
     @Before
     public void setUp() throws Exception {
@@ -137,6 +138,7 @@ public class HiveMetadataTest {
         hiveMetadata = new HiveMetadata("hive_catalog", new HdfsEnvironment(), hmsOps, fileOps, statisticsProvider,
                 Optional.empty(), executorForHmsRefresh, executorForHmsRefresh,
                 new ConnectorProperties(ConnectorType.HIVE));
+        mockedPartitionLocationProvider = MockedPartitionLocationProvider.getInstance();
     }
 
     @After
@@ -505,6 +507,45 @@ public class HiveMetadataTest {
         hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo), null);
     }
 
+    @Test(expected = StarRocksConnectorException.class)
+    public void testAppendPartitionWithModifiedLocation() {
+        String stagingDir = "hdfs://127.0.0.1:10000/tmp/starrocks/queryid";
+        THiveFileInfo fileInfo = new THiveFileInfo();
+        fileInfo.setFile_name("myfile.parquet");
+        fileInfo.setPartition_path("hdfs://127.0.0.1:10000/tmp/starrocks/queryid/col1=2");
+        fileInfo.setRecord_count(10);
+        fileInfo.setFile_size_in_bytes(100);
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setStaging_dir(stagingDir);
+        tSinkCommitInfo.setIs_overwrite(false);
+        tSinkCommitInfo.setHive_file_info(fileInfo);
+
+        new MockUp<RemoteFileOperations>() {
+            @Mock
+            public void asyncRenameFiles(
+                    List<CompletableFuture<?>> renameFileFutures,
+                    AtomicBoolean cancelled,
+                    Path writePath,
+                    Path targetPath,
+                    List<String> fileNames) {
+
+            }
+        };
+        List<String> colNames = List.of("c1");
+        mockedPartitionLocationProvider.updateColNames(colNames);
+
+        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo), null);
+
+        new MockUp<HiveMetastoreOperations>() {
+            @Mock
+            public void updatePartitionStatistics(String dbName, String tableName, String partitionName,
+                                                  Function<HivePartitionStats, HivePartitionStats> update) {
+                throw new StarRocksConnectorException("ERROR");
+            }
+        };
+        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo), null);
+    }
+
     @Test
     public void testOverwritePartition() throws Exception {
         String stagingDir = "hdfs://127.0.0.1:10000/tmp/starrocks/queryid";
@@ -525,6 +566,31 @@ public class HiveMetadataTest {
         };
 
         AnalyzeTestUtil.init();
+        hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo), null);
+    }
+
+    @Test
+    public void testOverwritePartitionWithModifiedLocation() throws Exception {
+        String stagingDir = "hdfs://127.0.0.1:10000/tmp/starrocks/queryid";
+        THiveFileInfo fileInfo = new THiveFileInfo();
+        fileInfo.setFile_name("myfile.parquet");
+        fileInfo.setPartition_path("hdfs://127.0.0.1:10000/tmp/starrocks/queryid/col1=2");
+        fileInfo.setRecord_count(10);
+        fileInfo.setFile_size_in_bytes(100);
+        TSinkCommitInfo tSinkCommitInfo = new TSinkCommitInfo();
+        tSinkCommitInfo.setStaging_dir(stagingDir);
+        tSinkCommitInfo.setIs_overwrite(true);
+        tSinkCommitInfo.setHive_file_info(fileInfo);
+
+        new MockUp<RemoteFileOperations>() {
+            @Mock
+            public void renameDirectory(Path source, Path target, Runnable runWhenPathNotExist) {
+            }
+        };
+
+        AnalyzeTestUtil.init();
+        List<String> colNames = List.of("c1");
+        mockedPartitionLocationProvider.updateColNames(colNames);
         hiveMetadata.finishSink("hive_db", "hive_table", Lists.newArrayList(tSinkCommitInfo), null);
     }
 

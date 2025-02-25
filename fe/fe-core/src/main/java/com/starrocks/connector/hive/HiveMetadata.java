@@ -386,6 +386,8 @@ public class HiveMetadata implements ConnectorMetadata {
                         partitionColNames.size(), partitionValues.size());
                 if (hmsOps.partitionExists(table, partitionValues)) {
                     mode = isOverwrite ? UpdateMode.OVERWRITE : UpdateMode.APPEND;
+                    Partition partition = hmsOps.getPartition(dbName, tableName, partitionValues);
+                    partitionUpdate.updateTargetPathFromMeta(new Path(partition.getFullPath()));
                 } else {
                     mode = PartitionUpdate.UpdateMode.NEW;
                 }
