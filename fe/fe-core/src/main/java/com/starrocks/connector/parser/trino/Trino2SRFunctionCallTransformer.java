@@ -257,6 +257,10 @@ public class Trino2SRFunctionCallTransformer {
                                 new IntLiteral(100))
                         )
                 )));
+
+        // from_iso8601_timestamp -> timestamp
+        registerFunctionTransformer("from_iso8601_timestamp", 1, "timestamp",
+                List.of(Expr.class));
     }
 
     private static void registerStringFunctionTransformer() {
