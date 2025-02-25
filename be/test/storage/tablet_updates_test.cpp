@@ -3963,13 +3963,21 @@ void TabletUpdatesTest::test_apply_breakpoint_check(bool enable_persistent_index
     }
     ASSERT_EQ(N, read_tablet(_tablet, rowsets.size() + 1));
 
-    // apply force quit
-    _tablet->updates()->stop_and_wait_apply_done();
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("TabletUpdates::_do_update", [&](void* arg) { sleep(10); });
     // commit rowset
     auto st = _tablet->rowset_commit(rowsets.size() + 2, rowsets[0]);
     ASSERT_TRUE(st.ok()) << st.to_string();
+    sleep(5);
+    // apply force quit
+    _tablet->updates()->stop_and_wait_apply_done();
     // check breakpoint
     ASSERT_FALSE(_tablet->updates()->breakpoint_check().ok());
+    ASSERT_TRUE(_tablet->updates()->is_apply_stop());
+    ASSERT_FALSE(_tablet->updates()->is_error());
+
+    SyncPoint::GetInstance()->ClearAllCallBacks();
+    SyncPoint::GetInstance()->DisableProcessing();
 }
 
 TEST_F(TabletUpdatesTest, test_apply_breakpoint_check) {

@@ -73,6 +73,8 @@
 
 namespace starrocks {
 
+const std::string kBreakpointMsg = "PK apply stopped";
+
 std::string EditVersion::to_string() const {
     if (minor_number() == 0) {
         return strings::Substitute("$0", major_number());
@@ -874,7 +876,7 @@ bool TabletUpdates::_check_status_msg(std::string_view msg) {
     return has_memory && (has_exceed_limit || has_alloc_failed);
 }
 
-bool TabletUpdates::_is_tolerable(Status& status) {
+bool TabletUpdates::_is_retryable(Status& status) {
     switch (status.code()) {
     case TStatusCode::OK:
     case TStatusCode::MEM_LIMIT_EXCEEDED:
@@ -883,6 +885,23 @@ bool TabletUpdates::_is_tolerable(Status& status) {
         return true;
     default:
         return _check_status_msg(status.message());
+    }
+}
+
+bool TabletUpdates::_is_breakpoint(Status& status) {
+    std::string_view msg;
+    std::string lower_msg;
+
+    switch (status.code()) {
+    case TStatusCode::ABORTED:
+        msg = status.message();
+        lower_msg.reserve(msg.size());
+        for (char ch : msg) {
+            lower_msg.push_back(std::tolower(static_cast<unsigned char>(ch)));
+        }
+        return lower_msg.find(kBreakpointMsg) != std::string::npos;
+    default:
+        return false;
     }
 }
 
@@ -991,18 +1010,21 @@ void TabletUpdates::do_apply() {
         }
         first = false;
         // submit a delay apply task to storage_engine
-        if (config::enable_retry_apply && _is_tolerable(apply_st) && !apply_st.ok()) {
+        if (config::enable_retry_apply && _is_retryable(apply_st) && !apply_st.ok()) {
             //reset pk index, reset rowset_update_states, reset compaction_state
             _reset_apply_status(*version_info_apply);
-            if (!_apply_stopped) {
-                auto time_point =
-                        std::chrono::steady_clock::now() + std::chrono::seconds(config::retry_apply_interval_second);
-                StorageEngine::instance()->add_schedule_apply_task(_tablet.tablet_id(), time_point);
-                std::string msg = strings::Substitute("apply tablet: $0 failed and retry later, status: $1",
-                                                      _tablet.tablet_id(), apply_st.to_string());
-                LOG(WARNING) << msg;
-                _apply_schedule.store(true);
-            }
+            auto time_point =
+                    std::chrono::steady_clock::now() + std::chrono::seconds(config::retry_apply_interval_second);
+            StorageEngine::instance()->add_schedule_apply_task(_tablet.tablet_id(), time_point);
+            std::string msg = strings::Substitute("apply tablet: $0 failed and retry later, status: $1",
+                                                  _tablet.tablet_id(), apply_st.to_string());
+            LOG(WARNING) << msg;
+            _apply_schedule.store(true);
+            break;
+        } else if (_is_breakpoint(apply_st)) {
+            // apply stopped, clean states and quit.
+            _reset_apply_status(*version_info_apply);
+            VLOG(2) << "apply stopped, clean states and quit tablet id: " << _tablet.tablet_id();
             break;
         } else {
             if (!apply_st.ok()) {
@@ -1037,8 +1059,8 @@ void TabletUpdates::stop_and_wait_apply_done() {
 
 Status TabletUpdates::breakpoint_check() {
     if (_apply_stopped) {
-        // apply stopped, return timeout status, so apply retry mechanism can be triggered
-        return Status::Timeout("PK apply stopped");
+        // apply stopped, return error and stop the apply process
+        return Status::Aborted(kBreakpointMsg);
     } else {
         return Status::OK();
     }
@@ -1882,6 +1904,7 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
 Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
                                  const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
                                  DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema) {
+    TEST_SYNC_POINT_CALLBACK("TabletUpdates::_do_update", &rowset_id);
     RETURN_IF_ERROR(breakpoint_check());
     if (condition_column >= 0) {
         auto tablet_column = tablet_schema->column(condition_column);
