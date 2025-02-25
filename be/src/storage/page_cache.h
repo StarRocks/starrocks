@@ -121,7 +121,6 @@ public:
 private:
     static StoragePageCache* _s_instance;
 
-    MemTracker* _mem_tracker = nullptr;
     std::unique_ptr<Cache> _cache = nullptr;
 };
 
@@ -134,7 +133,6 @@ public:
     PageCacheHandle(Cache* cache, Cache::Handle* handle) : _cache(cache), _handle(handle) {}
     ~PageCacheHandle() {
         if (_handle != nullptr) {
-            SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(GlobalEnv::GetInstance()->page_cache_mem_tracker());
             _cache->release(_handle);
         }
     }

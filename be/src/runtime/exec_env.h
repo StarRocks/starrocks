@@ -143,6 +143,11 @@ public:
     MemTracker* short_key_index_mem_tracker() { return _short_key_index_mem_tracker.get(); }
     MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker.get(); }
     MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker.get(); }
+    // The value of `page_cache_mem_tracker` is manually counted and is attached to the process_mem_tracker tree.
+    // It is not based on the `ThreadLocalMemTracker`.
+    // Therefore, when counting the memory, the `MemTracker::set` interface can be used,
+    // while the consume/release interfaces cannot be used.
+    // Otherwise, it will cause problems in the memory statistics of the process.
     MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker.get(); }
     MemTracker* jit_cache_mem_tracker() { return _jit_cache_mem_tracker.get(); }
     MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
