@@ -105,6 +105,7 @@ import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.MultiColumnStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.storagevolume.StorageVolume;
@@ -874,6 +875,16 @@ public class EditLog {
                 case OperationType.OP_REMOVE_HISTOGRAM_STATS_META: {
                     HistogramStatsMeta histogramStatsMeta = (HistogramStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayRemoveHistogramStatsMeta(histogramStatsMeta);
+                    break;
+                }
+                case OperationType.OP_ADD_MULTI_COLUMN_STATS_META: {
+                    MultiColumnStatsMeta multiColumnStatsMeta = (MultiColumnStatsMeta) journal.data();
+                    globalStateMgr.getAnalyzeMgr().replayAddMultiColumnStatsMeta(multiColumnStatsMeta);
+                    break;
+                }
+                case OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META: {
+                    MultiColumnStatsMeta multiColumnStatsMeta = (MultiColumnStatsMeta) journal.data();
+                    globalStateMgr.getAnalyzeMgr().replayRemoveMultiColumnStatsMeta(multiColumnStatsMeta);
                     break;
                 }
                 case OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META: {
@@ -1764,6 +1775,14 @@ public class EditLog {
 
     public void logRemoveHistogramStatsMeta(HistogramStatsMeta meta) {
         logEdit(OperationType.OP_REMOVE_HISTOGRAM_STATS_META, meta);
+    }
+
+    public void logAddMultiColumnStatsMeta(MultiColumnStatsMeta meta) {
+        logEdit(OperationType.OP_ADD_MULTI_COLUMN_STATS_META, meta);
+    }
+
+    public void logRemoveMultiColumnStatsMeta(MultiColumnStatsMeta meta) {
+        logEdit(OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META, meta);
     }
 
     public void logAddExternalBasicStatsMeta(ExternalBasicStatsMeta meta) {
