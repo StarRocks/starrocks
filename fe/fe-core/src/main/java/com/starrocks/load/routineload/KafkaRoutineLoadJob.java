@@ -197,7 +197,9 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
             if (progress.containsKey(mapKey)) {
                 String progressVal = progress.get(mapKey);
                 //check progressVal
-                if (!checkProgressVal(progressVal)) continue;
+                if (!checkProgressVal(progressVal)) {
+                    continue;
+                }
                 Long lag = entry.getValue() - Long.valueOf(progress.get(mapKey));
                 lag = lag < 0 ? 0 : lag;
                 partitionLag.put(mapKey, lag.toString());
@@ -207,12 +209,16 @@ public class KafkaRoutineLoadJob extends RoutineLoadJob {
     }
 
     private boolean checkProgressVal(String progressVal) {
-        if (progressVal == null) return false;
-
-        if (progressVal.equals(KafkaProgress.OFFSET_ZERO) || progressVal.equals(KafkaProgress.OFFSET_END) || progressVal.equals(KafkaProgress.OFFSET_BEGINNING))
+        if (progressVal == null) {
             return false;
-
-        if (!StringUtils.isNumeric(progressVal)) return false;
+        }
+        if (progressVal.equals(KafkaProgress.OFFSET_ZERO) || progressVal.equals(KafkaProgress.OFFSET_END) ||
+                progressVal.equals(KafkaProgress.OFFSET_BEGINNING)) {
+            return false;
+        }
+        if (!StringUtils.isNumeric(progressVal)) {
+            return false;
+        }
         return true;
     }
 

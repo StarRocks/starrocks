@@ -32,4 +32,14 @@ public class PulsarRoutineLoadJobTest {
         Assert.assertTrue(statistic.contains("\"receivedBytesRate\":10"));
         Assert.assertTrue(statistic.contains("\"loadRowsRate\":16"));
     }
+
+
+    @Test
+    public void testGetSourceLagString() {
+        RoutineLoadJob job = new PulsarRoutineLoadJob(1L, "routine_load", 1L, 1L, "127.0.0.1:9020", "topic1", "");
+        String sourceLagString = job.getSourceLagString(null);
+        Assert.assertTrue(sourceLagString.equals(""));
+    }
+
+
 }
