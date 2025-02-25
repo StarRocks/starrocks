@@ -1,4 +1,3 @@
-
 :::note
-The configuration changes made with `ADMIN SET FRONTEND` will be restored to the default values in the `fe.conf` file after the FE restarts. Therefore, we recommend that you also modify the configuration items in `fe.conf` if you want the changes to be permanent.
+`ADMIN SET FRONTEND` で行った設定変更は、FE が再起動すると `fe.conf` ファイルのデフォルト値に戻ります。したがって、変更を永続的にしたい場合は、`fe.conf` の設定項目も変更することをお勧めします。
 :::

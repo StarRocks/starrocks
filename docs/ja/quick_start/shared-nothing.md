@@ -1,5 +1,5 @@
 ---
-description: StarRocks in Docker: 実データを使用したジョインによるクエリ
+description: "StarRocks in Docker: 実データを使用したジョインによるクエリ"
 displayed_sidebar: docs
 ---
 import DDL from '../_assets/quick-start/_DDL.mdx'

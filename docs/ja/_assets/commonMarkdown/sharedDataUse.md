@@ -1,13 +1,12 @@
+For more information on how to create a ストレージボリューム for other オブジェクトストレージ and set the default ストレージボリューム, see [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) and [SET DEFAULT STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/SET_DEFAULT_STORAGE_VOLUME.md).
 
-For more information on how to create a storage volume for other object storages and set the default storage volume, see [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) and [SET DEFAULT STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/SET_DEFAULT_STORAGE_VOLUME.md).
+### データベースとクラウドネイティブテーブルの作成
 
-### Create a database and a cloud-native table
+デフォルトのストレージボリュームを作成した後、このストレージボリュームを使用してデータベースとクラウドネイティブテーブルを作成できます。
 
-After you create a default storage volume, you can then create a database and a cloud-native table using this storage volume.
+共有データ StarRocks クラスターは、すべての [StarRocks テーブルタイプ](../../table_design/table_types/table_types.md)をサポートしています。
 
-Shared-data StarRocks clusters support all [StarRocks table types](../../table_design/table_types/table_types.md).
-
-The following example creates a database `cloud_db` and a table `detail_demo` based on Duplicate Key table type, enables the local disk cache, sets the hot data validity duration to one month, and disables asynchronous data ingestion into object storage:
+次の例では、データベース `cloud_db` とテーブル `detail_demo` を重複キーテーブルタイプに基づいて作成し、ローカルディスクキャッシュを有効にし、ホットデータの有効期間を1か月に設定し、オブジェクトストレージへの非同期データ取り込みを無効にしています。
 
 ```SQL
 CREATE DATABASE cloud_db;
@@ -33,38 +32,38 @@ PROPERTIES (
 
 > **NOTE**
 >
-> The default storage volume is used when you create a database or a cloud-native table in a shared-data StarRocks cluster if no storage volume is specified.
+> デフォルトのストレージボリュームは、共有データ StarRocks クラスターでデータベースまたはクラウドネイティブテーブルを作成する際に、ストレージボリュームが指定されていない場合に使用されます。
 
-In addition to the regular table `PROPERTIES`, you need to specify the following `PROPERTIES` when creating a table for shared-data StarRocks cluster:
+通常のテーブル `PROPERTIES` に加えて、共有データ StarRocks クラスター用のテーブルを作成する際には、以下の `PROPERTIES` を指定する必要があります。
 
 #### datacache.enable
 
-Whether to enable the local disk cache.
+ローカルディスクキャッシュを有効にするかどうか。
 
-- `true` (Default) When this property is set to `true`, the data to be loaded is simultaneously written into the object storage and the local disk (as the cache for query acceleration).
-- `false` When this property is set to `false`, the data is loaded only into the object storage.
+- `true` (デフォルト) このプロパティが `true` に設定されている場合、ロードされるデータはオブジェクトストレージとローカルディスク（クエリアクセラレーションのキャッシュとして）に同時に書き込まれます。
+- `false` このプロパティが `false` に設定されている場合、データはオブジェクトストレージにのみロードされます。
 
 > **NOTE**
 >
-> In version 3.0 this property was named `enable_storage_cache`.
+> バージョン 3.0 では、このプロパティは `enable_storage_cache` と呼ばれていました。
 >
-> To enable the local disk cache, you must specify the directory of the disk in the CN configuration item `storage_root_path`.
+> ローカルディスクキャッシュを有効にするには、CN 設定項目 `storage_root_path` にディスクのディレクトリを指定する必要があります。
 
 #### datacache.partition_duration
 
-The validity duration of the hot data. When the local disk cache is enabled, all data is loaded into the cache. When the cache is full, StarRocks deletes the less recently used data from the cache. When a query needs to scan the deleted data, StarRocks checks if the data is within the duration of validity starting from the current time. If the data is within the duration, StarRocks loads the data into the cache again. If the data is not within the duration, StarRocks does not load it into the cache. This property is a string value that can be specified with the following units: `YEAR`, `MONTH`, `DAY`, and `HOUR`, for example, `7 DAY` and `12 HOUR`. If it is not specified, all data is cached as the hot data.
+ホットデータの有効期間。ローカルディスクキャッシュが有効になっている場合、すべてのデータがキャッシュにロードされます。キャッシュがいっぱいになると、StarRocks はキャッシュから最近使用されていないデータを削除します。クエリが削除されたデータをスキャンする必要がある場合、StarRocks はデータが現在の時点からの有効期間内にあるかどうかを確認します。データが有効期間内にある場合、StarRocks はデータを再度キャッシュにロードします。データが有効期間内にない場合、StarRocks はそれをキャッシュにロードしません。このプロパティは文字列値で、次の単位で指定できます: `YEAR`、`MONTH`、`DAY`、および `HOUR`。例えば、`7 DAY` や `12 HOUR` です。指定されていない場合、すべてのデータがホットデータとしてキャッシュされます。
 
 > **NOTE**
 >
-> In version 3.0 this property was named `storage_cache_ttl`.
+> バージョン 3.0 では、このプロパティは `storage_cache_ttl` と呼ばれていました。
 >
-> This property is available only when `datacache.enable` is set to `true`.
+> このプロパティは、`datacache.enable` が `true` に設定されている場合にのみ利用可能です。
 
-### View table information
+### テーブル情報の表示
 
-You can view the information of tables in a specific database using `SHOW PROC "/dbs/<db_id>"`. See [SHOW PROC](../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md) for more information.
+特定のデータベース内のテーブル情報を `SHOW PROC "/dbs/<db_id>"` を使用して表示できます。詳細は [SHOW PROC](../../sql-reference/sql-statements/cluster-management/nodes_processes/SHOW_PROC.md) を参照してください。
 
-Example:
+例:
 
 ```Plain
 mysql> SHOW PROC "/dbs/xxxxx";
@@ -75,16 +74,16 @@ mysql> SHOW PROC "/dbs/xxxxx";
 +---------+-------------+----------+---------------------+--------------+--------+--------------+--------------------------+--------------+---------------+------------------------------+
 ```
 
-The `Type` of a table in shared-data StarRocks cluster is `CLOUD_NATIVE`. In the field `StoragePath`, StarRocks returns the object storage directory where the table is stored.
+共有データ StarRocks クラスター内のテーブルの `Type` は `CLOUD_NATIVE` です。`StoragePath` フィールドでは、StarRocks はテーブルが格納されているオブジェクトストレージのディレクトリを返します。
 
-### Load data into a shared-data StarRocks cluster
+### 共有データ StarRocks クラスターへのデータロード
 
-Shared-data StarRocks clusters support all loading methods provided by StarRocks. See [Loading options](../../loading/Loading_intro.md) for more information.
+共有データ StarRocks クラスターは、StarRocks が提供するすべてのロード方法をサポートしています。詳細は [Loading options](../../loading/Loading_intro.md) を参照してください。
 
-### Query in a shared-data StarRocks cluster
+### 共有データ StarRocks クラスターでのクエリ
 
-Tables in a shared-data StarRocks cluster support all types of queries provided by StarRocks. See StarRocks [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) for more information.
+共有データ StarRocks クラスター内のテーブルは、StarRocks が提供するすべてのクエリタイプをサポートしています。詳細は StarRocks [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) を参照してください。
 
 > **NOTE**
 >
-> Shared-data StarRocks clusters support [synchronous materialized views](../../using_starrocks/Materialized_view-single_table.md) from v3.4.0.
+> 共有データ StarRocks クラスターは、v3.4.0 から [同期マテリアライズドビュー](../../using_starrocks/Materialized_view-single_table.md) をサポートしています。

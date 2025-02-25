@@ -1,9 +1,9 @@
-### Kubernetes environment
+### Kubernetes 環境
 
-The Kubernetes environment used while writing this guide consists of three nodes with four vCPUS, and 16GB RAM each (GCP `e2-standard-4` machines). The Kubernetes cluster was deployed with this `gcloud` command:
+このガイドを作成する際に使用した Kubernetes 環境は、4 vCPUS と 16GB RAM を持つ 3 つのノードで構成されています（GCP `e2-standard-4` マシン）。Kubernetes クラスターは次の `gcloud` コマンドでデプロイされました。
 
 :::tip
-This command is for your reference, if you are using AWS, Azure, or any other Kubernetes provider you will need to modify this for your environment. In Google Cloud you will need to specify your own project and an appropriate location.
+このコマンドは参考用です。AWS、Azure、または他の Kubernetes プロバイダーを使用している場合は、環境に合わせてこれを変更する必要があります。Google Cloud では、独自のプロジェクトと適切なロケーションを指定する必要があります。
 :::
 
 ```bash
@@ -15,7 +15,6 @@ gcloud container --project enterprise-demo-422514 \
 
 ### Helm
 
-Helm is a package manager for Kubernetes that simplifies the deployment and management of applications. In this lab you will use Helm to deploy the CelerData Enterprise Edition Kubernetes operator and the sample StarRocks cluster.
+Helm は、Kubernetes のパッケージマネージャーで、アプリケーションのデプロイと管理を簡素化します。このラボでは、Helm を使用して CelerData Enterprise Edition Kubernetes operator とサンプルの StarRocks クラスターをデプロイします。
 
 [Install helm](https://helm.sh/docs/intro/quickstart/)
-

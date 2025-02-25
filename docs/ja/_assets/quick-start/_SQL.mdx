@@ -1,11 +1,10 @@
-
-These queries can be run in your SQL client. All of the queries use the `quickstart` database.
+これらのクエリは、SQL クライアントで実行できます。すべてのクエリは `quickstart` データベースを使用します。
 
 ```sql
 USE quickstart;
 ```
 
-#### How many crashes are there per hour in NYC?
+#### NYC での時間ごとの事故件数は？
 
 ```sql
 SELECT COUNT(*),
@@ -16,7 +15,7 @@ ORDER BY Time ASC
 LIMIT 200;
 ```
 
-Here is part of the output. Note that I am looking closer at January 6th and 7th as this is Monday and Tuesday of a non-holiday week. Looking at New Years Day is probably not indicative of a normal morning during rush-hour traffic.
+以下は出力の一部です。1月6日と7日を詳しく見ていることに注意してください。これは祝日ではない週の月曜日と火曜日です。元旦を見ても、通常のラッシュアワーの朝を示しているとは言えないでしょう。
 
 ```plaintext
 |       14 | 2014-01-06 06:00:00 |
@@ -53,9 +52,9 @@ Here is part of the output. Note that I am looking closer at January 6th and 7th
 # highlight-end
 ```
 
-It looks like about 40 accidents on a Monday or Tuesday morning during rush hour traffic, and around the same at 17:00 hours.
+月曜日や火曜日の朝のラッシュアワーでは約40件の事故が発生しており、17:00 時にも同様の件数が見られます。
 
-#### What is the average temperature in NYC?
+#### NYC の平均気温は？
 
 ```sql
 SELECT avg(HourlyDryBulbTemperature),
@@ -66,9 +65,9 @@ ORDER BY Time ASC
 LIMIT 100;
 ```
 
-Output:
+出力:
 
-Note that this is data from 2014, NYC has not been this cold lately.
+これは2014年のデータであり、最近のNYCはこれほど寒くありません。
 
 ```plaintext
 +-------------------------------+---------------------+
@@ -84,9 +83,9 @@ Note that this is data from 2014, NYC has not been this cold lately.
 |                            26 | 2014-01-01 07:00:00 |
 ```
 
-#### Is it safe to drive in NYC when visibility is poor?
+#### 視界が悪いときにNYCで運転するのは安全ですか？
 
-Let's look at the number of crashes when visibility is poor (between 0 and 1.0 miles). To answer this question use a JOIN across the two tables on the DATETIME column.
+視界が悪いとき（0から1.0マイルの間）の事故件数を見てみましょう。この質問に答えるために、2つのテーブルを DATETIME 列で ジョイン します。
 
 ```sql
 SELECT COUNT(DISTINCT c.COLLISION_ID) AS Crashes,
@@ -103,13 +102,13 @@ ORDER BY Crashes DESC
 LIMIT 100;
 ```
 
-The highest number of crashes in a single hour during low visibility is 129. There are multiple things to consider:
+視界が悪いときの1時間あたりの事故件数の最高は129件です。考慮すべき点はいくつかあります：
 
-- February 3rd 2014 was a Monday
-- 8AM is rush hour
-- It was raining (0.12 inches or precipitation that hour)
-- The temperature is 32 degrees F (the freezing point for water)
-- Visibility is bad at 0.25 miles, normal for NYC is 10 miles
+- 2014年2月3日は月曜日
+- 午前8時はラッシュアワー
+- 雨が降っていた（その時間の降水量は0.12インチ）
+- 気温は32度F（水の氷点）
+- 視界は0.25マイルで、NYCの通常は10マイル
 
 ```plaintext
 +---------+--------+------------+---------------+-------------------+
@@ -132,9 +131,9 @@ The highest number of crashes in a single hour during low visibility is 129. The
 |      71 |   24.2 |       0.25 | 0.04          | 05 Mar 2015 11:00 |
 ```
 
-#### What about driving in icy conditions?
+#### 氷点下の条件での運転はどうでしょうか？
 
-Water vapor can desublimate to ice at 40 degrees F; this query looks at temps between 0 and 40 degrees F.
+水蒸気は40度Fで氷に昇華することがあります。このクエリは0から40度Fの間の気温を調べます。
 
 ```sql
 SELECT COUNT(DISTINCT c.COLLISION_ID) AS Crashes,
@@ -151,7 +150,7 @@ ORDER BY Crashes DESC
 LIMIT 100;
 ```
 
-The results for freezing temperatures suprised me a little, I did not expect too much traffic on a Sunday morning in the city on a cold January day.A quick look at [weather.com](https://weather.com/storms/winter/news/northeast-storm-rain-snow-wind) showed that there was a big storm with many crashes that day, just like what can be seen in the data.
+氷点下の気温に関する結果は少し驚きました。寒い1月の日曜日の朝に市内であまり交通がないと思っていました。[weather.com](https://weather.com/storms/winter/news/northeast-storm-rain-snow-wind) をざっと見たところ、その日は多くの事故が発生した大きな嵐があったことがわかりました。データにもその様子が見られます。
 
 ```plaintext
 +---------+--------+------------+---------------+-------------------+
@@ -169,5 +168,4 @@ The results for freezing temperatures suprised me a little, I did not expect too
 |      96 |   26.3 |       0.33 | 0.07          | 01 Mar 2015 14:00 |
 ```
 
-Drive carefully!
-
+安全運転を心がけましょう！

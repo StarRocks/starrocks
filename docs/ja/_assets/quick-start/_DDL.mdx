@@ -1,7 +1,6 @@
+### データベースの作成
 
-### Create a database
-
-Type these two lines in at the `StarRocks > ` prompt and press enter after each:
+`StarRocks > ` プロンプトで次の2行を入力し、それぞれの後にエンターキーを押します。
 
 ```sql
 CREATE DATABASE IF NOT EXISTS quickstart;
@@ -9,13 +8,11 @@ CREATE DATABASE IF NOT EXISTS quickstart;
 USE quickstart;
 ```
 
-### Create two tables
+### 2つのテーブルを作成
 
 #### Crashdata
 
-The crash dataset contains many more fields than these, the schema has been trimmed
-down to include only the fields that might be useful to answer questions about the
-impact weather has on driving conditions.
+クラッシュデータセットにはこれより多くのフィールドが含まれていますが、スキーマは天候が運転条件に与える影響に関する質問に答えるために役立つ可能性のあるフィールドのみを含むように縮小されています。
 
 ```sql
 CREATE TABLE IF NOT EXISTS crashdata (
@@ -38,9 +35,7 @@ CREATE TABLE IF NOT EXISTS crashdata (
 
 #### Weatherdata
 
-Similar to the crash data, the weather dataset has many more columns (a total of
-125 columns) and only the ones that are expected to answer the questions are
-included in the database.
+クラッシュデータと同様に、天候データセットにはさらに多くの列（合計125列）があり、質問に答えると予想されるもののみがデータベースに含まれています。
 
 ```sql
 CREATE TABLE IF NOT EXISTS weatherdata (
@@ -61,4 +56,3 @@ CREATE TABLE IF NOT EXISTS weatherdata (
     HourlyWindSpeed STRING
 );
 ```
-

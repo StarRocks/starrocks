@@ -1,14 +1,14 @@
-### Advantages of Broker Load
+### Broker Load の利点
 
-- Broker Load supports data transformation, UPSERT, and DELETE operations during loading.
-- Broker Load runs in the background and clients don't need to stay connected for the job to continue.
-- Broker Load is preferred for long running jobs, the default timeout is 4 hours.
-- Broker Load supports Parquet, ORC, and CSV file format.
+- Broker Load は、ロード中にデータ変換、UPSERT、および DELETE 操作をサポートします。
+- Broker Load はバックグラウンドで実行され、クライアントはジョブが続行するために接続を維持する必要がありません。
+- Broker Load は長時間実行されるジョブに適しており、デフォルトのタイムアウトは 4 時間です。
+- Broker Load は Parquet、ORC、および CSV ファイル形式をサポートします。
 
-### Data flow
+### データフロー
 
 ![Workflow of Broker Load](../broker_load_how-to-work_en.png)
 
-1. The user creates a load job
-2. The frontend (FE) creates a query plan and distributes the plan to the backend nodes (BE)
-3. The backend (BE) nodes pull the data from the source and load the data into StarRocks
+1. ユーザーがロードジョブを作成します
+2. フロントエンド (FE) がクエリプランを作成し、そのプランをバックエンドノード (BE) に配布します
+3. バックエンド (BE) ノードがソースからデータを取得し、StarRocks にデータをロードします

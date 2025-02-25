@@ -1,155 +1,154 @@
+ロールをカスタマイズして、権限とユーザーを管理することをお勧めします。以下の例では、一般的なシナリオのいくつかの権限の組み合わせを分類しています。
 
-We recommend you customize roles to manage privileges and users. The following examples classify a few combinations of privileges for some common scenarios.
-
-#### Grant global read-only privileges on StarRocks tables
+#### StarRocks テーブルに対するグローバルな読み取り専用権限を付与する
 
    ```SQL
-   -- Create a role.
+   -- ロールを作成する。
    CREATE ROLE read_only;
-   -- Grant the USAGE privilege on all catalogs to the role.
+   -- すべてのカタログに対する USAGE 権限をロールに付与する。
    GRANT USAGE ON ALL CATALOGS TO ROLE read_only;
-   -- Grant the privilege to query all tables to the role.
+   -- すべてのテーブルをクエリする権限をロールに付与する。
    GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_only;
-   -- Grant the privilege to query all views to the role.
+   -- すべてのビューをクエリする権限をロールに付与する。
    GRANT SELECT ON ALL VIEWS IN ALL DATABASES TO ROLE read_only;
-   -- Grant the privilege to query all materialized views and the privilege to accelerate queries with them to the role.
+   -- すべてのマテリアライズドビューをクエリし、それを使用してクエリを高速化する権限をロールに付与する。
    GRANT SELECT ON ALL MATERIALIZED VIEWS IN ALL DATABASES TO ROLE read_only;
    ```
 
-   And you can further grant the privilege to use UDFs in queries:
+   さらに、クエリで UDF を使用する権限を付与することができます。
 
    ```SQL
-   -- Grant the USAGE privilege on all database-level UDF to the role.
+   -- すべてのデータベースレベルの UDF に対する USAGE 権限をロールに付与する。
    GRANT USAGE ON ALL FUNCTIONS IN ALL DATABASES TO ROLE read_only;
-   -- Grant the USAGE privilege on global UDF to the role.
+   -- グローバル UDF に対する USAGE 権限をロールに付与する。
    GRANT USAGE ON ALL GLOBAL FUNCTIONS TO ROLE read_only;
    ```
 
-#### Grant global write privileges on StarRocks tables
+#### StarRocks テーブルに対するグローバルな書き込み権限を付与する
 
    ```SQL
-   -- Create a role.
+   -- ロールを作成する。
    CREATE ROLE write_only;
-   -- Grant the USAGE privilege on all catalogs to the role.
+   -- すべてのカタログに対する USAGE 権限をロールに付与する。
    GRANT USAGE ON ALL CATALOGS TO ROLE write_only;
-   -- Grant the INSERT and UPDATE privileges on all tables to the role.
+   -- すべてのテーブルに対する INSERT および UPDATE 権限をロールに付与する。
    GRANT INSERT, UPDATE ON ALL TABLES IN ALL DATABASES TO ROLE write_only;
-   -- Grant the REFRESH privilege on all materialized views to the role.
+   -- すべてのマテリアライズドビューに対する REFRESH 権限をロールに付与する。
    GRANT REFRESH ON ALL MATERIALIZED VIEWS IN ALL DATABASES TO ROLE write_only;
    ```
 
-#### Grant read-only privileges on a specific external catalog
+#### 特定の external catalog に対する読み取り専用権限を付与する
 
    ```SQL
-   -- Create a role.
+   -- ロールを作成する。
    CREATE ROLE read_catalog_only;
-   -- Grant the USAGE privilege on the destination catalog to the role.
+   -- 対象の catalog に対する USAGE 権限をロールに付与する。
    GRANT USAGE ON CATALOG hive_catalog TO ROLE read_catalog_only;
-   -- Switch to the corresponding catalog.
+   -- 対応する catalog に切り替える。
    SET CATALOG hive_catalog;
-   -- Grant the privileges to query all tables and all views in the external catalog.
+   -- external catalog 内のすべてのテーブルとすべてのビューをクエリする権限を付与する。
    GRANT SELECT ON ALL TABLES IN ALL DATABASES TO ROLE read_catalog_only;
    ```
 
    :::tip
-   For views in external catalogs, you can query only Hive table views (since v3.1).
+   external catalog のビューについては、Hive テーブルビューのみクエリできます (v3.1 以降)。
    :::
 
-#### Grant write-only privileges on a specific external catalog
+#### 特定の external catalog に対する書き込み専用権限を付与する
 
-You can only write data into Iceberg tables (since v3.1) and Hive tables (since v3.2).
+Iceberg テーブル (v3.1 以降) と Hive テーブル (v3.2 以降) にのみデータを書き込むことができます。
 
    ```SQL
-   -- Create a role.
+   -- ロールを作成する。
    CREATE ROLE write_catalog_only;
-   -- Grant the USAGE privilege on the destination catalog to the role.
+   -- 対象の catalog に対する USAGE 権限をロールに付与する。
    GRANT USAGE ON CATALOG iceberg_catalog TO ROLE read_catalog_only;
-   -- Switch to the corresponding catalog.
+   -- 対応する catalog に切り替える。
    SET CATALOG iceberg_catalog;
-   -- Grant the privilege to write data into Iceberg tables.
+   -- Iceberg テーブルにデータを書き込む権限を付与する。
    GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE write_catalog_only;
    ```
 
-#### Grant admin privileges on a specific database
+#### 特定のデータベースに対する管理者権限を付与する
 
    ```SQL
-   -- Create a role.
+   -- ロールを作成する。
    CREATE ROLE db1_admin;
-   -- Grant ALL privileges on the destination database to the role. This role can create tables, views, materialized views, and UDFs in this database. And it also can drop or modify this database.
+   -- 対象のデータベースに対するすべての権限をロールに付与する。このロールは、このデータベース内でテーブル、ビュー、マテリアライズドビュー、UDF を作成できます。また、このデータベースを削除または変更することもできます。
    GRANT ALL ON DATABASE db1 TO ROLE db1_admin;
-   -- Switch to the corresponding catalog.
+   -- 対応する catalog に切り替える。
    SET CATALOG iceberg_catalog;
-   -- Grant all privileges on tables, views, materialized views, and UDFs in this database to the role.
+   -- このデータベース内のテーブル、ビュー、マテリアライズドビュー、および UDF に対するすべての権限をロールに付与する。
    GRANT ALL ON ALL TABLES IN DATABASE db1 TO ROLE db1_admin;
    GRANT ALL ON ALL VIEWS IN DATABASE db1 TO ROLE db1_admin;
    GRANT ALL ON ALL MATERIALIZED VIEWS IN DATABASE db1 TO ROLE db1_admin;
    GRANT ALL ON ALL FUNCTIONS IN DATABASE db1 TO ROLE db1_admin;
    ```
 
-#### Grant privileges to perform backup and restore operations on global, database, table, and partition levels
+#### グローバル、データベース、テーブル、およびパーティションレベルでバックアップおよびリストア操作を実行する権限を付与する
 
-- Grant privileges to perform global backup and restore operations:
+- グローバルバックアップおよびリストア操作を実行する権限を付与する:
 
-     The privileges to perform global backup and restore operations allow the role to back up and restore any database, table, or partition. It requires the REPOSITORY privilege on the SYSTEM level, the privileges to create databases in the default catalog, to create tables in any database, and to load and export data on any table.
+     グローバルバックアップおよびリストア操作を実行する権限により、ロールは任意のデータベース、テーブル、またはパーティションをバックアップおよびリストアできます。これには、SYSTEM レベルでの REPOSITORY 権限、default catalog でのデータベース作成権限、任意のデータベースでのテーブル作成権限、および任意のテーブルでのデータのロードおよびエクスポート権限が必要です。
 
      ```SQL
-     -- Create a role.
+     -- ロールを作成する。
      CREATE ROLE recover;
-     -- Grant the REPOSITORY privilege on the SYSTEM level.
+     -- SYSTEM レベルでの REPOSITORY 権限を付与する。
      GRANT REPOSITORY ON SYSTEM TO ROLE recover;
-     -- Grant the privilege to create databases in the default catalog.
+     -- default catalog でデータベースを作成する権限を付与する。
      GRANT CREATE DATABASE ON CATALOG default_catalog TO ROLE recover;
-     -- Grant the privilege to create tables in any database.
+     -- 任意のデータベースでテーブルを作成する権限を付与する。
      GRANT CREATE TABLE ON ALL DATABASES TO ROLE recover;
-     -- Grant the privilege to load and export data on any table.
+     -- 任意のテーブルでデータをロードおよびエクスポートする権限を付与する。
      GRANT INSERT, EXPORT ON ALL TABLES IN ALL DATABASES TO ROLE recover;
      ```
 
-- Grant the privileges to perform database-level backup and restore operations:
+- データベースレベルのバックアップおよびリストア操作を実行する権限を付与する:
 
-     The privileges to perform database-level backup and restore operations require the REPOSITORY privilege on the SYSTEM level, the privilege to create databases in the default catalog, the privilege to create tables in any database, the privilege to load data into any table, and the privilege export data from any table in the database to be backed up.
+     データベースレベルのバックアップおよびリストア操作を実行する権限には、SYSTEM レベルでの REPOSITORY 権限、default catalog でのデータベース作成権限、任意のデータベースでのテーブル作成権限、任意のテーブルへのデータロード権限、およびバックアップ対象のデータベース内の任意のテーブルからデータをエクスポートする権限が必要です。
 
      ```SQL
-     -- Create a role.
+     -- ロールを作成する。
      CREATE ROLE recover_db;
-     -- Grant the REPOSITORY privilege on the SYSTEM level.
+     -- SYSTEM レベルでの REPOSITORY 権限を付与する。
      GRANT REPOSITORY ON SYSTEM TO ROLE recover_db;
-     -- Grant the privilege to create databases.
+     -- データベースを作成する権限を付与する。
      GRANT CREATE DATABASE ON CATALOG default_catalog TO ROLE recover_db;
-     -- Grant the privilege to create tables.
+     -- テーブルを作成する権限を付与する。
      GRANT CREATE TABLE ON ALL DATABASES TO ROLE recover_db;
-     -- Grant the privilege to load data into any table.
+     -- 任意のテーブルにデータをロードする権限を付与する。
      GRANT INSERT ON ALL TABLES IN ALL DATABASES TO ROLE recover_db;
-     -- Grant the privilege to export data from any table in the database to be backed up.
+     -- バックアップ対象のデータベース内の任意のテーブルからデータをエクスポートする権限を付与する。
      GRANT EXPORT ON ALL TABLES IN DATABASE <db_name> TO ROLE recover_db;
      ```
 
-- Grant the privileges to perform table-level backup and restore operations:
+- テーブルレベルのバックアップおよびリストア操作を実行する権限を付与する:
 
-     The privileges to perform table-level backup and restore operations require the REPOSITORY privilege on the SYSTEM level, the privilege to create tables in corresponding databases, the privilege to load data into any table in the database, and the privilege to export data from the table to be backed up.
+     テーブルレベルのバックアップおよびリストア操作を実行する権限には、SYSTEM レベルでの REPOSITORY 権限、対応するデータベースでのテーブル作成権限、データベース内の任意のテーブルへのデータロード権限、およびバックアップ対象のテーブルからデータをエクスポートする権限が必要です。
 
      ```SQL
-     -- Create a role.
+     -- ロールを作成する。
      CREATE ROLE recover_tbl;
-     -- Grant the REPOSITORY privilege on the SYSTEM level.
+     -- SYSTEM レベルでの REPOSITORY 権限を付与する。
      GRANT REPOSITORY ON SYSTEM TO ROLE recover_tbl;
-     -- Grant the privilege to create tables in corresponding databases.
+     -- 対応するデータベースでテーブルを作成する権限を付与する。
      GRANT CREATE TABLE ON DATABASE <db_name> TO ROLE recover_tbl;
-     -- Grant the privilege to load data into any table in a database.
+     -- データベース内の任意のテーブルにデータをロードする権限を付与する。
      GRANT INSERT ON ALL TABLES IN DATABASE <db_name> TO ROLE recover_db;
-     -- Grant the privilege to export data from the table you want to back up.
+     -- バックアップ対象のテーブルからデータをエクスポートする権限を付与する。
      GRANT EXPORT ON TABLE <table_name> TO ROLE recover_tbl;     
      ```
 
-- Grant the privileges to perform partition-level backup and restore operations:
+- パーティションレベルのバックアップおよびリストア操作を実行する権限を付与する:
 
-     The privileges to perform partition-level backup and restore operations require the REPOSITORY privilege on the SYSTEM level, and the privilege to load and export data on the corresponding table.
+     パーティションレベルのバックアップおよびリストア操作を実行する権限には、SYSTEM レベルでの REPOSITORY 権限、および対応するテーブルでのデータのロードおよびエクスポート権限が必要です。
 
      ```SQL
-     -- Create a role.
+     -- ロールを作成する。
      CREATE ROLE recover_par;
-     -- Grant the REPOSITORY privilege on the SYSTEM level.
+     -- SYSTEM レベルでの REPOSITORY 権限を付与する。
      GRANT REPOSITORY ON SYSTEM TO ROLE recover_par;
-     -- Grant the privilege to load and export data on the corresponding table.
+     -- 対応するテーブルでデータをロードおよびエクスポートする権限を付与する。
      GRANT INSERT, EXPORT ON TABLE <table_name> TO ROLE recover_par;
      ```
