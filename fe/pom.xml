@@ -65,6 +65,7 @@ under the License.
         <grpc.version>1.63.0</grpc.version>
         <io.netty.version>4.1.118.Final</io.netty.version>
         <puppycrawl.version>10.21.1</puppycrawl.version>
+<<<<<<< HEAD
         <aws-v2-sdk.version>2.29.52</aws-v2-sdk.version>
         <avro.version>1.11.4</avro.version>
         <dnsjava.version>3.6.3</dnsjava.version>
@@ -75,6 +76,8 @@ under the License.
         <iceberg.version>1.7.1</iceberg.version>
         <staros.version>3.4-rc5</staros.version>
         <jetty.version>10.0.24</jetty.version>
+=======
+>>>>>>> 641b1c088d ([Tool] upgrade puppycrawl checkstyle to 10.21.1 (#56164))
     </properties>
 
     <profiles>
