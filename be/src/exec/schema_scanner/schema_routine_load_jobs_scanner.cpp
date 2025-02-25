@@ -239,7 +239,8 @@ Status SchemaRoutineLoadJobsScanner::fill_chunk(ChunkPtr* chunk) {
                 JsonValue* json_value_ptr = &json_value;
                 Status s = JsonValue::parse(latest_source_position, &json_value);
                 if (!s.ok()) {
-                    LOG(WARNING) << "parse latest_source_position failed. latest_source_position:" << latest_source_position.to_string() << " error:" << s;
+                    LOG(WARNING) << "parse latest_source_position failed. latest_source_position:"
+                                 << latest_source_position.to_string() << " error:" << s;
                     down_cast<NullableColumn*>(column.get())->append_nulls(1);
                 } else {
                     fill_column_with_slot<TYPE_JSON>(column.get(), (void*)&json_value_ptr);
