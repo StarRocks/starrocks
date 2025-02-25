@@ -79,12 +79,23 @@ Status SchemaPartitionsMetaScanner::start(RuntimeState* state) {
             auth_info.__set_user_ip(*(_param->user_ip));
         }
     }
-    TGetPartitionsMetaRequest partitions_meta_req;
-    partitions_meta_req.__set_auth_info(auth_info);
 
     // init schema scanner state
     RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
-    RETURN_IF_ERROR(SchemaHelper::get_partitions_meta(_ss_state, partitions_meta_req, &_partitions_meta_response));
+    int64_t table_id_offset = 0;
+    while (true) {
+        TGetPartitionsMetaRequest partitions_meta_req;
+        partitions_meta_req.__set_auth_info(auth_info);
+        partitions_meta_req.__set_start_table_id_offset(table_id_offset);
+        TGetPartitionsMetaResponse partitions_meta_response;
+        RETURN_IF_ERROR(SchemaHelper::get_partitions_meta(_ss_state, partitions_meta_req, &partitions_meta_response));
+        _partitions_meta_vec.insert(_partitions_meta_vec.end(), partitions_meta_response.partitions_meta_infos.begin(),
+                                    partitions_meta_response.partitions_meta_infos.end());
+        table_id_offset = partitions_meta_response.next_table_id_offset;
+        if (!table_id_offset) {
+            break;
+        }
+    }
     _ctz = state->timezone_obj();
     _partitions_meta_index = 0;
     return Status::OK();
@@ -97,7 +108,7 @@ Status SchemaPartitionsMetaScanner::get_next(ChunkPtr* chunk, bool* eos) {
     if (nullptr == chunk || nullptr == eos) {
         return Status::InternalError("input pointer is nullptr.");
     }
-    if (_partitions_meta_index >= _partitions_meta_response.partitions_meta_infos.size()) {
+    if (_partitions_meta_index >= _partitions_meta_vec.size()) {
         *eos = true;
         return Status::OK();
     }
@@ -106,7 +117,7 @@ Status SchemaPartitionsMetaScanner::get_next(ChunkPtr* chunk, bool* eos) {
 }
 
 Status SchemaPartitionsMetaScanner::fill_chunk(ChunkPtr* chunk) {
-    const TPartitionMetaInfo& info = _partitions_meta_response.partitions_meta_infos[_partitions_meta_index];
+    const TPartitionMetaInfo& info = _partitions_meta_vec[_partitions_meta_index];
     const auto& slot_id_to_index_map = (*chunk)->get_slot_id_to_index_map();
     for (const auto& [slot_id, index] : slot_id_to_index_map) {
         if (slot_id < 1 || slot_id > _column_num) {
