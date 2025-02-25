@@ -32,6 +32,7 @@ import com.starrocks.credential.aws.AwsCloudConfiguration;
 import com.starrocks.credential.aws.AwsCloudCredential;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.paimon.catalog.CachingCatalog;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
 import org.apache.paimon.catalog.CatalogFactory;
@@ -203,8 +204,10 @@ public class PaimonConnector implements Connector {
             Configuration configuration = new Configuration();
             hdfsEnvironment.getCloudConfiguration().applyToConfiguration(configuration);
             this.paimonNativeCatalog = CatalogFactory.createCatalog(CatalogContext.create(getPaimonOptions(), configuration));
-            GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
-                    .registerPaimonCatalog(catalogName, this.paimonNativeCatalog);
+            if (this.paimonNativeCatalog instanceof CachingCatalog) {
+                GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
+                        .registerPaimonCatalog(catalogName, this.paimonNativeCatalog);
+            }
         } catch (Exception e) {
             if (e instanceof NullPointerException ||
                     (e.getMessage() != null && e.getMessage().contains(DLF_AUTH_USER_NAME))) {
