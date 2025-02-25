@@ -43,11 +43,11 @@ import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.OperatorFunctionChecker;
 import com.starrocks.sql.optimizer.operator.scalar.PredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
-import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.plan.ScalarOperatorToExpr;
@@ -278,7 +278,7 @@ public class ListPartitionPruner implements PartitionPruner {
                         SqlToScalarOperatorTranslator.translateWithSlotRef(generatedExpr, slotRefResolver);
 
                 if (call instanceof CallOperator &&
-                        ScalarOperatorEvaluator.INSTANCE.isMonotonicFunction((CallOperator) call)) {
+                        OperatorFunctionChecker.onlyContainMonotonicFunctions((CallOperator) call).first) {
                     List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(call);
                     for (ColumnRefOperator ref : columnRefOperatorList) {
                         result.add(ref.getName());
@@ -325,7 +325,7 @@ public class ListPartitionPruner implements PartitionPruner {
                         SqlToScalarOperatorTranslator.translateWithSlotRef(generatedExpr, slotRefResolver);
 
                 if (call instanceof CallOperator &&
-                        ScalarOperatorEvaluator.INSTANCE.isMonotonicFunction((CallOperator) call)) {
+                        OperatorFunctionChecker.onlyContainMonotonicFunctions((CallOperator) call).first) {
                     List<ColumnRefOperator> columnRefOperatorList = Utils.extractColumnRef(call);
 
                     for (ColumnRefOperator ref : columnRefOperatorList) {
