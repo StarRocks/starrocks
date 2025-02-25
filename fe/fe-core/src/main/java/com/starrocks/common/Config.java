@@ -3468,4 +3468,17 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static boolean transaction_state_print_partition_info = true;
+<<<<<<< HEAD
+=======
+
+    @ConfField(mutable = true)
+    public static int max_show_proc_transactions_entry = 2000;
+
+    /**
+     *  max partition meta count will be returned when BE/CN call GetPartitionsMeta
+     *  if one table's partition count exceeds this, it will return all partitions for this table
+     */
+    @ConfField(mutable = true)
+    public static int max_get_partitions_meta_result_count = 100000;
+>>>>>>> 9b123d602 ([BugFix] fix rpc error for partitions_meta when partitions are too many (#56217))
 }
