@@ -73,7 +73,7 @@
 
 namespace starrocks {
 
-const std::string kBreakpointMsg = "PK apply stopped";
+const std::string kBreakpointMsg = "primary key apply stopped";
 
 std::string EditVersion::to_string() const {
     if (minor_number() == 0) {
@@ -1021,7 +1021,7 @@ void TabletUpdates::do_apply() {
         } else if (_is_breakpoint(apply_st)) {
             // apply stopped, clean states and quit.
             _reset_apply_status(*version_info_apply);
-            VLOG(2) << "apply stopped, clean states and quit tablet id: " << _tablet.tablet_id();
+            LOG(INFO) << "apply stopped, clean states and quit tablet id: " << _tablet.tablet_id();
             break;
         } else {
             if (!apply_st.ok()) {
