@@ -129,7 +129,7 @@ void StoragePageCache::insert(const CacheKey& key, const Slice& data, PageCacheH
     int64_t mem_size = data.size;
 #endif
 
-    auto deleter = [](const starrocks::CacheKey& key, void* value) { delete[] (uint8_t*)value; };
+    auto deleter = [](const starrocks::CacheKey& key, void* value) { delete[](uint8_t*) value; };
 
     CachePriority priority = CachePriority::NORMAL;
     if (in_memory) {
