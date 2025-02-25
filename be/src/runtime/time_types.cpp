@@ -194,10 +194,16 @@ bool date::from_string(const char* date_str, size_t len, int* year, int* month, 
     uint32_t date_val[MAX_DATE_PARTS];
     int32_t date_len[MAX_DATE_PARTS];
 
-    // Skip space character
+    // Skip leading whitespace
     while (ptr < end && is_space(*ptr)) {
         ptr++;
     }
+
+    // Skip trailing whitespace
+    while (ptr < end && is_space(*(end - 1))) {
+        --end;
+    }
+
     if (ptr == end || !isdigit(*ptr)) {
         return false;
     }
@@ -384,8 +390,8 @@ std::pair<bool, bool> date::from_string_to_datetime(const char* date_str, size_t
         __m128i is_digit = _mm_and_si128(_mm_cmpgt_epi8(date_chars, _mm_set1_epi8('0' - 1)),
                                          _mm_cmplt_epi8(date_chars, _mm_set1_epi8('9' + 1)));
 
-        // Create mask for digit positions
-        const __m128i digit_mask = _mm_set_epi8(0, 0, 0, 0, 0, 0, 1, 0, 1, 1, 0, 1, 1, 0, 1, 1);
+        // Create mask for digit positions (0-3, 5-6, 8-9)
+        const __m128i digit_mask = _mm_setr_epi8(1, 1, 1, 1, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0);
 
         // Check if all digit positions contain digits
         digits_valid = _mm_testc_si128(_mm_cmpeq_epi8(_mm_and_si128(is_digit, digit_mask), digit_mask), digit_mask);
@@ -461,7 +467,7 @@ std::pair<bool, bool> date::from_string_to_datetime(const char* date_str, size_t
 
         if (time_separators_valid) {
             // Create mask for digit positions (0,1,3,4,6,7 should be digits)
-            const __m128i time_digit_mask = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1, 1, 0, 1, 1);
+            const __m128i time_digit_mask = _mm_setr_epi8(1, 1, 0, 1, 1, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0);
 
             // Check which positions contain digits
             __m128i is_time_digit = _mm_and_si128(_mm_cmpgt_epi8(time_chars, _mm_set1_epi8('0' - 1)),
@@ -525,16 +531,20 @@ std::pair<bool, bool> date::from_string_to_datetime(const char* date_str, size_t
                                                    _mm_cmplt_epi8(micro_chars, _mm_set1_epi8('9' + 1)));
 
             // Create a mask for up to 6 positions
-            const __m128i micro_mask = _mm_set_epi8(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1);
+            const __m128i micro_mask = _mm_setr_epi8(1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
 
             // Find the first non-digit position
+            // We need to find where digits end within our mask
             __m128i not_digit = _mm_andnot_si128(is_micro_digit, micro_mask);
-            int mask = _mm_movemask_epi8(not_digit & micro_mask);
+            int mask = _mm_movemask_epi8(not_digit);
+
+            // We only care about the first 6 positions that are covered by our mask
+            mask &= 0x3F;  // 0x3F = 00111111 in binary, masks out first 6 bits
 
             // Count leading digits (up to 6)
+            // If mask is 0, all 6 positions are digits
+            // Otherwise, count trailing zeros to find position of first non-digit
             digit_count = mask ? __builtin_ctz(mask) : 6;
-
-            // Use the actual digits for parsing (handled outside the ifdef)
         }
 #endif
 
