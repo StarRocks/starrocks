@@ -388,6 +388,8 @@ public:
 
     void stop_and_wait_apply_done();
 
+    Status breakpoint_check();
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;

@@ -62,4 +62,8 @@ Status LocalPrimaryKeyCompactionConflictResolver::segment_iterator(
     });
 }
 
+Status LocalPrimaryKeyCompactionConflictResolver::breakpoint_check() {
+    return _tablet->update()->breakpoint_check();
+}
+
 } // namespace starrocks
