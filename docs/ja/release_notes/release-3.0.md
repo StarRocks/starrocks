@@ -126,7 +126,7 @@ displayed_sidebar: docs
 - UDF を使用すると、特定のケースでメモリリークが発生することがあります。 [#29467](https://github.com/StarRocks/starrocks/pull/29467) [#29465](https://github.com/StarRocks/starrocks/pull/29465)
 - ORDER BY 句に集計関数が含まれている場合、エラー "java.lang.IllegalStateException: null" が返されます。 [#30108](https://github.com/StarRocks/starrocks/pull/30108)
 - Tencent COS に保存されたデータに対して Hive カタログを使用してクエリを実行すると、クエリ結果が正しくありません。 [#30363](https://github.com/StarRocks/starrocks/pull/30363)
-- ARRAY<STRUCT> 型データの STRUCT の一部のサブフィールドが欠落している場合、クエリ中に欠落したサブフィールドにデフォルト値が埋め込まれるとデータ長が不正確になり、BEs がクラッシュします。
+- `ARRAY<STRUCT>` 型データの STRUCT の一部のサブフィールドが欠落している場合、クエリ中に欠落したサブフィールドにデフォルト値が埋め込まれるとデータ長が不正確になり、BEs がクラッシュします。
 - セキュリティ脆弱性を回避するために Berkeley DB Java Edition のバージョンがアップグレードされました。[#30029](https://github.com/StarRocks/starrocks/pull/30029)
 - 主キーテーブルにデータをロードし、同時にトランケート操作とクエリを実行すると、特定のケースでエラー "java.lang.NullPointerException" がスローされます。 [#30573](https://github.com/StarRocks/starrocks/pull/30573)
 - スキーマ変更の実行時間が長すぎる場合、指定されたバージョンのタブレットがガベージコレクションされるため、失敗することがあります。 [#31376](https://github.com/StarRocks/starrocks/pull/31376)

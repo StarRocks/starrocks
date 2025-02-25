@@ -479,7 +479,7 @@ displayed_sidebar: docs
 - `ADMIN SET FRONTEND CONFIG` コマンドを使用して FE 動的パラメータ `max_broker_load_job_concurrency` を変更しても効果がない問題を修正しました。[#29964](https://github.com/StarRocks/starrocks/pull/29964) [#29720](https://github.com/StarRocks/starrocks/pull/29720)
 - [date_diff()](https://docs.starrocks.io/docs/sql-reference/sql-functions/date-time-functions/date_diff/) 関数の時間単位が定数であるが、日付が定数でない場合、BEs がクラッシュする問題を修正しました。[#29937](https://github.com/StarRocks/starrocks/issues/29937)
 - 共有データアーキテクチャでは、非同期ロードが有効になった後、自動パーティション化が効果を発揮しない問題を修正しました。[#29986](https://github.com/StarRocks/starrocks/issues/29986)
-- [CREATE TABLE LIKE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE/) ステートメントを使用して主キーテーブルを作成すると、「Unexpected exception: Unknown properties: {persistent_index_type=LOCAL}」というエラーがスローされる問題を修正しました。[#30255](https://github.com/StarRocks/starrocks/pull/30255)
+- [CREATE TABLE LIKE](https://docs.starrocks.io/docs/sql-reference/sql-statements/data-definition/CREATE_TABLE_LIKE/) ステートメントを使用して主キーテーブルを作成すると、「Unexpected exception: Unknown properties: `{persistent_index_type=LOCAL}`」というエラーがスローされる問題を修正しました。[#30255](https://github.com/StarRocks/starrocks/pull/30255)
 - 主キーテーブルを復元すると、BEs が再起動された後にメタデータの不整合が発生する問題を修正しました。[#30135](https://github.com/StarRocks/starrocks/pull/30135)
 - 主キーテーブルにデータをロードし、同時にトランケート操作とクエリが実行される場合、「java.lang.NullPointerException」というエラーが特定のケースでスローされる問題を修正しました。[#30573](https://github.com/StarRocks/starrocks/pull/30573)
 - マテリアライズドビュー作成ステートメントに述語式が指定されている場合、それらのマテリアライズドビューのリフレッシュ結果が不正確になる問題を修正しました。[#29904](https://github.com/StarRocks/starrocks/pull/29904)

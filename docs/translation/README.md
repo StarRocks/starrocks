@@ -55,8 +55,6 @@ The entries in the file should be relative to the `starrocks/docs/translation/` 
 </td>
 <td>
 
-<td>
-
 #### From Chinese to English
 
 `starrocks/docs/translation/files.txt`

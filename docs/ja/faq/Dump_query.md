@@ -32,9 +32,9 @@ query_dump インターフェースは、SQL を実行する際に FE が依存�
 
 HTTP Post
 
-fe_host:fe_http_port/api/query_dump?db=${database}&mock=${value} post_data=${Query}
+`fe_host:fe_http_port/api/query_dump?db=${database}&mock=${value} post_data=${Query}`
 
-wget --user=${username} --password=${password} --post-file ${query_file} "http://${fe_host}:${fe_http_port}/api/query_dump?db=${database}&mock={value}" -O ${dump_file}
+`wget --user=${username} --password=${password} --post-file ${query_file} "http://${fe_host}:${fe_http_port}/api/query_dump?db=${database}&mock={value}" -O ${dump_file}`
 
 パラメータ説明:
 
