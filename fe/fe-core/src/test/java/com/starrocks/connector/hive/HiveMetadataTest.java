@@ -297,7 +297,7 @@ public class HiveMetadataTest {
                         "\"hive.table" +
                         ".input.format\" = \"org.apache.hadoop.hive.ql.io.orc.OrcInputFormat\",\"location\" = \"hdfs://127.0.0" +
                         ".1:10000/hive\");",
-                AstToStringBuilder.getExternalCatalogTableDdlStmt("db1", hiveTable));
+                AstToStringBuilder.getExternalCatalogTableDdlStmt(hiveTable));
     }
 
     @Test

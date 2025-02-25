@@ -1886,7 +1886,7 @@ public class AstToStringBuilder {
         }
     }
 
-    public static String getExternalCatalogTableDdlStmt(String dbName, Table table) {
+    public static String getExternalCatalogTableDdlStmt(Table table) {
         // create table catalogName.dbName.tableName (
         StringBuilder createTableSql = new StringBuilder();
         String tableName = table.getName();
@@ -1896,7 +1896,7 @@ public class AstToStringBuilder {
             createTableSql.append("CREATE TABLE ");
         }
         createTableSql.append("`").append(table.getCatalogName()).append("`.`").
-                append(dbName).append("`.`").append(table.getName()).append("`")
+                append(table.getCatalogDBName()).append("`.`").append(table.getName()).append("`")
                 .append(" (\n");
 
         // Columns
@@ -1956,10 +1956,10 @@ public class AstToStringBuilder {
         return createTableSql.toString();
     }
 
-    public static String getExternalCatalogViewDdlStmt(String dbName, ConnectorView view) {
+    public static String getExternalCatalogViewDdlStmt(ConnectorView view) {
         StringBuilder sb = new StringBuilder();
         sb.append("CREATE VIEW `").append(view.getCatalogName()).append("`.`").
-                append(dbName).append("`.`").append(view.getName()).append("` (");
+                append(view.getCatalogDBName()).append("`.`").append(view.getName()).append("` (");
         List<String> colDef = Lists.newArrayList();
         for (Column column : view.getBaseSchema()) {
             colDef.add("`" + column.getName() + "`");

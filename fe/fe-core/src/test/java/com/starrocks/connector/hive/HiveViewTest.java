@@ -179,7 +179,7 @@ public class HiveViewTest extends PlanTestBase {
                         "    t1b,t1a\n" +
                         "from\n" +
                         "    test_all_type", HiveView.Type.Hive);
-        String viewDdl = AstToStringBuilder.getExternalCatalogViewDdlStmt("testDb", hiveView);
+        String viewDdl = AstToStringBuilder.getExternalCatalogViewDdlStmt(hiveView);
         Assert.assertEquals("CREATE VIEW `hive0`.`testDb`.`test` (`t1a`, `t1b`) AS select\n" +
                 "    t1b,t1a\n" +
                 "from\n" +
