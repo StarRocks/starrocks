@@ -307,9 +307,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
     @SerializedName("warehouseId")
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
-    @SerializedName("pofpe")
-    protected boolean pauseOnFatalParseError = DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR;
-
     protected ReentrantReadWriteLock lock = new ReentrantReadWriteLock(true);
     // TODO(ml): error sample
 
@@ -378,12 +375,12 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         if (stmt.getMaxBatchRows() != -1) {
             this.maxBatchRows = stmt.getMaxBatchRows();
         }
-        this.pauseOnFatalParseError = stmt.isPauseOnFatalParseError();
         jobProperties.put(LoadStmt.LOG_REJECTED_RECORD_NUM, String.valueOf(stmt.getLogRejectedRecordNum()));
         jobProperties.put(LoadStmt.PARTIAL_UPDATE, String.valueOf(stmt.isPartialUpdate()));
         jobProperties.put(LoadStmt.PARTIAL_UPDATE_MODE, String.valueOf(stmt.getPartialUpdateMode()));
         jobProperties.put(LoadStmt.TIMEZONE, stmt.getTimezone());
         jobProperties.put(LoadStmt.STRICT_MODE, String.valueOf(stmt.isStrictMode()));
+        jobProperties.put(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR, String.valueOf(stmt.isPauseOnFatalParseError()));
         if (stmt.getMergeConditionStr() != null) {
             jobProperties.put(LoadStmt.MERGE_CONDITION, stmt.getMergeConditionStr());
         }
@@ -618,6 +615,14 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         String value = jobProperties.get(LoadStmt.STRICT_MODE);
         if (value == null) {
             return DEFAULT_STRICT_MODE;
+        }
+        return Boolean.valueOf(value);
+    }
+
+    public boolean isPauseOnFatalParseError() {
+        String value = jobProperties.get(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR);
+        if (value == null) {
+            return DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR;
         }
         return Boolean.valueOf(value);
     }
@@ -1264,7 +1269,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 return Optional.of(new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
                         ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(txnStatusChangeReasonStr, "max_filter_ratio")));
             case PARSE_ERROR:
-                return !pauseOnFatalParseError ? Optional.empty() : Optional.of(new ErrorReason(InternalErrorCode.PARSE_ERR,
+                return !isPauseOnFatalParseError() ? Optional.empty() : Optional.of(new ErrorReason(InternalErrorCode.PARSE_ERR,
                         ERR_PARSE_ERROR.formatErrorMsg(txnStatusChangeReasonStr)));
             default:
                 return Optional.empty();
@@ -1679,7 +1684,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         jobProperties.put("desireTaskConcurrentNum", String.valueOf(desireTaskConcurrentNum));
         jobProperties.put("taskConsumeSecond", String.valueOf(taskConsumeSecond));
         jobProperties.put("taskTimeoutSecond", String.valueOf(taskTimeoutSecond));
-        jobProperties.put("pauseOnFatalParseError", String.valueOf(pauseOnFatalParseError));
         jobProperties.putAll(this.jobProperties);
         Gson gson = new GsonBuilder().disableHtmlEscaping().create();
         return gson.toJson(jobProperties);
@@ -1723,6 +1727,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
         sb.append("\"").append(LoadStmt.STRICT_MODE).append("\"=\"");
         sb.append(isStrictMode()).append("\",\n");
+
+        sb.append("\"").append(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR).append("\"=\"");
+        sb.append(isPauseOnFatalParseError()).append("\",\n");
 
         sb.append("\"").append(LoadStmt.TIMEZONE).append("\"=\"");
         sb.append(getTimezone()).append("\",\n");
@@ -2016,10 +2023,6 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
         if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND)) {
             this.taskTimeoutSecond = Long.parseLong(
                     copiedJobProperties.remove(CreateRoutineLoadStmt.TASK_TIMEOUT_SECOND));
-        }
-        if (copiedJobProperties.containsKey(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR)) {
-            this.pauseOnFatalParseError = Boolean.parseBoolean(
-                    copiedJobProperties.remove(CreateRoutineLoadStmt.PAUSE_ON_FATAL_PARSE_ERROR));
         }
 
         if (copiedJobProperties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
