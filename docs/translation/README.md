@@ -76,6 +76,7 @@ The entries in the file should be relative to the `starrocks/docs/translation/` 
 > find ../en/_assets -type f -name "*\.md*" > files.txt
 > ```
 
+Also:
 
 > Note:
 >
