@@ -22,8 +22,8 @@
 
 namespace starrocks {
 
-std::pair<NullColumnPtr, std::vector<int32_t>> extract_column_with_codes(const GlobalDictMap& dict_map) {
-    ColumnPtr res = NullColumn::create(BinaryColumn::create(), NullColumn::create());
+std::pair<NullableColumn::Ptr, std::vector<int32_t>> extract_column_with_codes(const GlobalDictMap& dict_map) {
+    NullableColumn::Ptr res = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     res->reserve(dict_map.size() + 1);
 
     std::vector<Slice> slices;
@@ -41,7 +41,7 @@ std::pair<NullColumnPtr, std::vector<int32_t>> extract_column_with_codes(const G
     }
     (void)res->append_strings(slices.data(), slices.size());
     (void)res->set_null(0);
-    return std::make_pair(NullColumn::static_pointer_cast(std::move(res)), std::move(codes));
+    return std::make_pair(std::move(res), std::move(codes));
 }
 
 } // namespace starrocks

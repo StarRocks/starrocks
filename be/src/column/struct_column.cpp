@@ -33,8 +33,6 @@ StructColumn::StructColumn(MutableColumns&& fields, std::vector<std::string> fie
     // Struct must have at least one field.
     DCHECK(_field_names.size() > 0);
     for (auto& f : fields) {
-        DCHECK(f->is_nullable());
-        f->check_or_die();
         _fields.emplace_back(std::move(f));
     }
     DCHECK(_fields.size() > 0);

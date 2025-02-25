@@ -23,6 +23,6 @@
 
 namespace starrocks {
 
-std::pair<NullColumnPtr, std::vector<int32_t>> extract_column_with_codes(const GlobalDictMap& dict_map);
+std::pair<NullableColumn::Ptr, std::vector<int32_t>> extract_column_with_codes(const GlobalDictMap& dict_map);
 
 } // namespace starrocks
