@@ -61,6 +61,7 @@ under the License.
         <kudu.version>1.17.0</kudu.version>
         <hikaricp.version>3.4.5</hikaricp.version>
         <kafka-clients.version>3.4.0</kafka-clients.version>
+        <io.netty.version>4.1.118.Final</io.netty.version>
     </properties>
 
     <profiles>
@@ -422,8 +423,13 @@ under the License.
             <dependency>
                 <groupId>io.netty</groupId>
                 <artifactId>netty-all</artifactId>
-                <!--same with hadoop 3.4.0-->
-                <version>4.1.100.Final</version>
+                <version>${io.netty.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-handler</artifactId>
+                <version>${io.netty.version}</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java -->
