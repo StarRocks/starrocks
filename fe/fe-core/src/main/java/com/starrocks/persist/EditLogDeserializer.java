@@ -248,6 +248,7 @@ public class EditLogDeserializer {
             .put(OperationType.OP_CREATE_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
             .put(OperationType.OP_ALTER_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
             .put(OperationType.OP_DROP_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
+            .put(OperationType.OP_LAKE_TABLE_ASYNC_FAST_SCHEMA_CHANGE_JOB_BRIEFLY, LakeTableAsyncFastSchemaChangeJobInfo.class)
             .build();
 
     public static Writable deserialize(Short opCode, DataInput in) throws IOException {

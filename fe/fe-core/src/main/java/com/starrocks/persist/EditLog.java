@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.JsonParseException;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
+import com.starrocks.alter.LakeTableAsyncFastSchemaChangeJob;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserProperty;
@@ -703,6 +704,12 @@ public class EditLog {
                         default:
                             break;
                     }
+                    break;
+                }
+                case OperationType.OP_LAKE_TABLE_ASYNC_FAST_SCHEMA_CHANGE_JOB_BRIEFLY: {
+                    LakeTableAsyncFastSchemaChangeJobInfo jobInfo = (LakeTableAsyncFastSchemaChangeJobInfo) journal.data();
+                    AlterJobV2 alterJob = new LakeTableAsyncFastSchemaChangeJob(jobInfo);
+                    globalStateMgr.getSchemaChangeHandler().replayAlterJobV2(alterJob);
                     break;
                 }
                 case OperationType.OP_BATCH_ADD_ROLLUP_V2: {
@@ -1620,6 +1627,11 @@ public class EditLog {
 
     public void logAlterJob(AlterJobV2 alterJob) {
         logEdit(OperationType.OP_ALTER_JOB_V2, alterJob);
+    }
+
+    // for the same job, after the initial log, use this method to minimize data writing
+    public void logLakeTableAsyncFastSchemaChangeJobBriefly(LakeTableAsyncFastSchemaChangeJobInfo jobInfo) {
+        logEdit(OperationType.OP_LAKE_TABLE_ASYNC_FAST_SCHEMA_CHANGE_JOB_BRIEFLY, jobInfo);
     }
 
     public JournalTask logAlterJobNoWait(AlterJobV2 alterJob) {

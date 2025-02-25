@@ -593,6 +593,7 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DELETE_SQL_QUERY_BLACK_LIST = 13521;
 
+    public static final short OP_LAKE_TABLE_ASYNC_FAST_SCHEMA_CHANGE_JOB_BRIEFLY = 13526;
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
      */

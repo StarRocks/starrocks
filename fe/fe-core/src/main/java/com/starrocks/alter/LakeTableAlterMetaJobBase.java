@@ -37,6 +37,7 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.mv.MVRepairHandler.PartitionRepairInfo;
+import com.starrocks.persist.LakeTableAsyncFastSchemaChangeJobInfo;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
@@ -82,6 +83,14 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         super(jobId, jobType, dbId, tableId, tableName, timeoutMs);
     }
 
+    LakeTableAlterMetaJobBase(LakeTableAsyncFastSchemaChangeJobInfo jobInfo) {
+        super(jobInfo);
+        this.watershedTxnId = jobInfo.getWatershedTxnId();
+        this.watershedGtid = jobInfo.getWatershedGtid();
+        this.physicalPartitionIndexMap = jobInfo.getPhysicalPartitionIndexMap();
+        this.commitVersionMap = jobInfo.getCommitVersionMap();
+    }
+
     @Override
     protected void runPendingJob() throws AlterCancelException {
         // send task to be
@@ -110,7 +119,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             this.watershedTxnId = globalStateMgr.getGlobalTransactionMgr().getTransactionIDGenerator()
                     .getNextTransactionId();
             this.watershedGtid = globalStateMgr.getGtidGenerator().nextGtid();
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+            logAlterJob();
         }
 
         try {
@@ -166,7 +175,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             this.jobState = JobState.FINISHED_REWRITING;
             this.finishedTimeMs = System.currentTimeMillis();
 
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+            logAlterJob();
 
             // NOTE: !!! below this point, this update meta job must success unless the database or table been dropped. !!!
             updateNextVersion(table);
@@ -210,7 +219,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
             updateCatalog(db, table);
             this.jobState = JobState.FINISHED;
             this.finishedTimeMs = System.currentTimeMillis();
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+            logAlterJob();
             // set visible version
             updateVisibleVersion(table);
             table.setState(OlapTable.OlapTableState.NORMAL);
@@ -418,6 +427,23 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
 
     protected long getWatershedTxnId() {
         return watershedTxnId;
+    }
+
+    protected long getWatershedGtid() {
+        return watershedGtid;
+    }
+
+    protected void logAlterJob() {
+        if (this instanceof LakeTableAsyncFastSchemaChangeJob) {
+            LakeTableAsyncFastSchemaChangeJobInfo info = new LakeTableAsyncFastSchemaChangeJobInfo(this.getWatershedTxnId(),
+                    this.getWatershedGtid(), this.getPartitionIndexMap(), this.getCommitVersionMap(), this.getType(),
+                    this.getJobId(), this.getJobState(), this.getDbId(), this.getTableId(), this.getTableName(),
+                    this.getErrMsg(), this.getCreateTimeMs(), this.getFinishedTimeMs(), this.getTimeoutMs(),
+                    this.getWarehouseId());
+            GlobalStateMgr.getCurrentState().getEditLog().logLakeTableAsyncFastSchemaChangeJobBriefly(info);
+        } else {
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
+        }
     }
 
     @Override
