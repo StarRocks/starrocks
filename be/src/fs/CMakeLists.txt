@@ -38,6 +38,7 @@ set(EXEC_FILES
     fs_jindo.cpp
     fs_util.cpp
     bundle_file.cpp
+    paimon/paimon_file_system.cpp
     )
 
 if (NOT BUILD_FORMAT_LIB)

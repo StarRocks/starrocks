@@ -55,6 +55,7 @@
 #include "common/process_exit.h"
 #include "common/status.h"
 #include "exec/pipeline/query_context.h"
+#include "fs/paimon/paimon_file_system.h"
 #include "fs/s3/poco_http_client_factory.h"
 #include "runtime/exec_env.h"
 #include "runtime/heartbeat_flags.h"
@@ -110,6 +111,8 @@ static Aws::Utils::Logging::LogLevel parse_aws_sdk_log_level(const std::string& 
     }
     return level;
 }
+
+REGISTER_PAIMON_FACTORY(paimon, starrocks::PaimonFileSystemFactory);
 
 extern int meta_tool_main(int argc, char** argv);
 
