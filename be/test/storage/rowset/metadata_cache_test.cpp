@@ -173,7 +173,7 @@ TEST_F(MetadataCacheTest, test_warmup) {
         }
         // warmup first rowset
         metadata_cache_ptr->refresh_rowset(rowsets[0].get());
-        metadata_cache_ptr->set_capacity(rowsets[0]->segment_memory_usage() * 32);
+        metadata_cache_ptr->set_capacity(rowsets[0]->segment_memory_usage() * 64);
         ASSERT_TRUE(rowsets[0]->segment_memory_usage() > 0);
     }
 }

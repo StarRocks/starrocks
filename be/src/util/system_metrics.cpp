@@ -42,12 +42,17 @@
 #include <cstdio>
 #include <memory>
 
+#include "cache/block_cache/block_cache.h"
+#ifdef USE_STAROS
+#include "fslib/star_cache_handler.h"
+#endif
 #include "gutil/strings/split.h" // for string split
 #include "gutil/strtoint.h"      //  for atoi64
 #include "io/io_profiler.h"
 #include "jemalloc/jemalloc.h"
 #include "runtime/mem_tracker.h"
 #include "runtime/runtime_filter_worker.h"
+#include "storage/page_cache.h"
 #include "util/metrics.h"
 
 namespace starrocks {
@@ -292,6 +297,33 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("datacache_mem_bytes", &_memory_metrics->datacache_mem_bytes);
 }
 
+void SystemMetrics::_update_datacache_mem_tracker() {
+    // update datacache mem_tracker
+    int64_t datacache_mem_bytes = 0;
+    auto* datacache_mem_tracker = GlobalEnv::GetInstance()->datacache_mem_tracker();
+    if (datacache_mem_tracker) {
+        BlockCache* block_cache = BlockCache::instance();
+        if (block_cache->is_initialized()) {
+            auto datacache_metrics = block_cache->cache_metrics();
+            datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;
+        }
+#ifdef USE_STAROS
+        if (!config::datacache_unified_instance_enable) {
+            datacache_mem_bytes += staros::starlet::fslib::star_cache_get_memory_usage();
+        }
+#endif
+        datacache_mem_tracker->set(datacache_mem_bytes);
+    }
+}
+
+void SystemMetrics::_update_pagecache_mem_tracker() {
+    auto* pagecache_mem_tracker = GlobalEnv::GetInstance()->page_cache_mem_tracker();
+    auto* page_cache = StoragePageCache::instance();
+    if (pagecache_mem_tracker && page_cache) {
+        pagecache_mem_tracker->set(page_cache->memory_usage());
+    }
+}
+
 void SystemMetrics::_update_memory_metrics() {
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     LOG(INFO) << "Memory tracking is not available with address sanitizer builds.";
@@ -324,6 +356,9 @@ void SystemMetrics::_update_memory_metrics() {
         _memory_metrics->jemalloc_retained_bytes.set_value(value);
     }
 #endif
+
+    _update_datacache_mem_tracker();
+    _update_pagecache_mem_tracker();
 
 #define SET_MEM_METRIC_VALUE(tracker, key)                                                  \
     if (GlobalEnv::GetInstance()->tracker() != nullptr) {                                   \
