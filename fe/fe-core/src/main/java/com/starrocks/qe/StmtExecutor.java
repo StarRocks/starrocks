@@ -116,6 +116,7 @@ import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.plugin.AuditEvent;
 import com.starrocks.proto.PPlanFragmentCancelReason;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.QueryStatisticsItemPB;
@@ -836,7 +837,25 @@ public class StmtExecutor {
             if (shouldMarkIdleCheck(parsedStmt)) {
                 WarehouseIdleChecker.decreaseRunningSQL(context.getCurrentWarehouseId());
             }
+
+            recordExecStatsIntoContext();
         }
+    }
+
+    /**
+     * record execution stats for all kinds of statement
+     * some statements may execute multiple statement which will also create multiple StmtExecutor, so here
+     * we accumulate them into the ConnectContext instead of using the last one
+     */
+    private void recordExecStatsIntoContext() {
+        PQueryStatistics execStats = getQueryStatisticsForAuditLog();
+        context.getAuditEventBuilder().addCpuCostNs(execStats.getCpuCostNs() != null ? execStats.getCpuCostNs() : 0);
+        context.getAuditEventBuilder()
+                .addMemCostBytes(execStats.getMemCostBytes() != null ? execStats.getMemCostBytes() : 0);
+        context.getAuditEventBuilder().addScanBytes(execStats.getScanBytes() != null ? execStats.getScanBytes() : 0);
+        context.getAuditEventBuilder().addScanRows(execStats.getScanRows() != null ? execStats.getScanRows() : 0);
+        context.getAuditEventBuilder().addSpilledBytes(execStats.spillBytes != null ? execStats.spillBytes : 0);
+        context.getAuditEventBuilder().setReturnRows(execStats.returnedRows == null ? 0 : execStats.returnedRows);
     }
 
     private void clearQueryScopeHintContext() {
@@ -1360,6 +1379,13 @@ public class StmtExecutor {
             }
         }
 
+        processQueryStatisticsFromResult(batch, execPlan, isOutfileQuery);
+    }
+
+    /**
+     * The query result batch will piggyback query statistics in it
+     */
+    private void processQueryStatisticsFromResult(RowBatch batch, ExecPlan execPlan, boolean isOutfileQuery) {
         if (batch != null) {
             statisticsForAuditLog = batch.getQueryStatistics();
             if (!isOutfileQuery) {
@@ -1380,6 +1406,9 @@ public class StmtExecutor {
             // collect table-level metrics
             Set<Long> tableIds = Sets.newHashSet();
             for (QueryStatisticsItemPB item : statisticsForAuditLog.statsItems) {
+                if (item == null) {
+                    continue;
+                }
                 TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(item.tableId);
                 entity.counterScanRowsTotal.increase(item.scanRows);
                 entity.counterScanBytesTotal.increase(item.scanBytes);
@@ -1531,6 +1560,10 @@ public class StmtExecutor {
         statsConnectCtx.setStatisticsConnection(true);
         try (var guard = statsConnectCtx.bindScope()) {
             executeAnalyze(statsConnectCtx, analyzeStmt, analyzeStatus, db, table);
+        } finally {
+            // copy the stats to current context
+            AuditEvent event = statsConnectCtx.getAuditEventBuilder().build();
+            context.getAuditEventBuilder().copyExecStatsFrom(event);
         }
 
     }
@@ -2706,6 +2739,7 @@ public class StmtExecutor {
                 GlobalStateMgr.getCurrentState().getOperationListenerBus()
                         .onDMLStmtJobTransactionFinish(txnState, database, targetTable, dmlType);
             }
+            recordExecStatsIntoContext();
         }
 
         String errMsg = "";
@@ -2775,11 +2809,13 @@ public class StmtExecutor {
                     sqlResult.add(batch.getBatch());
                 }
             } while (!batch.isEos());
+            processQueryStatisticsFromResult(batch, plan, false);
         } catch (Exception e) {
             LOG.warn("Failed to execute executeStmtWithExecPlan", e);
             coord.getExecStatus().setInternalErrorStatus(e.getMessage());
         } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+            recordExecStatsIntoContext();
         }
         return Pair.create(sqlResult, coord.getExecStatus());
     }
@@ -2834,6 +2870,7 @@ public class StmtExecutor {
                 }
             } while (!batch.isEos());
             context.getState().setEof();
+            processQueryStatisticsFromResult(batch, plan, false);
         } catch (Exception e) {
             LOG.error("Failed to execute metadata collection job", e);
             if (coord.getExecStatus().ok()) {
@@ -2848,6 +2885,7 @@ public class StmtExecutor {
             } else {
                 QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
             }
+            recordExecStatsIntoContext();
         }
     }
 
