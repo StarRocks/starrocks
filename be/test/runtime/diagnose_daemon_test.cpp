@@ -18,6 +18,7 @@
 
 #include "testutil/assert.h"
 #include "testutil/sync_point.h"
+#include "util/defer_op.h"
 
 namespace starrocks {
 
@@ -39,6 +40,8 @@ protected:
     std::unique_ptr<DiagnoseDaemon> _daemon;
 };
 
+using SymbolizeTuple = std::tuple<void*, char*, size_t>;
+
 TEST_F(DiagnoseDaemonTest, test_stack_trace) {
     SyncPoint::GetInstance()->EnableProcessing();
     DeferOp defer([]() {
@@ -48,7 +51,7 @@ TEST_F(DiagnoseDaemonTest, test_stack_trace) {
 
     SyncPoint::GetInstance()->SetCallBack("StackTraceTask::symbolize", [&](void* arg) {
         SymbolizeTuple* tuple = (SymbolizeTuple*)arg;
-        std::snprintf(std::get<1>(*tuple), std::get<2>(*tuple), std::string(100, 'a').c_str());
+        std::snprintf(std::get<1>(*tuple), std::get<2>(*tuple), "%s", std::string(100, 'a').c_str());
     });
 
     DiagnoseRequest request1;

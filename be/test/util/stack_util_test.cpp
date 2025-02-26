@@ -19,6 +19,9 @@
 
 #include <utility>
 
+#include "testutil/sync_point.h"
+#include "util/defer_op.h"
+
 namespace starrocks {
 
 using SymbolizeTuple = std::tuple<void*, char*, size_t>;

@@ -67,6 +67,7 @@ struct StackTraceTask {
 #else
             std::tuple<void*, char*, size_t> tuple = {addrs[i], buf, sizeof(buf)};
             TEST_SYNC_POINT_CALLBACK("StackTraceTask::symbolize", &tuple);
+            success = true;
 #endif
             if (success) {
                 snprintf(line, 2048, "%s  %16p  %s\n", line_prefix.c_str(), addrs[i], buf);
