@@ -1,0 +1,256 @@
+==> ./commonMarkdown/quickstart-routine-load-tip.mdx <==
+
+:::tip
+Try Routine Load out in this [Quick Start](../../quick_start/routine-load.md)
+:::
+
+
+==> ./commonMarkdown/loadMethodIntro.md <==
+
+- Synchronous loading using [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md)+[`FILES()`](../../sql-reference/sql-functions/table-functions/files.md)
+- Asynchronous loading using [Broker Load](../../sql-reference/sql-statements/loading_unloading/BROKER_LOAD.md)
+- Continuous asynchronous loading using [Pipe](../../sql-reference/sql-statements/loading_unloading/pipe/CREATE_PIPE.md)
+
+Each of these options has its own advantages, which are detailed in the following sections.
+
+In most cases, we recommend that you use the INSERT+`FILES()` method, which is much easier to use.
+
+However, the INSERT+`FILES()` method currently supports only the Parquet, ORC, and CSV file formats. Therefore, if you need to load data of other file formats such as JSON, or perform data changes such as DELETE during data loading, you can resort to Broker Load.
+
+==> ./commonMarkdown/StaticBE_config_note.md <==
+### BE の静的パラメータを設定する
+
+BE の静的パラメータは、対応する設定ファイル **be.conf** で変更し、BE を再起動して変更を有効にすることでのみ設定できます。
+==> ./commonMarkdown/sharedDataUseIntro.md <==
+共有データ StarRocks クラスタの使用方法は、クラシックな共有なし StarRocks クラスタと似ていますが、共有データクラスタはストレージボリュームとクラウドネイティブテーブルを使用してデータをオブジェクトストレージに保存します。
+
+### デフォルトストレージボリュームの作成
+
+StarRocks が自動的に作成する組み込みのストレージボリュームを使用することも、手動でデフォルトストレージボリュームを作成して設定することもできます。このセクションでは、デフォルトストレージボリュームを手動で作成して設定する方法について説明します。
+
+> **注意**
+>
+> 共有データ StarRocks クラスタが v3.0 からアップグレードされた場合、FE 設定ファイル **fe.conf** に指定したオブジェクトストレージ関連のプロパティを使用して StarRocks がデフォルトストレージボリュームを作成しているため、デフォルトストレージボリュームを定義する必要はありません。他のオブジェクトストレージリソースを使用して新しいストレージボリュームを作成し、デフォルトストレージボリュームを別に設定することもできます。
+
+
+==> ./commonMarkdown/sharedDataUse.md <==
+
+For more information on how to create a storage volume for other object storages and set the default storage volume, see [CREATE STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md) and [SET DEFAULT STORAGE VOLUME](../../sql-reference/sql-statements/cluster-management/storage_volume/SET_DEFAULT_STORAGE_VOLUME.md).
+
+### Create a database and a cloud-native table
+
+After you create a default storage volume, you can then create a database and a cloud-native table using this storage volume.
+
+Shared-data StarRocks clusters support all [StarRocks table types](../../table_design/table_types/table_types.md).
+
+The following example creates a database `cloud_db` and a table `detail_demo` based on Duplicate Key table type, enables the local disk cache, sets the hot data validity duration to one month, and disables asynchronous data ingestion into object storage:
+
+==> ./commonMarkdown/userPrivilegeCase.md <==
+
+We recommend you customize roles to manage privileges and users. The following examples classify a few combinations of privileges for some common scenarios.
+
+#### Grant global read-only privileges on StarRocks tables
+
+   ```SQL
+   -- Create a role.
+   CREATE ROLE read_only;
+   -- Grant the USAGE privilege on all catalogs to the role.
+   GRANT USAGE ON ALL CATALOGS TO ROLE read_only;
+
+==> ./commonMarkdown/CN_config_method.md <==
+
+
+==> ./commonMarkdown/FE_config_method.md <==
+FE パラメータは、動的パラメータと静的パラメータに分類されます。
+
+- 動的パラメータは、SQL コマンドを実行することで設定および調整でき、非常に便利です。ただし、FE を再起動すると設定が無効になります。そのため、変更が失われないように、**fe.conf** ファイルの設定項目も変更することをお勧めします。
+
+- 静的パラメータは、FE の設定ファイル **fe.conf** でのみ設定および調整できます。**このファイルを変更した後、変更を有効にするには FE を再起動する必要があります。**
+
+パラメータが動的パラメータであるかどうかは、[ADMIN SHOW CONFIG](../../sql-reference/sql-statements/cluster-management/config_vars/ADMIN_SHOW_CONFIG.md) の出力にある `IsMutable` 列で示されます。`TRUE` は動的パラメータを示します。
+
+動的および静的な FE パラメータの両方が **fe.conf** ファイルで設定できることに注意してください。
+==> ./commonMarkdown/multi-service-access.mdx <==
+マルチサービスアクセス制御のベストプラクティスについては、[Multi-service access control](../../administration/user_privs/User_privilege.md#multi-service-access-control) を参照してください。
+==> ./commonMarkdown/pipeAdvantages.md <==
+Pipe は、継続的なデータロードと大規模なデータロードに最適です。
+
+- **マイクロバッチでの大規模なデータロードは、データエラーによるリトライのコストを削減するのに役立ちます。**
+
+  Pipe を利用することで、StarRocks は大量のデータファイルを効率的にロードできます。Pipe はファイルの数やサイズに基づいて自動的にファイルを分割し、ロードジョブを小さく連続したタスクに分解します。このアプローチにより、1 つのファイルのエラーが全体のロードジョブに影響を与えないようにします。各ファイルのロードステータスは Pipe によって記録され、エラーを含むファイルを簡単に特定して修正できます。データエラーによるリトライの必要性を最小限に抑えることで、このアプローチはコスト削減に役立ちます。
+
+- **継続的なデータロードは、人手を削減するのに役立ちます。**
+
+  Pipe は、新しいまたは更新されたデータファイルを特定の場所に書き込み、これらのファイルから新しいデータを継続的に StarRocks にロードするのを支援します。`"AUTO_INGEST" = "TRUE"` を指定して Pipe ジョブを作成すると、指定されたパスに保存されたデータファイルの変更を常に監視し、データファイルから新しいまたは更新されたデータを自動的に宛先の StarRocks テーブルにロードします。
+
+
+==> ./commonMarkdown/replicanum.md <==
+:::note
+
+ステージング環境の StarRocks クラスターに BE が 1 つしか含まれていない場合、`PROPERTIES` 句でレプリカの数を `1` に設定できます。例えば、`PROPERTIES( "replication_num" = "1" )` のようにします。デフォルトのレプリカ数は 3 であり、これは本番環境の StarRocks クラスターにも推奨される数です。デフォルトの数を使用したい場合は、`replication_num` パラメータを設定する必要はありません。
+
+:::
+==> ./commonMarkdown/quickstart-shared-nothing-tip.mdx <==
+:::tip
+この例では、[StarRocks Basics](../../quick_start/shared-nothing.md) クイックスタートで紹介されている Local Climatological Data (LCD) データセットを使用します。データをロードして、自分で例を試してみてください。
+:::
+==> ./commonMarkdown/RoutineLoadPrivNote.md <==
+StarRocks テーブルで実行される Routine Load ジョブは、これらの StarRocks テーブルに対して INSERT 権限を持つユーザーとしてのみ管理できます。INSERT 権限を持っていない場合は、[GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) に記載されている手順に従って、StarRocks クラスターに接続するために使用するユーザーに INSERT 権限を付与してください。
+==> ./commonMarkdown/sharedDataIntro.md <==
+このトピックでは、共有データ StarRocks クラスタのデプロイと使用方法について説明します。この機能は、S3 互換ストレージでは v3.0 から、Azure Blob Storage では v3.1 からサポートされています。
+
+> **注意**
+>
+> - StarRocks バージョン 3.1 では、共有データのデプロイと設定にいくつかの変更があります。バージョン 3.1 以上を使用している場合は、このドキュメントを使用してください。
+> - バージョン 3.0 を使用している場合は、[3.0 ドキュメント](https://docs.starrocks.io/docs/3.0/deployment/deploy_shared_data/)を使用してください。
+> - 共有データ StarRocks クラスタは、データのバックアップとリストアをサポートしていません。
+
+共有データ StarRocks クラスタは、ストレージとコンピュートの分離を前提にクラウド向けに特別に設計されています。データをオブジェクトストレージ（例えば、AWS S3、Google GCS、Azure Blob Storage、MinIO）に保存することができます。これにより、より安価なストレージと優れたリソース分離を実現し、クラスタの弾力的なスケーラビリティを達成できます。共有データ StarRocks クラスタのクエリパフォーマンスは、ローカルディスクキャッシュがヒットした場合、共有なし StarRocks クラスタと一致します。
+
+
+==> ./commonMarkdown/dateTimeTip.mdx <==
+:::tip
+- [日付と時刻の SQL 関数](../../sql-reference/sql-functions/date-time-functions/date-time-functions.mdx)
+- [日付と時刻のデータ型](../../sql-reference/data-types/date-types/date-types.mdx)
+:::
+==> ./commonMarkdown/brokerDataFlow.md <==
+### Advantages of Broker Load
+
+- Broker Load supports data transformation, UPSERT, and DELETE operations during loading.
+- Broker Load runs in the background and clients don't need to stay connected for the job to continue.
+- Broker Load is preferred for long running jobs, the default timeout is 4 hours.
+- Broker Load supports Parquet, ORC, and CSV file format.
+
+### Data flow
+
+![Workflow of Broker Load](../broker_load_how-to-work_en.png)
+
+==> ./commonMarkdown/BE_config_method.md <==
+BE の設定項目の中には、BE ノードがオンラインのときに対話的に設定できる動的パラメータがあります。それ以外は静的パラメータです。BE ノードの静的パラメータは、対応する設定ファイル **be.conf** を変更し、BE ノードを再起動して変更を反映させることでのみ設定できます。
+==> ./commonMarkdown/insertPrivNote.md <==
+StarRocks のテーブルにデータをロードするには、その StarRocks テーブルに対して INSERT 権限を持つユーザーである必要があります。INSERT 権限を持っていない場合は、[GRANT](../../sql-reference/sql-statements/account-management/GRANT.md) に記載されている手順に従って、StarRocks クラスターに接続するために使用するユーザーに INSERT 権限を付与してください。構文は `GRANT INSERT ON TABLE <table_name> IN DATABASE <database_name> TO { ROLE <role_name> | USER <user_identity>}` です。
+==> ./commonMarkdown/quickstart-iceberg-tip.mdx <==
+:::tip
+この例では、[StarRocks Basics](../../quick_start/shared-nothing.md) クイックスタートで紹介されている Local Climatological Data(LCD) データセットを使用しています。データをロードして、自分で例を試すことができます。
+:::
+==> ./commonMarkdown/sharedDataCNconf.md <==
+**CN を起動する前に**、CN の設定ファイル **cn.conf** に次の設定項目を追加してください。
+
+```Properties
+starlet_port = <starlet_port>
+storage_root_path = <storage_root_path>
+```
+
+#### starlet_port
+
+StarRocks 共有データクラスタの CN ハートビートサービスポート。デフォルト値: `9070`。
+
+==> ./commonMarkdown/userManagementPriv.md <==
+:::tip
+
+`user_admin` ロールを持つユーザーのみがこの操作を実行する権限を持っています。
+
+:::
+==> ./commonMarkdown/StaticFE_config_note.md <==
+:::note
+FE の静的パラメータは、設定ファイル **fe.conf** を変更し、FE を再起動して変更を反映させることで設定されます。
+:::
+==> ./commonMarkdown/FE_config_note.md <==
+
+:::note
+The configuration changes made with `ADMIN SET FRONTEND` will be restored to the default values in the `fe.conf` file after the FE restarts. Therefore, we recommend that you also modify the configuration items in `fe.conf` if you want the changes to be permanent.
+:::
+
+==> ./commonMarkdown/quickstart-overview-tip.mdx <==
+## 実践で学ぶ
+
+[クイックスタート](../../quick_start/quick_start.mdx) を試して、StarRocks を現実的なシナリオで使用する概要をつかんでください。
+==> ./commonMarkdown/datalakeIntro.md <==
+![DLA](../1.1-8-dla.png)
+
+StarRocks は、ローカルデータの効率的な分析に加えて、データレイクに保存されたデータを分析するためのコンピュートエンジンとしても機能します。Apache Hudi、Apache Iceberg、Delta Lake などのデータレイクが含まれます。StarRocks の主要な機能の一つは、外部で管理されているメタストアへのリンクとして機能する external catalog です。この機能により、データ移行の必要なく、外部データソースをシームレスにクエリすることができます。したがって、ユーザーは HDFS や Amazon S3 などの異なるシステムから、Parquet、ORC、CSV などのさまざまなファイル形式でデータを分析できます。
+
+前の図は、StarRocks がデータの計算と分析を担当し、データレイクがデータの保存、組織化、およびメンテナンスを担当するデータレイク分析のシナリオを示しています。データレイクは、ユーザーがオープンストレージ形式でデータを保存し、柔軟なスキーマを使用して、さまざまな BI、AI、アドホック、およびレポート用途の「単一の真実の源」に関するレポートを作成できるようにします。StarRocks は、そのベクトル化エンジンと CBO の利点を十分に活用し、データレイク分析のパフォーマンスを大幅に向上させます。
+==> ./commonMarkdown/BE_dynamic_note.md <==
+### BE の動的パラメータを設定する
+
+`curl` コマンドを使用して、BE ノードの動的パラメータを設定できます。
+
+```Shell
+curl -XPOST http://be_host:http_port/api/update_config?<configuration_item>=<value>
+```
+==> ./commonMarkdown/quickstart-shared-data.mdx <==
+:::tip
+[共有データ](../../quick_start/shared-data.md) をオブジェクトストレージとして MinIO を使って試してみてください。
+:::
+==> ./deployment/_OperatorPrereqs.mdx <==
+### Kubernetes environment
+
+The Kubernetes environment used while writing this guide consists of three nodes with four vCPUS, and 16GB RAM each (GCP `e2-standard-4` machines). The Kubernetes cluster was deployed with this `gcloud` command:
+
+:::tip
+This command is for your reference, if you are using AWS, Azure, or any other Kubernetes provider you will need to modify this for your environment. In Google Cloud you will need to specify your own project and an appropriate location.
+:::
+
+```bash
+gcloud container --project enterprise-demo-422514 \
+
+==> ./quick-start/_clientsAllin1.mdx <==
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+これらの3つのクライアントはこのチュートリアルでテストされています。どれか1つを使用してください。
+
+- mysql CLI: Docker環境またはあなたのマシンから実行できます。
+- [DBeaver](https://dbeaver.io/download/) はコミュニティ版とPro版があります。
+- [MySQL Workbench](https://dev.mysql.com/downloads/workbench/)
+
+#### クライアントの設定
+
+==> ./quick-start/_clientsCompose.mdx <==
+import Tabs from '@theme/Tabs';
+import TabItem from '@theme/TabItem';
+
+これらの3つのクライアントはこのチュートリアルでテストされていますが、1つだけ使用すれば大丈夫です。
+
+- mysql CLI: Docker 環境またはあなたのマシンから実行できます。
+- [DBeaver](https://dbeaver.io/download/) はコミュニティ版と Pro 版があります。
+- [MySQL Workbench](https://dev.mysql.com/downloads/workbench/)
+
+#### クライアントの設定
+
+==> ./quick-start/_DDL.mdx <==
+
+### Create a database
+
+Type these two lines in at the `StarRocks > ` prompt and press enter after each:
+
+```sql
+CREATE DATABASE IF NOT EXISTS quickstart;
+
+USE quickstart;
+```
+
+==> ./quick-start/_curl.mdx <==
+StarRocks Stream Load と curl は多くの引数を取ります。このチュートリアルで使用されるものだけがここで説明されており、残りは詳細情報セクションでリンクされます。
+
+#### `--location-trusted`
+
+これは、curl がリダイレクトされた URL に資格情報を渡すように設定します。
+
+#### `-u root`
+
+StarRocks にログインするために使用されるユーザー名です。
+
+
+==> ./quick-start/_SQL.mdx <==
+
+These queries can be run in your SQL client. All of the queries use the `quickstart` database.
+
+```sql
+USE quickstart;
+```
+
+#### How many crashes are there per hour in NYC?
+
+```sql

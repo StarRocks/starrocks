@@ -1,0 +1,24 @@
+# Logs:
+debug: false  # Debug mode
+weave_project: "gpt-translate"  # Weave project
+silence_openai: true  # Silence OpenAI logger
+
+# Translation:
+language: "ja"  # Language to translate to
+replace: true  # Replace existing file
+remove_comments: true  # Remove comments
+do_translate_header_description: true  # Translate the header description
+max_openai_concurrent_calls: 7  # Max number of concurrent calls to OpenAI
+
+# Files:
+input_file: "docs/intro.md"  # File to translate
+out_file: " intro_ja.md"  # File to save the translated file to
+input_folder: ../en  # Folder to translate
+out_folder: ../ja  # Folder to save the translated files to
+
+limit: null  # Limit number of files to translate (useful for testing)
+
+# Model:
+model: "gpt-4o"
+temperature: 0.2
+max_tokens: 4096
