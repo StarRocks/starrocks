@@ -526,8 +526,10 @@ public:
         uint8_t* selection = selection_filter.data();
         if (input_column->is_constant()) {
             const auto* const_column = down_cast<const ConstColumn*>(input_column);
-            if (const_column->only_null() && evaluate_null) {
-                selection[0] = _has_null;
+            if (const_column->only_null()) {
+                if constexpr (evaluate_null) {
+                    selection[0] = _has_null;
+                }
             } else {
                 const auto& input_data = GetContainer<Type>::get_data(const_column->data_column());
                 evaluate_min_max(input_data, selection, 1);
