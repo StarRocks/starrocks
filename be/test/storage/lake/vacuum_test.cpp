@@ -590,7 +590,7 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
         EXPECT_EQ(0, response.vacuumed_files());
         EXPECT_EQ(0, response.vacuumed_file_size());
-        EXPECT_EQ(0, response.vacuumed_version());
+        EXPECT_EQ(1, response.vacuumed_version());
 
         ensure_all_files_exist();
     }
@@ -1425,7 +1425,7 @@ TEST_P(LakeVacuumTest, test_vacuumed_version) {
         vacuum(_tablet_mgr.get(), request, &response);
         ASSERT_TRUE(response.has_status());
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
-        EXPECT_EQ(0, response.vacuumed_version());
+        EXPECT_EQ(1, response.vacuumed_version());
     }
 
     {

@@ -349,8 +349,10 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     g_metadata_travel_latency << (t1 - t0);
     if (!skip_check_grace_timestamp) {
         // All tablet metadata files encountered were created after the grace timestamp, there were no files to delete
-        // The vacuumed_version will be set to min garbage version
-        *vacuumed_version = version;
+        // The final_retain_version is set to min_retain_version or minmum exist version which has garbage files.
+        // So we set vacuumed_version to `final_retain_version - 1` to avoid the garbage files of final_retain_version can
+        // not be deleted
+        *vacuumed_version = final_retain_version - 1;
         return Status::OK();
     }
     *vacuumed_version = final_retain_version;
@@ -402,7 +404,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
         (*vacuumed_files) += datafile_deleter.delete_count();
         (*vacuumed_files) += metafile_deleter.delete_count();
     }
-    *vacuumed_version = final_vacuum_version；
+    *vacuumed_version = final_vacuum_version;
     return Status::OK();
 }
 
