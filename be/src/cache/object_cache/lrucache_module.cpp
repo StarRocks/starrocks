@@ -39,7 +39,7 @@ Status LRUCacheModule::insert(const std::string& key, void* value, size_t size, 
     if (!_check_write(charge, options)) {
         return Status::InternalError("cache insertion is rejected");
     }
-    auto* lru_handle = _cache->insert(key, value, charge, size, deleter, static_cast<CachePriority>(options->priority));
+    auto* lru_handle = _cache->insert(key, value, size, charge, deleter, static_cast<CachePriority>(options->priority));
     if (handle) {
         *handle = reinterpret_cast<ObjectCacheHandlePtr>(lru_handle);
     }
