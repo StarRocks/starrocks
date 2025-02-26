@@ -57,7 +57,9 @@ import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.logging.log4j.util.Strings;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -77,6 +79,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
 
     private static final Logger LOG = LogManager.getLogger(RoutineLoadTaskScheduler.class);
 
+    public static boolean PRINT_STACETRACE = false;
     private static final long BACKEND_SLOT_UPDATE_INTERVAL_MS = 10000; // 10s
     private static final long SLOT_FULL_SLEEP_MS = 10000; // 10s
     private static final long POLL_TIMEOUT_SEC = 10; // 10s
@@ -91,11 +94,19 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
     @VisibleForTesting
     public RoutineLoadTaskScheduler() {
         super("Routine load task scheduler", 0);
+        if (PRINT_STACETRACE) {
+            LOG.warn("RoutineLoadTaskScheduler created at: {}", Strings.join(
+                    Arrays.asList(Thread.currentThread().getStackTrace()), ' '));
+        }
         this.routineLoadManager = GlobalStateMgr.getCurrentState().getRoutineLoadMgr();
     }
 
     public RoutineLoadTaskScheduler(RoutineLoadMgr routineLoadManager) {
         super("Routine load task scheduler", 0);
+        if (PRINT_STACETRACE) {
+            LOG.warn("RoutineLoadTaskScheduler created at: {}", Strings.join(
+                    Arrays.asList(Thread.currentThread().getStackTrace()), ' '));
+        }
         this.routineLoadManager = routineLoadManager;
     }
 
@@ -109,6 +120,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
     }
 
     private void process() throws InterruptedException {
+        LOG.warn("schedule a job 0...");
         updateBackendSlotIfNecessary();
 
         int idleSlotNum = routineLoadManager.getClusterIdleSlotNum();
@@ -122,18 +134,19 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
         }
 
         try {
+            LOG.warn("schedule a job A...");
             // This step will be blocked until timeout when queue is empty
             RoutineLoadTaskInfo routineLoadTaskInfo = needScheduleTasksQueue.poll(POLL_TIMEOUT_SEC, TimeUnit.SECONDS);
             if (routineLoadTaskInfo == null) {
                 return;
             }
-
+            LOG.warn("schedule a job B ...");
             if (routineLoadTaskInfo.getTimeToExecuteMs() > System.currentTimeMillis()) {
                 // delay adding to queue to avoid endless loop
                 delayPutToQueue(routineLoadTaskInfo, null);
                 return;
             }
-
+            LOG.warn("schedule a job C ...");
             // try to delay scheduling this task for scheduleInterval, to void too many failure
             if (System.currentTimeMillis() - routineLoadTaskInfo.getLastScheduledTime() <
                     routineLoadTaskInfo.getTaskScheduleIntervalMs()) {
@@ -141,7 +154,7 @@ public class RoutineLoadTaskScheduler extends FrontendDaemon {
                 delayPutToQueue(routineLoadTaskInfo, null);
                 return;
             }
-
+            LOG.warn("schedule a job D ...");
             submitToSchedule(routineLoadTaskInfo);
         } catch (Exception e) {
             LOG.warn("Taking routine load task from queue has been interrupted", e);

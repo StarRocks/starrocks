@@ -47,7 +47,10 @@ import mockit.Injectable;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.Map;
@@ -55,11 +58,17 @@ import java.util.Queue;
 import java.util.UUID;
 
 public class RoutineLoadTaskSchedulerTest {
+    private static final Logger LOG = LogManager.getLogger(RoutineLoadTaskSchedulerTest.class);
 
     @Mocked
     private RoutineLoadMgr routineLoadManager;
     @Mocked
     private GlobalStateMgr globalStateMgr;
+
+    @BeforeClass
+    public static void beforeSetup() {
+        RoutineLoadTaskScheduler.PRINT_STACETRACE = true;
+    }
 
     @Test
     public void testRunOneCycle(@Injectable KafkaRoutineLoadJob kafkaRoutineLoadJob1,
@@ -133,7 +142,7 @@ public class RoutineLoadTaskSchedulerTest {
         Deencapsulation.setField(kafkaProgress, "partitionIdToOffset", partitionIdToOffset);
 
         Queue<RoutineLoadTaskInfo> routineLoadTaskInfoQueue = Queues.newLinkedBlockingQueue();
-        KafkaTaskInfo routineLoadTaskInfo1 = new KafkaTaskInfo(new UUID(1, 1), routineLoadJob, 20000,
+        KafkaTaskInfo routineLoadTaskInfo1 = new KafkaTaskInfo(new UUID(1, 1), routineLoadJob, 2000,
                 System.currentTimeMillis(), partitionIdToOffset, Config.routine_load_task_timeout_second * 1000);
         routineLoadTaskInfoQueue.add(routineLoadTaskInfo1);
 
@@ -218,6 +227,7 @@ public class RoutineLoadTaskSchedulerTest {
         KafkaTaskInfo routineLoadTaskInfo1 = new KafkaTaskInfo(new UUID(1, 1), routineLoadJob, 20000,
                 System.currentTimeMillis(), partitionIdToOffset, Config.routine_load_task_timeout_second * 1000);
         routineLoadTaskInfoQueue.add(routineLoadTaskInfo1);
+        LOG.warn("task info: {}", routineLoadTaskInfo1);
 
         Map<Long, RoutineLoadTaskInfo> idToRoutineLoadTask = Maps.newHashMap();
         idToRoutineLoadTask.put(1L, routineLoadTaskInfo1);
