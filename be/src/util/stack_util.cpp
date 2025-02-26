@@ -218,8 +218,11 @@ std::string get_stack_trace_for_threads_with_pattern(const std::vector<int>& tid
         }
     }
     string ret;
+    int64_t total_symbolize_cost_us = 0;
     for (auto& e : task_map) {
+        int64_t ts = MonotonicMicros();
         string stack_trace = e.first.to_string(line_prefix);
+        total_symbolize_cost_us += MonotonicMicros() - ts;
         if (!pattern.empty() && stack_trace.find(pattern) == string::npos) {
             continue;
         }
@@ -245,11 +248,11 @@ std::string get_stack_trace_for_threads_with_pattern(const std::vector<int>& tid
     } else {
         avg_task_cost_us = total_task_cost_us / task_done_count;
     }
-    ret += strings::Substitute(
-            "$0total $1 threads, $2 identical groups, finish $3 threads, cost $4 us, thread block(avg/min/max) "
-            "$5/$6/$7 us",
+    ret += fmt::format(
+            "{}total {} threads, {} identical groups, finish {} threads, total cost {} us, symbolize cost {} us,"
+            " thread block(avg/min/max) {}/{}/{} us, ",
             line_prefix, tids.size(), task_map.size(), task_done_count, (MonotonicMicros() - start_us),
-            avg_task_cost_us, min_task_cost_us, max_task_cost_us);
+            total_symbolize_cost_us, avg_task_cost_us, min_task_cost_us, max_task_cost_us);
     return ret;
 }
 

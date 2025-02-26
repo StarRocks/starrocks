@@ -314,7 +314,7 @@ void TabletSinkIndexChannelTest::test_load_diagnose_base(const std::string& erro
     chunk->get_column_by_index(1)->append_datum(Datum(1L));
     ASSERT_OK(sink->send_chunk(runtime_state.get(), chunk.get()));
     ASSERT_FALSE(sink->close(runtime_state.get(), Status::OK()).ok());
-    ASSERT_EQ((diagnose_profile || diagnose_stack_trace) ? 1 : 0, num_diagnose)
+    ASSERT_EQ((diagnose_profile || diagnose_stack_trace) ? 1 : 0, num_diagnose);
     ASSERT_EQ((diagnose_profile ? 1 : 0), runtime_state->load_channel_profile()->num_children());
 }
 
