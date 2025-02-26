@@ -249,15 +249,15 @@ From v3.4.1 onwards, asynchronous materialized views support multi-column partit
 - Currently, multi-column partitions in materialized views can only be mapped one-to-one or in an N:1 relationship with the base table's partitions, not an M:N relationship. For example, if the base table has partition columns `(col1, col2, ..., coln)`, the materialized view partition expression can only be a single column partition, such as `col1`, `col2`, or `coln`, or a one-to-one mapping to the base table’s partition columns, that is, `(col1, col2, ..., coln)`. This limitation is designed to simplify the partition mapping logic between the base table and the materialized view, avoiding the complexity introduced by M:N relationships.
 - Because Iceberg partition expressions support the `transform` function, additional handling is required when mapping Iceberg partition expressions to StarRocks materialized view partition expressions. The mapping relationship is as follows:
 
-  | Iceberg Transform | Iceberg partition expression | Materialized view partition expression |
-  | ----------------- | ---------------------------- | -------------------------------------- |
-  | Identity          | <col>                        | <col>                                  |
-  | hour              | hour(<col>)                  | date_trunc('hour', <col>)              |
-  | day               | day(<col>)                   | date_trunc('day', <col>)               |
-  | month             | month(<col>)                 | date_trunc('month', <col>)             |
-  | year              | year(<col>)                  | date_trunc('year', <col>)              |
-  | bucket            | bucket(<col>, <n>)           | Not supported                          |
-  | truncate          | truncate(<col>)              | Not supported                          |
+  | Iceberg Transform | Iceberg partition expression   | Materialized view partition expression   |
+  | ----------------- | ------------------------------ | ---------------------------------------- |
+  | Identity          | `<col>`                        | `<col>`                                  |
+  | hour              | `hour(<col>)`                  | `date_trunc('hour', <col>)`              |
+  | day               | `day(<col>)`                   | `date_trunc('day', <col>)`               |
+  | month             | `month(<col>)`                 | `date_trunc('month', <col>)`             |
+  | year              | `year(<col>)`                  | `date_trunc('year', <col>)`              |
+  | bucket            | `bucket(<col>, <n>)`           | Not supported                            |
+  | truncate          | `truncate(<col>)`              | Not supported                            |
 
 - For non-Iceberg partition columns, where partition expression computation is not involved, additional partition expression handling is not required. You can map them directly.
 

@@ -245,15 +245,15 @@ AS
 - 当前物化视图支持的多列分区只能与基表的多列分区一一映射，或者是 N:1 关系，而不能是 M:N 关系。例如，如果基表的分区列为 `(col1, col2, ..., coln)`，则物化视图定义时的分区只能是单列分区，如 `col1`、`col2`、`coln`，或者与基表分区列一一映射，如 `(col1, col2, ..., coln)`。这是因为通用的 M:N 关系会导致基表与物化视图之间的分区映射逻辑复杂，通过一一映射可以简化刷新和分区补偿逻辑。
 - 由于 Iceberg 分区表达式支持 Transform 功能，若 Iceberg 的分区表达式映射到 StarRocks 时，需要额外处理分区表达式。以下为两者对应关系：
 
-  | Iceberg Transform | Iceberg 分区表达式    | 物化视图分区表达式            |
-  | ----------------- | ------------------- | -------------------------- |
-  | Identity          | <col>               | <col>                      |
-  | hour              | hour(<col>)         | date_trunc('hour', <col>)  |
-  | day               | day(<col>)          | date_trunc('day', <col>)   |
-  | month             | month(<col>)        | date_trunc('month', <col>) |
-  | year              | year(<col>)         | date_trunc('year', <col>)  |
-  | bucket            | bucket(<col>, <n>)  | Not supported              |
-  | truncate          | truncate(<col>)     | Not supported              |
+  | Iceberg Transform | Iceberg 分区表达式      | 物化视图分区表达式             |
+  | ----------------- | --------------------- | ---------------------------- |
+  | Identity          | `<col>`               | `<col>`                      |
+  | hour              | `hour(<col>)`         | `date_trunc('hour', <col>)`  |
+  | day               | `day(<col>)`          | `date_trunc('day', <col>)`   |
+  | month             | `month(<col>)`        | `date_trunc('month', <col>)` |
+  | year              | `year(<col>)`         | `date_trunc('year', <col>)`  |
+  | bucket            | `bucket(<col>, <n>)`  | Not supported                |
+  | truncate          | `truncate(<col>)`     | Not supported                |
 
 - 对于非 Iceberg 类型的分区列，因不涉及分区表达式计算，创建物化视图时只需直接选择映射，不需要额外的分区表达式处理。
 
