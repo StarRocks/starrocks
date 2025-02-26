@@ -287,7 +287,7 @@ TEST_F(COWTest, TestColumnsMove3) {
     }
 }
 
-TEST_F(COWTest, TestColumnPtrCast) {
+TEST_F(COWTest, TestColumnPtrStaticPointerCast) {
     ColumnPtr x = ConcreteColumn::create(1);
     EXPECT_EQ(1, x->get());
     {
@@ -327,6 +327,53 @@ TEST_F(COWTest, TestColumnPtrCast) {
     // use std::move
     {
         ConcreteColumnPtr x1 = ConcreteColumn::static_pointer_cast(std::move(x));
+        x1->set(2);
+        EXPECT_EQ(2, x1->get());
+        EXPECT_EQ(nullptr, x);
+        EXPECT_EQ(1, x1->use_count());
+    }
+}
+
+TEST_F(COWTest, TestColumnPtrDynamicPointerCast) {
+    ColumnPtr x = ConcreteColumn::create(1);
+    EXPECT_EQ(1, x->get());
+    {
+        ConcreteColumnPtr x1 = ConcreteColumn::create(x);
+        // x1 is a deep copy of x, which its type is ConcreteColumn
+        x1->set(2);
+        EXPECT_EQ(2, x1->get());
+        EXPECT_EQ(1, x->get());
+        // x1 and x are not shared
+        EXPECT_NE(x1.get(), x.get());
+        EXPECT_EQ(1, x1->use_count());
+        EXPECT_EQ(1, x->use_count());
+    }
+
+    {
+        // x1 is a shadow copy of x, which its type is ConcreteColumn
+        ConcreteColumnPtr x1 = ConcreteColumn::dynamic_pointer_cast(x);
+        x1->set(2);
+        EXPECT_EQ(2, x1->get());
+        EXPECT_EQ(2, x->get());
+        EXPECT_EQ(x.get(), x1.get());
+        EXPECT_EQ(2, x1->use_count());
+        EXPECT_EQ(2, x->use_count());
+    }
+    {
+        MutableColumnPtr x2 = x->assume_mutable();
+        x2->set(3);
+        EXPECT_EQ(3, x2->get());
+        EXPECT_EQ(3, x->get());
+        EXPECT_EQ(x.get(), x2.get());
+        EXPECT_EQ(2, x2->use_count());
+        EXPECT_EQ(2, x->use_count());
+    }
+    EXPECT_EQ(3, x->get());
+    EXPECT_EQ(1, x->use_count());
+
+    // use std::move
+    {
+        ConcreteColumnPtr x1 = ConcreteColumn::dynamic_pointer_cast(std::move(x));
         x1->set(2);
         EXPECT_EQ(2, x1->get());
         EXPECT_EQ(nullptr, x);
@@ -479,18 +526,52 @@ TEST_F(COWTest, TestCOW) {
     EXPECT_TRUE(y_ptr != y.get());
 }
 
-TEST_F(COWTest, TestColumnMutate) {
+TEST_F(COWTest, TestColumnMutate1) {
     ConcreteColumn::MutablePtr x = ConcreteColumn::create(1);
+    // ensure x is not used again.
     auto y = (std::move(*x)).mutate();
     y->set(2);
-    std::cout << "x:" << x->get() << ", use_count:" << x->use_count() << std::endl;
-    std::cout << "y:" << y->get() << ", use_count:" << y->use_count() << std::endl;
+    EXPECT_EQ(2, x->get());
+    EXPECT_EQ(2, y->get());
+    EXPECT_EQ(2, x->use_count());
+    EXPECT_EQ(2, y->use_count());
+
+    // if x changed, y will changed again.
+    x->set(3);
+    EXPECT_EQ(3, x->get());
+    EXPECT_EQ(3, y->get());
 
     auto z = (std::move(*x)).mutate();
     z->set(3);
-    std::cout << "x:" << x->get() << ", use_count:" << x->use_count() << std::endl;
-    std::cout << "y:" << y->get() << ", use_count:" << y->use_count() << std::endl;
-    std::cout << "z:" << z->get() << ", use_count:" << z->use_count() << std::endl;
+    EXPECT_EQ(3, x->get());
+    EXPECT_EQ(3, y->get());
+    EXPECT_EQ(3, y->get());
+    EXPECT_EQ(2, x->use_count());
+    EXPECT_EQ(2, y->use_count());
+    EXPECT_EQ(1, z->use_count());
+}
+
+TEST_F(COWTest, TestColumnMutate2) {
+    const ConcreteColumn::Ptr x = ConcreteColumn::create(1);
+    // ensure x is not used again.
+    auto y = (std::move(*x)).mutate();
+    y->set(2);
+    EXPECT_EQ(2, x->get());
+    EXPECT_EQ(2, y->get());
+    EXPECT_EQ(2, x->use_count());
+    EXPECT_EQ(2, y->use_count());
+
+    // x can't be changed, because x is const
+    // x->set(3);
+
+    auto z = (std::move(*x)).mutate();
+    z->set(3);
+    EXPECT_EQ(2, x->get());
+    EXPECT_EQ(2, y->get());
+    EXPECT_EQ(3, z->get());
+    EXPECT_EQ(2, x->use_count());
+    EXPECT_EQ(2, y->use_count());
+    EXPECT_EQ(1, z->use_count());
 }
 
 } // namespace starrocks
