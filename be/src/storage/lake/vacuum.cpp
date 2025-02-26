@@ -385,6 +385,7 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     auto metafile_delete_cb = [=](const std::vector<std::string>& files) {
         erase_tablet_metadata_from_metacache(tablet_mgr, files);
     };
+    int64_t final_vacuum_version = std::numeric_limits<int64_t>::max();
     for (auto tablet_id : tablet_ids) {
         int64_t tablet_vacuumed_version = 0;
         AsyncFileDeleter datafile_deleter(config::lake_vacuum_min_batch_delete_size);
@@ -394,13 +395,14 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
                                                 &tablet_vacuumed_version));
         RETURN_IF_ERROR(datafile_deleter.finish());
         RETURN_IF_ERROR(metafile_deleter.finish());
-        if (*vacuumed_version == -1 || *vacuumed_version > tablet_vacuumed_version) {
+        if (final_vacuum_version > tablet_vacuumed_version) {
             // set partition vacuumed_version to min tablet vacuumed version
-            *vacuumed_version = tablet_vacuumed_version;
+            final_vacuum_version = tablet_vacuumed_version;
         }
         (*vacuumed_files) += datafile_deleter.delete_count();
         (*vacuumed_files) += metafile_deleter.delete_count();
     }
+    *vacuumed_version = final_vacuum_version；
     return Status::OK();
 }
 
@@ -474,7 +476,7 @@ Status vacuum_impl(TabletManager* tablet_mgr, const VacuumRequest& request, Vacu
 
     int64_t vacuumed_files = 0;
     int64_t vacuumed_file_size = 0;
-    int64_t vacuumed_version = -1;
+    int64_t vacuumed_version = 0;
 
     std::sort(tablet_ids.begin(), tablet_ids.end());
 
