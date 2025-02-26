@@ -14,7 +14,7 @@ sidebar_position: 10
 
 如果您经常按照连续日期范围来查询和管理数据，则只需要在时间函数分区表达式中，指定一个日期类型（DATE 或者 DATETIME ）的分区列，以及指定分区粒度（年、月、日或小时）。StarRocks 会根据导入的数据和分区表达式，自动创建分区并且设置分区的起止时间。
 
-不过在一些特殊场景下，比如历史数据按月划分分区、最近数据按天划分分区，则需要采用 [Range 分区](Data_distribution.md#range-分区)创建分区。
+不过在一些特殊场景下，比如历史数据按月划分分区、最近数据按天划分分区，则需要采用 [Range 分区](./Data_distribution.md#range-分区)创建分区。
 
 ### 语法
 
@@ -135,7 +135,7 @@ partition_columns ::=
 
 | 参数                    | 是否必填 | 参数                                                         |
 | ----------------------- | -------- | ------------------------------------------------------------ |
-| `partition_columns`     | 是       | 分区列。<br /><ul><li>支持为字符串（不支持 BINARY）、日期、整数和布尔值。不支持分区列的值为 `NULL`。</li><li> 导入后自动创建的一个分区中只能包含各分区列的一个值，如果需要包含各分区列的多值，请使用 [List 分区](list_partitioning.md)。</li></ul> |
+| `partition_columns`     | 是       | 分区列。<br /><ul><li>支持为字符串（不支持 BINARY）、日期、整数和布尔值。不支持分区列的值为 `NULL`。</li><li> 导入后自动创建的一个分区中只能包含各分区列的一个值，如果需要包含各分区列的多值，请使用 [List 分区](./list_partitioning.md)。</li></ul> |
 
 ### 使用说明
 
@@ -171,7 +171,7 @@ INSERT INTO t_recharge_detail1
 
 > **说明**
 >
-> 分区中只能包含各分区列的一个值，如果需要一个分区中包含各分区列的多值，请使用 [List 分区](list_partitioning.md)。
+> 分区中只能包含各分区列的一个值，如果需要一个分区中包含各分区列的多值，请使用 [List 分区](./list_partitioning.md)。
 
 ```SQL
 MySQL > SHOW PARTITIONS from t_recharge_detail1\G
