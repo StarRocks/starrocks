@@ -360,10 +360,12 @@ public:
 protected:
     MutablePtr shallow_mutate() const {
         if (this->use_count() > 1) {
-            VLOG(1) << "[COW] trigger COW: " << this << ", use_count=" << this->use_count() << ", try to deep clone";
             return derived()->clone();
         } else {
-            VLOG(1) << "[COW] trigger COW: " << this << ", use_count=" << this->use_count() << ", try to shadow clone";
+            if (VLOG_IS_ON(1)) {
+                VLOG(1) << "[COW] trigger COW: " << this << ", use_count=" << this->use_count()
+                        << ", try to shadow clone";
+            }
             return assume_mutable();
         }
     }
