@@ -3041,10 +3041,10 @@ public class Config extends ConfigBase {
     public static String ssl_truststore_password = "";
 
     /**
-     * Allow only encrypted connections from clients
+     * Allow only secure transport from clients
      **/
     @ConfField
-    public static boolean require_secure_transport = false;
+    public static boolean ssl_force_secure_transport = false;
 
     /**
      * ignore check db status when show proc '/catalog/catalog_name'
