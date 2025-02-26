@@ -17,6 +17,7 @@
 #include <gtest/gtest.h>
 
 #include "testutil/assert.h"
+#include "testutil/sync_point.h"
 
 namespace starrocks {
 
@@ -39,6 +40,17 @@ protected:
 };
 
 TEST_F(DiagnoseDaemonTest, test_stack_trace) {
+    SyncPoint::GetInstance()->EnableProcessing();
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("StackTraceTask::symbolize");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+
+    SyncPoint::GetInstance()->SetCallBack("StackTraceTask::symbolize", [&](void* arg) {
+        SymbolizeTuple* tuple = (SymbolizeTuple*)arg;
+        std::snprintf(std::get<1>(*tuple), std::get<2>(*tuple), std::string(100, 'a').c_str());
+    });
+
     DiagnoseRequest request1;
     request1.type = DiagnoseType::STACK_TRACE;
     request1.context = "trace1";
@@ -48,7 +60,9 @@ TEST_F(DiagnoseDaemonTest, test_stack_trace) {
     request2.type = DiagnoseType::STACK_TRACE;
     request2.context = "trace2";
     ASSERT_OK(_daemon->diagnose(request2));
-    _daemon->thread_pool()->wait();
+
+    ASSERT_TRUE(_daemon->thread_pool()->wait_for(MonoDelta::FromSeconds(10)));
+    ASSERT_EQ(1, _daemon->diagnose_id());
 }
 
 } // namespace starrocks

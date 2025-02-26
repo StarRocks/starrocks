@@ -44,6 +44,7 @@ public:
     void stop();
 
     ThreadPool* thread_pool() { return _single_thread_pool.get(); }
+    int64_t diagnose_id() { return _diagnose_id; }
 
 private:
     void _execute_request(const DiagnoseRequest& request);

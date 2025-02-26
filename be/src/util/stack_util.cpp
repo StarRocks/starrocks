@@ -22,11 +22,14 @@
 #include <fmt/format.h>
 #include <sys/syscall.h>
 
+#include <tuple>
+
 #include "common/config.h"
 #include "gutil/strings/join.h"
 #include "gutil/strings/split.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "testutil/sync_point.h"
 #include "util/time.h"
 
 namespace google {
@@ -57,7 +60,15 @@ struct StackTraceTask {
         for (int i = 0; i < depth; ++i) {
             char line[2048];
             char buf[1024];
-            if (google::glog_internal_namespace_::Symbolize(addrs[i], buf, sizeof(buf))) {
+            bool success = false;
+            // symbolize costs a lot of time, so mock it in test mode
+#ifndef BE_TEST
+            success = google::glog_internal_namespace_::Symbolize(addrs[i], buf, sizeof(buf));
+#else
+            std::tuple<void*, char*, size_t> tuple = {addrs[i], buf, sizeof(buf)};
+            TEST_SYNC_POINT_CALLBACK("StackTraceTask::symbolize", &tuple);
+#endif
+            if (success) {
                 snprintf(line, 2048, "%s  %16p  %s\n", line_prefix.c_str(), addrs[i], buf);
             } else {
                 snprintf(line, 2048, "%s  %16p  (unknown)\n", line_prefix.c_str(), addrs[i]);
