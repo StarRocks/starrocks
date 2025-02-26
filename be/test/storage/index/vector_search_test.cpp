@@ -69,17 +69,17 @@ protected:
         CHECK_OK(vector_index_writer->init());
 
         // construct columns
-        std::shared_ptr<FixedLengthColumn<float>> element = std::make_shared<FixedLengthColumn<float>>();
+        auto element = FixedLengthColumn<float>::create();
         element->append(1);
         element->append(2);
         element->append(3);
-        NullColumnPtr null_column = std::make_shared<NullColumn>(element->size(), 0);
-        std::shared_ptr<NullableColumn> nullable_column = std::make_shared<NullableColumn>(element, null_column);
-        std::shared_ptr<UInt32Column> offsets = std::make_shared<UInt32Column>();
+        NullColumnPtr null_column = NullColumn::create(element->size(), 0);
+        auto nullable_column = NullableColumn::create(std::move(element), std::move(null_column));
+        auto offsets = UInt32Column::create();
         offsets->append(0);
         offsets->append(3);
         for (int i = 0; i < 10; i++) {
-            std::shared_ptr<FixedLengthColumn<float>> e = std::make_shared<FixedLengthColumn<float>>();
+            auto e = FixedLengthColumn<float>::create();
             e->append(i + 1.1);
             e->append(i + 2.2);
             e->append(i + 3.3);
@@ -87,9 +87,9 @@ protected:
             offsets->append((i + 2) * 3);
         }
 
-        ArrayColumn array_column(nullable_column, offsets);
+        ArrayColumn::Ptr array_column = ArrayColumn::create(std::move(nullable_column), std::move(offsets));
 
-        CHECK_OK(vector_index_writer->append(array_column));
+        CHECK_OK(vector_index_writer->append(*array_column));
 
         ASSERT_EQ(vector_index_writer->size(), 11);
 

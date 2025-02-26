@@ -47,7 +47,7 @@ public:
               _null_masks(null_masks) {}
 
     Status do_visit(const NullableColumn& column) {
-        ColumnPtr ptr = down_cast<NullableColumn*>(_first_column.get())->data_column();
+        const ColumnPtr ptr = down_cast<const NullableColumn*>(_first_column.get())->data_column();
         ColumnSelfComparator comparator(ptr, _cmp_vector, column.immutable_null_column_data());
         RETURN_IF_ERROR(column.data_column()->accept(&comparator));
 

@@ -29,19 +29,8 @@ NullableColumn::NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&
             << "nullable column's data must be single column";
     DCHECK(!null_column->is_constant() && !null_column->is_nullable())
             << "nullable column's data must be single column";
-    ColumnPtr ptr = std::move(null_column);
-    _null_column = std::static_pointer_cast<NullColumn>(ptr);
+    _null_column = NullColumn::static_pointer_cast(std::move(null_column));
     _has_null = SIMD::contain_nonzero(_null_column->get_data(), 0);
-}
-
-NullableColumn::NullableColumn(ColumnPtr data_column, NullColumnPtr null_column)
-        : _data_column(std::move(data_column)),
-          _null_column(std::move(null_column)),
-          _has_null(SIMD::contain_nonzero(_null_column->get_data(), 0)) {
-    DCHECK(!_data_column->is_constant() && !_data_column->is_nullable())
-            << "nullable column's data must be single column";
-    DCHECK(!_null_column->is_constant() && !_null_column->is_nullable())
-            << "nullable column's data must be single column";
 }
 
 size_t NullableColumn::null_count() const {
@@ -141,7 +130,7 @@ StatusOr<ColumnPtr> NullableColumn::replicate(const Buffer<uint32_t>& offsets) {
 
     ASSIGN_OR_RETURN(auto null_col, this->_null_column->replicate(offsets));
 
-    return NullableColumn::create(data_col, std::dynamic_pointer_cast<NullColumn>(null_col));
+    return NullableColumn::create(data_col, NullColumn::dynamic_pointer_cast(null_col));
 }
 
 bool NullableColumn::append_nulls(size_t count) {
@@ -279,7 +268,7 @@ int NullableColumn::equals(size_t left, const Column& rhs, size_t right, bool sa
     }
 }
 
-uint32_t NullableColumn::serialize(size_t idx, uint8_t* pos) {
+uint32_t NullableColumn::serialize(size_t idx, uint8_t* pos) const {
     // For nullable column don't have null column data and has_null is false.
     if (!_has_null) {
         strings::memcpy_inlined(pos, &_has_null, sizeof(bool));
@@ -296,14 +285,14 @@ uint32_t NullableColumn::serialize(size_t idx, uint8_t* pos) {
     return sizeof(bool) + _data_column->serialize(idx, pos + sizeof(bool));
 }
 
-uint32_t NullableColumn::serialize_default(uint8_t* pos) {
+uint32_t NullableColumn::serialize_default(uint8_t* pos) const {
     bool null = true;
     strings::memcpy_inlined(pos, &null, sizeof(bool));
     return sizeof(bool);
 }
 
 size_t NullableColumn::serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, size_t start,
-                                                   size_t count) {
+                                                   size_t count) const {
     _null_column->serialize_batch_at_interval(dst, byte_offset, byte_interval, start, count);
     for (size_t i = start; i < start + count; i++) {
         if (_null_column->get_data()[i] == 0) {
@@ -316,7 +305,7 @@ size_t NullableColumn::serialize_batch_at_interval(uint8_t* dst, size_t byte_off
 }
 
 void NullableColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                                     uint32_t max_one_row_size) {
+                                     uint32_t max_one_row_size) const {
     _data_column->serialize_batch_with_null_masks(dst, slice_sizes, chunk_size, max_one_row_size,
                                                   _null_column->get_data().data(), _has_null);
 }
@@ -478,7 +467,7 @@ int64_t NullableColumn::xor_checksum(uint32_t from, uint32_t to) const {
     }
 
     int64_t xor_checksum = 0;
-    uint8_t* src = _null_column->get_data().data();
+    const uint8_t* src = _null_column->get_data().data();
 
     // The XOR of NullableColumn
     // XOR all the 8-bit integers one by one
@@ -512,7 +501,6 @@ void NullableColumn::check_or_die() const {
 
 StatusOr<ColumnPtr> NullableColumn::upgrade_if_overflow() {
     RETURN_IF_ERROR(_null_column->capacity_limit_reached());
-
     return upgrade_helper_func(&_data_column);
 }
 

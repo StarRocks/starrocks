@@ -191,7 +191,7 @@ struct SortRuntimeFilterBuilder {
         }
 
         auto data_column = ColumnHelper::get_data_column(column.get());
-        auto runtime_data_column = down_cast<RunTimeColumnType<ltype>*>(data_column);
+        auto runtime_data_column = down_cast<const RunTimeColumnType<ltype>*>(data_column);
         auto data = runtime_data_column->get_data()[rid];
         if (asc) {
             return MinMaxRuntimeFilter<ltype>::template create_with_range<false>(pool, data, is_close_interval,
@@ -226,8 +226,8 @@ struct SortRuntimeFilterUpdater {
             }
         }
 
-        auto data_column = ColumnHelper::get_data_column(column.get());
-        auto runtime_data_column = down_cast<RunTimeColumnType<ltype>*>(data_column);
+        const auto* data_column = ColumnHelper::get_data_column(column.get());
+        const auto* runtime_data_column = down_cast<const RunTimeColumnType<ltype>*>(data_column);
         auto data = GetContainer<ltype>::get_data(runtime_data_column)[rid];
         if (asc) {
             down_cast<MinMaxRuntimeFilter<ltype>*>(filter)->template update_min_max<false>(data);

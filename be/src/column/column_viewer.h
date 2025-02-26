@@ -40,6 +40,7 @@ template <LogicalType Type>
 class ColumnViewer {
 public:
     static auto constexpr TYPE = Type;
+
     explicit ColumnViewer(const ColumnPtr& column);
 
     const RunTimeCppType<Type> value(const size_t idx) const { return _data[idx & _not_const_mask]; }
@@ -50,7 +51,7 @@ public:
 
     const NullColumnPtr& null_column() const { return _null_column; };
 
-    typename RunTimeColumnType<Type>::Ptr column() const { return _column; };
+    RunTimeColumnType<Type>::Ptr column() const { return _column; };
 
 private:
     // column ptr
@@ -59,9 +60,9 @@ private:
     NullColumnPtr _null_column;
 
     // raw pointer
-    RunTimeCppType<Type>* _data;
+    const RunTimeCppType<Type>* _data;
 
-    NullColumn::ValueType* _null_data;
+    const NullColumn::ValueType* _null_data;
 
     const size_t _not_const_mask;
     const size_t _null_mask;

@@ -41,7 +41,7 @@ namespace starrocks {
 //   Benchmark_RuntimeFilter_Eval/20000000/100/100  968723953 ns    968634431 ns            1 compute_hash_time(ms)=213 evalute_time(ms)=163 items_per_second=20.6476M/s
 
 static void do_benchmark_hash_partitioned(benchmark::State& state, TRuntimeFilterBuildJoinMode::type join_mode,
-                                          std::vector<ColumnPtr> columns, int64_t num_rows, int64_t num_partitions) {
+                                          Columns columns, int64_t num_rows, int64_t num_partitions) {
     std::vector<uint32_t> hash_values;
     std::vector<size_t> num_rows_per_partitions(num_partitions, 0);
 
@@ -129,7 +129,7 @@ static void do_benchmark_hash_partitioned(benchmark::State& state, TRuntimeFilte
     state.PauseTiming();
 }
 
-static std::vector<ColumnPtr> columns;
+static Columns columns;
 class RuntimeFilterBench {
 public:
     static void Setup(int32_t num_rows, int32_t num_column) {

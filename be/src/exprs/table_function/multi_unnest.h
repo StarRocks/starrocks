@@ -38,7 +38,7 @@ public:
         long row_count = state->get_columns()[0]->size();
         state->set_processed_rows(row_count);
 
-        std::vector<ColumnPtr> unnested_array_list;
+        Columns unnested_array_list;
         for (auto& col_idx : state->get_columns()) {
             Column* column = col_idx.get();
 
@@ -106,7 +106,7 @@ public:
             result.emplace_back(col_idx);
         }
 
-        return std::make_pair(result, copy_count_column);
+        return std::make_pair(std::move(result), std::move(copy_count_column));
     }
 
     class UnnestState : public TableFunctionState {

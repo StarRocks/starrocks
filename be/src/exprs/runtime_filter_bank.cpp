@@ -146,8 +146,8 @@ Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, L
     return Status::OK();
 }
 
-Status RuntimeFilterHelper::fill_runtime_bloom_filter(const std::vector<ColumnPtr>& columns, LogicalType type,
-                                                      RuntimeFilter* filter, size_t column_offset, bool eq_null) {
+Status RuntimeFilterHelper::fill_runtime_bloom_filter(const Columns& columns, LogicalType type, RuntimeFilter* filter,
+                                                      size_t column_offset, bool eq_null) {
     for (const auto& column : columns) {
         RETURN_IF_ERROR(fill_runtime_bloom_filter(column, type, filter, column_offset, eq_null));
     }
@@ -175,10 +175,10 @@ StatusOr<ExprContext*> RuntimeFilterHelper::rewrite_runtime_filter_in_cross_join
             col = ColumnHelper::create_const_null_column(1);
         } else {
             auto data_col = down_cast<NullableColumn*>(res.get())->data_column();
-            col = std::make_shared<ConstColumn>(data_col, 1);
+            col = ConstColumn::create(std::move(data_col), 1);
         }
     } else {
-        col = std::make_shared<ConstColumn>(res, 1);
+        col = ConstColumn::create(std::move(res), 1);
     }
 
     auto literal = pool->add(new VectorizedLiteral(std::move(col), right_child->type()));

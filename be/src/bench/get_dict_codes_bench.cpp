@@ -56,7 +56,7 @@ static void BM_GetDictCodesWithMap(benchmark::State& state) {
     std::mt19937 rng(rd());
     std::uniform_int_distribution<int> dist(0, 999);
 
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor{TYPE_VARCHAR}, true);
+    MutableColumnPtr column = ColumnHelper::create_column(TypeDescriptor{TYPE_VARCHAR}, true);
     (void)column->append_strings_overflow(dict_values, kDictLength);
     column->append_default();
     for (int i = 0; i < kDictSize + 1; i++) {

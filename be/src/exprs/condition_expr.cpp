@@ -39,7 +39,7 @@ struct SelectIfOP {
         [[maybe_unused]] auto* input_data0 = ColumnHelper::get_data_column(value0.get());
         [[maybe_unused]] auto* input_data1 = ColumnHelper::get_data_column(value1.get());
 
-        ColumnPtr res = ColumnHelper::create_column(type_desc, false);
+        MutableColumnPtr res = ColumnHelper::create_column(type_desc, false);
         auto* res_col = down_cast<RunTimeColumnType<Type>*>(res.get());
         auto& res_data = res_col->get_data();
         res_data.resize(select_vec.size());
@@ -127,7 +127,7 @@ private:
         NullColumnPtr null = nullptr;
 
         if (columns[0]->is_nullable()) {
-            null = down_cast<NullableColumn*>(columns[0].get())->null_column();
+            null = down_cast<const NullableColumn*>(columns[0].get())->null_column();
         }
 
         for (int row = 0; row < num_rows; ++row) {
@@ -349,7 +349,7 @@ private:
             columns.push_back(ColumnHelper::unfold_const_column(this->type(), num_rows, col));
         }
         ColumnViewer<TYPE_BOOLEAN> bhs_viewer(columns[0]);
-        ColumnPtr res = ColumnHelper::create_column(this->type(), true);
+        MutableColumnPtr res = ColumnHelper::create_column(this->type(), true);
         res->reserve(num_rows);
         if constexpr (check_null) {
             for (int row = 0; row < num_rows; ++row) {
@@ -378,7 +378,7 @@ public:
     DEFINE_CLASS_CONSTRUCT_FN(VectorizedCoalesceExpr);
 
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
-        std::vector<ColumnPtr> columns;
+        Columns columns;
         for (int i = 0; i < _children.size(); ++i) {
             ASSIGN_OR_RETURN(auto value, _children[i]->evaluate_checked(context, ptr));
             auto null_count = ColumnHelper::count_nulls(value);
@@ -408,7 +408,7 @@ public:
 
         // direct return if only one
         if (columns.size() == 1) {
-            // TODO: don't copy column if chunk support copy on write
+            // don't copy column if chunk support copy on write
             return columns[0]->clone();
         }
 

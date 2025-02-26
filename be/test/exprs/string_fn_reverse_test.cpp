@@ -47,7 +47,7 @@ TEST_F(StringFunctionReverseTest, reverseASCIITest) {
         str->append(s.substr(0, j));
     }
 
-    columns.emplace_back(str);
+    columns.emplace_back(str->clone());
 
     ColumnPtr result = StringFunctions::reverse(ctx.get(), columns).value();
     ASSERT_EQ(100, result->size());
@@ -76,7 +76,7 @@ TEST_F(StringFunctionReverseTest, reverseUtf8Test) {
         str->append(std::get<0>(c));
     }
 
-    columns.emplace_back(str);
+    columns.emplace_back(str->clone());
 
     ColumnPtr result = StringFunctions::reverse(ctx.get(), columns).value();
     ASSERT_EQ(str->size(), result->size());

@@ -52,7 +52,7 @@ public:
 
 private:
     std::string _rand_str();
-    std::shared_ptr<BinaryColumn> _gen_binary_column();
+    BinaryColumn::MutablePtr _gen_binary_column();
 
     int _mode = 1;
     std::random_device _rd;
@@ -107,8 +107,8 @@ std::string BinaryColumnCopyBench::_rand_str() {
     return str;
 }
 
-std::shared_ptr<BinaryColumn> BinaryColumnCopyBench::_gen_binary_column() {
-    std::shared_ptr<BinaryColumn> column = std::make_shared<BinaryColumn>();
+BinaryColumn::MutablePtr BinaryColumnCopyBench::_gen_binary_column() {
+    BinaryColumn::MutablePtr column = BinaryColumn::create();
 
     for (size_t i = 0; i < _chunk_size; i++) {
         std::string str = _rand_str();

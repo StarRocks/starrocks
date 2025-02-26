@@ -99,7 +99,7 @@ struct GroupReaderParam {
     // partition column
     const std::vector<HdfsScannerContext::ColumnInfo>* partition_columns = nullptr;
     // partition column value which read from hdfs file path
-    const std::vector<ColumnPtr>* partition_values = nullptr;
+    const Columns* partition_values = nullptr;
     // not existed column
     const std::vector<SlotDescriptor*>* not_existed_slots = nullptr;
     // used for global low cardinality optimization

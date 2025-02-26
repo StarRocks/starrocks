@@ -46,8 +46,8 @@ TEST_F(VecMathFunctionsTest, truncateTest) {
             c1->append(ints[i]);
         }
 
-        columns.emplace_back(c0);
-        columns.emplace_back(c1);
+        columns.emplace_back(std::move(c0));
+        columns.emplace_back(std::move(c1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr res = MathFunctions::truncate(ctx.get(), columns).value();
@@ -70,8 +70,8 @@ TEST_F(VecMathFunctionsTest, truncateNanTest) {
         c0->append(0);
         c1->append(1591994755);
 
-        columns.emplace_back(c0);
-        columns.emplace_back(c1);
+        columns.emplace_back(std::move(c0));
+        columns.emplace_back(std::move(c1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr res = MathFunctions::truncate(ctx.get(), columns).value();
@@ -144,11 +144,11 @@ static void testRoundDecimal(const std::vector<std::string>& arg0_values, const 
         // ConstColumn
         c0_const = true;
         arg0_data_column->resize(1);
-        c0 = ConstColumn::create(arg0_data_column, arg0_values.size());
+        c0 = ConstColumn::create(std::move(arg0_data_column), arg0_values.size());
     } else {
         if (arg0_null_flags.empty()) {
             // normal Column
-            c0 = arg0_data_column;
+            c0 = std::move(arg0_data_column);
         } else {
             // NullableColumn
             c0_nullable = true;
@@ -156,7 +156,7 @@ static void testRoundDecimal(const std::vector<std::string>& arg0_values, const 
             for (int i = 0; i < arg0_values.size(); i++) {
                 null_flags->append(arg0_null_flags[i]);
             }
-            c0 = NullableColumn::create(arg0_data_column, null_flags);
+            c0 = NullableColumn::create(std::move(arg0_data_column), std::move(null_flags));
         }
     }
 
@@ -172,11 +172,11 @@ static void testRoundDecimal(const std::vector<std::string>& arg0_values, const 
         // ConstColumn
         c1_const = true;
         arg1_data_column->resize(1);
-        c1 = ConstColumn::create(arg1_data_column, arg1_values.size());
+        c1 = ConstColumn::create(std::move(arg1_data_column), arg1_values.size());
     } else {
         if (arg1_null_flags.empty()) {
             // normal Column
-            c1 = arg1_data_column;
+            c1 = std::move(arg1_data_column);
         } else {
             // NullableColumn
             c1_nullable = true;
@@ -184,16 +184,16 @@ static void testRoundDecimal(const std::vector<std::string>& arg0_values, const 
             for (int i = 0; i < arg1_values.size(); i++) {
                 null_flags->append(arg1_null_flags[i]);
             }
-            c1 = NullableColumn::create(arg1_data_column, null_flags);
+            c1 = NullableColumn::create(std::move(arg1_data_column), std::move(null_flags));
         }
     }
 
-    columns.emplace_back(c0);
+    columns.emplace_back(std::move(c0));
     if (type == TYPE_ROUND) {
         c1_const = true;
         c1_nullable = false;
     } else {
-        columns.emplace_back(c1);
+        columns.emplace_back(std::move(c1));
     }
 
     FunctionContext::TypeDesc return_type;
@@ -415,8 +415,8 @@ TEST_F(VecMathFunctionsTest, RoundUpToTest) {
             tc2->append(ints[i]);
         }
 
-        columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
+        columns.emplace_back(std::move(tc1));
+        columns.emplace_back(std::move(tc2));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::round_up_to(ctx.get(), columns).value();
@@ -446,8 +446,8 @@ TEST_F(VecMathFunctionsTest, RoundUpToHalfwayCasesWithPositiveTest) {
             tc2->append(ints[i]);
         }
 
-        columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
+        columns.emplace_back(std::move(tc1));
+        columns.emplace_back(std::move(tc2));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::round_up_to(ctx.get(), columns).value();
@@ -477,8 +477,8 @@ TEST_F(VecMathFunctionsTest, RoundUpToHalfwayCasesWithNegativeTest) {
             tc2->append(ints[i]);
         }
 
-        columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
+        columns.emplace_back(std::move(tc1));
+        columns.emplace_back(std::move(tc2));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::round_up_to(ctx.get(), columns).value();
@@ -505,7 +505,7 @@ TEST_F(VecMathFunctionsTest, BinTest) {
             tc1->append(i);
         }
 
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::bin(ctx.get(), columns).value();
@@ -545,8 +545,8 @@ TEST_F(VecMathFunctionsTest, LeastDecimalTest) {
         }
     }
 
-    columns.emplace_back(tc1);
-    columns.emplace_back(tc2);
+    columns.emplace_back(std::move(tc1));
+    columns.emplace_back(std::move(tc2));
 
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     ColumnPtr result = MathFunctions::template least<TYPE_DECIMALV2>(ctx.get(), columns).value();
@@ -591,8 +591,8 @@ TEST_F(VecMathFunctionsTest, GreatestDecimalTest) {
         }
     }
 
-    columns.emplace_back(tc1);
-    columns.emplace_back(tc2);
+    columns.emplace_back(std::move(tc1));
+    columns.emplace_back(std::move(tc2));
 
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     ColumnPtr result = MathFunctions::template greatest<TYPE_DECIMALV2>(ctx.get(), columns).value();
@@ -625,7 +625,7 @@ TEST_F(VecMathFunctionsTest, PositiveDecimalTest) {
         }
     }
 
-    columns.emplace_back(tc1);
+    columns.emplace_back(std::move(tc1));
 
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     ColumnPtr result = MathFunctions::template positive<TYPE_DECIMALV2>(ctx.get(), columns).value();
@@ -658,7 +658,7 @@ TEST_F(VecMathFunctionsTest, NegativeDecimalTest) {
         }
     }
 
-    columns.emplace_back(tc1);
+    columns.emplace_back(std::move(tc1));
 
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     ColumnPtr result = MathFunctions::template negative<TYPE_DECIMALV2>(ctx.get(), columns).value();
@@ -703,8 +703,8 @@ TEST_F(VecMathFunctionsTest, ModDecimalGeneralTest) {
         }
     }
 
-    columns.emplace_back(tc1);
-    columns.emplace_back(tc2);
+    columns.emplace_back(std::move(tc1));
+    columns.emplace_back(std::move(tc2));
 
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     ColumnPtr result = MathFunctions::template mod<TYPE_DECIMALV2>(ctx.get(), columns).value();
@@ -752,8 +752,8 @@ TEST_F(VecMathFunctionsTest, ModDecimalBigTest) {
         }
     }
 
-    columns.emplace_back(tc1);
-    columns.emplace_back(tc2);
+    columns.emplace_back(std::move(tc1));
+    columns.emplace_back(std::move(tc2));
 
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     ColumnPtr result = MathFunctions::template mod<TYPE_DECIMALV2>(ctx.get(), columns).value();
@@ -821,9 +821,9 @@ TEST_F(VecMathFunctionsTest, Conv_intTest) {
             tc3->append(destints[i]);
         }
 
-        columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
-        columns.emplace_back(tc3);
+        columns.emplace_back(std::move(tc1));
+        columns.emplace_back(std::move(tc2));
+        columns.emplace_back(std::move(tc3));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::conv_int(ctx.get(), columns).value();
@@ -924,9 +924,9 @@ TEST_F(VecMathFunctionsTest, Conv_stringTest) {
             tc3->append(destints[i]);
         }
 
-        columns.emplace_back(tc1);
-        columns.emplace_back(tc2);
-        columns.emplace_back(tc3);
+        columns.emplace_back(std::move(tc1));
+        columns.emplace_back(std::move(tc2));
+        columns.emplace_back(std::move(tc3));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::conv_string(ctx.get(), columns).value();
@@ -947,7 +947,7 @@ TEST_F(VecMathFunctionsTest, LnTest) {
         tc1->append(0);
         tc1->append(2.0);
         tc1->append(-1);
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result_log10 = MathFunctions::log10(ctx.get(), columns).value();
@@ -972,7 +972,7 @@ TEST_F(VecMathFunctionsTest, ExpTest) {
         tc1->append(2.0);
         tc1->append(709.0);
 
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result_exp = MathFunctions::exp(ctx.get(), columns).value();
@@ -992,7 +992,7 @@ TEST_F(VecMathFunctionsTest, InfNanTest) {
         tc1->append(710.0);
         tc1->append(2.47498282E8);
         tc1->append(2.47498282E3);
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result_exp = MathFunctions::exp(ctx.get(), columns).value();
@@ -1009,14 +1009,14 @@ TEST_F(VecMathFunctionsTest, InfNanTest) {
         tc1->append(0.2);
         tc1->append(0.3);
         tc1->append(4.0);
-        binary_columns.emplace_back(tc1);
+        binary_columns.emplace_back(std::move(tc1));
 
         auto tc2 = DoubleColumn::create();
         tc2->append(0.8);
         tc2->append(0.2);
         tc2->append(0.3);
         tc2->append(1024.0);
-        binary_columns.emplace_back(tc2);
+        binary_columns.emplace_back(std::move(tc2));
 
         std::vector<bool> null_expect = {true, false, false, true};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
@@ -1038,7 +1038,7 @@ TEST_F(VecMathFunctionsTest, CbrtTest) {
     tc1->append(8);
     tc1->append(3.1415);
     tc1->append(-3.1415);
-    columns.emplace_back(tc1);
+    columns.emplace_back(std::move(tc1));
 
     std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
     ColumnPtr results = MathFunctions::cbrt(ctx.get(), columns).value();
@@ -1059,7 +1059,7 @@ TEST_F(VecMathFunctionsTest, squareTest) {
         tc1->append(2.0);
         tc1->append(-1);
         tc1->append(std::nan("not a double number"));
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result_square = MathFunctions::square(ctx.get(), columns).value();
@@ -1083,7 +1083,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
             tc1->append(input);
         }
 
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::abs_tinyint(ctx.get(), columns).value();
@@ -1106,7 +1106,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
             tc1->append(input);
         }
 
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::abs_smallint(ctx.get(), columns).value();
@@ -1129,7 +1129,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
             tc1->append(input);
         }
 
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::abs_int(ctx.get(), columns).value();
@@ -1154,7 +1154,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
             tc1->append(input);
         }
 
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::abs_bigint(ctx.get(), columns).value();
@@ -1179,7 +1179,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
             tc1->append(input);
         }
 
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::abs_largeint(ctx.get(), columns).value();
@@ -1202,7 +1202,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
             tc1->append(input);
         }
 
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::abs_double(ctx.get(), columns).value();
@@ -1225,7 +1225,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
             tc1->append(input);
         }
 
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::abs_float(ctx.get(), columns).value();
@@ -1252,7 +1252,7 @@ TEST_F(VecMathFunctionsTest, AbsTest) {
             }
         }
 
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::abs_decimalv2val(ctx.get(), columns).value();
@@ -1279,7 +1279,7 @@ TEST_F(VecMathFunctionsTest, CotTest) {
         tc1->append(0.1);
         tc1->append(0.2);
         tc1->append(0.3);
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         Columns columns2;
         auto tc2 = DoubleColumn::create();
@@ -1287,7 +1287,7 @@ TEST_F(VecMathFunctionsTest, CotTest) {
         tc2->append(0.1);
         tc2->append(0.2);
         tc2->append(0.3);
-        columns2.emplace_back(tc2);
+        columns2.emplace_back(std::move((tc2)));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::cot(ctx.get(), columns).value();
@@ -1312,13 +1312,13 @@ TEST_F(VecMathFunctionsTest, Atan2Test) {
         tc1->append(0.1);
         tc1->append(0.2);
         tc1->append(0.3);
-        columns.emplace_back(tc1);
+        columns.emplace_back(std::move(tc1));
 
         auto tc2 = DoubleColumn::create();
         tc2->append(0.1);
         tc2->append(0.2);
         tc2->append(0.3);
-        columns.emplace_back(tc2);
+        columns.emplace_back(std::move(tc2));
 
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());
         ColumnPtr result = MathFunctions::atan2(ctx.get(), columns).value();
@@ -1339,7 +1339,7 @@ TEST_F(VecMathFunctionsTest, TrigonometricFunctionTest) {
     tc1->append(1);
     tc1->append(3.1415926);
     tc1->append(30);
-    columns.emplace_back(tc1);
+    columns.emplace_back(std::move(tc1));
 
     {
         std::vector<double> result_expect = {std::sinh(-1), std::sinh(0), std::sinh(1), std::sinh(3.1415926),
@@ -1384,7 +1384,7 @@ TEST_F(VecMathFunctionsTest, OutputNanTest) {
     tc1->append(-10);
     tc1->append(1.0);
     tc1->append(std::nan("not a double number"));
-    columns.emplace_back(tc1);
+    columns.emplace_back(std::move(tc1));
 
     {
         std::vector<bool> null_expect = {true, false, true};
@@ -1480,13 +1480,13 @@ TEST_F(VecMathFunctionsTest, OutputNanTest) {
         tc1->append(std::nan("not a double number"));
         tc1->append(0.2);
         tc1->append(0.3);
-        binary_columns.emplace_back(tc1);
+        binary_columns.emplace_back(std::move(tc1));
 
         auto tc2 = DoubleColumn::create();
         tc2->append(0.8);
         tc2->append(0.2);
         tc2->append(0.3);
-        binary_columns.emplace_back(tc2);
+        binary_columns.emplace_back(std::move(tc2));
 
         std::vector<bool> null_expect = {true, false, false};
         std::unique_ptr<FunctionContext> ctx(FunctionContext::create_test_context());

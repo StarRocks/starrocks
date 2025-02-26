@@ -647,7 +647,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_probe_column(ColumnPtr* src_co
                                                                const SlotDescriptor* slot, bool to_nullable) {
     if (_probe_state->match_flag == JoinMatchFlag::ALL_MATCH_ONE) {
         if (to_nullable) {
-            ColumnPtr dest_column = NullableColumn::create(*src_column, NullColumn::create((*src_column)->size()));
+            ColumnPtr dest_column =
+                    NullableColumn::create((*src_column)->as_mutable_ptr(), NullColumn::create((*src_column)->size()));
             (*chunk)->append_column(std::move(dest_column), slot->id());
         } else {
             (*chunk)->append_column(*src_column, slot->id());
@@ -655,7 +656,8 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_probe_column(ColumnPtr* src_co
     } else if (_probe_state->match_flag == JoinMatchFlag::MOST_MATCH_ONE) {
         if (to_nullable) {
             (*src_column)->filter(_probe_state->probe_match_filter, _probe_state->probe_row_count);
-            ColumnPtr dest_column = NullableColumn::create(*src_column, NullColumn::create((*src_column)->size()));
+            ColumnPtr dest_column =
+                    NullableColumn::create((*src_column)->as_mutable_ptr(), NullColumn::create((*src_column)->size()));
             (*chunk)->append_column(std::move(dest_column), slot->id());
         } else {
             (*src_column)->filter(_probe_state->probe_match_filter, _probe_state->probe_row_count);
@@ -701,7 +703,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_copy_build_column(const ColumnPtr& 
                 null_column->get_data()[i] = 1;
             }
         }
-        auto dest_column = NullableColumn::create(std::move(data_column), null_column);
+        auto dest_column = NullableColumn::create(std::move(data_column), std::move(null_column));
         (*chunk)->append_column(std::move(dest_column), slot->id());
     } else {
         auto dest_column = src_column->clone_empty();
@@ -1305,7 +1307,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_left_anti_join(Ru
         // process left anti join from not in
         for (size_t i = 0; i < probe_row_count; i++) {
             size_t index = _probe_state->next[i];
-            if ((*_probe_state->null_array)[i] == 1) {
+            if ((*_probe_state->null_array).at(i) == 1) {
                 continue;
             }
 
@@ -1363,7 +1365,7 @@ HashTableProbeState::ProbeCoroutine JoinHashMap<LT, BuildFunc, ProbeFunc>::_prob
         for (size_t i = _probe_state->cur_probe_index++; i < _probe_state->probe_row_count;
              i = _probe_state->cur_probe_index++) {
             size_t build_index = _probe_state->next[i];
-            if ((*_probe_state->null_array)[i] == 1) {
+            if ((*_probe_state->null_array).at(i) == 1) {
                 continue;
             }
 
@@ -1795,7 +1797,7 @@ void JoinHashMap<LT, BuildFunc, ProbeFunc>::_probe_from_ht_for_null_aware_anti_j
     size_t probe_row_count = _probe_state->probe_row_count;
     for (; i < probe_row_count; i++) {
         size_t build_index = _probe_state->next[i];
-        if (_probe_state->null_array != nullptr && (*_probe_state->null_array)[i] == 1) {
+        if (_probe_state->null_array != nullptr && (*_probe_state->null_array).at(i) == 1) {
             // when left table col value is null needs match all rows in right table
             for (size_t j = 1; j < _table_items->row_count + 1; j++) {
                 MATCH_RIGHT_TABLE_ROWS()

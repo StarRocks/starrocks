@@ -38,7 +38,7 @@ private:
     const TypeDescriptor type_desc = TypeDescriptor(TYPE_VARCHAR);
     size_t _num_column = 0;
     size_t _num_rows = 0;
-    std::vector<ColumnPtr> _columns{};
+    Columns _columns{};
 };
 
 void HashFunctionsBench::SetUp() {

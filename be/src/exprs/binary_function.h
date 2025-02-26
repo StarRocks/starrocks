@@ -262,7 +262,7 @@ public:
                 null_flags->resize(data->size());
             }
             const auto& real_data =
-                    ColumnHelper::cast_to_raw<ResultType>(FunctionHelper::get_data_column_of_nullable(data));
+                    ColumnHelper::cast_to_raw<ResultType>(FunctionHelper::get_data_column_of_nullable(data).get());
 
             // Avoid calling virtual fuctions `size` in for loop
             const auto size = data->size();
@@ -314,7 +314,7 @@ public:
         if (v1->is_constant() && v2->is_constant()) {
             const ColumnPtr& data2 = ColumnHelper::as_column<ConstColumn>(v2)->data_column();
 
-            auto null_result = std::static_pointer_cast<NullColumn>(
+            auto null_result = NullColumn::static_pointer_cast(
                     PRODUCE_NULL_FN::template evaluate<LType, RType, TYPE_NULL>(v1, data2));
 
             // is null, return only null
@@ -327,7 +327,7 @@ public:
         }
 
         if (!v1->is_nullable() && !v2->is_nullable()) {
-            NullColumnPtr null_result = std::static_pointer_cast<NullColumn>(
+            NullColumnPtr null_result = NullColumn::static_pointer_cast(
                     PRODUCE_NULL_FN::template evaluate<LType, RType, TYPE_NULL>(v1, v2));
 
             ColumnPtr data_result = FN::template evaluate<LType, RType, ResultType>(v1, v2);
