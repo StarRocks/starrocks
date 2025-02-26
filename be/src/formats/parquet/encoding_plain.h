@@ -16,6 +16,7 @@
 
 #include "column/column.h"
 #include "column/column_helper.h"
+#include "column/nullable_column.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
 #include "gutil/strings/substitute.h"
@@ -111,7 +112,7 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
         size_t max_fetch = count * SIZE_OF_TYPE;
         if (max_fetch + _offset > _data.size) {
             return Status::InternalError(strings::Substitute(
@@ -169,29 +170,51 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
-        std::vector<Slice> slices;
-        slices.reserve(count);
-
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
         size_t num_decoded = 0;
-        size_t byte_size = 0;
-        while (num_decoded < count && _offset < _data.size) {
-            uint32_t length = decode_fixed32_le(reinterpret_cast<const uint8_t*>(_data.data) + _offset);
-            _offset += sizeof(int32_t);
-            slices.emplace_back(_data.data + _offset, length);
-            _offset += length;
-            byte_size += length;
-            num_decoded++;
+        if (dst->is_nullable()) {
+            down_cast<NullableColumn*>(dst)->mutable_null_column()->append_default(count);
         }
+        if (filter) {
+            auto* binary_column = ColumnHelper::get_binary_column(dst);
+            while (num_decoded < count && _offset < _data.size) {
+                uint32_t length = decode_fixed32_le(reinterpret_cast<const uint8_t*>(_data.data) + _offset);
+                _offset += sizeof(int32_t);
+                if (filter[num_decoded]) {
+                    binary_column->append(Slice(_data.data + _offset, length));
+                } else {
+                    binary_column->append_default();
+                }
+                _offset += length;
+                num_decoded++;
+            }
+        } else {
+            std::vector<Slice> slices;
+            slices.reserve(count);
+            size_t byte_size = 0;
+            size_t max_size = 0;
+            while (num_decoded < count && _offset < _data.size) {
+                uint32_t length = decode_fixed32_le(reinterpret_cast<const uint8_t*>(_data.data) + _offset);
+                _offset += sizeof(int32_t);
+                slices.emplace_back(_data.data + _offset, length);
+                _offset += length;
+                byte_size += length;
+                max_size = max_size > length ? max_size : length;
+                num_decoded++;
+            }
+
+            byte_size += ColumnHelper::get_binary_column(dst)->get_bytes().size();
+            ColumnHelper::get_binary_column(dst)->reserve(count, byte_size);
+            auto ret = ColumnHelper::get_binary_column(dst)->append_strings_overflow(slices.data(), num_decoded, max_size);
+            if (UNLIKELY(!ret)) {
+                return Status::InternalError("PlainDecoder append strings to column failed");
+            }
+        }
+
         // never happend
         if (num_decoded < count || _offset > _data.size) {
             return Status::InternalError(strings::Substitute(
                     "going to read out-of-bounds data, offset=$0,count=$1,size=$2", _offset, count, _data.size));
-        }
-        ColumnHelper::get_binary_column(dst)->reserve(count, byte_size);
-        auto ret = dst->append_strings(slices);
-        if (UNLIKELY(!ret)) {
-            return Status::InternalError("PlainDecoder append strings to column failed");
         }
         return Status::OK();
     }
@@ -250,7 +273,7 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
         auto original_size = dst->size();
         dst->resize(original_size + count);
         auto num_unpacked_values = unpack_batch(count, dst->mutable_raw_data() + original_size);
@@ -379,7 +402,7 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
         if (_offset + _type_length * count > _data.size) {
             return Status::InternalError(strings::Substitute(
                     "going to read out-of-bounds data, offset=$0,count=$1,size=$2", _offset, count, _data.size));
