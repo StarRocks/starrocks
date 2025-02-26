@@ -1,0 +1,58 @@
+### データベースの作成
+
+`StarRocks > ` プロンプトで次の2行を入力し、それぞれの後にエンターキーを押します。
+
+```sql
+CREATE DATABASE IF NOT EXISTS quickstart;
+
+USE quickstart;
+```
+
+### 2つのテーブルを作成
+
+#### Crashdata
+
+クラッシュデータセットにはこれより多くのフィールドが含まれていますが、スキーマは天候が運転条件に与える影響に関する質問に答えるために役立つ可能性のあるフィールドのみを含むように縮小されています。
+
+```sql
+CREATE TABLE IF NOT EXISTS crashdata (
+    CRASH_DATE DATETIME,
+    BOROUGH STRING,
+    ZIP_CODE STRING,
+    LATITUDE INT,
+    LONGITUDE INT,
+    LOCATION STRING,
+    ON_STREET_NAME STRING,
+    CROSS_STREET_NAME STRING,
+    OFF_STREET_NAME STRING,
+    CONTRIBUTING_FACTOR_VEHICLE_1 STRING,
+    CONTRIBUTING_FACTOR_VEHICLE_2 STRING,
+    COLLISION_ID INT,
+    VEHICLE_TYPE_CODE_1 STRING,
+    VEHICLE_TYPE_CODE_2 STRING
+);
+```
+
+#### Weatherdata
+
+クラッシュデータと同様に、天候データセットにはさらに多くの列（合計125列）があり、質問に答えると予想されるもののみがデータベースに含まれています。
+
+```sql
+CREATE TABLE IF NOT EXISTS weatherdata (
+    DATE DATETIME,
+    NAME STRING,
+    HourlyDewPointTemperature STRING,
+    HourlyDryBulbTemperature STRING,
+    HourlyPrecipitation STRING,
+    HourlyPresentWeatherType STRING,
+    HourlyPressureChange STRING,
+    HourlyPressureTendency STRING,
+    HourlyRelativeHumidity STRING,
+    HourlySkyConditions STRING,
+    HourlyVisibility STRING,
+    HourlyWetBulbTemperature STRING,
+    HourlyWindDirection STRING,
+    HourlyWindGustSpeed STRING,
+    HourlyWindSpeed STRING
+);
+```

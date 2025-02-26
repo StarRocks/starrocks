@@ -36,7 +36,7 @@ const config = {
 
   i18n: {
     defaultLocale: 'en',
-    locales: ['en', 'zh'],
+    locales: ['en', 'zh', 'ja'],
     localeConfigs: {
       en: {
         htmlLang: 'en-US',

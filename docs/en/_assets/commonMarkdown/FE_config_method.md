@@ -1,3 +1,5 @@
+---
+---
 FE parameters are classified into dynamic parameters and static parameters.
 
 - Dynamic parameters can be configured and adjusted by running SQL commands, which is very convenient. But the configurations become invalid if you restart your FE. Therefore, we recommend that you also modify the configuration items in the **fe.conf** file to prevent the loss of modifications.
