@@ -37,6 +37,7 @@ package com.starrocks.sql.optimizer.rewrite;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import com.google.gson.Gson;
 import com.starrocks.analysis.DecimalLiteral;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.catalog.ScalarType;
@@ -45,8 +46,11 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
+import com.starrocks.common.util.ProfileManager;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.QueryDetail;
+import com.starrocks.qe.QueryDetailQueue;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import net.openhft.hashing.LongHashFunction;
@@ -1548,5 +1552,36 @@ public class ScalarOperatorFunctions {
         return ConstantOperator.createVarchar(value.getVarchar());
     }
 
+    @ConstantFunction(name = "last_query_id", returnType = VARCHAR, argTypes = {}, isMetaFunction = true)
+    public static ConstantOperator lastQueryId() {
+        ConnectContext current = ConnectContext.get();
+        if (current != null) {
+            return ConstantOperator.createVarchar(current.getLastQueryId().toString());
+        } else {
+            return ConstantOperator.createNull(Type.VARCHAR);
+        }
+    }
+
+    @ConstantFunction(name = "get_query_profile", returnType = VARCHAR, argTypes = {VARCHAR}, isMetaFunction = true)
+    public static ConstantOperator getQueryProfile(ConstantOperator queryId) {
+        String profile = ProfileManager.getInstance().getProfile(queryId.getVarchar());
+        return ConstantOperator.createVarchar(profile);
+    }
+
+    @ConstantFunction(name = "get_query_detail", returnType = VARCHAR, argTypes = {VARCHAR}, isMetaFunction = true)
+    public static ConstantOperator getQueryDetail(ConstantOperator queryId) {
+        QueryDetail detail = QueryDetailQueue.getQueryDetailsByQueryId(queryId.getVarchar());
+        if (detail != null) {
+            Gson gson = new Gson();
+            // remove verbose fields in it
+            detail = detail.copy();
+            detail.setExplain(null);
+            detail.setProfile(null);
+            String json = gson.toJson(detail);
+            return ConstantOperator.createVarchar(json);
+        } else {
+            return ConstantOperator.createNull(Type.VARCHAR);
+        }
+    }
 }
 
