@@ -1,0 +1,454 @@
+{
+  "version.label": {
+    "message": "Latest-3.4",
+    "description": "The label for version current"
+  },
+  "sidebar.docs.category.Introduction to StarRocks": {
+    "message": "StarRocks の紹介",
+    "description": "The label for category Introduction to StarRocks in sidebar docs"
+  },
+  "sidebar.docs.category.Quick Start": {
+    "message": "クイックスタート",
+    "description": "The label for category Quick Start in sidebar docs"
+  },
+  "sidebar.docs.category.Project Help": {
+    "message": "プロジェクトヘルプ",
+    "description": "The label for category Project Help in sidebar docs"
+  },
+  "sidebar.docs.category.Deployment": {
+    "message": "デプロイ",
+    "description": "The label for category Deployment in sidebar docs"
+  },
+  "sidebar.docs.category.Preparation": {
+    "message": "準備",
+    "description": "The label for category Preparation in sidebar docs"
+  },
+  "sidebar.docs.category.Shared-nothing deployment": {
+    "message": "Shared-nothing デプロイ",
+    "description": "The label for category Shared-nothing deployment in sidebar docs"
+  },
+  "sidebar.docs.category.Shared-data deployment": {
+    "message": "Shared-data デプロイ",
+    "description": "The label for category Shared-data deployment in sidebar docs"
+  },
+  "sidebar.docs.category.Manage your deployment": {
+    "message": "デプロイ管理",
+    "description": "The label for category Manage your deployment in sidebar docs"
+  },
+  "sidebar.docs.category.Table Design": {
+    "message": "テーブル設計",
+    "description": "The label for category Table Design in sidebar docs"
+  },
+  "sidebar.docs.category.Table types": {
+    "message": "テーブルの種類",
+    "description": "The label for category Table types in sidebar docs"
+  },
+  "sidebar.docs.category.Data distribution": {
+    "message": "データ分散",
+    "description": "The label for category Data distribution in sidebar docs"
+  },
+  "sidebar.docs.category.Indexes": {
+    "message": "インデックス",
+    "description": "The label for category Indexes in sidebar docs"
+  },
+  "sidebar.docs.category.Data Loading": {
+    "message": "データロード",
+    "description": "The label for category Data Loading in sidebar docs"
+  },
+  "sidebar.docs.category.Loading overview": {
+    "message": "ロード概要",
+    "description": "The label for category Loading overview in sidebar docs"
+  },
+  "sidebar.docs.category.Load from Object Storage": {
+    "message": "オブジェクトストレージからのロード",
+    "description": "The label for category Load from Object Storage in sidebar docs"
+  },
+  "sidebar.docs.category.Load data from Apache Kafka": {
+    "message": "Apache Kafka からのデータロード",
+    "description": "The label for category Load data from Apache Kafka in sidebar docs"
+  },
+  "sidebar.docs.category.Load data from Apache Spark": {
+    "message": "Apache Spark からのデータロード",
+    "description": "The label for category Load data from Apache Spark in sidebar docs"
+  },
+  "sidebar.docs.category.Data Unloading": {
+    "message": "データアンロード",
+    "description": "The label for category Data Unloading in sidebar docs"
+  },
+  "sidebar.docs.category.Data Lakes": {
+    "message": "データレイク",
+    "description": "The label for category Data Lakes in sidebar docs"
+  },
+  "sidebar.docs.category.Catalog": {
+    "message": "カタログ",
+    "description": "The label for category Catalog in sidebar docs"
+  },
+  "sidebar.docs.category.Iceberg": {
+    "message": "Iceberg",
+    "description": "The label for category Iceberg in sidebar docs"
+  },
+  "sidebar.docs.category.Data cache": {
+    "message": "データキャッシュ",
+    "description": "The label for category Data cache in sidebar docs"
+  },
+  "sidebar.docs.category.Query Acceleration": {
+    "message": "クエリ高速化",
+    "description": "The label for category Query Acceleration in sidebar docs"
+  },
+  "sidebar.docs.category.Asynchronous materialized views": {
+    "message": "非同期マテリアライズドビュー",
+    "description": "The label for category Asynchronous materialized views in sidebar docs"
+  },
+  "sidebar.docs.category.Use cases": {
+    "message": "ユースケース",
+    "description": "The label for category Use cases in sidebar docs"
+  },
+  "sidebar.docs.category.Caching": {
+    "message": "キャッシング",
+    "description": "The label for category Caching in sidebar docs"
+  },
+  "sidebar.docs.category.Computing the number of distinct values": {
+    "message": "異なる値の数の計算",
+    "description": "The label for category Computing the number of distinct values in sidebar docs"
+  },
+  "sidebar.docs.category.Integrations": {
+    "message": "統合",
+    "description": "The label for category Integrations in sidebar docs"
+  },
+  "sidebar.docs.category.Cloud Authentication": {
+    "message": "クラウド認証",
+    "description": "The label for category Cloud Authentication in sidebar docs"
+  },
+  "sidebar.docs.category.Streaming Data": {
+    "message": "ストリーミングデータ",
+    "description": "The label for category Streaming Data in sidebar docs"
+  },
+  "sidebar.docs.category.Apache Kafka": {
+    "message": "Apache Kafka",
+    "description": "The label for category Apache Kafka in sidebar docs"
+  },
+  "sidebar.docs.category.StarRocks Pipe": {
+    "message": "StarRocks Pipe",
+    "description": "The label for category StarRocks Pipe in sidebar docs"
+  },
+  "sidebar.docs.category.Batch Loading Data": {
+    "message": "バッチデータロード",
+    "description": "The label for category Batch Loading Data in sidebar docs"
+  },
+  "sidebar.docs.category.Loading Tools": {
+    "message": "ロードツール",
+    "description": "The label for category Loading Tools in sidebar docs"
+  },
+  "sidebar.docs.category.BI Tools": {
+    "message": "BI ツール",
+    "description": "The label for category BI Tools in sidebar docs"
+  },
+  "sidebar.docs.category.IDE Tools": {
+    "message": "IDE ツール",
+    "description": "The label for category IDE Tools in sidebar docs"
+  },
+  "sidebar.docs.category.Administration": {
+    "message": "管理",
+    "description": "The label for category Administration in sidebar docs"
+  },
+  "sidebar.docs.category.Configuration": {
+    "message": "設定",
+    "description": "The label for category Configuration in sidebar docs"
+  },
+  "sidebar.docs.category.Management": {
+    "message": "マネジメント",
+    "description": "The label for category Management in sidebar docs"
+  },
+  "sidebar.docs.category.Monitor and Alert": {
+    "message": "監視とアラート",
+    "description": "The label for category Monitor and Alert in sidebar docs"
+  },
+  "sidebar.docs.category.Resource management": {
+    "message": "リソース管理",
+    "description": "The label for category Resource management in sidebar docs"
+  },
+  "sidebar.docs.category.User Privileges and Authentication": {
+    "message": "ユーザー権限と認証",
+    "description": "The label for category User Privileges and Authentication in sidebar docs"
+  },
+  "sidebar.docs.category.Performance Tuning": {
+    "message": "パフォーマンスチューニング",
+    "description": "The label for category Performance Tuning in sidebar docs"
+  },
+  "sidebar.docs.category.Query Profile": {
+    "message": "クエリプロファイル",
+    "description": "The label for category Query Profile in sidebar docs"
+  },
+  "sidebar.docs.category.Reference": {
+    "message": "リファレンス",
+    "description": "The label for category Reference in sidebar docs"
+  },
+  "sidebar.docs.category.Data types": {
+    "message": "データ型",
+    "description": "The label for category Data types in sidebar docs"
+  },
+  "sidebar.docs.category.Numeric": {
+    "message": "数値型",
+    "description": "The label for category Numeric in sidebar docs"
+  },
+  "sidebar.docs.category.String": {
+    "message": "文字列",
+    "description": "The label for category String in sidebar docs"
+  },
+  "sidebar.docs.category.Date and Time": {
+    "message": "日付と時刻",
+    "description": "The label for category Date and Time in sidebar docs"
+  },
+  "sidebar.docs.category.Semi-structured": {
+    "message": "セミ構造化データ",
+    "description": "The label for category Semi-structured in sidebar docs"
+  },
+  "sidebar.docs.category.Other": {
+    "message": "その他",
+    "description": "The label for category Other in sidebar docs"
+  },
+  "sidebar.docs.category.SQL Functions": {
+    "message": "SQL 関数",
+    "description": "The label for category SQL Functions in sidebar docs"
+  },
+  "sidebar.docs.category.Aggregate": {
+    "message": "集約関数",
+    "description": "The label for category Aggregate in sidebar docs"
+  },
+  "sidebar.docs.category.Array": {
+    "message": "配列",
+    "description": "The label for category Array in sidebar docs"
+  },
+  "sidebar.docs.category.Binary": {
+    "message": "バイナリ",
+    "description": "The label for category Binary in sidebar docs"
+  },
+  "sidebar.docs.category.Bit": {
+    "message": "ビット",
+    "description": "The label for category Bit in sidebar docs"
+  },
+  "sidebar.docs.category.Bitmap": {
+    "message": "ビットマップ",
+    "description": "The label for category Bitmap in sidebar docs"
+  },
+  "sidebar.docs.category.Condition": {
+    "message": "条件",
+    "description": "The label for category Condition in sidebar docs"
+  },
+  "sidebar.docs.category.Cryptographic": {
+    "message": "暗号",
+    "description": "The label for category Cryptographic in sidebar docs"
+  },
+  "sidebar.docs.category.Date and time": {
+    "message": "日付と時間",
+    "description": "The label for category Date and time in sidebar docs"
+  },
+  "sidebar.docs.category.Dictionary": {
+    "message": "辞書",
+    "description": "The label for category Dictionary in sidebar docs"
+  },
+  "sidebar.docs.category.Hash": {
+    "message": "ハッシュ",
+    "description": "The label for category Hash in sidebar docs"
+  },
+  "sidebar.docs.category.JSON": {
+    "message": "JSON",
+    "description": "The label for category JSON in sidebar docs"
+  },
+  "sidebar.docs.category.JSON Constructor": {
+    "message": "JSONコンストラクタ",
+    "description": "The label for category JSON Constructor in sidebar docs"
+  },
+  "sidebar.docs.category.JSON query and processing": {
+    "message": "JSONクエリと処理",
+    "description": "The label for category JSON query and processing in sidebar docs"
+  },
+  "sidebar.docs.category.Pattern matching": {
+    "message": "パターンマッチング",
+    "description": "The label for category Pattern matching in sidebar docs"
+  },
+  "sidebar.docs.category.Map": {
+    "message": "マップ",
+    "description": "The label for category Map in sidebar docs"
+  },
+  "sidebar.docs.category.Math": {
+    "message": "数学",
+    "description": "The label for category Math in sidebar docs"
+  },
+  "sidebar.docs.category.Percentile": {
+    "message": "パーセンタイル",
+    "description": "The label for category Percentile in sidebar docs"
+  },
+  "sidebar.docs.category.Scalar": {
+    "message": "スカラー",
+    "description": "The label for category Scalar in sidebar docs"
+  },
+  "sidebar.docs.category.Spatial": {
+    "message": "空間",
+    "description": "The label for category Spatial in sidebar docs"
+  },
+  "sidebar.docs.category.Struct": {
+    "message": "構造体",
+    "description": "The label for category Struct in sidebar docs"
+  },
+  "sidebar.docs.category.Table": {
+    "message": "テーブル",
+    "description": "The label for category Table in sidebar docs"
+  },
+  "sidebar.docs.category.Utility": {
+    "message": "ユーティリティ",
+    "description": "The label for category Utility in sidebar docs"
+  },
+  "sidebar.docs.category.SQL statements": {
+    "message": "SQLステートメント",
+    "description": "The label for category SQL statements in sidebar docs"
+  },
+  "sidebar.docs.category.User account management": {
+    "message": "ユーザーアカウント管理",
+    "description": "The label for category User account management in sidebar docs"
+  },
+  "sidebar.docs.category.Cluster management": {
+    "message": "クラスター管理",
+    "description": "The label for category Cluster management in sidebar docs"
+  },
+  "sidebar.docs.category.Nodes and processes": {
+    "message": "ノードとプロセス",
+    "description": "The label for category Nodes and processes in sidebar docs"
+  },
+  "sidebar.docs.category.Configuration variables": {
+    "message": "設定変数",
+    "description": "The label for category Configuration variables in sidebar docs"
+  },
+  "sidebar.docs.category.Resource group": {
+    "message": "リソースグループ",
+    "description": "The label for category Resource group in sidebar docs"
+  },
+  "sidebar.docs.category.Storage volume": {
+    "message": "ストレージボリューム",
+    "description": "The label for category Storage volume in sidebar docs"
+  },
+  "sidebar.docs.category.Tablet and replica": {
+    "message": "タブレットとレプリカ",
+    "description": "The label for category Tablet and replica in sidebar docs"
+  },
+  "sidebar.docs.category.File": {
+    "message": "ファイル",
+    "description": "The label for category File in sidebar docs"
+  },
+  "sidebar.docs.category.SQL blacklist": {
+    "message": "SQLブラックリスト",
+    "description": "The label for category SQL blacklist in sidebar docs"
+  },
+  "sidebar.docs.category.Plugin": {
+    "message": "プラグイン",
+    "description": "The label for category Plugin in sidebar docs"
+  },
+  "sidebar.docs.category.Execution plan and profile": {
+    "message": "実行計画とプロファイル",
+    "description": "The label for category Execution plan and profile in sidebar docs"
+  },
+  "sidebar.docs.category.Loading and unloading": {
+    "message": "ロードとアンロード",
+    "description": "The label for category Loading and unloading in sidebar docs"
+  },
+  "sidebar.docs.category.ETL": {
+    "message": "ETL",
+    "description": "The label for category ETL in sidebar docs"
+  },
+  "sidebar.docs.category.pipe": {
+    "message": "パイプ",
+    "description": "The label for category pipe in sidebar docs"
+  },
+  "sidebar.docs.category.routine_load": {
+    "message": "ルーチンロード",
+    "description": "The label for category routine_load in sidebar docs"
+  },
+  "sidebar.docs.category.unloading": {
+    "message": "アンロード",
+    "description": "The label for category unloading in sidebar docs"
+  },
+  "sidebar.docs.category.Database": {
+    "message": "データベース",
+    "description": "The label for category Database in sidebar docs"
+  },
+  "sidebar.docs.category.Resource": {
+    "message": "リソース",
+    "description": "The label for category Resource in sidebar docs"
+  },
+  "sidebar.docs.category.Table, bucket, partition, and index": {
+    "message": "テーブル、バケット、パーティション、インデックス",
+    "description": "The label for category Table, bucket, partition, and index in sidebar docs"
+  },
+  "sidebar.docs.category.View": {
+    "message": "ビュー",
+    "description": "The label for category View in sidebar docs"
+  },
+  "sidebar.docs.category.Materialized View": {
+    "message": "マテリアライズドビュー",
+    "description": "The label for category Materialized View in sidebar docs"
+  },
+  "sidebar.docs.category.Function": {
+    "message": "関数",
+    "description": "The label for category Function in sidebar docs"
+  },
+  "sidebar.docs.category.CBO statistics": {
+    "message": "CBO統計",
+    "description": "The label for category CBO statistics in sidebar docs"
+  },
+  "sidebar.docs.category.Backup and restore": {
+    "message": "バックアップとリストア",
+    "description": "The label for category Backup and restore in sidebar docs"
+  },
+  "sidebar.docs.category.dictionary": {
+    "message": "辞書",
+    "description": "The label for category dictionary in sidebar docs"
+  },
+  "sidebar.docs.category.Information Schema": {
+    "message": "情報スキーマ",
+    "description": "The label for category Information Schema in sidebar docs"
+  },
+  "sidebar.docs.category.System metadatabase": {
+    "message": "システムメタデータベース",
+    "description": "The label for category System metadatabase in sidebar docs"
+  },
+  "sidebar.docs.category.FAQ": {
+    "message": "FAQ",
+    "description": "The label for category FAQ in sidebar docs"
+  },
+  "sidebar.docs.category.Data Migration": {
+    "message": "データ移行",
+    "description": "The label for category Data Migration in sidebar docs"
+  },
+  "sidebar.docs.category.Benchmarks": {
+    "message": "ベンチマーク",
+    "description": "The label for category Benchmarks in sidebar docs"
+  },
+  "sidebar.docs.category.Developers": {
+    "message": "開発者",
+    "description": "The label for category Developers in sidebar docs"
+  },
+  "sidebar.docs.category.build-starrocks": {
+    "message": "build-starrocks",
+    "description": "The label for category build-starrocks in sidebar docs"
+  },
+  "sidebar.docs.category.code-style-guides": {
+    "message": "コードスタイルガイド",
+    "description": "The label for category code-style-guides in sidebar docs"
+  },
+  "sidebar.docs.category.development-environment": {
+    "message": "開発環境",
+    "description": "The label for category development-environment in sidebar docs"
+  },
+  "sidebar.docs.category.trace-tools": {
+    "message": "トレースツール",
+    "description": "The label for category trace-tools in sidebar docs"
+  },
+  "sidebar.docs.link.Kettle connector": {
+    "message": "Kettle コネクター",
+    "description": "The label for link Kettle connector in sidebar docs, linking to https://github.com/StarRocks/starrocks-connector-for-kettle"
+  },
+  "sidebar.docs.link.DBT": {
+    "message": "DBT",
+    "description": "The label for link DBT in sidebar docs, linking to https://github.com/StarRocks/dbt-starrocks/blob/main/README.md"
+  }
+}
