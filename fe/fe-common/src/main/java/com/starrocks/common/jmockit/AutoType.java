@@ -2,6 +2,7 @@
  * Copyright (c) 2006 JMockit developers
  * This file is subject to the terms of the MIT license.
  * (https://github.com/jmockit/jmockit2/blob/master/LICENSE.txt)
+ * test
  */
 
 package com.starrocks.common.jmockit;
