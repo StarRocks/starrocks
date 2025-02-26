@@ -143,7 +143,7 @@ public class CompactionMgrTest {
 
             }
         };
-        compactionManager.rebuildActiveCompactionTransactionMapOnRestart();
+        compactionManager.buildActiveCompactionTransactionMap();
 
         Set<PartitionIdentifier> allPartitions = compactionManager.getAllPartitions();
         Assert.assertEquals(3, allPartitions.size());
@@ -289,7 +289,7 @@ public class CompactionMgrTest {
         };
 
         CompactionMgr compactionMgr = new CompactionMgr();
-        compactionMgr.rebuildActiveCompactionTransactionMapOnRestart();
+        compactionMgr.buildActiveCompactionTransactionMap();
         ConcurrentHashMap<Long, Long> activeCompactionTransactionMap =
                 compactionMgr.getRemainedActiveCompactionTxnWhenStart();
         Assert.assertEquals(1, activeCompactionTransactionMap.size());
