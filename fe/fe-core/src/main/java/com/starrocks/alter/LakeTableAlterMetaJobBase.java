@@ -186,7 +186,6 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
 
         if (!publishVersion()) {
-            LOG.info("publish version failed, will retry later. jobId={}", jobId);
             return;
         }
 
@@ -255,7 +254,7 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         return true;
     }
 
-    boolean publishVersion() {
+    protected boolean lakePublishVersion() {
         try {
             TxnInfoPB txnInfo = new TxnInfoPB();
             txnInfo.txnId = watershedTxnId;
