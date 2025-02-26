@@ -353,6 +353,8 @@ public:
 
     void try_release_resource_before_core_dump();
 
+    static Status init_object_cache(GlobalEnv* global_env);
+
 private:
     void _wait_for_fragments_finish();
     size_t _get_running_fragments_count() const;

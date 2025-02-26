@@ -170,18 +170,6 @@ StorageEngine* init_storage_engine(GlobalEnv* global_env, std::vector<StorePath>
     return engine;
 }
 
-Status init_object_cache(GlobalEnv* global_env) {
-    ObjectCache* object_cache = ObjectCache::instance();
-    if (object_cache->initialized()) {
-        return Status::OK();
-    }
-    ObjectCacheOptions options;
-    int64_t storage_cache_limit = global_env->get_storage_page_cache_size();
-    storage_cache_limit = global_env->check_storage_page_cache_size(storage_cache_limit);
-    options.capacity = storage_cache_limit;
-    return object_cache->init(options);
-}
-
 extern void shutdown_tracer();
 
 void start_be(const std::vector<StorePath>& paths, bool as_cn) {
@@ -235,7 +223,7 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         LOG(INFO) << process_name << " starts by skipping the datacache initialization";
     }
 
-    EXIT_IF_ERROR(init_object_cache(global_env));
+    EXIT_IF_ERROR(ExecEnv::init_object_cache(global_env));
     LOG(INFO) << process_name << " start step " << start_step++ << ": object cache init successfully";
 
     // Init storage page cache.

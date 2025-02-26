@@ -108,6 +108,11 @@ int init_test_env(int argc, char** argv) {
     st = exec_env->init(paths);
     CHECK(st.ok()) << st;
 
+    st = exec_env->init_object_cache(global_env);
+    CHECK(st.ok()) << st;
+
+    StoragePageCache::create_global_cache(ObjectCache::instance());
+
     int r = RUN_ALL_TESTS();
 
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
