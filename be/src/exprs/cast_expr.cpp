@@ -1065,8 +1065,10 @@ public:
     DEFINE_CAST_CONSTRUCT(VectorizedCastExpr);
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
-        if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {
-            return ColumnHelper::create_const_null_column(column->size());
+
+        size_t col_size = column->size();
+        if (ColumnHelper::count_nulls(column) == col_size && co_size != 0) {
+            return ColumnHelper::create_const_null_column(col_size);
         }
         const TypeDescriptor& to_type = this->type();
 
@@ -1120,7 +1122,7 @@ public:
         }
         DCHECK(result_column.get() != nullptr);
         if (result_column->is_constant()) {
-            result_column->resize(column->size());
+            result_column->resize(col_size);
         }
         return result_column;
     };
