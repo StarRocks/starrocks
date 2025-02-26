@@ -246,10 +246,10 @@ public class SPMPlanTest extends PlanTestBase {
                 "AND (`test`.`t0`.`v2` IN (_spm_const_list(1, 10, 11))) " +
                 "AND (`test`.`t1`.`v5` = _spm_const_var(2, 5))");
 
-        assertContains(generator.getPlanStmtSQL(), "SELECT v2, v4 FROM " +
-                "(SELECT * FROM t0 WHERE v3 IS NOT NULL AND v2 IN (_spm_const_list(1, 10, 11))) t_0 " +
-                "INNER JOIN[SHUFFLE] " +
-                "(SELECT * FROM t1 WHERE v6 IS NOT NULL AND v5 = _spm_const_var(2, 5)) t_1 ON v3 = v6");
+        assertContains(generator.getPlanStmtSQL(),
+                "SELECT v2, v4 FROM (SELECT * FROM t0 WHERE v3 IS NOT NULL AND v2 IN (_spm_const_list(1, 10, 11))) "
+                        + "t_0 INNER JOIN[SHUFFLE] (SELECT v4, v6 FROM t1 WHERE v6 IS NOT NULL AND v5 = "
+                        + "_spm_const_var(2, 5)) t_1 ON v3 = v6");
     }
 
     @Test
@@ -275,8 +275,8 @@ public class SPMPlanTest extends PlanTestBase {
 
         assertContains(generator.getPlanStmtSQL(), "SELECT v2, v4 FROM "
                 + "(SELECT * FROM t0 WHERE v3 IS NOT NULL AND v2 IN (_spm_const_list(1, 10, 11))) t_0 "
-                + "INNER JOIN[SHUFFLE] (SELECT * FROM t1 WHERE v6 IS NOT NULL AND v5 = _spm_const_var(2, 1)) t_1 ON "
-                + "v3 = v6");
+                + "INNER JOIN[SHUFFLE] (SELECT v4, v6 FROM t1 WHERE v6 IS NOT NULL AND v5 = _spm_const_var(2, 1)) t_1 "
+                + "ON v3 = v6");
     }
 
     @Test
@@ -320,8 +320,9 @@ public class SPMPlanTest extends PlanTestBase {
         assertContains(generator.getBindSql(), "SELECT `test`.`t0`.`v2`, sum(`test`.`t0`.`v3`)\n" + "FROM `test`.`t0`\n"
                 + "WHERE `test`.`t0`.`v1` = _spm_const_var(1, 1)\n" + "GROUP BY `test`.`t0`.`v2`");
 
-        assertContains(generator.getPlanStmtSQL(),
-                "SELECT v2, sum(v3) AS c_4 FROM (SELECT * FROM t0 WHERE v1 = _spm_const_var(1, 1)) t_0 GROUP BY v2");
+        assertContains(generator.getPlanStmtSQL(), "SELECT v2, sum(v3) AS c_4 "
+                + "FROM (SELECT v2, v3 FROM t0 WHERE v1 = _spm_const_var(1, 1)) t_0 "
+                + "GROUP BY v2");
     }
 
     @Test
@@ -338,9 +339,20 @@ public class SPMPlanTest extends PlanTestBase {
         assertContains(generator.getBindSql(), "SELECT `test`.`t0`.`v2`, sum(`test`.`t0`.`v3`)\n" + "FROM `test`.`t0`\n"
                 + "WHERE `test`.`t0`.`v1` = _spm_const_var(1, 1)\n" + "GROUP BY `test`.`t0`.`v2`");
 
-        assertContains(generator.getPlanStmtSQL(),
-                "SELECT v2, sum(v3) AS c_4 FROM (SELECT * FROM t0 WHERE v1 = _spm_const_var(1, 1)) t_0 "
-                        + "GROUP BY v2 HAVING c_4 > _spm_const_var(2, 100)");
+        assertContains(generator.getPlanStmtSQL(), "SELECT v2, sum(v3) AS c_4 "
+                + "FROM (SELECT v2, v3 FROM t0 WHERE v1 = _spm_const_var(1, 1)) t_0 "
+                + "GROUP BY v2 HAVING sum(v3) > _spm_const_var(2, 100)");
+    }
+
+    @Test
+    public void testBindAggregateHavingProjection() {
+        CreateBaselinePlanStmt stmt =
+                createBaselinePlanStmt("SELECT v2 + 2, sum(v3) FROM t0 WHERE v1 = 1 GROUP BY v2 HAVING sum(v3) > 100");
+        SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
+        generator.execute();
+        assertContains(generator.getPlanStmtSQL(), "SELECT sum(v3) AS c_4, v2 + _spm_const_var(1, 2) AS c_5 "
+                + "FROM (SELECT v2, v3 FROM t0 WHERE v1 = _spm_const_var(2, 1)) t_0 "
+                + "GROUP BY v2 HAVING sum(v3) > _spm_const_var(3, 100)");
     }
 
     @Test
@@ -378,13 +390,14 @@ public class SPMPlanTest extends PlanTestBase {
                         + "(_spm_const_var(10, 11), _spm_const_var(11, 22), _spm_const_var(12, 33))) y(v4,v5,v6) ON "
                         + "`x`.`v1` = `y`.`v4`");
 
-        assertContains(generator.getPlanStmtSQL(), "SELECT * FROM " + "(SELECT * FROM "
-                + "(SELECT * FROM (VALUES (_spm_const_var(1, 1), _spm_const_var(2, 2), _spm_const_var(3, 3)), "
-                + "(_spm_const_var(4, 4), _spm_const_var(5, 5), _spm_const_var(6, 6))) AS t(c_1, c_2, c_3)) t_0 "
-                + "WHERE c_1 IS NOT NULL) t_2 " + "INNER JOIN[BROADCAST] " + "(SELECT * FROM "
+        assertContains(generator.getPlanStmtSQL(), "SELECT * FROM "
+                + "(SELECT * FROM "
+                + "(VALUES (_spm_const_var(1, 1), _spm_const_var(2, 2), _spm_const_var(3, 3)), "
+                + "(_spm_const_var(4, 4), _spm_const_var(5, 5), _spm_const_var(6, 6))) AS t(c_1, c_2, c_3) "
+                + "WHERE c_1 IS NOT NULL) t_0 INNER JOIN[BROADCAST] "
                 + "(SELECT * FROM (VALUES (_spm_const_var(7, 9), _spm_const_var(8, 7), _spm_const_var(9, 8)), "
-                + "(_spm_const_var(10, 11), _spm_const_var(11, 22), _spm_const_var(12, 33))) AS t(c_4, c_5, c_6)) "
-                + "t_1 WHERE c_4 IS NOT NULL) t_3 ON c_1 = c_4");
+                + "(_spm_const_var(10, 11), _spm_const_var(11, 22), _spm_const_var(12, 33))) AS t(c_4, c_5, c_6) "
+                + "WHERE c_4 IS NOT NULL) t_1 ON c_1 = c_4");
     }
 
     @Test
@@ -402,9 +415,11 @@ public class SPMPlanTest extends PlanTestBase {
                 + "WHERE `test`.`t0`.`v1` = _spm_const_var(1, 1) UNION ALL SELECT *\n" + "FROM `test`.`t0`\n"
                 + "WHERE `test`.`t0`.`v1` = _spm_const_var(2, 2)");
 
-        assertContains(generator.getPlanStmtSQL(), "SELECT c_7, c_8, c_9 " + "FROM ("
-                + "SELECT v1, v2, v3 FROM (SELECT * FROM t0 WHERE v1 = _spm_const_var(1, 1)) t_0 " + "UNION "
-                + "SELECT v1, v2, v3 FROM (SELECT * FROM t0 WHERE v1 = _spm_const_var(2, 2)) t_1" + ") t_2");
+        assertContains(generator.getPlanStmtSQL(), "SELECT * FROM ("
+                + "SELECT v1 AS c_7, v2 AS c_8, v3 AS c_9 FROM t0 WHERE v1 = _spm_const_var(1, 1) "
+                + "UNION ALL "
+                + "SELECT v1 AS c_7, v2 AS c_8, v3 AS c_9 FROM t0 WHERE v1 = _spm_const_var(2, 2)"
+                + ") t_2");
     }
 
     @Test
@@ -439,10 +454,10 @@ public class SPMPlanTest extends PlanTestBase {
                 + "FROM `test`.`t0`) , `y` (`v1`, `v2`, `v3`) AS (SELECT *\n" + "FROM `x`) SELECT x.*\n"
                 + "FROM `x` , `y` \n" + "WHERE `x`.`v1` = _spm_const_var(1, 1)");
 
-        assertContains(generator.getPlanStmtSQL(),
-                "WITH t_0 AS (SELECT * FROM t0) " + "SELECT t_1.v1 AS c_4, t_1.v2 AS c_5, t_1.v3 AS c_6 "
-                        + "FROM (SELECT * FROM t_0 WHERE v1 = _spm_const_var(1, 1)) t_1 " + "CROSS JOIN[BROADCAST] "
-                        + "(SELECT 1 AS c_12 FROM t_0) t_2");
+        assertContains(generator.getPlanStmtSQL(), "WITH t_0 AS (SELECT * FROM t0) "
+                + "SELECT v1, v2, v3 FROM "
+                + "(SELECT * FROM t_0 WHERE v1 = _spm_const_var(1, 1)) t_1 "
+                + "CROSS JOIN[BROADCAST] (SELECT 1 AS c_12 FROM t_0) t_2");
     }
 
     @Test
@@ -467,8 +482,43 @@ public class SPMPlanTest extends PlanTestBase {
                 + ".`v2` DESC ) AS `sum1`\n" + "FROM `test`.`t0`");
 
         assertContains(generator.getPlanStmtSQL(),
-                "SELECT v2, v3, avg(v2) OVER (PARTITION BY v2, v3 ORDER BY v2 DESC ) AS c_4, "
+                "SELECT v3, avg(v2) OVER (PARTITION BY v2, v3 ORDER BY v2 DESC ) AS c_4, "
                         + "sum(v2) OVER (PARTITION BY v2, v3 ORDER BY v2 DESC ) AS c_5 FROM t0");
+    }
+
+    @Test
+    public void testWindow2() {
+        connectContext.getSessionVariable().setCboCTERuseRatio(0);
+        CreateBaselinePlanStmt stmt = createBaselinePlanStmt(
+                "select v3, sum(v2), avg(v2) over (partition by v2, v3 order by v2 desc), "
+                        + "sum(v2) over (partition by v2, v3 order by v2 desc) as sum1 from t0 "
+                        + "group by v2,v3 having sum(v2) > 100");
+        SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
+        generator.execute();
+
+        assertContains(generator.getBindSqlDigest(), "SELECT `test`.`t0`.`v3`, sum(`test`.`t0`.`v2`), "
+                + "avg(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` "
+                + "ORDER BY `test`.`t0`.`v2` DESC ), "
+                + "sum(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` "
+                + "ORDER BY `test`.`t0`.`v2` DESC ) AS `sum1`\n"
+                + "FROM `test`.`t0`\n"
+                + "GROUP BY `test`.`t0`.`v2`, `test`.`t0`.`v3`\n"
+                + "HAVING (sum(`test`.`t0`.`v2`)) > ?");
+
+        assertContains(generator.getBindSql(), "SELECT `test`.`t0`.`v3`, sum(`test`.`t0`.`v2`), "
+                + "avg(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` "
+                + "ORDER BY `test`.`t0`.`v2` DESC ), "
+                + "sum(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` "
+                + "ORDER BY `test`.`t0`.`v2` DESC ) AS `sum1`\n"
+                + "FROM `test`.`t0`\n"
+                + "GROUP BY `test`.`t0`.`v2`, `test`.`t0`.`v3`\n"
+                + "HAVING (sum(`test`.`t0`.`v2`)) > _spm_const_var(1, 100)");
+
+        assertContains(generator.getPlanStmtSQL(),
+                "SELECT v3, c_4, avg(v2) OVER (PARTITION BY v2, v3 ORDER BY v2 DESC ) AS c_5, "
+                        + "sum(v2) OVER (PARTITION BY v2, v3 ORDER BY v2 DESC ) AS c_6 "
+                        + "FROM (SELECT v2, v3, sum(v2) AS c_4 FROM t0 "
+                        + "GROUP BY v2, v3 HAVING sum(v2) > _spm_const_var(1, 100)) t_0");
     }
 
     @Test
@@ -489,7 +539,8 @@ public class SPMPlanTest extends PlanTestBase {
                         + "(`test`.`t0`.`v3`)\n" + "FROM `test`.`t0`\n"
                         + "GROUP BY GROUPING SETS ((), (`test`.`t0`.`v1`, `test`.`t0`.`v2`))");
 
-        assertContains(generator.getPlanStmtSQL(), "SELECT * FROM (SELECT v1, v2, GROUPING(v1, v2), sum(c_4) AS c_4 "
-                + "FROM t0 GROUP BY GROUPING SETS((), (v1, v2))) t_0");
+        assertContains(generator.getPlanStmtSQL(), "SELECT c_1, c_2, c_6, c_4 FROM "
+                + "(SELECT v1 AS c_1, v2 AS c_2, sum(v3) AS c_4, GROUPING(v1, v2) AS c_6 "
+                + "FROM t0 GROUP BY GROUPING SETS((), (v1, v2))) t1");
     }
 }

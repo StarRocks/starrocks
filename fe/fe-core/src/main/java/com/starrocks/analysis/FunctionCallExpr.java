@@ -485,4 +485,9 @@ public class FunctionCallExpr extends Expr {
             return this;
         }
     }
+
+    @Override
+    public String toString() {
+        return toMySql();
+    }
 }

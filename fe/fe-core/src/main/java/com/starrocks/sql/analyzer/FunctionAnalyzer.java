@@ -678,6 +678,10 @@ public class FunctionAnalyzer {
             return fn;
         }
 
+        fn = SPMFunctions.getSPMFunction(node.getFnName().getFunction());
+        if (fn != null) {
+            return fn;
+        }
         // get fn from builtin functions
         fn = getAnalyzedBuiltInFunction(session, fnName, params, argumentTypes, node.getPos());
         if (fn != null) {
@@ -691,12 +695,7 @@ public class FunctionAnalyzer {
         }
 
         // get fn from meta functions
-        fn = ScalarOperatorEvaluator.INSTANCE.getMetaFunction(node.getFnName(), argumentTypes);
-
-        if (fn != null) {
-            return fn;
-        }
-        return SPMFunctions.getSPMFunction(node.getFnName().getFunction());
+        return ScalarOperatorEvaluator.INSTANCE.getMetaFunction(node.getFnName(), argumentTypes);
     }
 
     /**

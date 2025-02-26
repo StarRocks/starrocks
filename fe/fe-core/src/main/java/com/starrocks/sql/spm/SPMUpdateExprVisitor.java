@@ -15,6 +15,7 @@
 package com.starrocks.sql.spm;
 
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CTERelation;
@@ -54,11 +55,15 @@ public class SPMUpdateExprVisitor<C> implements AstVisitor<ParseNode, C> {
     public ParseNode visitSelect(SelectRelation stmt, C context) {
         stmt.getCteRelations().forEach(this::visit);
         visit(stmt.getRelation());
-        stmt.getSelectList().getItems().forEach(item -> item.setExpr(visitExpr(item.getExpr(), context)));
         stmt.setOutputExpr(visitExprList(stmt.getOutputExpression(), context));
         stmt.setWhereClause(visitExpr(stmt.getWhereClause(), context));
         stmt.setGroupBy(visitExprList(stmt.getGroupBy(), context));
         stmt.setHaving(visitExpr(stmt.getHaving(), context));
+        if (stmt.getOrderBy() != null) {
+            for (OrderByElement element : stmt.getOrderBy()) {
+                element.setExpr(visitExpr(element.getExpr(), context));
+            }
+        }
         return stmt;
     }
 

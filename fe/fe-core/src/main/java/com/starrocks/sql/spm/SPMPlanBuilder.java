@@ -15,14 +15,7 @@
 package com.starrocks.sql.spm;
 
 import com.google.common.base.Preconditions;
-import com.google.common.collect.Sets;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.HintNode;
-import com.starrocks.analysis.InPredicate;
-import com.starrocks.analysis.IntLiteral;
-import com.starrocks.analysis.LiteralExpr;
-import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SetVarHint;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.DdlException;
@@ -49,8 +42,6 @@ import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
 
 import java.util.List;
-import java.util.Optional;
-import java.util.Set;
 
 // to build plan for bind sql
 public class SPMPlanBuilder {
@@ -130,7 +121,7 @@ public class SPMPlanBuilder {
                     new ColumnRefSet(logicalPlan.getOutputColumn()));
 
             SPMPlan2SQLBuilder sqlBuilder = new SPMPlan2SQLBuilder();
-            planStmtSQL = sqlBuilder.toSQL(hints, optimizedPlan);
+            planStmtSQL = sqlBuilder.toSQL(hints, optimizedPlan, logicalPlan.getOutputColumn());
             costs = optimizedPlan.getCost();
         } finally {
             if (cloneVariable != null) {
@@ -141,15 +132,15 @@ public class SPMPlanBuilder {
 
     protected void parameterizedStmt() {
         QueryRelation bind;
-        SPMPlaceholderBuilder builder = new SPMPlaceholderBuilder();
         if (this.stmt.getBindStmt() != null) {
             // has bind and plan
+            SPMPlaceholderBuilder builder = new SPMPlaceholderBuilder(false);
             builder.findPlaceholder(this.stmt.getBindStmt());
             bind = builder.insertPlaceholder(this.stmt.getBindStmt());
-            PlanASTPlaceholderBinder placeholderBinder = new PlanASTPlaceholderBinder(builder);
-            placeholderBinder.bind(this.stmt.getPlanStmt());
+            builder.bindPlaceholder(this.stmt.getPlanStmt());
         } else {
             // only plan
+            SPMPlaceholderBuilder builder = new SPMPlaceholderBuilder(false);
             bind = builder.insertPlaceholder(this.stmt.getPlanStmt());
         }
         SPMAst2SQLBuilder digestBuilder = new SPMAst2SQLBuilder(false, true);
@@ -174,72 +165,6 @@ public class SPMPlanBuilder {
             Analyzer.analyze(statement, session);
         } finally {
             locker.unlock();
-        }
-    }
-
-    private static class PlanASTPlaceholderBinder extends SPMUpdateExprVisitor<Expr> {
-        private final SPMPlaceholderBuilder builder;
-        private final Set<Long> userSPMIds = Sets.newHashSet();
-
-        public PlanASTPlaceholderBinder(SPMPlaceholderBuilder builder) {
-            this.builder = builder;
-        }
-
-        public void bind(QueryRelation query) {
-            query.accept(this, null);
-            if (!builder.getUserDefineIds().containsAll(userSPMIds) ||
-                    !userSPMIds.containsAll(builder.getUserDefineIds())) {
-                throw new SemanticException("placeholder conflict");
-            }
-            for (Long userDefineId : builder.getUserDefineIds()) {
-                if (!userSPMIds.contains(userDefineId)) {
-                    throw new SemanticException("can't found placeholder: " + userDefineId + " in plan stmt");
-                }
-            }
-            for (Long userSPMId : userSPMIds) {
-                if (!builder.getUserDefineIds().contains(userSPMId)) {
-                    throw new SemanticException("can't found placeholder: " + userSPMId + " in bind stmt");
-                }
-            }
-        }
-
-        @Override
-        public ParseNode visitInPredicate(InPredicate node, Expr parent) {
-            if (node.getChildren().stream().anyMatch(SPMFunctions::isSPMFunctions)) {
-                return super.visitInPredicate(node, parent);
-            }
-            Optional<Expr> spm = builder.findPlaceholderExpr(node, node);
-            return spm.orElseThrow(() -> new SemanticException(
-                    "can't find expression placeholder or there is placeholder conflict : " +
-                            node.toMySql()));
-        }
-
-        @Override
-        public ParseNode visitLiteral(LiteralExpr node, Expr parent) {
-            Optional<Expr> spm = builder.findPlaceholderExpr(node, parent);
-            return spm.orElseThrow(() -> new SemanticException(
-                    "can't find expression placeholder or there is placeholder conflict, expression : " +
-                            node.toMySql()));
-        }
-
-        @Override
-        public ParseNode visitFunctionCall(FunctionCallExpr node, Expr parent) {
-            if (SPMFunctions.isSPMFunctions(node)) {
-                long spmId = ((IntLiteral) node.getChild(0)).getValue();
-                userSPMIds.add(spmId);
-                return node;
-            }
-            return super.visitFunctionCall(node, parent);
-        }
-
-        @Override
-        public ParseNode visitExpression(Expr node, Expr parent) {
-            if (node.getChildren() != null && !node.getChildren().isEmpty()) {
-                for (int i = 0; i < node.getChildren().size(); i++) {
-                    node.setChild(i, visitExpr(node.getChild(i), node));
-                }
-            }
-            return node;
         }
     }
 }

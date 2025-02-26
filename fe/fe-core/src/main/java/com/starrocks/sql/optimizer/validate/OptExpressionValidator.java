@@ -51,12 +51,6 @@ public class OptExpressionValidator extends OptExpressionVisitor<OptExpression, 
     }
 
     public void validate(OptExpression root) {
-        // TODO(packy92)
-        //  The tree-based rewriting rules in RBO may modify the child node but not update the
-        //  parent node, resulting in the statistical cache calculated by the previous rules
-        //  not being refreshed, which may affect the calculation of statistical information in memo.
-        //  Just clear it before into memo.
-        root.clearStatsAndInitOutputInfo();
         visit(root, null);
     }
 

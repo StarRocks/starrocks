@@ -23,6 +23,7 @@ import com.starrocks.analysis.IntLiteral;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.Type;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -78,12 +79,11 @@ public class SPMFunctions {
     }
 
     public static boolean isSPMFunctions(ScalarOperator operator) {
-        if (!(operator instanceof CallOperator)) {
+        if (!(operator.getOpType() == OperatorType.CALL)) {
             return false;
         }
 
-        return SPM_FUNCTIONS.contains(((CallOperator) operator).getFunction()
-                .getFunctionName().getFunction().toLowerCase());
+        return SPM_FUNCTIONS.contains(((CallOperator) operator).getFnName().toLowerCase());
     }
 
     public static ScalarOperator castSPMFunctions(ScalarOperator operator, Type type) {

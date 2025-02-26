@@ -134,6 +134,12 @@ public class SPMPlanner {
             if (SPMFunctions.isSPMFunctions(node) && ((Expr) node2).isConstant()) {
                 Preconditions.checkState(!node.getChildren().isEmpty());
                 Preconditions.checkState(node.getChild(0) instanceof IntLiteral);
+                long spmId = ((IntLiteral) node.getChild(0)).getValue();
+
+                if (placeholderValues.containsKey(spmId)) {
+                    // same placeholder check is same values
+                    return placeholderValues.get(spmId).equals(node2);
+                }
                 placeholderValues.put(((IntLiteral) node.getChild(0)).getValue(), (Expr) node2);
                 return true;
             }

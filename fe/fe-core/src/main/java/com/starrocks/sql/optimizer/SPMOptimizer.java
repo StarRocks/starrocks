@@ -85,6 +85,7 @@ public class SPMOptimizer extends Optimizer {
     isEnableStatsToOptimizeSkewJoin
     MVRewrite
     PruneTable
+    PRUNE_UKFK_JOIN_RULES
      */
     private OptExpression optimizeByRule(OptExpression tree,
                                          TaskContext rootTaskContext) {
@@ -123,7 +124,6 @@ public class SPMOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PRUNE_COLUMNS_RULES);
         // Put EliminateAggRule after PRUNE_COLUMNS to give a chance to prune group bys before eliminate aggregations.
         scheduler.rewriteOnce(tree, rootTaskContext, EliminateAggRule.getInstance());
-        scheduler.rewriteIterative(tree, rootTaskContext, RuleSet.PRUNE_UKFK_JOIN_RULES);
         deriveLogicalProperty(tree);
 
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownJoinOnExpressionToChildProject());
@@ -196,6 +196,8 @@ public class SPMOptimizer extends Optimizer {
 
         scheduler.rewriteOnce(tree, rootTaskContext, UnionToValuesRule.getInstance());
         deriveLogicalProperty(tree);
+        
+        tree.getInputs().get(0).clearStatsAndInitOutputInfo();
         return tree.getInputs().get(0);
     }
 
@@ -311,6 +313,7 @@ public class SPMOptimizer extends Optimizer {
 
         OptExpression expression = OptExpression.create(groupExpression.getOp(), childPlans);
         expression.setCost(groupExpression.getCost(requiredProperty));
+        expression.setRequiredProperties(inputProperties);
         return expression;
     }
 }
