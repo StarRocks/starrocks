@@ -1067,7 +1067,7 @@ public:
         ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
 
         size_t col_size = column->size();
-        if (ColumnHelper::count_nulls(column) == col_size && co_size != 0) {
+        if (ColumnHelper::count_nulls(column) == col_size && col_size != 0) {
             return ColumnHelper::create_const_null_column(col_size);
         }
         const TypeDescriptor& to_type = this->type();
