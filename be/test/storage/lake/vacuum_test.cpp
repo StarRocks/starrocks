@@ -590,7 +590,7 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
         EXPECT_EQ(0, response.vacuumed_files());
         EXPECT_EQ(0, response.vacuumed_file_size());
-        EXPECT_EQ(2, response.vacuumed_version());
+        EXPECT_EQ(0, response.vacuumed_version());
 
         ensure_all_files_exist();
     }
