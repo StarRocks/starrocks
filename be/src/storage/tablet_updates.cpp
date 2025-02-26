@@ -2713,11 +2713,11 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
         } else {
             dcg_deleted = res.value();
         }
-        VLOG(2) << strings::Substitute(
-                "remove_expired_versions $0 time:$1 min_readable_version:$2 deletes: #version:$3 #rowset:$4 "
-                "#delvec:$5 #dcgs:$6",
-                _debug_version_info(true), expire_time, min_readable_version, num_version_removed, num_rowset_removed,
-                delvec_deleted, dcg_deleted);
+        std::string msg = strings::Substitute("remove_expired_versions $0 time:$1 min_readable_version:$2",
+                                              _debug_version_info(true), expire_time, min_readable_version);
+        LOG(INFO) << msg;
+        VLOG(1) << strings::Substitute(" deletes: #version:$0 #rowset:$1 #delvec:$2 #dcgs:$3", num_version_removed,
+                                       num_rowset_removed, delvec_deleted, dcg_deleted);
     }
     _remove_unused_rowsets();
 }
