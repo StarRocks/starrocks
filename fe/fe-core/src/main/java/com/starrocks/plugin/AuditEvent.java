@@ -229,6 +229,24 @@ public class AuditEvent {
             return this;
         }
 
+        public AuditEventBuilder addScanBytes(long scanBytes) {
+            if (auditEvent.scanBytes == -1) {
+                auditEvent.scanBytes = scanBytes;
+            } else {
+                auditEvent.scanBytes += scanBytes;
+            }
+            return this;
+        }
+
+        public AuditEventBuilder addScanRows(long scanRows) {
+            if (auditEvent.scanRows == -1) {
+                auditEvent.scanRows = scanRows;
+            } else {
+                auditEvent.scanRows += scanRows;
+            }
+            return this;
+        }
+
         /**
          * Cpu cost in nanoseconds
          */
@@ -237,13 +255,30 @@ public class AuditEvent {
             return this;
         }
 
-        public AuditEventBuilder setMemCostBytes(long memCostBytes) {
-            auditEvent.memCostBytes = memCostBytes;
+        public AuditEventBuilder addCpuCostNs(long cpuNs) {
+            if (auditEvent.cpuCostNs == -1) {
+                auditEvent.cpuCostNs = cpuNs;
+            } else {
+                auditEvent.cpuCostNs += cpuNs;
+            }
             return this;
         }
 
-        public AuditEventBuilder setSpilledBytes(long spilledBytes) {
-            auditEvent.spilledBytes = spilledBytes;
+        public AuditEventBuilder addMemCostBytes(long memCostBytes) {
+            if (auditEvent.memCostBytes == -1) {
+                auditEvent.memCostBytes = memCostBytes;
+            } else {
+                auditEvent.memCostBytes = Math.max(auditEvent.memCostBytes, memCostBytes);
+            }
+            return this;
+        }
+
+        public AuditEventBuilder addSpilledBytes(long spilledBytes) {
+            if (auditEvent.spilledBytes == -1) {
+                auditEvent.spilledBytes = spilledBytes;
+            } else {
+                auditEvent.spilledBytes += spilledBytes;
+            }
             return this;
         }
 
@@ -348,6 +383,16 @@ public class AuditEvent {
 
         public AuditEvent build() {
             return this.auditEvent;
+        }
+
+        // Copy execution statistics from another audit event
+        public void copyExecStatsFrom(AuditEvent event) {
+            this.auditEvent.cpuCostNs = event.cpuCostNs;
+            this.auditEvent.memCostBytes = event.memCostBytes;
+            this.auditEvent.scanBytes = event.scanBytes;
+            this.auditEvent.scanRows = event.scanRows;
+            this.auditEvent.spilledBytes = event.spilledBytes;
+            this.auditEvent.returnRows = event.returnRows;
         }
     }
 }
