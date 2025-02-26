@@ -130,7 +130,7 @@ DISTRIBUTED BY HASH(event_day, site_id)
 
 If you frequently query and manage data of a specific type, you only need to specify the column representing the type as the partition column. StarRocks will automatically create partitions based on the partition column values of the loaded data.
 
-However, in some special scenarios, such as when the table contains a column `city`, and you frequently query and manage data based on countries and cities. You must use [list partitioning](list_partitioning.md) to store data of multiple cities within the same country in one partition.
+However, in some special scenarios, such as when the table contains a column `city`, and you frequently query and manage data based on countries and cities. You must use [list partitioning](./list_partitioning.md) to store data of multiple cities within the same country in one partition.
 
 ### Syntax
 
