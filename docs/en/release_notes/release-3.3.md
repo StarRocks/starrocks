@@ -10,9 +10,21 @@ After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.
 
 :::
 
-## 3.3.10
+## 3.3.10 (Yanked)
 
-Release date: Febuary 21, 2025
+Release date: February 21, 2025
+
+:::tip
+
+This version has been taken offline due to metadata loss issues in **shared-data clusters**.
+
+- **Problem**: When there are committed compaction transactions that are not yet been published during a shift of Leader FE node in a shared-data cluster, metadata loss may occur after the shift.
+
+- **Impact scope**: This problem only affects shared-data clusters. Shared-nothing clusters are unaffected.
+
+- **Temporary workaround**: When the Publish task is returned with an error, you can execute `SHOW PROC 'compactions'` to check if there are any partitions that have two compaction transactions with empty `FinishTime`. You can execute `ALTER TABLE DROP PARTITION FORCE` to drop the partitions to avoid Publish tasks getting hang.
+
+:::
 
 ### New Features
 
