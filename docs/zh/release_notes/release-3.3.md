@@ -10,9 +10,21 @@ displayed_sidebar: docs
 
 :::
 
-## 3.3.10
+## 3.3.10 (已下线)
 
 发布日期：2025 年 2 月 21 日
+
+:::tip
+
+此版本由于**存算分离集群**存在元数据丢失问题已经下线。
+
+- **问题**：当存算分离集群中的 Leader FE 节点切换期间有已 Commit 但尚未 Publish 的 Compaction 事务时，节点切换后可能会发生元数据丢失。
+
+- **影响范围**：此问题仅影响存算分离群集。存算一体集群不受影响。
+
+- **临时解决方法**：当 Publish 任务返回错误时，可以执行 `SHOW PROC ‘compactions’` 检查是否有分区同时有两个 `FinishTime` 为空的 Compaction 事务。您可以执行 `ALTER TABLE DROP PARTITION FORCE` 来删除该分区，以避免 Publish 任务卡住。
+
+:::
 
 ### 新增功能
 
