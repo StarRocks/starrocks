@@ -154,6 +154,10 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
         return type;
     }
 
+    public void setType(AnalyzeType type) {
+        this.type = type;
+    }
+
     @Override
     public ScheduleType getScheduleType() {
         return scheduleType;
