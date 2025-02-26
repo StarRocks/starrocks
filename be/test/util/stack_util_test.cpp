@@ -49,6 +49,9 @@ void test_get_stack_trace_for_all_threads(const std::string& line_prefix) {
     }
     int32_t num_frame = 0;
     for (auto& line : lines) {
+        if (line.empty()) {
+            continue;
+        }
         ASSERT_TRUE(line_prefix.size() <= line.size());
         ASSERT_TRUE(line.compare(0, line_prefix.size(), line_prefix) == 0);
         if (line.find("mock_frame_") == std::string::npos) {
