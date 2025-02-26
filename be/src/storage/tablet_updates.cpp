@@ -1824,11 +1824,10 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     size_t del_percent = _cur_total_rows == 0 ? 0 : (_cur_total_dels * 100) / _cur_total_rows;
     std::string msg_part1 = strings::Substitute("apply_rowset_commit finish. tablet:$0 version:$1 txn_id: $2 ",
                                                 tablet_id, version_info.version.to_string(), rowset->txn_id());
-    std::string msg_part2 =
-            strings::Substitute(" total del/row:$0/$1 $2% rowset:$3 #seg:$4 ", _cur_total_dels, _cur_total_rows,
-                                del_percent, rowset_id, rowset->num_segments()) std::string msg_part3 =
-                    strings::Substitute("#op(upsert:$0 del:$1) #del:$2+$3=$4 #dv:$5", rowset->num_rows(), delete_op,
-                                        old_total_del, new_del, total_del, ndelvec);
+    std::string msg_part2 = strings::Substitute(" total del/row:$0/$1 $2% rowset:$3 #seg:$4 ", _cur_total_dels,
+                                                _cur_total_rows, del_percent, rowset_id, rowset->num_segments());
+    std::string msg_part3 = strings::Substitute("#op(upsert:$0 del:$1) #del:$2+$3=$4 #dv:$5", rowset->num_rows(),
+                                                delete_op, old_total_del, new_del, total_del, ndelvec);
     std::string msg_part4 = strings::Substitute("duration:$0ms($1/$2/$3/$4)", t_write - t_start, t_apply - t_start,
                                                 t_index - t_apply, t_delvec - t_index, t_write - t_delvec);
 
@@ -2250,9 +2249,9 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
         std::lock_guard lg(_rowset_stats_lock);
         _rowset_stats.emplace(rowsetid, std::move(rowset_stats));
     }
-    VLOG(1) << "commit compaction tablet:" << _tablet.tablet_id() << " gtid:" << edit_version_info_ptr->gtid
-            << " version:" << edit_version_info_ptr->version.to_string() << " rowset:" << rowsetid
-            << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
+    LOG(INFO) << "commit compaction tablet:" << _tablet.tablet_id() << " gtid:" << edit_version_info_ptr->gtid
+              << " version:" << edit_version_info_ptr->version.to_string();
+    VLOG(1) << " rowset:" << rowsetid << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
             << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
             << " #pending:" << _pending_commits.size()
             << " state_memory:" << PrettyPrinter::print(_compaction_state->memory_usage(), TUnit::BYTES);
@@ -2573,11 +2572,11 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
                                                 version_info.version.to_string());
 
     std::string msg_part2 = strings::Substitute("total del/row:$0/$1 $2% rowset:$3 #row:$4 ", _cur_total_dels,
-                                                _cur_total_rows, del_percent, rowset_id, total_rows)
+                                                _cur_total_rows, del_percent, rowset_id, total_rows);
 
-            std::string msg_part3 = strings::Substitute("#del:$0 #delvec:$1 duration:$2ms($3/$4/$5)", total_deletes,
-                                                        delvecs.size(), t_write - t_start, t_load - t_start,
-                                                        t_index_delvec - t_load, t_write - t_index_delvec);
+    std::string msg_part3 =
+            strings::Substitute("#del:$0 #delvec:$1 duration:$2ms($3/$4/$5)", total_deletes, delvecs.size(),
+                                t_write - t_start, t_load - t_start, t_index_delvec - t_load, t_write - t_index_delvec);
     bool is_slow = t_write - t_start > (config::apply_version_slow_log_sec * 2) * 1000;
     if (is_slow) {
         LOG(INFO) << msg_part1 << msg_part2 << msg_part3;
