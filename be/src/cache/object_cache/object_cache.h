@@ -93,8 +93,6 @@ public:
     bool available() const { return initialized() && capacity() > 0; }
 
 private:
-
-
     std::shared_ptr<ObjectCacheModule> _cache_module;
     std::atomic<bool> _initialized = false;
 };
