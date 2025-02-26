@@ -694,7 +694,8 @@ Status TabletUpdates::rowset_commit(int64_t version, const RowsetSharedPtr& rows
                 std::string msg = strings::Substitute("commit rowset tablet:$0 version:$1 txn_id:$2 ",
                                                       _tablet.tablet_id(), version, rowset->txn_id());
                 LOG(INFO) << msg;
-                VLOG(1) << rowset->rowset_id().to_string() << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id()
+                VLOG(1) << msg << rowset->rowset_id().to_string()
+                        << " rowset:" << rowset->rowset_meta()->get_rowset_seg_id()
                         << " #seg:" << rowset->num_segments() << " #delfile:" << rowset->num_delete_files()
                         << " #uptfile:" << rowset->num_update_files() << " #row:" << rowset->num_rows()
                         << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
@@ -1835,8 +1836,8 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
     if (is_slow) {
         LOG(INFO) << msg_part1 << msg_part2 << msg_part3 << msg_part4;
     } else {
-        LOG(INFO) << msg_part1;
-        VLOG(1) << msg_part2 << msg_part3 << msg_part4;
+        LOG(INFO) << msg_part1 << msg_part4;
+        VLOG(1) << msg_part1 << msg_part2 << msg_part3 << msg_part4;
     }
     VLOG(2) << "rowset commit apply " << delvec_change_info << " " << _debug_string(true, true);
     return apply_st;
@@ -2251,7 +2252,9 @@ Status TabletUpdates::_commit_compaction(std::unique_ptr<CompactionInfo>* pinfo,
     }
     LOG(INFO) << "commit compaction tablet:" << _tablet.tablet_id() << " gtid:" << edit_version_info_ptr->gtid
               << " version:" << edit_version_info_ptr->version.to_string();
-    VLOG(1) << " rowset:" << rowsetid << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
+    VLOG(1) << "commit compaction tablet:" << _tablet.tablet_id() << " gtid:" << edit_version_info_ptr->gtid
+            << " version:" << edit_version_info_ptr->version.to_string() << " rowset:" << rowsetid
+            << " #seg:" << rowset->num_segments() << " #row:" << rowset->num_rows()
             << " size:" << PrettyPrinter::print(rowset->data_disk_size(), TUnit::BYTES)
             << " #pending:" << _pending_commits.size()
             << " state_memory:" << PrettyPrinter::print(_compaction_state->memory_usage(), TUnit::BYTES);
@@ -2571,18 +2574,18 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     std::string msg_part1 = strings::Substitute("apply_compaction_commit finish tablet:$0 version:$1 ", tablet_id,
                                                 version_info.version.to_string());
 
-    std::string msg_part2 = strings::Substitute("total del/row:$0/$1 $2% rowset:$3 #row:$4 ", _cur_total_dels,
-                                                _cur_total_rows, del_percent, rowset_id, total_rows);
+    std::string msg_part2 =
+            strings::Substitute("total del/row:$0/$1 $2% rowset:$3 #row:$4 #del:$5 #delvec:$6", _cur_total_dels,
+                                _cur_total_rows, del_percent, rowset_id, total_rows, total_deletes, delvecs.size());
 
-    std::string msg_part3 =
-            strings::Substitute("#del:$0 #delvec:$1 duration:$2ms($3/$4/$5)", total_deletes, delvecs.size(),
-                                t_write - t_start, t_load - t_start, t_index_delvec - t_load, t_write - t_index_delvec);
-    bool is_slow = t_write - t_start > (config::apply_version_slow_log_sec * 2) * 1000;
+    std::string msg_part3 = strings::Substitute(" duration:$0ms($1/$2/$3)", t_write - t_start, t_load - t_start,
+                                                t_index_delvec - t_load, t_write - t_index_delvec);
+    bool is_slow = t_write - t_start > config::apply_version_slow_log_sec * 1000;
     if (is_slow) {
         LOG(INFO) << msg_part1 << msg_part2 << msg_part3;
     } else {
-        LOG(INFO) << msg_part1;
-        VLOG(1) << msg_part2 << msg_part3;
+        LOG(INFO) << msg_part1 << msg_part3;
+        VLOG(1) << msg_part1 << msg_part2 << msg_part3;
     }
     VLOG(2) << "update compaction apply " << _debug_string(true, true);
     if (row_before != row_after) {
@@ -2773,7 +2776,10 @@ void TabletUpdates::remove_expired_versions(int64_t expire_time) {
         } else {
             dcg_deleted = res.value();
         }
-        VLOG(2) << strings::Substitute(
+        std::string msg = strings::Substitute("remove_expired_versions $0 time:$1 min_readable_version:$2",
+                                              _debug_version_info(true), expire_time, min_readable_version);
+        LOG(INFO) << msg;
+        VLOG(1) << strings::Substitute(
                 "remove_expired_versions $0 time:$1 min_readable_version:$2 deletes: #version:$3 #rowset:$4 "
                 "#delvec:$5 #dcgs:$6",
                 _debug_version_info(true), expire_time, min_readable_version, num_version_removed, num_rowset_removed,

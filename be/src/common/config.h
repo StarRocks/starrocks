@@ -1589,4 +1589,6 @@ CONF_mBool(enable_collect_table_metrics, "true");
 CONF_mInt64(rf_sample_rows, "1024");
 CONF_mInt64(rf_sample_ratio, "32");
 CONF_mInt64(rf_branchless_ratio, "8");
+
+CONF_mInt32(big_query_sec, "1");
 } // namespace starrocks::config
