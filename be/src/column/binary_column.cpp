@@ -654,7 +654,7 @@ template <typename T>
 void BinaryColumnBase<T>::crc32_hash_with_selection(uint32_t* hashes, uint8_t* selection, uint16_t from,
                                                     uint16_t to) const {
     for (uint32_t i = from; i < to && !_bytes.empty(); ++i) {
-        if (selection[i]) {
+        if (!selection[i]) {
             continue;
         }
         hashes[i] = HashUtil::zlib_crc_hash(_bytes.data() + _offsets[i],
