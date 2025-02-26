@@ -348,6 +348,7 @@ protected:
             TypeDescriptor::create_map_type(TYPE_VARCHAR_DESC, TYPE_UNKNOWN_DESC);
     const TypeDescriptor TYPE_UNKNOWN_INTARRAY_MAP_DESC =
             TypeDescriptor::create_map_type(TYPE_UNKNOWN_DESC, TYPE_INT_ARRAY_DESC);
+    const TypeDescriptor TYPE_VARCHAR_ARRAY_DESC = TypeDescriptor::create_array_type(TYPE_VARCHAR_DESC);
 };
 
 StatusOr<RuntimeFilterProbeDescriptor*> FileReaderTest::gen_runtime_filter_desc(SlotId slot_id) {
@@ -3752,7 +3753,7 @@ TEST_F(FileReaderTest, low_rows_reader_empty_not_null) {
 }
 
 TEST_F(FileReaderTest, low_rows_reader_filter_group) {
-    const std::string small_page_file = "./be/test/formats/parquet/test_data/low_rows_non_dict.parquet";
+    const std::string file = "./be/test/formats/parquet/test_data/low_rows_non_dict.parquet";
 
     Utils::SlotDesc slot_descs[] = {{"c0", TYPE_INT_DESC}, {"c2", TYPE_INT_DESC}, {""}};
 
@@ -3773,17 +3774,61 @@ TEST_F(FileReaderTest, low_rows_reader_filter_group) {
     ParquetUTBase::create_dictmapping_string_conjunct(TExprOpcode::EQ, 1, "a", &t_conjuncts);
     std::vector<ExprContext*> expr_ctxs;
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
-    auto ctx = _create_file_random_read_context(small_page_file, slot_descs);
+    auto ctx = _create_file_random_read_context(file, slot_descs);
     ctx->conjunct_ctxs_by_slot.insert({1, expr_ctxs});
     ctx->global_dictmaps = &dict_map;
     TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
     tuple_desc->decoded_slots()[1]->type().type = TYPE_VARCHAR;
     ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[1], nullptr, tuple_desc, _runtime_state, ctx);
 
-    auto file_reader = _create_file_reader(small_page_file);
+    auto file_reader = _create_file_reader(file);
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
     EXPECT_EQ(file_reader->row_group_size(), 0);
+}
+
+TEST_F(FileReaderTest, plain_string_decode) {
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_INT_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_DESC, true), chunk->num_columns());
+    chunk->append_column(ColumnHelper::create_column(TYPE_VARCHAR_ARRAY_DESC, true), chunk->num_columns());
+
+    const std::string file = "./be/test/formats/parquet/test_data/low_rows_non_dict.parquet";
+
+    Utils::SlotDesc slot_descs[] = {{"c0", TYPE_INT_DESC},
+                                    {"c1", TYPE_INT_DESC},
+                                    {"c2", TYPE_VARCHAR_DESC},
+                                    {"c3", TYPE_VARCHAR_ARRAY_DESC},
+                                    {""}};
+
+    std::set<int32_t> in_oprands{1, 100};
+    std::vector<TExpr> t_conjuncts;
+    ParquetUTBase::create_in_predicate_int_conjunct_ctxs(TExprOpcode::FILTER_IN, 0, in_oprands, &t_conjuncts);
+    std::vector<ExprContext*> expr_ctxs;
+    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &expr_ctxs);
+    auto ctx = _create_file_random_read_context(file, slot_descs);
+    ctx->conjunct_ctxs_by_slot.insert({0, expr_ctxs});
+
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    ParquetUTBase::setup_conjuncts_manager(ctx->conjunct_ctxs_by_slot[0], nullptr, tuple_desc, _runtime_state, ctx);
+
+    auto file_reader = _create_file_reader(file);
+    Status status = file_reader->init(ctx);
+    ASSERT_TRUE(status.ok());
+    size_t total_row_nums = 0;
+    while (!status.is_end_of_file()) {
+        chunk->reset();
+        status = file_reader->get_next(&chunk);
+        chunk->check_or_die();
+        total_row_nums += chunk->num_rows();
+        if (chunk->num_rows() == 2) {
+            ASSERT_EQ(chunk->debug_row(0), "[1, 100, '1', ['1',NULL,'0']]");
+            ASSERT_EQ(chunk->debug_row(1), "[100, 1, NULL, NULL]");
+        }
+    }
+
+    EXPECT_EQ(2, total_row_nums);
 }
 
 } // namespace starrocks::parquet
