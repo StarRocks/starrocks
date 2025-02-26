@@ -347,13 +347,13 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     }
     auto t1 = butil::gettimeofday_ms();
     g_metadata_travel_latency << (t1 - t0);
-    // if skip_check_grace_timestamp is false which means all tablet metadata files encountered were created after the grace timestamp
-    // so the vacuumed_version will be set to min garbage version
-    *vacuumed_version = skip_check_grace_timestamp ? final_retain_version : version;
     if (!skip_check_grace_timestamp) {
         // All tablet metadata files encountered were created after the grace timestamp, there were no files to delete
+        // The vacuumed_version will be set to min garbage version
+        *vacuumed_version = version;
         return Status::OK();
     }
+    *vacuumed_version = final_retain_version;
     DCHECK_LE(version, final_retain_version);
     for (auto v = version + 1; v < final_retain_version; v++) {
         RETURN_IF_ERROR(metafile_deleter->delete_file(join_path(meta_dir, tablet_metadata_filename(tablet_id, v))));
