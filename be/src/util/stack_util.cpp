@@ -203,19 +203,18 @@ std::string get_stack_trace_for_threads_with_pattern(const std::vector<int>& tid
     }
 
     int64_t task_done_count = 0;
-    int64_t max_block_time_us = 0;
-    int64_t min_block_time_us = std::numeric_limits<int64_t>::max();
-    int64_t total_block_time_us = 0;
-
+    int64_t max_task_cost_us = 0;
+    int64_t min_task_cost_us = std::numeric_limits<int64_t>::max();
+    int64_t total_task_cost_us = 0;
     // group threads with same stack trace together
     std::unordered_map<StackTraceTask, std::vector<int>, StackTraceTaskHash> task_map;
     for (int i = 0; i < tids.size(); ++i) {
         if (tasks[i].done) {
             task_map[tasks[i]].push_back(tids[i]);
             task_done_count += 1;
-            max_block_time_us = std::max(max_block_time_us, tasks[i].cost_us);
-            min_block_time_us = std::min(min_block_time_us, tasks[i].cost_us);
-            total_block_time_us += tasks[i].cost_us;
+            max_task_cost_us = std::max(max_task_cost_us, tasks[i].cost_us);
+            min_task_cost_us = std::min(min_task_cost_us, tasks[i].cost_us);
+            total_task_cost_us += tasks[i].cost_us;
         }
     }
     string ret;
@@ -239,19 +238,18 @@ std::string get_stack_trace_for_threads_with_pattern(const std::vector<int>& tid
         ret += stack_trace;
         ret += "\n";
     }
-    int64_t avg_block_time_us = 0;
+    int64_t avg_task_cost_us = 0;
     if (task_done_count == 0) {
-        min_block_time_us = 0;
-        max_block_time_us = 0;
+        min_task_cost_us = 0;
+        max_task_cost_us = 0;
     } else {
-        avg_block_time_us = total_block_time_us / task_done_count;
+        avg_task_cost_us = total_task_cost_us / task_done_count;
     }
     ret += strings::Substitute(
             "$0total $1 threads, $2 identical groups, finish $3 threads, cost $4 us, thread block(avg/min/max) "
-            "$5/$6/$7 "
-            "us",
+            "$5/$6/$7 us",
             line_prefix, tids.size(), task_map.size(), task_done_count, (MonotonicMicros() - start_us),
-            avg_block_time_us, min_block_time_us, max_block_time_us);
+            avg_task_cost_us, min_task_cost_us, max_task_cost_us);
     return ret;
 }
 

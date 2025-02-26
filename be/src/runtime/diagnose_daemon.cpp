@@ -30,21 +30,21 @@ static std::string diagnose_type_name(DiagnoseType type) {
     }
 }
 
-static std::vector<std::string> split_into_multiple_lines(const std::string& input) {
-    std::vector<std::string> lines;
-    std::istringstream stream(input);
-    std::string line;
-    while (std::getline(stream, line, '\n')) {
-        lines.push_back(line);
-    }
-    return lines;
-}
-
-static void log_into_multiple_messages(const std::string& raw_log) {
-    std::vector<std::string> lines = split_into_multiple_lines(raw_log);
+static void split_and_log_long_message(const std::string& raw_log) {
     const size_t max_message_size = google::LogMessage::kMaxLogMessageLen;
+    if (raw_log.size() <= max_message_size) {
+        LOG(INFO) << raw_log;
+        return;
+    }
+    // split into multiple lines to ensure the log in one line to log in one message
+    std::vector<std::string> lines;
+    std::istringstream stream(raw_log);
+    std::string buf;
+    while (std::getline(stream, buf, '\n')) {
+        lines.push_back(buf);
+    }
     std::string message;
-    for (const auto& line : lines) {
+    for (auto& line : lines) {
         if (message.size() + line.size() + 1 > max_message_size) {
             if (!message.empty()) {
                 LOG(INFO) << message;
@@ -65,10 +65,14 @@ static void log_into_multiple_messages(const std::string& raw_log) {
 }
 
 Status DiagnoseDaemon::init() {
-    return ThreadPoolBuilder("diagnose").set_min_threads(0).set_max_threads(1).build(&_single_thread_pool);
+    return ThreadPoolBuilder("diagnose")
+            .set_min_threads(0)
+            .set_max_threads(1)
+            .set_idle_timeout(MonoDelta::FromSeconds(10))
+            .build(&_single_thread_pool);
 }
 
-Status DiagnoseDaemon::diagnose(const starrocks::DiagnoseRequest& request) {
+Status DiagnoseDaemon::diagnose(const DiagnoseRequest& request) {
     return _single_thread_pool->submit_func([this, request]() { _execute_request(request); });
 }
 
@@ -78,7 +82,7 @@ void DiagnoseDaemon::stop() {
     }
 }
 
-void DiagnoseDaemon::_execute_request(const starrocks::DiagnoseRequest& request) {
+void DiagnoseDaemon::_execute_request(const DiagnoseRequest& request) {
     switch (request.type) {
     case DiagnoseType::STACK_TRACE:
         _perform_stack_trace(request.context);
@@ -102,7 +106,7 @@ void DiagnoseDaemon::_perform_stack_trace(const std::string& context) {
     _last_stack_trace_time_ms = MonotonicMillis();
     LOG(INFO) << "diagnose stack trace, id: " << _diagnose_id << ", cost: " << (_last_stack_trace_time_ms - start_time)
               << " ms, size: " << stack_trace.size() << ", context: [" << context << "]";
-    log_into_multiple_messages(stack_trace);
+    split_and_log_long_message(stack_trace);
 }
 
 } // namespace starrocks

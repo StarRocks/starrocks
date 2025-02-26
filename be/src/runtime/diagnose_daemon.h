@@ -43,6 +43,8 @@ public:
 
     void stop();
 
+    ThreadPool* thread_pool() { return _single_thread_pool.get(); }
+
 private:
     void _execute_request(const DiagnoseRequest& request);
     void _perform_stack_trace(const std::string& context);
