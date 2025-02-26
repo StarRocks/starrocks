@@ -442,6 +442,12 @@ public:
     using ColumnCallback = std::function<void(WrappedPtr&)>;
     virtual void for_each_subcolumn(ColumnCallback) {}
 
+    MutablePtr mutate() const&& {
+        MutablePtr res = shallow_mutate();
+        res->for_each_subcolumn([](WrappedPtr& subcolumn) { subcolumn = std::move(*subcolumn).mutate(); });
+        return res;
+    }
+
     static MutablePtr mutate(Ptr ptr) {
         MutablePtr res = ptr->shallow_mutate(); /// Now use_count is 2.
         ptr.reset();                            /// Reset use_count to 1.
