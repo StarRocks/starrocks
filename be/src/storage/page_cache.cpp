@@ -83,7 +83,7 @@ void StoragePageCache::release_global_cache() {
 }
 
 void StoragePageCache::prune() {
-    _cache->prune();
+    (void)_cache->prune();
 }
 
 void StoragePageCache::set_capacity(size_t capacity) {
