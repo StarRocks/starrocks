@@ -55,7 +55,11 @@ public class SPMUpdateExprVisitor<C> implements AstVisitor<ParseNode, C> {
     public ParseNode visitSelect(SelectRelation stmt, C context) {
         stmt.getCteRelations().forEach(this::visit);
         visit(stmt.getRelation());
-        stmt.setOutputExpr(visitExprList(stmt.getOutputExpression(), context));
+        if (stmt.getOutputExpression() == null) {
+            stmt.getSelectList().getItems().forEach(item -> item.setExpr(visitExpr(item.getExpr(), context)));
+        } else {
+            stmt.setOutputExpr(visitExprList(stmt.getOutputExpression(), context));
+        }
         stmt.setWhereClause(visitExpr(stmt.getWhereClause(), context));
         stmt.setGroupBy(visitExprList(stmt.getGroupBy(), context));
         stmt.setHaving(visitExpr(stmt.getHaving(), context));

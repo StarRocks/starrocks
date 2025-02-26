@@ -16,10 +16,12 @@ package com.starrocks.sql.spm;
 
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.Subquery;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 
 import java.util.List;
@@ -67,6 +69,12 @@ public class SPMAstCheckVisitor implements AstVisitor<Boolean, ParseNode> {
     }
 
     @Override
+    public Boolean visitSubquery(SubqueryRelation node, ParseNode context) {
+        SubqueryRelation other = cast(context);
+        return check(node.getQueryStatement(), other.getQueryStatement());
+    }
+
+    @Override
     public Boolean visitSelect(SelectRelation node, ParseNode node2) {
         SelectRelation other = cast(node2);
         if (!check(node.getCteRelations(), other.getCteRelations())) {
@@ -97,6 +105,12 @@ public class SPMAstCheckVisitor implements AstVisitor<Boolean, ParseNode> {
     public Boolean visitTable(TableRelation node, ParseNode node2) {
         TableRelation other = cast(node2);
         return node.getTable().getId() == other.getTable().getId();
+    }
+
+    @Override
+    public Boolean visitSubqueryExpr(Subquery node, ParseNode context) {
+        Subquery other = cast(context);
+        return check(node.getQueryStatement(), other.getQueryStatement());
     }
 
     @Override

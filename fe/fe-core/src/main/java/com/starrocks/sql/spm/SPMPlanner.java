@@ -143,10 +143,7 @@ public class SPMPlanner {
                 placeholderValues.put(((IntLiteral) node.getChild(0)).getValue(), (Expr) node2);
                 return true;
             }
-            if (!node.equalsWithoutChild(node2)) {
-                return false;
-            }
-            return check(node.getChildren(), ((Expr) node2).getChildren());
+            return super.visitExpression(node, node2);
         }
     }
 

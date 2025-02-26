@@ -39,4 +39,9 @@ public class SQLPlanManager {
     public void dropBaselinePlan(long baseLineId) {
         baselinePlans.removeIf(p -> p.getId() == baseLineId);
     }
+
+    // for ut
+    public void dropAllBaselinePlans() {
+        baselinePlans.clear();
+    }
 }

@@ -192,7 +192,7 @@ public class AstTraverser<R, C> implements AstVisitor<R, C> {
     }
 
     @Override
-    public R visitSubquery(Subquery node, C context) {
+    public R visitSubqueryExpr(Subquery node, C context) {
         return visit(node.getQueryStatement(), context);
     }
 }

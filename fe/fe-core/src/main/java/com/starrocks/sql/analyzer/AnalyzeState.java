@@ -101,19 +101,6 @@ public class AnalyzeState {
         return columnReferences;
     }
 
-    //    public SelectRelation build() {
-    //        SelectRelation selectRelation = new SelectRelation(
-    //                outputExpressions, isDistinct,
-    //                orderScope, orderSourceExpressions,
-    //                relation, predicate, limit,
-    //                groupBy, aggregate, groupingSetsList, groupingFunctionCallExprs,
-    //                orderBy, having,
-    //                outputAnalytic, orderByAnalytic,
-    //                columnReferences);
-    //        selectRelation.setScope(new Scope(RelationId.of(selectRelation), outputScope.getRelationFields()));
-    //        return selectRelation;
-    //    }
-
     public Scope getOrderScope() {
         return orderScope;
     }

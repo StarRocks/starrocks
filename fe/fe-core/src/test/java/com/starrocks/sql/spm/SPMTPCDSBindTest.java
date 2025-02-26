@@ -32,8 +32,8 @@ import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
 
-public class SPMTPCHDSPlanTest extends TPCDSPlanTestBase {
-    private static final Logger LOG = LogManager.getLogger(SPMTPCHDSPlanTest.class);
+public class SPMTPCDSBindTest extends TPCDSPlanTestBase {
+    private static final Logger LOG = LogManager.getLogger(SPMTPCDSBindTest.class);
 
     @BeforeAll
     public static void beforeAll() throws Exception {

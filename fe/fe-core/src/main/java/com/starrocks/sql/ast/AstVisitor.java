@@ -1485,7 +1485,7 @@ public interface AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
-    default R visitSubquery(Subquery node, C context) {
+    default R visitSubqueryExpr(Subquery node, C context) {
         return visitExpression(node, context);
     }
 

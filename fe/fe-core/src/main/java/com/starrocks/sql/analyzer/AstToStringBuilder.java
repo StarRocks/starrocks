@@ -1305,7 +1305,7 @@ public class AstToStringBuilder {
         }
 
         @Override
-        public String visitSubquery(Subquery node, Void context) {
+        public String visitSubqueryExpr(Subquery node, Void context) {
             return "(" + visit(node.getQueryStatement()) + ")";
         }
 
