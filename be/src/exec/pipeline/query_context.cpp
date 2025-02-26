@@ -45,6 +45,7 @@ QueryContext::QueryContext()
     _lifetime_sw.start();
 }
 
+long big_query_time_ns = 1000 * 1000 * 1000; //one second
 QueryContext::~QueryContext() noexcept {
     // When destruct FragmentContextManager, we use query-level MemTracker. since when PipelineDriver executor
     // release QueryContext when it finishes the last driver of the query, the current instance-level MemTracker will
@@ -54,10 +55,13 @@ QueryContext::~QueryContext() noexcept {
     // current RuntimeState to release Operators, OperatorFactories in the remaining RuntimeStates will trigger
     // segmentation fault.
     if (_mem_tracker != nullptr) {
-        LOG(INFO) << fmt::format(
-                "finished query_id:{} context life time:{} cpu costs:{} peak memusage:{} scan_bytes:{} spilled "
-                "bytes:{}",
-                print_id(query_id()), lifetime(), cpu_cost(), mem_cost_bytes(), get_scan_bytes(), get_spill_bytes());
+        if (lifetime() > big_query_time_ns) {
+            LOG(INFO) << fmt::format(
+                    "finished query_id:{} context life time:{} cpu costs:{} peak memusage:{} scan_bytes:{} spilled "
+                    "bytes:{}",
+                    print_id(query_id()), lifetime(), cpu_cost(), mem_cost_bytes(), get_scan_bytes(),
+                    get_spill_bytes());
+        }
     }
 
     {
