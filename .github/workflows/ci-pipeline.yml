@@ -514,9 +514,6 @@ jobs:
           mkdir -p thirdparty/installed/bin/
           cd thirdparty/installed/bin/ && ln -s /usr/local/bin/thrift thrift
           cd ${{ github.workspace }}/fe
-          java -version
-          export SONAR_SCANNER_OPTS="-Xms3072m -Xmx12288m"
-          export MAVEN_OPTS="-Xms3072m -Xmx12288m"
           mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar \
             -Dsonar.java.opts="-Xms3072m -Xmx12288m" \
             -Dsonar.exclusions="**/test/**" \
