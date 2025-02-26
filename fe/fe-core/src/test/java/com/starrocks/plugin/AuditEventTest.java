@@ -33,7 +33,8 @@ public class AuditEventTest {
                 .setDigest("digest")
                 .setErrorCode("errorCode")
                 .setIsQuery(true)
-                .setWarehouse("wh");
+                .setWarehouse("wh")
+                .setErrorMsg("errorMsg");
         AuditEvent event = builder.build();
 
         Assert.assertEquals(AuditEvent.EventType.CONNECTION, event.type);
@@ -48,5 +49,6 @@ public class AuditEventTest {
         Assert.assertEquals("errorCode", event.errorCode);
         Assert.assertEquals(true, event.isQuery);
         Assert.assertEquals("wh", event.warehouse);
+        Assert.assertEquals("errorMsg", event.errorMsg);
     }
 }

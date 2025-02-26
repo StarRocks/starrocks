@@ -147,6 +147,9 @@ public class AuditEvent {
 
     @AuditField(value = "IsForwardToLeader")
     public boolean isForwardToLeader = false;
+    
+    @AuditField(value = "ErrorMsg")
+    public String errorMsg = null;
 
     public static class AuditEventBuilder {
 
@@ -343,6 +346,13 @@ public class AuditEvent {
 
         public AuditEventBuilder setIsForwardToLeader(boolean isForwardToLeader) {
             auditEvent.isForwardToLeader = isForwardToLeader;
+            return this;
+        }
+
+        public AuditEventBuilder setErrorMsg(String msg) {
+            if (msg != null && msg.length() != 0) {
+                auditEvent.errorMsg = msg;
+            }
             return this;
         }
 
