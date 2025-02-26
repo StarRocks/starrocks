@@ -57,6 +57,14 @@ public class CompactionMgr implements MemoryTrackable {
     private CompactionScheduler compactionScheduler;
 
     /**
+     *
+     * In order to ensure that the input rowsets of compaction still exists when doing publishing version, it is
+     * necessary to ensure that the compaction task of the same partition is executed serially, that is, the next
+     * compaction task can be executed only after the status of the previous compaction task changes to visible or
+     * canceled.
+     * So when FE restarted, we should make sure all the active compaction transactions before restarting were tracked,
+     * and exclude them from choosing as candidates for compaction.
+     *
      * We use `activeCompactionTransactionMap` to track all lake compaction txns that are not published on FE restart.
      * The key of the map is the transaction id related to the compaction task, and the value is table id of the
      * compaction task. It's possible that multiple keys have the same value, because there might be multiple compaction
@@ -106,9 +114,10 @@ public class CompactionMgr implements MemoryTrackable {
     }
 
     /**
-     * iterate all transactions and find those with LAKE_COMPACTION labels and are not finished before FE restart.
+     * iterate all transactions and find those with LAKE_COMPACTION labels and are not finished before FE restart
+     * or Leader FE changed.
      **/
-    public void rebuildActiveCompactionTransactionMapOnRestart() {
+    public void buildActiveCompactionTransactionMap() {
         Map<Long, Long> activeTxnStates =
                 GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getLakeCompactionActiveTxnStats();
         for (Map.Entry<Long, Long> txnState : activeTxnStates.entrySet()) {
@@ -257,16 +266,6 @@ public class CompactionMgr implements MemoryTrackable {
     public void load(SRMetaBlockReader reader) throws IOException, SRMetaBlockException, SRMetaBlockEOFException {
         CompactionMgr compactionManager = reader.readJson(CompactionMgr.class);
         partitionStatisticsHashMap = compactionManager.partitionStatisticsHashMap;
-
-        // In order to ensure that the input rowsets of compaction still exists when doing publishing version, it is
-        // necessary to ensure that the compaction task of the same partition is executed serially, that is, the next
-        // compaction task can be executed only after the status of the previous compaction task changes to visible or
-        // canceled.
-        // So when FE restarted, we should make sure all the active compaction transactions before restarting were tracked,
-        // and exclude them from choosing as candidates for compaction.
-        // Note here, the map is maintained on leader and follower fe, its keys were removed from the map after compaction
-        // transaction has finished, and for follower FE, this is done by replay process.
-        rebuildActiveCompactionTransactionMapOnRestart();
     }
 
     public long getPartitionStatsCount() {
