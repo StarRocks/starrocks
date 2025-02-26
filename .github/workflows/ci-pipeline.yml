@@ -514,9 +514,9 @@ jobs:
           mkdir -p thirdparty/installed/bin/
           cd thirdparty/installed/bin/ && ln -s /usr/local/bin/thrift thrift
           cd ${{ github.workspace }}/fe
+          export SONAR_SCANNER_OPTS="-Xms3072m -Xmx12288m"
+          export MAVEN_OPTS="-Xms3072m -Xmx12288m"
           mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar \
-            -Dsonar.java.opts="-Xms3072m -Xmx12288m" \
-            -Dsonar.exclusions="**/test/**" \
             -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} \
             -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
 
