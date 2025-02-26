@@ -826,6 +826,20 @@ public:
         return Status::OK();
     }
 
+    Status upsert() {
+        LOG(INFO) << "FixedMutableIndex call upsert";
+        uint8_t new_data[8] = {0x79, 0x15, 0xdb, 0xea, 0x36, 0x00, 0x00, 0x00};
+        const auto& key = *reinterpret_cast<const KeyType*>(new_data);
+        uint64_t hash = FixedKeyHash<KeySize>()(key);
+        LOG(INFO) << "start upsert";
+        if (auto [it, inserted] = _map.emplace_with_hash(hash, key, NullIndexValue); inserted) {
+            LOG(INFO) << "upsert success";
+        } else {
+            LOG(INFO) << "upsert failed";
+        }
+        return Status::OK();
+    }
+
     Status upsert(const Slice* keys, const IndexValue* values, IndexValue* old_values, KeysInfo* not_found,
                   size_t* num_found, const std::vector<size_t>& idxes) override {
         TRY_CATCH_BAD_ALLOC({
@@ -1138,6 +1152,11 @@ public:
             }
             *num_found = nfound;
         });
+        return Status::OK();
+    }
+
+    Status upsert() {
+        LOG(INFO) << "SliceMutableIndex call upsert";
         return Status::OK();
     }
 
@@ -5315,6 +5334,26 @@ void PersistentIndex::_calc_memory_usage() {
 
 void PersistentIndex::test_force_dump() {
     _dump_snapshot = true;
+}
+
+Status PersistentIndex::replay_pk_upsert() {
+    LOG(INFO) << "replay pk upsert 1";
+    auto st = MutableIndex::create(8);
+    LOG(INFO) << "replay pk upsert 2";
+    if (!st.ok()) {
+        return st.status();
+    }
+    LOG(INFO) << "replay pk upsert 3";
+    auto l0 = std::move(st).value();
+    LOG(INFO) << "replay pk upsert 4";
+    std::string index_file_name = "/home/disk1/sr/be/index.l0.387732.0";
+    phmap::BinaryInputArchive ar(index_file_name.data());
+    LOG(INFO) << "replay pk upsert 5";
+    l0->load_snapshot(ar);
+    LOG(INFO) << "replay pk upsert 6";
+    l0->upsert();
+    LOG(INFO) << "replay pk upsert 7";
+    return Status::OK();
 }
 
 } // namespace starrocks
