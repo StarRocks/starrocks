@@ -439,7 +439,7 @@ public class IcebergMetadata implements ConnectorMetadata {
                             lastUpdated = row.get(7, Long.class);
                         } catch (NullPointerException e) {
                             LOG.error("The table [{}] snapshot [{}] has been expired",
-                                    icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName(), e);
+                                    icebergTable.getRemoteDbName(), icebergTable.getRemoteTableName());
                         }
                         Partition partition = new Partition(lastUpdated);
                         return ImmutableList.of(partition);
