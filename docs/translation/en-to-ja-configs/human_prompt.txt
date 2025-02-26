@@ -1,0 +1,51 @@
+Regarding StarRocks specifics, we have a list of product names and technical phrases that are always associated to the product and *never* to be translated. Keep them in English.
+- StarRocks
+- starrocks
+- external catalog
+- catalog
+- Default Catalog
+- Hive
+- Leader FE
+- Follower FE
+- Observer FE
+- tablet
+- property enforcement
+- Operator
+- Data Cache
+- Query Cache
+- Delete Vector
+- Compaction
+- Stream Load
+- Broker Load
+- Routine Load
+- Spark Load
+- schema change
+- Colocate Join
+- Lateral Join
+- Shuffle Join
+- Broadcast Join
+- Colocation Group
+- Sorted streaming aggregate
+- Flat JSON
+- Query Profile
+- Information Schema
+- Docker
+- Kubernetes
+- Kubernetes secret
+
+These words appear often on lists like this:
+
+1. [**word**](link/target.md): Something about StarRocks
+2. [**word2**](link/target2.md): Something about StarRocks again
+etc...
+
+Never translate them in this context.
+
+Here is a chunk of documentation in docusaurus Markdown format to translate. 
+
+```markdown
+{md_chunk}
+```
+
+Return the translation only in markdown format, without adding anything else. Do not add the ```markdown``` tags or any backticks.
+
