@@ -40,6 +40,7 @@ public class SemiJoinDeduplicateRule implements TreeRewriteRule {
 
         private Void visitChildren(List<OptExpression> children, DeduplicateContext context) {
             for (OptExpression child : children) {
+                // pass "false,false" to children
                 child.getOp().accept(this, child, new DeduplicateContext());
             }
             return null;
@@ -47,13 +48,18 @@ public class SemiJoinDeduplicateRule implements TreeRewriteRule {
 
         @Override
         public Void visit(OptExpression opt, DeduplicateContext context) {
-            for (OptExpression input : opt.getInputs()) {
-                input.getOp().accept(this, input, context);
-            }
+            
+            visitChildren(opt.getInputs(), context);
             return null;
         }
 
+
         @Override
+        public Void visitLogicalProject(OptExpression opt, DeduplicateContext context) {
+            // pass through the context from parent to child
+            opt.inputAt(0).getOp().accept(this, opt.inputAt(0), context);
+            return null;
+        }
 
         @Override
         public Void visitLogicalJoin(OptExpression opt, DeduplicateContext context) {
