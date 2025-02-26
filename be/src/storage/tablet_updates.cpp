@@ -2059,10 +2059,10 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, con
 // at last, we will commit this compaction in version (3.1). But this compaction will miss the partial update.
 // So we need `_check_conflict_with_partial_update` to detect this conflict and cancel this compaction.
 Status TabletUpdates::_check_conflict_with_partial_update(CompactionInfo* info) {
-    // check if compaction's start version is too old to decide whether conflict with partial update
+    // check if compaction's start version is too old to decide whether conflict happens
     if (info->start_version < _edit_version_infos[0]->version) {
         std::string msg = strings::Substitute(
-                "compaction's start version is too old to decide whether conflict with partial update, so abort it, "
+                "compaction's start version is too old to decide whether conflict happens, so abort it, "
                 "tabletid:$0 ver:$1-$2",
                 _tablet.tablet_id(), info->start_version.major_number(),
                 _edit_version_infos[0]->version.major_number());
