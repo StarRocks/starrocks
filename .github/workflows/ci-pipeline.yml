@@ -517,7 +517,7 @@ jobs:
           java -version
           export SONAR_SCANNER_OPTS="-Xms3072m -Xmx12288m"
           export MAVEN_OPTS="-Xms3072m -Xmx12288m"
-          mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+          mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar \
             -Dsonar.java.opts="-Xms3072m -Xmx12288m" \
             -Dsonar.exclusions="**/test/**" \
             -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} \
