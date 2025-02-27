@@ -18,7 +18,10 @@ use mv_hive_db_${uuid0};
 -- result:
 -- !result
 shell: hadoop fs -test -d ${hdfs_path}/tbl_for_refresh && hadoop fs -rm -r ${hdfs_path}/tbl_for_refresh >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
 
+-- !result
 CREATE EXTERNAL TABLE tbl_for_refresh (
   num int,
   dt date
@@ -42,9 +45,9 @@ create database db_${uuid0};
 use db_${uuid0};
 -- result:
 -- !result
-CREATE MATERIALIZED VIEW test_mv1
-PARTITION BY dt
-REFRESH DEFERRED MANUAL AS
+CREATE MATERIALIZED VIEW test_mv1 
+PARTITION BY dt 
+REFRESH DEFERRED MANUAL AS 
   SELECT * FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.tbl_for_refresh;
 -- result:
 -- !result
