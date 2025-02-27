@@ -18,6 +18,7 @@ public enum IcebergTableOperation {
     EXPIRE_SNAPSHOTS,
     FAST_FORWARD,
     CHERRYPICK_SNAPSHOT,
+    REMOVE_ORPHAN_FILES,
     UNKNOWN;
 
     public static IcebergTableOperation fromString(String opStr) {
