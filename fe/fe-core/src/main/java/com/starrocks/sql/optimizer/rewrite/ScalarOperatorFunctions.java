@@ -705,6 +705,18 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
+            @ConstantFunction(name = "curtime", argTypes = {}, returnType = TIME),
+            @ConstantFunction(name = "current_time", argTypes = {}, returnType = TIME)
+    })
+    public static ConstantOperator curTime() {
+        ConnectContext connectContext = ConnectContext.get();
+        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime() / 1000 * 1000)
+                .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+        double second = startTime.getHour() * 3600D + startTime.getMinute() * 60D + startTime.getSecond();
+        return ConstantOperator.createTime(second);
+    }
+
+    @ConstantFunction.List(list = {
             @ConstantFunction(name = "now", argTypes = {}, returnType = DATETIME),
             @ConstantFunction(name = "current_timestamp", argTypes = {}, returnType = DATETIME),
             @ConstantFunction(name = "localtime", argTypes = {}, returnType = DATETIME),
