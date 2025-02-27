@@ -534,7 +534,8 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
                 if (Type.DATE.equals(type)) {
                     childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);
                 }
-                res = ConstantOperator.createInt(Integer.parseInt(childString.trim()));
+                BigDecimal bd = new BigDecimal(childString.trim());
+                res = ConstantOperator.createInt(bd.setScale(0, RoundingMode.DOWN).intValue());
             } else if (desc.isBigint()) {
                 if (Type.DATE.equals(type)) {
                     childString = DateUtils.convertDateFormaterToDateKeyFormater(childString);

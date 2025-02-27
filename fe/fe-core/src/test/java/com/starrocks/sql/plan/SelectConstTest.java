@@ -214,6 +214,7 @@ public class SelectConstTest extends PlanTestBase {
                 "78883632:00:00");
         assertFeExecuteResult("select timediff('1000-01-01 01:01:01.000001', '9999-01-02 01:01:01.123456')",
                 "-78883632:00:01");
+        assertFeExecuteResult("select cast ('123.4' as INT);", "123");
     }
 
     private void assertFeExecuteResult(String sql, String expected) throws Exception {

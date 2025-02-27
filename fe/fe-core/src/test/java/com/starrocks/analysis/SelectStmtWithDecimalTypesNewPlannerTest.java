@@ -549,8 +549,8 @@ public class SelectStmtWithDecimalTypesNewPlannerTest {
 
         sql = "select TRUNCATE(0.6798916342905857, 3.13);";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
-        Assert.assertTrue(plan.contains("truncate[(0.6798916342905857, cast(3.13 as INT)); args: DOUBLE,INT; " +
-                "result: DOUBLE; args nullable: true; result nullable: true]"));
+        Assert.assertTrue(plan.contains("truncate[(0.6798916342905857, 3); args: DOUBLE,INT; " +
+                "result: DOUBLE; args nullable: false; result nullable: true]"));
 
         sql = "select TRUNCATE(0.6798916342905857, cast('2000-01-31 12:00:00' as datetime));";
         plan = UtFrameUtils.getVerboseFragmentPlan(ctx, sql);
