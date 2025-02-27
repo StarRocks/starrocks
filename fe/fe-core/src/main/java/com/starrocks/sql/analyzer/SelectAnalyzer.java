@@ -76,13 +76,20 @@ public class SelectAnalyzer {
         analyzeWhere(whereClause, analyzeState, sourceScope);
 
         List<Expr> outputExpressions =
-                analyzeSelect(selectList, fromRelation, groupByClause != null, analyzeState, sourceScope);
+                analyzeSelect(selectList, fromRelation, analyzeState, sourceScope);
         Scope outputScope = analyzeState.getOutputScope();
 
         List<Expr> groupByExpressions = new ArrayList<>(
                 analyzeGroupBy(groupByClause, analyzeState, sourceScope, outputScope, outputExpressions));
+
+        boolean distinctWithoutGroupBy = selectList.isDistinct() && groupByExpressions.isEmpty();
         if (selectList.isDistinct()) {
-            groupByExpressions.addAll(outputExpressions);
+            if (!groupByExpressions.isEmpty()) {
+                new AggregationAnalyzer(session, analyzeState, groupByExpressions, sourceScope, null)
+                        .verify(outputExpressions);
+            } else {
+                groupByExpressions.addAll(outputExpressions);
+            }
         }
 
         analyzeHaving(havingClause, analyzeState, sourceScope, outputScope, outputExpressions);
@@ -112,8 +119,8 @@ public class SelectAnalyzer {
                 throw new SemanticException("cannot combine '*' in select list with GROUP BY: *");
             }
 
-            if (!aggregates.isEmpty() && selectList.isDistinct()) {
-                throw new SemanticException("cannot combine SELECT DISTINCT with aggregate functions or GROUP BY");
+            if (distinctWithoutGroupBy && !aggregates.isEmpty()) {
+                throw new SemanticException("cannot combine SELECT DISTINCT with aggregate functions without GROUP BY");
             }
 
             new AggregationAnalyzer(session, analyzeState, groupByExpressions, sourceScope, null)
@@ -193,8 +200,7 @@ public class SelectAnalyzer {
         analyzeState.setLimit(analyzeLimit(limitElement, analyzeState, sourceScope));
     }
 
-    private List<Expr> analyzeSelect(SelectList selectList, Relation fromRelation, boolean hasGroupByClause,
-                                     AnalyzeState analyzeState, Scope scope) {
+    private List<Expr> analyzeSelect(SelectList selectList, Relation fromRelation, AnalyzeState analyzeState, Scope scope) {
         ImmutableList.Builder<Expr> outputExpressionBuilder = ImmutableList.builder();
         ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
         List<Integer> outputExprInOrderByScope = new ArrayList<>();
@@ -293,15 +299,8 @@ public class SelectAnalyzer {
                         throw new SemanticException("DISTINCT can only be applied to comparable types : %s",
                                 expr.getType());
                     }
-                    if (expr.isAggregate()) {
-                        throw new SemanticException(
-                                "cannot combine SELECT DISTINCT with aggregate functions or GROUP BY");
-                    }
                 });
 
-                if (hasGroupByClause) {
-                    throw new SemanticException("cannot combine SELECT DISTINCT with aggregate functions or GROUP BY");
-                }
                 analyzeState.setIsDistinct(true);
             }
         }
@@ -552,8 +551,8 @@ public class SelectAnalyzer {
         }).collect(Collectors.toList());
     }
 
-    private void analyzeHaving(Expr havingClause, AnalyzeState analyzeState,
-                               Scope sourceScope, Scope outputScope, List<Expr> outputExprs) {
+    private void analyzeHaving(Expr havingClause, AnalyzeState analyzeState, Scope sourceScope,
+                               Scope outputScope, List<Expr> outputExprs) {
         if (havingClause != null) {
             Expr predicate = pushNegationToOperands(havingClause);
 
@@ -562,13 +561,13 @@ public class SelectAnalyzer {
 
             AnalyzerUtils.verifyNoWindowFunctions(predicate, "HAVING");
             AnalyzerUtils.verifyNoGroupingFunctions(predicate, "HAVING");
-
             analyzeExpression(predicate, analyzeState, sourceScope);
 
             if (!predicate.getType().matchesType(Type.BOOLEAN) && !predicate.getType().matchesType(Type.NULL)) {
                 throw new SemanticException("HAVING clause must evaluate to a boolean: actual type %s",
                         predicate.getType());
             }
+
             analyzeState.setHaving(predicate);
         }
     }
