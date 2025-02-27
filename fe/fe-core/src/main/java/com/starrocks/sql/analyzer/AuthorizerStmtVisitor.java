@@ -325,7 +325,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
         return null;
     }
 
-    void checkSelectTableAction(ConnectContext context, QueryStatement statement, List<TableName> excludeTables) {
+    public void checkSelectTableAction(ConnectContext context, QueryStatement statement, List<TableName> excludeTables) {
         ColumnPrivilege.check(context, statement, excludeTables);
     }
 

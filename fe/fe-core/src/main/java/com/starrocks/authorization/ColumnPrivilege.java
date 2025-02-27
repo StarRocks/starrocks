@@ -26,6 +26,7 @@ import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DeleteStmt;
@@ -156,10 +157,19 @@ public class ColumnPrivilege {
                                 List<TableName> allTables = view.getTableRefs();
                                 for (TableName t : allTables) {
                                     BasicTable basicTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getBasicTable(
-                                            InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, t.getDb(), t.getTbl());
-
-                                    Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
-                                            null, t.getDb(), basicTable);
+                                            t.getCatalog(), t.getDb(), t.getTbl());
+                                    if (basicTable.isOlapView()) {
+                                        View subView = (View) basicTable;
+                                        QueryStatement queryStatement = subView.getQueryStatement();
+                                        Analyzer.analyze(queryStatement, context);
+                                        Authorizer.check(queryStatement, context);
+                                    } else if (basicTable.isMaterializedView()) {
+                                        Authorizer.checkMaterializedViewAction(context.getCurrentUserIdentity(),
+                                                context.getCurrentRoleIds(), t, PrivilegeType.SELECT);
+                                    } else {
+                                        Authorizer.checkTableAction(context.getCurrentUserIdentity(),
+                                                context.getCurrentRoleIds(), t, PrivilegeType.SELECT);
+                                    }
                                 }
                             }
 
