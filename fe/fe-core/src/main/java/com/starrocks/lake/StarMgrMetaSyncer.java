@@ -203,8 +203,10 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         List<Long> emptyShardGroup = new ArrayList<>();
         for (long groupId : diffList) {
             Long tableId = groupIdToTableId.get(groupId);
-            if (tableId != null && !GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isTableSafeToDeleteTablet(tableId.longValue())) {
-                LOG.debug("table with id: {} can not be delete shard for now, because of automated cluster snapshot", tableId.longValue());
+            if (tableId != null &&
+                !GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isTableSafeToDeleteTablet(tableId.longValue())) {
+                LOG.debug("table with id: {} can not be delete shard for now, because of automated cluster snapshot",
+                          tableId.longValue());
                 continue;
             }
 
