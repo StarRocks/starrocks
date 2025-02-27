@@ -1833,6 +1833,9 @@ public class SchemaChangeHandler extends AlterHandler {
             throw new DdlException("olapTable is null");
         }
         boolean fastSchemaEvolution = olapTable.getUseFastSchemaEvolution();
+        if (RunMode.isSharedNothingMode() && olapTable.getKeysType() == PRIMARY_KEYS) {
+            fastSchemaEvolution = false;
+        }
         //for multi add colmuns clauses
         IntSupplier colUniqueIdSupplier = new IntSupplier() {
             private int pendingMaxColUniqueId = olapTable.getMaxColUniqueId();
