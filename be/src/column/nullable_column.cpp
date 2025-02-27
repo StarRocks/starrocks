@@ -366,6 +366,47 @@ void NullableColumn::fnv_hash(uint32_t* hash, uint32_t from, uint32_t to) const 
     }
 }
 
+void NullableColumn::fnv_hash_with_selection(uint32_t* hash, uint8_t* selection, uint16_t from, uint16_t to) const {
+    if (!_has_null) {
+        _data_column->fnv_hash_with_selection(hash, selection, from, to);
+        return;
+    }
+    const auto& null_data = _null_column->get_data();
+    uint32_t value = 0x9e3779b9;
+    while (from < to) {
+        uint16_t new_from = from + 1;
+        while (new_from < to && null_data[from] == null_data[new_from]) {
+            ++new_from;
+        }
+        if (null_data[from]) {
+            for (uint16_t i = from; i < new_from; ++i) {
+                if (!selection[i]) continue;
+                hash[i] = hash[i] ^ (value + (hash[i] << 6) + (hash[i] >> 2));
+            }
+        } else {
+            _data_column->fnv_hash_with_selection(hash, selection, from, new_from);
+        }
+        from = new_from;
+    }
+}
+
+void NullableColumn::fnv_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const {
+    if (!_has_null) {
+        _data_column->fnv_hash_selective(hash, sel, sel_size);
+        return;
+    }
+    const auto& null_data = _null_column->get_data();
+    uint32_t value = 0x9e3779b9;
+    // @TODO can we optimize this?
+    for (uint16_t i = 0; i < sel_size; i++) {
+        if (null_data[sel[i]]) {
+            hash[sel[i]] = hash[sel[i]] ^ (value + (hash[sel[i]] << 6) + (hash[sel[i]] >> 2));
+        } else {
+            _data_column->fnv_hash(hash, sel[i], sel[i] + 1);
+        }
+    }
+}
+
 void NullableColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const {
     // fast path when _has_null is false
     if (!_has_null) {
@@ -389,6 +430,45 @@ void NullableColumn::crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) cons
             _data_column->crc32_hash(hash, from, new_from);
         }
         from = new_from;
+    }
+}
+void NullableColumn::crc32_hash_with_selection(uint32_t* hash, uint8_t* selection, uint16_t from, uint16_t to) const {
+    if (!_has_null) {
+        _data_column->crc32_hash_with_selection(hash, selection, from, to);
+        return;
+    }
+    const auto& null_data = _null_column->get_data();
+    static const int INT_VALUE = 0;
+    while (from < to) {
+        uint16_t new_from = from + 1;
+        while (new_from < to && null_data[from] == null_data[new_from]) {
+            ++new_from;
+        }
+        if (null_data[from]) {
+            for (uint16_t i = from; i < new_from; ++i) {
+                if (!selection[i]) continue;
+                hash[i] = HashUtil::zlib_crc_hash(&INT_VALUE, 4, hash[i]);
+            }
+        } else {
+            _data_column->crc32_hash_with_selection(hash, selection, from, new_from);
+        }
+        from = new_from;
+    }
+}
+void NullableColumn::crc32_hash_selective(uint32_t* hash, uint16_t* sel, uint16_t sel_size) const {
+    if (!_has_null) {
+        _data_column->crc32_hash_selective(hash, sel, sel_size);
+        return;
+    }
+    const auto& null_data = _null_column->get_data();
+    static const int INT_VALUE = 0;
+    // @TODO can we optimize this?
+    for (uint16_t i = 0; i < sel_size; i++) {
+        if (null_data[sel[i]]) {
+            hash[sel[i]] = HashUtil::zlib_crc_hash(&INT_VALUE, 4, hash[sel[i]]);
+        } else {
+            _data_column->crc32_hash(hash, sel[i], sel[i] + 1);
+        }
     }
 }
 

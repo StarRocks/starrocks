@@ -326,6 +326,8 @@ struct TQueryOptions {
   150: optional map<string, string> ann_params;
   151: optional double pq_refine_factor;
   152: optional double k_factor;
+
+  160: optional bool enable_join_runtime_filter_pushdown;
 }
 
 // A scan range plus the parameters needed to execute that scan.

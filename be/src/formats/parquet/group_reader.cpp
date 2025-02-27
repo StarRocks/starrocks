@@ -168,7 +168,6 @@ Status GroupReader::get_next(ChunkPtr* chunk, size_t* row_count) {
         *row_count = 0;
         return Status::EndOfFile("");
     }
-
     _read_chunk->reset();
 
     ChunkPtr active_chunk = _create_read_chunk(_active_column_indices);
