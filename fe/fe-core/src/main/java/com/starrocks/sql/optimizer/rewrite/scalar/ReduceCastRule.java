@@ -60,6 +60,18 @@ public class ReduceCastRule extends TopDownScalarOperatorRewriteRule {
             return newCastOperator;
         }
 
+        // remove varchar cast inside date/datetime cast
+        if (operator.getType().isDate() || operator.getType().isDatetime()) {
+            ScalarOperator castChild = operator.getChild(0);
+            if (castChild instanceof CastOperator
+                    && castChild.getType().isVarchar()
+                    && (castChild.getChild(0).getType().isDate() || castChild.getChild(0).getType().isDatetime())) {
+                CastOperator newCastOperator = (CastOperator) operator.clone();
+                newCastOperator.setChild(0, castChild.getChild(0));
+                operator = newCastOperator;
+            }
+        }
+
         // remove same type cast
         if (operator.getType().isDecimalOfAnyVersion()) {
             if (operator.getType().getPrimitiveType().equals(operator.getChild(0).getType().getPrimitiveType())
