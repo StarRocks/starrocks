@@ -2,7 +2,7 @@
 displayed_sidebar: docs
 ---
 
-# Rules
+# Protobuf Guides
 
 ## Never use required
 
