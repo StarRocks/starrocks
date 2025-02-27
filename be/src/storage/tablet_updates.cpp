@@ -44,6 +44,7 @@
 #include "storage/local_primary_key_recover.h"
 #include "storage/merge_iterator.h"
 #include "storage/persistent_index.h"
+#include "storage/persistent_index_load_executor.h"
 #include "storage/primary_key_dump.h"
 #include "storage/rows_mapper.h"
 #include "storage/rowset/base_rowset.h"
@@ -4907,7 +4908,8 @@ void TabletUpdates::_to_updates_pb_unlocked(TabletUpdatesPB* updates_pb) const {
 }
 
 Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool restore_from_backup,
-                                    bool save_source_schema) {
+                                    bool save_source_schema, bool need_rebuild_pk_index,
+                                    int32_t rebuild_pk_index_wait_seconds) {
 #define CHECK_FAIL(status)                                                                       \
     do {                                                                                         \
         Status st = (status);                                                                    \
@@ -5159,6 +5161,23 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
         index_entry->update_expire_time(MonotonicMillis() + manager->get_index_cache_expire_ms(_tablet));
         index_entry->value().unload();
         index_cache.release(index_entry);
+
+        // rebuild primary index
+        if (need_rebuild_pk_index) {
+            auto* pindex_load_executor = manager->get_pindex_load_executor();
+            auto latch_or =
+                    pindex_load_executor->submit_task(std::static_pointer_cast<Tablet>(_tablet.shared_from_this()));
+            if (latch_or.ok()) {
+                auto finished = latch_or.value()->wait_for(std::chrono::seconds(rebuild_pk_index_wait_seconds));
+                if (!finished) {
+                    LOG(INFO) << "persistent index is still loading, already wait " << rebuild_pk_index_wait_seconds
+                              << " seconds. tablet: " << tablet_id;
+                }
+            } else {
+                LOG(WARNING) << "fail to submit persistent index load task. tablet: " << tablet_id
+                             << ", error: " << latch_or.status().to_string();
+            }
+        }
 
         LOG(INFO) << "load full snapshot done " << _debug_string(false) << ss.str();
 

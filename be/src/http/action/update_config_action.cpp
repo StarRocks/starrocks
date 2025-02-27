@@ -63,6 +63,7 @@
 #include "storage/memtable_flush_executor.h"
 #include "storage/page_cache.h"
 #include "storage/persistent_index_compaction_manager.h"
+#include "storage/persistent_index_load_executor.h"
 #include "storage/segment_flush_executor.h"
 #include "storage/segment_replicate_executor.h"
 #include "storage/storage_engine.h"
@@ -345,6 +346,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 batch_write_mgr->txn_state_cache()->set_capacity(config::merge_commit_txn_state_cache_capacity);
             }
             return Status::OK();
+        });
+        _config_callback.emplace("pindex_load_thread_pool_num_max", [&]() -> Status {
+            LOG(INFO) << "set pindex_load_thread_pool_num_max: " << config::pindex_load_thread_pool_num_max;
+            return StorageEngine::instance()->update_manager()->get_pindex_load_executor()->refresh_max_thread_num();
         });
 
 #ifdef USE_STAROS

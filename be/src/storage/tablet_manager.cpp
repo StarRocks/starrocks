@@ -50,6 +50,7 @@
 #include "storage/compaction_manager.h"
 #include "storage/data_dir.h"
 #include "storage/olap_common.h"
+#include "storage/persistent_index_load_executor.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -1671,7 +1672,9 @@ std::vector<TabletSharedPtr> TabletManager::_get_all_tablets_from_shard(const Ta
 }
 
 Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId tablet_id, SchemaHash schema_hash,
-                                                       const string& schema_hash_path, bool restore) {
+                                                       const string& schema_hash_path, bool restore,
+                                                       bool need_rebuild_pk_index,
+                                                       int32_t rebuild_pk_index_wait_seconds) {
     auto meta_path = strings::Substitute("$0/meta", schema_hash_path);
     auto shard_path = path_util::dir_name(path_util::dir_name(path_util::dir_name(meta_path)));
     auto shard_str = shard_path.substr(shard_path.find_last_of('/') + 1);
@@ -1761,24 +1764,44 @@ Status TabletManager::create_tablet_from_meta_snapshot(DataDir* store, TTabletId
         return Status::NotFound("tablet path not exists");
     }
 
-    std::unique_lock l(_get_tablets_shard_lock(tablet_id));
-    RETURN_IF_ERROR(meta_store->write_batch(&wb));
+    Status add_tablet_st;
+    {
+        std::unique_lock l(_get_tablets_shard_lock(tablet_id));
+        RETURN_IF_ERROR(meta_store->write_batch(&wb));
 
-    if (!tablet->init().ok()) {
-        LOG(WARNING) << "Fail to init cloned tablet " << tablet_id << ", try to clear meta store";
-        wb.Clear();
-        RETURN_IF_ERROR(TabletMetaManager::clear_del_vector(store, &wb, tablet_id));
-        RETURN_IF_ERROR(TabletMetaManager::clear_delta_column_group(store, &wb, tablet_id));
-        RETURN_IF_ERROR(TabletMetaManager::clear_rowset(store, &wb, tablet_id));
-        RETURN_IF_ERROR(TabletMetaManager::clear_log(store, &wb, tablet_id));
-        RETURN_IF_ERROR(TabletMetaManager::remove_tablet_meta(store, &wb, tablet_id, schema_hash));
-        auto st = meta_store->write_batch(&wb);
-        LOG_IF(WARNING, !st.ok()) << "Fail to clear meta store: " << st;
-        return Status::InternalError("tablet init failed");
+        if (!tablet->init().ok()) {
+            LOG(WARNING) << "Fail to init cloned tablet " << tablet_id << ", try to clear meta store";
+            wb.Clear();
+            RETURN_IF_ERROR(TabletMetaManager::clear_del_vector(store, &wb, tablet_id));
+            RETURN_IF_ERROR(TabletMetaManager::clear_delta_column_group(store, &wb, tablet_id));
+            RETURN_IF_ERROR(TabletMetaManager::clear_rowset(store, &wb, tablet_id));
+            RETURN_IF_ERROR(TabletMetaManager::clear_log(store, &wb, tablet_id));
+            RETURN_IF_ERROR(TabletMetaManager::remove_tablet_meta(store, &wb, tablet_id, schema_hash));
+            auto st = meta_store->write_batch(&wb);
+            LOG_IF(WARNING, !st.ok()) << "Fail to clear meta store: " << st;
+            return Status::InternalError("tablet init failed");
+        }
+        add_tablet_st = _add_tablet_unlocked(tablet, true, false);
+        LOG_IF(WARNING, !add_tablet_st.ok()) << "Fail to add cloned tablet " << tablet_id << ": " << add_tablet_st;
     }
-    auto st = _add_tablet_unlocked(tablet, true, false);
-    LOG_IF(WARNING, !st.ok()) << "Fail to add cloned tablet " << tablet_id << ": " << st;
-    return st;
+
+    if (add_tablet_st.ok() && need_rebuild_pk_index && tablet->updates() != nullptr) {
+        // rebuild primary index
+        auto manager = StorageEngine::instance()->update_manager();
+        auto* pindex_load_executor = manager->get_pindex_load_executor();
+        auto latch_or = pindex_load_executor->submit_task(tablet);
+        if (latch_or.ok()) {
+            auto finished = latch_or.value()->wait_for(std::chrono::seconds(rebuild_pk_index_wait_seconds));
+            if (!finished) {
+                LOG(INFO) << "persistent index is still loading, already wait " << rebuild_pk_index_wait_seconds
+                          << " seconds. tablet: " << tablet_id;
+            }
+        } else {
+            LOG(WARNING) << "fail to submit persistent index load task. tablet: " << tablet_id
+                         << ", error: " << latch_or.status().to_string();
+        }
+    }
+    return add_tablet_st;
 }
 
 Status TabletManager::_remove_tablet_meta(const TabletSharedPtr& tablet) {

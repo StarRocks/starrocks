@@ -240,6 +240,7 @@ set(STORAGE_FILES
     lake/txn_log_applier.cpp
     lake/lake_local_persistent_index.cpp
     persistent_index_compaction_manager.cpp
+    persistent_index_load_executor.cpp
     lake/local_pk_index_manager.cpp
     persistent_index_tablet_loader.cpp
     lake/lake_local_persistent_index_tablet_loader.cpp
