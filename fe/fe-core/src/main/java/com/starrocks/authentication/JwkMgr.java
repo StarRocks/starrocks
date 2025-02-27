@@ -25,13 +25,19 @@ import java.text.ParseException;
 
 public class JwkMgr {
     public JWKSet getJwkSet(String jwksUrl) throws IOException, ParseException {
-        InputStream jwksInputStream;
-        if (jwksUrl.startsWith("http://") || jwksUrl.startsWith("https://")) {
-            jwksInputStream = new URL(jwksUrl).openStream();
-        } else {
-            String filePath = StarRocksFE.STARROCKS_HOME_DIR + "/conf/" + jwksUrl;
-            jwksInputStream = new FileInputStream(filePath);
+        InputStream jwksInputStream = null;
+        try {
+            if (jwksUrl.startsWith("http://") || jwksUrl.startsWith("https://")) {
+                jwksInputStream = new URL(jwksUrl).openStream();
+            } else {
+                String filePath = StarRocksFE.STARROCKS_HOME_DIR + "/conf/" + jwksUrl;
+                jwksInputStream = new FileInputStream(filePath);
+            }
+            return JWKSet.load(jwksInputStream);
+        } finally {
+            if (jwksInputStream != null) {
+                jwksInputStream.close();
+            }
         }
-        return JWKSet.load(jwksInputStream);
     }
 }

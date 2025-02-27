@@ -593,6 +593,12 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DELETE_SQL_QUERY_BLACK_LIST = 13521;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_CREATE_GROUP_PROVIDER = 13530;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_GROUP_PROVIDER = 13531;
+
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
      */
