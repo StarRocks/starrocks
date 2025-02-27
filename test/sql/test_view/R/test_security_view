@@ -11,6 +11,9 @@ create view v1 as select * from t1, t2;
 create view v2 security invoker as select * from t1, t2;
 -- result:
 -- !result
+create view v3 security invoker as select * from v2;
+-- result:
+-- !result
 create user if not exists u1;
 -- result:
 -- !result
@@ -21,6 +24,9 @@ grant select on view v1 to user u1;
 -- result:
 -- !result
 grant select on view v2 to user u1;
+-- result:
+-- !result
+grant select on view v3 to user u1;
 -- result:
 -- !result
 create user if not exists u2;
@@ -41,6 +47,9 @@ grant select on view v1 to user u2;
 grant select on view v2 to user u2;
 -- result:
 -- !result
+grant select on view v3 to user u1;
+-- result:
+-- !result
 execute as u1 with no revert;
 -- result:
 -- !result
@@ -50,6 +59,10 @@ select * from v1;
 select * from v2;
 -- result:
 E: (5203, 'Access denied; you need (at least one of) the SELECT privilege(s) on VIEW v2 for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
+-- !result
+select * from v3;
+-- result:
+E: (5203, 'Access denied; you need (at least one of) the SELECT privilege(s) on TABLE t1 for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
 -- !result
 execute as root with no revert;
 -- result:
