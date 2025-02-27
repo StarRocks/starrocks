@@ -89,6 +89,7 @@ class TFileBrokerServiceClient;
 template <class T>
 class ClientCache;
 class HeartbeatFlags;
+class DiagnoseDaemon;
 
 namespace pipeline {
 class DriverExecutor;
@@ -355,6 +356,8 @@ public:
 
     void try_release_resource_before_core_dump();
 
+    DiagnoseDaemon* diagnose_daemon() const { return _diagnose_daemon; }
+
 private:
     void _wait_for_fragments_finish();
     size_t _get_running_fragments_count() const;
@@ -424,6 +427,7 @@ private:
     query_cache::CacheManagerRawPtr _cache_mgr;
     BlockCache* _block_cache = nullptr;
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
+    DiagnoseDaemon* _diagnose_daemon = nullptr;
 };
 
 template <>

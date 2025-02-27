@@ -192,6 +192,7 @@ private:
     void _try_diagnose(const std::string& error_text);
     bool _is_diagnose_done();
     void _wait_diagnose(RuntimeState* state);
+    bool _process_diagnose_profile(RuntimeState* state, PLoadDiagnoseResult& result);
 
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 
