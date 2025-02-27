@@ -51,6 +51,12 @@ ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false")
 
 If the target cluster for data migration is a shared-data cluster, you need to manually disable Compaction before starting the data migration and re-enable it after the data migration is completed.
 
+:::tip
+
+You can skip this step if you are using StarRocks v3.3.10 or later.
+
+:::
+
 1. You can check whether Compaction is enabled by using the following statement:
 
    ```SQL
@@ -79,7 +85,13 @@ ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
 
 ### Disable column filtering
 
-The optimization for unused column filtering at the Scan stage may cause a crash during queries against the migrated data. You need to disable this optimization before data migration:
+The optimization for unused column filtering at the Scan stage may cause a crash during queries against the migrated data. You need to disable this optimization before data migration.
+
+:::tip
+
+You can skip this step if you are using StarRocks v3.3.10, v3.2.15, v3.1.17 or later.
+
+:::
 
 ```SQL
 SET GLOBAL enable_filter_unused_columns_in_scan_stage=false;
