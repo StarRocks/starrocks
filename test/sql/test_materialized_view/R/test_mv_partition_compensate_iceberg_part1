@@ -69,53 +69,53 @@ REFRESH DEFERRED MANUAL AS
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt !='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt !='2020-06-15' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>='2020-06-15' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
 SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt order by dt;
 -- result:
@@ -246,71 +246,71 @@ SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY dt or
 INSERT INTO mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 VALUES (3, "2020-06-15");
 -- result:
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-21' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-21' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt !='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt !='2020-06-15' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
 set enable_materialized_view_transparent_union_rewrite=true;
 -- result:
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt between '2020-06-16' and '2020-07-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt between '2020-06-16' and '2020-07-01' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
 set enable_materialized_view_transparent_union_rewrite=false;
 -- result:
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt in ('2020-06-21', '2020-07-25') GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt in ('2020-06-21', '2020-07-25') GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>='2020-06-15' GROUP BY dt;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>='2020-06-15' GROUP BY dt;", "test_mv1", "UNION")
 -- result:
-None
+True
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt;", "test_mv1", "UNION")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY dt;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY dt;", "test_mv1", "UNION")
 -- result:
-None
+True
 -- !result
 SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt order by dt;
 -- result:
@@ -458,53 +458,53 @@ REFRESH DEFERRED MANUAL AS
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt !='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt !='2020-06-15' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>='2020-06-15' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
 SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt order by dt;
 -- result:
@@ -635,71 +635,71 @@ SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY dt or
 INSERT INTO mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 VALUES (3, "2020-06-15");
 -- result:
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-21' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('day', dt) ='2020-06-21' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt !='2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt !='2020-06-15' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
 set enable_materialized_view_transparent_union_rewrite=true;
 -- result:
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt between '2020-06-16' and '2020-07-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt between '2020-06-16' and '2020-07-01' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
 set enable_materialized_view_transparent_union_rewrite=false;
 -- result:
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt in ('2020-06-21', '2020-07-25') GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt in ('2020-06-21', '2020-07-25') GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>='2020-06-15' GROUP BY dt;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt>='2020-06-15' GROUP BY dt;", "test_mv1", "UNION")
 -- result:
-None
+True
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY dt;", "test_mv1", "UNION")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 GROUP BY dt;", "test_mv1", "UNION")
 -- result:
-None
+True
 -- !result
 SELECT dt,sum(num) FROM mv_iceberg_${uuid0}.mv_ice_db_${uuid0}.t1 where dt='2020-06-15' GROUP BY dt order by dt;
 -- result:
