@@ -205,7 +205,8 @@ public:
 
             byte_size += ColumnHelper::get_binary_column(dst)->get_bytes().size();
             ColumnHelper::get_binary_column(dst)->reserve(count, byte_size);
-            auto ret = ColumnHelper::get_binary_column(dst)->append_strings_overflow(slices.data(), num_decoded, max_size);
+            auto ret =
+                    ColumnHelper::get_binary_column(dst)->append_strings_overflow(slices.data(), num_decoded, max_size);
             if (UNLIKELY(!ret)) {
                 return Status::InternalError("PlainDecoder append strings to column failed");
             }
