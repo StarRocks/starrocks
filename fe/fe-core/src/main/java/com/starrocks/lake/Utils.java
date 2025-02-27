@@ -250,7 +250,6 @@ public class Utils {
             LOG.warn("failed to get warehouse id by node id: {}", nodeId);
             return Optional.empty();
         }
-
         return Optional.of(node.getWarehouseId());
     }
 }

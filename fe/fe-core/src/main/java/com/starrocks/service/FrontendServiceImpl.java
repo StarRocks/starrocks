@@ -1230,8 +1230,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TLoadTxnBeginResult loadTxnBegin(TLoadTxnBeginRequest request) throws TException {
         String clientAddr = getClientAddrAsString();
-        LOG.info("receive txn begin request, db: {}, tbl: {}, label: {}, backend: {}",
-                request.getDb(), request.getTbl(), request.getLabel(), clientAddr);
+        LOG.info("receive txn begin request, db: {}, tbl: {}, label: {}, backendAddr: {}, backendId: {}",
+                request.getDb(), request.getTbl(), request.getLabel(), clientAddr, request.getBackend_id());
         LOG.debug("txn begin request: {}", request);
 
         TLoadTxnBeginResult result = new TLoadTxnBeginResult();
