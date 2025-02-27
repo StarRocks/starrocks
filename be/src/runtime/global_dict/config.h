@@ -22,4 +22,6 @@ namespace starrocks {
 using DictId = int32_t;
 
 constexpr auto LowCardDictType = TYPE_INT;
+constexpr int DICT_DECODE_MAX_SIZE = 256;
+
 } // namespace starrocks
