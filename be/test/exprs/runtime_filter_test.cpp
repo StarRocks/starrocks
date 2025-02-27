@@ -335,6 +335,13 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilter) {
     chunk.filter(selection);
     // 0 17 34 ... 187
     EXPECT_EQ(chunk.num_rows(), 12);
+
+    auto null_literal = ColumnHelper::create_const_null_column(4096);
+    selection.assign(null_literal->size(), 0);
+    rf->evaluate(null_literal.get(), &ctx);
+    for (auto v : selection) {
+        ASSERT_EQ(1, v);
+    }
 }
 
 TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterSlice) {
