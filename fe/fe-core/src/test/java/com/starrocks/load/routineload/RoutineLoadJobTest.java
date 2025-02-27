@@ -808,7 +808,7 @@ public class RoutineLoadJobTest {
                     TxnStatusChangeReason.PARSE_ERROR.toString());
             Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
             String errorMsg =
-                    "ErrorReason{errCode = 106, msg='parse error. Check the 'TrackingSQL' field for detailed information.'}";
+                    "ErrorReason{errCode = 5611, msg='parse error. Check the 'TrackingSQL' field for detailed information.'}";
             Assert.assertEquals(errorMsg, routineLoadJob.getPauseReason());
         }
 
