@@ -18,7 +18,7 @@ package com.starrocks.authentication;
 import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.commons.lang3.StringUtils;
@@ -63,8 +63,8 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         }
 
         if (!Config.enable_password_reuse) {
-            GlobalStateMgr.getCurrentState().getAuthenticationMgr().checkPlainPassword(
-                    userIdentity.getUser(), userIdentity.getHost(), password);
+            AuthenticationHandler.authenticate(new ConnectContext(), userIdentity.getUser(), userIdentity.getHost(),
+                    password.getBytes(StandardCharsets.UTF_8), null);
         }
     }
 

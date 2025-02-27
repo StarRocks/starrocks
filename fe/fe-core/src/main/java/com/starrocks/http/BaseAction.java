@@ -36,6 +36,8 @@ package com.starrocks.http;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
@@ -314,17 +316,13 @@ public abstract class BaseAction implements IAction {
     }
 
     // return currentUserIdentity from StarRocks auth
-    public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo)
-            throws AccessDeniedException {
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        UserIdentity currentUser =
-                globalStateMgr.getAuthenticationMgr().checkPlainPassword(
-                        authInfo.fullUserName, authInfo.remoteIp, authInfo.password);
-        if (currentUser == null) {
-            throw new AccessDeniedException("Access denied for "
-                    + authInfo.fullUserName + "@" + authInfo.remoteIp);
+    public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo) throws AccessDeniedException {
+        try {
+            return AuthenticationHandler.authenticate(new ConnectContext(), authInfo.fullUserName,
+                    authInfo.remoteIp, authInfo.password.getBytes(StandardCharsets.UTF_8), null);
+        } catch (AuthenticationException e) {
+            throw new AccessDeniedException("Access denied for " + authInfo.fullUserName + "@" + authInfo.remoteIp);
         }
-        return currentUser;
     }
 
     public ActionAuthorizationInfo getAuthorizationInfo(BaseRequest request)

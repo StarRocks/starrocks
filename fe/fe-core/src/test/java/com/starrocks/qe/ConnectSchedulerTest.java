@@ -37,7 +37,6 @@ package com.starrocks.qe;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.mysql.MysqlChannel;
 import com.starrocks.mysql.MysqlProto;
-import com.starrocks.mysql.NegotiateState;
 import mockit.Expectations;
 import mockit.Mocked;
 import org.junit.Assert;
@@ -63,11 +62,6 @@ public class ConnectSchedulerTest {
                 channel.getRemoteIp();
                 minTimes = 0;
                 result = "192.168.1.1";
-
-                // mock negotiate
-                MysqlProto.negotiate((ConnectContext) any);
-                minTimes = 0;
-                result = new MysqlProto.NegotiateResult(null, NegotiateState.OK);
 
                 MysqlProto.sendResponsePacket((ConnectContext) any);
                 minTimes = 0;
