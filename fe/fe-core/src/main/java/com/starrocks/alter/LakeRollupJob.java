@@ -400,7 +400,6 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         }
 
         if (!publishVersion()) {
-            LOG.info("publish version failed, will retry later. jobId={}", jobId);
             return;
         }
 
@@ -652,7 +651,7 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
         return true;
     }
 
-    private boolean publishVersion() {
+    protected boolean lakePublishVersion() {
         try (ReadLockedDatabase db = getReadLockedDatabase(dbId)) {
             LakeTable table = getTableOrThrow(db, tableId);
             for (long partitionId : physicalPartitionIdToRollupIndex.keySet()) {
