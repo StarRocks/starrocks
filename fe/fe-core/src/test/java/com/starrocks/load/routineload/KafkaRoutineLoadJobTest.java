@@ -528,14 +528,14 @@ public class KafkaRoutineLoadJobTest {
 
         progressJsonStr = "{\"0\":\"100\"}";
         Map<Integer, Long> latestPartitionOffsets = Maps.newHashMap();
-        latestPartitionOffsets.put(0,200L);
+        latestPartitionOffsets.put(0, 200L);
         Deencapsulation.setField(job, "latestPartitionOffsets", latestPartitionOffsets);
         sourceLagString = job.getSourceLagString(progressJsonStr);
         Assert.assertTrue(sourceLagString.contains("\"0\":\"100\""));
 
         //check  progress > latestPartitionOffsets
         progressJsonStr = "{\"0\":\"200\"}";
-        latestPartitionOffsets.put(0,100L);
+        latestPartitionOffsets.put(0, 100L);
         Deencapsulation.setField(job, "latestPartitionOffsets", latestPartitionOffsets);
         sourceLagString = job.getSourceLagString(progressJsonStr);
         Assert.assertTrue(sourceLagString.contains("\"0\":\"0\""));
