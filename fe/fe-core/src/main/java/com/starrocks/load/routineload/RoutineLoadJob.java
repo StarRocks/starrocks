@@ -122,7 +122,7 @@ import java.util.Queue;
 import java.util.UUID;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import static com.starrocks.common.ErrorCode.ERR_PARSE_ERROR;
+import static com.starrocks.common.ErrorCode.ERR_LOAD_DATA_PARSE_ERROR;
 import static com.starrocks.common.ErrorCode.ERR_TOO_MANY_ERROR_ROWS;
 
 /**
@@ -1269,8 +1269,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 return Optional.of(new ErrorReason(InternalErrorCode.TOO_MANY_FAILURE_ROWS_ERR,
                         ERR_TOO_MANY_ERROR_ROWS.formatErrorMsg(txnStatusChangeReasonStr, "max_filter_ratio")));
             case PARSE_ERROR:
-                return !isPauseOnFatalParseError() ? Optional.empty() : Optional.of(new ErrorReason(InternalErrorCode.PARSE_ERR,
-                        ERR_PARSE_ERROR.formatErrorMsg(txnStatusChangeReasonStr)));
+                return !isPauseOnFatalParseError() ? Optional.empty() : Optional.of(
+                        new ErrorReason(ERR_LOAD_DATA_PARSE_ERROR.getCode(),
+                                ERR_LOAD_DATA_PARSE_ERROR.formatErrorMsg(txnStatusChangeReasonStr)));
             default:
                 return Optional.empty();
         }
