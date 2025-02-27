@@ -1618,4 +1618,8 @@ CONF_mInt64(rf_sample_ratio, "32");
 CONF_mInt64(rf_branchless_ratio, "8");
 
 CONF_mInt32(big_query_sec, "1");
+
+CONF_mInt32(pk_index_rebuild_thread_pool_num_max, "8");
+CONF_mInt32(pk_index_rebuild_clone_wait_seconds, "60");
+CONF_mInt32(pk_index_rebuild_load_wait_seconds, "30");
 } // namespace starrocks::config
