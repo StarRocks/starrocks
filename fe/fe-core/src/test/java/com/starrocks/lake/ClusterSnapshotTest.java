@@ -14,6 +14,7 @@
 
 package com.starrocks.lake.snapshot;
 
+import com.staros.proto.ShardGroupInfo;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.AlterTest;
 import com.starrocks.alter.MaterializedViewHandler;
@@ -27,6 +28,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.journal.bdbje.BDBJEJournal;
+import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.leader.CheckpointController;
@@ -48,6 +50,7 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -314,6 +317,7 @@ public class ClusterSnapshotTest {
         setAutomatedSnapshotOff(false);
     }
 
+    @Test
     public void testDeletionControl() {
         new MockUp<RunMode>() {
             @Mock
@@ -322,28 +326,27 @@ public class ClusterSnapshotTest {
             }
         };
 
-        ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
-        Assert.assertTrue(localClusterSnapshotMgr.getSafeDeletionTimeMs() == Long.MAX_VALUE);
-        localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
-        Assert.assertEquals(localClusterSnapshotMgr.getSafeDeletionTimeMs(), 0L);
+        {
+            final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
+            Assert.assertTrue(localClusterSnapshotMgr.getSafeDeletionTimeMs() == Long.MAX_VALUE);
+            localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
+            Assert.assertEquals(localClusterSnapshotMgr.getSafeDeletionTimeMs(), 0L);
+    
+            ClusterSnapshotJob job1 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+            job1.setState(ClusterSnapshotJobState.FINISHED);
+            Assert.assertEquals(localClusterSnapshotMgr.getSafeDeletionTimeMs(), 0L);
+            ClusterSnapshotJob job2 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+            job2.setState(ClusterSnapshotJobState.FINISHED);
+            Assert.assertEquals(localClusterSnapshotMgr.getSafeDeletionTimeMs(), job1.getCreatedTimeMs());
+            localClusterSnapshotMgr.setAutomatedSnapshotOff();
+        }
 
-        ClusterSnapshotJob job1 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
-        job1.setState(ClusterSnapshotJobState.FINISHED);
-        Assert.assertEquals(localClusterSnapshotMgr.getSafeDeletionTimeMs(), 0L);
-        ClusterSnapshotJob job2 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
-        job2.setState(ClusterSnapshotJobState.FINISHED);
-        Assert.assertEquals(localClusterSnapshotMgr.getSafeDeletionTimeMs(), job1.getCreatedTimeMs());
-        localClusterSnapshotMgr.setAutomatedSnapshotOff();
-
-        localClusterSnapshotMgr = new ClusterSnapshotMgr();
-        Assert.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
         AlterJobV2 alterjob1 = new SchemaChangeJobV2(1, 2, 10, "table1", 100000);
         AlterJobV2 alterjob2 = new SchemaChangeJobV2(2, 2, 11, "table2", 100000);
         alterjob1.setJobState(AlterJobV2.JobState.FINISHED);
         alterjob1.setFinishedTimeMs(1000);
         alterjob2.setJobState(AlterJobV2.JobState.FINISHED);
         alterjob2.setFinishedTimeMs(1000);
-
         MaterializedViewHandler rollupHandler = new MaterializedViewHandler();
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
         schemaChangeHandler.addAlterJobV2(alterjob1);
@@ -361,21 +364,116 @@ public class ClusterSnapshotTest {
             }
         };
 
-        localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
-        Assert.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
-        Assert.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
-        ClusterSnapshotJob j1 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
-        j1.setState(ClusterSnapshotJobState.FINISHED);
+        {
+            final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
+            Assert.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+            localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
+            Assert.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+            Assert.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
+            ClusterSnapshotJob j1 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+            j1.setState(ClusterSnapshotJobState.FINISHED);
+    
+            Assert.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+            Assert.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
+    
+            ClusterSnapshotJob j2 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+            j2.setState(ClusterSnapshotJobState.FINISHED);
+    
+            Assert.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
+            Assert.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
+            localClusterSnapshotMgr.setAutomatedSnapshotOff();
+        }
 
-        Assert.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
-        Assert.assertTrue(!localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
+        {
+            AlterJobV2 alterjob3 = new SchemaChangeJobV2(1, 2, 100L, "table3", 100000);
+            alterjob3.setJobState(AlterJobV2.JobState.FINISHED);
+            alterjob3.setFinishedTimeMs(1000);
+            schemaChangeHandler.addAlterJobV2(alterjob3);
 
-        ClusterSnapshotJob j2 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
-        j2.setState(ClusterSnapshotJobState.FINISHED);
+            final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
+            localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
+            localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
+            long oldConfig = Config.shard_group_clean_threshold_sec;
+            Config.shard_group_clean_threshold_sec = 0;
+            StarMgrMetaSyncer syncer = new StarMgrMetaSyncer();
+            List<Long> groupIdFe = new ArrayList();
+            List<Long> emptyShardGroup = new ArrayList<>();
+            groupIdFe.add(100L);
+            ShardGroupInfo info1 = ShardGroupInfo.newBuilder()
+                    .setGroupId(99L)
+                    .putLabels("tableId", String.valueOf(100L))
+                    .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
+                    .build();
+            ShardGroupInfo info2 = ShardGroupInfo.newBuilder()
+                    .setGroupId(100L)
+                    .putLabels("tableId", String.valueOf(111L))
+                    .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
+                    .build();
+            List<ShardGroupInfo> shardGroupsInfo = new ArrayList();
+            shardGroupsInfo.add(info1);
+            shardGroupsInfo.add(info2);
+    
+            new MockUp<StarMgrMetaSyncer>() {
+                @Mock
+                public List<Long> getAllPartitionShardGroupId() {
+                    return groupIdFe;
+                }
+            };
+    
+            new MockUp<StarOSAgent>() {
+                @Mock
+                public List<ShardGroupInfo> listShardGroup() {
+                    return shardGroupsInfo;
+                }
+            };
 
-        Assert.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
-        Assert.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
-        localClusterSnapshotMgr.setAutomatedSnapshotOff();
+
+            new MockUp<GlobalStateMgr>() {
+                @Mock
+                public ClusterSnapshotMgr getClusterSnapshotMgr() {
+                    return localClusterSnapshotMgr;
+                }
+            };
+    
+            {
+                new Expectations() {
+                    {
+                        syncer.cleanOneGroup(99L, starOSAgent, emptyShardGroup);
+                        maxTimes = 1;
+                        minTimes = 1;
+                        result = 0;
+                    }
+                };
+                syncer.deleteUnusedShardAndShardGroup();
+            }
+            ClusterSnapshotJob j3 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+            j3.setState(ClusterSnapshotJobState.FINISHED);
+            {
+                new Expectations() {
+                    {
+                        syncer.cleanOneGroup(99L, starOSAgent, emptyShardGroup);
+                        maxTimes = 0;
+                        minTimes = 0;
+                        result = 0;
+                    }
+                };
+                syncer.deleteUnusedShardAndShardGroup();
+            }
+            ClusterSnapshotJob j4 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+            j4.setState(ClusterSnapshotJobState.FINISHED);
+            {
+                new Expectations() {
+                    {
+                        syncer.cleanOneGroup(99L, starOSAgent, emptyShardGroup);
+                        maxTimes = 1;
+                        minTimes = 1;
+                        result = 0;
+                    }
+                };
+                syncer.deleteUnusedShardAndShardGroup();
+            }
+            localClusterSnapshotMgr.setAutomatedSnapshotOff();
+        }
     }
 
     @Test
