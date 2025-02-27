@@ -1606,6 +1606,12 @@ public class AstToStringBuilder {
             sb.append(")");
             addTableComment(sb, view);
 
+            if (view.isSecurity()) {
+                sb.append(" SECURITY INVOKER");
+            } else {
+                sb.append(" SECURITY NONE");
+            }
+
             sb.append(" AS ").append(view.getInlineViewDef()).append(";");
             createTableStmt.add(sb.toString());
             return;
