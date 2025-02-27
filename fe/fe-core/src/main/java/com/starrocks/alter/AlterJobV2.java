@@ -49,6 +49,7 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.persist.LakeTableAsyncFastSchemaChangeJobInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -145,6 +146,20 @@ public abstract class AlterJobV2 implements Writable {
         this.span = TraceManager.startNoopSpan();
     }
 
+    AlterJobV2(LakeTableAsyncFastSchemaChangeJobInfo jobInfo) {
+        this.type = jobInfo.getType();
+        this.jobId = jobInfo.getJobId();
+        this.jobState = jobInfo.getJobState();
+        this.dbId = jobInfo.getDbId();
+        this.tableId = jobInfo.getTableId();
+        this.tableName = jobInfo.getTableName();
+        this.errMsg = jobInfo.getErrMsg();
+        this.createTimeMs = jobInfo.getCreateTimeMs();
+        this.finishedTimeMs = jobInfo.getFinishedTimeMs();
+        this.timeoutMs = jobInfo.getTimeoutMs();
+        this.warehouseId = jobInfo.getWarehouseId();
+    }
+
     public long getJobId() {
         return jobId;
     }
@@ -171,6 +186,14 @@ public abstract class AlterJobV2 implements Writable {
 
     public String getTableName() {
         return tableName;
+    }
+
+    public String getErrMsg() {
+        return errMsg;
+    }
+
+    public long getCreateTimeMs() {
+        return createTimeMs;
     }
 
     public long getTimeoutMs() {
