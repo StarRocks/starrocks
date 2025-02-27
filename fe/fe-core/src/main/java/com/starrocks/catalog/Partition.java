@@ -151,6 +151,8 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
 
     private volatile long minRetainVersion = 0;
 
+    private volatile long lastSuccVacuumVersion = 0;
+
     private Partition() {
     }
 
@@ -626,6 +628,14 @@ public class Partition extends MetaObject implements PhysicalPartition, GsonPost
 
     public void setMinRetainVersion(long minRetainVersion) {
         this.minRetainVersion = minRetainVersion;
+    }
+
+    public long getLastSuccVacuumVersion() {
+        return lastSuccVacuumVersion;
+    }
+
+    public void setLastSuccVacuumVersion(long lastSuccVacuumVersion) {
+        this.lastSuccVacuumVersion = lastSuccVacuumVersion;
     }
 
     public String generatePhysicalPartitionName(long physicalPartitionId) {
