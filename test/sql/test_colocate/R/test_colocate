@@ -147,130 +147,66 @@ INSERT INTO t4 (c0, c1, c2, c3) VALUES
   (null, 'o', 'Value15', 150);
 -- result:
 -- !result
-select t1.c0, t2.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0=t2.c0 and t1.c1=t2.c1 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1;
+select t1.c0, t2.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0=t2.c0 and t1.c1=t2.c1 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1 order by 1,2,3,4,5,6;
 -- result:
-5	5	None	f	f	None
-2	2	2	b	b	b
-8	8	8	h	h	h
-8	8	8	h	h	h
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-4	4	None	d	d	None
-10	10	10	j	j	j
-14	None	None	l	None	None
-1	None	None	a	None	None
-5	None	None	None	None	None
 None	None	None	None	None	None
-None	None	None	k	None	None
-15	None	None	o	None	None
 None	None	None	c	None	None
--- !result
-select t1.c0, t2.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1=t2.c1 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1;
--- result:
-None	None	None	c	c	None
-8	8	8	h	h	h
-8	8	8	h	h	h
-10	10	10	j	j	j
-4	4	None	d	d	None
-14	None	None	l	None	None
+None	None	None	k	None	None
 1	None	None	a	None	None
-None	None	None	None	None	None
+2	2	2	b	b	b
+4	4	None	d	d	None
 5	None	None	None	None	None
+5	5	None	f	f	None
+8	8	8	h	h	h
+8	8	8	h	h	h
+10	10	10	j	j	j
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+14	None	None	l	None	None
 15	None	None	o	None	None
-5	5	None	f	f	None
-None	None	None	k	k	None
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-2	2	2	b	b	b
 -- !result
-select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1=t2.c1 left join t3 on t2.c0<=>t3.c0 and t2.c1=t3.c1;
+select t1.c0, t2.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1=t2.c1 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1 order by 1,2,3,4,5,6;
 -- result:
-14	14	None	l	None	None
-None	None	None	c	c	None
-8	8	8	h	h	h
-8	8	8	h	h	h
-5	5	None	f	f	None
-4	4	None	d	d	None
-2	2	2	b	b	b
-None	None	None	k	k	k
-10	10	10	j	j	j
 None	None	None	None	None	None
-1	1	None	a	None	None
-5	5	None	None	None	None
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-15	15	None	o	None	None
--- !result
-select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1;
--- result:
-4	4	None	d	d	None
-5	5	None	None	None	None
-1	1	None	a	None	None
-14	14	None	l	None	None
-None	None	None	None	None	None
-15	15	None	o	None	None
 None	None	None	c	c	None
-5	5	None	f	f	None
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
 None	None	None	k	k	None
-8	8	8	h	h	h
-8	8	8	h	h	h
+1	None	None	a	None	None
 2	2	2	b	b	b
-10	10	10	j	j	j
--- !result
-select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 left join t3 on t2.c0<=>t3.c0 and t2.c1=t3.c1;
--- result:
 4	4	None	d	d	None
-14	14	None	l	None	None
-2	2	2	b	b	b
+5	None	None	None	None	None
+5	5	None	f	f	None
+8	8	8	h	h	h
+8	8	8	h	h	h
 10	10	10	j	j	j
-5	5	None	None	None	None
-15	15	None	o	None	None
-1	1	None	a	None	None
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+14	None	None	l	None	None
+15	None	None	o	None	None
+-- !result
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1=t2.c1 left join t3 on t2.c0<=>t3.c0 and t2.c1=t3.c1 order by 1,2,3,4,5,6;
+-- result:
+None	None	None	None	None	None
 None	None	None	c	c	None
 None	None	None	k	k	k
-8	8	8	h	h	h
-8	8	8	h	h	h
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-None	None	None	None	None	None
-5	5	None	f	f	None
--- !result
-select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 left join t3 on t2.c0<=>t3.c0 and t2.c1<=>t3.c1;
--- result:
-5	5	None	f	f	None
+1	1	None	a	None	None
 2	2	2	b	b	b
+4	4	None	d	d	None
+5	5	None	None	None	None
+5	5	None	f	f	None
+8	8	8	h	h	h
+8	8	8	h	h	h
 10	10	10	j	j	j
 12	12	12	l	l	l
 12	12	12	l	l	l
@@ -280,861 +216,913 @@ select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>
 12	12	12	l	l	l
 12	12	12	l	l	l
 12	12	12	l	l	l
-4	4	None	d	d	None
+14	14	None	l	None	None
+15	15	None	o	None	None
+-- !result
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1 order by 1,2,3,4,5,6;
+-- result:
+None	None	None	None	None	None
 None	None	None	c	c	None
+None	None	None	k	k	None
+1	1	None	a	None	None
+2	2	2	b	b	b
+4	4	None	d	d	None
+5	5	None	None	None	None
+5	5	None	f	f	None
+8	8	8	h	h	h
+8	8	8	h	h	h
+10	10	10	j	j	j
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+14	14	None	l	None	None
+15	15	None	o	None	None
+-- !result
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 left join t3 on t2.c0<=>t3.c0 and t2.c1=t3.c1 order by 1,2,3,4,5,6;
+-- result:
+None	None	None	None	None	None
+None	None	None	c	c	None
+None	None	None	k	k	k
+1	1	None	a	None	None
+2	2	2	b	b	b
+4	4	None	d	d	None
+5	5	None	None	None	None
+5	5	None	f	f	None
+8	8	8	h	h	h
+8	8	8	h	h	h
+10	10	10	j	j	j
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+14	14	None	l	None	None
+15	15	None	o	None	None
+-- !result
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 left join t3 on t2.c0<=>t3.c0 and t2.c1<=>t3.c1 order by 1,2,3,4,5,6;
+-- result:
+None	None	None	None	None	None
+None	None	None	c	c	None
+None	None	None	k	k	k
+1	1	None	a	None	None
+2	2	2	b	b	b
+4	4	None	d	d	None
+5	5	None	f	f	None
 5	5	5	None	None	None
-None	None	None	k	k	k
+8	8	8	h	h	h
+8	8	8	h	h	h
+10	10	10	j	j	j
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
 14	14	None	l	None	None
-8	8	8	h	h	h
-8	8	8	h	h	h
-None	None	None	None	None	None
-1	1	None	a	None	None
 15	15	None	o	None	None
 -- !result
-select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 left join t3 on t2.c0 = t3.c0 and t1.c1 =t3.c1;
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 left join t3 on t2.c0 = t3.c0 and t1.c1 =t3.c1 order by 1,2,3,4,5,6;
 -- result:
-14	14	None	l	None	None
+None	None	None	None	None	None
 None	None	None	c	None	None
-5	5	None	f	f	None
 None	None	None	k	None	None
 1	1	None	a	None	None
-None	None	None	None	None	None
-5	5	None	None	None	None
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
 2	2	2	b	b	b
-15	15	None	o	None	None
 4	4	None	d	d	None
-8	8	8	h	h	h
-8	8	8	h	h	h
-10	10	10	j	j	j
--- !result
-select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0 <=>t2.c0 and t1.c1<=>t2.c1 left join t3 on t2.c0 = t3.c0 and t1.c1 =t3.c1;
--- result:
-None	None	None	None	None	None
-15	15	None	o	None	None
-8	8	8	h	h	h
-8	8	8	h	h	h
-None	None	None	c	c	None
-10	10	10	j	j	j
-1	1	None	a	None	None
-14	14	None	l	None	None
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-4	4	None	d	d	None
+5	5	None	None	None	None
 5	5	None	f	f	None
-5	5	None	None	None	None
-None	None	None	k	k	None
-2	2	2	b	b	b
+8	8	8	h	h	h
+8	8	8	h	h	h
+10	10	10	j	j	j
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+14	14	None	l	None	None
+15	15	None	o	None	None
 -- !result
-select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0 <=>t2.c0 and t1.c1<=>t2.c1 left join t3 on t2.c0 <=> t3.c0 and t1.c1 =t3.c1;
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0 <=>t2.c0 and t1.c1<=>t2.c1 left join t3 on t2.c0 = t3.c0 and t1.c1 =t3.c1 order by 1,2,3,4,5,6;
 -- result:
 None	None	None	None	None	None
+None	None	None	c	c	None
+None	None	None	k	k	None
+1	1	None	a	None	None
+2	2	2	b	b	b
+4	4	None	d	d	None
+5	5	None	None	None	None
+5	5	None	f	f	None
+8	8	8	h	h	h
+8	8	8	h	h	h
+10	10	10	j	j	j
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
 14	14	None	l	None	None
+15	15	None	o	None	None
+-- !result
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0 <=>t2.c0 and t1.c1<=>t2.c1 left join t3 on t2.c0 <=> t3.c0 and t1.c1 =t3.c1 order by 1,2,3,4,5,6;
+-- result:
+None	None	None	None	None	None
 None	None	None	c	c	None
 None	None	None	k	k	k
+1	1	None	a	None	None
+2	2	2	b	b	b
+4	4	None	d	d	None
+5	5	None	None	None	None
+5	5	None	f	f	None
+8	8	8	h	h	h
+8	8	8	h	h	h
+10	10	10	j	j	j
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+14	14	None	l	None	None
 15	15	None	o	None	o
-1	1	None	a	None	None
-8	8	8	h	h	h
-8	8	8	h	h	h
-2	2	2	b	b	b
-5	5	None	f	f	None
-10	10	10	j	j	j
-5	5	None	None	None	None
-4	4	None	d	d	None
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
 -- !result
-select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0 <=>t2.c0 and t1.c1<=>t2.c1 right join t3 on t1.c0 = t3.c0 and t2.c1 = t3.c1 left join t4 on t2.c0 = t4.c0 and t2.c3 = t4.c1;
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0 <=>t2.c0 and t1.c1<=>t2.c1 right join t3 on t1.c0 = t3.c0 and t2.c1 = t3.c1 left join t4 on t2.c0 = t4.c0 and t2.c3 = t4.c1 order by 1,2,3,4,5,6;
 -- result:
-None	None	None	None	None	k
-None	None	5	None	None	h
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-8	8	8	h	h	h
-8	8	8	h	h	h
-None	None	3	None	None	c
-None	None	1	None	None	a
-None	None	14	None	None	m
-10	10	10	j	j	j
-None	None	3	None	None	d
-None	None	None	None	None	o
-None	None	5	None	None	None
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-2	2	2	b	b	b
-None	None	8	None	None	None
 None	None	None	None	None	f
--- !result
-select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0 <=>t2.c0 and t1.c1<=>t2.c1 right join t3 on t1.c0 = t3.c0 and t2.c1 = t3.c1 left join t4 on t2.c0 <=> t4.c0 and t2.c3 = t4.c1;
--- result:
 None	None	None	None	None	k
-10	10	10	j	j	j
-None	None	14	None	None	m
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
+None	None	None	None	None	o
+None	None	1	None	None	a
 None	None	3	None	None	c
+None	None	3	None	None	d
+None	None	5	None	None	None
+None	None	5	None	None	h
+None	None	8	None	None	None
+None	None	14	None	None	m
 2	2	2	b	b	b
 8	8	8	h	h	h
 8	8	8	h	h	h
-None	None	5	None	None	None
-None	None	1	None	None	a
-None	None	None	None	None	o
-None	None	5	None	None	h
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-None	None	3	None	None	d
-None	None	8	None	None	None
-None	None	None	None	None	f
--- !result
-select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 right join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 left join t3 on t2.c0<=>t3.c0 and t2.c1<=>t3.c1;
--- result:
 10	10	10	j	j	j
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+-- !result
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0 <=>t2.c0 and t1.c1<=>t2.c1 right join t3 on t1.c0 = t3.c0 and t2.c1 = t3.c1 left join t4 on t2.c0 <=> t4.c0 and t2.c3 = t4.c1 order by 1,2,3,4,5,6;
+-- result:
+None	None	None	None	None	f
+None	None	None	None	None	k
+None	None	None	None	None	o
+None	None	1	None	None	a
+None	None	3	None	None	c
+None	None	3	None	None	d
+None	None	5	None	None	None
+None	None	5	None	None	h
+None	None	8	None	None	None
+None	None	14	None	None	m
+2	2	2	b	b	b
+8	8	8	h	h	h
+8	8	8	h	h	h
+10	10	10	j	j	j
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+-- !result
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 right join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 left join t3 on t2.c0<=>t3.c0 and t2.c1<=>t3.c1 order by 1,2,3,4,5,6;
+-- result:
+None	None	None	None	None	None
 None	None	None	None	o	o
-8	8	8	h	h	h
-8	8	8	h	h	h
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-None	None	8	None	None	None
+None	None	None	c	c	None
 None	None	None	k	k	k
-None	None	None	None	None	None
-4	4	None	d	d	None
-None	None	14	None	m	m
 None	None	5	None	h	h
-5	5	None	f	f	None
-2	2	2	b	b	b
-None	None	None	c	c	None
-5	5	5	None	None	None
--- !result
-select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 right join t3 on t2.c0 = t3.c0 and t1.c1 =t3.c1;
--- result:
-None	None	5	None	None	None
-None	None	5	None	None	h
-None	None	14	None	None	m
-None	None	None	None	None	o
-None	None	3	None	None	d
-8	8	8	h	h	h
-8	8	8	h	h	h
-None	None	1	None	None	a
-None	None	3	None	None	c
-2	2	2	b	b	b
-10	10	10	j	j	j
-None	None	None	None	None	k
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
 None	None	8	None	None	None
-None	None	None	None	None	f
--- !result
-select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0 <=>t2.c0 and t1.c1<=>t2.c1 right join t3 on t2.c0 = t3.c0 and t1.c1 =t3.c1;
--- result:
-None	None	5	None	None	None
-None	None	3	None	None	d
-None	None	None	None	None	o
-None	None	14	None	None	m
-10	10	10	j	j	j
-8	8	8	h	h	h
-8	8	8	h	h	h
-None	None	3	None	None	c
-None	None	None	None	None	k
-None	None	5	None	None	h
+None	None	14	None	m	m
 2	2	2	b	b	b
-None	None	1	None	None	a
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-None	None	None	None	None	f
-None	None	8	None	None	None
--- !result
-select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 right join t2 on t1.c0 <=>t2.c0 and t1.c1<=>t2.c1 left join t3 on t2.c0 <=> t3.c0 and t1.c1 =t3.c1;
--- result:
-None	None	None	None	m	None
-None	None	None	None	h	None
-5	5	None	None	None	None
-None	None	None	None	None	None
-None	None	None	None	o	None
-8	8	8	h	h	h
-8	8	8	h	h	h
 4	4	None	d	d	None
-None	None	None	k	k	k
-10	10	10	j	j	j
-2	2	2	b	b	b
 5	5	None	f	f	None
-None	None	None	c	c	None
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-12	12	12	l	l	l
-None	None	None	None	None	None
--- !result
-select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 right join t2 on t1.c0 <=>t2.c0 and t1.c1<=>t2.c1 right join t3 on t1.c0 = t3.c0 and t2.c1 = t3.c1 left join t4 on t2.c0 = t4.c0 and t2.c3 = t4.c1;
--- result:
-None	None	5	None	None	None
-None	None	3	None	None	c
+5	5	5	None	None	None
+8	8	8	h	h	h
+8	8	8	h	h	h
 10	10	10	j	j	j
-None	None	1	None	None	a
-None	None	None	None	None	k
-None	None	14	None	None	m
 12	12	12	l	l	l
 12	12	12	l	l	l
 12	12	12	l	l	l
 12	12	12	l	l	l
-None	None	3	None	None	d
 12	12	12	l	l	l
 12	12	12	l	l	l
 12	12	12	l	l	l
 12	12	12	l	l	l
-8	8	8	h	h	h
-8	8	8	h	h	h
-None	None	5	None	None	h
+-- !result
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 right join t3 on t2.c0 = t3.c0 and t1.c1 =t3.c1 order by 1,2,3,4,5,6;
+-- result:
 None	None	None	None	None	f
-None	None	8	None	None	None
+None	None	None	None	None	k
 None	None	None	None	None	o
+None	None	1	None	None	a
+None	None	3	None	None	c
+None	None	3	None	None	d
+None	None	5	None	None	None
+None	None	5	None	None	h
+None	None	8	None	None	None
+None	None	14	None	None	m
 2	2	2	b	b	b
+8	8	8	h	h	h
+8	8	8	h	h	h
+10	10	10	j	j	j
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
 -- !result
-select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0=t2.c0 and t1.c1=t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2;
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0 <=>t2.c0 and t1.c1<=>t2.c1 right join t3 on t2.c0 = t3.c0 and t1.c1 =t3.c1 order by 1,2,3,4,5,6;
 -- result:
-2	2	b	b	b
-5	5	f	f	None
-4	4	d	d	None
-8	8	h	h	h
-14	None	l	None	None
-8	None	h	None	None
+None	None	None	None	None	f
+None	None	None	None	None	k
+None	None	None	None	None	o
+None	None	1	None	None	a
+None	None	3	None	None	c
+None	None	3	None	None	d
+None	None	5	None	None	None
+None	None	5	None	None	h
+None	None	8	None	None	None
+None	None	14	None	None	m
+2	2	2	b	b	b
+8	8	8	h	h	h
+8	8	8	h	h	h
+10	10	10	j	j	j
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+-- !result
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 right join t2 on t1.c0 <=>t2.c0 and t1.c1<=>t2.c1 left join t3 on t2.c0 <=> t3.c0 and t1.c1 =t3.c1 order by 1,2,3,4,5,6;
+-- result:
+None	None	None	None	None	None
+None	None	None	None	None	None
+None	None	None	None	h	None
+None	None	None	None	m	None
+None	None	None	None	o	None
+None	None	None	c	c	None
+None	None	None	k	k	k
+2	2	2	b	b	b
+4	4	None	d	d	None
+5	5	None	None	None	None
+5	5	None	f	f	None
+8	8	8	h	h	h
+8	8	8	h	h	h
+10	10	10	j	j	j
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+-- !result
+select t1.c0, t1.c0, t3.c0, t1.c1, t2.c1, t3.c1 from t1 right join t2 on t1.c0 <=>t2.c0 and t1.c1<=>t2.c1 right join t3 on t1.c0 = t3.c0 and t2.c1 = t3.c1 left join t4 on t2.c0 = t4.c0 and t2.c3 = t4.c1 order by 1,2,3,4,5,6;
+-- result:
+None	None	None	None	None	f
+None	None	None	None	None	k
+None	None	None	None	None	o
+None	None	1	None	None	a
+None	None	3	None	None	c
+None	None	3	None	None	d
+None	None	5	None	None	None
+None	None	5	None	None	h
+None	None	8	None	None	None
+None	None	14	None	None	m
+2	2	2	b	b	b
+8	8	8	h	h	h
+8	8	8	h	h	h
+10	10	10	j	j	j
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+12	12	12	l	l	l
+-- !result
+select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0=t2.c0 and t1.c1=t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2 order by 1,2,3,4,5;
+-- result:
 None	None	None	None	None
-15	None	o	None	None
-5	None	None	None	None
-None	None	k	None	None
 None	None	c	None	None
+None	None	k	None	None
 1	None	a	None	None
-10	10	j	j	j
-12	12	l	l	l
-12	12	l	l	l
--- !result
-select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1=t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2;
--- result:
-4	4	d	d	None
 2	2	b	b	b
-8	None	h	None	None
-1	None	a	None	None
-None	None	None	None	None
+4	4	d	d	None
 5	None	None	None	None
-15	None	o	None	None
-14	None	l	None	None
-None	None	k	k	None
-8	8	h	h	h
-None	None	c	c	None
-12	12	l	l	l
-10	10	j	j	j
-12	12	l	l	l
 5	5	f	f	None
--- !result
-select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2;
--- result:
-None	None	c	c	None
-2	2	b	b	b
-12	12	l	l	l
-8	8	h	h	h
-5	5	None	None	None
 8	None	h	None	None
-None	None	None	None	None
+8	8	h	h	h
+10	10	j	j	j
+12	12	l	l	l
+12	12	l	l	l
 14	None	l	None	None
 15	None	o	None	None
-1	None	a	None	None
-12	12	l	l	l
-5	5	f	f	None
-4	4	d	d	None
-10	10	j	j	j
-None	None	k	k	None
 -- !result
-select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0<=>t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2;
+select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1=t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2 order by 1,2,3,4,5;
 -- result:
+None	None	None	None	None
 None	None	c	c	None
-5	5	None	None	None
-8	None	h	None	None
-None	None	None	None	None
+None	None	k	k	None
+1	None	a	None	None
+2	2	b	b	b
 4	4	d	d	None
-None	None	k	k	k
-15	None	o	None	None
+5	None	None	None	None
+5	5	f	f	None
+8	None	h	None	None
+8	8	h	h	h
+10	10	j	j	j
+12	12	l	l	l
 12	12	l	l	l
 14	None	l	None	None
-1	None	a	None	None
-10	10	j	j	j
-12	12	l	l	l
-5	5	f	f	None
-2	2	b	b	b
-8	8	h	h	h
+15	None	o	None	None
 -- !result
-select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 right join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 right join t3 on t2.c0<=>t3.c0 and t2.c1<=>t3.c1 and t2.c2=t3.c2;
+select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2 order by 1,2,3,4,5;
 -- result:
-None	None	None	None	c
-None	None	k	k	k
-8	8	h	h	h
-5	5	None	None	None
-None	5	None	h	h
-None	8	None	None	None
+None	None	None	None	None
+None	None	c	c	None
+None	None	k	k	None
+1	None	a	None	None
 2	2	b	b	b
-None	14	None	m	m
-12	12	l	l	l
+4	4	d	d	None
+5	5	None	None	None
+5	5	f	f	None
+8	None	h	None	None
+8	8	h	h	h
 10	10	j	j	j
+12	12	l	l	l
+12	12	l	l	l
+14	None	l	None	None
+15	None	o	None	None
+-- !result
+select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0<=>t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2 order by 1,2,3,4,5;
+-- result:
+None	None	None	None	None
+None	None	c	c	None
+None	None	k	k	k
+1	None	a	None	None
+2	2	b	b	b
+4	4	d	d	None
+5	5	None	None	None
+5	5	f	f	None
+8	None	h	None	None
+8	8	h	h	h
+10	10	j	j	j
+12	12	l	l	l
+12	12	l	l	l
+14	None	l	None	None
+15	None	o	None	None
+-- !result
+select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 right join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 right join t3 on t2.c0<=>t3.c0 and t2.c1<=>t3.c1 and t2.c2=t3.c2 order by 1,2,3,4,5;
+-- result:
 None	None	None	None	a
-12	12	l	l	l
+None	None	None	None	c
+None	None	None	None	d
 None	None	None	None	f
 None	None	None	o	o
-None	None	None	None	d
--- !result
-select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 right join t3 on t2.c0=t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2;
--- result:
-None	None	None	None	c
-12	12	l	l	l
-None	None	None	None	o
-None	None	None	None	d
-None	None	None	None	h
-None	None	None	None	m
-None	None	None	None	None
+None	None	k	k	k
+None	5	None	h	h
+None	8	None	None	None
+None	14	None	m	m
 2	2	b	b	b
+5	5	None	None	None
+8	8	h	h	h
+10	10	j	j	j
 12	12	l	l	l
+12	12	l	l	l
+-- !result
+select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 right join t3 on t2.c0=t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2 order by 1,2,3,4,5;
+-- result:
+None	None	None	None	None
+None	None	None	None	None
+None	None	None	None	a
+None	None	None	None	c
+None	None	None	None	d
 None	None	None	None	f
+None	None	None	None	h
 None	None	None	None	k
-None	None	None	None	None
-10	10	j	j	j
-None	None	None	None	a
-8	8	h	h	h
--- !result
-select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 right join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0<=>t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2;
--- result:
-5	5	f	f	None
-None	None	k	k	k
-None	None	c	c	None
-5	5	None	None	None
-None	8	None	None	None
-None	None	None	None	None
-8	8	h	h	h
-4	4	d	d	None
-10	10	j	j	j
-12	12	l	l	l
-None	5	None	h	h
-None	14	None	m	m
-12	12	l	l	l
-None	None	None	o	o
-2	2	b	b	b
--- !result
-select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 right join t3 on t2.c0<=>t3.c0 and t2.c1<=>t3.c1 and t2.c2=t3.c2;
--- result:
-None	None	None	None	f
-None	None	None	None	None
-2	2	b	b	b
-None	None	None	None	h
-12	12	l	l	l
-None	None	None	None	a
-12	12	l	l	l
-5	5	None	None	None
-None	None	k	k	k
-None	None	None	None	o
-None	None	None	None	c
 None	None	None	None	m
-10	10	j	j	j
-None	None	None	None	d
+None	None	None	None	o
+2	2	b	b	b
 8	8	h	h	h
+10	10	j	j	j
+12	12	l	l	l
+12	12	l	l	l
 -- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0=t.c0 and t3.c1= t.c1;
+select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 right join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0<=>t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2 order by 1,2,3,4,5;
 -- result:
-5	None	None	None	None
-14	m	None	None	None
-None	k	None	None	None
-3	d	None	None	None
-1	a	None	None	None
-None	o	None	None	None
-5	h	None	None	None
-3	c	None	None	None
-2	b	2	b	1
-10	j	10	j	1
-12	l	12	l	4
-12	l	12	l	4
-8	None	None	None	None
+None	None	None	None	None
+None	None	None	o	o
+None	None	c	c	None
+None	None	k	k	k
+None	5	None	h	h
+None	8	None	None	None
+None	14	None	m	m
+2	2	b	b	b
+4	4	d	d	None
+5	5	None	None	None
+5	5	f	f	None
+8	8	h	h	h
+10	10	j	j	j
+12	12	l	l	l
+12	12	l	l	l
+-- !result
+select t1.c0, t2.c0, t1.c1, t2.c1, t3.c1 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 right join t3 on t2.c0<=>t3.c0 and t2.c1<=>t3.c1 and t2.c2=t3.c2 order by 1,2,3,4,5;
+-- result:
+None	None	None	None	None
+None	None	None	None	a
+None	None	None	None	c
+None	None	None	None	d
+None	None	None	None	f
+None	None	None	None	h
+None	None	None	None	m
+None	None	None	None	o
+None	None	k	k	k
+2	2	b	b	b
+5	5	None	None	None
+8	8	h	h	h
+10	10	j	j	j
+12	12	l	l	l
+12	12	l	l	l
+-- !result
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0=t.c0 and t3.c1= t.c1 order by 1,2,3,4,5;
+-- result:
 None	f	None	None	None
-8	h	8	h	2
--- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1;
--- result:
-3	d	None	None	None
-5	None	None	None	None
 None	k	None	None	None
-3	c	None	None	None
-8	h	8	h	2
-14	m	None	None	None
-10	j	10	j	1
 None	o	None	None	None
 1	a	None	None	None
-5	h	None	None	None
-12	l	12	l	4
-12	l	12	l	4
-8	None	None	None	None
-None	f	None	None	None
-2	b	2	b	1
--- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0<=>t.c0 and t3.c1= t.c1;
--- result:
 2	b	2	b	1
 3	c	None	None	None
-8	h	8	h	2
-8	None	None	None	None
-5	h	None	None	None
 3	d	None	None	None
-10	j	10	j	1
-None	f	None	None	None
-14	m	None	None	None
-None	k	None	None	None
-1	a	None	None	None
-None	o	None	None	None
-12	l	12	l	4
-12	l	12	l	4
 5	None	None	None	None
--- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0<=>t.c0 and t3.c1<=>t.c1;
--- result:
-None	k	None	None	None
-5	None	None	None	None
-12	l	12	l	4
-12	l	12	l	4
-14	m	None	None	None
-1	a	None	None	None
+5	h	None	None	None
 8	None	None	None	None
+8	h	8	h	2
+10	j	10	j	1
+12	l	12	l	4
+12	l	12	l	4
+14	m	None	None	None
+-- !result
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1 order by 1,2,3,4,5;
+-- result:
+None	f	None	None	None
+None	k	None	None	None
+None	o	None	None	None
+1	a	None	None	None
+2	b	2	b	1
 3	c	None	None	None
-10	j	10	j	1
-None	f	None	None	None
 3	d	None	None	None
-None	o	None	None	None
-5	h	None	None	None
-2	b	2	b	1
-8	h	8	h	2
--- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1,t2.c2) t on t3.c0=t.c0 and t3.c1= t.c1;
--- result:
 5	None	None	None	None
-None	k	None	None	None
+5	h	None	None	None
+8	None	None	None	None
+8	h	8	h	2
 10	j	10	j	1
-2	b	2	b	1
+12	l	12	l	4
+12	l	12	l	4
 14	m	None	None	None
+-- !result
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0<=>t.c0 and t3.c1= t.c1 order by 1,2,3,4,5;
+-- result:
+None	f	None	None	None
+None	k	None	None	None
+None	o	None	None	None
+1	a	None	None	None
+2	b	2	b	1
+3	c	None	None	None
+3	d	None	None	None
+5	None	None	None	None
+5	h	None	None	None
+8	None	None	None	None
+8	h	8	h	2
+10	j	10	j	1
+12	l	12	l	4
+12	l	12	l	4
+14	m	None	None	None
+-- !result
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0<=>t.c0 and t3.c1<=>t.c1 order by 1,2,3,4,5;
+-- result:
+None	f	None	None	None
+None	k	None	None	None
+None	o	None	None	None
+1	a	None	None	None
+2	b	2	b	1
+3	c	None	None	None
+3	d	None	None	None
+5	None	None	None	None
+5	h	None	None	None
+8	None	None	None	None
+8	h	8	h	2
+10	j	10	j	1
+12	l	12	l	4
+12	l	12	l	4
+14	m	None	None	None
+-- !result
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1,t2.c2) t on t3.c0=t.c0 and t3.c1= t.c1 order by 1,2,3,4,5;
+-- result:
+None	f	None	None	None
+None	k	None	None	None
+None	o	None	None	None
+1	a	None	None	None
+2	b	2	b	1
+3	c	None	None	None
+3	d	None	None	None
+5	None	None	None	None
+5	h	None	None	None
+8	None	None	None	None
+8	h	8	h	2
+10	j	10	j	1
 12	l	12	l	2
 12	l	12	l	2
 12	l	12	l	2
 12	l	12	l	2
-8	None	None	None	None
-None	f	None	None	None
-8	h	8	h	2
-5	h	None	None	None
-3	c	None	None	None
-1	a	None	None	None
-3	d	None	None	None
-None	o	None	None	None
+14	m	None	None	None
 -- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 right join (select count(*) as cnt, t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0=t.c0 and t3.c1= t.c1;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 right join (select count(*) as cnt, t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0=t.c0 and t3.c1= t.c1 order by 1,2,3,4,5;
 -- result:
-12	l	12	l	4
-12	l	12	l	4
-None	None	4	d	1
-10	j	10	j	1
 None	None	None	None	7
+None	None	4	d	1
 None	None	5	f	1
 2	b	2	b	1
 8	h	8	h	2
--- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 right join (select count(*) as cnt, t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1;
--- result:
-8	h	8	h	2
 10	j	10	j	1
 12	l	12	l	4
 12	l	12	l	4
+-- !result
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 right join (select count(*) as cnt, t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1 order by 1,2,3,4,5;
+-- result:
+None	None	None	None	7
+None	None	4	d	1
 None	None	5	f	1
 2	b	2	b	1
-None	None	4	d	1
-None	None	None	None	7
--- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1 from t1 right join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0<=>t.c0 and t3.c1= t.c1;
--- result:
-5	None	None	None	None
-12	l	12	l	4
-12	l	12	l	4
-8	None	None	None	None
-None	f	None	None	None
-10	j	10	j	1
 8	h	8	h	2
-5	h	5	h	1
+10	j	10	j	1
+12	l	12	l	4
+12	l	12	l	4
+-- !result
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1 from t1 right join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0<=>t.c0 and t3.c1= t.c1 order by 1,2,3,4,5;
+-- result:
+None	f	None	None	None
+None	k	None	k	1
 None	o	None	o	1
 1	a	None	None	None
-3	d	None	None	None
-None	k	None	k	1
 2	b	2	b	1
-14	m	14	m	1
 3	c	None	None	None
--- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1 from t1 right join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0<=>t.c0 and t3.c1<=>t.c1;
--- result:
 3	d	None	None	None
-1	a	None	None	None
-None	k	None	k	1
-3	c	None	None	None
+5	None	None	None	None
+5	h	5	h	1
+8	None	None	None	None
 8	h	8	h	2
+10	j	10	j	1
+12	l	12	l	4
+12	l	12	l	4
 14	m	14	m	1
+-- !result
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1 from t1 right join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0<=>t.c0 and t3.c1<=>t.c1 order by 1,2,3,4,5;
+-- result:
+None	f	None	None	None
+None	k	None	k	1
+None	o	None	o	1
+1	a	None	None	None
+2	b	2	b	1
+3	c	None	None	None
+3	d	None	None	None
 5	None	5	None	1
-10	j	10	j	1
-None	o	None	o	1
 5	h	5	h	1
-2	b	2	b	1
-12	l	12	l	4
-12	l	12	l	4
 8	None	8	None	1
-None	f	None	None	None
--- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 right join (select count(*) as cnt, t2.c0, t2.c1 from t1 right join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1,t2.c2) t on t3.c0=t.c0 and t3.c1= t.c1;
--- result:
-10	j	10	j	1
-2	b	2	b	1
-None	None	None	c	1
-14	m	14	m	1
 8	h	8	h	2
-5	h	5	h	1
-None	None	5	None	1
-None	None	4	d	1
-None	None	5	f	1
-None	None	None	k	1
-12	l	12	l	2
-12	l	12	l	2
-None	None	8	None	1
-12	l	12	l	2
-12	l	12	l	2
-None	None	None	None	1
-None	None	None	o	1
+10	j	10	j	1
+12	l	12	l	4
+12	l	12	l	4
+14	m	14	m	1
 -- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1, max(t2.c2) c2 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0=t.c0 and t3.c1= t.c1 and t3.c2=t.c2;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 right join (select count(*) as cnt, t2.c0, t2.c1 from t1 right join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1,t2.c2) t on t3.c0=t.c0 and t3.c1= t.c1 order by 1,2,3,4,5;
 -- result:
-5	None	None	None	None
+None	None	None	None	1
+None	None	None	c	1
+None	None	None	k	1
+None	None	None	o	1
+None	None	4	d	1
+None	None	5	None	1
+None	None	5	f	1
+None	None	8	None	1
+2	b	2	b	1
+5	h	5	h	1
+8	h	8	h	2
+10	j	10	j	1
+12	l	12	l	2
+12	l	12	l	2
+12	l	12	l	2
+12	l	12	l	2
+14	m	14	m	1
+-- !result
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1, max(t2.c2) c2 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0=t.c0 and t3.c1= t.c1 and t3.c2=t.c2 order by 1,2,3,4,5;
+-- result:
+None	f	None	None	None
+None	k	None	None	None
+None	o	None	None	None
+1	a	None	None	None
+2	b	2	b	1
 3	c	None	None	None
+3	d	None	None	None
+5	None	None	None	None
+5	h	None	None	None
+8	None	None	None	None
+8	h	8	h	2
+10	j	10	j	1
 12	l	None	None	None
-8	None	None	None	None
-3	d	None	None	None
-None	o	None	None	None
-None	k	None	None	None
-8	h	8	h	2
-2	b	2	b	1
-5	h	None	None	None
 12	l	12	l	4
-None	f	None	None	None
-10	j	10	j	1
-1	a	None	None	None
 14	m	None	None	None
 -- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1, max(t2.c2) from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1, max(t2.c2) from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1 order by 1,2,3,4,5;
 -- result:
-5	None	None	None	None
-8	h	8	h	2
-None	o	None	None	None
-14	m	None	None	None
-3	d	None	None	None
-1	a	None	None	None
-2	b	2	b	1
-5	h	None	None	None
-None	k	None	None	None
-3	c	None	None	None
-12	l	12	l	4
-12	l	12	l	4
 None	f	None	None	None
-8	None	None	None	None
-10	j	10	j	1
--- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1, max(t2.c2) from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0<=>t.c0 and t3.c1= t.c1;
--- result:
-5	h	None	None	None
-5	None	None	None	None
-1	a	None	None	None
 None	k	None	None	None
-8	None	None	None	None
 None	o	None	None	None
-8	h	8	h	2
+1	a	None	None	None
 2	b	2	b	1
-14	m	None	None	None
-12	l	12	l	4
-12	l	12	l	4
 3	c	None	None	None
 3	d	None	None	None
-10	j	10	j	1
-None	f	None	None	None
--- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1, t2.c2 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1,t2.c2) t on t3.c0=t.c0 and t3.c1= t.c1;
--- result:
-None	k	None	None	None
-None	o	None	None	None
 5	None	None	None	None
-14	m	None	None	None
 5	h	None	None	None
-1	a	None	None	None
-10	j	10	j	1
-3	c	None	None	None
-2	b	2	b	1
-12	l	12	l	2
-12	l	12	l	2
-12	l	12	l	2
-12	l	12	l	2
-None	f	None	None	None
 8	None	None	None	None
 8	h	8	h	2
-3	d	None	None	None
+10	j	10	j	1
+12	l	12	l	4
+12	l	12	l	4
+14	m	None	None	None
 -- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 right join (select count(*) as cnt, t2.c0, t2.c1, max(t2.c2) c2 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0=t.c0 and t3.c1= t.c1 and t3.c2=t.c2;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1, max(t2.c2) from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0<=>t.c0 and t3.c1= t.c1 order by 1,2,3,4,5;
 -- result:
-None	None	4	d	1
+None	f	None	None	None
+None	k	None	None	None
+None	o	None	None	None
+1	a	None	None	None
+2	b	2	b	1
+3	c	None	None	None
+3	d	None	None	None
+5	None	None	None	None
+5	h	None	None	None
+8	None	None	None	None
+8	h	8	h	2
+10	j	10	j	1
+12	l	12	l	4
+12	l	12	l	4
+14	m	None	None	None
+-- !result
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1, t2.c2 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1,t2.c2) t on t3.c0=t.c0 and t3.c1= t.c1 order by 1,2,3,4,5;
+-- result:
+None	f	None	None	None
+None	k	None	None	None
+None	o	None	None	None
+1	a	None	None	None
+2	b	2	b	1
+3	c	None	None	None
+3	d	None	None	None
+5	None	None	None	None
+5	h	None	None	None
+8	None	None	None	None
+8	h	8	h	2
+10	j	10	j	1
+12	l	12	l	2
+12	l	12	l	2
+12	l	12	l	2
+12	l	12	l	2
+14	m	None	None	None
+-- !result
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 right join (select count(*) as cnt, t2.c0, t2.c1, max(t2.c2) c2 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0=t.c0 and t3.c1= t.c1 and t3.c2=t.c2 order by 1,2,3,4,5;
+-- result:
 None	None	None	None	7
-12	l	12	l	4
-10	j	10	j	1
-8	h	8	h	2
-2	b	2	b	1
+None	None	4	d	1
 None	None	5	f	1
+2	b	2	b	1
+8	h	8	h	2
+10	j	10	j	1
+12	l	12	l	4
 -- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 right join (select count(*) as cnt, t2.c0, t2.c1, max(t2.c2) from t1 right join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 right join (select count(*) as cnt, t2.c0, t2.c1, max(t2.c2) from t1 right join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1 order by 1,2,3,4,5;
 -- result:
 None	None	None	None	1
-None	None	5	f	1
-None	None	None	k	1
-8	h	8	h	2
-2	b	2	b	1
-5	h	5	h	1
-14	m	14	m	1
 None	None	None	c	1
-None	None	8	None	1
-12	l	12	l	4
-12	l	12	l	4
+None	None	None	k	1
 None	None	None	o	1
+None	None	4	d	1
 None	None	5	None	1
-None	None	4	d	1
-10	j	10	j	1
--- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1, max(t2.c2) from t1 right join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0<=>t.c0 and t3.c1= t.c1;
--- result:
-5	None	None	None	None
-8	h	8	h	2
-3	d	None	None	None
-None	k	None	k	1
-5	h	5	h	1
-1	a	None	None	None
-None	o	None	o	1
-3	c	None	None	None
-2	b	2	b	1
-12	l	12	l	4
-12	l	12	l	4
-None	f	None	None	None
-8	None	None	None	None
-14	m	14	m	1
-10	j	10	j	1
--- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 right join (select count(*) as cnt, t2.c0, t2.c1, t2.c2 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1,t2.c2) t on t3.c0=t.c0 and t3.c1= t.c1;
--- result:
 None	None	5	f	1
-None	None	None	None	7
-None	None	4	d	1
-8	h	8	h	2
+None	None	8	None	1
 2	b	2	b	1
+5	h	5	h	1
+8	h	8	h	2
 10	j	10	j	1
-12	l	12	l	2
-12	l	12	l	2
-12	l	12	l	2
-12	l	12	l	2
+12	l	12	l	4
+12	l	12	l	4
+14	m	14	m	1
 -- !result
-select t4.c0, t4.c1, t.c01, t.c13 from t4 left join (select t1.c0 as c01, t2.c0 as c02, t1.c1 as c11, t2.c1 as c12, t3.c1 as c13 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2 group by t1.c0, t2.c0, t1.c1, t2.c1, t3.c1) t on t4.c0 = t.c02 and t4.c1 = t.c13;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 left join (select count(*) as cnt, t2.c0, t2.c1, max(t2.c2) from t1 right join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0<=>t.c0 and t3.c1= t.c1 order by 1,2,3,4,5; 
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt from t3 right join (select count(*) as cnt, t2.c0, t2.c1, t2.c2 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1,t2.c2) t on t3.c0=t.c0 and t3.c1= t.c1 order by 1,2,3,4,5;
 -- result:
-None	k	None	None
-5	h	None	None
-8	h	8	h
-4	d	None	None
-1	None	None	None
-12	l	12	l
-8	None	None	None
-12	None	None	None
-14	m	None	None
-5	None	None	None
-None	o	None	None
-5	f	None	None
+None	f	None	None	None
+None	k	None	k	1
+None	o	None	o	1
+1	a	None	None	None
+2	b	2	b	1
+3	c	None	None	None
+3	d	None	None	None
+5	None	None	None	None
+5	h	5	h	1
+8	None	None	None	None
+8	h	8	h	2
+10	j	10	j	1
+12	l	12	l	4
+12	l	12	l	4
+14	m	14	m	1
+-- !result
+select t4.c0, t4.c1, t.c01, t.c13 from t4 left join (select t1.c0 as c01, t2.c0 as c02, t1.c1 as c11, t2.c1 as c12, t3.c1 as c13 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2 group by t1.c0, t2.c0, t1.c1, t2.c1, t3.c1) t on t4.c0 = t.c02 and t4.c1 = t.c13 order by 1,2,3,4;
+-- result:
 None	c	None	None
-2	b	2	b
-10	j	10	j
--- !result
-select t4.c0, t4.c1, t.c01, t.c13 from t4 left join (select t1.c0 as c01, t2.c0 as c02, t1.c1 as c11, t2.c1 as c12, t3.c1 as c13 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0<=>t3.c0 and t2.c1<=>t3.c1 and t2.c2=t3.c2 group by t1.c0, t2.c0, t1.c1, t2.c1, t3.c1) t on t4.c0 = t.c02 and t4.c1 = t.c13;
--- result:
-5	h	None	None
+None	k	None	None
+None	o	None	None
 1	None	None	None
+2	b	2	b
+4	d	None	None
+5	None	None	None
+5	f	None	None
+5	h	None	None
+8	None	None	None
+8	h	8	h
+10	j	10	j
 12	None	None	None
 12	l	12	l
-None	c	None	None
-10	j	10	j
 14	m	None	None
-5	None	None	None
-8	None	None	None
-None	k	None	None
-5	f	None	None
-4	d	None	None
-8	h	8	h
-None	o	None	None
-2	b	2	b
 -- !result
-select t4.c0, t4.c1, t.c01, t.c13 from t4 right join (select t1.c0 as c01, t2.c0 as c02, t1.c1 as c11, t2.c1 as c12, t3.c1 as c13 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2 group by t1.c0, t2.c0, t1.c1, t2.c1, t3.c1) t on t4.c0 = t.c02 and t4.c1 = t.c13;
+select t4.c0, t4.c1, t.c01, t.c13 from t4 left join (select t1.c0 as c01, t2.c0 as c02, t1.c1 as c11, t2.c1 as c12, t3.c1 as c13 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0<=>t3.c0 and t2.c1<=>t3.c1 and t2.c2=t3.c2 group by t1.c0, t2.c0, t1.c1, t2.c1, t3.c1) t on t4.c0 = t.c02 and t4.c1 = t.c13 order by 1,2,3,4;
 -- result:
+None	c	None	None
+None	k	None	None
+None	o	None	None
+1	None	None	None
+2	b	2	b
+4	d	None	None
+5	None	None	None
+5	f	None	None
+5	h	None	None
+8	None	None	None
 8	h	8	h
-None	None	5	None
-None	None	5	None
-None	None	15	None
+10	j	10	j
+12	None	None	None
+12	l	12	l
+14	m	None	None
+-- !result
+select t4.c0, t4.c1, t.c01, t.c13 from t4 right join (select t1.c0 as c01, t2.c0 as c02, t1.c1 as c11, t2.c1 as c12, t3.c1 as c13 from t1 left join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0=t3.c0 and t2.c1=t3.c1 and t2.c2=t3.c2 group by t1.c0, t2.c0, t1.c1, t2.c1, t3.c1) t on t4.c0 = t.c02 and t4.c1 = t.c13 order by 1,2,3,4;
+-- result:
+None	None	None	None
 None	None	None	None
 None	None	None	None
 None	None	1	None
-None	None	8	None
-None	None	None	None
-None	None	14	None
-12	l	12	l
-10	j	10	j
 None	None	4	None
-2	b	2	b
--- !result
-select t4.c0, t4.c1, t.c01, t.c13 from t4 right join (select t1.c0 as c01, t2.c0 as c02, t1.c1 as c11, t2.c1 as c12, t3.c1 as c13 from t1 right join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0<=>t3.c0 and t2.c1<=>t3.c1 and t2.c2=t3.c2 group by t1.c0, t2.c0, t1.c1, t2.c1, t3.c1) t on t4.c0 = t.c02 and t4.c1 = t.c13;
--- result:
-None	None	None	None
-None	None	None	None
 None	None	5	None
 None	None	5	None
-10	j	10	j
-None	None	None	k
-12	l	12	l
-None	None	None	None
-5	h	None	h
+None	None	8	None
+None	None	14	None
+None	None	15	None
 2	b	2	b
 8	h	8	h
+10	j	10	j
+12	l	12	l
+-- !result
+select t4.c0, t4.c1, t.c01, t.c13 from t4 right join (select t1.c0 as c01, t2.c0 as c02, t1.c1 as c11, t2.c1 as c12, t3.c1 as c13 from t1 right join t2 on t1.c0<=>t2.c0 and t1.c1<=>t2.c1 and t1.c2=t2.c2 left join t3 on t2.c0<=>t3.c0 and t2.c1<=>t3.c1 and t2.c2=t3.c2 group by t1.c0, t2.c0, t1.c1, t2.c1, t3.c1) t on t4.c0 = t.c02 and t4.c1 = t.c13 order by 1,2,3,4;
+-- result:
+None	None	None	None
+None	None	None	None
+None	None	None	None
+None	None	None	k
 None	None	None	o
 None	None	4	None
+None	None	5	None
+None	None	5	None
+2	b	2	b
+5	h	None	h
+8	h	8	h
+10	j	10	j
+12	l	12	l
 14	m	None	m
 -- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt, t.c3 from t3 left join (select count(*) as cnt, count(distinct t1.c3) c3,t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0=t.c0 and t3.c1= t.c1;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt, t.c3 from t3 left join (select count(*) as cnt, count(distinct t1.c3) c3,t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0=t.c0 and t3.c1= t.c1 order by 1,2,3,4,5,6;
 -- result:
-5	None	None	None	None	None
+None	f	None	None	None	None
 None	k	None	None	None	None
-14	m	None	None	None	None
+None	o	None	None	None	None
+1	a	None	None	None	None
+2	b	2	b	1	1
 3	c	None	None	None	None
 3	d	None	None	None	None
-None	o	None	None	None	None
-2	b	2	b	1	1
-1	a	None	None	None	None
-5	h	None	None	None	None
-8	h	8	h	2	2
-12	l	12	l	4	2
-12	l	12	l	4	2
-None	f	None	None	None	None
-8	None	None	None	None	None
-10	j	10	j	1	1
--- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt, t.c3 from t3 left join (select count(*) as cnt, count(distinct t1.c3) c3,t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1;
--- result:
-None	k	None	None	None	None
-12	l	12	l	4	2
-12	l	12	l	4	2
-8	None	None	None	None	None
-None	f	None	None	None	None
-10	j	10	j	1	1
 5	None	None	None	None	None
-3	d	None	None	None	None
-14	m	None	None	None	None
 5	h	None	None	None	None
-1	a	None	None	None	None
+8	None	None	None	None	None
+8	h	8	h	2	2
+10	j	10	j	1	1
+12	l	12	l	4	2
+12	l	12	l	4	2
+14	m	None	None	None	None
+-- !result
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt, t.c3 from t3 left join (select count(*) as cnt, count(distinct t1.c3) c3,t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1 order by 1,2,3,4,5,6;
+-- result:
+None	f	None	None	None	None
+None	k	None	None	None	None
 None	o	None	None	None	None
+1	a	None	None	None	None
 2	b	2	b	1	1
 3	c	None	None	None	None
-8	h	8	h	2	2
--- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt, t.c3 from t3 left join (select count(*) as cnt, count(distinct t1.c3) c3,t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1 join t4 on t3.c0 = t4.c0 and t.c1 = t4.c1;
--- result:
-10	j	10	j	1	1
-8	h	8	h	2	2
-12	l	12	l	4	2
-12	l	12	l	4	2
-2	b	2	b	1	1
--- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt, t.c3 from t3 right join (select count(*) as cnt, count(distinct t1.c3) c3,t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0=t.c0 and t3.c1= t.c1;
--- result:
-None	None	5	f	1	1
+3	d	None	None	None	None
+5	None	None	None	None	None
+5	h	None	None	None	None
+8	None	None	None	None	None
 8	h	8	h	2	2
 10	j	10	j	1	1
+12	l	12	l	4	2
+12	l	12	l	4	2
+14	m	None	None	None	None
+-- !result
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt, t.c3 from t3 left join (select count(*) as cnt, count(distinct t1.c3) c3,t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1 join t4 on t3.c0 = t4.c0 and t.c1 = t4.c1 order by 1,2,3,4,5,6;
+-- result:
 2	b	2	b	1	1
-None	None	4	d	1	1
+8	h	8	h	2	2
+10	j	10	j	1	1
+12	l	12	l	4	2
+12	l	12	l	4	2
+-- !result
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt, t.c3 from t3 right join (select count(*) as cnt, count(distinct t1.c3) c3,t2.c0, t2.c1 from t1 left join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c0, t2.c1) t on t3.c0=t.c0 and t3.c1= t.c1 order by 1,2,3,4,5,6;
+-- result:
 None	None	None	None	7	7
+None	None	4	d	1	1
+None	None	5	f	1	1
+2	b	2	b	1	1
+8	h	8	h	2	2
+10	j	10	j	1	1
 12	l	12	l	4	2
 12	l	12	l	4	2
 -- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt, t.c3 from t3 left join (select count(*) as cnt, count(distinct t1.c3) c3,t2.c0, t2.c1 from t1 right join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1;
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt, t.c3 from t3 left join (select count(*) as cnt, count(distinct t1.c3) c3,t2.c0, t2.c1 from t1 right join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1 order by 1,2,3,4,5,6;
 -- result:
-None	k	None	None	None	None
-3	d	None	None	None	None
-10	j	10	j	1	1
-2	b	2	b	1	1
-1	a	None	None	None	None
-None	o	None	None	None	None
-5	h	5	h	1	0
-12	l	12	l	4	2
-12	l	12	l	4	2
 None	f	None	None	None	None
-8	None	None	None	None	None
-14	m	14	m	1	0
-8	h	8	h	2	2
-3	c	None	None	None	None
-5	None	None	None	None	None
--- !result
-select t3.c0, t3.c1, t.c0, t.c1, t.cnt, t.c3 from t3 right join (select count(*) as cnt, count(distinct t1.c3) c3,t2.c0, t2.c1 from t1 right join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1 join t4 on t3.c0 = t4.c0 and t.c1 = t4.c1;
--- result:
-14	m	14	m	1	0
-10	j	10	j	1	1
-8	h	8	h	2	2
-12	l	12	l	4	2
-12	l	12	l	4	2
-5	h	5	h	1	0
+None	k	None	None	None	None
+None	o	None	None	None	None
+1	a	None	None	None	None
 2	b	2	b	1	1
+3	c	None	None	None	None
+3	d	None	None	None	None
+5	None	None	None	None	None
+5	h	5	h	1	0
+8	None	None	None	None	None
+8	h	8	h	2	2
+10	j	10	j	1	1
+12	l	12	l	4	2
+12	l	12	l	4	2
+14	m	14	m	1	0
+-- !result
+select t3.c0, t3.c1, t.c0, t.c1, t.cnt, t.c3 from t3 right join (select count(*) as cnt, count(distinct t1.c3) c3,t2.c0, t2.c1 from t1 right join t2 on t1.c0 =t2.c0 and t1.c1=t2.c1 group by t2.c1, t2.c0) t on t3.c0=t.c0 and t3.c1= t.c1 join t4 on t3.c0 = t4.c0 and t.c1 = t4.c1 order by 1,2,3,4,5,6;
+-- result:
+2	b	2	b	1	1
+5	h	5	h	1	0
+8	h	8	h	2	2
+10	j	10	j	1	1
+12	l	12	l	4	2
+12	l	12	l	4	2
+14	m	14	m	1	0
 -- !result
