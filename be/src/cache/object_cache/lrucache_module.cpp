@@ -21,7 +21,7 @@
 namespace starrocks {
 
 LRUCacheModule::~LRUCacheModule() {
-    if (!_cache) {
+    if (_cache) {
         _cache->prune();
     }
 }
