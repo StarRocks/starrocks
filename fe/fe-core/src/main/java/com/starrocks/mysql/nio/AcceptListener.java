@@ -91,8 +91,8 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                         context.setConnectScheduler(connectScheduler);
                         // authenticate check failed.
                         result = MysqlProto.negotiate(context);
-                        if (result.getState() != NegotiateState.OK) {
-                            throw new AfterConnectedException(result.getState().getMsg());
+                        if (result.state() != NegotiateState.OK) {
+                            throw new AfterConnectedException(result.state().getMsg());
                         }
                         Pair<Boolean, String> registerResult = connectScheduler.registerConnection(context);
                         if (registerResult.first) {
@@ -134,8 +134,8 @@ public class AcceptListener implements ChannelListener<AcceptingChannel<StreamCo
                     } finally {
                         // Ignore the NegotiateState.READ_FIRST_AUTH_PKG_FAILED connections,
                         // because this maybe caused by port probe.
-                        if (result != null && result.getState() != NegotiateState.READ_FIRST_AUTH_PKG_FAILED) {
-                            LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context, result.getAuthPacket());
+                        if (result != null && result.state() != NegotiateState.READ_FIRST_AUTH_PKG_FAILED) {
+                            LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context, result.authPacket());
                             ConnectContext.remove();
                         }
                     }
