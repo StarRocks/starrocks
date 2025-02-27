@@ -950,6 +950,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean lake_enable_tablet_creation_optimization = false;
 
+    @ConfField(mutable = true, comment = "Time out in seconds for the tablet to spend on warmup (shared-data only).")
+    public static int lake_compute_replica_warmup_timeout_secs = 900;
+
     /**
      * The thrift server max worker threads
      */
