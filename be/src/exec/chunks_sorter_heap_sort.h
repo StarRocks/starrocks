@@ -272,8 +272,7 @@ private:
 
     const size_t _offset;
     const size_t _limit;
-
-    // std::vector<detail::ChunkRowCursor> _sorted_values;
+    size_t _next_output_row = 0;
 
     RuntimeProfile::Counter* _sort_filter_rows = nullptr;
     RuntimeProfile::Counter* _sort_filter_costs = nullptr;
