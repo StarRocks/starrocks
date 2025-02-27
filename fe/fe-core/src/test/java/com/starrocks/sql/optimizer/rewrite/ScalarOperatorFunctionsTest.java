@@ -1373,6 +1373,8 @@ public class ScalarOperatorFunctionsTest {
         LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime() / 1000 * 1000)
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         assertEquals(expected, ScalarOperatorFunctions.now().getDatetime());
+        double expectedTime = expected.getHour() * 3600D + expected.getMinute() * 60D + expected.getSecond();
+        assertEquals(expectedTime, ScalarOperatorFunctions.curTime().getTime(), 0.1);
     }
 
     @Test
