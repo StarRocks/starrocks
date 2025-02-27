@@ -229,6 +229,12 @@ statement
     | showSecurityIntegrationStatement
     | showCreateSecurityIntegrationStatement
 
+    // Group Provider Statement
+    | createGroupProviderStatement
+    | dropGroupProviderStatement
+    | showGroupProvidersStatement
+    | showCreateGroupProviderStatement
+
     // Backup Restore Statement
     | backupStatement
     | cancelBackupStatement
@@ -1803,6 +1809,24 @@ showCreateSecurityIntegrationStatement
     : SHOW CREATE SECURITY INTEGRATION identifier
     ;
 
+// ------------------------------------------- Group Provider Statement ------------------------------------------
+
+createGroupProviderStatement
+    : CREATE GROUP PROVIDER identifier properties
+    ;
+
+dropGroupProviderStatement
+    : DROP GROUP PROVIDER identifier
+    ;
+
+showGroupProvidersStatement
+    : SHOW GROUP PROVIDERS
+    ;
+
+showCreateGroupProviderStatement
+    : SHOW CREATE GROUP PROVIDER identifier
+    ;
+
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
 
 backupStatement
@@ -3004,7 +3028,7 @@ nonReserved
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE | OFF
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLAN | PLUGIN | PLUGINS | POLICY | POLICIES
-    | PERCENT_RANK | PREDICATE | PRECEDING | PRIORITY | PROC | PROCESSLIST | PROFILE | PROFILELIST | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
+    | PERCENT_RANK | PREDICATE | PRECEDING | PRIORITY | PROC | PROCESSLIST | PROFILE | PROFILELIST | PROVIDER | PROVIDERS | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
     | QUARTER | QUERY | QUERIES | QUEUE | QUOTA | QUALIFY
     | REASON | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES
