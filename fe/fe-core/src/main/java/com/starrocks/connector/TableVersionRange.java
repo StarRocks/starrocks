@@ -61,6 +61,10 @@ public class TableVersionRange {
                 .toString();
     }
 
+    public String versionRange() {
+        return start.map(s -> s + " to ").orElse("") + end.map(String::valueOf).orElse("");
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) {

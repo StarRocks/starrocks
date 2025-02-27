@@ -202,7 +202,7 @@ class PiecesPlanTransformer {
             });
 
             pieces.algebra = scan.getTable().getUUID() + ":" + scan.getTable().getName() +
-                    (scan.getTableVersionRange().isEmpty() ? "" : ":" + scan.getTableVersionRange()); ;
+                    (scan.getTableVersionRange().isEmpty() ? "" : ":" + scan.getTableVersionRange().versionRange());
             return pieces;
         }
     }
