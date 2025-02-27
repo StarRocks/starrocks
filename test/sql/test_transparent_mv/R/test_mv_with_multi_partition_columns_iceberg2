@@ -1,4 +1,7 @@
--- name: test_mv_with_multi_partition_columns_iceberg2
+-- name: test_mv_with_multi_partition_columns_iceberg2 @slow
+set new_planner_optimize_timeout=10000;
+-- result:
+-- !result
 create database db_${uuid0};
 -- result:
 -- !result
