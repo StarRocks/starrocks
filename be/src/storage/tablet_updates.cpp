@@ -1055,6 +1055,7 @@ void TabletUpdates::stop_and_wait_apply_done() {
     _wait_apply_done();
     int64_t duration = MonotonicMicros() - start_time;
     StarRocksMetrics::instance()->primary_key_wait_apply_done_duration_ms.increment(duration / 1000);
+    StarRocksMetrics::instance()->primary_key_wait_apply_done_total.increment(1);
 }
 
 Status TabletUpdates::breakpoint_check() {
