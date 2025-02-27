@@ -179,7 +179,6 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
         return RewriteStatus::UNCHANGED;
     }
     DCHECK(_column_iterators[cid]->all_page_dict_encoded());
-
     if (PredicateType::kEQ == pred->type()) {
         Datum value = pred->value();
         int code = _column_iterators[cid]->dict_lookup(value.get_slice());
@@ -316,6 +315,9 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
         const auto& [dict_column, code_column] = *dict_and_codes_ptr;
 
         return _rewrite_expr_predicate(pool, dict_column, code_column, field->is_nullable(), pred, dest_pred);
+    }
+    if (PredicateType::kPlaceHolder == pred->type()) {
+        return RewriteStatus::ALWAYS_TRUE;
     }
 
     return RewriteStatus::UNCHANGED;

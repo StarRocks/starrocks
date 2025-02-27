@@ -139,6 +139,7 @@ set(STORAGE_FILES
     column_and_predicate.cpp
     column_expr_predicate.cpp
     conjunctive_predicates.cpp
+    runtime_filter_predicate.cpp
     predicate_tree/predicate_tree.cpp
     convert_helper.cpp
     delete_predicates.cpp

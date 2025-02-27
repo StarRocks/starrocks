@@ -996,6 +996,9 @@ std::ostream& operator<<(std::ostream& os, PredicateType p) {
     case PredicateType::kMap:
         os << "map";
         break;
+    case PredicateType::kPlaceHolder:
+        os << "placeholder";
+        break;
     default:
         CHECK(false) << "unknown predicate " << p;
     }

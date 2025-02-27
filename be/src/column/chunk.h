@@ -153,6 +153,7 @@ public:
 
     void set_slot_id_to_index(SlotId slot_id, size_t idx) { _slot_id_to_index[slot_id] = idx; }
     bool is_slot_exist(SlotId id) const { return _slot_id_to_index.contains(id); }
+    bool is_cid_exist(ColumnId cid) const { return _cid_to_index.contains(cid); }
     void reset_slot_id_to_index() { _slot_id_to_index.clear(); }
     size_t get_index_by_slot_id(SlotId slot_id) { return _slot_id_to_index[slot_id]; }
 
@@ -219,6 +220,7 @@ public:
     DelCondSatisfied delete_state() const { return _delete_state; }
 
     const SlotHashMap& get_slot_id_to_index_map() const { return _slot_id_to_index; }
+    const ColumnIdHashMap& get_column_id_to_index_map() const { return _cid_to_index; }
 
     // Call `Column::reserve` on each column of |chunk|, with |cap| passed as argument.
     void reserve(size_t cap);
