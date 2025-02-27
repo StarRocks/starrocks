@@ -57,4 +57,8 @@ TEST_F(TestUtils, test_is_tracker_hit_hard_limit) {
     ASSERT_TRUE(!is_tracker_hit_hard_limit(tracker.get(), 4));
 }
 
+TEST_F(TestUtils, test_is_disk_full_error) {
+    ASSERT_TRUE(is_disk_full_error(Status::IOError("No space left on device")));
+}
+
 } // namespace starrocks
