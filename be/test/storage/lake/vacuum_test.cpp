@@ -511,6 +511,7 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         ASSERT_NE(0, response.status().status_code());
         EXPECT_EQ(0, response.vacuumed_files());
         EXPECT_EQ(0, response.vacuumed_file_size());
+        EXPECT_EQ(0, response.vacuumed_version());
 
         ensure_all_files_exist();
     }
@@ -529,6 +530,7 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
                 << response.status().error_msgs(0);
         EXPECT_EQ(0, response.vacuumed_files());
         EXPECT_EQ(0, response.vacuumed_file_size());
+        EXPECT_EQ(0, response.vacuumed_version());
 
         ensure_all_files_exist();
     }
@@ -548,6 +550,7 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
                 << response.status().error_msgs(0);
         EXPECT_EQ(0, response.vacuumed_files());
         EXPECT_EQ(0, response.vacuumed_file_size());
+        EXPECT_EQ(0, response.vacuumed_version());
 
         ensure_all_files_exist();
     }
@@ -568,6 +571,7 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
                 << response.status().error_msgs(0);
         EXPECT_EQ(0, response.vacuumed_files());
         EXPECT_EQ(0, response.vacuumed_file_size());
+        EXPECT_EQ(0, response.vacuumed_version());
 
         ensure_all_files_exist();
     }
@@ -586,10 +590,7 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
         EXPECT_EQ(0, response.vacuumed_files());
         EXPECT_EQ(0, response.vacuumed_file_size());
-<<<<<<< HEAD
-=======
         EXPECT_EQ(1, response.vacuumed_version());
->>>>>>> 421d65613 ([BugFix] Fix the bug of incorrect updates in the vacuum version. (#56273))
 
         ensure_all_files_exist();
     }
@@ -613,6 +614,7 @@ TEST_P(LakeVacuumTest, test_vacuum_3) {
         // 1 txn slog file
         EXPECT_EQ(15, response.vacuumed_files());
         EXPECT_GT(response.vacuumed_file_size(), 0);
+        EXPECT_EQ(5, response.vacuumed_version());
 
         EXPECT_FALSE(file_exist(tablet_metadata_filename(100, 2)));
         EXPECT_FALSE(file_exist(tablet_metadata_filename(100, 3)));
@@ -1342,8 +1344,6 @@ TEST_P(LakeVacuumTest, test_vacuum_combined_txn_log) {
     }
 }
 
-<<<<<<< HEAD
-=======
 TEST_P(LakeVacuumTest, test_vacuumed_version) {
     ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
         {
@@ -1459,7 +1459,6 @@ TEST_P(LakeVacuumTest, test_vacuumed_version) {
     }
 }
 
->>>>>>> 421d65613 ([BugFix] Fix the bug of incorrect updates in the vacuum version. (#56273))
 INSTANTIATE_TEST_SUITE_P(LakeVacuumTest, LakeVacuumTest,
                          ::testing::Values(VacuumTestArg{1}, VacuumTestArg{3}, VacuumTestArg{100}));
 
