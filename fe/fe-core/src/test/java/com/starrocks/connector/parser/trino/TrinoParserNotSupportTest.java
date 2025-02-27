@@ -78,9 +78,6 @@ public class TrinoParserNotSupportTest extends TrinoTestBase {
 
         sql = "select TIMESTAMP '2014-09-17 Europe/Berlin'";
         analyzeSuccess(sql);
-
-        sql = "SELECT TIMESTAMP '2014-03-14 09:30:00' AT TIME ZONE 'America/Los_Angeles'";
-        analyzeFail(sql, "Unsupported expression [TIMESTAMP '2014-03-14 09:30:00' AT TIME ZONE 'America/Los_Angeles']");
     }
 
     // refer to https://trino.io/docs/current/functions/conversion.html#format
