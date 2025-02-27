@@ -43,7 +43,6 @@
 #include "runtime/current_thread.h"
 #include "runtime/exec_env.h"
 #include "util/defer_op.h"
-#include "util/lru_cache.h"
 
 namespace starrocks {
 
