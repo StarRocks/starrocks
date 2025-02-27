@@ -373,6 +373,14 @@ Start to run: %s
                     # check mode only work in validating mode
                     # pretreatment expect res
                     expect_res = case_info.result[sql_id]
+                    # replace expect_res variables
+                    if isinstance(expect_res, list):
+                        expect_res = self._replace_uuid_variables(expect_res)
+                        expect_res = expect_res[0] if expect_res else []
+                    elif isinstance(expect_res, str):
+                        expect_res_list = [expect_res]
+                        expect_res_list = self._replace_uuid_variables(expect_res_list)
+                        expect_res = expect_res_list[0]
                     expect_res_for_log = expect_res if len(expect_res) < 1000 else expect_res[:1000] + "..."
 
                     log.info(f"""[{sql_id}.result]: 
