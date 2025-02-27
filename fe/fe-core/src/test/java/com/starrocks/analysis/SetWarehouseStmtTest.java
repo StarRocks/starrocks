@@ -17,20 +17,20 @@ package com.starrocks.analysis;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.epack.warehouse.LocalWarehouse;
-import com.starrocks.epack.warehouse.WarehouseManagerEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.Warehouse;
+import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
-import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -65,8 +65,7 @@ public class SetWarehouseStmtTest {
      * Mock {@link WarehouseManager#getWarehouse(String)} and {@link WarehouseManager#warehouseExists(String)}.
      */
     @Test
-    public void testSetWarehouse(@Mocked WarehouseManagerEPack warehouseMgr) throws Exception {
-
+    public void testSetWarehouse() throws Exception {
         new MockUp<RunMode>() {
             @Mock
             public RunMode getCurrentRunMode() {
@@ -74,27 +73,22 @@ public class SetWarehouseStmtTest {
             }
         };
 
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(String warehouseName) {
-                return new LocalWarehouse(12343L, "aaa", 11L, null, "no comments");
-            }
+        WarehouseManager warehouseManager = new MockedWarehouseManager();
+        warehouseManager.addWarehouse(new LocalWarehouse(12343L, "aaa", 11L, null, "mock warehouse for ut"));
+        GlobalStateMgr globalStateMgr = ctx.getGlobalStateMgr();
 
-            @Mock
-            public boolean warehouseExists(String warehouseName) {
-                return true;
-            }
-        };
+        new Expectations(globalStateMgr) {{
+            globalStateMgr.getWarehouseMgr();
+            result = warehouseManager;
+        }};
 
         ctx.setQueryId(UUIDUtil.genUUID());
-        StmtExecutor executor = new StmtExecutor(ctx, UtFrameUtils.parseStmtWithNewParser(
-                String.format("SET WAREHOUSE aaa"), ctx));
+        StmtExecutor executor = new StmtExecutor(ctx, UtFrameUtils.parseStmtWithNewParser("SET WAREHOUSE aaa", ctx));
         executor.execute();
 
         Assert.assertEquals("aaa", ctx.getCurrentWarehouseName());
 
-        executor = new StmtExecutor(ctx, UtFrameUtils.parseStmtWithNewParser(
-                String.format("set xxx=aaa"), ctx));
+        executor = new StmtExecutor(ctx, UtFrameUtils.parseStmtWithNewParser("set xxx=aaa", ctx));
         executor.execute();
         Assert.assertSame(ctx.getState().getStateType(), QueryState.MysqlStateType.ERR);
     }
