@@ -495,7 +495,8 @@ public class AlterMVJobExecutor extends AlterJobExecutorEPack {
      * Inactive the materialized view and its related materialized views.
      */
     private static void doInactiveMaterializedView(MaterializedView mv, String reason) {
-        if (mv == null) {
+        // Only check this in leader and not replay to avoid duplicate inactive
+        if (mv == null || !GlobalStateMgr.getCurrentState().isLeader()) {
             return;
         }
         LOG.warn("Inactive MV {}/{} because {}", mv.getName(), mv.getId(), reason);
@@ -562,6 +563,10 @@ public class AlterMVJobExecutor extends AlterJobExecutorEPack {
         if (!Config.enable_mv_automatic_inactive_by_base_table_changes) {
             LOG.warn("Skip to inactive related materialized views because of automatic inactive is disabled, " +
                     "table:{}, modifiedColumns:{}", olapTable.getName(), modifiedColumns);
+            return;
+        }
+        // Only check this in leader and not replay to avoid duplicate inactive
+        if (!GlobalStateMgr.getCurrentState().isLeader()) {
             return;
         }
         // inactive related asynchronous mvs
