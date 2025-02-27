@@ -65,7 +65,8 @@ Status LocalPartitionTopnContext::push_one_chunk_to_partitioner(RuntimeState* st
             [this, state](size_t partition_idx) {
                 _chunks_sorters.emplace_back(std::make_shared<ChunksSorterTopn>(
                         state, &_sort_exprs, &_is_asc_order, &_is_null_first, _sort_keys, _offset, _partition_limit,
-                        _topn_type, ChunksSorterTopn::tunning_buffered_chunks(_partition_limit)));
+                        _topn_type, ChunksSorterTopn::kDefaultMaxBufferRows, ChunksSorterTopn::kDefaultMaxBufferBytes,
+                        ChunksSorterTopn::tunning_buffered_chunks(_partition_limit)));
             },
             [this, state](size_t partition_idx, const ChunkPtr& chunk) {
                 (void)_chunks_sorters[partition_idx]->update(state, chunk);
