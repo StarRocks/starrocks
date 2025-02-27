@@ -74,10 +74,17 @@ public class TrinoParserNotSupportTest extends TrinoTestBase {
     @Test
     public void testTimeStampWithTimeZone() {
         String sql = "select TIMESTAMP '2014-03-14 09:30:00 Europe/Berlin'";
+<<<<<<< HEAD
         analyzeFail(sql, "Invalid date literal 2014-03-14 09:30:00 Europe/Berlin");
 
         sql = "SELECT TIMESTAMP '2014-03-14 09:30:00' AT TIME ZONE 'America/Los_Angeles'";
         analyzeFail(sql, "Unsupported expression [TIMESTAMP '2014-03-14 09:30:00' AT TIME ZONE 'America/Los_Angeles']");
+=======
+        analyzeSuccess(sql);
+
+        sql = "select TIMESTAMP '2014-09-17 Europe/Berlin'";
+        analyzeSuccess(sql);
+>>>>>>> 2c09f772db ([Enhancement] Support at time zone expression for trino parser (#56311))
     }
 
     // refer to https://trino.io/docs/current/functions/conversion.html#format
