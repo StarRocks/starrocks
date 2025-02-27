@@ -620,6 +620,26 @@ void BinaryColumnBase<T>::fnv_hash(uint32_t* hashes, uint32_t from, uint32_t to)
                                        static_cast<uint32_t>(_offsets[i + 1] - _offsets[i]), hashes[i]);
     }
 }
+template <typename T>
+void BinaryColumnBase<T>::fnv_hash_with_selection(uint32_t* hashes, uint8_t* selection, uint16_t from,
+                                                  uint16_t to) const {
+    for (uint32_t i = from; i < to; ++i) {
+        if (!selection[i]) {
+            continue;
+        }
+        hashes[i] = HashUtil::fnv_hash(_bytes.data() + _offsets[i],
+                                       static_cast<uint32_t>(_offsets[i + 1] - _offsets[i]), hashes[i]);
+    }
+}
+
+template <typename T>
+void BinaryColumnBase<T>::fnv_hash_selective(uint32_t* hashes, uint16_t* sel, uint16_t sel_size) const {
+    for (uint16_t i = 0; i < sel_size; i++) {
+        uint16_t idx = sel[i];
+        hashes[idx] = HashUtil::fnv_hash(_bytes.data() + _offsets[idx],
+                                         static_cast<uint32_t>(_offsets[idx + 1] - _offsets[idx]), hashes[idx]);
+    }
+}
 
 template <typename T>
 void BinaryColumnBase<T>::crc32_hash(uint32_t* hashes, uint32_t from, uint32_t to) const {
@@ -627,6 +647,27 @@ void BinaryColumnBase<T>::crc32_hash(uint32_t* hashes, uint32_t from, uint32_t t
     for (uint32_t i = from; i < to && !_bytes.empty(); ++i) {
         hashes[i] = HashUtil::zlib_crc_hash(_bytes.data() + _offsets[i],
                                             static_cast<uint32_t>(_offsets[i + 1] - _offsets[i]), hashes[i]);
+    }
+}
+
+template <typename T>
+void BinaryColumnBase<T>::crc32_hash_with_selection(uint32_t* hashes, uint8_t* selection, uint16_t from,
+                                                    uint16_t to) const {
+    for (uint32_t i = from; i < to && !_bytes.empty(); ++i) {
+        if (!selection[i]) {
+            continue;
+        }
+        hashes[i] = HashUtil::zlib_crc_hash(_bytes.data() + _offsets[i],
+                                            static_cast<uint32_t>(_offsets[i + 1] - _offsets[i]), hashes[i]);
+    }
+}
+
+template <typename T>
+void BinaryColumnBase<T>::crc32_hash_selective(uint32_t* hashes, uint16_t* sel, uint16_t sel_size) const {
+    for (uint16_t i = 0; i < sel_size; i++) {
+        uint16_t idx = sel[i];
+        hashes[idx] = HashUtil::zlib_crc_hash(_bytes.data() + _offsets[idx],
+                                              static_cast<uint32_t>(_offsets[idx + 1] - _offsets[idx]), hashes[idx]);
     }
 }
 

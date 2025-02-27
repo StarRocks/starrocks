@@ -159,7 +159,6 @@ size_t RuntimeBloomFilter::serialize(int serialize_version, uint8_t* data) const
 
     if (num_partitions == 0) {
         offset += _bf.serialize(data + offset);
-
     } else {
         for (const auto& bf : _hash_partition_bf) {
             offset += bf.serialize(data + offset);
