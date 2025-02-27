@@ -407,6 +407,13 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
 
     DroppedTabletInfo drop_info{.tablet = dropped_tablet, .flag = flag};
 
+    // meta lock free shutdown for primary key table. In current impl, TabletUpdates's context
+    // is protected by specified lock defined in TabletUpdates itself but not tablet meta lock
+    // It is safe call stop_and_wait_apply_done out of tablet meta lock
+    if (dropped_tablet->updates() != nullptr) {
+        dropped_tablet->updates()->stop_and_wait_apply_done();
+    }
+
     if (flag == kDeleteFiles) {
         {
             // NOTE: Other threads may save the tablet meta back to storage again after we
@@ -492,6 +499,13 @@ Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletIn
     }
 
     for (const auto& dropped_tablet : dropped_tablets) {
+        // meta lock free shutdown for primary key table. In current impl, TabletUpdates's context
+        // is protected by specified lock defined in TabletUpdates itself but not tablet meta lock
+        // It is safe call stop_and_wait_apply_done out of tablet meta lock
+        if (dropped_tablet->updates() != nullptr) {
+            dropped_tablet->updates()->stop_and_wait_apply_done();
+        }
+
         // make sure dropped tablet state is TABLET_SHUTDOWN IN MEMORY ONLY!
         // any persistent operation is useless because the disk has failed
         // and the IO operation should be always failed in this case.
@@ -1519,6 +1533,13 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
     }
 
     DroppedTabletInfo drop_info{.tablet = dropped_tablet, .flag = flag};
+
+    // meta lock free shutdown for primary key table. In current impl, TabletUpdates's context
+    // is protected by specified lock defined in TabletUpdates itself but not tablet meta lock
+    // It is safe call stop_and_wait_apply_done out of tablet meta lock
+    if (dropped_tablet->updates() != nullptr) {
+        dropped_tablet->updates()->stop_and_wait_apply_done();
+    }
 
     if (flag == kDeleteFiles) {
         {

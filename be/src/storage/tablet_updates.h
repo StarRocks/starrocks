@@ -386,6 +386,8 @@ public:
 
     void rewrite_rs_meta(bool is_fatal);
 
+    void stop_and_wait_apply_done();
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -440,7 +442,6 @@ private:
                               EditVersion* commit_version);
 
     void _wait_apply_done();
-    void _stop_and_wait_apply_done();
 
     Status _do_compaction(std::unique_ptr<CompactionInfo>* pinfo);
 
