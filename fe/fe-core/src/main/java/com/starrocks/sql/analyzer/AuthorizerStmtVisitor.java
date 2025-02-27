@@ -1682,16 +1682,38 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitShowCreateTableStatement(ShowCreateTableStmt statement, ConnectContext context) {
-        try {
-            BasicTable basicTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getBasicTable(
-                    statement.getTbl().getCatalog(), statement.getTbl().getDb(), statement.getTbl().getTbl());
-            Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    statement.getDb(), basicTable);
-        } catch (AccessDeniedException e) {
-            AccessDeniedException.reportAccessDenied(
-                    statement.getTbl().getCatalog(),
-                    context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.ANY.name(), ObjectType.TABLE.name(), statement.getTbl().getTbl());
+        if (statement.getType() == ShowCreateTableStmt.CreateTableType.VIEW) {
+            try {
+                Authorizer.checkAnyActionOnView(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        statement.getTbl());
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(
+                        statement.getTbl().getCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.ANY.name(), ObjectType.VIEW.name(), statement.getTbl().getTbl());
+            }
+        } else if (statement.getType() == ShowCreateTableStmt.CreateTableType.MATERIALIZED_VIEW) {
+            try {
+                Authorizer.checkAnyActionOnMaterializedView(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        statement.getTbl());
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(
+                        statement.getTbl().getCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.ANY.name(), ObjectType.MATERIALIZED_VIEW.name(), statement.getTbl().getTbl());
+            }
+        } else {
+            try {
+                BasicTable basicTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getBasicTable(
+                        statement.getTbl().getCatalog(), statement.getTbl().getDb(), statement.getTbl().getTbl());
+                Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        statement.getDb(), basicTable);
+            } catch (AccessDeniedException e) {
+                AccessDeniedException.reportAccessDenied(
+                        statement.getTbl().getCatalog(),
+                        context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        PrivilegeType.ANY.name(), ObjectType.TABLE.name(), statement.getTbl().getTbl());
+            }
         }
         return null;
     }
