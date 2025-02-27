@@ -474,6 +474,7 @@ public class ClusterSnapshotTest {
             }
             localClusterSnapshotMgr.setAutomatedSnapshotOff();
         }
+        Config.shard_group_clean_threshold_sec = oldConfig;
     }
 
     @Test
