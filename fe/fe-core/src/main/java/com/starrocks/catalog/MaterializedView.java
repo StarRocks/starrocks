@@ -1651,9 +1651,17 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
     private <K> Map<Table, K> refreshBaseTable(Map<Table, K> cached) {
         Map<Table, K> result = Maps.newHashMap();
         for (Map.Entry<Table, K> e : cached.entrySet()) {
-            Preconditions.checkState(tableToBaseTableInfoCache.containsKey(e.getKey()));
-            Table refreshedTable = MvUtils.getTableChecked(tableToBaseTableInfoCache.get(e.getKey()));
-            result.put(refreshedTable, e.getValue());
+            Table table = e.getKey();
+            if (table instanceof IcebergTable || table instanceof DeltaLakeTable) {
+                Preconditions.checkState(tableToBaseTableInfoCache.containsKey(table));
+                // TODO: get table from current context rather than metadata catalog
+                // it's fine to re-get table from metadata catalog again since metadata catalog should cache
+                // the newest table info.
+                Table refreshedTable = MvUtils.getTableChecked(tableToBaseTableInfoCache.get(table));
+                result.put(refreshedTable, e.getValue());
+            } else {
+                result.put(table, e.getValue());
+            }
         }
         return result;
     }
