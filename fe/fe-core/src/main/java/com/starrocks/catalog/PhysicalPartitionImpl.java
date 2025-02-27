@@ -197,10 +197,12 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
         this.minRetainVersion = minRetainVersion;
     }
 
+    @Override
     public long getLastSuccVacuumVersion() {
         return lastSuccVacuumVersion;
     }
 
+    @Override
     public void setLastSuccVacuumVersion(long lastSuccVacuumVersion) {
         this.lastSuccVacuumVersion = lastSuccVacuumVersion;
     }
