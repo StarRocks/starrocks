@@ -34,7 +34,6 @@ public class SecurityIntegrationFactory {
 
     public static SecurityIntegration createSecurityIntegration(String name, Map<String, String> propertyMap) {
         String type = propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_TYPE_KEY);
-
         checkSecurityIntegrationIsSupported(type);
 
         SecurityIntegration securityIntegration = null;
