@@ -656,11 +656,14 @@ if [ ${BUILD_BE} -eq 1 ]; then
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/avro-1.9.2.jar
     rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/avro-1.9.2.jar
 
-    # https://avd.aquasec.com/nvd/2025/cve-2025-24970, replace 4.1.100.Final with 4.1.118.Final
-    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/netty-*-4.1.100.Final*.jar
-    cp -f ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib/netty-*-4.1.118.Final*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/
-    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/netty-*-4.1.100.Final*.jar
-    cp -f ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib/netty-*-4.1.118.Final*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/
+    if [ "${BUILD_JAVA_EXT}" == "ON" ] ; then
+        # Only process the netty replacement if the java-ext is built as well
+        # https://avd.aquasec.com/nvd/2025/cve-2025-24970, replace 4.1.100.Final with 4.1.118.Final
+        rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/netty-*-4.1.100.Final*.jar
+        cp -f ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib/netty-*-4.1.118.Final*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/
+        rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/netty-*-4.1.100.Final*.jar
+        cp -f ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib/netty-*-4.1.118.Final*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/
+    fi
 
     cp -r -p ${STARROCKS_HOME}/be/extension/python-udf/src/flight_server.py ${STARROCKS_OUTPUT}/be/lib/py-packages
 
