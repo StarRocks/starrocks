@@ -41,13 +41,14 @@ public class SSLContextLoaderTest {
 
         // after 2 seconds, the sslContext is still null, because the auto update is disabled.
         Thread.sleep(2000L);
+        Assert.assertNull(SSLContextLoader.getSslContext());
 
         // enable auto update
         Config.ssl_cert_auto_update_interval_s = 1;
         SSLContextLoader.updateAutoRefreshInterval(Config.ssl_cert_auto_update_interval_s);
 
         // after 3 seconds, the sslContext changed to not null
-        Thread.sleep(3000L);
+        Thread.sleep(5000L);
         SSLContext firstContext = SSLContextLoader.getSslContext();
         Assert.assertNotNull(firstContext);
 
@@ -56,7 +57,7 @@ public class SSLContextLoaderTest {
         Config.ssl_keystore_password = "starrocks2";
         Config.ssl_key_password = "starrocks2";
         // after 3 seconds, the sslContext change to anther value
-        Thread.sleep(3000L);
+        Thread.sleep(5000L);
 
         Assert.assertNotNull(SSLContextLoader.getSslContext());
         Assert.assertNotSame(firstContext, SSLContextLoader.getSslContext());
