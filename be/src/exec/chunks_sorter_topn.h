@@ -16,6 +16,7 @@
 
 #include "column/vectorized_fwd.h"
 #include "exec/chunks_sorter.h"
+#include "exec/sorting/merge.h"
 #include "exprs/expr_context.h"
 #include "util/runtime_profile.h"
 
@@ -23,10 +24,11 @@ namespace starrocks {
 // Sort Chunks in memory with specified order by rules.
 class ChunksSorterTopn : public ChunksSorter {
 public:
-    static constexpr size_t kMaxBufferedChunks = 512;
-    static constexpr size_t kMinBufferedChunks = 16;
     static constexpr size_t kDefaultBufferedChunks = 64;
-
+    static constexpr size_t kDefaultMaxBufferRows =
+            1 << 30; // 1 billion rows, the number of rows has little impact on performance
+    static constexpr size_t kDefaultMaxBufferBytes =
+            256 << 20; // 256MB, a larger limit may improve performance but is not memory allocator friendly
     // Tunning the max_buffer_chunks according to requested limit
     // The experiment could refer to https://github.com/StarRocks/starrocks/pull/4694.
     //
@@ -46,7 +48,7 @@ public:
         if (limit <= 65536) {
             return 64;
         }
-        return 256;
+        return std::max<size_t>(256, limit / 4096);
     }
 
     /**
@@ -62,6 +64,8 @@ public:
                      const std::vector<bool>* is_asc_order, const std::vector<bool>* is_null_first,
                      const std::string& sort_keys, size_t offset = 0, size_t limit = 0,
                      const TTopNType::type topn_type = TTopNType::ROW_NUMBER,
+                     size_t max_buffered_rows = kDefaultMaxBufferRows,
+                     size_t max_buffered_bytes = kDefaultMaxBufferBytes,
                      size_t max_buffered_chunks = kDefaultBufferedChunks);
     ~ChunksSorterTopn() override;
 
@@ -74,7 +78,7 @@ public:
 
     size_t get_output_rows() const override;
 
-    int64_t mem_usage() const override { return _raw_chunks.mem_usage() + _merged_segment.mem_usage(); }
+    int64_t mem_usage() const override { return _raw_chunks.mem_usage() + _merged_runs.mem_usage(); }
 
     void setup_runtime(RuntimeState* state, RuntimeProfile* profile, MemTracker* parent_mem_tracker) override;
 
@@ -93,8 +97,8 @@ private:
     Status _hybrid_sort_common(RuntimeState* state, std::pair<Permutation, Permutation>& new_permutation,
                                DataSegments& segments);
 
-    Status _merge_sort_common(ChunkPtr& big_chunk, DataSegments& segments, const size_t rows_to_keep,
-                              size_t sorted_size, Permutation& new_permutation);
+    Status _merge_sort_common(MergedRuns* dst, DataSegments& segments, const size_t rows_to_keep,
+                              Permutation& new_permutation);
 
     static void _set_permutation_before(Permutation&, size_t size, std::vector<std::vector<uint8_t>>& filter_array);
 
@@ -110,11 +114,38 @@ private:
     Status _partial_sort_col_wise(RuntimeState* state, std::pair<Permutation, Permutation>& permutations,
                                   DataSegments& segments);
 
+    // 1. compare each row in the segment with the highest element in merged sort runs, and assign INCLUDE_IN_SEGMENT to LE elements.
+    // 2. compare each row in the segment with the lowest element in merged sort runs, and assign SMALLER_THAN_MIN_OF_SEGMENT to LT elements.
+    Status _build_filter_from_high_low_comparison(const DataSegments& segments,
+                                                  std::vector<std::vector<uint8_t>>& filter_array,
+                                                  const SortDescs& sort_descs, uint32_t& least_num,
+                                                  uint32_t& middle_num);
+    // compare each row in the segment with the lowest element in merged sort runs, and assign SMALLER_THAN_MIN_OF_SEGMENT to LT elements.
+    Status _build_filter_from_low_comparison(const DataSegments& segments,
+                                             std::vector<std::vector<uint8_t>>& filter_array,
+                                             const SortDescs& sort_descs, uint32_t& least_num, uint32_t& middle_num);
     // For rank type topn, it may keep more data than we need during processing,
     // therefor, pruning should be performed when processing is finished
     // For example, given the sorted set [1, 2, 3, 3, 3, 4, 5] with limit = 3,
     // the last two element [4, 5] should be pruned
     void _rank_pruning();
+
+    const MergedRun& _lowest_merged_run() const { return _merged_runs.front(); }
+
+    std::pair<const MergedRun*, int> _get_run_by_row_id(size_t rid) const {
+        size_t index = 0;
+        size_t skip_offset = rid;
+        while (index < _merged_runs.num_chunks() && skip_offset >= 0) {
+            const auto& run = _merged_runs.at(index);
+            if (skip_offset >= run.num_rows()) {
+                skip_offset -= run.num_rows();
+            } else {
+                return {&run, skip_offset};
+            }
+            index++;
+        }
+        return {nullptr, 0};
+    }
 
     // buffer
     struct RawChunks {
@@ -134,10 +165,12 @@ private:
             size_of_rows = 0;
         }
     };
+    const size_t _max_buffered_rows;
+    const size_t _max_buffered_bytes;
     const size_t _max_buffered_chunks;
     RawChunks _raw_chunks;
     bool _init_merged_segment;
-    DataSegment _merged_segment;
+    MergedRuns _merged_runs;
 
     const size_t _limit;
     const size_t _offset;

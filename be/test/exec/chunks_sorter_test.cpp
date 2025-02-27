@@ -28,6 +28,7 @@
 #include "common/object_pool.h"
 #include "exec/chunks_sorter_full_sort.h"
 #include "exec/chunks_sorter_topn.h"
+#include "exec/sorting/merge.h"
 #include "exec/sorting/sort_helper.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
@@ -766,7 +767,8 @@ TEST_F(ChunksSorterTest, rank_topn) {
         for (int limit = 1; limit <= 22; limit++) {
             std::cerr << fmt::format("order by column {} limit {}", "ranking_key", limit) << std::endl;
             ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 0, limit,
-                                    TTopNType::RANK, 1);
+                                    TTopNType::RANK, ChunksSorterTopn::kDefaultMaxBufferRows,
+                                    ChunksSorterTopn::kDefaultMaxBufferBytes, 1);
             if (ranking1_first) {
                 ASSERT_OK(sorter.update(_runtime_state.get(), ChunkPtr(_chunk_ranking_1->clone_unique().release())));
                 ASSERT_OK(sorter.update(_runtime_state.get(), ChunkPtr(_chunk_ranking_2->clone_unique().release())));
@@ -980,7 +982,7 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_fisrt) {
     ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
     ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 2, 7, TTopNType::ROW_NUMBER,
-                            2);
+                            ChunksSorterTopn::kDefaultMaxBufferRows, ChunksSorterTopn::kDefaultMaxBufferBytes, 2);
 
     size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
     ASSERT_OK(sorter.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release())));
@@ -1021,7 +1023,8 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_last) {
     int offset = 7;
     for (int limit = 8; limit + offset <= 16; limit++) {
         ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", offset, limit,
-                                TTopNType::ROW_NUMBER, 2);
+                                TTopNType::ROW_NUMBER, ChunksSorterTopn::kDefaultMaxBufferRows,
+                                ChunksSorterTopn::kDefaultMaxBufferBytes, 2);
         size_t total_rows = _chunk_1->num_rows() + _chunk_2->num_rows() + _chunk_3->num_rows();
         ASSERT_OK(sorter.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release())));
         ASSERT_OK(sorter.update(_runtime_state.get(), ChunkPtr(_chunk_2->clone_unique().release())));
@@ -1043,10 +1046,11 @@ TEST_F(ChunksSorterTest, part_sort_by_3_columns_null_last) {
 
         // part sort with large offset
         ChunksSorterTopn sorter2(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 100, limit,
-                                 TTopNType::ROW_NUMBER, 2);
-        ASSERT_OK(sorter.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release())));
-        ASSERT_OK(sorter.update(_runtime_state.get(), ChunkPtr(_chunk_2->clone_unique().release())));
-        ASSERT_OK(sorter.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release())));
+                                 TTopNType::ROW_NUMBER, ChunksSorterTopn::kDefaultMaxBufferRows,
+                                 ChunksSorterTopn::kDefaultMaxBufferBytes, 2);
+        ASSERT_OK(sorter2.update(_runtime_state.get(), ChunkPtr(_chunk_1->clone_unique().release())));
+        ASSERT_OK(sorter2.update(_runtime_state.get(), ChunkPtr(_chunk_2->clone_unique().release())));
+        ASSERT_OK(sorter2.update(_runtime_state.get(), ChunkPtr(_chunk_3->clone_unique().release())));
         ASSERT_OK(sorter2.done(_runtime_state.get()));
         page_1 = consume_page_from_sorter(sorter2);
         ASSERT_TRUE(page_1 == nullptr);
@@ -1070,7 +1074,8 @@ TEST_F(ChunksSorterTest, order_by_with_unequal_sized_chunks) {
 
     // partial sort
     ChunksSorterTopn full_sorter(_runtime_state.get(), &sort_exprs, &is_asc, &is_null_first, "", 1, 6,
-                                 TTopNType::ROW_NUMBER, 2);
+                                 TTopNType::ROW_NUMBER, ChunksSorterTopn::kDefaultMaxBufferRows,
+                                 ChunksSorterTopn::kDefaultMaxBufferBytes, 2);
     ChunkPtr chunk_1 = _chunk_1->clone_empty();
     ChunkPtr chunk_2 = _chunk_2->clone_empty();
     for (size_t i = 0; i < _chunk_1->num_columns(); ++i) {
@@ -1136,7 +1141,7 @@ TEST_F(ChunksSorterTest, stable_sort) {
     ASSERT_EQ(expect, result);
 }
 
-void pack_nullable(const ChunkPtr& chunk) {
+void pack_nullable(Chunk* chunk) {
     for (auto& col : chunk->columns()) {
         col = std::make_shared<NullableColumn>(col, std::make_shared<NullColumn>(col->size()));
     }
@@ -1153,7 +1158,7 @@ TEST_F(ChunksSorterTest, get_filter_test) {
     ASSERT_OK(Expr::prepare(sort_exprs, _runtime_state.get()));
     ASSERT_OK(Expr::open(sort_exprs, _runtime_state.get()));
 
-    ChunkPtr merged_chunk = std::make_shared<Chunk>();
+    ChunkUniquePtr merged_chunk = std::make_unique<Chunk>();
     {
         auto c0_merged = Int32Column::create();
         c0_merged->append(3);
@@ -1164,10 +1169,11 @@ TEST_F(ChunksSorterTest, get_filter_test) {
         merged_chunk->append_column(c0_merged, 0);
         merged_chunk->append_column(c1_merged, 1);
     }
-    pack_nullable(merged_chunk);
+    pack_nullable(merged_chunk.get());
 
-    DataSegment merged_segment;
-    merged_segment.init(&sort_exprs, merged_chunk);
+    MergedRun merged_segment;
+    auto merged_run = MergedRun::build(std::move(merged_chunk), sort_exprs);
+    ASSERT_OK(merged_run.status());
 
     ChunkPtr unmerged_chunk = std::make_shared<Chunk>();
     {
@@ -1181,7 +1187,7 @@ TEST_F(ChunksSorterTest, get_filter_test) {
         unmerged_chunk->append_column(c0_unmerged, 0);
         unmerged_chunk->append_column(c1_unmerged, 1);
     }
-    pack_nullable(unmerged_chunk);
+    pack_nullable(unmerged_chunk.get());
 
     DataSegment unmerged_segment;
     unmerged_segment.init(&sort_exprs, unmerged_chunk);
@@ -1198,10 +1204,16 @@ TEST_F(ChunksSorterTest, get_filter_test) {
     std::vector<int> null_first_flags = {1, 1};
 
     SortDescs desc(sort_order_flags, null_first_flags);
+    const std::vector<bool> is_asc_order = {true, true};
+    const std::vector<bool> is_null_first = {true, true};
 
-    size_t rows_to_sort = 2;
+    ChunksSorterTopn sorter(_runtime_state.get(), &sort_exprs, &is_asc_order, &is_null_first, "", 0, 2);
+    sorter._merged_runs.push_back(std::move(merged_run.value()));
+
     uint32_t smaller_num, include_num;
-    auto st = merged_segment.get_filter_array(segments, rows_to_sort, filter_array, desc, smaller_num, include_num);
+
+    auto st = sorter._build_filter_from_high_low_comparison(segments, filter_array, desc, smaller_num, include_num);
+
     ASSERT_OK(st);
 
     size_t inc = 0;
