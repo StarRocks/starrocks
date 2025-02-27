@@ -136,8 +136,6 @@ public class TextMatchBasedRewriteRule extends Rule {
         CachingMvPlanContextBuilder.AstKey astKey = new CachingMvPlanContextBuilder.AstKey(parseNode);
         OptExpression rewritten = rewriteByTextMatch(input, context, astKey);
         if (rewritten != null) {
-            logMVRewrite(context, this, "Materialized view text based rewrite failed, " +
-                    "try to rewrite sub-query again");
             return rewritten;
         }
         // try to rewrite sub-query again if exact-match failed.
@@ -145,6 +143,8 @@ public class TextMatchBasedRewriteRule extends Rule {
             logMVRewrite(context, this, "OptToAstMap is empty, no try to rewrite sub-query again");
             return null;
         }
+        logMVRewrite(context, this, "Materialized view text based rewrite success, " +
+                "try to rewrite sub-query again");
         return input.getOp().accept(new TextBasedRewriteVisitor(context, mvTransformerContext), input, connectContext);
     }
 
@@ -258,7 +258,7 @@ public class TextMatchBasedRewriteRule extends Rule {
                     mvCompensatePlan = OptExpression.create(mvScanOperator);
                 } else {
                     logMVRewrite(context, this, "Partitioned MV {} is outdated which " +
-                                    "contains some partitions to be refreshed: {}, and cannot compensate it to predicate",
+                                    "contains some partitions to be refreshed: {}, compensate it with union rewrite",
                             mv.getName(), partitionNamesToRefresh);
                     mvCompensatePlan = MvPartitionCompensator.getMvTransparentPlan(mvContext, input, mvScanOutputColumns);
                 }
@@ -271,6 +271,7 @@ public class TextMatchBasedRewriteRule extends Rule {
                             MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
                     mvEntity.increaseQueryTextBasedMatchedCount(1L);
                     OptimizerTraceUtil.logMVRewrite(context, this, "TEXT_BASED_REWRITE: {}", REWRITE_SUCCESS);
+                    context.getQueryMaterializationContext().markRewriteSuccess(true);
                     return rewritten;
                 }
             }
