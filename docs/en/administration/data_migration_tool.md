@@ -53,7 +53,7 @@ If the target cluster for data migration is a shared-data cluster, you need to m
 
 :::tip
 
-You can skip this step if you are using StarRocks v3.4.1, v3.3.10, or later.
+You can skip this step if you are using StarRocks v3.3.10 or later.
 
 :::
 
@@ -89,7 +89,7 @@ The optimization for unused column filtering at the Scan stage may cause a crash
 
 :::tip
 
-You can skip this step if you are using StarRocks v3.4.1, v3.3.10, v3.2.15, v3.1.17 or later.
+You can skip this step if you are using StarRocks v3.3.10, v3.2.15, v3.1.17 or later.
 
 :::
 
