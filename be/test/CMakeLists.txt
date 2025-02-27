@@ -502,6 +502,8 @@ set(EXEC_FILES
         ./storage/lake/write_combined_txn_log_test.cpp
         ./cache/block_cache/datacache_utils_test.cpp
         ./cache/block_cache/block_cache_hit_rate_counter_test.cpp
+        ./cache/object_cache/lrucache_module_test.cpp
+        ./cache/object_cache/object_cache_test.cpp
         ./util/thrift_rpc_helper_test.cpp
         )
 

@@ -245,7 +245,6 @@ Status GlobalEnv::_init_mem_tracker() {
 
     MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
 
-    _init_storage_page_cache(); // TODO: move to StorageEngine
     return Status::OK();
 }
 
@@ -270,12 +269,6 @@ void GlobalEnv::_reset_tracker() {
     for (auto& iter : _mem_tracker_map) {
         iter.second.reset();
     }
-}
-
-void GlobalEnv::_init_storage_page_cache() {
-    int64_t storage_cache_limit = get_storage_page_cache_size();
-    storage_cache_limit = check_storage_page_cache_size(storage_cache_limit);
-    StoragePageCache::create_global_cache(page_cache_mem_tracker(), storage_cache_limit);
 }
 
 int64_t GlobalEnv::get_storage_page_cache_size() {
@@ -884,6 +877,18 @@ void ExecEnv::try_release_resource_before_core_dump() {
         (void)_block_cache->update_mem_quota(0, false);
         LOG(INFO) << "release block cache";
     }
+}
+
+Status ExecEnv::init_object_cache(GlobalEnv* global_env) {
+    ObjectCache* object_cache = ObjectCache::instance();
+    if (object_cache->initialized()) {
+        return Status::OK();
+    }
+    ObjectCacheOptions options;
+    int64_t storage_cache_limit = global_env->get_storage_page_cache_size();
+    storage_cache_limit = global_env->check_storage_page_cache_size(storage_cache_limit);
+    options.capacity = storage_cache_limit;
+    return object_cache->init(options);
 }
 
 pipeline::DriverExecutor* ExecEnv::wg_driver_executor() {
