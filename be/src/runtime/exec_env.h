@@ -172,8 +172,6 @@ private:
     Status _init_mem_tracker();
     void _reset_tracker();
 
-    void _init_storage_page_cache();
-
     std::shared_ptr<MemTracker> regist_tracker(MemTrackerType type, int64_t bytes_limit, MemTracker* parent);
 
     // root process memory tracker
@@ -354,6 +352,8 @@ public:
     ThreadPool* delete_file_thread_pool();
 
     void try_release_resource_before_core_dump();
+
+    static Status init_object_cache(GlobalEnv* global_env);
 
 private:
     void _wait_for_fragments_finish();

@@ -37,8 +37,8 @@
 #include <gtest/gtest.h>
 
 #include "common/config.h"
-#include "runtime/mem_tracker.h"
 #include "storage/page_cache.h"
+#include "testutil/assert.h"
 #include "util/logging.h"
 
 namespace starrocks {
@@ -50,14 +50,15 @@ public:
 
 protected:
     void SetUp() override {
-        auto _page_cache_mem_tracker = std::make_unique<MemTracker>();
-        static const int kNumShardBits = 5;
-        static const int kNumShards = 1 << kNumShardBits;
         StoragePageCache::release_global_cache();
-        StoragePageCache::create_global_cache(_page_cache_mem_tracker.get(), kNumShards * 100000);
+        ObjectCacheOptions options{.capacity = 1024 * 1024, .module = ObjectCacheModuleType::LRUCACHE};
+        ASSERT_OK(_obj_cache.init(options));
+        StoragePageCache::create_global_cache(&_obj_cache);
     }
 
     void TearDown() override { StoragePageCache::instance()->prune(); }
+
+    ObjectCache _obj_cache;
 };
 
 class TestMetricsVisitor : public MetricsVisitor {
@@ -283,9 +284,8 @@ TEST_F(StarRocksMetricsTest, PageCacheMetrics) {
     auto cache = StoragePageCache::instance();
     {
         StoragePageCache::CacheKey key("abc", 0);
-        char* buf = new char[1024];
         PageCacheHandle handle;
-        Slice data(buf, 1024);
+        Slice data(new char[1024], 1024);
         cache->insert(key, data, &handle, false);
         auto found = cache->lookup(key, &handle);
         ASSERT_TRUE(found);
