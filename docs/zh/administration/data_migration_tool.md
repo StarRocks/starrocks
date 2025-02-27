@@ -51,6 +51,12 @@ ADMIN SET FRONTEND CONFIG("enable_legacy_compatibility_for_replication"="false")
 
 如果数据迁移的目标集群为存算分离集群，在数据迁移之前，您需要手动关闭 Compaction，并在数据迁移完成后重新开启。
 
+:::tip
+
+如果您使用 StarRocks v3.4.1、v3.3.10 或以后版本，可以跳过该步骤。
+
+:::
+
 1. 您可以通过以下语句查看当前集群是否开启 Compaction：
 
    ```SQL
@@ -79,7 +85,13 @@ ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
 
 ### 禁用列过滤
 
-在 SCAN 阶段过滤未使用列的优化可能会导致查询被迁移的数据时发生崩溃，因此您需要在数据迁移前禁用此优化：
+在 SCAN 阶段过滤未使用列的优化可能会导致查询被迁移的数据时发生崩溃，因此您需要在数据迁移前禁用此优化。
+
+:::tip
+
+如果您使用 StarRocks v3.4.1、v3.3.10、v3.2.15、v3.1.17 或以后版本，可以跳过该步骤。
+
+:::
 
 ```SQL
 SET GLOBAL enable_filter_unused_columns_in_scan_stage=false;
