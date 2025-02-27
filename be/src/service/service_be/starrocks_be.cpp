@@ -223,6 +223,13 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
         LOG(INFO) << process_name << " starts by skipping the datacache initialization";
     }
 
+    EXIT_IF_ERROR(ExecEnv::init_object_cache(global_env));
+    LOG(INFO) << process_name << " start step " << start_step++ << ": object cache init successfully";
+
+    // Init storage page cache.
+    StoragePageCache::create_global_cache(ObjectCache::instance());
+    LOG(INFO) << process_name << " start step " << start_step++ << ": storage page cache init successfully";
+
 #ifdef USE_STAROS
     BlockCache* block_cache = BlockCache::instance();
     if (config::datacache_unified_instance_enable && block_cache->is_initialized()) {
