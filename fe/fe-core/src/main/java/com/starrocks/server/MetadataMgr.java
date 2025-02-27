@@ -32,6 +32,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalCatalogTableBasicInfo;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -611,6 +612,10 @@ public class MetadataMgr {
      * Use this method if you are absolutely sure, otherwise use MetadataMgr#getTable.
      */
     public BasicTable getBasicTable(String catalogName, String dbName, String tblName) {
+        if (catalogName == null) {
+            return getTable(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, tblName);
+        }
+
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return getTable(catalogName, dbName, tblName);
         }
