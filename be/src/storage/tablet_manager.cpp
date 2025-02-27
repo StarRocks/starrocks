@@ -409,9 +409,9 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
 
     // meta lock free shutdown for primary key table. In current impl, TabletUpdates's context
     // is protected by specified lock defined in TabletUpdates itself but not tablet meta lock
-    // It is safe call _stop_and_wait_apply_done out of tablet meta lock
+    // It is safe call stop_and_wait_apply_done out of tablet meta lock
     if (dropped_tablet->updates() != nullptr) {
-        dropped_tablet->updates()->on_shutdown();
+        dropped_tablet->updates()->stop_and_wait_apply_done();
     }
 
     if (flag == kDeleteFiles) {
@@ -501,9 +501,9 @@ Status TabletManager::drop_tablets_on_error_root_path(const std::vector<TabletIn
     for (const auto& dropped_tablet : dropped_tablets) {
         // meta lock free shutdown for primary key table. In current impl, TabletUpdates's context
         // is protected by specified lock defined in TabletUpdates itself but not tablet meta lock
-        // It is safe call _stop_and_wait_apply_done out of tablet meta lock
+        // It is safe call stop_and_wait_apply_done out of tablet meta lock
         if (dropped_tablet->updates() != nullptr) {
-            dropped_tablet->updates()->on_shutdown();
+            dropped_tablet->updates()->stop_and_wait_apply_done();
         }
 
         // make sure dropped tablet state is TABLET_SHUTDOWN IN MEMORY ONLY!
@@ -1536,9 +1536,9 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
 
     // meta lock free shutdown for primary key table. In current impl, TabletUpdates's context
     // is protected by specified lock defined in TabletUpdates itself but not tablet meta lock
-    // It is safe call _stop_and_wait_apply_done out of tablet meta lock
+    // It is safe call stop_and_wait_apply_done out of tablet meta lock
     if (dropped_tablet->updates() != nullptr) {
-        dropped_tablet->updates()->on_shutdown();
+        dropped_tablet->updates()->stop_and_wait_apply_done();
     }
 
     if (flag == kDeleteFiles) {
