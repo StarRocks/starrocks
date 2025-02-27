@@ -79,7 +79,13 @@ ADMIN SET FRONTEND CONFIG("lake_compaction_max_tasks"="-1");
 
 ### Disable column filtering
 
-The optimization for unused column filtering at the Scan stage may cause a crash during queries against the migrated data. You need to disable this optimization before data migration:
+The optimization for unused column filtering at the Scan stage may cause a crash during queries against the migrated data. You need to disable this optimization before data migration.
+
+:::tip
+
+You can skip this step if you are using StarRocks v3.1.17 or later.
+
+:::
 
 ```SQL
 SET GLOBAL enable_filter_unused_columns_in_scan_stage=false;
