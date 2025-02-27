@@ -77,14 +77,11 @@ public:
         }
     };
 
-    // Create global instance of this class
-    static void create_global_cache(ObjectCache* obj_cache);
-
-    static void release_global_cache();
+    void init_metrics();
 
     // Return global instance.
     // Client should call create_global_cache before.
-    static StoragePageCache* instance() { return _s_instance; }
+    static StoragePageCache* instance() { return CacheEnv::GetInstance()->page_cache(); }
 
     StoragePageCache(ObjectCache* obj_cache) : _cache(obj_cache) {}
 
@@ -119,8 +116,6 @@ public:
     void prune();
 
 private:
-    static StoragePageCache* _s_instance;
-
     ObjectCache* _cache = nullptr;
 };
 

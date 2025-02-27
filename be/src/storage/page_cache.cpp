@@ -49,37 +49,18 @@ METRIC_DEFINE_UINT_GAUGE(page_cache_lookup_count, MetricUnit::OPERATIONS);
 METRIC_DEFINE_UINT_GAUGE(page_cache_hit_count, MetricUnit::OPERATIONS);
 METRIC_DEFINE_UINT_GAUGE(page_cache_capacity, MetricUnit::BYTES);
 
-StoragePageCache* StoragePageCache::_s_instance = nullptr;
-
-static void init_metrics() {
+void StoragePageCache::init_metrics() {
     StarRocksMetrics::instance()->metrics()->register_metric("page_cache_lookup_count", &page_cache_lookup_count);
-    StarRocksMetrics::instance()->metrics()->register_hook("page_cache_lookup_count", []() {
-        page_cache_lookup_count.set_value(StoragePageCache::instance()->get_lookup_count());
-    });
+    StarRocksMetrics::instance()->metrics()->register_hook(
+            "page_cache_lookup_count", [this]() { page_cache_lookup_count.set_value(get_lookup_count()); });
 
     StarRocksMetrics::instance()->metrics()->register_metric("page_cache_hit_count", &page_cache_hit_count);
-    StarRocksMetrics::instance()->metrics()->register_hook("page_cache_hit_count", []() {
-        page_cache_hit_count.set_value(StoragePageCache::instance()->get_hit_count());
-    });
+    StarRocksMetrics::instance()->metrics()->register_hook(
+            "page_cache_hit_count", [this]() { page_cache_hit_count.set_value(get_hit_count()); });
 
     StarRocksMetrics::instance()->metrics()->register_metric("page_cache_capacity", &page_cache_capacity);
-    StarRocksMetrics::instance()->metrics()->register_hook("page_cache_capacity", []() {
-        page_cache_capacity.set_value(StoragePageCache::instance()->get_capacity());
-    });
-}
-
-void StoragePageCache::create_global_cache(ObjectCache* obj_cache) {
-    if (_s_instance == nullptr) {
-        _s_instance = new StoragePageCache(obj_cache);
-        init_metrics();
-    }
-}
-
-void StoragePageCache::release_global_cache() {
-    if (_s_instance != nullptr) {
-        delete _s_instance;
-        _s_instance = nullptr;
-    }
+    StarRocksMetrics::instance()->metrics()->register_hook("page_cache_capacity",
+                                                           [this]() { page_cache_capacity.set_value(get_capacity()); });
 }
 
 void StoragePageCache::prune() {

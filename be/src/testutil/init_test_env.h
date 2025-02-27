@@ -77,9 +77,6 @@ int init_test_env(int argc, char** argv) {
     std::vector<StorePath> paths;
     paths.emplace_back(config::storage_root_path);
 
-    auto metadata_mem_tracker = std::make_unique<MemTracker>();
-    auto tablet_schema_mem_tracker = std::make_unique<MemTracker>(-1, "tablet_schema", metadata_mem_tracker.get());
-    auto schema_change_mem_tracker = std::make_unique<MemTracker>();
     auto compaction_mem_tracker = std::make_unique<MemTracker>();
     auto update_mem_tracker = std::make_unique<MemTracker>();
     StorageEngine* engine = nullptr;
@@ -100,18 +97,17 @@ int init_test_env(int argc, char** argv) {
     auto st = global_env->init();
     CHECK(st.ok()) << st;
 
-    auto* exec_env = ExecEnv::GetInstance();
-    // Pagecache is turned on by default, and some test cases require cache to be turned on,
+    // Pagecache is turned off by default, and some test cases require cache to be turned on,
     // and some test cases do not. For easy management, we turn cache off during unit test
     // initialization. If there are test cases that require Pagecache, it must be responsible
     // for managing it.
+    auto* cache_env = CacheEnv::GetInstance();
+    st = cache_env->init(paths);
+    CHECK(st.ok()) << st;
+
+    auto* exec_env = ExecEnv::GetInstance();
     st = exec_env->init(paths);
     CHECK(st.ok()) << st;
-
-    st = exec_env->init_object_cache(global_env);
-    CHECK(st.ok()) << st;
-
-    StoragePageCache::create_global_cache(ObjectCache::instance());
 
     int r = RUN_ALL_TESTS();
 
@@ -130,6 +126,7 @@ int init_test_env(int argc, char** argv) {
     }
 #endif
     exec_env->destroy();
+    cache_env->destroy();
     global_env->stop();
 
     shutdown_tracer();
