@@ -342,13 +342,15 @@ public:
 
 protected:
     MutablePtr shallow_mutate() const {
+#ifndef NDEBUG
+        if (VLOG_IS_ON(1)) {
+            VLOG(1) << "[COW] trigger COW: " << this << ", use_count=" << this->use_count() << ", try to "
+                    << (this->use_count() > 1 ? "deep" : "shadow") << " clone";
+        }
+#endif
         if (this->use_count() > 1) {
             return derived()->clone();
         } else {
-            if (VLOG_IS_ON(1)) {
-                VLOG(1) << "[COW] trigger COW: " << this << ", use_count=" << this->use_count()
-                        << ", try to shadow clone";
-            }
             return assume_mutable();
         }
     }
