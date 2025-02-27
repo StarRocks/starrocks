@@ -1297,14 +1297,20 @@ public class ScalarOperatorFunctions {
         if (split.isNull()) {
             return ConstantOperator.createNull(Type.VARCHAR);
         }
+        String separator = split.getVarchar();
         final StringBuilder resultBuilder = new StringBuilder();
-        for (int i = 0; i < values.length - 1; i++) {
-            if (values[i].isNull()) {
+        boolean first = true;
+        for (ConstantOperator value : values) {
+            if (value.isNull()) {
                 continue;
             }
-            resultBuilder.append(values[i].getVarchar()).append(split.getVarchar());
+            if (first) {
+                first = false;
+            } else {
+                resultBuilder.append(separator);
+            }
+            resultBuilder.append(value.getVarchar());
         }
-        resultBuilder.append(values[values.length - 1].getVarchar());
         return ConstantOperator.createVarchar(resultBuilder.toString());
     }
 
