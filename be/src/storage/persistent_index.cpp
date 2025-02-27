@@ -831,7 +831,7 @@ public:
         uint8_t new_data[8] = {0x79, 0x15, 0xdb, 0xea, 0x36, 0x00, 0x00, 0x00};
         const auto& key = *reinterpret_cast<const KeyType*>(new_data);
         uint64_t hash = FixedKeyHash<KeySize>()(key);
-        LOG(INFO) << "start upsert";
+        LOG(INFO) << "start upsert, hashval: " << hash;
         if (auto [it, inserted] = _map.emplace_with_hash(hash, key, NullIndexValue); inserted) {
             LOG(INFO) << "upsert success";
         } else {
