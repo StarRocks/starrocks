@@ -101,6 +101,7 @@ import io.trino.sql.tree.ArithmeticBinaryExpression;
 import io.trino.sql.tree.ArithmeticUnaryExpression;
 import io.trino.sql.tree.ArrayConstructor;
 import io.trino.sql.tree.AstVisitor;
+import io.trino.sql.tree.AtTimeZone;
 import io.trino.sql.tree.BetweenPredicate;
 import io.trino.sql.tree.BinaryLiteral;
 import io.trino.sql.tree.BooleanLiteral;
@@ -1009,6 +1010,13 @@ public class AstBuilder extends AstVisitor<ParseNode, ParseTreeContext> {
         } catch (AnalysisException e) {
             throw unsupportedException(PARSER_ERROR_MSG.invalidDateFormat(node.getValue()));
         }
+    }
+
+    @Override
+    protected ParseNode visitAtTimeZone(AtTimeZone node, ParseTreeContext context) {
+        Expr dt = (Expr) visit(node.getValue(), context);
+        Expr tz = (Expr) visit(node.getTimeZone(), context);
+        return new FunctionCallExpr("convert_tz", List.of(dt, new VariableExpr("time_zone"), tz));
     }
 
     @Override
