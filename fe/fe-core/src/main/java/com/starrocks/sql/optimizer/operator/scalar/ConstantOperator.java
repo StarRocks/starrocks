@@ -35,6 +35,7 @@ import java.math.RoundingMode;
 import java.text.DecimalFormat;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Objects;
@@ -373,6 +374,11 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
         } else if (type.isDate()) {
             LocalDateTime time = (LocalDateTime) Optional.ofNullable(value).orElse(LocalDateTime.MIN);
             return time.format(DateUtils.DATE_FORMATTER_UNIX);
+        } else if (type.isTime()) {
+            // Time is a double value but we only need int when casting to datetime
+            if (value instanceof Double) {
+                return String.valueOf(((Double) value).intValue());
+            }
         } else if (type.isFloatingPointType()) {
             double val = (double) Optional.ofNullable(value).orElse((double) 0);
             BigDecimal decimal = BigDecimal.valueOf(val);
@@ -499,8 +505,8 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
     }
 
     public Optional<ConstantOperator> castTo(Type desc) {
-        if (type.isTime() || desc.isTime()) {
-            // Don't support constant time cast in FE
+        if ((type.isTime() || desc.isTime()) && !(type.isTime() && desc.isDatetime())) {
+            // Don't support constant time cast to types other than datetime in FE
             return Optional.empty();
         }
 
@@ -558,12 +564,25 @@ public final class ConstantOperator extends ScalarOperator implements Comparable
                 }
                 res = ConstantOperator.createDouble(Double.parseDouble(childString));
             } else if (desc.isDate() || desc.isDatetime()) {
-                String dateStr = StringUtils.strip(childString, "\r\n\t ");
-                LocalDateTime dateTime = DateUtils.parseStrictDateTime(dateStr);
-                if (Type.DATE.equals(desc)) {
-                    dateTime = dateTime.truncatedTo(ChronoUnit.DAYS);
+                if (type.isTime()) {
+                    // Cast time to datetime
+                    String timeStr = StringUtils.strip(childString, "\r\n\t ");
+                    int time = Integer.parseInt(timeStr);
+                    int hours = time / 3600;
+                    int minutes = (time % 3600) / 60;
+                    int seconds = time % 60;
+                    LocalDate date = LocalDate.now();
+                    LocalTime localTime = LocalTime.of(hours, minutes, seconds);
+                    LocalDateTime dateTime = LocalDateTime.of(date, localTime);
+                    res = ConstantOperator.createDatetime(dateTime, desc);
+                } else {
+                    String dateStr = StringUtils.strip(childString, "\r\n\t ");
+                    LocalDateTime dateTime = DateUtils.parseStrictDateTime(dateStr);
+                    if (Type.DATE.equals(desc)) {
+                        dateTime = dateTime.truncatedTo(ChronoUnit.DAYS);
+                    }
+                    res = ConstantOperator.createDatetime(dateTime, desc);
                 }
-                res = ConstantOperator.createDatetime(dateTime, desc);
             } else if (desc.isDecimalV2()) {
                 res = ConstantOperator.createDecimal(BigDecimal.valueOf(Double.parseDouble(childString)), Type.DECIMALV2);
             } else if (desc.isDecimalV3()) {
