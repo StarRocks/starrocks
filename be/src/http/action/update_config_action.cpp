@@ -129,8 +129,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 }
                 space.size = disk_size;
             }
-            Status st = BlockCache::instance()->adjust_disk_spaces(spaces);
-            return st;
+            return BlockCache::instance()->update_disk_spaces(spaces);
         });
         _config_callback.emplace("max_compaction_concurrency", [&]() -> Status {
             if (!config::enable_event_based_compaction_framework) {
