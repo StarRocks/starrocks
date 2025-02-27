@@ -54,8 +54,8 @@ Status MapApplyExpr::prepare(starrocks::RuntimeState* state, starrocks::ExprCont
 }
 
 StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
-    std::vector<ColumnPtr> input_columns;
-    NullColumnPtr input_null_map = nullptr;
+    Columns input_columns;
+    NullColumn::MutablePtr input_null_map = nullptr;
     MapColumn* input_map = nullptr;
     ColumnPtr input_map_ptr_ref = nullptr; // hold shared_ptr to avoid early deleted.
     // step 1: get input columns from map(key_col, value_col)
@@ -77,10 +77,10 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
                     nullable->null_column()->get_data(),
                     down_cast<MapColumn*>(data_column.get())->offsets_column()->get_data());
             if (input_null_map) {
-                input_null_map =
-                        FunctionHelper::union_null_column(nullable->null_column(), input_null_map); // merge null
+                input_null_map = FunctionHelper::union_null_column(nullable->null_column(),
+                                                                   std::move(input_null_map)); // merge null
             } else {
-                input_null_map = ColumnHelper::as_column<NullColumn>(nullable->null_column()->clone_shared());
+                input_null_map = ColumnHelper::as_column<NullColumn>(nullable->null_column()->clone());
             }
         }
         DCHECK(data_column->is_map());
@@ -152,16 +152,15 @@ StatusOr<ColumnPtr> MapApplyExpr::evaluate_checked(ExprContext* context, Chunk* 
                                                  map_col->keys_column()->size()));
     }
 
-    auto res_map = std::make_shared<MapColumn>(
-            map_col->keys_column(), map_col->values_column(),
-            ColumnHelper::as_column<UInt32Column>(input_map->offsets_column()->clone_shared()));
+    auto res_map = MapColumn::create(map_col->keys_column(), map_col->values_column(),
+                                     ColumnHelper::as_column<UInt32Column>(input_map->offsets_column()->clone()));
 
     if (_maybe_duplicated_keys && res_map->size() > 0) {
         res_map->remove_duplicated_keys();
     }
     // attach null info
     if (input_null_map != nullptr) {
-        return NullableColumn::create(std::move(res_map), input_null_map);
+        return NullableColumn::create(std::move(res_map), std::move(input_null_map));
     }
     return res_map;
 }

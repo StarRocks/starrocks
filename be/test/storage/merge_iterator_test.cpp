@@ -135,7 +135,7 @@ TEST_F(MergeIteratorTest, merge_one) {
     ASSERT_TRUE(iter->init_encoded_schema(EMPTY_GLOBAL_DICTMAPS).ok());
 
     auto get_row = [](const ChunkPtr& chunk, size_t row) -> int32_t {
-        auto c = std::dynamic_pointer_cast<FixedLengthColumn<int32_t>>(chunk->get_column_by_index(0));
+        auto c = FixedLengthColumn<int32_t>::dynamic_pointer_cast(chunk->get_column_by_index(0));
         return c->get_data()[row];
     };
 
@@ -174,7 +174,7 @@ TEST_F(MergeIteratorTest, test_issue_6167) {
     auto iter = new_heap_merge_iterator(subs);
 
     auto get_row = [](const ChunkPtr& chunk, size_t row) -> int32_t {
-        auto c = std::dynamic_pointer_cast<FixedLengthColumn<int32_t>>(chunk->get_column_by_index(0));
+        auto c = FixedLengthColumn<int32_t>::dynamic_pointer_cast(chunk->get_column_by_index(0));
         return c->get_data()[row];
     };
 

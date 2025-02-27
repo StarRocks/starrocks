@@ -49,7 +49,7 @@ TEST_F(PercentileFunctionsTest, percentileHashTest) {
     s->append(1);
     s->append(2);
     s->append(3);
-    columns.push_back(s);
+    columns.push_back(std::move(s));
 
     auto column = PercentileFunctions::percentile_hash(ctx, columns).value();
     ASSERT_TRUE(column->is_object());
@@ -63,14 +63,14 @@ TEST_F(PercentileFunctionsTest, percentileHashTest) {
 TEST_F(PercentileFunctionsTest, percentileNullTest) {
     Columns columns;
     auto c1 = PercentileColumn::create();
-    auto c1_null = NullableColumn::create(c1, NullColumn::create());
+    auto c1_null = NullableColumn::create(std::move(c1), NullColumn::create());
     c1_null->append_nulls(1);
-    columns.push_back(c1_null);
+    columns.emplace_back(std::move(c1_null));
 
     auto c2 = DoubleColumn::create();
-    auto c2_null = NullableColumn::create(c2, NullColumn::create());
+    auto c2_null = NullableColumn::create(std::move(c2), NullColumn::create());
     c2_null->append_nulls(1);
-    columns.push_back(c2_null);
+    columns.emplace_back(std::move(c2_null));
 
     ColumnPtr column = PercentileFunctions::percentile_approx_raw(ctx, columns).value();
     ASSERT_TRUE(column->is_nullable());

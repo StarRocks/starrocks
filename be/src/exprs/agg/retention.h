@@ -43,7 +43,7 @@ struct RetentionState {
         size_t array_size = 0;
         if (ele_col.is_nullable()) {
             const auto& null_column = down_cast<const NullableColumn&>(ele_col);
-            auto data_column = down_cast<BooleanColumn*>(null_column.data_column().get());
+            auto data_column = down_cast<const BooleanColumn*>(null_column.data_column().get());
             size_t offset = offsets[row_num];
             array_size = offsets[row_num + 1] - offset;
 

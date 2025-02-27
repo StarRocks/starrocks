@@ -100,7 +100,7 @@ Status ColumnModePartialUpdateHandler::_load_upserts(const RowsetUpdateStatePara
     }
 
     // 2. build schema.
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         std::string err_msg =
                 fmt::format("create column for primary key encoder failed, tablet_id: {}", params.tablet->id());

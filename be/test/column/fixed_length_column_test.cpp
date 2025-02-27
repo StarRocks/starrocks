@@ -26,7 +26,7 @@ namespace starrocks {
 
 // NOLINTNEXTLINE
 TEST(FixedLengthColumnTest, test_basic) {
-    auto column = FixedLengthColumn<int32_t>::create();
+    FixedLengthColumn<int32_t>::Ptr column = FixedLengthColumn<int32_t>::create();
     for (int i = 0; i < 100; i++) {
         column->append(i);
     }
@@ -85,7 +85,7 @@ TEST(FixedLengthColumnTest, test_nullable) {
         null_column->append(i % 2 ? 1 : 0);
     }
 
-    auto column = NullableColumn::create(std::move(data_column), std::move(null_column));
+    NullableColumn::Ptr column = NullableColumn::create(std::move(data_column), std::move(null_column));
 
     ASSERT_EQ(false, column->is_numeric());
     ASSERT_EQ(100, column->size());
@@ -148,7 +148,7 @@ TEST(FixedLengthColumnTest, test_nullable) {
 
         column->filter(filter);
         auto result = column;
-        auto data_result = std::static_pointer_cast<Int32Column>(result->data_column());
+        auto data_result = Int32Column::static_pointer_cast(result->data_column());
 
         ASSERT_EQ(50, result->size());
         for (int j = 0; j < 50; ++j) {
@@ -165,8 +165,8 @@ TEST(FixedLengthColumnTest, test_nullable) {
 // NOLINTNEXTLINE
 TEST(FixedLengthColumnTest, test_append_strings) {
     std::vector<Slice> values{{"hello"}, {"starrocks"}};
-    auto c1 = Int32Column::create();
-    auto nullable_c1 = NullableColumn::create(c1, NullColumn::create());
+    Int32Column::Ptr c1 = Int32Column::create();
+    NullableColumn::Ptr nullable_c1 = NullableColumn::create(c1, NullColumn::create());
     ASSERT_FALSE(c1->append_strings(values));
     ASSERT_FALSE(nullable_c1->append_strings(values.data(), values.size()));
 }
@@ -178,7 +178,7 @@ TEST(FixedLengthColumnTest, test_append_numbers) {
     size_t length = values.size() * sizeof(values[0]);
 
     // FixedLengthColumn
-    auto c1 = Int32Column::create();
+    Int32Column::Ptr c1 = Int32Column::create();
     ASSERT_EQ(values.size(), c1->append_numbers(buff, length));
     ASSERT_EQ(values.size(), c1->size());
     for (size_t i = 0; i < values.size(); i++) {
@@ -187,7 +187,7 @@ TEST(FixedLengthColumnTest, test_append_numbers) {
     }
 
     // Nullable FixedLengthColumn
-    auto c2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    NullableColumn::Ptr c2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
     ASSERT_EQ(values.size(), c2->append_numbers(buff, length));
     ASSERT_EQ(values.size(), c2->size());
     for (size_t i = 0; i < values.size(); i++) {
@@ -199,11 +199,11 @@ TEST(FixedLengthColumnTest, test_append_numbers) {
 // NOLINTNEXTLINE
 TEST(FixedLengthColumnTest, test_append_nulls) {
     // FixedLengthColumn
-    auto c1 = Int32Column::create();
+    Int32Column::Ptr c1 = Int32Column::create();
     ASSERT_FALSE(c1->append_nulls(10));
 
     // NullableColumn
-    auto c2 = NullableColumn::create(Int64Column::create(), NullColumn::create());
+    NullableColumn::Ptr c2 = NullableColumn::create(Int64Column::create(), NullColumn::create());
     ASSERT_TRUE(c2->append_nulls(10));
     ASSERT_EQ(10U, c2->size());
     for (int i = 0; i < 10; i++) {
@@ -214,7 +214,7 @@ TEST(FixedLengthColumnTest, test_append_nulls) {
 // NOLINTNEXTLINE
 TEST(FixedLengthColumnTest, test_append_defaults) {
     // FixedLengthColumn
-    auto c1 = Int32Column::create();
+    Int32Column::Ptr c1 = Int32Column::create();
     c1->append_default(10);
     ASSERT_EQ(10U, c1->size());
     for (int i = 0; i < 10; i++) {
@@ -222,7 +222,7 @@ TEST(FixedLengthColumnTest, test_append_defaults) {
     }
 
     // NullableColumn
-    auto c2 = NullableColumn::create(Int16Column::create(), NullColumn::create());
+    NullableColumn::Ptr c2 = NullableColumn::create(Int16Column::create(), NullColumn::create());
     c2->append_default(10);
     ASSERT_EQ(10U, c2->size());
     for (int i = 0; i < 10; i++) {
@@ -235,8 +235,8 @@ TEST(FixedLengthColumnTest, test_compare_at) {
     // int32 basic
     {
         std::vector<int32_t> numbers{1, 2, 3, 4, 5, 6, 7};
-        auto c1 = Int32Column::create();
-        auto c2 = Int32Column::create();
+        Int32Column::Ptr c1 = Int32Column::create();
+        Int32Column::Ptr c2 = Int32Column::create();
         c1->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
         c2->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
         for (size_t i = 0; i < numbers.size(); i++) {
@@ -253,8 +253,8 @@ TEST(FixedLengthColumnTest, test_compare_at) {
     // int32 boundary test
     {
         std::vector<int32_t> numbers{-2147483648, 1514736000, 1577808000, 2147483647};
-        auto c1 = Int32Column::create();
-        auto c2 = Int32Column::create();
+        Int32Column::Ptr c1 = Int32Column::create();
+        Int32Column::Ptr c2 = Int32Column::create();
         c1->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
         c2->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
         for (size_t i = 0; i < numbers.size(); i++) {
@@ -271,8 +271,8 @@ TEST(FixedLengthColumnTest, test_compare_at) {
     // double
     {
         std::vector<double> numbers{1, 2, 3, 4, 5, 6, 7};
-        auto c1 = DoubleColumn::create();
-        auto c2 = DoubleColumn::create();
+        DoubleColumn::Ptr c1 = DoubleColumn::create();
+        DoubleColumn::Ptr c2 = DoubleColumn::create();
         c1->append_numbers(numbers.data(), numbers.size() * sizeof(double));
         c1->append(34315.800000033356);
         c2->append_numbers(numbers.data(), numbers.size() * sizeof(double));
@@ -294,8 +294,8 @@ TEST(FixedLengthColumnTest, test_compare_at) {
     // nullable int32
     {
         std::vector<int32_t> numbers{1, 2, 3, 4, 5, 6, 7};
-        auto c1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
-        auto c2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        NullableColumn::Ptr c1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        NullableColumn::Ptr c2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
         c1->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
         c2->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
         for (size_t i = 0; i < numbers.size(); i++) {
@@ -323,8 +323,8 @@ TEST(FixedLengthColumnTest, test_compare_at) {
     }
     // big int
     {
-        auto c1 = NullableColumn::create(Int64Column::create(), NullColumn::create());
-        auto c2 = NullableColumn::create(Int64Column::create(), NullColumn::create());
+        NullableColumn::Ptr c1 = NullableColumn::create(Int64Column::create(), NullColumn::create());
+        NullableColumn::Ptr c2 = NullableColumn::create(Int64Column::create(), NullColumn::create());
         c1->append_datum(Datum(int64_t(53988727729812)));
         c2->append_datum(Datum(int64_t(10872854479952)));
         ASSERT_EQ(1, c1->compare_at(0, 0, *c2, -1));
@@ -333,8 +333,8 @@ TEST(FixedLengthColumnTest, test_compare_at) {
     }
     // large int
     {
-        auto c1 = NullableColumn::create(Int128Column::create(), NullColumn::create());
-        auto c2 = NullableColumn::create(Int128Column::create(), NullColumn::create());
+        NullableColumn::Ptr c1 = NullableColumn::create(Int128Column::create(), NullColumn::create());
+        NullableColumn::Ptr c2 = NullableColumn::create(Int128Column::create(), NullColumn::create());
         c1->append_datum(Datum(int128_t(5398872772981245727)));
         c2->append_datum(Datum(int128_t(1087285447995287452)));
         ASSERT_EQ(1, c1->compare_at(0, 0, *c2, -1));
@@ -345,7 +345,7 @@ TEST(FixedLengthColumnTest, test_compare_at) {
 
 // NOLINTNEXTLINE
 TEST(FixedLengthColumnTest, test_decimal) {
-    auto dc = DecimalColumn::create();
+    DecimalColumn::Ptr dc = DecimalColumn::create();
 
     dc->append(DecimalV2Value(1));
     dc->append(DecimalV2Value(2));
@@ -393,8 +393,8 @@ TEST(FixedLengthColumnTest, test_append_numeric) {
 
 // NOLINTNEXTLINE
 TEST(FixedLengthColumnTest, test_append_nullable_numeric) {
-    auto c1 = NullableColumn::create(FixedLengthColumn<int64_t>::create(), NullColumn::create());
-    auto c2 = NullableColumn::create(FixedLengthColumn<int64_t>::create(), NullColumn::create());
+    NullableColumn::Ptr c1 = NullableColumn::create(FixedLengthColumn<int64_t>::create(), NullColumn::create());
+    NullableColumn::Ptr c2 = NullableColumn::create(FixedLengthColumn<int64_t>::create(), NullColumn::create());
     c1->append_datum(Datum((int64_t)0));
 
     c2->append_nulls(1);
@@ -429,8 +429,8 @@ TEST(FixedLengthColumnTest, test_assign) {
     // int32
     {
         std::vector<int32_t> numbers{1, 2, 3, 4, 5, 6, 7};
-        auto c1 = Int32Column::create();
-        auto c2 = Int32Column::create();
+        Int32Column::Ptr c1 = Int32Column::create();
+        Int32Column::Ptr c2 = Int32Column::create();
         c1->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
         c2->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
 
@@ -447,8 +447,8 @@ TEST(FixedLengthColumnTest, test_assign) {
     // nullable int32
     {
         std::vector<int32_t> numbers{1, 2, 3, 4, 5, 6, 7};
-        auto c1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
-        auto c2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        NullableColumn::Ptr c1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        NullableColumn::Ptr c2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
         c1->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
         c1->append_nulls(1);
         c2->append_numbers(numbers.data(), numbers.size() * sizeof(int32_t));
@@ -547,14 +547,15 @@ TEST(FixedLengthColumnTest, test_xor_checksum) {
 }
 
 TEST(FixedLengthColumnTest, test_compare_row) {
-    auto column = FixedLengthColumn<int32_t>::create();
+    auto mutable_column = FixedLengthColumn<int32_t>::create();
     for (int i = 0; i <= 100; i++) {
-        column->append(i);
+        mutable_column->append(i);
     }
 
-    CompareVector cmp_vector(column->size());
+    CompareVector cmp_vector(mutable_column->size());
 
     // ascending
+    ColumnPtr column = std::move(mutable_column);
     EXPECT_EQ(1, compare_column(column, cmp_vector, {30}, SortDesc(1, 1)));
     EXPECT_EQ(30, std::count(cmp_vector.begin(), cmp_vector.end(), -1));
     EXPECT_EQ(70, std::count(cmp_vector.begin(), cmp_vector.end(), 1));
@@ -628,7 +629,7 @@ TEST(FixedLengthColumnTest, test_fill_range) {
     void* buff = values.data();
     size_t length = values.size() * sizeof(values[0]);
 
-    auto c1 = Int64Column::create();
+    Int64Column::Ptr c1 = Int64Column::create();
     ASSERT_EQ(values.size(), c1->append_numbers(buff, length));
     ASSERT_EQ(values.size(), c1->size());
 

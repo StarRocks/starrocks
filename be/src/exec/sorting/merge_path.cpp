@@ -625,7 +625,7 @@ void detail::LeafNode::process_input(const int32_t parallel_idx) {
 ChunkPtr detail::LeafNode::_generate_ordinal(const size_t chunk_id, const size_t num_rows) {
     static TypeDescriptor s_type_desc = TypeDescriptor(TYPE_BIGINT);
     static Chunk::SlotHashMap s_slot_map = {{0, 0}};
-    ColumnPtr ordinal_column = ColumnHelper::create_column(s_type_desc, false);
+    MutableColumnPtr ordinal_column = ColumnHelper::create_column(s_type_desc, false);
     ordinal_column->resize(num_rows);
     auto* raw_array = down_cast<Int64Column*>(ordinal_column.get())->get_data().data();
 
