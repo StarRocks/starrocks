@@ -75,7 +75,19 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         List<GsonUtils.ExpressionSerializedObject> serializedPartitionExprs = Lists.newArrayList();
         for (Expr partitionExpr : partitionExprs) {
             if (partitionExpr != null) {
-                serializedPartitionExprs.add(new GsonUtils.ExpressionSerializedObject(partitionExpr.toSql()));
+                if (partitionExpr instanceof FunctionCallExpr) {
+                    Expr cloneExpr = partitionExpr.clone();
+                    for (int i = 0; i < cloneExpr.getChildren().size(); i++) {
+                        Expr child = cloneExpr.getChildren().get(i);
+                        if (child instanceof SlotRef) {
+                            cloneExpr.setChild(i, new SlotRef(null, ((SlotRef) child).getColumnName()));
+                            break;
+                        }
+                    }
+                    serializedPartitionExprs.add(new GsonUtils.ExpressionSerializedObject(cloneExpr.toSql()));
+                } else {
+                    serializedPartitionExprs.add(new GsonUtils.ExpressionSerializedObject(partitionExpr.toSql()));
+                }
             }
         }
         this.serializedPartitionExprs = serializedPartitionExprs;
