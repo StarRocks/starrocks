@@ -347,11 +347,19 @@ static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_vie
     }
     auto t1 = butil::gettimeofday_ms();
     g_metadata_travel_latency << (t1 - t0);
+<<<<<<< HEAD
 
+=======
+>>>>>>> 421d65613 ([BugFix] Fix the bug of incorrect updates in the vacuum version. (#56273))
     if (!skip_check_grace_timestamp) {
         // All tablet metadata files encountered were created after the grace timestamp, there were no files to delete
+        // The final_retain_version is set to min_retain_version or minmum exist version which has garbage files.
+        // So we set vacuumed_version to `final_retain_version - 1` to avoid the garbage files of final_retain_version can
+        // not be deleted
+        *vacuumed_version = final_retain_version - 1;
         return Status::OK();
     }
+    *vacuumed_version = final_retain_version;
     DCHECK_LE(version, final_retain_version);
     for (auto v = version + 1; v < final_retain_version; v++) {
         RETURN_IF_ERROR(metafile_deleter->delete_file(join_path(meta_dir, tablet_metadata_filename(tablet_id, v))));
@@ -382,7 +390,11 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
     auto metafile_delete_cb = [=](const std::vector<std::string>& files) {
         erase_tablet_metadata_from_metacache(tablet_mgr, files);
     };
+<<<<<<< HEAD
 
+=======
+    int64_t final_vacuum_version = std::numeric_limits<int64_t>::max();
+>>>>>>> 421d65613 ([BugFix] Fix the bug of incorrect updates in the vacuum version. (#56273))
     for (auto tablet_id : tablet_ids) {
         AsyncFileDeleter datafile_deleter(config::lake_vacuum_min_batch_delete_size);
         AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
@@ -390,9 +402,17 @@ static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view
                                                 &datafile_deleter, &metafile_deleter, vacuumed_file_size));
         RETURN_IF_ERROR(datafile_deleter.finish());
         RETURN_IF_ERROR(metafile_deleter.finish());
+<<<<<<< HEAD
+=======
+        if (final_vacuum_version > tablet_vacuumed_version) {
+            // set partition vacuumed_version to min tablet vacuumed version
+            final_vacuum_version = tablet_vacuumed_version;
+        }
+>>>>>>> 421d65613 ([BugFix] Fix the bug of incorrect updates in the vacuum version. (#56273))
         (*vacuumed_files) += datafile_deleter.delete_count();
         (*vacuumed_files) += metafile_deleter.delete_count();
     }
+    *vacuumed_version = final_vacuum_version;
     return Status::OK();
 }
 
