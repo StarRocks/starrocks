@@ -179,7 +179,7 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_tables" = "11111;22222");
 - Type：String
 - Unit：-
 - Is mutable：Yes
-- Description：Disable compaction for certain tables, does not affect compaction that has started. Value is Table Id, seperated by ';'.
+- Description：Disable compaction for certain tables. This will not affect compaction that has started. The value of this item is table ID. Multiple values are separated by ';'.
 - Introduced in：v3.2.7
 
 #### CN parameters
