@@ -890,4 +890,51 @@ StatusOr<TabletAndRowsets> TabletManager::capture_tablet_and_rowsets(int64_t tab
 
     return std::make_tuple(std::move(tablet_ptr), std::move(rowsets));
 }
+
+StatusOr<int64_t> TabletManager::collect_tablet_storage_size(int64_t tablet_id, int64_t curr_version,
+                                                             int64_t vacuum_version) {
+    auto root_dir = tablet_root_location(tablet_id);
+    auto data_dir = join_path(root_dir, lake::kSegmentDirectoryName);
+    auto version = curr_version;
+    int64_t total_size = 0;
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(root_dir));
+    while (version >= vacuum_version) {
+        // TODO(zhangqiang)
+        // not found metadata will cause one api call
+        auto res = get_tablet_metadata(tablet_id, version, false);
+        if (res.status().is_not_found()) {
+            break;
+        } else if (!res.ok()) {
+            return res.status();
+        }
+        auto metadata = std::move(res).value();
+        // first metadata, get rowset size
+        if (version == curr_version) {
+            for (const auto& rowset : metadata->rowsets()) {
+                total_size += rowset.data_size();
+            }
+        }
+        // the compaction input files and ophan files in vacuum version are removed
+        if (version > vacuum_version) {
+            for (const auto& rowset : metadata->compaction_inputs()) {
+                total_size += rowset.data_size();
+            }
+
+            for (const auto& file : metadata->orphan_files()) {
+                total_size += file.size();
+            }
+
+            for (auto& [_, file_meta] : metadata->delvec_meta().version_to_file()) {
+                total_size += file_meta.size();
+            }
+
+            for (const auto& sstable : metadata->sstable_meta().sstables()) {
+                total_size += sstable.filesize();
+            }
+        }
+        version = metadata->prev_garbage_version();
+    }
+    return total_size;
+}
+
 } // namespace starrocks::lake

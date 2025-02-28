@@ -650,7 +650,7 @@ TEST_F(LakeTabletManagerTest, test_get_schema_file_concurrently) {
     bthreads.reserve(10);
     for (int i = 0; i < 10; i++) {
         ASSIGN_OR_ABORT(auto bid, bthreads::start_bthread(fn_read_schema));
-        bthreads.emplace_back(bid);
+        bthreads.push_back(bid);
     }
 
     for (auto&& t : pthreads) {
@@ -659,6 +659,70 @@ TEST_F(LakeTabletManagerTest, test_get_schema_file_concurrently) {
     for (auto&& t : bthreads) {
         bthread_join(t, nullptr);
     }
+}
+
+TEST_F(LakeTabletManagerTest, collect_tablet_storage_size) {
+    // first ingestion
+    {
+        starrocks::TabletMetadata metadata;
+        metadata.set_id(12345);
+        metadata.set_version(2);
+        for (int i = 2; i < 5; i++) {
+            auto rowset_meta_pb = metadata.add_rowsets();
+            rowset_meta_pb->set_id(i);
+            rowset_meta_pb->set_data_size(1024);
+        }
+
+        EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+    }
+    // compaction
+    // input_rowset {2,3} output_rowset{5}
+    {
+        starrocks::TabletMetadata metadata;
+        metadata.set_id(12345);
+        metadata.set_version(3);
+        auto rowset_meta_pb1 = metadata.add_rowsets();
+        rowset_meta_pb1->set_id(4);
+        rowset_meta_pb1->set_data_size(1024);
+        auto rowset_meta_pb2 = metadata.add_rowsets();
+        rowset_meta_pb2->set_id(5);
+        rowset_meta_pb2->set_data_size(2048);
+
+        for (int i = 2; i < 4; i++) {
+            auto rowset_meta_pb = metadata.add_compaction_inputs();
+            rowset_meta_pb->set_id(i);
+            rowset_meta_pb->set_data_size(1024);
+        }
+        EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+    }
+    // ingestion
+    {
+        auto res = _tablet_manager->get_tablet_metadata(12345, 3);
+        EXPECT_TRUE(res.ok());
+        auto metadata = std::make_shared<TabletMetadataPB>(*res.value());
+        metadata->set_version(4);
+        metadata->set_prev_garbage_version(3);
+        metadata->mutable_compaction_inputs()->Clear();
+        auto rowset_meta_pb = metadata->add_rowsets();
+        rowset_meta_pb->set_id(6);
+        rowset_meta_pb->set_data_size(2048);
+        EXPECT_OK(_tablet_manager->put_tablet_metadata(metadata));
+    }
+    auto res1 = _tablet_manager->collect_tablet_storage_size(12345, 4, 2);
+    ASSERT_TRUE(res1.ok());
+    ASSERT_EQ(res1.value(), 7168);
+
+    auto res2 = _tablet_manager->collect_tablet_storage_size(12345, 4, 3);
+    ASSERT_TRUE(res2.ok());
+    ASSERT_EQ(res2.value(), 5120);
+
+    auto res3 = _tablet_manager->collect_tablet_storage_size(12345, 4, 4);
+    ASSERT_TRUE(res3.ok());
+    ASSERT_EQ(res3.value(), 5120);
+
+    auto res4 = _tablet_manager->collect_tablet_storage_size(12345, 3, 3);
+    ASSERT_TRUE(res4.ok());
+    ASSERT_EQ(res4.value(), 3072);
 }
 
 #ifdef USE_STAROS

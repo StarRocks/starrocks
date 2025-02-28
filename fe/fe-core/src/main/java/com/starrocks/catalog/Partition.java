@@ -223,7 +223,7 @@ public class Partition extends MetaObject implements GsonPostProcessable {
     public long getDataSize() {
         long dataSize = 0;
         for (PhysicalPartition subPartition : getSubPartitions()) {
-            dataSize += subPartition.storageDataSize();
+            dataSize += subPartition.dataSize();
         }
         return dataSize;
     }

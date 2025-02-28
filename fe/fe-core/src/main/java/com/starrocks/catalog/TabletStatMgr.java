@@ -270,8 +270,10 @@ public class TabletStatMgr extends FrontendDaemon {
         try {
             long visibleVersion = partition.getVisibleVersion();
             long visibleVersionTime = partition.getVisibleVersionTime();
+            long vacuumVersion = partition.getLastSuccVacuumVersion();
             List<Tablet> tablets = new ArrayList<>(partition.getBaseIndex().getTablets());
-            return new PartitionSnapshot(dbName, tableName, partitionId, visibleVersion, visibleVersionTime, tablets);
+            return new PartitionSnapshot(dbName, tableName, partitionId, visibleVersion, vacuumVersion,
+                                         visibleVersionTime, tablets);
         } finally {
             locker.unLockDatabase(db.getId(), LockType.READ);
         }
@@ -282,7 +284,11 @@ public class TabletStatMgr extends FrontendDaemon {
                                                             @NotNull PhysicalPartition partition) {
         PartitionSnapshot snapshot = createPartitionSnapshot(db, table, partition);
         long visibleVersionTime = snapshot.visibleVersionTime;
-        snapshot.tablets.removeIf(t -> ((LakeTablet) t).getDataSizeUpdateTime() >= visibleVersionTime);
+        snapshot.tablets.removeIf(t -> {
+            LakeTablet lakeTablet = (LakeTablet) t;
+            return lakeTablet.getDataSizeUpdateTime() >= visibleVersionTime &&
+                   lakeTablet.getDataSizeUpdateTime() >= partition.getLastVacuumTime();
+        });
         if (snapshot.tablets.isEmpty()) {
             LOG.debug("Skipped tablet stat collection of partition {}", snapshot.debugName());
             return null;
@@ -307,14 +313,16 @@ public class TabletStatMgr extends FrontendDaemon {
         private final long partitionId;
         private final long visibleVersion;
         private final long visibleVersionTime;
+        private final long vacuumVersion;
         private final List<Tablet> tablets;
 
         PartitionSnapshot(String dbName, String tableName, long partitionId, long visibleVersion,
-                          long visibleVersionTime, List<Tablet> tablets) {
+                          long vacuumVersion, long visibleVersionTime, List<Tablet> tablets) {
             this.dbName = dbName;
             this.tableName = tableName;
             this.partitionId = partitionId;
             this.visibleVersion = visibleVersion;
+            this.vacuumVersion = vacuumVersion;
             this.visibleVersionTime = visibleVersionTime;
             this.tablets = Objects.requireNonNull(tablets);
         }
@@ -329,6 +337,7 @@ public class TabletStatMgr extends FrontendDaemon {
         private final String tableName;
         private final long partitionId;
         private final long version;
+        private final long vacuumVersion;
         private final Map<Long, Tablet> tablets;
         private long collectStatTime = 0;
         private List<Future<TabletStatResponse>> responseList;
@@ -338,6 +347,7 @@ public class TabletStatMgr extends FrontendDaemon {
             this.tableName = Objects.requireNonNull(snapshot.tableName, "tableName is null");
             this.partitionId = snapshot.partitionId;
             this.version = snapshot.visibleVersion;
+            this.vacuumVersion = snapshot.vacuumVersion;
             this.tablets = new HashMap<>();
             for (Tablet tablet : snapshot.tablets) {
                 this.tablets.put(tablet.getId(), tablet);
@@ -367,6 +377,7 @@ public class TabletStatMgr extends FrontendDaemon {
                 TabletInfo tabletInfo = new TabletInfo();
                 tabletInfo.tabletId = tablet.getId();
                 tabletInfo.version = version;
+                tabletInfo.vacuumVersion = vacuumVersion;
                 beToTabletInfos.computeIfAbsent(node, k -> Lists.newArrayList()).add(tabletInfo);
             }
 
@@ -406,6 +417,7 @@ public class TabletStatMgr extends FrontendDaemon {
                             LakeTablet tablet = (LakeTablet) tablets.get(stat.tabletId);
                             tablet.setDataSize(stat.dataSize);
                             tablet.setRowCount(stat.numRows);
+                            tablet.setStorageSize(stat.storageSize);
                             tablet.setDataSizeUpdateTime(collectStatTime);
                         }
                     }

@@ -38,7 +38,12 @@ public abstract class Tablet extends MetaObject implements Writable {
         return id;
     }
 
+    // DataSize is the sum of the sizes of the data in valid versions that are retained.
     public abstract long getDataSize(boolean singleReplica);
+
+    // StorageSize is the sum of the sizes of all files in the tablet storage path, including the invalid files 
+    // that have not been deleted yet.
+    public abstract long getStorageSize(boolean singleReplica);
 
     public abstract long getRowCount(long version);
 
