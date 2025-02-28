@@ -39,6 +39,13 @@ def create_app(model_file_arg=None):
     model = xgb.Booster()
     model.load_model(model_file_arg)
 
+    @app.get("/health_check")
+    async def health_check(request: Request):
+        return Response(
+            content="ok",
+            media_type="text/plain"
+        )
+            
     @app.post("/predict_csv")
     async def predict_csv(request: Request):
         try:
