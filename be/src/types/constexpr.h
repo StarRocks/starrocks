@@ -31,6 +31,12 @@ constexpr int HLL_EMPTY_SIZE = 1;
 const static int MAX_HLL_LOG_K = 20;
 const static uint8_t DEFAULT_HLL_LOG_K = 17;
 
+const static uint16_t DEFAULT_QUANTILE_K = 128;
+const static uint64_t DEFAULT_COUNTER_NUM = 10;
+
+const static uint8_t DEFAULT_FREQUENT_LG_MIn_SIZE = 3;
+const static uint8_t DEFAULT_FREQUENT_LG_MAX_SIZE = 21;
+
 // For JSON type
 constexpr int kJsonDefaultSize = 128;
 constexpr int kJsonMetaDefaultFormatVersion = 1;
