@@ -273,7 +273,7 @@ void DiskSpaceMonitor::_adjust_datacache_callback() {
         }
         lck.unlock();
 
-        static const int64_t kWaitTimeout = config::datacache_disk_adjust_interval_seconds * 1000 * 1000;
+        int64_t kWaitTimeout = config::datacache_disk_adjust_interval_seconds * 1000 * 1000;
         static const int64_t kCheckInterval = 1000 * 1000;
         auto cond = [this]() { return is_stopped(); };
         auto ret = Awaitility().timeout(kWaitTimeout).interval(kCheckInterval).until(cond);
