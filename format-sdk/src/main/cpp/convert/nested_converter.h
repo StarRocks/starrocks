@@ -95,6 +95,34 @@ public:
         return arrow::Status::OK();
     }
 
+    arrow::Result<std::shared_ptr<arrow::Array>> toArrowArray(const std::shared_ptr<Column>& column) override {
+        // convert data column,include list:offsets, values, map: offsets, keys, values, struct: children columns.
+        const auto data_column = arrow::internal::checked_pointer_cast<SrColumnType>(get_data_column(column));
+        ARROW_ASSIGN_OR_RAISE(std::vector<starrocks::ColumnPtr> sr_sub_columns, get_children_columns(data_column));
+
+        std::vector<std::shared_ptr<arrow::Array>> arrays;
+        arrays.resize(sr_sub_columns.size());
+        if (_children.size() < arrays.size()) {
+            return arrow::Status::Invalid("Converter size (", _children.size(), ") is less than arrow array size(",
+                                          arrays.size(), ")");
+        }
+
+        // convert children data column
+        for (size_t idx = 0; idx < arrays.size(); ++idx) {
+            ARROW_ASSIGN_OR_RAISE(arrays[idx], _children[idx]->toArrowArray(sr_sub_columns[idx]));
+        }
+
+        // convert null bitmap
+        std::shared_ptr<arrow::Buffer> null_bitmap;
+        if (column->is_nullable()) {
+            auto nullable = down_cast<NullableColumn*>(column.get());
+            auto& null_bytes = nullable->immutable_null_column_data();
+            ARROW_ASSIGN_OR_RAISE(null_bitmap, convert_null_bitmap(null_bytes));
+        }
+
+        return make_nested_array<ArrowArrayType>(arrays, null_bitmap);
+    }
+
 private:
     template <class ArrowArrayClass, typename = std::enable_if_t<std::is_same_v<ArrowArrayClass, arrow::ListArray> ||
                                                                  std::is_same_v<ArrowArrayClass, arrow::MapArray> ||
