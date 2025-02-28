@@ -16,17 +16,10 @@ package com.starrocks.common.proc;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
-import com.google.common.collect.Lists;
-import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.LimitElement;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
-import com.starrocks.common.util.ListComparator;
-import com.starrocks.common.util.OrderByPair;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.PartitionInfo;
@@ -35,10 +28,8 @@ import com.starrocks.server.GlobalStateMgr;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 public class PaimonTablePartitionsProcDir extends PartitionsProcDir {
-    private ImmutableList<String> titleNames;
     private Table table;
 
     public PaimonTablePartitionsProcDir(Table table, PartitionType partitionType) {
@@ -47,90 +38,16 @@ public class PaimonTablePartitionsProcDir extends PartitionsProcDir {
         this.createTitleNames();
     }
 
-    private void createTitleNames() {
+    @Override
+    public void createTitleNames() {
         ImmutableList.Builder<String> builder =
                 new ImmutableList.Builder<String>().add("PartitionName").add("VisibleVersionTime").add("State")
                         .add("PartitionKey").add("RowCount").add("DataSize").add("FileCount");
         this.titleNames = builder.build();
 
     }
-    public ProcResult fetchResultByFilter(Map<String, Expr> filterMap, List<OrderByPair> orderByPairs,
-                                          LimitElement limitElement) throws AnalysisException {
-        List<List<Comparable>> partitionInfos = getPartitionInfos();
-        List<List<Comparable>> filterPartitionInfos;
 
-        // where
-        if (filterMap == null || filterMap.isEmpty()) {
-            filterPartitionInfos = partitionInfos;
-        } else {
-            filterPartitionInfos = Lists.newArrayList();
-            for (List<Comparable> partitionInfo : partitionInfos) {
-                if (partitionInfo.size() != this.titleNames.size()) {
-                    throw new AnalysisException(
-                            "PartitionInfos.size() " + partitionInfos.size() + " not equal TITLE_NAMES.size() " +
-                                    this.titleNames.size());
-                }
-                boolean isNeed = true;
-                for (int i = 0; i < partitionInfo.size(); i++) {
-                    isNeed = filter(this.titleNames.get(i), partitionInfo.get(i), filterMap);
-                    if (!isNeed) {
-                        break;
-                    }
-                }
-
-                if (isNeed) {
-                    filterPartitionInfos.add(partitionInfo);
-                }
-            }
-        }
-
-        // order by
-        if (orderByPairs != null && !orderByPairs.isEmpty()) {
-            ListComparator<List<Comparable>> comparator;
-            OrderByPair[] orderByPairArr = new OrderByPair[orderByPairs.size()];
-            comparator = new ListComparator<>(orderByPairs.toArray(orderByPairArr));
-            filterPartitionInfos.sort(comparator);
-        }
-
-        // limit
-        if (limitElement != null && limitElement.hasLimit()) {
-            int beginIndex = (int) limitElement.getOffset();
-            int endIndex = (int) (beginIndex + limitElement.getLimit());
-            if (endIndex > filterPartitionInfos.size()) {
-                endIndex = filterPartitionInfos.size();
-            }
-            filterPartitionInfos = filterPartitionInfos.subList(beginIndex, endIndex);
-        }
-
-        return getBasicProcResult(filterPartitionInfos);
-    }
-
-    public BaseProcResult getBasicProcResult(List<List<Comparable>> partitionInfos) {
-        // set result
-        BaseProcResult result = new BaseProcResult();
-        result.setNames(this.titleNames);
-        for (List<Comparable> info : partitionInfos) {
-            List<String> row = new ArrayList<String>(info.size());
-            for (Comparable comparable : info) {
-                row.add(comparable.toString());
-            }
-            result.addRow(row);
-        }
-
-        return result;
-    }
-
-    public int analyzeColumn(String columnName) {
-        for (int i = 0; i < this.titleNames.size(); ++i) {
-            if (this.titleNames.get(i).equalsIgnoreCase(columnName)) {
-                return i;
-            }
-        }
-        ErrorReport.reportSemanticException(ErrorCode.ERR_WRONG_COLUMN_NAME, columnName);
-        return -1;
-    }
-
-    private List<List<Comparable>> getPartitionInfos() {
+    public List<List<Comparable>> getPartitionInfos() {
         Preconditions.checkNotNull(table);
         PaimonTable paimonTable = (PaimonTable) table;
         // get info
@@ -167,11 +84,6 @@ public class PaimonTablePartitionsProcDir extends PartitionsProcDir {
         return partitionInfo;
     }
 
-    @Override
-    public ProcResult fetchResult() throws AnalysisException {
-        List<List<Comparable>> partitionInfos = getPartitionInfos();
-        return getBasicProcResult(partitionInfos);
-    }
 
     @Override
     public boolean register(String name, ProcNodeInterface node) {
@@ -180,6 +92,6 @@ public class PaimonTablePartitionsProcDir extends PartitionsProcDir {
 
     @Override
     public ProcNodeInterface lookup(String partitionIdOrName) throws AnalysisException {
-        return null;
+        throw new AnalysisException("paimon not support");
     }
 }
