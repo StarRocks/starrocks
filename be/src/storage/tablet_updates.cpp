@@ -1947,13 +1947,14 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
     return Status::OK();
 }
 
-Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
+Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, const vector<uint32_t>& all_rowset_ids) {
     auto scope = IOProfiler::scope(IOProfiler::TAG_COMPACTION, _tablet.tablet_id());
     int64_t input_rowsets_size = 0;
     int64_t input_row_num = 0;
     size_t num_segments = 0;
     auto info = (*pinfo).get();
     vector<RowsetSharedPtr> input_rowsets(info->inputs.size());
+    vector<RowsetSharedPtr> all_rowsets(all_rowset_ids.size());
     {
         std::lock_guard<std::mutex> lg(_rowsets_lock);
         for (size_t i = 0; i < info->inputs.size(); i++) {
@@ -1971,9 +1972,21 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo) {
                 num_segments += input_rowsets[i]->num_segments();
             }
         }
+        for (size_t i = 0; i < all_rowset_ids.size(); i++) {
+            auto itr = _rowsets.find(all_rowset_ids[i]);
+            if (itr == _rowsets.end()) {
+                // rowset should exists
+                string msg = strings::Substitute("_do_compaction rowset $0 should exists $1", all_rowset_ids[i],
+                                                 _debug_string(false));
+                LOG(ERROR) << msg;
+                return Status::InternalError(msg);
+            } else {
+                all_rowsets[i] = itr->second;
+            }
+        }
     }
 
-    auto cur_tablet_schema = CompactionUtils::rowset_with_max_schema_version(input_rowsets)->schema();
+    auto cur_tablet_schema = CompactionUtils::rowset_with_max_schema_version(all_rowsets)->schema();
     CompactionAlgorithm algorithm = CompactionUtils::choose_compaction_algorithm(
             cur_tablet_schema->num_columns(), config::vertical_compaction_max_columns_per_group, num_segments);
 
@@ -2951,7 +2964,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker) {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
-    Status st = _do_compaction(&info);
+    Status st = _do_compaction(&info, rowsets);
     if (!st.ok()) {
         _compaction_running = false;
         _last_compaction_failure_millis = UnixMillis();
@@ -3119,7 +3132,7 @@ Status TabletUpdates::compaction_for_size_tiered(MemTracker* mem_tracker) {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
-    Status st = _do_compaction(&info);
+    Status st = _do_compaction(&info, rowsets);
     if (!st.ok()) {
         _compaction_running = false;
         _last_compaction_failure_millis = UnixMillis();
@@ -3184,7 +3197,8 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
         return Status::AlreadyExist("illegal state: another compaction is running");
     }
     std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
-    std::unordered_set<uint32_t> all_rowsets;
+    std::unordered_set<uint32_t> all_rowsets_set;
+    vector<uint32_t> rowsets;
     {
         std::lock_guard rl(_lock);
         if (_edit_version_infos.empty()) {
@@ -3195,8 +3209,8 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
         }
         // 1. start compaction at current apply version
         info->start_version = _edit_version_infos[_apply_version_idx]->version;
-        const auto& rowsets = _edit_version_infos[_apply_version_idx]->rowsets;
-        all_rowsets.insert(rowsets.begin(), rowsets.end());
+        rowsets = _edit_version_infos[_apply_version_idx]->rowsets;
+        all_rowsets_set.insert(rowsets.begin(), rowsets.end());
     }
     size_t total_rows = 0;
     size_t total_bytes = 0;
@@ -3206,7 +3220,7 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
     {
         std::lock_guard lg(_rowset_stats_lock);
         for (auto rowsetid : input_rowset_ids) {
-            if (all_rowsets.find(rowsetid) == all_rowsets.end()) {
+            if (all_rowsets_set.find(rowsetid) == all_rowsets_set.end()) {
                 LOG(WARNING) << "specified input rowset not found in current version rowsetid:" << rowsetid;
                 continue;
             }
@@ -3244,14 +3258,14 @@ Status TabletUpdates::compaction(MemTracker* mem_tracker, const vector<uint32_t>
     std::sort(info->inputs.begin(), info->inputs.end());
     LOG(INFO) << "update compaction with specified rowsets start tablet:" << _tablet.tablet_id()
               << " version:" << info->start_version.to_string() << " pick:" << info->inputs.size()
-              << "/all:" << all_rowsets.size() << " " << int_list_to_string(info->inputs) << " #rows:" << total_rows
+              << "/all:" << all_rowsets_set.size() << " " << int_list_to_string(info->inputs) << " #rows:" << total_rows
               << "->" << total_rows_after_compaction << " bytes:" << PrettyPrinter::print(total_bytes, TUnit::BYTES)
               << "->" << PrettyPrinter::print(total_bytes_after_compaction, TUnit::BYTES) << "(estimate)";
 
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
-    Status st = _do_compaction(&info);
+    Status st = _do_compaction(&info, rowsets);
     if (!st.ok()) {
         _compaction_running = false;
         _last_compaction_failure_millis = UnixMillis();
