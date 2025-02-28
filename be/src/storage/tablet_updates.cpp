@@ -1976,10 +1976,8 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, con
             auto itr = _rowsets.find(all_rowset_ids[i]);
             if (itr == _rowsets.end()) {
                 // rowset should exists
-                string msg = strings::Substitute("_do_compaction rowset $0 should exists $1", all_rowset_ids[i],
-                                                 _debug_string(false));
-                LOG(ERROR) << msg;
-                return Status::InternalError(msg);
+                return Status::InternalError(strings::Substitute("_do_compaction rowset $0 should exists $1",
+                                                                 all_rowset_ids[i], _debug_string(false)));
             } else {
                 all_rowsets[i] = itr->second;
             }
