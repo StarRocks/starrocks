@@ -144,7 +144,7 @@ public:
 
         ConcreteColumn2(const ConcreteColumn2& col) {
             std::cout << "ConcreteColumn copy constructor" << std::endl;
-            this->_inner = col._inner->clone();
+            this->_inner = ConcreteColumn::static_pointer_cast(col._inner->clone());
             this->_null_column = MNullColumn::static_pointer_cast(col._null_column->clone());
         }
 
@@ -153,11 +153,14 @@ public:
         void set(int value) override { _inner->set(value); }
 
         void for_each_subcolumn(ColumnCallback callback) override {
-            // callback(_inner);
-            // // callback(_null_column);
-            // MNullColumn::Ptr null_column = MNullColumn::static_pointer_cast(std::move(_null_column));
-            // callback(null_column);
-            // _null_column = MNullColumn::static_pointer_cast(std::move(null_column));
+            ColumnPtr inner;
+            callback(inner);
+            _inner = ConcreteColumn::static_pointer_cast(std::move(inner));
+
+            // callback(_null_column);
+            ColumnPtr null;
+            callback(null);
+            _null_column = MNullColumn::static_pointer_cast(std::move(null));
         }
 
     private:
