@@ -5725,6 +5725,11 @@ void TabletUpdates::_reset_apply_status(const EditVersionInfo& version_info_appl
         if (state_entry != nullptr) {
             manager->update_state_cache().remove(state_entry);
         }
+        auto column_state_entry = manager->update_column_state_cache().get(
+                strings::Substitute("$0_$1", _tablet.tablet_id(), rowset->rowset_id().to_string()));
+        if (column_state_entry != nullptr) {
+            manager->update_column_state_cache().remove(column_state_entry);
+        }
     } else if (version_info_apply.compaction) {
         // reset compaction state
         _compaction_state.reset();
