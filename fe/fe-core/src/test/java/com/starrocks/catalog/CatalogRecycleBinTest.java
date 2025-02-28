@@ -86,9 +86,9 @@ public class CatalogRecycleBinTest {
     public void testGetDb() {
         CatalogRecycleBin bin = new CatalogRecycleBin();
         Database database = new Database(1, "db");
-        bin.recycleDatabase(database, Sets.newHashSet());
+        bin.recycleDatabase(database, Sets.newHashSet(), true);
         Database database2 = new Database(2, "db");
-        bin.recycleDatabase(database2, Sets.newHashSet());
+        bin.recycleDatabase(database2, Sets.newHashSet(), true);
 
         Database recycledDb = bin.getDatabase(1);
         Assert.assertNull(recycledDb);
@@ -373,7 +373,7 @@ public class CatalogRecycleBinTest {
         Config.catalog_trash_expire_second = 600; // set expire in 10 minutes
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
         Database db = new Database(111, "uno");
-        recycleBin.recycleDatabase(db, new HashSet<>());
+        recycleBin.recycleDatabase(db, new HashSet<>(), true);
 
         // no need to set enable erase later if there are a lot of time left
         long now = System.currentTimeMillis();
@@ -403,9 +403,9 @@ public class CatalogRecycleBinTest {
 
         // 1. recycle 2 dbs
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
-        recycleBin.recycleDatabase(db1, new HashSet<>());
-        recycleBin.recycleDatabase(db2SameName, new HashSet<>());  // will remove same name
-        recycleBin.recycleDatabase(db2, new HashSet<>());
+        recycleBin.recycleDatabase(db1, new HashSet<>(), true);
+        recycleBin.recycleDatabase(db2SameName, new HashSet<>(), true);  // will remove same name
+        recycleBin.recycleDatabase(db2, new HashSet<>(), true);
 
         Assert.assertEquals(recycleBin.getDatabase(db1.getId()), db1);
         Assert.assertEquals(recycleBin.getDatabase(db2.getId()), db2);
