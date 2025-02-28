@@ -126,7 +126,7 @@ TEST_F(BlockCacheTest, hybrid_cache) {
     ASSERT_TRUE(res.status().is_not_found());
 
     cache->shutdown();
-    fs::remove_all(cache_dir).ok();
+    fs::remove_all(cache_dir);
 }
 
 TEST_F(BlockCacheTest, write_with_overwrite_option) {
@@ -241,7 +241,7 @@ TEST_F(BlockCacheTest, read_cache_with_adaptor) {
     }
 
     cache->shutdown();
-    fs::remove_all(cache_dir).ok();
+    fs::remove_all(cache_dir);
 }
 
 TEST_F(BlockCacheTest, update_cache_quota) {
@@ -286,7 +286,7 @@ TEST_F(BlockCacheTest, update_cache_quota) {
     }
 
     cache->shutdown();
-    fs::remove_all(cache_dir).ok();
+    fs::remove_all(cache_dir);
 }
 
 TEST_F(BlockCacheTest, clear_residual_blockfiles) {
@@ -337,7 +337,7 @@ TEST_F(BlockCacheTest, clear_residual_blockfiles) {
         ASSERT_EQ(files.size(), 0);
     }
 
-    fs::remove_all(cache_dir).ok();
+    fs::remove_all(cache_dir);
 }
 
 #endif
