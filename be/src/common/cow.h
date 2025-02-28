@@ -23,6 +23,12 @@
 
 namespace starrocks {
 
+// A Clone-on-write base class.
+//
+// The type Cow is a smart pointer providing clone-on-write functionality:
+//   - mutable data can not be shared with others only if it's mutated, and immutable data can be shared with others.
+//   - when immutable data needs mutation, it will trigger clone-on-write which only deep clones the data if it's shared
+//          with others, otherwise shadow clones the data.
 template <typename Derived>
 class Cow {
     typedef std::atomic<uint32_t> AtomicCounter;
@@ -60,7 +66,7 @@ protected:
         template <class U>
         friend class Owner;
 
-        /// Copy construct/assignment
+        // Copy construct/assignment
         template <typename U>
         Owner(Owner<U> const& rhs) : _t(rhs.get()) {
             if (_t) {
@@ -86,7 +92,7 @@ protected:
             return *this;
         }
 
-        /// Move onstruct/assignment
+        // Move onstruct/assignment
         Owner(Owner&& rhs) : _t(rhs._t) { rhs._t = nullptr; }
         template <class U>
         Owner(Owner<U>&& rhs) : _t(rhs._t) {
@@ -109,20 +115,20 @@ protected:
         operator bool() const { return _t != nullptr; }
         operator T*() const { return _t; }
 
-        /// @brief swap the pointer with others
+        // swap the pointer with others
         void swap(Owner& rhs) {
             T* tmp = _t;
             _t = rhs._t;
             rhs._t = tmp;
         }
-        /// @brief detach and return the pointer
+        // detach and return the pointer
         T* detach() {
             T* ret = _t;
             _t = nullptr;
             return ret;
         }
 
-        /// @brief reset the pointer with others
+        // reset the pointer with others
         void reset() { Owner().swap(*this); }
         void reset(T* rhs) { Owner(rhs).swap(*this); }
         void reset(T* rhs, bool add_ref) { Owner(rhs, add_ref).swap(*this); }
@@ -131,6 +137,8 @@ protected:
         T* _t = nullptr;
     };
 
+    // If the owner data is mutable, it can call non-const method of derived class, but
+    // one mutable data should only have one owner and it can not be shared with others.
     template <typename T>
     class Mutable : public Owner<T> {
     private:
@@ -144,38 +152,34 @@ protected:
         explicit Mutable(T* ptr, bool add_ref = true) : Base(ptr, add_ref) {}
 
     public:
-        /// Copy: not possible.
+        // Copy: not possible.
         Mutable(const Mutable&) = delete;
-        /// Move: ok.
+        // Move: ok.
         Mutable(Mutable&&) = default;
         Mutable& operator=(Mutable&&) = default;
-        /// Initializing from temporary of compatible type.
+        // Initializing from temporary of compatible type.
         template <typename U>
         Mutable(Mutable<U>&& other) : Base(std::move(other)) {}
         Mutable() = default;
         Mutable(std::nullptr_t) {}
     };
 
+    // If the owner data is immutable, it can only call non const methods of derived class ideally, but
+    // it can be shared with others.
+    //  - mutable data can be converted to immutable data only if the mutable data's onwership is transferred;
+    //  - immutable data can be converted to mutable data only if clone-on-write is triggered.
+    // NOTE: To be compatible with old codes, it can call non-const methods of derived class if the Immutable data
+    // is not `const` or `const&` or called from `const method`; otherwise, it can only call const methods of derived class.
     template <typename T>
     class Immutable : public Owner<const T> {
-    private:
-        using Base = Owner<const T>;
-
-        template <typename>
-        friend class Cow;
-        template <typename, typename, typename>
-        friend class CowFactory;
-
-        explicit Immutable(const T* ptr, bool add_ref = true) : Base(ptr, add_ref) {}
-
     public:
-        /// Copy constructor/assignment
+        // Copy constructor/assignment
         Immutable(const Immutable&) = default;
         Immutable& operator=(const Immutable&) = default;
         template <typename U>
         Immutable(const Immutable<U>& other) : Base(other) {}
 
-        /// Move constructor/assignment
+        // Move constructor/assignment
         Immutable(Immutable&&) = default;
         Immutable& operator=(Immutable&&) = default;
         template <typename U>
@@ -183,7 +187,7 @@ protected:
         template <typename U>
         Immutable(Mutable<U>&& other) : Base(std::move(other)) {}
 
-        /// Copy from mutable ptr: not possible.
+        // Copy from mutable ptr: not possible.
         template <typename U>
         Immutable(const Mutable<U>&) = delete;
         Immutable() = default;
@@ -197,6 +201,16 @@ protected:
 
         const T& operator*() const { return *get(); }
         T& operator*() { return *get(); }
+
+    private:
+        using Base = Owner<const T>;
+
+        template <typename>
+        friend class Cow;
+        template <typename, typename, typename>
+        friend class CowFactory;
+
+        explicit Immutable(const T* ptr, bool add_ref = true) : Base(ptr, add_ref) {}
     };
 
 public:
@@ -204,7 +218,8 @@ public:
     using Ptr = Immutable<Derived>;
 
 protected:
-    MutablePtr shallow_mutate() const {
+    // trigger clone-on-write, deep clone if the data is shared with others, otherwise shadow clone.
+    MutablePtr try_mutate() const {
 #ifndef NDEBUG
         if (VLOG_IS_ON(1)) {
             VLOG(1) << "[Cow] trigger Cow: " << this << ", use_count=" << this->use_count() << ", try to "
@@ -216,11 +231,6 @@ protected:
         } else {
             return as_mutable_ptr();
         }
-    }
-
-    template <typename To = Derived>
-    To* as_mutable_raw_ptr() const {
-        return const_cast<To*>(static_cast<const To*>(derived()));
     }
 
 public:
@@ -238,6 +248,9 @@ public:
 
     Ptr get_ptr() const { return Ptr(derived()); }
     MutablePtr get_ptr() { return MutablePtr(derived()); }
+
+    // cast the data as mutable ptr if it's mutable no matter it's mutable or immutable.
+    // NOTE:  ptr's use_count will be added by 1, and this is not safe because the data may be shared with others.
     MutablePtr as_mutable_ptr() const { return const_cast<Cow*>(this)->get_ptr(); }
 
 private:
@@ -276,41 +289,31 @@ public:
         return typename AncestorBaseType::MutablePtr(new Derived(static_cast<const Derived&>(*this)));
     }
 
-    static MutablePtr static_pointer_cast(BaseMutablePtr&& ptr) {
-        DCHECK(ptr.get() != nullptr);
-        DCHECK(static_cast<Derived*>(ptr.get()) != nullptr);
-        return MutablePtr(static_cast<Derived*>(ptr.detach()), false);
-    }
+    // cast base ptr to derived ptr statically, like std::static_pointer_cast; if failed, return nullptr.
     static Ptr static_pointer_cast(const BasePtr& ptr) {
         DCHECK(ptr.get() != nullptr);
         DCHECK(static_cast<const Derived*>(ptr.get()) != nullptr);
         return Ptr(static_cast<const Derived*>(ptr.get()));
     }
+
+    // cast base ptr to derived ptr statically, like std::static_pointer_cast; if failed, return nullptr.
+    // NOTE: ptr will be released if cast success.
+    static MutablePtr static_pointer_cast(BaseMutablePtr&& ptr) {
+        DCHECK(ptr.get() != nullptr);
+        DCHECK(static_cast<Derived*>(ptr.get()) != nullptr);
+        return MutablePtr(static_cast<Derived*>(ptr.detach()), false);
+    }
+
+    // cast base ptr to derived ptr statically, like std::static_pointer_cast; if failed, return nullptr.
+    // NOTE: ptr will be released if cast success.
     static Ptr static_pointer_cast(BasePtr&& ptr) {
         DCHECK(ptr.get() != nullptr);
         DCHECK(static_cast<const Derived*>(ptr.get()) != nullptr);
         return Ptr(static_cast<const Derived*>(ptr.detach()), false);
     }
 
-    /// @brief : dynamic cast base ptr to derived ptr, like std::dynamic_pointer_cast; if failed, return nullptr.
-    /// @param ptr : base ptr to cast, NOTE: it will be released if cast success.
-    /// @return    : derived ptr if cast success, otherwise nullptr.
-    static MutablePtr dynamic_pointer_cast(BaseMutablePtr&& ptr) {
-        DCHECK(ptr.get() != nullptr);
-        if (auto* _p = dynamic_cast<Derived*>(ptr.detach())) {
-            return MutablePtr(_p, false);
-        } else {
-            return Ptr();
-        }
-    }
-    static Ptr dynamic_pointer_cast(const BasePtr& ptr) {
-        DCHECK(ptr.get() != nullptr);
-        if (auto* _ptr = dynamic_cast<const Derived*>(ptr.get())) {
-            return Ptr(_ptr);
-        } else {
-            return Ptr();
-        }
-    }
+    // cast base ptr to derived ptr dynamically, like std::dynamic_pointer_cast; if failed, return nullptr.
+    // NOTE: ptr will be released if cast success.
     static Ptr dynamic_pointer_cast(BasePtr&& ptr) {
         DCHECK(ptr.get() != nullptr);
         if (auto* _ptr = dynamic_cast<const Derived*>(ptr.detach())) {
@@ -320,8 +323,29 @@ public:
         }
     }
 
+    // cast base ptr to derived ptr dynamically, like std::dynamic_pointer_cast; if failed, return nullptr.
+    // NOTE: ptr will be released if cast success.
+    static MutablePtr dynamic_pointer_cast(BaseMutablePtr&& ptr) {
+        DCHECK(ptr.get() != nullptr);
+        if (auto* _p = dynamic_cast<Derived*>(ptr.detach())) {
+            return MutablePtr(_p, false);
+        } else {
+            return Ptr();
+        }
+    }
+
+    // cast base ptr to derived ptr dynamically, like std::dynamic_pointer_cast; if failed, return nullptr.
+    static Ptr dynamic_pointer_cast(const BasePtr& ptr) {
+        DCHECK(ptr.get() != nullptr);
+        if (auto* _ptr = dynamic_cast<const Derived*>(ptr.get())) {
+            return Ptr(_ptr);
+        } else {
+            return Ptr();
+        }
+    }
+
 protected:
-    MutablePtr shallow_mutate() const { return MutablePtr(static_cast<Derived*>(Base::shallow_mutate().get())); }
+    MutablePtr try_mutate() const { return MutablePtr(static_cast<Derived*>(Base::try_mutate().get())); }
 
 private:
     Derived* derived() { return static_cast<Derived*>(this); }

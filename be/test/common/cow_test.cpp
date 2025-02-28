@@ -43,14 +43,14 @@ public:
         virtual void for_each_subcolumn(ColumnCallback) {}
 
         MutablePtr mutate() const&& {
-            MutablePtr res = shallow_mutate();
+            MutablePtr res = try_mutate();
             res->for_each_subcolumn([](Ptr& subcolumn) { subcolumn = std::move(*subcolumn).mutate(); });
             return res;
         }
 
         [[nodiscard]] static MutablePtr mutate(Ptr ptr) {
-            MutablePtr res = ptr->shallow_mutate(); /// Now use_count is 2.
-            ptr.reset();                            /// Reset use_count to 1.
+            MutablePtr res = ptr->try_mutate(); /// Now use_count is 2.
+            ptr.reset();                        /// Reset use_count to 1.
             res->for_each_subcolumn([](Ptr& subcolumn) { subcolumn = IColumn::mutate(std::move(subcolumn)); });
             return res;
         }
