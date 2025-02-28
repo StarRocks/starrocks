@@ -179,7 +179,7 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_tables" = "11111;22222");
 - 类型：String
 - 单位：-
 - 是否动态：是
-- 描述：禁止对某些表发起 compaction 任务，已发起的不会受到影响。值为 Table Id，如果有多个表，用分号隔开。
+- 描述：禁止对指定表发起 Compaction 任务，已发起的任务不会受到影响。此项的值为 Table ID，如有多个值，需使用分号(;)隔开。
 - 引入版本：v3.2.7
 
 #### CN 参数
