@@ -122,9 +122,6 @@ public class DatabaseTransactionMgr {
     // The id of the database that shapeless.the current transaction manager is responsible for
     private final long dbId;
 
-    // not realtime usedQuota value to make a fast check for database data quota
-    private volatile long usedQuotaDataBytes = -1;
-
     /*
      * transactionLock is used to control the access to database transaction manager data
      * Modifications to the following multiple data structures must be protected by this lock
@@ -2161,22 +2158,11 @@ public class DatabaseTransactionMgr {
             throw new AnalysisException("Database[" + dbId + "] does not exist");
         }
 
-        if (usedQuotaDataBytes == -1) {
-            usedQuotaDataBytes = globalStateMgr.getLocalMetastore().getUsedDataQuotaWithLock(db);
+        try {
+            GlobalStateMgr.getCurrentState().getLocalMetastore().checkDataSizeQuota(db);
+        } catch (StarRocksException e) {
+            throw new AnalysisException(e.toString());
         }
-
-        long dataQuotaBytes = db.getDataQuota();
-        if (usedQuotaDataBytes >= dataQuotaBytes) {
-            Pair<Double, String> quotaUnitPair = DebugUtil.getByteUint(dataQuotaBytes);
-            String readableQuota =
-                    DebugUtil.DECIMAL_FORMAT_SCALE_3.format(quotaUnitPair.first) + " " + quotaUnitPair.second;
-            throw new AnalysisException("Database[" + db.getOriginName()
-                    + "] data size exceeds quota[" + readableQuota + "]");
-        }
-    }
-
-    public void updateDatabaseUsedQuotaData(long usedQuotaDataBytes) {
-        this.usedQuotaDataBytes = usedQuotaDataBytes;
     }
 
     public List<Object> getSamplesForMemoryTracker() {
