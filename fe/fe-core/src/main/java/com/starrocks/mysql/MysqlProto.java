@@ -115,6 +115,11 @@ public class MysqlProto {
             if (authPacket == null) {
                 return new NegotiateResult(null, NegotiateState.READ_SSL_AUTH_PKG_FAILED);
             }
+        } else if (Config.ssl_force_secure_transport) {
+            LOG.warn("Connections using insecure transport are prohibited");
+            ErrorReport.report(ErrorCode.ERR_SECURE_TRANSPORT_REQUIRED);
+            sendResponsePacket(context);
+            return new NegotiateResult(null, NegotiateState.INSECURE_TRANSPORT_PROHIBITED);
         }
 
         // check capability
