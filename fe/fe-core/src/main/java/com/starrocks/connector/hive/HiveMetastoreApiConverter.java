@@ -160,7 +160,14 @@ public class HiveMetastoreApiConverter {
 
     public static HiveTable toHiveTable(Table table, String catalogName) {
         validateHiveTableType(table.getTableType());
-
+        RemoteFileInputFormat storageFormat = fromHdfsInputFormatClass(table.getSd().getInputFormat());
+        SerDeInfo serDeInfo = table.getSd().getSerdeInfo();
+        if (storageFormat == RemoteFileInputFormat.TEXTFILE && serDeInfo != null) {
+            String serdeClass = serDeInfo.getSerializationLib();
+            if (HiveClassNames.TEXT_JSON_SERDE_CLASS.equals(serdeClass)) {
+                storageFormat = RemoteFileInputFormat.JSONTEXT;
+            }
+        }
         HiveTable.Builder tableBuilder = HiveTable.builder()
                 .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt())
                 .setTableName(table.getTableName())
@@ -180,8 +187,7 @@ public class HiveMetastoreApiConverter {
                 .setProperties(toHiveProperties(table,
                         HiveStorageFormat.get(fromHdfsInputFormatClass(table.getSd().getInputFormat()).name())))
                 .setSerdeProperties(toSerDeProperties(table))
-                .setStorageFormat(
-                        HiveStorageFormat.get(fromHdfsInputFormatClass(table.getSd().getInputFormat()).name()))
+                .setStorageFormat(HiveStorageFormat.get(storageFormat.name()))
                 .setCreateTime(table.getCreateTime())
                 .setHiveTableType(HiveTable.HiveTableType.fromString(table.getTableType()));
 
@@ -356,10 +362,18 @@ public class HiveMetastoreApiConverter {
         textFileParameters.putAll(sd.getSerdeInfo().getParameters());
         // "skip.header.line.count" is set in TBLPROPERTIES
         textFileParameters.putAll(params);
+
+        SerDeInfo serDeInfo = sd.getSerdeInfo();
+        RemoteFileInputFormat storageFormat = toRemoteFileInputFormat(sd.getInputFormat());
+        if (storageFormat == RemoteFileInputFormat.TEXTFILE && serDeInfo != null) {
+            if (HiveClassNames.TEXT_JSON_SERDE_CLASS.equals(serDeInfo.getSerializationLib())) {
+                storageFormat = RemoteFileInputFormat.JSONTEXT;
+            }
+        }
         Partition.Builder partitionBuilder = Partition.builder()
                 .setParams(params)
                 .setFullPath(sd.getLocation())
-                .setInputFormat(toRemoteFileInputFormat(sd.getInputFormat()))
+                .setInputFormat(storageFormat)
                 .setTextFileFormatDesc(toTextFileFormatDesc(textFileParameters))
                 .setSplittable(RemoteFileInputFormat.isSplittable(sd.getInputFormat()));
 
