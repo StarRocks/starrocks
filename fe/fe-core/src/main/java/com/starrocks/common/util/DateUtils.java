@@ -64,6 +64,7 @@ public class DateUtils {
     public static final DateTimeFormatter DATE_TIME_MS_FORMATTER_UNIX = unixDatetimeFormatter("%Y-%m-%d %H:%i:%s.%f");
     public static final DateTimeFormatter SECOND_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m%d%H%i%s");
     public static final DateTimeFormatter MINUTE_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m%d%H%i");
+    public static final DateTimeFormatter DATE_TIME_S_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m%d%H%i%s");
     public static final DateTimeFormatter HOUR_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m%d%H");
     public static final DateTimeFormatter YEAR_FORMATTER_UNIX = unixDatetimeFormatter("%Y");
     public static final DateTimeFormatter MONTH_FORMATTER_UNIX = unixDatetimeFormatter("%Y%m");
@@ -151,6 +152,8 @@ public class DateUtils {
             } else if (str.length() == 8) {
                 // 20200202
                 formatter = STRICT_DATE_NO_SPLIT_FORMATTER;
+            } else if (str.length() == 14) {
+                formatter = DATE_TIME_S_FORMATTER_UNIX;
             } else {
                 formatter = STRICT_DATE_FORMATTER;
             }
