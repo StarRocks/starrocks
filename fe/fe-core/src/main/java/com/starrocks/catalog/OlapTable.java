@@ -1694,6 +1694,29 @@ public class OlapTable extends Table {
                 .collect(Collectors.toSet());
     }
 
+    public String getLatestHasDataPartitionValue() throws DdlException {
+        if (partitionInfo.getType() != PartitionType.RANGE) {
+            throw new DdlException("Currently only range partitions are supported");
+        }
+
+        List<Partition> hasDataPartitions =
+                idToPartition.values().stream().filter(Partition::hasData).toList();
+        if (hasDataPartitions.isEmpty()) {
+            return null;
+        }
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+        List<Range<PartitionKey>> rangePartitions = new ArrayList<>();
+        for (Partition partition : hasDataPartitions) {
+            Range<PartitionKey> range = rangePartitionInfo.getRange(partition.getId());
+            rangePartitions.add(range);
+        }
+        List<Range<PartitionKey>> sortedRange =
+                rangePartitions.stream().sorted(RangeUtils.RANGE_COMPARATOR).toList();
+        Range<PartitionKey> latestRange = sortedRange.get(sortedRange.size() - 1);
+        PartitionKey partitionKey = latestRange.lowerEndpoint();
+        return AnalyzerUtils.parseLiteralExprToDateString(partitionKey, 0);
+    }
+
     public Map<String, Range<PartitionKey>> getValidRangePartitionMap(int lastPartitionNum) throws AnalysisException {
         Map<String, Range<PartitionKey>> rangePartitionMap = getRangePartitionMap();
         // less than 0 means not set
