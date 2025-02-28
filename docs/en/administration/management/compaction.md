@@ -156,8 +156,6 @@ You can configure compaction tasks using these FE and CN (BE) parameters.
 
 You can configure the following FE parameter dynamically.
 
-Example:
-
 ```SQL
 ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "-1");
 ```
@@ -171,11 +169,22 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "-1");
 - Description: The maximum number of concurrent Compaction tasks allowed in a shared-data cluster. Setting this item to `-1` indicates calculating the concurrent task number in an adaptive manner, that is, the number of surviving CN nodes multiplied by 16. Setting this value to `0` will disable compaction.
 - Introduced in: v3.1.0
 
+```SQL
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_tables" = "11111;22222");
+```
+
+##### lake_compaction_disable_tables
+
+- Default：""
+- Type：String
+- Unit：-
+- Is mutable：Yes
+- Description：Disable compaction for certain tables. This will not affect compaction that has started. The value of this item is table ID. Multiple values are separated by ';'.
+- Introduced in：v3.2.7
+
 #### CN parameters
 
 You can configure the following CN parameter dynamically.
-
-Example:
 
 ```SQL
 UPDATE information_schema.be_configs SET VALUE = 8 
@@ -219,8 +228,6 @@ WHERE name = "compact_threads";
 
 ### Manually trigger compaction tasks
 
-From v3.2.5 onwards, you can manually trigger compaction for a table or specific partitions.
-
 ```SQL
 -- Trigger compaction for the whole table.
 ALTER TABLE <table_name> COMPACT;
@@ -241,6 +248,7 @@ CANCEL COMPACTION WHERE TXN_ID = <TXN_ID>;
 > **NOTE**
 >
 > - The CANCEL COMPACTION statement must be submitted from the Leader FE node.
+> - The CANCEL COMPACTION statement only applies to transactions that have not committed, that is, `CommitTime` is NULL in the return of `SHOW PROC '/compactions'`.
 > - CANCEL COMPACTION is an asynchronous process. You can check if the task is cancelled by executing `SHOW PROC '/compactions'`.
 
 ## Best practices
