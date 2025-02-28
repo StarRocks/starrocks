@@ -64,6 +64,10 @@ public class ProxyContextManager {
         }
     }
 
+    public int getTotalConnCount() {
+        return connectionMaps.size();
+    }
+
     public static class ScopeGuard implements AutoCloseable {
         private ProxyContextManager manager;
         private boolean set = false;

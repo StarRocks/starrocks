@@ -55,6 +55,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -159,6 +160,9 @@ public class ExecuteSqlAction extends RestBaseAction {
             // finalize just send 200 for kill, and throw StarRocksHttpException if context's error is set
             finalize(request, response, parsedStmt, context);
 
+            if (GracefulExitFlag.isGracefulExit()) {
+                context.getNettyChannel().close();
+            }
         } catch (StarRocksHttpException e) {
             LOG.warn("fail to process url: {}", request.getRequest().uri(), e);
             RestBaseResult failResult = new RestBaseResult(e.getMessage());
