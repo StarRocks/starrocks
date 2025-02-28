@@ -606,6 +606,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         public AstBuilder create(long sqlMode, IdentityHashMap<ParserRuleContext, List<HintNode>> hintMap) {
             return new AstBuilder(sqlMode, hintMap);
         }
+        public com.starrocks.connector.parser.pinot.AstBuilder createPinotAst(long sqlMode, IdentityHashMap<ParserRuleContext,
+                List<HintNode>> hintMap) {
+            return new com.starrocks.connector.parser.pinot.AstBuilder(sqlMode, hintMap);
+        }
     }
 
     public List<Parameter> getParameters() {
@@ -7333,7 +7337,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return functionCallExpr;
     }
 
-    private AnalyticExpr buildOverClause(FunctionCallExpr functionCallExpr, StarRocksParser.OverContext context,
+    protected AnalyticExpr buildOverClause(FunctionCallExpr functionCallExpr, StarRocksParser.OverContext context,
                                          NodePosition pos) {
         functionCallExpr.setIsAnalyticFnCall(true);
         List<OrderByElement> orderByElements = new ArrayList<>();
@@ -8407,7 +8411,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         return qualifiedNameToTableName(getQualifiedName(context));
     }
 
-    private QualifiedName getQualifiedName(StarRocksParser.QualifiedNameContext context) {
+    protected QualifiedName getQualifiedName(StarRocksParser.QualifiedNameContext context) {
         List<String> parts = new ArrayList<>();
         NodePosition pos = createPos(context);
         for (ParseTree c : context.children) {
