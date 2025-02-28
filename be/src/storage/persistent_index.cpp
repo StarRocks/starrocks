@@ -832,10 +832,13 @@ public:
         const auto& key = *reinterpret_cast<const KeyType*>(new_data);
         uint64_t hash = FixedKeyHash<KeySize>()(key);
         LOG(INFO) << "start upsert, hashval: " << hash;
-        if (auto [it, inserted] = _map.emplace_with_hash(hash, key, NullIndexValue); inserted) {
-            LOG(INFO) << "upsert success";
-        } else {
-            LOG(INFO) << "upsert failed";
+
+        for (int i = 0; i < config::upsert_replay_times; i++) {
+            if (auto [it, inserted] = _map.emplace_with_hash(hash, key, NullIndexValue); inserted) {
+                LOG(INFO) << "upsert success: " << i;
+            } else {
+                LOG(INFO) << "upsert failed: " << i;
+            }
         }
         return Status::OK();
     }
