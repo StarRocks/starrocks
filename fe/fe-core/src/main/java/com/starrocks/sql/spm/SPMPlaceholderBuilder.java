@@ -28,7 +28,6 @@ import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.QueryRelation;
-import com.starrocks.sql.ast.SubqueryRelation;
 import org.apache.commons.collections4.CollectionUtils;
 
 import java.util.List;
@@ -38,17 +37,7 @@ import java.util.stream.Collectors;
 
 // replace variables to SPMFunctions
 public class SPMPlaceholderBuilder {
-    private static class PlaceholderExpr {
-        private final Expr originalExpr;
-        private final Expr placeholderExpr;
-        private final Expr parentExpr;
-
-        public PlaceholderExpr(Expr originalExpr, Expr placeholderExpr, Expr parentExpr) {
-            this.originalExpr = originalExpr;
-            this.placeholderExpr = placeholderExpr;
-            this.parentExpr = parentExpr;
-        }
-
+    private record PlaceholderExpr(Expr originalExpr, Expr placeholderExpr, Expr parentExpr) {
         public boolean equals(Expr originalExpr, Expr parentExpr) {
             if (parentExpr == null) {
                 // root expr
@@ -86,19 +75,22 @@ public class SPMPlaceholderBuilder {
 
     private Optional<Expr> findPlaceholderExpr(Expr expr, Expr parent) {
         List<PlaceholderExpr> l = placeholderExprs.stream()
-                .filter(p -> p.equals(expr, parent)).collect(Collectors.toList());
+                .filter(p -> p.equals(expr, parent)).toList();
         return l.size() == 1 ? Optional.of(l.get(0).placeholderExpr.clone()) : Optional.empty();
     }
 
+    // insert placeholder expression to replace expression in query stmt
     public QueryRelation insertPlaceholder(QueryRelation query) {
         return (QueryRelation) query.accept(inserter, null);
     }
 
-    public boolean findPlaceholder(QueryRelation query) {
+    // find placeholder expression from query stmt
+    // e.g. user add a query with SPMFunctions manually, we need to find it
+    public void findPlaceholder(QueryRelation query) {
         query.accept(finder, null);
-        return !userSPMIds.isEmpty();
     }
 
+    // plan stmt bind placeholder expression, find same
     public void bindPlaceholder(QueryRelation query) {
         PlanASTPlaceholderBinder binder = new PlanASTPlaceholderBinder();
         binder.bind(query);
@@ -130,8 +122,11 @@ public class SPMPlaceholderBuilder {
     private class PlaceholderInserter extends SPMUpdateExprVisitor<Expr> {
         @Override
         public ParseNode visitInPredicate(InPredicate node, Expr root) {
-            if (!node.isLiteralChildren()) {
-                return super.visitInPredicate(node, root);
+            if (node.getChildren().stream().anyMatch(SPMFunctions::isSPMFunctions)) {
+                return visitExpression(node, root);
+            }
+            if (!node.isConstantValues()) {
+                return visitExpression(node, root);
             }
             Optional<Expr> placeholder = findPlaceholderExpr(node, root);
             if (placeholder.isPresent()) {
@@ -200,8 +195,9 @@ public class SPMPlaceholderBuilder {
         }
 
         @Override
-        public ParseNode visitSubquery(SubqueryRelation stmt, Expr context) {
-            return super.visitSubquery(stmt, null);
+        public ParseNode visitSubqueryExpr(Subquery node, Expr context) {
+            node.getQueryStatement().accept(this, null);
+            return node;
         }
 
         @Override
@@ -253,11 +249,10 @@ public class SPMPlaceholderBuilder {
             if (node.getChildren().stream().anyMatch(SPMFunctions::isSPMFunctions)) {
                 return visitExpression(node, root);
             }
-            if (!node.isLiteralChildren()) {
-                return super.visitInPredicate(node, root);
+            if (!node.isConstantValues()) {
+                return visitExpression(node, root);
             }
             Optional<Expr> spm = findPlaceholderExpr(node, node);
-
             if (spm.isEmpty()) {
                 throw new SemanticException("can't find expression placeholder or placeholder conflict, "
                         + "expression : " + node.toMySql());

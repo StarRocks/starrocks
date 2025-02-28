@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.spm;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
@@ -32,10 +33,12 @@ import java.util.stream.Collectors;
 
 public class SPMUpdateExprVisitor<C> implements AstVisitor<ParseNode, C> {
     protected Expr visitExpr(Expr node, C context) {
-        if (node != null) {
-            return (Expr) node.accept(this, context);
+        if (node == null) {
+            return null;
         }
-        return null;
+        Expr x = (Expr) node.accept(this, context);
+        Preconditions.checkNotNull(x);
+        return x;
     }
 
     protected List<Expr> visitExprList(List<Expr> nodes, C context) {
@@ -79,7 +82,7 @@ public class SPMUpdateExprVisitor<C> implements AstVisitor<ParseNode, C> {
     }
 
     @Override
-    public ParseNode visitSubquery(SubqueryRelation stmt, C context) {
+    public ParseNode visitSubqueryRelation(SubqueryRelation stmt, C context) {
         return visit(stmt.getQueryStatement());
     }
 

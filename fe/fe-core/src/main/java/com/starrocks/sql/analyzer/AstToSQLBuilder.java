@@ -109,7 +109,7 @@ public class AstToSQLBuilder {
             }
 
             res += '`' + fieldName + '`';
-            if (!fieldName.equalsIgnoreCase(columnName)) {
+            if (columnName != null && !fieldName.equalsIgnoreCase(columnName)) {
                 res += " AS `" + columnName + "`";
             }
             return res;
@@ -200,15 +200,15 @@ public class AstToSQLBuilder {
         protected List<String> visitSelectItemList(SelectRelation stmt) {
             if (CollectionUtils.isNotEmpty(stmt.getOutputExpression())) {
                 List<String> selectListString = new ArrayList<>();
+                List<String> columnNameList = stmt.getOutputAlias();
                 for (int i = 0; i < stmt.getOutputExpression().size(); ++i) {
                     Expr expr = stmt.getOutputExpression().get(i);
-                    String columnName = stmt.getColumnOutputNames().get(i);
+                    String columnName = columnNameList.get(i);
 
                     if (expr instanceof FieldReference) {
                         Field field = stmt.getScope().getRelationFields().getFieldByIndex(i);
                         selectListString.add(buildColumnName(field.getRelationAlias(), field.getName(), columnName));
-                    } else if (expr instanceof SlotRef) {
-                        SlotRef slot = (SlotRef) expr;
+                    } else if (expr instanceof SlotRef slot) {
                         if (slot.getOriginType().isStructType()) {
                             selectListString.add(buildStructColumnName(slot.getTblNameWithoutAnalyzed(),
                                     slot.getColumnName(), columnName));
@@ -216,8 +216,10 @@ public class AstToSQLBuilder {
                             selectListString.add(buildColumnName(slot.getTblNameWithoutAnalyzed(), slot.getColumnName(),
                                     columnName));
                         }
-                    } else {
+                    } else if (columnName != null) {
                         selectListString.add(visit(expr) + " AS `" + columnName + "`");
+                    } else {
+                        selectListString.add(visit(expr));
                     }
                 }
                 return selectListString;
@@ -266,7 +268,7 @@ public class AstToSQLBuilder {
         }
 
         @Override
-        public String visitSubquery(SubqueryRelation node, Void context) {
+        public String visitSubqueryRelation(SubqueryRelation node, Void context) {
             StringBuilder sqlBuilder = new StringBuilder("(" + visit(node.getQueryStatement()) + ")");
 
             if (node.getAlias() != null) {
@@ -309,7 +311,7 @@ public class AstToSQLBuilder {
                     sqlBuilder.append(")");
                 }
             }
-            
+
             for (TableRelation.TableHint hint : CollectionUtils.emptyIfNull(node.getTableHints())) {
                 sqlBuilder.append(" [");
                 sqlBuilder.append(hint.name());

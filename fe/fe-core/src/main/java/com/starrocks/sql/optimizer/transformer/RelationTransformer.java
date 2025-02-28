@@ -809,7 +809,7 @@ public class RelationTransformer implements AstVisitor<LogicalPlan, ExpressionMa
     }
 
     @Override
-    public LogicalPlan visitSubquery(SubqueryRelation node, ExpressionMapping context) {
+    public LogicalPlan visitSubqueryRelation(SubqueryRelation node, ExpressionMapping context) {
         LogicalPlan logicalPlan = transform(node.getQueryStatement().getQueryRelation());
         OptExpression subQueryOptExpression = logicalPlan.getRoot();
 

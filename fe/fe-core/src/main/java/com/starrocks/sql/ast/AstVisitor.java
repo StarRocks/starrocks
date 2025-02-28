@@ -1319,7 +1319,7 @@ public interface AstVisitor<R, C> {
         return visitRelation(node, context);
     }
 
-    default R visitSubquery(SubqueryRelation node, C context) {
+    default R visitSubqueryRelation(SubqueryRelation node, C context) {
         return visitRelation(node, context);
     }
 

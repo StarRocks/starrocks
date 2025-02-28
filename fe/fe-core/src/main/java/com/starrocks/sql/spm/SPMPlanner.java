@@ -16,10 +16,13 @@ package com.starrocks.sql.spm;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
+import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
+import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
@@ -29,6 +32,7 @@ import com.starrocks.sql.analyzer.PlannerMetaLocker;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.parser.SqlParser;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.Comparator;
 import java.util.List;
@@ -36,6 +40,7 @@ import java.util.Map;
 import java.util.Optional;
 
 public class SPMPlanner {
+    public static final boolean ENABLE_THROW_EXCEPTION = false;
 
     private final ConnectContext session;
 
@@ -67,8 +72,9 @@ public class SPMPlanner {
             return query;
         }
 
-        analyze(query);
         try (Timer ignored = Tracers.watchScope("SPMPlanner")) {
+            analyze(query);
+
             SPMAst2SQLBuilder builder = new SPMAst2SQLBuilder(false, true);
             String digest = builder.build((QueryStatement) query);
             long hash = builder.buildHash();
@@ -89,6 +95,13 @@ public class SPMPlanner {
                 baseline = base.get();
                 return replacePlan(base.get());
             }
+        } catch (Exception e) {
+            // fallback to original query
+            baseline = null; // clean baseline
+            if (ENABLE_THROW_EXCEPTION) {
+                throw e;
+            }
+            return query;
         }
     }
 
@@ -129,8 +142,13 @@ public class SPMPlanner {
             }
         }
 
+        // Expressions using functions need to be handled separately, because spm_function may lead to the selection
+        // of different types of functions, which can be ignored during binding
+        //
+        // this problem only occurs when binding the real plan, because the parameters at this time may be different
+        // ----------------- start -----------------
         @Override
-        public Boolean visitExpression(Expr node, ParseNode node2) {
+        public Boolean visitFunctionCall(FunctionCallExpr node, ParseNode node2) {
             if (SPMFunctions.isSPMFunctions(node) && ((Expr) node2).isConstant()) {
                 Preconditions.checkState(!node.getChildren().isEmpty());
                 Preconditions.checkState(node.getChild(0) instanceof IntLiteral);
@@ -140,10 +158,59 @@ public class SPMPlanner {
                     // same placeholder check is same values
                     return placeholderValues.get(spmId).equals(node2);
                 }
-                placeholderValues.put(((IntLiteral) node.getChild(0)).getValue(), (Expr) node2);
+                placeholderValues.put(spmId, (Expr) node2);
                 return true;
             }
-            return super.visitExpression(node, node2);
+            FunctionCallExpr other = cast(node2);
+            Preconditions.checkNotNull(node.getFn());
+            Preconditions.checkNotNull(other.getFn());
+            if (!StringUtils.equals(node.getFn().functionName(), other.getFn().functionName())) {
+                return false;
+            }
+            return check(node.getChildren(), ((Expr) node2).getChildren());
+        }
+
+        @Override
+        public Boolean visitArithmeticExpr(ArithmeticExpr node, ParseNode node2) {
+            ArithmeticExpr other = cast(node2);
+            if (node.getOp() != other.getOp()) {
+                return false;
+            }
+            return check(node.getChildren(), ((Expr) node2).getChildren());
+        }
+
+        @Override
+        public Boolean visitTimestampArithmeticExpr(TimestampArithmeticExpr node, ParseNode node2) {
+            TimestampArithmeticExpr other = cast(node2);
+            Preconditions.checkNotNull(node.getFn());
+            Preconditions.checkNotNull(other.getFn());
+            if (!StringUtils.equals(node.getFn().functionName(), other.getFn().functionName())) {
+                return false;
+            }
+            return check(node.getChildren(), ((Expr) node2).getChildren());
+        }
+        // ----------------- end -----------------
+
+        @Override
+        public Boolean visitInPredicate(InPredicate node, ParseNode context) {
+            if (node.getChildren().stream().noneMatch(SPMFunctions::isSPMFunctions)) {
+                return super.visitExpression(node, context);
+            }
+            InPredicate other = cast(context);
+            if (node.isNotIn() != other.isNotIn() || !check(node.getChild(0), other.getChild(0))) {
+                return false;
+            }
+            Preconditions.checkState(node.getChildren().size() == 2);
+            Preconditions.checkState(SPMFunctions.isSPMFunctions(node.getChild(1)));
+            Preconditions.checkState(!node.getChild(1).getChildren().isEmpty());
+            Preconditions.checkState(node.getChild(1).getChild(0) instanceof IntLiteral);
+            long spmId = ((IntLiteral) node.getChild(1).getChild(0)).getValue();
+            if (placeholderValues.containsKey(spmId)) {
+                // same placeholder check is same values
+                return placeholderValues.get(spmId).equals(other);
+            }
+            placeholderValues.put(spmId, other);
+            return true;
         }
     }
 
@@ -156,7 +223,21 @@ public class SPMPlanner {
                 long id = ((IntLiteral) node.getChild(0)).getValue();
                 return placeholderValues.get(id);
             }
-            return super.visitFunctionCall(node, context);
+            return super.visitExpression(node, context);
+        }
+
+        @Override
+        public ParseNode visitInPredicate(InPredicate node, Void context) {
+            if (node.getChildren().stream().anyMatch(SPMFunctions::isSPMFunctions)) {
+                Preconditions.checkState(node.getChildren().size() == 2);
+                Preconditions.checkState(SPMFunctions.isSPMFunctions(node.getChild(1)));
+                Preconditions.checkState(!node.getChild(1).getChildren().isEmpty());
+                Preconditions.checkState(node.getChild(1).getChild(0) instanceof IntLiteral);
+                long spmId = ((IntLiteral) node.getChild(1).getChild(0)).getValue();
+                InPredicate value = placeholderValues.get(spmId).cast();
+                return new InPredicate(node.getChild(0), value.getListChildren(), node.isNotIn());
+            }
+            return super.visitExpression(node, context);
         }
     }
 }

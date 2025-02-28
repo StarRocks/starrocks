@@ -14,23 +14,30 @@
 
 package com.starrocks.sql.spm;
 
+import com.starrocks.analysis.AnalyticExpr;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.ParseNode;
+import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.Subquery;
 import com.starrocks.sql.ast.AstVisitor;
+import com.starrocks.sql.ast.CTERelation;
+import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.SelectRelation;
+import com.starrocks.sql.ast.SetOperationRelation;
 import com.starrocks.sql.ast.SubqueryRelation;
 import com.starrocks.sql.ast.TableRelation;
 
 import java.util.List;
+import java.util.Objects;
 
 /*
  * This class is used to compare two ASTs
  */
 public class SPMAstCheckVisitor implements AstVisitor<Boolean, ParseNode> {
-    private static <T> T cast(ParseNode node) {
+    protected static <T> T cast(ParseNode node) {
         return (T) node;
     }
 
@@ -69,9 +76,17 @@ public class SPMAstCheckVisitor implements AstVisitor<Boolean, ParseNode> {
     }
 
     @Override
-    public Boolean visitSubquery(SubqueryRelation node, ParseNode context) {
+    public Boolean visitSubqueryRelation(SubqueryRelation node, ParseNode context) {
         SubqueryRelation other = cast(context);
         return check(node.getQueryStatement(), other.getQueryStatement());
+    }
+
+    @Override
+    public Boolean visitOrderByElement(OrderByElement node, ParseNode context) {
+        OrderByElement other = cast(context);
+        boolean check = Objects.equals(node.getNullsFirstParam(), other.getNullsFirstParam());
+        check = check && Objects.equals(node.getIsAsc(), other.getIsAsc());
+        return check && check(node.getExpr(), other.getExpr());
     }
 
     @Override
@@ -86,7 +101,20 @@ public class SPMAstCheckVisitor implements AstVisitor<Boolean, ParseNode> {
         check = check && check(node.getWhereClause(), other.getWhereClause());
         check = check && check(node.getGroupBy(), other.getGroupBy());
         check = check && check(node.getHaving(), other.getHaving());
+        check = check && check(node.getOrderBy(), other.getOrderBy());
         return check;
+    }
+
+    @Override
+    public Boolean visitSlot(SlotRef node, ParseNode node2) {
+        if (node2 instanceof SlotRef other) {
+            return node.equalsWithoutChild(other);
+        } else if (node2 instanceof FieldReference other) {
+            // field reference has none index, we just compare type here
+            // and depend on the field reference to check the index
+            return node.getType().equals(other.getType());
+        }
+        return false;
     }
 
     @Override
@@ -108,9 +136,53 @@ public class SPMAstCheckVisitor implements AstVisitor<Boolean, ParseNode> {
     }
 
     @Override
+    public Boolean visitCTE(CTERelation stmt, ParseNode context) {
+        CTERelation other = cast(context);
+        return check(stmt.getCteQueryStatement(), other.getCteQueryStatement());
+    }
+
+    @Override
+    public Boolean visitSetOp(SetOperationRelation node, ParseNode context) {
+        SetOperationRelation other = cast(context);
+        if (node.getQualifier() != other.getQualifier()) {
+            return false;
+        }
+        return check(node.getRelations(), other.getRelations());
+    }
+
+    @Override
     public Boolean visitSubqueryExpr(Subquery node, ParseNode context) {
         Subquery other = cast(context);
-        return check(node.getQueryStatement(), other.getQueryStatement());
+
+        QueryStatement qs1 = skipEmptyRelation(node.getQueryStatement());
+        QueryStatement qs2 = skipEmptyRelation(other.getQueryStatement());
+        return check(qs1, qs2);
+    }
+
+    private QueryStatement skipEmptyRelation(QueryStatement query) {
+        while ((query.getQueryRelation() instanceof SubqueryRelation qs)) {
+            if (qs.hasOffset() || qs.hasLimit() || qs.hasWithClause()) {
+                break;
+            }
+            query = qs.getQueryStatement();
+        }
+        return query;
+    }
+
+    @Override
+    public Boolean visitAnalyticExpr(AnalyticExpr node, ParseNode node2) {
+        AnalyticExpr other = cast(node2);
+        boolean check = Objects.equals(node.getWindow(), other.getWindow());
+        check = check && Objects.equals(node.getPartitionHint(), other.getPartitionHint());
+        check = check && Objects.equals(node.getSkewHint(), other.getSkewHint());
+        check = check && Objects.equals(node.isUseHashBasedPartition(), other.isUseHashBasedPartition());
+        check = check && Objects.equals(node.isSkewed(), other.isSkewed());
+
+        check = check && check(node.getFnCall(), other.getFnCall());
+        check = check && check(node.getPartitionExprs(), other.getPartitionExprs());
+        check = check && check(node.getOrderByElements(), other.getOrderByElements());
+        check = check && check(node.getChildren(), ((Expr) node2).getChildren());
+        return check;
     }
 
     @Override

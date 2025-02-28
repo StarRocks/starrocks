@@ -16,7 +16,6 @@ package com.starrocks.sql.spm;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
-import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.HintNode;
@@ -24,17 +23,14 @@ import com.starrocks.analysis.InPredicate;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
-import com.starrocks.common.util.ParseUtil;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.JoinRelation;
 import com.starrocks.sql.ast.QueryRelation;
 import com.starrocks.sql.ast.QueryStatement;
-import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
-import org.apache.commons.lang3.StringUtils;
+import org.apache.commons.collections4.CollectionUtils;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -136,32 +132,15 @@ public class SPMAst2SQLBuilder {
             return s;
         }
 
-        @Override
         protected List<String> visitSelectItemList(SelectRelation stmt) {
-            List<String> selectListString = new ArrayList<>();
-            for (SelectListItem item : stmt.getSelectList().getItems()) {
-                if (item.isStar()) {
-                    if (item.getTblName() != null) {
-                        selectListString.add(item.getTblName() + ".*");
-                    } else {
-                        selectListString.add("*");
-                    }
-                } else if (item.getExpr() != null) {
-                    Expr expr = item.getExpr();
-                    String str = visit(expr);
-                    if (StringUtils.isNotEmpty(item.getAlias())) {
-                        str += " AS " + ParseUtil.backquote(item.getAlias());
-                    }
-                    selectListString.add(str);
-                }
-            }
-            return selectListString;
+            Preconditions.checkState(CollectionUtils.isNotEmpty(stmt.getOutputExpression()));
+            return super.visitSelectItemList(stmt);
         }
 
         @Override
         public String visitInPredicate(InPredicate node, Void context) {
-            if (enableDigest && node.getChildren().stream().allMatch(SPMFunctions::isSPMFunctions)) {
-                Preconditions.checkState(node.getChildren().size() == 2);
+            if ((node.getChildren().stream().anyMatch(SPMFunctions::isSPMFunctions) || node.isConstantValues())
+                    && enableDigest) {
                 StringBuilder strBuilder = new StringBuilder();
                 String notStr = (node.isNotIn()) ? "NOT " : "";
                 strBuilder.append(printWithParentheses(node.getChild(0))).append(" ").append(notStr).append("IN ");
@@ -189,30 +168,6 @@ public class SPMAst2SQLBuilder {
                 return "?";
             }
             return super.visitLiteral(expr, context);
-        }
-
-        @Override
-        public String visitCompoundPredicate(CompoundPredicate node, Void context) {
-            StringBuilder sqlBuilder = new StringBuilder();
-            if (CompoundPredicate.Operator.NOT.equals(node.getOp())) {
-                sqlBuilder.append("NOT ");
-                sqlBuilder.append(printWithParentheses(node.getChild(0)));
-            } else {
-                sqlBuilder.append(printCompoundPredicate(node, node.getOp()));
-            }
-            return sqlBuilder.toString();
-        }
-
-        public String printCompoundPredicate(Expr node, CompoundPredicate.Operator op) {
-            if (!(node instanceof CompoundPredicate)) {
-                return printWithParentheses(node);
-            }
-            CompoundPredicate compoundPredicate = (CompoundPredicate) node;
-            if (!op.equals(compoundPredicate.getOp())) {
-                return printWithParentheses(node);
-            }
-            return printCompoundPredicate(node.getChild(0), op) + " " + op + " " +
-                    printCompoundPredicate(node.getChild(1), op);
         }
     }
 }

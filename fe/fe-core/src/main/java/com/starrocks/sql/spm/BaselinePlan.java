@@ -80,4 +80,13 @@ public class BaselinePlan {
     public LocalDateTime getUpdateTime() {
         return updateTime;
     }
+
+    @Override
+    public String toString() {
+        return "BaselinePlan{" +
+                "id=" + id +
+                ", bindSqlHash=" + bindSqlHash +
+                ", bindSqlDigest='" + bindSqlDigest + '\'' +
+                '}';
+    }
 }

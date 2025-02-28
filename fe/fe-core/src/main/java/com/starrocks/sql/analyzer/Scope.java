@@ -92,8 +92,8 @@ public class Scope {
 
     public ResolvedField resolveField(SlotRef expression, RelationId outerRelationId) {
         Optional<ResolvedField> resolvedField = resolveField(expression, 0, outerRelationId);
-        if (!resolvedField.isPresent()) {
-            throw new SemanticException("Column '%s' cannot be resolved", expression.toSql());
+        if (resolvedField.isEmpty()) {
+            throw new SemanticException("Column '%s' cannot be resolved", expression.toMySql());
         }
         return resolvedField.get();
     }

@@ -132,15 +132,14 @@ public class SPMPlanBuilder {
 
     protected void parameterizedStmt() {
         QueryRelation bind;
+        SPMPlaceholderBuilder builder = new SPMPlaceholderBuilder(false);
         if (this.stmt.getBindStmt() != null) {
             // has bind and plan
-            SPMPlaceholderBuilder builder = new SPMPlaceholderBuilder(false);
             builder.findPlaceholder(this.stmt.getBindStmt());
             bind = builder.insertPlaceholder(this.stmt.getBindStmt());
             builder.bindPlaceholder(this.stmt.getPlanStmt());
         } else {
             // only plan
-            SPMPlaceholderBuilder builder = new SPMPlaceholderBuilder(false);
             bind = builder.insertPlaceholder(this.stmt.getPlanStmt());
         }
         SPMAst2SQLBuilder digestBuilder = new SPMAst2SQLBuilder(false, true);

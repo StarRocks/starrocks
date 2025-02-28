@@ -197,6 +197,7 @@ public class SelectAnalyzer {
                                      AnalyzeState analyzeState, Scope scope) {
         ImmutableList.Builder<Expr> outputExpressionBuilder = ImmutableList.builder();
         ImmutableList.Builder<Field> outputFields = ImmutableList.builder();
+        List<String> outputAlias = Lists.newArrayList();
         List<Integer> outputExprInOrderByScope = new ArrayList<>();
 
         for (SelectListItem item : selectList.getItems()) {
@@ -208,7 +209,7 @@ public class SelectAnalyzer {
                         .collect(Collectors.toList());
                 List<String> unknownTypeFields = fields.stream()
                         .filter(field -> field.getType().getPrimitiveType().equals(PrimitiveType.UNKNOWN_TYPE))
-                        .map(Field::getName).collect(Collectors.toList());
+                        .map(Field::getName).toList();
                 if (!unknownTypeFields.isEmpty()) {
                     throw new SemanticException("Datatype of external table column " + unknownTypeFields
                             + " is not supported!");
@@ -235,6 +236,7 @@ public class SelectAnalyzer {
                     FieldReference fieldReference = new FieldReference(fieldIndex, item.getTblName());
                     analyzeExpression(fieldReference, analyzeState, scope);
                     outputExpressionBuilder.add(fieldReference);
+                    outputAlias.add(null);
                 }
                 outputFields.addAll(fields);
 
@@ -247,6 +249,7 @@ public class SelectAnalyzer {
                             AstToStringBuilder.getAliasName(item.getExpr(), false, false) : item.getAlias();
                 }
 
+                outputAlias.add(item.getAlias());
                 analyzeExpression(item.getExpr(), analyzeState, scope);
                 outputExpressionBuilder.add(item.getExpr());
 
@@ -310,6 +313,7 @@ public class SelectAnalyzer {
         analyzeState.setOutputExpression(outputExpressions);
         analyzeState.setOutputExprInOrderByScope(outputExprInOrderByScope);
         analyzeState.setOutputScope(new Scope(RelationId.anonymous(), new RelationFields(outputFields.build())));
+        analyzeState.setOutputAlias(outputAlias);
         return outputExpressions;
     }
 

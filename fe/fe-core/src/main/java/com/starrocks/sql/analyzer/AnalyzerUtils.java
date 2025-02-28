@@ -402,7 +402,7 @@ public class AnalyzerUtils {
         }
 
         @Override
-        public Void visitSubquery(SubqueryRelation node, Void context) {
+        public Void visitSubqueryRelation(SubqueryRelation node, Void context) {
             return visit(node.getQueryStatement());
         }
 
@@ -579,9 +579,9 @@ public class AnalyzerUtils {
         }
 
         @Override
-        public Void visitSubquery(SubqueryRelation node, Void context) {
+        public Void visitSubqueryRelation(SubqueryRelation node, Void context) {
             ctes.add(node.getResolveTableName());
-            return super.visitSubquery(node, context);
+            return super.visitSubqueryRelation(node, context);
         }
 
         @Override
@@ -1148,7 +1148,7 @@ public class AnalyzerUtils {
         }
 
         @Override
-        public Void visitSubquery(SubqueryRelation node, Void context) {
+        public Void visitSubqueryRelation(SubqueryRelation node, Void context) {
             subQueryRelations.put(node.getResolveTableName(), node);
             return visit(node.getQueryStatement());
         }
@@ -1168,7 +1168,7 @@ public class AnalyzerUtils {
         }
 
         @Override
-        public Void visitSubquery(SubqueryRelation node, Void context) {
+        public Void visitSubqueryRelation(SubqueryRelation node, Void context) {
             // no recursive
             subQueryRelations.put(node.getResolveTableName(), node);
             return null;

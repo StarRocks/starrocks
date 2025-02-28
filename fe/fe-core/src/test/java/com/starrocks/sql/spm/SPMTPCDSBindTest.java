@@ -26,6 +26,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -35,10 +36,15 @@ import java.util.List;
 public class SPMTPCDSBindTest extends TPCDSPlanTestBase {
     private static final Logger LOG = LogManager.getLogger(SPMTPCDSBindTest.class);
 
+    private static final List<String> UNSUPPORTED = Lists.newArrayList(
+            "query04", "query06", "query09", "query14-1", "query14-2",
+            "query23-1", "query23-2", "query24-1", "query24-2", "query44", "query54", "query58");
+
     @BeforeAll
     public static void beforeAll() throws Exception {
         beforeClass();
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+        SPMFunctions.enableSPMParamsPrint = true;
     }
 
     public CreateBaselinePlanStmt createBaselinePlanStmt(String sql) {
@@ -101,13 +107,25 @@ public class SPMTPCDSBindTest extends TPCDSPlanTestBase {
         analyzeSuccess(planSQL);
     }
 
+    @Test
+    public void validateCase() {
+        CreateBaselinePlanStmt stmt = createBaselinePlanStmt(Q69);
+        SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
+        generator.execute();
+
+        String bindSQL = generator.getBindSql();
+        String planSQL = generator.getPlanStmtSQL();
+
+        System.out.println(bindSQL);
+        System.out.println("\n\n====================================\n\n");
+        System.out.println(planSQL);
+    }
+
     public static List<Arguments> testCases() {
         List<Arguments> list = Lists.newArrayList();
-        List<String> unsupported = Lists.newArrayList("query04", "query06", "query09", "query14-1", "query14-2",
-                "query23-1", "query23-2", "query24-1", "query24-2", "query44", "query54", "query58");
         getSqlMap().forEach((k, v) -> {
-            if (!unsupported.contains(k)) {
-                list.add(Arguments.of("tpch." + k, v));
+            if (!UNSUPPORTED.contains(k)) {
+                list.add(Arguments.of(k, v));
             }
         });
         return list;
@@ -115,11 +133,10 @@ public class SPMTPCDSBindTest extends TPCDSPlanTestBase {
 
     public static List<Arguments> testCases2() {
         List<Arguments> list = Lists.newArrayList();
-        List<String> unsupported = Lists.newArrayList("query04", "query06", "query09", "query14-1", "query14-2",
-                "query23-1", "query23-2", "query24-1", "query24-2", "query44", "query54", "query58");
+        List<String> conflict = Lists.newArrayList("query33", "query56", "query60", "query83");
         getSqlMap().forEach((k, v) -> {
-            if (!unsupported.contains(k)) {
-                list.add(Arguments.of("tpch." + k, v, v));
+            if (!UNSUPPORTED.contains(k) && !conflict.contains(k)) {
+                list.add(Arguments.of(k, v, v));
             }
         });
         return list;

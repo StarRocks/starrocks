@@ -47,6 +47,7 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -686,6 +687,15 @@ public class SPMPlan2SQLBuilder {
         @Override
         public String visitVariableReference(ColumnRefOperator variable, SQLRelation context) {
             return context.columnNames.get(variable.getId());
+        }
+
+        @Override
+        public String visitConstant(ConstantOperator literal, SQLRelation context) {
+            String x = super.visitConstant(literal, context);
+            if (literal.getType().isDateType()) {
+                return "'" + x + "'";
+            }
+            return x;
         }
 
         @Override
