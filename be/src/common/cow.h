@@ -23,7 +23,7 @@
 
 namespace starrocks {
 
-// A Clone-on-write base class.
+// A Clone-on-write base class inspired by Clickhouse and Rust.
 //
 // The type Cow is a smart pointer providing clone-on-write functionality:
 //   - mutable data can not be shared with others only if it's mutated, and immutable data can be shared with others.
@@ -173,6 +173,12 @@ protected:
     template <typename T>
     class Immutable : public Owner<const T> {
     public:
+        template <typename... Args>
+        Immutable(Args&&... args) : Base(std::forward<Args>(args)...) {}
+
+        template <typename U>
+        Immutable(std::initializer_list<U>&& arg) : Base(std::forward<std::initializer_list<U>>(arg)) {}
+
         // Copy constructor/assignment
         Immutable(const Immutable&) = default;
         Immutable& operator=(const Immutable&) = default;
