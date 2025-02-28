@@ -35,10 +35,13 @@
 package com.starrocks.plugin;
 
 import com.google.common.base.Joiner;
+import com.starrocks.sql.ast.UserVariable;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /*
  * AuditEvent contains all information about audit log info.
@@ -137,6 +140,9 @@ public class AuditEvent {
 
     @AuditField(value = "IsForwardToLeader")
     public boolean isForwardToLeader = false;
+
+    @AuditField(value = "UserVariables")
+    public HashMap<String, UserVariable> userVariables = new HashMap<>();
 
     public static class AuditEventBuilder {
 
@@ -313,6 +319,11 @@ public class AuditEvent {
 
         public AuditEventBuilder setIsForwardToLeader(boolean isForwardToLeader) {
             auditEvent.isForwardToLeader = isForwardToLeader;
+            return this;
+        }
+   
+        public AuditEventBuilder setUserVariables(Map<String, UserVariable> userVariables) {
+            auditEvent.userVariables = new HashMap<>(userVariables);
             return this;
         }
 
