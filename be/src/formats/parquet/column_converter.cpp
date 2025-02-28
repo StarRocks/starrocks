@@ -48,8 +48,6 @@
 #include "util/int96.h"
 #include "util/timezone_utils.h"
 
-static constexpr bool parquet_fast_tz = true;
-
 namespace starrocks::parquet {
 
 // When doing decimal convert, source scale may not equal with destination scale,
@@ -664,7 +662,7 @@ Status Int96ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
             }
         }
     };
-    if (parquet_fast_tz) {
+    if (config::parquet_fast_timezone_conversion) {
         fill_dst_fn.operator()<true>();
     } else {
         fill_dst_fn.operator()<false>();
@@ -769,7 +767,7 @@ Status Int64ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     };
 
     if (_is_adjusted_to_utc) {
-        if (parquet_fast_tz) {
+        if (config::parquet_fast_timezone_conversion) {
             fill_dst_fn.operator()<true, true>();
         } else {
             fill_dst_fn.operator()<true, false>();
