@@ -18,6 +18,7 @@ set(EXEC_FILES
         ./column/nullable_column_test.cpp
         ./column/object_column_test.cpp
         ./column/timestamp_value_test.cpp
+        ./common/cow_test.cpp
         ./column/schema_test.cpp
         ./common/config_test.cpp
         ./common/process_exit_test.cpp
