@@ -839,6 +839,13 @@ under the License.
                 <version>12.4.2.jre11</version>
             </dependency>
 
+            <!-- https://mvnrepository.com/artifact/com.mysql/mysql-connector-j -->
+            <dependency>
+                <groupId>com.mysql</groupId>
+                <artifactId>mysql-connector-j</artifactId>
+                <version>9.2.0</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->
             <dependency>
                 <groupId>com.mockrunner</groupId>
