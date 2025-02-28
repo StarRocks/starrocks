@@ -163,7 +163,8 @@ TEST_F(LakeDataSourceTest, test_convert_scan_range_to_morsel_queue) {
     auto data_source_provider = dynamic_cast<connector::LakeDataSourceProvider*>(scan_node->data_source_provider());
     data_source_provider->set_lake_tablet_manager(_tablet_mgr.get());
 
-    ASSERT_TRUE(data_source_provider->always_shared_scan());
+    TScanRangeParams scan_range;
+    ASSERT_TRUE(data_source_provider->always_shared_scan(&scan_range));
 
     config::tablet_internal_parallel_max_splitted_scan_bytes = 32;
     config::tablet_internal_parallel_min_splitted_scan_rows = 4;
