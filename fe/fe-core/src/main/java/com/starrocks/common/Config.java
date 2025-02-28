@@ -714,6 +714,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int query_queue_v2_concurrency_level = 4;
+
+    @ConfField(mutable = true, comment = "Schedule policy of pending queries: SWRR/SJF")
+    public static String query_queue_v2_schedule_policy = "SWRR";
+
     /**
      * Used to estimate the number of slots of a query based on the cardinality of the Source Node. It is equal to the
      * cardinality of the Source Node divided by the configuration value and is limited to between [1, DOP*numBEs].
