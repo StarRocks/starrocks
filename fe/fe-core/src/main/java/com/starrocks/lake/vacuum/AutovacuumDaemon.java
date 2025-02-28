@@ -17,6 +17,8 @@ package com.starrocks.lake.vacuum;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
@@ -27,6 +29,7 @@ import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.proto.TabletInfoPB;
 import com.starrocks.proto.VacuumRequest;
 import com.starrocks.proto.VacuumResponse;
 import com.starrocks.rpc.BrpcProxy;
@@ -152,17 +155,19 @@ public class AutovacuumDaemon extends FrontendDaemon {
     }
 
     private void vacuumPartitionImpl(Database db, OlapTable table, PhysicalPartition partition) {
-        List<Tablet> tablets;
+        Map<Long, List<Tablet>> indexToTablets = new HashMap<>();
         long visibleVersion;
         long minRetainVersion;
         long startTime = System.currentTimeMillis();
         long minActiveTxnId = computeMinActiveTxnId(db, table);
-        Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
+        Map<ComputeNode, List<TabletInfoPB>> nodeToTablets = new HashMap<>();
 
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
-            tablets = partition.getBaseIndex().getTablets();
+            for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                indexToTablets.put(index.getId(), index.getTablets());
+            }
             visibleVersion = partition.getVisibleVersion();
             minRetainVersion = partition.getMinRetainVersion();
             if (minRetainVersion <= 0) {
@@ -172,15 +177,24 @@ public class AutovacuumDaemon extends FrontendDaemon {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
 
-        for (Tablet tablet : tablets) {
-            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-            Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
-            ComputeNode node = warehouseManager.getComputeNodeAssignedToTablet(warehouse.getName(), (LakeTablet) tablet);
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
+        for (Map.Entry<Long, List<Tablet>> entry : indexToTablets.entrySet()) {
+            long indexId = entry.getKey();
+            List<Tablet> tablets = entry.getValue();
+            for (Tablet tablet : tablets) {
+                LakeTablet lakeTablet = (LakeTablet) tablet;
+                ComputeNode node = warehouseManager.getComputeNodeAssignedToTablet(warehouse.getName(), lakeTablet);
 
-            if (node == null) {
-                return;
+                if (node == null) {
+                    return;
+                }
+                TabletInfoPB tabletInfo = new TabletInfoPB();
+                tabletInfo.setTabletId(tablet.getId());
+                tabletInfo.setMinVersion(lakeTablet.getMinVersion());
+                tabletInfo.setIndexId(indexId);
+                nodeToTablets.computeIfAbsent(node, k -> Lists.newArrayList()).add(tabletInfo);
             }
-            nodeToTablets.computeIfAbsent(node, k -> Lists.newArrayList()).add(tablet.getId());
         }
 
         boolean hasError = false;
@@ -189,10 +203,11 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long vacuumedVersion = Long.MAX_VALUE;
         boolean needDeleteTxnLog = true;
         List<Future<VacuumResponse>> responseFutures = Lists.newArrayListWithCapacity(nodeToTablets.size());
-        for (Map.Entry<ComputeNode, List<Long>> entry : nodeToTablets.entrySet()) {
+        for (Map.Entry<ComputeNode, List<TabletInfoPB>> entry : nodeToTablets.entrySet()) {
             ComputeNode node = entry.getKey();
             VacuumRequest vacuumRequest = new VacuumRequest();
-            vacuumRequest.tabletIds = entry.getValue();
+            // vacuumRequest.tabletIds is deprecated, use tabletInfos instead.
+            vacuumRequest.tabletInfos = entry.getValue();
             vacuumRequest.minRetainVersion = minRetainVersion;
             vacuumRequest.graceTimestamp =
                     startTime / MILLISECONDS_PER_SECOND - Config.lake_autovacuum_grace_period_minutes * 60;
@@ -226,6 +241,20 @@ public class AutovacuumDaemon extends FrontendDaemon {
                     vacuumedFiles += response.vacuumedFiles;
                     vacuumedFileSize += response.vacuumedFileSize;
                     vacuumedVersion = Math.min(vacuumedVersion, response.vacuumedVersion);
+
+                    if (response.tabletInfos != null) {
+                        for (TabletInfoPB tabletInfo : response.tabletInfos) {
+                            MaterializedIndex index = tabletInfo.indexId <= 0 ? partition.getBaseIndex()
+                                    : partition.getIndex(tabletInfo.indexId);
+                            if (index != null) {
+                                Tablet tablet = index.getTablet(tabletInfo.tabletId);
+                                if (tablet != null) {
+                                    LakeTablet lakeTablet = (LakeTablet) tablet;
+                                    lakeTablet.setMinVersion(tabletInfo.minVersion);
+                                }
+                            }
+                        }
+                    }
                 }
             } catch (InterruptedException e) {
                 LOG.warn("thread interrupted");
