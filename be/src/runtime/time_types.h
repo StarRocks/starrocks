@@ -377,7 +377,8 @@ int timestamp::get_timezone_offset_by_timestamp(Timestamp timestamp, const cctz:
 
 int timestamp::get_timezone_offset_by_epoch_seconds(int64_t seconds_from_epoch, const cctz::time_zone& ctz) {
     // if system_clock duration is nanoseconds(libstdc++), and to avoid overflow
-    // followings are min and max values. how I get these values? ask deepseek.
+    // std::numeric_limits<int64_t>::max() / 1'000'000'000
+    // std::numeric_limits<int64_t>::min() / 1'000'000'000
     static constexpr int64_t MIN_SECONDS = -9223372036;
     static constexpr int64_t MAX_SECONDS = 9223372036;
     seconds_from_epoch = std::max(MIN_SECONDS, std::min(MAX_SECONDS, seconds_from_epoch));
