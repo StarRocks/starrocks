@@ -23,7 +23,7 @@
 
 namespace starrocks {
 
-// A Clone-on-write base class.
+// A Clone-on-write base class inspired by Clickhouse and Rust.
 //
 // The type Cow is a smart pointer providing clone-on-write functionality:
 //   - mutable data can not be shared with others only if it's mutated, and immutable data can be shared with others.
