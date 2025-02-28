@@ -1550,9 +1550,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             row.add(dataSourcePropertiesJsonToString());
             row.add(customPropertiesJsonToString());
             row.add(getStatistic());
-
             String progressJsonStr = getProgress().toJsonString();
-
             row.add(progressJsonStr);
             row.add(getTimestampProgress().toJsonString());
             switch (state) {
@@ -1590,10 +1588,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                     row.add(e.getMessage());
                 }
             }
-
             row.add(getSourceProgressString());
             row.add(getSourceLagString(progressJsonStr));
-
             return row;
         } finally {
             readUnlock();
@@ -2051,9 +2047,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             info.setCustom_properties(customPropertiesJsonToString());
             info.setData_source_type(dataSourceType.name());
             info.setStatistic(getStatistic());
-
             String progressJsonStr = getProgress().toJsonString();
-
             info.setProgress(progressJsonStr);
             switch (state) {
                 case PAUSED:
@@ -2072,12 +2066,9 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 info.setTracking_sql("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
             }
             info.setOther_msg(otherMsg);
-
             info.setLatest_source_position(getSourceProgressString());
             info.setOffset_lag(getSourceLagString(progressJsonStr));
-
             return info;
-
         } finally {
             readUnlock();
         }
