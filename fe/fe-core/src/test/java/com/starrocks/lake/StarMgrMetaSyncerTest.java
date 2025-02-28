@@ -49,7 +49,6 @@ import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
-import com.starrocks.lake.snapshot.ClusterSnapshotUtils;
 import com.starrocks.persist.EditLog;
 import com.starrocks.proto.DeleteTabletRequest;
 import com.starrocks.proto.DeleteTabletResponse;
@@ -994,18 +993,18 @@ public class StarMgrMetaSyncerTest {
             }
         };
 
-        new MockUp<ClusterSnapshotUtils>() {
-            @Mock
-            public static void clearAutomatedSnapshotFromRemote(String snapshotName) {
-                return;
-            }
-        };
-
         new MockUp<GlobalStateMgr>() {
             @Mock
             public long getNextId() {
                 long id = nextId.incrementAndGet();
                 return id;
+            }
+        };
+
+        new MockUp<ClusterSnapshotJob>() {
+            @Mock
+            public void setState(ClusterSnapshotJobState state) {
+                return;
             }
         };
 
