@@ -34,9 +34,9 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.Warehouse;
-import org.junit.After;
+import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.MockedStatic;
 
@@ -51,18 +51,18 @@ import static org.mockito.Mockito.mockStatic;
 import static org.mockito.Mockito.when;
 
 public class VacuumTest {
-    private Database db;
-    private OlapTable olapTable;
-    private PhysicalPartition partition;
-    private WarehouseManager warehouseManager;
-    private ComputeNode computeNode;
-    private LakeService lakeService;
-    private ConnectContext connectContext;
-    protected StarRocksAssert starRocksAssert;
+    private static Database db;
+    private static OlapTable olapTable;
+    private static PhysicalPartition partition;
+    private static WarehouseManager warehouseManager;
+    private static ComputeNode computeNode;
+    private static LakeService lakeService;
+    private static ConnectContext connectContext;
+    protected static StarRocksAssert starRocksAssert;
 
 
-    @Before
-    public void setUp() throws Exception {
+    @BeforeClass
+    public static void setUp() throws Exception {
         FeConstants.runningUnitTest = true;
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         // create connect context
@@ -84,10 +84,6 @@ public class VacuumTest {
         db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(GlobalStateMgrTestUtil.testDb1);
         olapTable = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
                     .getTable(db.getFullName(), GlobalStateMgrTestUtil.testTable1);
-        partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
-        partition.setVisibleVersion(10L, System.currentTimeMillis());
-        partition.setMinRetainVersion(10L);
-        partition.setLastSuccVacuumVersion(4L);
 
         warehouseManager = mock(WarehouseManager.class);
         computeNode = mock(ComputeNode.class);
@@ -98,18 +94,22 @@ public class VacuumTest {
 
         when(computeNode.getHost()).thenReturn("localhost");
         when(computeNode.getBrpcPort()).thenReturn(8080);
-
         
     }
 
-    @After
-    public void clear() {
+    @AfterClass
+    public static void clear() {
         db.dropTable(olapTable.getName());
     }
 
     @Test
     public void testLastSuccVacuumVersionUpdate() throws Exception {
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+        partition.setVisibleVersion(10L, System.currentTimeMillis());
+        partition.setMinRetainVersion(10L);
+        partition.setLastSuccVacuumVersion(4L);
+
         AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
 
         VacuumResponse mockResponse = new VacuumResponse();
@@ -142,6 +142,10 @@ public class VacuumTest {
     @Test
     public void testLastSuccVacuumVersionUpdateFailed() throws Exception {
         GlobalStateMgr currentState = GlobalStateMgr.getCurrentState();
+        partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+        partition.setVisibleVersion(10L, System.currentTimeMillis());
+        partition.setMinRetainVersion(10L);
+        partition.setLastSuccVacuumVersion(4L);
         AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
 
         VacuumResponse mockResponse = new VacuumResponse();
@@ -167,6 +171,10 @@ public class VacuumTest {
 
     @Test
     public void testVacuumCheck() throws Exception {
+        partition = olapTable.getPhysicalPartitions().stream().findFirst().orElse(null);
+        partition.setVisibleVersion(10L, System.currentTimeMillis());
+        partition.setMinRetainVersion(10L);
+        partition.setLastSuccVacuumVersion(4L);
         AutovacuumDaemon autovacuumDaemon = new AutovacuumDaemon();
         long current = System.currentTimeMillis();
         // static
