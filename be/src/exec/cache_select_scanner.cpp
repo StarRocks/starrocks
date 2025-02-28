@@ -29,7 +29,12 @@ Status CacheSelectScanner::do_init(RuntimeState* runtime_state, const HdfsScanne
 Status CacheSelectScanner::do_open(RuntimeState* runtime_state) {
     // Cache select don't need to decompress data
     _compression_type = CompressionTypePB::NO_COMPRESSION;
-    RETURN_IF_ERROR(open_random_access_file());
+    // cache select only support text, parquet and orc format
+    if (_scanner_params.scan_range->file_format == THdfsFileFormat::TEXT ||
+        _scanner_params.scan_range->file_format == THdfsFileFormat::PARQUET ||
+        _scanner_params.scan_range->file_format == THdfsFileFormat::ORC) {
+        RETURN_IF_ERROR(open_random_access_file());
+    }
     return Status::OK();
 }
 
@@ -51,8 +56,8 @@ Status CacheSelectScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* ch
     } else if (_scanner_params.scan_range->file_format == THdfsFileFormat::ORC) {
         RETURN_IF_ERROR(_fetch_orc());
     } else {
-        return Status::InternalError("Unsupported file format in cache select: " +
-                                     to_string(_scanner_params.scan_range->file_format));
+        return Status::EndOfFile("Unsupported file format in cache select: " +
+                                 to_string(_scanner_params.scan_range->file_format));
     }
 
     // handle iceberg delete files
