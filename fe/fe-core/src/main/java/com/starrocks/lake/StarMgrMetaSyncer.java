@@ -63,7 +63,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         super("StarMgrMetaSyncer", Config.star_mgr_meta_sync_interval_sec * 1000L);
     }
 
-    public List<Long> getAllPartitionShardGroupId() {
+    private List<Long> getAllPartitionShardGroupId() {
         List<Long> groupIds = new ArrayList<>();
         List<Long> dbIds = GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIdsIncludeRecycleBin();
         for (Long dbId : dbIds) {
@@ -161,7 +161,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
      * 2. Compare the list and get a list of shard groups that in StarMgr but not in FE
      * 3. shard groups with empty shards and older than threshold, will be permanently deleted.
      */
-    public void deleteUnusedShardAndShardGroup() {
+    private void deleteUnusedShardAndShardGroup() {
         StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
 
         List<Long> groupIdFe = getAllPartitionShardGroupId();
@@ -221,7 +221,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         }
     }
 
-    public void cleanOneGroup(long groupId, StarOSAgent starOSAgent, List<Long> emptyShardGroup) {
+    private void cleanOneGroup(long groupId, StarOSAgent starOSAgent, List<Long> emptyShardGroup) {
         try {
             List<Long> shardIds = starOSAgent.listShard(groupId);
             if (shardIds.isEmpty()) {

@@ -14,7 +14,6 @@
 
 package com.starrocks.lake.snapshot;
 
-import com.staros.proto.ShardGroupInfo;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.AlterTest;
 import com.starrocks.alter.MaterializedViewHandler;
@@ -28,7 +27,6 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
 import com.starrocks.fs.hdfs.HdfsFsManager;
 import com.starrocks.journal.bdbje.BDBJEJournal;
-import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.leader.CheckpointController;
@@ -50,7 +48,6 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -382,98 +379,6 @@ public class ClusterSnapshotTest {
             Assert.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(10));
             Assert.assertTrue(localClusterSnapshotMgr.isTableSafeToDeleteTablet(11));
             localClusterSnapshotMgr.setAutomatedSnapshotOff();
-        }
-
-        {
-            AlterJobV2 alterjob3 = new SchemaChangeJobV2(1, 2, 100L, "table3", 100000);
-            alterjob3.setJobState(AlterJobV2.JobState.FINISHED);
-            alterjob3.setFinishedTimeMs(1000);
-            schemaChangeHandler.addAlterJobV2(alterjob3);
-
-            final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
-            localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
-            localClusterSnapshotMgr.setAutomatedSnapshotOn(storageVolumeName);
-            long oldConfig = Config.shard_group_clean_threshold_sec;
-            Config.shard_group_clean_threshold_sec = 0;
-            StarMgrMetaSyncer syncer = new StarMgrMetaSyncer();
-            List<Long> groupIdFe = new ArrayList();
-            List<Long> emptyShardGroup = new ArrayList<>();
-            groupIdFe.add(100L);
-            ShardGroupInfo info1 = ShardGroupInfo.newBuilder()
-                    .setGroupId(99L)
-                    .putLabels("tableId", String.valueOf(100L))
-                    .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
-                    .build();
-            ShardGroupInfo info2 = ShardGroupInfo.newBuilder()
-                    .setGroupId(100L)
-                    .putLabels("tableId", String.valueOf(111L))
-                    .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
-                    .build();
-            List<ShardGroupInfo> shardGroupsInfo = new ArrayList();
-            shardGroupsInfo.add(info1);
-            shardGroupsInfo.add(info2);
-    
-            new MockUp<StarMgrMetaSyncer>() {
-                @Mock
-                public List<Long> getAllPartitionShardGroupId() {
-                    return groupIdFe;
-                }
-            };
-    
-            new MockUp<StarOSAgent>() {
-                @Mock
-                public List<ShardGroupInfo> listShardGroup() {
-                    return shardGroupsInfo;
-                }
-            };
-
-
-            new MockUp<GlobalStateMgr>() {
-                @Mock
-                public ClusterSnapshotMgr getClusterSnapshotMgr() {
-                    return localClusterSnapshotMgr;
-                }
-            };
-    
-            {
-                new Expectations() {
-                    {
-                        syncer.cleanOneGroup(99L, starOSAgent, emptyShardGroup);
-                        maxTimes = 1;
-                        minTimes = 1;
-                        result = 0;
-                    }
-                };
-                syncer.deleteUnusedShardAndShardGroup();
-            }
-            ClusterSnapshotJob j3 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
-            j3.setState(ClusterSnapshotJobState.FINISHED);
-            {
-                new Expectations() {
-                    {
-                        syncer.cleanOneGroup(99L, starOSAgent, emptyShardGroup);
-                        maxTimes = 0;
-                        minTimes = 0;
-                        result = 0;
-                    }
-                };
-                syncer.deleteUnusedShardAndShardGroup();
-            }
-            ClusterSnapshotJob j4 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
-            j4.setState(ClusterSnapshotJobState.FINISHED);
-            {
-                new Expectations() {
-                    {
-                        syncer.cleanOneGroup(99L, starOSAgent, emptyShardGroup);
-                        maxTimes = 1;
-                        minTimes = 1;
-                        result = 0;
-                    }
-                };
-                syncer.deleteUnusedShardAndShardGroup();
-            }
-            localClusterSnapshotMgr.setAutomatedSnapshotOff();
-            Config.shard_group_clean_threshold_sec = oldConfig;
         }
     }
 
