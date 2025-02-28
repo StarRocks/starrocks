@@ -18,10 +18,7 @@
 
 namespace starrocks {
 
-SchemaScanner::ColumnDesc SchemaDummyScanner::_s_dummy_columns[] = {};
-
-SchemaDummyScanner::SchemaDummyScanner()
-        : SchemaScanner(_s_dummy_columns, sizeof(_s_dummy_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
+SchemaDummyScanner::SchemaDummyScanner() : SchemaScanner(nullptr, 0) {}
 
 SchemaDummyScanner::~SchemaDummyScanner() = default;
 
