@@ -37,6 +37,7 @@ package com.starrocks.common;
 import com.starrocks.StarRocksFE;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Replica;
+import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
 
 import static java.lang.Math.max;
 import static java.lang.Runtime.getRuntime;
@@ -715,8 +716,8 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static int query_queue_v2_concurrency_level = 4;
 
-    @ConfField(mutable = true, comment = "Schedule policy of pending queries: SWRR/SJF")
-    public static String query_queue_v2_schedule_policy = "SWRR";
+    @ConfField(mutable = true, comment = "Schedule strategy of pending queries: SWRR/SJF")
+    public static String query_queue_v2_schedule_strategy = QueryQueueOptions.SchedulePolicy.createDefault().name();
 
     /**
      * Used to estimate the number of slots of a query based on the cardinality of the Source Node. It is equal to the
