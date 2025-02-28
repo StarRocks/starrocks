@@ -170,8 +170,10 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
             } else {
                 Preconditions.checkState(false, "unknown schedule policy: " + opts.getPolicy());
             }
-            while (requiringQueue.isEmpty()) {
-                newQueue.add(requiringQueue.poll());
+            if (requiringQueue != null) {
+                while (requiringQueue.isEmpty()) {
+                    newQueue.add(requiringQueue.poll());
+                }
             }
             requiringQueue = newQueue;
 

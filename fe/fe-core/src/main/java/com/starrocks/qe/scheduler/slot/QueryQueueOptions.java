@@ -52,9 +52,9 @@ public class QueryQueueOptions {
                 BackendResourceStat.getInstance().getAvgMemLimitBytes(),
                 Config.query_queue_v2_num_rows_per_slot,
                 Config.query_queue_v2_cpu_costs_per_slot);
-        SchedulePolicy policy = SchedulePolicy.create(Config.query_queue_v2_schedule_policy);
+        SchedulePolicy policy = SchedulePolicy.create(Config.query_queue_v2_schedule_strategy);
         if (policy == null) {
-            LOG.error("unknown query_queue_v2_schedule_policy: {}", Config.query_queue_v2_schedule_policy);
+            LOG.error("unknown query_queue_v2_schedule_policy: {}", Config.query_queue_v2_schedule_strategy);
             policy = SchedulePolicy.createDefault();
         }
         return new QueryQueueOptions(true, v2, policy);
@@ -64,7 +64,7 @@ public class QueryQueueOptions {
     QueryQueueOptions(boolean enableQueryQueueV2, V2 v2) {
         this.enableQueryQueueV2 = enableQueryQueueV2 && v2 != null;
         this.v2 = v2;
-        this.policy = SchedulePolicy.SWRR;
+        this.policy = SchedulePolicy.createDefault();
     }
 
     QueryQueueOptions(boolean enableQueryQueueV2, V2 v2, SchedulePolicy policy) {
@@ -101,7 +101,7 @@ public class QueryQueueOptions {
 
     @Override
     public int hashCode() {
-        return Objects.hash(enableQueryQueueV2, v2);
+        return Objects.hash(enableQueryQueueV2, v2, policy);
     }
 
     @Override
