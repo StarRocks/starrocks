@@ -16,11 +16,11 @@ select * from hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_view order
 -- !result
 show create view hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_view;
 -- result:
-hive_oss_par_parquet_view	CREATE VIEW `hive_oss_par_parquet_view` (`col_int`, `col_string`) AS select col_int, col_string from hive_oss_par_parquet_snappy;
+hive_oss_par_parquet_view	CREATE VIEW `hive_sql_test_${uuid0}`.`hive_oss_db`.`hive_oss_par_parquet_view` (`col_int`, `col_string`) AS select col_int, col_string from hive_oss_par_parquet_snappy;
 -- !result
 show create table hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_view;
 -- result:
-hive_oss_par_parquet_view	CREATE VIEW `hive_oss_par_parquet_view` (`col_int`, `col_string`) AS select col_int, col_string from hive_oss_par_parquet_snappy;
+hive_oss_par_parquet_view	CREATE VIEW `hive_sql_test_${uuid0}`.`hive_oss_db`.`hive_oss_par_parquet_view` (`col_int`, `col_string`) AS select col_int, col_string from hive_oss_par_parquet_snappy;
 -- !result
 drop catalog hive_sql_test_${uuid0};
 -- result:
