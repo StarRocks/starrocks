@@ -186,6 +186,15 @@ public class ShowStmtAnalyzer {
             String db = node.getDb();
             db = getDatabaseName(db, context);
             node.setDb(db);
+            String catalogName;
+            if (node.getCatalogName() != null) {
+                catalogName = node.getCatalogName();
+            } else {
+                catalogName = context.getCurrentCatalog();
+            }
+            if (!GlobalStateMgr.getCurrentState().getCatalogMgr().catalogExists(catalogName)) {
+                ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_CATALOG_ERROR, catalogName);
+            }
             return null;
         }
 
