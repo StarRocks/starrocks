@@ -28,10 +28,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
-<<<<<<< HEAD
-import com.starrocks.common.UserException;
-=======
->>>>>>> ec3cc1f11 ([Enhancement] Support partial refresh in text based mv rewrite (#56166))
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.qe.SessionVariable;
@@ -447,90 +443,6 @@ public class MvPartitionCompensator {
         return Range.all();
     }
 
-<<<<<<< HEAD
-    /**
-     * Return the refreshed partition key ranges of the ref base table.
-     *
-     * NOTE: This method can be only used in query rewrite and cannot be used to insert routine.
-     * @param partitionByTable          : the base table of the mv
-     * @param partitionColumn           : the partition column of the base table
-     * @param mv                        : the materialized view
-     * @param mvPartitionNamesToRefresh : the updated partition names  of the materialized view
-     * @return
-     */
-    private static List<Range<PartitionKey>> getMvRefreshedPartitionRange(
-            Table partitionByTable,
-            Column partitionColumn,
-            MaterializedView mv,
-            Set<String> mvPartitionNamesToRefresh) throws AnalysisException {
-        // materialized view latest partition ranges except to-refresh partitions
-        List<Range<PartitionKey>> mvRanges = getLatestPartitionRangeForNativeTable(mv, mvPartitionNamesToRefresh);
-        Optional<Expr> mvPartitionExprOpt = mv.getRangePartitionFirstExpr();
-        if (mvPartitionExprOpt.isEmpty()) {
-            return Lists.newArrayList();
-        }
-        Expr mvPartitionExpr = mvPartitionExprOpt.get();
-        List<Range<PartitionKey>> refBaseTableRanges;
-        try {
-            Map<String, Range<PartitionKey>> refBaseTableRangeMap =
-                    PartitionUtil.getPartitionKeyRange(partitionByTable, partitionColumn, mvPartitionExpr);
-            refBaseTableRanges = refBaseTableRangeMap.values().stream().collect(Collectors.toList());
-        } catch (UserException e) {
-            LOG.warn("Materialized view Optimizer compute partition range failed.", e);
-            return Lists.newArrayList();
-        }
-
-        // date to varchar range
-        Map<Range<PartitionKey>, Range<PartitionKey>> baseRangeMapping = null;
-        boolean isConvertToDate = PartitionUtil.isConvertToDate(mvPartitionExpr, partitionColumn);
-        if (isConvertToDate) {
-            baseRangeMapping = Maps.newHashMap();
-            // convert varchar range to date range
-            List<Range<PartitionKey>> baseTableDateRanges = Lists.newArrayList();
-            for (Range<PartitionKey> range : refBaseTableRanges) {
-                Range<PartitionKey> datePartitionRange = convertToDateRange(range);
-                baseTableDateRanges.add(datePartitionRange);
-                baseRangeMapping.put(datePartitionRange, range);
-            }
-            refBaseTableRanges = baseTableDateRanges;
-        }
-
-        List<Range<PartitionKey>> latestBaseTableRanges = Lists.newArrayList();
-        for (Range<PartitionKey> range : refBaseTableRanges) {
-            // if materialized view's partition range can enclose the ref base table range, we think that
-            // the materialized view's partition has been refreshed and should be compensated into the materialized
-            // view's partition predicate.
-            if (mvRanges.stream().anyMatch(mvRange -> mvRange.encloses(range))) {
-                latestBaseTableRanges.add(range);
-            }
-        }
-        if (isConvertToDate) {
-            // treat string type partition as list, so no need merge
-            List<Range<PartitionKey>> tmpRangeList = Lists.newArrayList();
-            for (Range<PartitionKey> range : latestBaseTableRanges) {
-                tmpRangeList.add(baseRangeMapping.get(range));
-            }
-            return tmpRangeList;
-        } else {
-            return MvUtils.mergeRanges(latestBaseTableRanges);
-        }
-    }
-
-    private static List<Range<PartitionKey>> getLatestPartitionRangeForNativeTable(OlapTable partitionTable,
-                                                                                   Set<String> modifiedPartitionNames) {
-        // partitions that will be excluded
-        Set<Long> filteredIds = Sets.newHashSet();
-        for (Partition p : partitionTable.getPartitions()) {
-            if (modifiedPartitionNames.contains(p.getName()) || !p.hasData()) {
-                filteredIds.add(p.getId());
-            }
-        }
-        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionTable.getPartitionInfo();
-        return rangePartitionInfo.getRangeList(filteredIds, false);
-    }
-
-=======
->>>>>>> ec3cc1f11 ([Enhancement] Support partial refresh in text based mv rewrite (#56166))
     private static List<ScalarOperator> getScanOpPrunedPartitionPredicates(MaterializedView mv,
                                                                            LogicalScanOperator scanOperator) {
         if (scanOperator instanceof LogicalOlapScanOperator) {
