@@ -248,7 +248,7 @@ CANCEL COMPACTION WHERE TXN_ID = <TXN_ID>;
 > **NOTE**
 >
 > - The CANCEL COMPACTION statement must be submitted from the Leader FE node.
-> - The CANCEL COMPACTION statement only applies to transactions that have not committed, that is, CommitTime is NULL is `SHOW PROC '/compactions'`.
+> - The CANCEL COMPACTION statement only applies to transactions that have not committed, that is, `CommitTime` is NULL in the return of `SHOW PROC '/compactions'`.
 > - CANCEL COMPACTION is an asynchronous process. You can check if the task is cancelled by executing `SHOW PROC '/compactions'`.
 
 ## Best practices
