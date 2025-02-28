@@ -46,6 +46,7 @@
 #include "agent/publish_version.h"
 #include "agent/task_worker_pool.h"
 #include "brpc/errno.pb.h"
+#include "cache/block_cache/block_cache.h"
 #include "column/stream_chunk.h"
 #include "common/closure_guard.h"
 #include "common/config.h"
@@ -82,6 +83,7 @@
 #include "storage/txn_manager.h"
 #include "util/arrow/row_batch.h"
 #include "util/failpoint/fail_point.h"
+#include "util/hash_util.hpp"
 #include "util/stopwatch.hpp"
 #include "util/thrift_util.h"
 #include "util/time.h"
@@ -599,6 +601,55 @@ void PInternalServiceImplBase<T>::_fetch_data(google::protobuf::RpcController* c
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
     auto* ctx = new GetResultBatchCtx(cntl, result, done);
     _exec_env->result_mgr()->fetch_data(request->finst_id(), ctx);
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::fetch_datacache(google::protobuf::RpcController* cntl_base,
+                                                  const PFetchDataCacheRequest* request, PFetchDataCacheResponse* response,
+                                                  google::protobuf::Closure* done) {
+    // TODO: Submit to a task pool related to datacache.
+    auto task = [=]() { this->_fetch_datacache(cntl_base, request, response, done); };
+    if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
+        ClosureGuard closure_guard(done);
+        Status::ServiceUnavailable("submit fetch_data task failed").to_protobuf(response->mutable_status());
+    }
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::_fetch_datacache(google::protobuf::RpcController* cntl_base,
+                                                   const PFetchDataCacheRequest* request, PFetchDataCacheResponse* response,
+                                                   google::protobuf::Closure* done) {
+    auto begin_us = GetCurrentTimeMicros();
+    // NOTE: we should give a default value to response to avoid concurrent risk
+    // If we don't give response here, stream manager will call done->Run before
+    // transmit_data(), which will cause a dirty memory access.
+    auto* cntl = static_cast<brpc::Controller*>(cntl_base);
+    Status st;
+    st.to_protobuf(response->mutable_status());
+
+    VLOG_CACHE << "[Gavin] recv fetch_datacache from " << cntl->remote_side().ip << ":" << cntl->remote_side().port
+               << ", request_id: " << request->request_id()
+               << ", cache_id: " << HashUtil::hash(request->cache_key().data(), request->cache_key().size(), 0)
+               << ", offset: " << request->offset() << ", size: " << request->size();
+
+    BlockCache* block_cache = BlockCache::instance();
+    ReadCacheOptions options;
+    IOBuffer buf;
+    st = block_cache->read_buffer(request->cache_key(), request->offset(), request->size(), &buf, &options);
+    if (st.ok()) {
+        cntl->response_attachment().swap(buf.raw_buf());
+    } else {
+        LOG(WARNING) << "failed to fetch datacache, req_id: " << request->request_id() << ", reason: "
+                     << st.message();
+    }
+    if (done != nullptr) {
+        // NOTE: only when done is not null, we can set response status
+        st.to_protobuf(response->mutable_status());
+        done->Run();
+    }
+    VLOG_CACHE << "[Gavin] finish fetch_datacache, request_id: " << request->request_id() << ", st: " << st
+               << ", size: " << cntl->response_attachment().size()
+               << ", latency_us: " << GetCurrentTimeMicros() - begin_us;
 }
 
 template <typename T>

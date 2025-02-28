@@ -38,15 +38,20 @@ import com.starrocks.planner.IcebergScanNode;
 import com.starrocks.planner.OdpsScanNode;
 import com.starrocks.planner.PaimonScanNode;
 import com.starrocks.planner.ScanNode;
+import com.starrocks.qe.scheduler.CandidateWorkerProvider;
 import com.starrocks.qe.scheduler.NonRecoverableException;
 import com.starrocks.qe.scheduler.WorkerProvider;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
 import com.starrocks.system.ComputeNode;
+import com.starrocks.system.HistoricalNodeMgr;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TScanRangeParams;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -56,7 +61,6 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * Hybrid backend selector for hive table.
@@ -80,6 +84,8 @@ public class HDFSBackendSelector implements BackendSelector {
     private final List<TScanRangeLocations> locations;
     private final FragmentScanRangeAssignment assignment;
     private final WorkerProvider workerProvider;
+    private final WorkerProvider candidateWorkerProvider;
+    private final ConnectContext connectContext;
     private final boolean forceScheduleLocal;
     private final boolean shuffleScanRange;
     private final boolean useIncrementalScanRanges;
@@ -153,15 +159,48 @@ public class HDFSBackendSelector implements BackendSelector {
                                FragmentScanRangeAssignment assignment, WorkerProvider workerProvider,
                                boolean forceScheduleLocal,
                                boolean shuffleScanRange,
-                               boolean useIncrementalScanRanges) {
+                               boolean useIncrementalScanRanges,
+                               ConnectContext connectContext) {
         this.scanNode = scanNode;
         this.locations = locations;
         this.assignment = assignment;
         this.workerProvider = workerProvider;
         this.forceScheduleLocal = forceScheduleLocal;
+        this.connectContext = connectContext;
         this.hdfsScanRangeHasher = new HdfsScanRangeHasher();
         this.shuffleScanRange = shuffleScanRange;
         this.useIncrementalScanRanges = useIncrementalScanRanges;
+        this.candidateWorkerProvider = initCandidateWorkerProvider();
+    }
+
+    private WorkerProvider initCandidateWorkerProvider() {
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        if (!sessionVariable.isEnableDataCacheSharing() ||
+                isCacheSharingExpired(sessionVariable.getDataCacheSharingWorkPeriod())) {
+            LOG.error("[Gavin] init candidate worker provider failed");
+            return null;
+        }
+
+        WorkerProvider.Factory factory = new CandidateWorkerProvider.Factory();
+        WorkerProvider candidateWorkerProvider = factory.captureAvailableWorkers(
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
+                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
+                sessionVariable.getComputationFragmentSchedulingPolicy(), workerProvider.getWarehouseId());
+        return candidateWorkerProvider;
+    }
+
+    private boolean isCacheSharingExpired(long cacheSharingWorkPeriod) {
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Warehouse warehouse = warehouseManager.getWarehouse(workerProvider.getWarehouseId());
+        HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
+
+        long lastUpdateTime = historicalNodeMgr.getLastUpdateTime(warehouse.getName());
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastUpdateTime > cacheSharingWorkPeriod * 1000) {
+            LOG.error("[Gavin] cache sharing is expired");
+            return true;
+        }
+        return false;
     }
 
     // re-balance scan ranges for compute node if needed, return the compute node which scan range is assigned to
@@ -171,10 +210,9 @@ public class HDFSBackendSelector implements BackendSelector {
             return null;
         }
 
-        boolean forceReBalance = ConnectContext.get() != null ? ConnectContext.get().getSessionVariable().
-                getHdfsBackendSelectorForceRebalance() : false;
-        boolean enableDataCache = ConnectContext.get() != null ? ConnectContext.get().getSessionVariable().
-                isEnableScanDataCache() : false;
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        boolean forceReBalance = sessionVariable.getHdfsBackendSelectorForceRebalance();
+        boolean enableDataCache = sessionVariable.isEnableScanDataCache();
         // If force-rebalancing is not specified and cache is used, skip the rebalancing directly.
         if (!forceReBalance && enableDataCache) {
             return backends.get(0);
@@ -211,13 +249,11 @@ public class HDFSBackendSelector implements BackendSelector {
     }
 
     @VisibleForTesting
-    public HashRing makeHashRing() {
-        Set<ComputeNode> nodes = assignedScansPerComputeNode.keySet();
+    public HashRing makeHashRing(Collection<ComputeNode> nodes) {
         HashRing hashRing = null;
-        String hashAlgorithm = ConnectContext.get() != null ? ConnectContext.get().getSessionVariable().
-                getHdfsBackendSelectorHashAlgorithm() : "consistent";
-        int virtualNodeNum = ConnectContext.get() != null ? ConnectContext.get().getSessionVariable().
-                getConsistentHashVirtualNodeNum() : CONSISTENT_HASH_RING_VIRTUAL_NUMBER;
+        SessionVariable sessionVariable = connectContext.getSessionVariable();
+        String hashAlgorithm = sessionVariable.getHdfsBackendSelectorHashAlgorithm();
+        int virtualNodeNum = sessionVariable.getConsistentHashVirtualNodeNum();
         if (hashAlgorithm.equalsIgnoreCase("rendezvous")) {
             hashRing = new RendezvousHashRing(Hashing.murmur3_128(), new TScanRangeLocationsFunnel(),
                     new ComputeNodeFunnel(), nodes);
@@ -276,7 +312,7 @@ public class HDFSBackendSelector implements BackendSelector {
             if (node == null) {
                 unassigned.add(scanRangeLocations);
             } else {
-                recordScanRangeAssignment(node, backends, scanRangeLocations);
+                recordScanRangeAssignment(node, null, backends, scanRangeLocations);
             }
         }
         return unassigned;
@@ -305,7 +341,17 @@ public class HDFSBackendSelector implements BackendSelector {
         }
 
         // use consistent hashing to schedule remote scan ranges
-        HashRing hashRing = makeHashRing();
+        HashRing hashRing = makeHashRing(assignedScansPerComputeNode.keySet());
+        HashRing candidateHashRing = null;
+        if (candidateWorkerProvider != null) {
+            Collection<ComputeNode> candidateWorkers = candidateWorkerProvider.getAllWorkers();
+            if (!candidateWorkers.isEmpty()) {
+                candidateHashRing = makeHashRing(candidateWorkers);
+            } else {
+                LOG.error("[Gavin] found empty candidate workers");
+            }
+        }
+
         if (shuffleScanRange) {
             Collections.shuffle(remoteScanRangeLocations);
         }
@@ -317,13 +363,20 @@ public class HDFSBackendSelector implements BackendSelector {
             if (node == null) {
                 throw new StarRocksException("Failed to find backend to execute");
             }
-            recordScanRangeAssignment(node, backends, scanRangeLocations);
+
+            ComputeNode candidateNode = null;
+            if (candidateHashRing != null) {
+                List<ComputeNode> candidateBackends = candidateHashRing.get(scanRangeLocations, kCandidateNumber);
+                // if datacache is enable, skip rebalance because it make the cache position undefined.
+                candidateNode = candidateBackends.get(0);
+            }
+            recordScanRangeAssignment(node, candidateNode, backends, scanRangeLocations);
         }
 
         recordScanRangeStatistic();
     }
 
-    private void recordScanRangeAssignment(ComputeNode worker, List<ComputeNode> backends,
+    private void recordScanRangeAssignment(ComputeNode worker, ComputeNode candidateWorker, List<ComputeNode> backends,
                                            TScanRangeLocations scanRangeLocations)
             throws NonRecoverableException {
         workerProvider.selectWorker(worker.getId());
@@ -340,6 +393,14 @@ public class HDFSBackendSelector implements BackendSelector {
         // add scan range params
         TScanRangeParams scanRangeParams = new TScanRangeParams();
         scanRangeParams.scan_range = scanRangeLocations.scan_range;
+        if (candidateWorker != null) {
+            LOG.debug("[Gavin] record scan range with target node: {}, candidate node: {}", worker.getHost(),
+                    candidateWorker.getHost());
+            scanRangeLocations.scan_range.hdfs_scan_range.setCandidate_node(
+                    String.format("%s:%d", candidateWorker.getHost(), candidateWorker.getBrpcPort()));
+        } else {
+            LOG.error("record scan range with empty candidate");
+        }
         assignment.put(worker.getId(), scanNode.getId().asInt(), scanRangeParams);
     }
 
