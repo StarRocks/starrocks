@@ -472,11 +472,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             // save table names for recycling
             Set<String> tableNames = new HashSet<>(db.getTableNamesViewWithLock());
             unprotectDropDb(db, isForceDrop, false);
-            if (!isForceDrop) {
-                recycleBin.recycleDatabase(db, tableNames);
-            } else {
-                stateMgr.getLocalMetastore().onEraseDatabase(db.getId());
-            }
+            recycleBin.recycleDatabase(db, tableNames, !isForceDrop);
             db.setExist(false);
 
             // 3. remove db from globalStateMgr
@@ -528,11 +524,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
             try {
                 Set<String> tableNames = new HashSet(db.getTableNamesViewWithLock());
                 unprotectDropDb(db, isForceDrop, true);
-                if (!isForceDrop) {
-                    recycleBin.recycleDatabase(db, tableNames);
-                } else {
-                    stateMgr.getLocalMetastore().onEraseDatabase(db.getId());
-                }
+                recycleBin.recycleDatabase(db, tableNames, !isForceDrop);
                 db.setExist(false);
             } finally {
                 locker.unLockDatabase(db.getId(), LockType.WRITE);
