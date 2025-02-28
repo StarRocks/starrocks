@@ -78,6 +78,11 @@ public:
     // to first send a HEAD OBJECT request to get the object size.
     virtual StatusOr<std::string> read_all();
 
+    // if cache in [offset, offset+length] exists, refresh it
+    // if not, read from remote and write to cache system
+    // stream offset will not change
+    virtual Status touch_cache(int64_t offset, size_t length) { return Status::OK(); }
+
     virtual const std::string& filename() const { return _filename; };
 
     virtual bool is_cache_hit() const { return false; };
