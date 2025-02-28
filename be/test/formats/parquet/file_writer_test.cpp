@@ -700,4 +700,33 @@ TEST_F(FileWriterTest, TestFieldIdWithStruct) {
     ASSERT_EQ(struct_group_node->field(1)->name(), "b");
 }
 
+TEST_F(FileWriterTest, TestWriteJson) {
+    auto type_json = TypeDescriptor::from_logical_type(TYPE_JSON);
+    std::vector<TypeDescriptor> type_descs{type_json};
+
+    // nullable column
+    auto data_column = JsonColumn::create();
+    auto json1 = JsonValue::parse(R"({"a": 1, "b": 2})");
+    data_column->append(&json1.value());
+    data_column->append(&json1.value());
+    auto json2 = JsonValue::parse(R"({"a": 3})");
+    data_column->append(&json2.value());
+
+    auto null_column = UInt8Column::create();
+    std::vector<uint8_t> nulls = {1, 0, 1};
+    null_column->append_numbers(nulls.data(), nulls.size());
+    auto nullable_column = NullableColumn::create(data_column, null_column);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(nullable_column, chunk->num_columns());
+
+    // write chunk
+    auto schema = _make_schema(type_descs);
+    ASSERT_TRUE(schema != nullptr);
+    auto st = _write_chunk(chunk, type_descs, schema);
+    ASSERT_OK(st);
+
+    // _read_chunk does not support read json
+}
+
 } // namespace starrocks::parquet
