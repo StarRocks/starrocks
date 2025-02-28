@@ -135,7 +135,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         enableEraseLater.remove(id);
     }
 
-    public synchronized void recycleDatabase(Database db, Set<String> tableNames) {
+    public synchronized void recycleDatabase(Database db, Set<String> tableNames, boolean recoverable) {
         Preconditions.checkState(!idToDatabase.containsKey(db.getId()));
 
         // db should be empty. all tables are recycled before
@@ -145,7 +145,7 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         eraseDatabaseWithSameName(db.getFullName());
 
         // recycle db
-        RecycleDatabaseInfo databaseInfo = new RecycleDatabaseInfo(db, tableNames);
+        RecycleDatabaseInfo databaseInfo = new RecycleDatabaseInfo(db, tableNames, recoverable);
         idToDatabase.put(db.getId(), databaseInfo);
         idToRecycleTime.put(db.getId(), System.currentTimeMillis());
         LOG.info("recycle db[{}-{}]", db.getId(), db.getOriginName());
@@ -325,6 +325,11 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             return 0;
         }
 
+        RecycleDatabaseInfo databaseInfo = idToDatabase.get(id);
+        if (databaseInfo != null && !databaseInfo.isRecoverable()) {
+            return 0;
+        }
+
         return idToRecycleTime.get(id);
     }
 
@@ -340,6 +345,18 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             expireMs += LATE_RECYCLE_INTERVAL_SECONDS * 1000L;
         }
         return latencyMs > expireMs;
+    }
+
+    private synchronized boolean canEraseDatabase(RecycleDatabaseInfo databaseInfo, long currentTimeMs) {
+        if (!checkValidDeletionByClusterSnapshot(databaseInfo.getDb().getId())) {
+            return false;
+        }
+
+        if (timeExpired(databaseInfo.getDb().getId(), currentTimeMs)) {
+            return true;
+        }
+
+        return false;
     }
 
     private synchronized boolean canEraseTable(RecycleTableInfo tableInfo, long currentTimeMs) {
@@ -414,9 +431,9 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
             Map.Entry<Long, RecycleDatabaseInfo> entry = dbIter.next();
             RecycleDatabaseInfo dbInfo = entry.getValue();
             Database db = dbInfo.getDb();
-            // No need to check cluster snapshot for database dropping.
-            // Because database is just meta data in FE image and not files or data in BE/CN side
-            if (timeExpired(db.getId(), currentTimeMs)) {
+            // db erase should be control by cluster snapshot backup if it is avaliable
+            // to prevent the incorrect deletion by the StarMgrMetaSyncer
+            if (canEraseDatabase(dbInfo, currentTimeMs)) {
                 // erase db
                 dbIter.remove();
                 removeRecycleMarkers(entry.getKey());
@@ -1087,14 +1104,18 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
         private Database db;
         @SerializedName("t")
         private Set<String> tableNames;
+        @SerializedName(value = "r")
+        private boolean recoverable;
 
         public RecycleDatabaseInfo() {
             tableNames = Sets.newHashSet();
+            recoverable = true;
         }
 
-        public RecycleDatabaseInfo(Database db, Set<String> tableNames) {
+        public RecycleDatabaseInfo(Database db, Set<String> tableNames, boolean recoverable) {
             this.db = db;
             this.tableNames = tableNames;
+            this.recoverable = recoverable;
         }
 
         public Database getDb() {
@@ -1103,6 +1124,10 @@ public class CatalogRecycleBin extends FrontendDaemon implements Writable {
 
         public Set<String> getTableNames() {
             return tableNames;
+        }
+
+        public boolean isRecoverable() {
+            return recoverable;
         }
 
         @Override
