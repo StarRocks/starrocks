@@ -179,7 +179,7 @@ TEST(DateValueTest, getOffsetByTimezone) {
         cctz::time_zone ctz;
         TimezoneUtils::find_cctz_time_zone(timezone, ctz);
 
-        auto offset = timestamp::get_offset_by_timezone(timestampInDST, ctz);
+        auto offset = timestamp::get_timezone_offset_by_timestamp(timestampInDST, ctz);
 
         ASSERT_EQ(32400, offset);
     }
@@ -190,7 +190,7 @@ TEST(DateValueTest, getOffsetByTimezone) {
         cctz::time_zone ctz;
         TimezoneUtils::find_cctz_time_zone(timezone, ctz);
 
-        auto offset = timestamp::get_offset_by_timezone(timestampOutOfDST, ctz);
+        auto offset = timestamp::get_timezone_offset_by_timestamp(timestampOutOfDST, ctz);
 
         ASSERT_EQ(28800, offset);
     }
