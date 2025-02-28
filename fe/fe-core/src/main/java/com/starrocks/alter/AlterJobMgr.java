@@ -61,6 +61,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.lake.DataCacheInfo;
 import com.starrocks.persist.AlterMaterializedViewBaseTableInfosLog;
 import com.starrocks.persist.AlterMaterializedViewStatusLog;
 import com.starrocks.persist.AlterViewInfo;
@@ -567,6 +568,12 @@ public class AlterJobMgr {
                 if (partitionInfo.getType() == PartitionType.UNPARTITIONED) {
                     olapTable.setReplicationNum(replicationNum);
                 }
+            }
+            if (olapTable.isCloudNativeTable()) {
+                DataCacheInfo dataCacheInfo = partitionInfo.getDataCacheInfo(info.getPartitionId());
+                boolean asyncWriteBack = dataCacheInfo == null ? false : dataCacheInfo.isAsyncWriteBack();
+                partitionInfo.setDataCacheInfo(info.getPartitionId(),
+                        new DataCacheInfo(info.getDataCacheEnable(), asyncWriteBack));
             }
             partitionInfo.setIsInMemory(info.getPartitionId(), info.isInMemory());
         } finally {

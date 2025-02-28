@@ -57,4 +57,33 @@ public class PropertyAnalyzerTest {
             Assert.assertEquals("Cannot parse text to Duration", e.getMessage());
         }
     }
+
+    @Test
+    public void testAnalyzeDataCacheEnable() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, "true");
+
+        try {
+            Assert.assertTrue(PropertyAnalyzer.analyzeDataCacheEnable(properties));
+        } catch (AnalysisException e) {
+            Assert.assertTrue(false);
+        }
+
+        Assert.assertTrue(properties.size() == 0);
+        properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, "false");
+        try {
+            Assert.assertFalse(PropertyAnalyzer.analyzeDataCacheEnable(properties));
+        } catch (AnalysisException e) {
+            Assert.assertTrue(false);
+        }
+
+        properties.put(PropertyAnalyzer.PROPERTIES_DATACACHE_ENABLE, "abcd");
+        // If the string passed in is not "true" (ignoring case),
+        // analyzeDataCacheEnable will return false instead of throwing an exception
+        try {
+            Assert.assertFalse(PropertyAnalyzer.analyzeDataCacheEnable(properties));
+        } catch (AnalysisException e) {
+            Assert.assertTrue(false);
+        }
+    }
 }
