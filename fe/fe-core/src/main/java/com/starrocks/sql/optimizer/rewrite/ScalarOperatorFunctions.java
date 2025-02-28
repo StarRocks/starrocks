@@ -77,10 +77,12 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.IsoFields;
 import java.time.temporal.TemporalAdjusters;
 import java.time.temporal.TemporalUnit;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.PrimitiveType.BIGINT;
 import static com.starrocks.catalog.PrimitiveType.BITMAP;
@@ -1298,20 +1300,12 @@ public class ScalarOperatorFunctions {
             return ConstantOperator.createNull(Type.VARCHAR);
         }
         String separator = split.getVarchar();
-        final StringBuilder resultBuilder = new StringBuilder();
-        boolean first = true;
-        for (ConstantOperator value : values) {
-            if (value.isNull()) {
-                continue;
-            }
-            if (first) {
-                first = false;
-            } else {
-                resultBuilder.append(separator);
-            }
-            resultBuilder.append(value.getVarchar());
-        }
-        return ConstantOperator.createVarchar(resultBuilder.toString());
+        return ConstantOperator.createVarchar(
+                Arrays.stream(values)
+                        .filter(v -> !v.isNull())
+                        .map(ConstantOperator::getVarchar)
+                        .collect(Collectors.joining(separator))
+        );
     }
 
     @ConstantFunction(name = "version", argTypes = {}, returnType = VARCHAR)
