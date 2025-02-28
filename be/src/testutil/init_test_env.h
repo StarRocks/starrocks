@@ -102,7 +102,8 @@ int init_test_env(int argc, char** argv) {
     // initialization. If there are test cases that require Pagecache, it must be responsible
     // for managing it.
     auto* cache_env = CacheEnv::GetInstance();
-    st = cache_env->init(paths);
+    std::vector<StorePath> datacache_paths;
+    st = cache_env->init(datacache_paths);
     CHECK(st.ok()) << st;
 
     auto* exec_env = ExecEnv::GetInstance();
