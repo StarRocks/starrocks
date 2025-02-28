@@ -547,7 +547,7 @@ Status LowCardColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
 
     auto* dst_data_column = down_cast<LowCardDictColumn*>(ColumnHelper::get_data_column(dst.get()));
     SIMDGather::gather(dst_data_column->get_data().data(), _code_convert_map->data(), codes.data(),
-                       DICT_DECODE_MAX_SIZE, src->size());
+                       _code_convert_map->size(), src->size());
 
     if (dst->is_nullable()) {
         auto* nullable_dst = down_cast<NullableColumn*>(dst.get());

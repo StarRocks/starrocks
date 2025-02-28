@@ -2080,6 +2080,9 @@ public class Config extends ConfigBase {
     @ConfField
     public static int dict_collect_thread_pool_for_lake_size = 4;
 
+    @ConfField
+    public static int low_cardinality_threshold = 255;
+
     /**
      * The column statistic cache update interval
      */

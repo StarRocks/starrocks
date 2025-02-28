@@ -271,7 +271,7 @@ Status DictOptimizeParser::_eval_and_rewrite(ExprContext* ctx, Expr* expr, DictO
     // assign convert mapping column
     dict_opt_ctx->convert_column = result_column;
     // build code convert map
-    dict_opt_ctx->code_convert_map.resize(DICT_DECODE_MAX_SIZE + 1);
+    dict_opt_ctx->code_convert_map.resize(codes.size() + 1);
     for (int i = 0; i < codes.size(); ++i) {
         dict_opt_ctx->code_convert_map[codes[i]] = i;
     }
