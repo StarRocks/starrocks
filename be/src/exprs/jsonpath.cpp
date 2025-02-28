@@ -182,9 +182,19 @@ vpack::Slice JsonPathPiece::extract(const JsonValue* json, const std::vector<Jso
     return extract(json->to_vslice(), jsonpath, 1, b);
 }
 
-vpack::Slice JsonPathPiece::extract(vpack::Slice root, const std::vector<JsonPathPiece>& jsonpath, int path_index,
-                                    vpack::Builder* builder) {
+// Reused by extract and collect
+template <typename RET,
+          typename = typename std::enable_if_t<std::is_same_v<RET, void> || std::is_same_v<RET, vpack::Slice>>>
+static RET extract_from_json(vpack::Slice root, const std::vector<JsonPathPiece>& jsonpath, int path_index,
+                             vpack::Builder* builder) {
     vpack::Slice current_value = root;
+
+#define RETURN_STMT                                    \
+    if constexpr (std::is_same_v<RET, vpack::Slice>) { \
+        return noneJsonSlice();                        \
+    } else {                                           \
+        return;                                        \
+    }
 
     for (int i = path_index; i < jsonpath.size(); i++) {
         auto& path_item = jsonpath[i];
@@ -198,13 +208,12 @@ vpack::Slice JsonPathPiece::extract(vpack::Slice root, const std::vector<JsonPat
         } else if (!item_key.empty()) {
             // Iterate to a sub-field
             if (!current_value.isObject()) {
-                return noneJsonSlice();
             }
 
             next_item = current_value.get(item_key);
         }
         if (next_item.isNone()) {
-            return noneJsonSlice();
+            RETURN_STMT
         }
 
         // TODO(mofei) refactor it to ArraySelector
@@ -215,7 +224,7 @@ vpack::Slice JsonPathPiece::extract(vpack::Slice root, const std::vector<JsonPat
             break;
         case SINGLE: {
             if (!next_item.isArray()) {
-                return noneJsonSlice();
+                RETURN_STMT
             }
             array_selector->iterate(next_item, [&](vpack::Slice array_item) { next_item = array_item; });
             break;
@@ -223,26 +232,47 @@ vpack::Slice JsonPathPiece::extract(vpack::Slice root, const std::vector<JsonPat
         case WILDCARD:
         case SLICE: {
             if (!next_item.isArray()) {
-                return noneJsonSlice();
+                RETURN_STMT
             }
             {
-                builder->clear();
-                vpack::ArrayBuilder ab(builder);
-                array_selector->iterate(next_item, [&](vpack::Slice array_item) {
-                    auto sub = extract(array_item, jsonpath, i + 1, builder);
-                    if (!sub.isNone()) {
-                        builder->add(sub);
-                    }
-                });
+                if constexpr (std::is_same_v<RET, vpack::Slice>) {
+                    builder->clear();
+                    vpack::ArrayBuilder ab(builder);
+                    array_selector->iterate(next_item, [&](vpack::Slice array_item) {
+                        JsonPathPiece::collect(array_item, jsonpath, i + 1, builder);
+                    });
+                } else {
+                    array_selector->iterate(next_item, [&](vpack::Slice array_item) {
+                        JsonPathPiece::collect(array_item, jsonpath, i + 1, builder);
+                    });
+                }
             }
-            return builder->slice();
+            if constexpr (std::is_same_v<RET, vpack::Slice>) {
+                return builder->slice();
+            } else {
+                return;
+            }
         }
         }
 
         current_value = next_item;
     }
 
-    return current_value;
+    if constexpr (std::is_same_v<RET, vpack::Slice>) {
+        return current_value;
+    } else {
+        builder->add(current_value);
+    }
+}
+
+vpack::Slice JsonPathPiece::extract(vpack::Slice root, const std::vector<JsonPathPiece>& jsonpath, int path_index,
+                                    vpack::Builder* builder) {
+    return extract_from_json<vpack::Slice>(root, jsonpath, path_index, builder);
+}
+
+void JsonPathPiece::collect(vpack::Slice root, const std::vector<JsonPathPiece>& jsonpath, int path_index,
+                            vpack::Builder* builder) {
+    return extract_from_json<void>(root, jsonpath, path_index, builder);
 }
 
 void JsonPath::reset(const JsonPath& rhs) {
