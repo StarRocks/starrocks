@@ -49,6 +49,9 @@ public:
 
 private:
     static bool need_evict_tablet(const std::string& tablet_pk_path);
+
+    // cleare tablet persistent index from the specified `data_dir`
+    static Status clear_persistent_index(int64_t tablet_id, DataDir* data_dir);
 };
 #else
 class LocalPkIndexManager {
