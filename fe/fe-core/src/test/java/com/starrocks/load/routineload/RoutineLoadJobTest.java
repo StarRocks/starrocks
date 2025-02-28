@@ -369,7 +369,7 @@ public class RoutineLoadJobTest {
         KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         routineLoadJob.setWarehouseId(0L);
         List<String> showInfo = routineLoadJob.getShowInfo();
-        Assert.assertEquals(22, showInfo.size());
+        Assert.assertEquals(23, showInfo.size());
         Assert.assertEquals("default_warehouse", showInfo.get(20));
 
         routineLoadJob.setWarehouseId(1L);
