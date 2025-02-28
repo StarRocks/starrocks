@@ -17,6 +17,11 @@ package com.starrocks.connector.exception;
 import static java.lang.String.format;
 
 public class StarRocksConnectorException extends RuntimeException {
+
+    public StarRocksConnectorException(Throwable cause) {
+        super(cause);
+    }
+
     public StarRocksConnectorException(String message) {
         super(message);
     }
