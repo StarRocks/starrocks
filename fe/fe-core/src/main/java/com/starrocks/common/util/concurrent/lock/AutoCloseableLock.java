@@ -22,6 +22,15 @@ public class AutoCloseableLock implements AutoCloseable {
     private final List<Long> tableList;
     private final LockType lockType;
 
+    public AutoCloseableLock(Long dbId, List<Long> tableList, LockType lockType) {
+        this.locker = new Locker();
+        this.dbId = dbId;
+        this.tableList = new ArrayList<>(tableList);
+        this.lockType = lockType;
+
+        locker.lockTablesWithIntensiveDbLock(dbId, tableList, lockType);
+    }
+
     public AutoCloseableLock(Locker locker, Long dbId, List<Long> tableList, LockType lockType) {
         this.locker = locker;
         this.dbId = dbId;
