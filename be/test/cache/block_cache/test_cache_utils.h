@@ -38,7 +38,6 @@ CacheOptions create_simple_options(size_t block_size, size_t mem_quota, ssize_t 
     options.block_size = block_size;
     options.skip_read_factor = 1.0;
     return options;
-    return options;
 }
 
 std::shared_ptr<BlockCache> create_cache(const CacheOptions& options) {
