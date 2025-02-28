@@ -26,6 +26,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.common.AnalysisException;
@@ -76,7 +77,8 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
             "rows", "TABLE_ROWS"
     );
 
-    private static final TableName TABLE_NAME = new TableName(InfoSchemaDb.DATABASE_NAME, "materialized_views");
+    private static final TableName TABLE_NAME = new TableName(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
+            InfoSchemaDb.DATABASE_NAME, "materialized_views");
 
     private String db;
 
