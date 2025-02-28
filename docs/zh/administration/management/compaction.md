@@ -248,7 +248,7 @@ CANCEL COMPACTION WHERE TXN_ID = <TXN_ID>;
 > **说明**
 >
 > - CANCEL COMPACTION 语句必须从 Leader FE 节点提交。
-> - CANCEL COMPACTION 只能用于未 Commit 的事务，即 `SHOW PROC '/compactions'` 中 CommitTime 为 NULL。
+> - CANCEL COMPACTION 只能用于未 Commit 的事务，即 `SHOW PROC '/compactions'` 返回中 `CommitTime` 为 NULL 的事务。
 > - CANCEL COMPACTION 为异步过程，您可以通过执行 `SHOW PROC '/compactions'` 查看任务是否取消。
 
 ## 最佳实践
