@@ -116,7 +116,7 @@ public class CompoundPredicateOperator extends PredicateOperator {
         }
     }
 
-    private List<ScalarOperator> normalizeChildren() {
+    public List<ScalarOperator> normalizeChildren() {
         List<ScalarOperator> sortedChildren;
         switch (type) {
             case AND:
