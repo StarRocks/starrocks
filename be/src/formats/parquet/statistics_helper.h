@@ -27,7 +27,7 @@ class StatisticsHelper {
 public:
     enum StatSupportedFilter { FILTER_IN, IS_NULL, IS_NOT_NULL, RF_MIN_MAX };
 
-    static Status decode_value_into_column(const ColumnPtr& column, const std::vector<std::string>& values,
+    static Status decode_value_into_column(const MutableColumnPtr& column, const std::vector<std::string>& values,
                                            const std::vector<bool>& null_pages, const TypeDescriptor& type,
                                            const ParquetField* field, const std::string& timezone);
 

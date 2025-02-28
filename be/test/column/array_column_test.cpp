@@ -29,9 +29,9 @@ namespace starrocks {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_create) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto column = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr column = ArrayColumn::create(elements, offsets);
     ASSERT_TRUE(column->is_array());
     ASSERT_FALSE(column->is_nullable());
     ASSERT_EQ(0, column->size());
@@ -40,9 +40,9 @@ PARALLEL_TEST(ArrayColumnTest, test_create) {
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_array_column_update_if_overflow) {
     // normal
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    auto column = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    ArrayColumn::Ptr column = ArrayColumn::create(elements, offsets);
 
     elements->append_datum("1");
     elements->append_datum("2");
@@ -58,19 +58,19 @@ PARALLEL_TEST(ArrayColumnTest, test_array_column_update_if_overflow) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_array_column_downgrade) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
     elements->append_datum("1");
     elements->append_datum("2");
     offsets->append(2);
-    auto column = ArrayColumn::create(elements, offsets);
+    ArrayColumn::Ptr column = ArrayColumn::create(elements, offsets);
     ASSERT_FALSE(column->has_large_column());
     auto ret = column->downgrade();
     ASSERT_TRUE(ret.ok());
     ASSERT_TRUE(ret.value() == nullptr);
 
     offsets = UInt32Column::create();
-    auto large_elements = NullableColumn::create(LargeBinaryColumn::create(), NullColumn::create());
+    NullableColumn::Ptr large_elements = NullableColumn::create(LargeBinaryColumn::create(), NullColumn::create());
     column = ArrayColumn::create(large_elements, offsets);
     for (size_t i = 0; i < 10; i++) {
         large_elements->append_datum(Slice(std::to_string(i)));
@@ -89,9 +89,9 @@ PARALLEL_TEST(ArrayColumnTest, test_array_column_downgrade) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_get_elements) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto column = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr column = ArrayColumn::create(elements, offsets);
 
     // insert [1, 2, 3], [4, 5, 6]
     elements->append_datum(1);
@@ -110,9 +110,9 @@ PARALLEL_TEST(ArrayColumnTest, test_get_elements) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_byte_size) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto column = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr column = ArrayColumn::create(elements, offsets);
 
     // insert [1, 2, 3], [4, 5, 6]
     elements->append_datum(1);
@@ -144,8 +144,8 @@ PARALLEL_TEST(ArrayColumnTest, test_byte_size) {
 PARALLEL_TEST(ArrayColumnTest, test_filter) {
     // ARRAY<INT>
     {
-        auto column = ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
-                                          UInt32Column::create());
+        ArrayColumn::Ptr column = ArrayColumn::create(
+                NullableColumn::create(Int32Column::create(), NullColumn::create()), UInt32Column::create());
         // The width of AVX2 register is 256 bits, aka 32 bytes, make the column size equals
         // to 2 * 32 + 31 in order to cover both the SIMD instructions and non-SIMD instructions.
         const int N = 2 * 32 + 31;
@@ -228,8 +228,8 @@ PARALLEL_TEST(ArrayColumnTest, test_filter) {
     }
     // ARRAY<INT>
     {
-        auto column = ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
-                                          UInt32Column::create());
+        ArrayColumn::Ptr column = ArrayColumn::create(
+                NullableColumn::create(Int32Column::create(), NullColumn::create()), UInt32Column::create());
         // The width of AVX2 register is 256 bits, aka 32 bytes, make the column size equals
         // to 2 * 32 + 31 in order to cover both the SIMD instructions and non-SIMD instructions.
         const int N = 3 * 32 + 31;
@@ -267,8 +267,8 @@ PARALLEL_TEST(ArrayColumnTest, test_filter) {
     }
     // ARRAY<INT> with the number of elements > 2^16
     {
-        auto column = ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
-                                          UInt32Column::create());
+        ArrayColumn::Ptr column = ArrayColumn::create(
+                NullableColumn::create(Int32Column::create(), NullColumn::create()), UInt32Column::create());
         column->reserve(4096);
         for (int i = 0; i < 4096; i++) {
             DatumArray array;
@@ -304,11 +304,11 @@ PARALLEL_TEST(ArrayColumnTest, test_filter) {
     // ARRAY<ARRAY<INT>>
     {
         const int N = 100;
-        auto elements = ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
-                                            UInt32Column::create());
-        auto nullable_elements = NullableColumn::create(std::move(elements), NullColumn::create());
+        ArrayColumn::Ptr elements = ArrayColumn::create(
+                NullableColumn::create(Int32Column::create(), NullColumn::create()), UInt32Column::create());
+        NullableColumn::Ptr nullable_elements = NullableColumn::create(std::move(elements), NullColumn::create());
         auto offsets = UInt32Column ::create();
-        auto column = ArrayColumn::create(std::move(nullable_elements), std::move(offsets));
+        ArrayColumn::Ptr column = ArrayColumn::create(std::move(nullable_elements), std::move(offsets));
 
         for (int i = 0; i < N; i++) {
             column->append_datum(DatumArray{DatumArray{i * 3, i * 3 + 1}, DatumArray{i * 2, i * 2 + 1}});
@@ -391,9 +391,9 @@ PARALLEL_TEST(ArrayColumnTest, test_filter) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_append_array) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto column = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr column = ArrayColumn::create(elements, offsets);
 
     // insert [1, 2, 3], [4, 5, 6]
     elements->append_datum(1);
@@ -417,11 +417,11 @@ PARALLEL_TEST(ArrayColumnTest, test_append_array) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_append_nulls) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto column = ArrayColumn::create(elements, offsets);
-    auto null_column = NullColumn::create();
-    auto nullable_column = NullableColumn::create(column, null_column);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr column = ArrayColumn::create(elements, offsets);
+    NullColumn::Ptr null_column = NullColumn::create();
+    NullableColumn::Ptr nullable_column = NullableColumn::create(column, null_column);
 
     ASSERT_TRUE(nullable_column->append_nulls(1));
 
@@ -445,9 +445,9 @@ PARALLEL_TEST(ArrayColumnTest, test_append_nulls) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_append_defaults) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto column = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr column = ArrayColumn::create(elements, offsets);
 
     // insert [1, 2, 3], [4, 5, 6]
     elements->append_datum(1);
@@ -470,9 +470,9 @@ PARALLEL_TEST(ArrayColumnTest, test_append_defaults) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_compare_at) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto column = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr column = ArrayColumn::create(elements, offsets);
 
     // insert [1, 2, 3], [4, 5, 6]
     elements->append_datum(1);
@@ -485,9 +485,9 @@ PARALLEL_TEST(ArrayColumnTest, test_compare_at) {
     elements->append_datum(6);
     offsets->append(6);
 
-    auto offsets_2 = UInt32Column::create();
-    auto elements_2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto column_2 = ArrayColumn::create(elements_2, offsets_2);
+    UInt32Column::Ptr offsets_2 = UInt32Column::create();
+    NullableColumn::Ptr elements_2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr column_2 = ArrayColumn::create(elements_2, offsets_2);
 
     // insert [4, 5, 6], [7, 8, 9]
     elements_2->append_datum(4);
@@ -564,13 +564,14 @@ PARALLEL_TEST(ArrayColumnTest, equals) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_multi_dimension_array) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
 
-    auto offsets_1 = UInt32Column::create();
-    auto elements_1 = NullableColumn::create(ArrayColumn::create(elements, offsets), NullColumn::create());
+    UInt32Column::Ptr offsets_1 = UInt32Column::create();
+    NullableColumn::Ptr elements_1 =
+            NullableColumn::create(ArrayColumn::create(elements, offsets), NullColumn::create());
 
-    auto column = ArrayColumn::create(elements_1, offsets_1);
+    ArrayColumn::Ptr column = ArrayColumn::create(elements_1, offsets_1);
 
     // insert [[1, 2, 3], [4, 5, 6]], [[7], [8], [9]]
     elements->append_datum(1);
@@ -605,9 +606,9 @@ PARALLEL_TEST(ArrayColumnTest, test_multi_dimension_array) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_resize) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto column = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr column = ArrayColumn::create(elements, offsets);
 
     // insert [1, 2, 3], [4, 5, 6], [7, 8, 9]
     elements->append_datum(1);
@@ -632,9 +633,9 @@ PARALLEL_TEST(ArrayColumnTest, test_resize) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_reset_column) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto column = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr column = ArrayColumn::create(elements, offsets);
 
     // insert [1, 2, 3], [4, 5, 6], [7, 8, 9]
     elements->append_datum(1);
@@ -658,9 +659,9 @@ PARALLEL_TEST(ArrayColumnTest, test_reset_column) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_swap_column) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto column = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr column = ArrayColumn::create(elements, offsets);
 
     // insert [1, 2, 3], [4, 5, 6]
     elements->append_datum(1);
@@ -673,9 +674,9 @@ PARALLEL_TEST(ArrayColumnTest, test_swap_column) {
     elements->append_datum(6);
     offsets->append(6);
 
-    auto offsets_2 = UInt32Column::create();
-    auto elements_2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto column_2 = ArrayColumn::create(elements_2, offsets_2);
+    UInt32Column::Ptr offsets_2 = UInt32Column::create();
+    NullableColumn::Ptr elements_2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr column_2 = ArrayColumn::create(elements_2, offsets_2);
 
     // insert [4, 5, 6], [7, 8, 9]
     elements_2->append_datum(4);
@@ -695,9 +696,9 @@ PARALLEL_TEST(ArrayColumnTest, test_swap_column) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_copy_constructor) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto c0 = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr c0 = ArrayColumn::create(elements, offsets);
 
     // insert [1, 2, 3], [4, 5, 6]
     elements->append_datum(1);
@@ -714,15 +715,15 @@ PARALLEL_TEST(ArrayColumnTest, test_copy_constructor) {
     c0->reset_column();
     ASSERT_EQ("[1,2,3]", c1.debug_item(0));
     ASSERT_EQ("[4,5,6]", c1.debug_item(1));
-    ASSERT_TRUE(c1.elements_column().unique());
-    ASSERT_TRUE(c1.offsets_column().unique());
+    ASSERT_TRUE(c1.elements_column()->use_count() == 1);
+    ASSERT_TRUE(c1.offsets_column()->use_count() == 1);
 }
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_move_constructor) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto c0 = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr c0 = ArrayColumn::create(elements, offsets);
 
     // insert [1, 2, 3], [4, 5, 6]
     elements->append_datum(1);
@@ -742,9 +743,9 @@ PARALLEL_TEST(ArrayColumnTest, test_move_constructor) {
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_copy_assignment) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto c0 = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr c0 = ArrayColumn::create(elements, offsets);
 
     // insert [1, 2, 3], [4, 5, 6]
     elements->append_datum(1);
@@ -762,15 +763,15 @@ PARALLEL_TEST(ArrayColumnTest, test_copy_assignment) {
     c0->reset_column();
     ASSERT_EQ("[1,2,3]", c1.debug_item(0));
     ASSERT_EQ("[4,5,6]", c1.debug_item(1));
-    ASSERT_TRUE(c1.elements_column().unique());
-    ASSERT_TRUE(c1.offsets_column().unique());
+    ASSERT_TRUE(c1.elements_column()->use_count() == 1);
+    ASSERT_TRUE(c1.offsets_column()->use_count() == 1);
 }
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_move_assignment) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto c0 = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr c0 = ArrayColumn::create(elements, offsets);
 
     // insert [1, 2, 3], [4, 5, 6]
     elements->append_datum(1);
@@ -787,15 +788,15 @@ PARALLEL_TEST(ArrayColumnTest, test_move_assignment) {
     c1 = std::move(*c0);
     ASSERT_EQ("[1,2,3]", c1.debug_item(0));
     ASSERT_EQ("[4,5,6]", c1.debug_item(1));
-    ASSERT_TRUE(c1.elements_column().unique());
-    ASSERT_TRUE(c1.offsets_column().unique());
+    ASSERT_TRUE(c1.elements_column()->use_count() == 1);
+    ASSERT_TRUE(c1.offsets_column()->use_count() == 1);
 }
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_clone) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto c0 = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr c0 = ArrayColumn::create(elements, offsets);
 
     // insert [1, 2, 3], [4, 5, 6]
     elements->append_datum(1);
@@ -812,15 +813,15 @@ PARALLEL_TEST(ArrayColumnTest, test_clone) {
     c0->reset_column();
     ASSERT_EQ("[1,2,3]", c1->debug_item(0));
     ASSERT_EQ("[4,5,6]", c1->debug_item(1));
-    ASSERT_TRUE(down_cast<ArrayColumn*>(c1.get())->elements_column().unique());
-    ASSERT_TRUE(down_cast<ArrayColumn*>(c1.get())->offsets_column().unique());
+    ASSERT_TRUE(down_cast<ArrayColumn*>(c1.get())->elements_column()->use_count() == 1);
+    ASSERT_TRUE(down_cast<ArrayColumn*>(c1.get())->offsets_column()->use_count() == 1);
 }
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_clone_shared) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto c0 = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr c0 = ArrayColumn::create(elements, offsets);
 
     // insert [1, 2, 3], [4, 5, 6]
     elements->append_datum(1);
@@ -833,20 +834,20 @@ PARALLEL_TEST(ArrayColumnTest, test_clone_shared) {
     elements->append_datum(6);
     offsets->append(6);
 
-    auto c1 = c0->clone_shared();
+    auto c1 = c0->clone();
     c0->reset_column();
     ASSERT_EQ("[1,2,3]", c1->debug_item(0));
     ASSERT_EQ("[4,5,6]", c1->debug_item(1));
-    ASSERT_TRUE(c1.unique());
-    ASSERT_TRUE(down_cast<ArrayColumn*>(c1.get())->elements_column().unique());
-    ASSERT_TRUE(down_cast<ArrayColumn*>(c1.get())->offsets_column().unique());
+    ASSERT_TRUE(c1->use_count() == 1);
+    ASSERT_TRUE(down_cast<ArrayColumn*>(c1.get())->elements_column()->use_count() == 1);
+    ASSERT_TRUE(down_cast<ArrayColumn*>(c1.get())->offsets_column()->use_count() == 1);
 }
 
 // NOLINTNEXTLINE
 PARALLEL_TEST(ArrayColumnTest, test_clone_column) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto c0 = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr c0 = ArrayColumn::create(elements, offsets);
 
     // insert [1, 2, 3], [4, 5, 6]
     elements->append_datum(1);
@@ -867,9 +868,9 @@ PARALLEL_TEST(ArrayColumnTest, test_clone_column) {
 }
 
 PARALLEL_TEST(ArrayColumnTest, test_array_hash) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto c0 = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr c0 = ArrayColumn::create(elements, offsets);
 
     // insert [1, 2, 3], [4, 5, 6]
     size_t array_size_1 = 3;
@@ -933,9 +934,9 @@ PARALLEL_TEST(ArrayColumnTest, test_array_hash) {
 }
 
 PARALLEL_TEST(ArrayColumnTest, test_xor_checksum) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto c0 = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr c0 = ArrayColumn::create(elements, offsets);
 
     // insert [1, 2, 3], [4, 5, 6, 7]
     elements->append_datum(1);
@@ -957,9 +958,9 @@ PARALLEL_TEST(ArrayColumnTest, test_xor_checksum) {
 }
 
 PARALLEL_TEST(ArrayColumnTest, test_update_rows) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto column = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr column = ArrayColumn::create(elements, offsets);
 
     // insert [1, 2, 3], [4, 5, 6]
     elements->append_datum(1);
@@ -984,9 +985,9 @@ PARALLEL_TEST(ArrayColumnTest, test_update_rows) {
     elements->append_datum(12);
     offsets->append(12);
 
-    auto offset_col1 = UInt32Column::create();
-    auto element_col1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto replace_col1 = ArrayColumn::create(element_col1, offset_col1);
+    UInt32Column::Ptr offset_col1 = UInt32Column::create();
+    NullableColumn::Ptr element_col1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr replace_col1 = ArrayColumn::create(element_col1, offset_col1);
 
     // insert [101, 102], [103, 104]
     element_col1->append_datum(101);
@@ -1006,9 +1007,9 @@ PARALLEL_TEST(ArrayColumnTest, test_update_rows) {
     ASSERT_EQ("[7,8,9]", column->debug_item(2));
     ASSERT_EQ("[103,104]", column->debug_item(3));
 
-    auto offset_col2 = UInt32Column::create();
-    auto element_col2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto replace_col2 = ArrayColumn::create(element_col2, offset_col2);
+    UInt32Column::Ptr offset_col2 = UInt32Column::create();
+    NullableColumn::Ptr element_col2 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr replace_col2 = ArrayColumn::create(element_col2, offset_col2);
 
     // insert [201, 202], [203, 204]
     element_col2->append_datum(201);
@@ -1030,9 +1031,9 @@ PARALLEL_TEST(ArrayColumnTest, test_update_rows) {
 
 PARALLEL_TEST(ArrayColumnTest, test_assign) {
     /// test assign comment arrays
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto column = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr column = ArrayColumn::create(elements, offsets);
 
     // insert [1, 2, 3], [4, 5, 6]
     elements->append_datum(1);
@@ -1084,9 +1085,9 @@ PARALLEL_TEST(ArrayColumnTest, test_assign) {
 }
 
 PARALLEL_TEST(ArrayColumnTest, test_empty_null_array) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto column = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr column = ArrayColumn::create(elements, offsets);
 
     // insert [1, 2, 3], [4, 5, 6]
     elements->append_datum(1);
@@ -1099,7 +1100,7 @@ PARALLEL_TEST(ArrayColumnTest, test_empty_null_array) {
     elements->append_datum(6);
     offsets->append(6);
 
-    auto null_map = NullColumn::create(2, 0);
+    NullColumn::Ptr null_map = NullColumn::create(2, 0);
     auto res = column->empty_null_in_complex_column(null_map->get_data(), column->offsets_column()->get_data());
     ASSERT_FALSE(res);
     ASSERT_EQ(2, column->size());
@@ -1122,9 +1123,9 @@ PARALLEL_TEST(ArrayColumnTest, test_empty_null_array) {
 }
 
 PARALLEL_TEST(ArrayColumnTest, test_replicate) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-    auto column = ArrayColumn::create(elements, offsets);
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    ArrayColumn::Ptr column = ArrayColumn::create(elements, offsets);
 
     // insert [1, 2, 3], [4, 5, 6],[]
     elements->append_datum(1);
@@ -1157,9 +1158,9 @@ PARALLEL_TEST(ArrayColumnTest, test_replicate) {
 
 PARALLEL_TEST(ArrayColumnTest, test_reference_memory_usage) {
     {
-        auto offsets = UInt32Column::create();
-        auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-        auto column = ArrayColumn::create(elements, offsets);
+        UInt32Column::Ptr offsets = UInt32Column::create();
+        NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        ArrayColumn::Ptr column = ArrayColumn::create(elements, offsets);
 
         // insert [],[1],[2, 3],[4, 5, 6]
         offsets->append(0);
@@ -1186,9 +1187,9 @@ PARALLEL_TEST(ArrayColumnTest, test_reference_memory_usage) {
     }
 
     {
-        auto offsets = UInt32Column::create();
-        auto elements = NullableColumn::create(JsonColumn::create(), NullColumn::create());
-        auto column = ArrayColumn::create(elements, offsets);
+        UInt32Column::Ptr offsets = UInt32Column::create();
+        NullableColumn::Ptr elements = NullableColumn::create(JsonColumn::create(), NullColumn::create());
+        ArrayColumn::Ptr column = ArrayColumn::create(elements, offsets);
 
         auto append_json_value = [&](const std::string& json_str) {
             auto json_value = JsonValue::parse(json_str).value();

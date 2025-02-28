@@ -76,8 +76,8 @@ TEST_P(LakeTabletWriterTest, test_write_success) {
     c2->append_numbers(k1.data(), k1.size() * sizeof(int));
     c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-    Chunk chunk0({c0, c1}, _schema);
-    Chunk chunk1({c2, c3}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+    Chunk chunk1({std::move(c2), std::move(c3)}, _schema);
 
     const int segment_rows = chunk0.num_rows() + chunk1.num_rows();
 
@@ -162,10 +162,10 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_success) {
     auto schema0 = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema, {0}));
     auto schema1 = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema, {1}));
 
-    Chunk c0_chunk({c0}, schema0);
-    Chunk c1_chunk({c1}, schema1);
-    Chunk c2_chunk({c2}, schema0);
-    Chunk c3_chunk({c3}, schema1);
+    Chunk c0_chunk({std::move(c0)}, schema0);
+    Chunk c1_chunk({std::move(c1)}, schema1);
+    Chunk c2_chunk({std::move(c2)}, schema0);
+    Chunk c3_chunk({std::move(c3)}, schema1);
 
     const int segment_rows = c0_chunk.num_rows() + c2_chunk.num_rows();
 
@@ -244,7 +244,7 @@ TEST_P(LakeTabletWriterTest, test_write_fail) {
     c0->append_numbers(k0.data(), k0.size() * sizeof(int));
     c1->append_numbers(v0.data(), v0.size() * sizeof(int));
 
-    Chunk chunk0({c0, c1}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
 
     VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
@@ -263,7 +263,7 @@ TEST_P(LakeTabletWriterTest, test_close_without_finish) {
     c0->append_numbers(k0.data(), k0.size() * sizeof(int));
     c1->append_numbers(v0.data(), v0.size() * sizeof(int));
 
-    Chunk chunk0({c0, c1}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
 
     VersionedTablet tablet(_tablet_mgr.get(), _tablet_metadata);
     ASSIGN_OR_ABORT(auto writer, tablet.new_writer(kHorizontal, next_id()));
@@ -306,10 +306,10 @@ TEST_P(LakeTabletWriterTest, test_vertical_write_close_without_finish) {
     auto schema0 = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema, {0}));
     auto schema1 = std::make_shared<Schema>(ChunkHelper::convert_schema(_tablet_schema, {1}));
 
-    Chunk c0_chunk({c0}, schema0);
-    Chunk c1_chunk({c1}, schema1);
-    Chunk c2_chunk({c2}, schema0);
-    Chunk c3_chunk({c3}, schema1);
+    Chunk c0_chunk({std::move(c0)}, schema0);
+    Chunk c1_chunk({std::move(c1)}, schema1);
+    Chunk c2_chunk({std::move(c2)}, schema0);
+    Chunk c3_chunk({std::move(c3)}, schema1);
 
     const int segment_rows = c0_chunk.num_rows() + c2_chunk.num_rows();
 

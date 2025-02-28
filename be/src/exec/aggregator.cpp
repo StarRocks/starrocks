@@ -879,7 +879,7 @@ Status Aggregator::compute_batch_agg_states_with_selection(Chunk* chunk, size_t 
 
 Status Aggregator::_evaluate_const_columns(int i) {
     // used for const columns.
-    std::vector<ColumnPtr> const_columns;
+    Columns const_columns;
     const_columns.reserve(_agg_expr_ctxs[i].size());
     for (auto& j : _agg_expr_ctxs[i]) {
         ASSIGN_OR_RETURN(auto col, j->root()->evaluate_const(j));
@@ -1145,14 +1145,14 @@ Columns Aggregator::_create_group_by_columns(size_t num_rows) {
     return group_by_columns;
 }
 
-void Aggregator::_serialize_to_chunk(ConstAggDataPtr __restrict state, const Columns& agg_result_columns) {
+void Aggregator::_serialize_to_chunk(ConstAggDataPtr __restrict state, Columns& agg_result_columns) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         _agg_functions[i]->serialize_to_column(_agg_fn_ctxs[i], state + _agg_states_offsets[i],
                                                agg_result_columns[i].get());
     }
 }
 
-void Aggregator::_finalize_to_chunk(ConstAggDataPtr __restrict state, const Columns& agg_result_columns) {
+void Aggregator::_finalize_to_chunk(ConstAggDataPtr __restrict state, Columns& agg_result_columns) {
     for (size_t i = 0; i < _agg_fn_ctxs.size(); i++) {
         _agg_functions[i]->finalize_to_column(_agg_fn_ctxs[i], state + _agg_states_offsets[i],
                                               agg_result_columns[i].get());

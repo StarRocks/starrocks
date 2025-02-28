@@ -31,9 +31,9 @@ TEST(ColumnAggregator, testIntSum) {
 
     auto aggregator = ColumnAggregatorFactory::create_value_column_aggregator(field);
 
-    auto src1 = Int32Column::create();
-    auto src2 = Int32Column::create();
-    auto src3 = Int32Column::create();
+    Int32Column::Ptr src1 = Int32Column::create();
+    Int32Column::Ptr src2 = Int32Column::create();
+    Int32Column::Ptr src3 = Int32Column::create();
 
     for (int i = 0; i < 1024; i++) {
         src1->append(1);
@@ -41,7 +41,7 @@ TEST(ColumnAggregator, testIntSum) {
         src3->append(1);
     }
 
-    auto agg1 = Int32Column::create();
+    Int32Column::Ptr agg1 = Int32Column::create();
 
     aggregator->update_aggregate(agg1.get());
     aggregator->update_source(src1);
@@ -94,14 +94,14 @@ TEST(ColumnAggregator, testNullIntSum) {
 
     auto aggregator = ColumnAggregatorFactory::create_value_column_aggregator(field);
 
-    auto src1 = Int32Column::create();
+    Int32Column::Ptr src1 = Int32Column::create();
     auto null1 = NullColumn ::create();
 
-    auto src2 = Int32Column::create();
-    auto null2 = NullColumn::create();
+    Int32Column::Ptr src2 = Int32Column::create();
+    NullColumn::Ptr null2 = NullColumn::create();
 
-    auto src3 = Int32Column::create();
-    auto null3 = NullColumn::create();
+    Int32Column::Ptr src3 = Int32Column::create();
+    NullColumn::Ptr null3 = NullColumn::create();
 
     for (int i = 0; i < 1024; i++) {
         src1->append(1);
@@ -118,11 +118,11 @@ TEST(ColumnAggregator, testNullIntSum) {
         null3->append(i % 2 == 0);
     }
 
-    auto nsrc1 = NullableColumn::create(src1, null1);
-    auto nsrc2 = NullableColumn::create(src2, null2);
-    auto nsrc3 = NullableColumn::create(src3, null3);
+    NullableColumn::Ptr nsrc1 = NullableColumn::create(std::move(src1), std::move(null1));
+    NullableColumn::Ptr nsrc2 = NullableColumn::create(std::move(src2), std::move(null2));
+    NullableColumn::Ptr nsrc3 = NullableColumn::create(std::move(src3), std::move(null3));
 
-    auto agg1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    NullableColumn::Ptr agg1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
 
     auto dst = down_cast<Int32Column*>(agg1->data_column().get());
     auto ndst = down_cast<NullColumn*>(agg1->null_column().get());
@@ -200,9 +200,9 @@ TEST(ColumnAggregator, testIntMax) {
 
     auto aggregator = ColumnAggregatorFactory::create_value_column_aggregator(field);
 
-    auto src1 = Int32Column::create();
-    auto src2 = Int32Column::create();
-    auto src3 = Int32Column::create();
+    Int32Column::Ptr src1 = Int32Column::create();
+    Int32Column::Ptr src2 = Int32Column::create();
+    Int32Column::Ptr src3 = Int32Column::create();
 
     for (int i = 0; i < 1024; i++) {
         src1->append(i);
@@ -210,7 +210,7 @@ TEST(ColumnAggregator, testIntMax) {
         src3->append(i * 2);
     }
 
-    auto agg1 = Int32Column::create();
+    Int32Column::Ptr agg1 = Int32Column::create();
 
     aggregator->update_aggregate(agg1.get());
     aggregator->update_source(src1);
@@ -263,9 +263,9 @@ TEST(ColumnAggregator, testStringMin) {
 
     auto aggregator = ColumnAggregatorFactory::create_value_column_aggregator(field);
 
-    auto src1 = BinaryColumn::create();
-    auto src2 = BinaryColumn::create();
-    auto src3 = BinaryColumn::create();
+    BinaryColumn::Ptr src1 = BinaryColumn::create();
+    BinaryColumn::Ptr src2 = BinaryColumn::create();
+    BinaryColumn::Ptr src3 = BinaryColumn::create();
 
     for (int i = 0; i < 1024; i++) {
         src1->append(Slice(std::to_string(i + 1000)));
@@ -273,7 +273,7 @@ TEST(ColumnAggregator, testStringMin) {
         src3->append(Slice(std::to_string(i + 2000)));
     }
 
-    auto agg1 = BinaryColumn::create();
+    BinaryColumn::Ptr agg1 = BinaryColumn::create();
 
     aggregator->update_aggregate(agg1.get());
     aggregator->update_source(src1);
@@ -324,13 +324,13 @@ TEST(ColumnAggregator, testNullBooleanMin) {
     FieldPtr field = std::make_shared<Field>(1, "test_boolean", LogicalType::TYPE_BOOLEAN, true);
     field->set_aggregate_method(StorageAggregateType::STORAGE_AGGREGATE_MIN);
 
-    auto agg = NullableColumn::create(BooleanColumn::create(), NullColumn::create());
+    NullableColumn::Ptr agg = NullableColumn::create(BooleanColumn::create(), NullColumn::create());
     auto aggregator = ColumnAggregatorFactory::create_value_column_aggregator(field);
     aggregator->update_aggregate(agg.get());
     std::vector<uint32_t> loops;
 
     // first chunk column
-    auto src = NullableColumn::create(BooleanColumn::create(), NullColumn::create());
+    NullableColumn::Ptr src = NullableColumn::create(BooleanColumn::create(), NullColumn::create());
     src->append_nulls(1);
 
     aggregator->update_source(src);
@@ -389,14 +389,14 @@ TEST(ColumnAggregator, testNullIntReplaceIfNotNull) {
 
     auto aggregator = ColumnAggregatorFactory::create_value_column_aggregator(field);
 
-    auto src1 = Int32Column::create();
+    Int32Column::Ptr src1 = Int32Column::create();
     auto null1 = NullColumn ::create();
 
-    auto src2 = Int32Column::create();
-    auto null2 = NullColumn::create();
+    Int32Column::Ptr src2 = Int32Column::create();
+    NullColumn::Ptr null2 = NullColumn::create();
 
-    auto src3 = Int32Column::create();
-    auto null3 = NullColumn::create();
+    Int32Column::Ptr src3 = Int32Column::create();
+    NullColumn::Ptr null3 = NullColumn::create();
 
     for (int i = 0; i < 1024; i++) {
         src1->append(i);
@@ -413,11 +413,11 @@ TEST(ColumnAggregator, testNullIntReplaceIfNotNull) {
         null3->append(i > 512);
     }
 
-    auto nsrc1 = NullableColumn::create(src1, null1);
-    auto nsrc2 = NullableColumn::create(src2, null2);
-    auto nsrc3 = NullableColumn::create(src3, null3);
+    NullableColumn::Ptr nsrc1 = NullableColumn::create(std::move(src1), std::move(null1));
+    NullableColumn::Ptr nsrc2 = NullableColumn::create(std::move(src2), std::move(null2));
+    NullableColumn::Ptr nsrc3 = NullableColumn::create(std::move(src3), std::move(null3));
 
-    auto agg1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    NullableColumn::Ptr agg1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
 
     auto dst = down_cast<Int32Column*>(agg1->data_column().get());
     auto ndst = down_cast<NullColumn*>(agg1->null_column().get());
@@ -496,14 +496,14 @@ TEST(ColumnAggregator, testNullIntReplace) {
 
     auto aggregator = ColumnAggregatorFactory::create_value_column_aggregator(field);
 
-    auto src1 = Int32Column::create();
+    Int32Column::Ptr src1 = Int32Column::create();
     auto null1 = NullColumn ::create();
 
-    auto src2 = Int32Column::create();
-    auto null2 = NullColumn::create();
+    Int32Column::Ptr src2 = Int32Column::create();
+    NullColumn::Ptr null2 = NullColumn::create();
 
-    auto src3 = Int32Column::create();
-    auto null3 = NullColumn::create();
+    Int32Column::Ptr src3 = Int32Column::create();
+    NullColumn::Ptr null3 = NullColumn::create();
 
     for (int i = 0; i < 1024; i++) {
         src1->append(i);
@@ -520,11 +520,11 @@ TEST(ColumnAggregator, testNullIntReplace) {
         null3->append(i > 512);
     }
 
-    auto nsrc1 = NullableColumn::create(src1, null1);
-    auto nsrc2 = NullableColumn::create(src2, null2);
-    auto nsrc3 = NullableColumn::create(src3, null3);
+    NullableColumn::Ptr nsrc1 = NullableColumn::create(std::move(src1), std::move(null1));
+    NullableColumn::Ptr nsrc2 = NullableColumn::create(std::move(src2), std::move(null2));
+    NullableColumn::Ptr nsrc3 = NullableColumn::create(std::move(src3), std::move(null3));
 
-    auto agg1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    NullableColumn::Ptr agg1 = NullableColumn::create(Int32Column::create(), NullColumn::create());
 
     auto dst = down_cast<Int32Column*>(agg1->data_column().get());
     auto ndst = down_cast<NullColumn*>(agg1->null_column().get());
@@ -605,18 +605,18 @@ TEST(ColumnAggregator, testArrayReplace) {
     FieldPtr field = std::make_shared<Field>(1, "test_array", array_type_info,
                                              StorageAggregateType::STORAGE_AGGREGATE_REPLACE, 1, false, false);
 
-    auto agg_elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    auto agg_offsets = UInt32Column::create();
-    auto agg = ArrayColumn::create(agg_elements, agg_offsets);
+    NullableColumn::Ptr agg_elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    UInt32Column::Ptr agg_offsets = UInt32Column::create();
+    ArrayColumn::Ptr agg = ArrayColumn::create(std::move(agg_elements), std::move(agg_offsets));
 
     auto aggregator = ColumnAggregatorFactory::create_value_column_aggregator(field);
     aggregator->update_aggregate(agg.get());
     std::vector<uint32_t> loops;
 
     // first chunk column
-    auto elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
-    auto offsets = UInt32Column::create();
-    auto src = ArrayColumn::create(elements, offsets);
+    NullableColumn::Ptr elements = NullableColumn::create(BinaryColumn::create(), NullColumn::create());
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    ArrayColumn::Ptr src = ArrayColumn::create(elements, offsets);
     for (int i = 0; i < 10; ++i) {
         elements->append_datum(Slice(std::to_string(i)));
     }
@@ -685,7 +685,7 @@ TEST(ColumnAggregator, testNullArrayReplaceIfNotNull2) {
     FieldPtr field =
             std::make_shared<Field>(1, "test_array", array_type_info,
                                     StorageAggregateType::STORAGE_AGGREGATE_REPLACE_IF_NOT_NULL, 1, false, true);
-    auto agg = NullableColumn::create(
+    NullableColumn::Ptr agg = NullableColumn::create(
             ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
                                 UInt32Column::create()),
             NullColumn::create());
@@ -693,7 +693,7 @@ TEST(ColumnAggregator, testNullArrayReplaceIfNotNull2) {
     aggregator->update_aggregate(agg.get());
 
     // first chunk column
-    auto src = NullableColumn::create(
+    NullableColumn::Ptr src = NullableColumn::create(
             ArrayColumn::create(NullableColumn::create(Int32Column::create(), NullColumn::create()),
                                 UInt32Column::create()),
             NullColumn::create());
@@ -763,7 +763,7 @@ TEST(ColumnAggregator, testNullArrayReplaceIfNotNull) {
             std::make_shared<Field>(1, "test_array", array_type_info,
                                     StorageAggregateType::STORAGE_AGGREGATE_REPLACE_IF_NOT_NULL, 1, false, true);
 
-    auto agg = NullableColumn::create(
+    NullableColumn::Ptr agg = NullableColumn::create(
             ArrayColumn::create(NullableColumn::create(BinaryColumn::create(), NullColumn::create()),
                                 UInt32Column::create()),
             NullColumn::create());
@@ -772,7 +772,7 @@ TEST(ColumnAggregator, testNullArrayReplaceIfNotNull) {
     std::vector<uint32_t> loops;
 
     // first chunk column
-    auto src = NullableColumn::create(
+    NullableColumn::Ptr src = NullableColumn::create(
             ArrayColumn::create(NullableColumn::create(BinaryColumn::create(), NullColumn::create()),
                                 UInt32Column::create()),
             NullColumn::create());

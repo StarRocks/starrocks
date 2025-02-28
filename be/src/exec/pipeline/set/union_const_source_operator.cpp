@@ -29,7 +29,7 @@ StatusOr<ChunkPtr> UnionConstSourceOperator::pull_chunk(starrocks::RuntimeState*
     for (size_t col_i = 0; col_i < columns_count; col_i++) {
         const auto* dst_slot = _dst_slots[col_i];
 
-        ColumnPtr dst_column = ColumnHelper::create_column(dst_slot->type(), dst_slot->is_nullable());
+        MutableColumnPtr dst_column = ColumnHelper::create_column(dst_slot->type(), dst_slot->is_nullable());
         dst_column->reserve(rows_count);
 
         for (size_t row_i = 0; row_i < rows_count; row_i++) {

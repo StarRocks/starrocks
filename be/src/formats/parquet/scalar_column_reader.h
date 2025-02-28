@@ -150,7 +150,7 @@ public:
         _can_lazy_dict_decode = can_lazy_decode && _col_type->is_string_type() && column_all_pages_dict_encoded();
     }
 
-    Status filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
+    Status filter_dict_column(ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
                               const size_t& layer) override {
         DCHECK_EQ(sub_field_path.size(), layer);
         return _dict_filter_ctx->predicate->evaluate_and(column.get(), filter->data());
@@ -214,7 +214,7 @@ public:
         return _dict_filter_ctx->rewrite_conjunct_ctxs_to_predicate(_reader.get(), is_group_filtered);
     }
 
-    Status filter_dict_column(const ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
+    Status filter_dict_column(ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
                               const size_t& layer) override {
         DCHECK_EQ(sub_field_path.size(), layer);
         return _dict_filter_ctx->predicate->evaluate_and(column.get(), filter->data());

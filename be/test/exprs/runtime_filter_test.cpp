@@ -275,8 +275,8 @@ static std::string alphabet0 =
 
 static std::string alphabet1 = "~!@#$%^&*()_+{}|:\"<>?[]\\;',./";
 
-static std::shared_ptr<BinaryColumn> gen_random_binary_column(const std::string& alphabet, size_t avg_length,
-                                                              size_t num_rows) {
+static BinaryColumn::MutablePtr gen_random_binary_column(const std::string& alphabet, size_t avg_length,
+                                                         size_t num_rows) {
     auto col = BinaryColumn::create();
     col->reserve(num_rows);
     std::random_device rd;
@@ -1183,7 +1183,7 @@ void TestMultiColumnsOnRuntimeFilter(TRuntimeFilterBuildJoinMode::type join_mode
 
 ColumnPtr CreateSeriesColumnInt32(int32_t num_rows, bool nullable) {
     auto type_desc = TypeDescriptor(TYPE_INT);
-    ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
+    MutableColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
     std::vector<int32_t> elements(num_rows);
     std::iota(elements.begin(), elements.end(), 0);
     for (auto& x : elements) {

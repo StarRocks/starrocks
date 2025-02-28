@@ -125,7 +125,7 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
     FunctionContext* fn_ctx = context->fn_context(_fn_context_index);
 
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        std::vector<ColumnPtr> const_columns;
+        Columns const_columns;
         const_columns.reserve(_children.size());
         for (const auto& child : _children) {
             ASSIGN_OR_RETURN(auto&& child_col, child->evaluate_const(context))
@@ -149,9 +149,8 @@ Status VectorizedFunctionCallExpr::open(starrocks::RuntimeState* state, starrock
     if (_fn.name.function_name == "round" && _type.type == TYPE_DOUBLE) {
         if (_children[1]->is_constant()) {
             ASSIGN_OR_RETURN(ColumnPtr ptr, _children[1]->evaluate_checked(context, nullptr));
-            _output_scale =
-                    std::static_pointer_cast<Int32Column>(std::static_pointer_cast<ConstColumn>(ptr)->data_column())
-                            ->get_data()[0];
+            _output_scale = Int32Column::static_pointer_cast(ConstColumn::static_pointer_cast(ptr)->data_column())
+                                    ->get_data()[0];
         }
     }
 

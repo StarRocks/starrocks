@@ -96,7 +96,7 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return Chunk({c0, c1}, _schema);
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
     }
 
     Chunk generate_data2(int64_t chunk_size, int interval, int shift) {
@@ -115,7 +115,7 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return Chunk({c0, c1}, _schema);
+        return Chunk({std::move(c0), std::move(c1)}, _schema);
     }
 
     int64_t read(int64_t version) {

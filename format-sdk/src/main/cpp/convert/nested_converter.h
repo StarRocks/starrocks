@@ -51,7 +51,7 @@ public:
                     const arrow::MemoryPool* pool)
             : ColumnConverter(arrow_type, sr_field, pool) {}
 
-    arrow::Status toSrColumn(const std::shared_ptr<arrow::Array> array, std::shared_ptr<Column>& column) override {
+    arrow::Status toSrColumn(const std::shared_ptr<arrow::Array> array, ColumnPtr& column) override {
         if (!column->is_nullable() && array->null_count() > 0) {
             return arrow::Status::Invalid("Column ", column->get_name(),
                                           " is non-nullable, but there are some null data in array.");
@@ -116,13 +116,13 @@ private:
     template <class SrColumnClass, typename = std::enable_if_t<std::is_same_v<SrColumnClass, ArrayColumn> ||
                                                                std::is_same_v<SrColumnClass, MapColumn> ||
                                                                std::is_same_v<SrColumnClass, StructColumn>>>
-    arrow::Result<std::vector<ColumnPtr>> get_children_columns(const std::shared_ptr<SrColumnClass> data_column) {
+    arrow::Result<Columns> get_children_columns(const std::shared_ptr<SrColumnClass> data_column) {
         if constexpr (std::is_same_v<SrColumnClass, ArrayColumn>) {
-            std::vector<ColumnPtr> all_sub_columns = {data_column->offsets_column(), data_column->elements_column()};
+            Columns all_sub_columns = {data_column->offsets_column(), data_column->elements_column()};
             return all_sub_columns;
         } else if constexpr (std::is_same_v<SrColumnClass, MapColumn>) {
-            std::vector<ColumnPtr> all_sub_columns = {data_column->offsets_column(), data_column->keys_column(),
-                                                      data_column->values_column()};
+            Columns all_sub_columns = {data_column->offsets_column(), data_column->keys_column(),
+                                       data_column->values_column()};
             return all_sub_columns;
         } else if constexpr (std::is_same_v<SrColumnClass, StructColumn>) {
             return data_column->fields();

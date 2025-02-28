@@ -78,10 +78,10 @@ public:
 
     // Create a vectorized column from field .
     // REQUIRE: |type| must be scalar type.
-    static std::shared_ptr<Column> column_from_field_type(LogicalType type, bool nullable);
+    static MutableColumnPtr column_from_field_type(LogicalType type, bool nullable);
 
     // Create a vectorized column from field.
-    static std::shared_ptr<Column> column_from_field(const Field& field);
+    static MutableColumnPtr column_from_field(const Field& field);
 
     // Get char column indexes
     static std::vector<size_t> get_char_field_indexes(const Schema& schema);
@@ -160,7 +160,7 @@ private:
 class SegmentedColumn final : public std::enable_shared_from_this<SegmentedColumn> {
 public:
     SegmentedColumn(const SegmentedChunkPtr& chunk, size_t column_index);
-    SegmentedColumn(std::vector<ColumnPtr> columns, size_t segment_size);
+    SegmentedColumn(Columns columns, size_t segment_size);
     ~SegmentedColumn() = default;
 
     ColumnPtr clone_selective(const uint32_t* indexes, uint32_t from, uint32_t size);
@@ -172,14 +172,14 @@ public:
     void upgrade_to_nullable();
     size_t segment_size() const;
     size_t num_segments() const;
-    std::vector<ColumnPtr> columns() const;
+    Columns columns() const;
 
 private:
     SegmentedChunkWeakPtr _chunk; // The chunk it belongs to
     size_t _column_index;         // The index in original chunk
     const size_t _segment_size;
 
-    std::vector<ColumnPtr> _cached_columns; // Only used for SelectiveCopy
+    Columns _cached_columns; // Only used for SelectiveCopy
 };
 
 // A big-chunk would be segmented into multi small ones, to avoid allocating large-continuous memory
