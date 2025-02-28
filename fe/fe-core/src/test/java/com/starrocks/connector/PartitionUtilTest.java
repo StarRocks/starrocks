@@ -64,15 +64,14 @@ public class PartitionUtilTest {
 
     @Test
     public void testStringPartitionKeyConvertToDatePartitionKey() {
-        try{
+        try {
             PartitionKey partitionKey = createPartitionKey(
                     Lists.newArrayList("1", "20250225112345", "3.0", HiveMetaClient.PARTITION_NULL_VALUE), partColumns);
             PartitionUtil.convertToDateLiteral(partitionKey.getKeys().get(1));
-        }catch (Exception e){
+        } catch (Exception e) {
             Assert.fail();
         }
     }
-
 
     @Test
     public void testCreatePartitionKey() throws Exception {
@@ -288,7 +287,8 @@ public class PartitionUtilTest {
             }
         };
 
-        Map<String, Range<PartitionKey>> partitionMap = PartitionUtil.getPartitionKeyRange(table, partitionColumn, null);
+        Map<String, Range<PartitionKey>> partitionMap =
+                PartitionUtil.getPartitionKeyRange(table, partitionColumn, null);
         Assert.assertEquals(partitionMap.size(), partitionNames.size());
         Assert.assertTrue(partitionMap.containsKey("p20221202"));
         PartitionKey upperBound = new PartitionKey();
