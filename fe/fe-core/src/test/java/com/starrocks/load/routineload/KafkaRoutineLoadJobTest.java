@@ -527,7 +527,27 @@ public class KafkaRoutineLoadJobTest {
         Assert.assertTrue(sourceLagString.contains("null"));
 
         progressJsonStr = "{\"0\":\"100\"}";
-        Map<Integer, Long> latestPartitionOffsets = Maps.newHashMap();
+        Map<Integer, Long> latestPartitionOffsets = null;
+        Deencapsulation.setField(job, "latestPartitionOffsets", latestPartitionOffsets);
+        sourceLagString = job.getSourceLagString(progressJsonStr);
+        Assert.assertTrue(sourceLagString.contains("null"));
+
+        progressJsonStr = "{\"0\":null}";
+        latestPartitionOffsets = Maps.newHashMap();
+        latestPartitionOffsets.put(0, 200L);
+        sourceLagString = job.getSourceLagString(progressJsonStr);
+        Assert.assertTrue(sourceLagString.contains("null"));
+
+        progressJsonStr = "{\"0\":\"" + KafkaProgress.OFFSET_ZERO + "\"}";
+        sourceLagString = job.getSourceLagString(progressJsonStr);
+        Assert.assertTrue(sourceLagString.contains("null"));
+
+        progressJsonStr = "{\"0\":\"XXX\"}";
+        sourceLagString = job.getSourceLagString(progressJsonStr);
+        Assert.assertTrue(sourceLagString.contains("null"));
+
+        progressJsonStr = "{\"0\":\"100\"}";
+        latestPartitionOffsets = Maps.newHashMap();
         latestPartitionOffsets.put(0, 200L);
         Deencapsulation.setField(job, "latestPartitionOffsets", latestPartitionOffsets);
         sourceLagString = job.getSourceLagString(progressJsonStr);
