@@ -273,11 +273,15 @@ StatusOr<ByteBufferPtr> CompressedStreamLoadPipeReader::read() {
         RETURN_IF_ERROR(StreamCompression::create_decompressor(compression, &_decompressor));
     }
 
-    if (_decompressed_buffer == nullptr) {
-        ASSIGN_OR_RETURN(_decompressed_buffer, ByteBuffer::allocate_with_tracker(buffer_size));
-    }
-
     ASSIGN_OR_RETURN(auto buf, StreamLoadPipeReader::read());
+    if (_decompressed_buffer == nullptr) {
+        ASSIGN_OR_RETURN(_decompressed_buffer, ByteBuffer::allocate_with_tracker(buffer_size, buf->meta()->type()));
+    }
+    // copy meta fail better not affect the decompression
+    Status copy_st = _decompressed_buffer->meta()->copy_from(buf->meta());
+    if (!copy_st.ok()) {
+        LOG_EVERY_N(WARNING, 1000) << "failed to copy meta when decompression, " << copy_st;
+    }
 
     // try to read all compressed data into _decompressed_buffer
     bool stream_end = false;
