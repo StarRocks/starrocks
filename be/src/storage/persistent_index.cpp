@@ -831,9 +831,10 @@ public:
         uint8_t new_data[8] = {0x79, 0x15, 0xdb, 0xea, 0x36, 0x00, 0x00, 0x00};
         const auto& key = *reinterpret_cast<const KeyType*>(new_data);
         uint64_t hash = FixedKeyHash<KeySize>()(key);
-        LOG(INFO) << "start upsert, hashval: " << hash;
-
-        for (int i = 0; i < config::upsert_replay_times; i++) {
+        int32_t replay_times = config::upsert_replay_times;
+        LOG(INFO) << "start upsert, hashval: " << hash << ", replay_times: " << replay_times;
+        
+        for (int i = 0; i < replay_times; i++) {
             if (auto [it, inserted] = _map.emplace_with_hash(hash, key, NullIndexValue); inserted) {
                 LOG(INFO) << "upsert success: " << i;
             } else {
