@@ -101,5 +101,7 @@ public interface PhysicalPartition {
     public void setMinRetainVersion(long minRetainVersion);
     public long getLastVacuumTime();
     public void setLastVacuumTime(long lastVacuumTime);
+    public long getLastSuccVacuumVersion();
+    public void setLastSuccVacuumVersion(long lastSuccVacuumVersion);
 
 }

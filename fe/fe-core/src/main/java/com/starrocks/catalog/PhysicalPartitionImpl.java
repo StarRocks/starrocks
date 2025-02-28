@@ -109,6 +109,8 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
 
     private volatile long minRetainVersion = 0;
 
+    private volatile long lastSuccVacuumVersion = 0;
+
     public PhysicalPartitionImpl(long id, String name, long parentId, long sharedGroupId, MaterializedIndex baseIndex) {
         this.id = id;
         this.name = name;
@@ -193,6 +195,16 @@ public class PhysicalPartitionImpl extends MetaObject implements PhysicalPartiti
     @Override
     public void setMinRetainVersion(long minRetainVersion) {
         this.minRetainVersion = minRetainVersion;
+    }
+
+    @Override
+    public long getLastSuccVacuumVersion() {
+        return lastSuccVacuumVersion;
+    }
+
+    @Override
+    public void setLastSuccVacuumVersion(long lastSuccVacuumVersion) {
+        this.lastSuccVacuumVersion = lastSuccVacuumVersion;
     }
 
     /*
