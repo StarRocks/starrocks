@@ -43,6 +43,7 @@ import com.starrocks.sql.optimizer.operator.scalar.MapOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
 import com.starrocks.sql.optimizer.operator.scalar.SubfieldOperator;
+import com.starrocks.sql.optimizer.operator.scalar.TryOperator;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
@@ -283,6 +284,12 @@ public class ScalarOperatorsReuse {
         public ScalarOperator visitCloneOperator(CloneOperator operator, Void context) {
             ScalarOperator clone = new CloneOperator(operator.getChild(0).accept(this, null));
             return tryRewrite(clone);
+        }
+
+        @Override
+        public ScalarOperator visitTryOperator(TryOperator operator, Void context) {
+            ScalarOperator tryOp = new TryOperator(operator.getChild(0).accept(this, null));
+            return tryRewrite(tryOp);
         }
     }
     private static class CommonSubScalarOperatorCollectorContext {
