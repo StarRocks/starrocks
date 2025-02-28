@@ -22,6 +22,7 @@
 #include "column/column_helper.h"
 #include "column/json_column.h"
 #include "column/map_column.h"
+#include "column/nullable_column.h"
 #include "column/schema.h"
 #include "column/struct_column.h"
 #include "column/type_traits.h"
@@ -632,6 +633,75 @@ public:
               _from(from),
               _size(size) {}
 
+    template <typename BT, std::size_t Alignment = 64>
+    struct aligned_allocator {
+        using value_type = BT;
+
+        aligned_allocator() noexcept = default;
+
+        template <typename U>
+        aligned_allocator(const aligned_allocator<U, Alignment>&) noexcept {}
+
+        BT* allocate(std::size_t n) {
+            if (n == 0) {
+                return nullptr;
+            }
+            void* ptr = std::aligned_alloc(Alignment, n * sizeof(BT));
+            if (!ptr) {
+                throw std::bad_alloc();
+            }
+            return static_cast<BT*>(ptr);
+        }
+
+        void deallocate(BT* p, std::size_t) noexcept { std::free(p); }
+
+        template <typename U>
+        struct rebind {
+            using other = aligned_allocator<U, Alignment>;
+        };
+    };
+
+    using aligned_i32_vector = std::vector<int32_t, aligned_allocator<int32_t, 64>>;
+
+    void simd_copy_int32_by_index(const int32_t* segment, const aligned_i32_vector& source,
+                                  const aligned_i32_vector& target, int32_t* result) {
+        size_t i = 0;
+        size_t size = source.size();
+        for (; i + 16 <= size; i += 16) {
+            __m512i source_indices = _mm512_load_si512(&source[i]);
+            __m512i gathered_values = _mm512_i32gather_epi32(source_indices, segment, 4);
+            __m512i target_indices = _mm512_load_si512(&target[i]);
+            _mm512_i32scatter_epi32(result, target_indices, gathered_values, 4);
+        }
+
+        for (; i < size; ++i) {
+            result[target[i]] = segment[source[i]];
+        }
+    }
+
+    void simd_copy_int8_by_index(const uint8_t* segment, const aligned_i32_vector& source,
+                                 const aligned_i32_vector& target, uint8_t* result) {
+        size_t i = 0;
+        size_t size = source.size();
+        for (; i + 16 <= size; i += 16) {
+            __m512i source_indices = _mm512_loadu_si512(&source[i]);
+            __m512i gathered_values_32 =
+                    _mm512_i32gather_epi32(source_indices, reinterpret_cast<const int*>(segment), 1);
+            __m128i gathered_values_8 = _mm512_cvtepi32_epi8(gathered_values_32);
+
+            // Scatter each byte manually due to the lack of native 8-bit scatter support
+            int8_t values[16];
+            _mm_storeu_si128(reinterpret_cast<__m128i*>(values), gathered_values_8);
+            for (int j = 0; j < 16; ++j) {
+                result[target[i + j]] = values[j];
+            }
+        }
+
+        for (; i < size; ++i) {
+            result[target[i]] = segment[source[i]];
+        }
+    }
+
     template <class T>
     Status do_visit(const FixedLengthColumnBase<T>& column) {
         using ColumnT = FixedLengthColumnBase<T>;
@@ -639,7 +709,7 @@ public:
 
         _result = column.clone_empty();
         auto output = ColumnHelper::as_column<ColumnT>(_result);
-        const size_t segment_size = _segment_column->segment_size();
+        constexpr size_t segment_size = 1 << 20;
 
         std::vector<ContainerT*> buffers;
         auto columns = _segment_column->columns();
@@ -647,17 +717,65 @@ public:
             buffers.push_back(&ColumnHelper::as_column<ColumnT>(seg_column)->get_data());
         }
 
+        // use a small buffer to avoid random access to segments
+        constexpr size_t kTLBSize = 64;
+        constexpr size_t kTLBOutputSize = 512;
+        size_t num_segments = buffers.size();
+        std::vector<size_t> tlb_index(num_segments, 0);
+        std::vector<aligned_i32_vector> tlb_source(num_segments, aligned_i32_vector(kTLBSize, 0));
+        std::vector<aligned_i32_vector> tlb_target(num_segments, aligned_i32_vector(kTLBSize, 0));
+
         ContainerT& output_items = output->get_data();
         output_items.resize(_size);
         size_t from = _from;
         for (size_t i = 0; i < _size; i++) {
             size_t idx = _indexes[from + i];
-            auto [segment_id, segment_offset] = _segment_address(idx, segment_size);
-            DCHECK_LT(segment_id, columns.size());
+            size_t segment_id = idx / segment_size;
+            size_t segment_offset = idx % segment_size;
+            DCHECK_LT(segment_id, num_segments);
             DCHECK_LT(segment_offset, columns[segment_id]->size());
+            DCHECK_LE(tlb_index[segment_id], kTLBSize);
 
-            output_items[i] = (*buffers[segment_id])[segment_offset];
+            tlb_source[segment_id][tlb_index[segment_id]] = segment_offset;
+            tlb_target[segment_id][tlb_index[segment_id]] = i;
+
+            // accumulate enough elements in a TLB buffer to reduce random page access
+            if (++tlb_index[segment_id] >= kTLBSize) {
+                auto& segment = *buffers[segment_id];
+                auto source_data = segment.data();
+                auto source_indices = tlb_source[segment_id];
+                auto target_indices = tlb_target[segment_id];
+                auto output_data = output_items.data();
+                auto size = tlb_source[segment_id].size();
+
+                if constexpr (std::is_same_v<T, int32_t>) {
+                    simd_copy_int32_by_index(source_data, source_indices, target_indices, output_data);
+                } else if constexpr (std::is_same_v<T, uint8_t>) {
+                    simd_copy_int8_by_index(source_data, source_indices, target_indices, output_data);
+                } else {
+                    for (size_t i = 0; i < size; i++) {
+                        size_t segment_offset = source_indices[i];
+                        size_t output_index = target_indices[i];
+                        output_data[output_index] = segment[segment_offset];
+                    }
+                }
+                tlb_index[segment_id] = 0;
+                continue;
+            }
+
+            // flush the buffer to avoid scattered output index
+            if ((i % kTLBOutputSize == 0) || (i == _size - 1)) {
+                for (size_t segment_id = 0; segment_id < num_segments; segment_id++) {
+                    for (size_t i = 0; i < tlb_index[segment_id]; i++) {
+                        int32_t segment_offset = tlb_source[segment_id][i];
+                        int32_t output_index = tlb_target[segment_id][i];
+                        output_items[output_index] = (*buffers[segment_id])[segment_offset];
+                    }
+                    tlb_index[segment_id] = 0;
+                }
+            }
         }
+
         return {};
     }
 
@@ -758,10 +876,19 @@ public:
         auto segmented_data_column = std::make_shared<SegmentedColumn>(data_columns, _segment_column->segment_size());
         SegmentedColumnSelectiveCopy copy_data(segmented_data_column, _indexes, _from, _size);
         (void)data_columns[0]->accept(&copy_data);
-        auto segmented_null_column = std::make_shared<SegmentedColumn>(null_columns, _segment_column->segment_size());
-        SegmentedColumnSelectiveCopy copy_null(segmented_null_column, _indexes, _from, _size);
-        (void)null_columns[0]->accept(&copy_null);
-        _result = NullableColumn::create(copy_data.result(), ColumnHelper::as_column<NullColumn>(copy_null.result()));
+
+        ColumnPtr null_column;
+        if (_segment_column->has_null()) {
+            auto segmented_null_column =
+                    std::make_shared<SegmentedColumn>(null_columns, _segment_column->segment_size());
+            SegmentedColumnSelectiveCopy copy_null(segmented_null_column, _indexes, _from, _size);
+            (void)null_columns[0]->accept(&copy_null);
+            null_column = copy_null.result();
+        } else {
+            null_column = NullColumn::create(_size, 0);
+        }
+
+        _result = NullableColumn::create(copy_data.result(), ColumnHelper::as_column<NullColumn>(null_column));
 
         return {};
     }
