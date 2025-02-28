@@ -103,12 +103,12 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     CHECK(global_vars->is_init()) << "global variables not initialized";
     LOG(INFO) << process_name << " start step " << start_step++ << ": global variables init successfully";
 
+    auto* storage_engine = init_storage_engine(global_env, paths, as_cn);
+    LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine init successfully";
+
     auto* cache_env = CacheEnv::GetInstance();
     EXIT_IF_ERROR(cache_env->init(paths));
     LOG(INFO) << process_name << " start step " << start_step++ << ": cache env init successfully";
-
-    auto* storage_engine = init_storage_engine(global_env, paths, as_cn);
-    LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine init successfully";
 
     auto* exec_env = ExecEnv::GetInstance();
     EXIT_IF_ERROR(exec_env->init(paths, as_cn));
