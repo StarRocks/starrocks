@@ -167,6 +167,7 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         split_morsel_queue->set_tablet_rowsets(std::move(tablet_rowsets));
         split_morsel_queue->set_key_ranges(read_params.range, read_params.end_range, read_params.start_key,
                                            read_params.end_key);
+        split_morsel_queue->set_tablet_schema(_tablet_schema);
 
         while (true) {
             auto split = split_morsel_queue->try_get().value();
