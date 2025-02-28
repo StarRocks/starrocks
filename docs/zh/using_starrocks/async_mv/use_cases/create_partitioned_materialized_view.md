@@ -49,7 +49,7 @@ StarRocks 的异步物化视图支持多种分区策略和函数，方便您实�
   - 目前不支持 List 分区和表达式分区。
   - 基表的两个相邻分区必须具有连续的范围。
 - 对于 External Catalog 中的多级分区基表，只能使用一级分区路径来创建分区物化视图。例如，对于以 `yyyyMMdd/hour` 格式分区的表，只能构建按 `yyyyMMdd` 分区的物化视图。
-- 从 v3.2.3 版本开始，StarRocks 支持在使用 [Partition Transforms (分区变换)](https://iceberg.apache.org/spec/#partition-transforms) 的 Iceberg 表上创建分区物化视图，物化视图将根据变换后的列进行分区。更多信息，参考 [使用物化视图加速数据湖查询 - 选择合适的刷新策略](./data_lake_query_acceleration_with_materialized_views.md#适的刷新策略)。
+- 从 v3.2.3 版本开始，StarRocks 支持在使用 [Partition Transforms (分区变换)](https://iceberg.apache.org/spec/#partition-transforms) 的 Iceberg 表上创建分区物化视图，物化视图将根据变换后的列进行分区。更多信息，参考 [使用物化视图加速数据湖查询 - 选择合适的刷新策略](./data_lake_query_acceleration_with_materialized_views.md#选择合适的刷新策略)。
 
 :::
 
@@ -269,6 +269,67 @@ FROM par_tbl3
 GROUP BY 
   par_tbl3.datekey_new,
   par_tbl3.k1;
+```
+
+### 多分区列对齐
+
+自 v3.4.1 起，异步物化视图支持多列分区表达式。您可以为物化视图指定多个分区列，一一映射基表的分区列。这使得基于物化视图的湖仓一体化方案得以实现，同时也能充分利用现有的 StarRocks 内表功能，提升 Lakehouse 的解决方案能力：
+
+- **简化用户操作**：简化数据从湖上流转到 StarRocks 的过程。
+- **加速查询性能**：在创建物化视图时复用内表功能，如 Colocate Group、Bitmap Index、Bloom Filter Index、Sort Key 和全局字典。对于直接基于基表的查询，物化视图会透明加速查询并自动改写。
+
+#### 多列分区表达式相关说明
+
+- 当前物化视图支持的多列分区只能与基表的多列分区一一映射，或者是 N:1 关系，而不能是 M:N 关系。例如，如果基表的分区列为 `(col1, col2, ..., coln)`，则物化视图定义时的分区只能是单列分区，如 `col1`、`col2`、`coln`，或者与基表分区列一一映射，如 `(col1, col2, ..., coln)`。这是因为通用的 M:N 关系会导致基表与物化视图之间的分区映射逻辑复杂，通过一一映射可以简化刷新和分区补偿逻辑。
+- 由于 Iceberg 分区表达式支持 Transform 功能，若 Iceberg 的分区表达式映射到 StarRocks 时，需要额外处理分区表达式。以下为两者对应关系：
+
+  | Iceberg Transform | Iceberg 分区表达式      | 物化视图分区表达式             |
+  | ----------------- | --------------------- | ---------------------------- |
+  | Identity          | `<col>`               | `<col>`                      |
+  | hour              | `hour(<col>)`         | `date_trunc('hour', <col>)`  |
+  | day               | `day(<col>)`          | `date_trunc('day', <col>)`   |
+  | month             | `month(<col>)`        | `date_trunc('month', <col>)` |
+  | year              | `year(<col>)`         | `date_trunc('year', <col>)`  |
+  | bucket            | `bucket(<col>, <n>)`  | Not supported                |
+  | truncate          | `truncate(<col>)`     | Not supported                |
+
+- 对于非 Iceberg 类型的分区列，因不涉及分区表达式计算，创建物化视图时只需直接选择映射，不需要额外的分区表达式处理。
+
+以下示例使用多列分区表达式基于 Iceberg Catalog（Spark）基表创建分区物化视图。
+
+Spark 中的基表定义如下：
+
+```SQL
+-- 分区表达式包含多个分区列以及 `days` Transform。
+CREATE TABLE lineitem_days (
+      l_orderkey    BIGINT,
+      l_partkey     INT,
+      l_suppkey     INT,
+      l_linenumber  INT,
+      l_quantity    DECIMAL(15, 2),
+      l_extendedprice  DECIMAL(15, 2),
+      l_discount    DECIMAL(15, 2),
+      l_tax         DECIMAL(15, 2),
+      l_returnflag  VARCHAR(1),
+      l_linestatus  VARCHAR(1),
+      l_shipdate    TIMESTAMP,
+      l_commitdate  TIMESTAMP,
+      l_receiptdate TIMESTAMP,
+      l_shipinstruct VARCHAR(25),
+      l_shipmode     VARCHAR(10),
+      l_comment      VARCHAR(44)
+) USING ICEBERG
+PARTITIONED BY (l_returnflag, l_linestatus, days(l_shipdate));
+```
+
+创建多列分区一一映射物化视图：
+
+```SQL
+CREATE MATERIALIZED VIEW test_days
+PARTITION BY (l_returnflag, l_linestatus, date_trunc('day', l_shipdate))
+REFRESH DEFERRED MANUAL
+AS 
+SELECT * FROM iceberg_catalog.test_db.lineitem_days;
 ```
 
 ### 实现增量刷新和透明改写
