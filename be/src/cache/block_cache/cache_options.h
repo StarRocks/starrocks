@@ -20,6 +20,12 @@
 #include <vector>
 
 #include "common/status.h"
+#include "cache/block_cache/dummy_types.h"
+
+#ifdef WITH_STARCACHE
+#include "starcache/star_cache.h"
+#endif
+
 
 namespace starrocks {
 
@@ -94,10 +100,27 @@ struct WriteCacheOptions {
 
 struct ReadCacheOptions {
     bool use_adaptor = false;
+    std::string remote_host;
+    int32_t remote_port;
 
     struct Stats {
         int64_t read_mem_bytes = 0;
         int64_t read_disk_bytes = 0;
     } stats;
 };
+
+// We use the `starcache::ObjectHandle` directly because implementing a new one seems unnecessary.
+// Importing the starcache headers here is not graceful, but the `cachelib` doesn't support
+// object cache and we'll deprecate it for some performance reasons. Now there is no need to
+// pay too much attention to the compatibility and upper-level abstraction of the cachelib interface.
+#ifdef WITH_STARCACHE
+using DataCacheHandle = starcache::ObjectHandle;
+using DataCacheMetrics = starcache::CacheMetrics;
+using DataCacheStatus = starcache::CacheStatus;
+#else
+using DataCacheHandle = DummyCacheHandle;
+using DataCacheMetrics = DummyCacheMetrics;
+using DataCacheStatus = DummyCacheStatus;
+#endif
+
 } // namespace starrocks

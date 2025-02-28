@@ -36,6 +36,7 @@ package com.starrocks.qe;
 
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
+import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
@@ -248,6 +249,7 @@ import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
 import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TTableInfo;
@@ -1905,6 +1907,13 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowBackendsStatement(ShowBackendsStmt statement, ConnectContext context) {
+            String warehouse = context.getCurrentWarehouseName();
+            ImmutableMap<Long, Backend> idToBackend =
+                    GlobalStateMgr.getCurrentState().getHistoricalNodeMgr().getHistoricalBackends(warehouse);
+            if (idToBackend != null) {
+                LOG.info("[Gavin] historical backend nodes of warehouse({}) is: {}", warehouse, idToBackend.toString());
+            }
+
             List<List<String>> backendInfos = BackendsProcDir.getClusterBackendInfos();
             return new ShowResultSet(statement.getMetaData(), backendInfos);
         }
@@ -2508,6 +2517,13 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowComputeNodes(ShowComputeNodesStmt statement, ConnectContext context) {
+            String warehouse = context.getCurrentWarehouseName();
+            ImmutableMap<Long, ComputeNode> idToComputeNode =
+                    GlobalStateMgr.getCurrentState().getHistoricalNodeMgr().getHistoricalComputeNodes(warehouse);
+            if (idToComputeNode != null) {
+                LOG.info("[Gavin] historical compute nodes of warehouse({}) is: {}", warehouse, idToComputeNode.toString());
+            }
+
             List<List<String>> computeNodesInfos = ComputeNodeProcDir.getClusterComputeNodesInfos();
             return new ShowResultSet(statement.getMetaData(), computeNodesInfos);
         }

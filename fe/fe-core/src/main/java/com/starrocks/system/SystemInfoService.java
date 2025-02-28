@@ -166,11 +166,32 @@ public class SystemInfoService implements GsonPostProcessable {
         idToComputeNodeRef.remove(computeNode.getId());
     }
 
+    private void updateHistoricalComputeNodes(String warehouseName)
+            throws DdlException {
+        HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
+        boolean updateResult = false;
+        if (RunMode.isSharedDataMode()) {
+            ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
+            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseName);
+            computeNodeIds.forEach(nodeId -> builder.put(nodeId, getBackendOrComputeNode(nodeId)));
+            ImmutableMap<Long, ComputeNode> idToComputeNode = builder.build();
+            updateResult = historicalNodeMgr.updateHistoricalComputeNodes(idToComputeNode, warehouseName);
+            LOG.info("[Gavin] update historical compute nodes, warehouse: {}, nodes: {}, result: {} ", warehouseName,
+                    idToComputeNode.toString(), updateResult);
+        } else {
+            updateResult = historicalNodeMgr.updateHistoricalComputeNodes(idToComputeNodeRef, warehouseName);
+            LOG.info("[Gavin] update historical compute nodes, warehouse: {}, nodeIds: {}, result: {} ", warehouseName,
+                    idToComputeNodeRef.toString(), updateResult);
+        }
+    }
+
     // Final entry of adding compute node
     public void addComputeNode(String host, int heartbeatPort, String warehouse) throws DdlException {
         ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         setComputeNodeOwner(newComputeNode);
         addComputeNodeToWarehouse(newComputeNode, warehouse);
+        // Record the historical compute nodes
+        updateHistoricalComputeNodes(warehouse);
 
         idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
 
@@ -188,6 +209,7 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public void addBackends(AddBackendClause addBackendClause) throws DdlException {
+        LOG.info("[Gavin] add backends.");
         for (Pair<String, Integer> pair : addBackendClause.getHostPortPairs()) {
             checkSameNodeExist(pair.first, pair.second);
         }
@@ -242,12 +264,34 @@ public class SystemInfoService implements GsonPostProcessable {
         computeNode.setWarehouseId(warehouse.getId());
     }
 
+    private void updateHistoricalBackends(String warehouseName)
+            throws DdlException {
+        HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
+        boolean updateResult = false;
+        if (RunMode.isSharedDataMode()) {
+            ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
+            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseName);
+            computeNodeIds.forEach(nodeId -> builder.put(nodeId, getBackendOrComputeNode(nodeId)));
+            ImmutableMap<Long, ComputeNode> idToComputeNode = builder.build();
+            updateResult = historicalNodeMgr.updateHistoricalComputeNodes(idToComputeNode, warehouseName);
+            LOG.info("[Gavin] update historical compute nodes, warehouse: {}, nodes: {}, result: {} ", warehouseName,
+                    idToComputeNode.toString(), updateResult);
+        } else {
+            updateResult = historicalNodeMgr.updateHistoricalBackends(idToBackendRef, warehouseName);
+            LOG.info("[Gavin] update historical backend nodes, warehouse: {}, nodeIds: {}, result: {} ", warehouseName,
+                    idToComputeNodeRef.toString(), updateResult);
+        }
+    }
+
     // Final entry of adding backend
     private void addBackend(String host, int heartbeatPort, String warehouse) throws DdlException {
+        LOG.info("[Gavin] add backend {}.", host);
         Backend newBackend = new Backend(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         // add backend to DEFAULT_CLUSTER
         setBackendOwner(newBackend);
         addComputeNodeToWarehouse(newBackend, warehouse);
+        // Record the historical backend nodes
+        updateHistoricalBackends(warehouse);
 
         // update idToBackend
         idToBackendRef.put(newBackend.getId(), newBackend);
@@ -387,6 +431,9 @@ public class SystemInfoService implements GsonPostProcessable {
                     "] does not exist in warehouse " + warehouse);
         }
 
+        // Record the historical backend nodes
+        updateHistoricalComputeNodes(warehouse);
+
         // update idToComputeNode
         idToComputeNodeRef.remove(dropComputeNode.getId());
 
@@ -499,6 +546,9 @@ public class SystemInfoService implements GsonPostProcessable {
                 throw new DdlException(e.getMessage());
             }
         }
+
+        // Record the historical backend nodes
+        updateHistoricalBackends(warehouse);
 
         // update idToBackend
         idToBackendRef.remove(droppedBackend.getId());

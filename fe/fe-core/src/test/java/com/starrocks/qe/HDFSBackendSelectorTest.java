@@ -128,12 +128,13 @@ public class HDFSBackendSelectorTest {
                 computeNodes,
                 ImmutableMap.of(),
                 computeNodes,
-                true
+                true,
+                0
         );
 
         HDFSBackendSelector selector =
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
-                        false, false, false);
+                        false, false, false, context);
         selector.computeScanRangeAssignment();
 
         int avg = (scanRangeNumber * scanRangeSize) / hostNumber;
@@ -150,11 +151,12 @@ public class HDFSBackendSelectorTest {
                 ImmutableMap.of(),
                 ImmutableMap.of(),
                 ImmutableMap.of(),
-                true
+                true,
+                0
         );
         selector =
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
-                        false, false, false);
+                        false, false, false, context);
         try {
             selector.computeScanRangeAssignment();
             Assert.fail();
@@ -196,12 +198,13 @@ public class HDFSBackendSelectorTest {
                 computeNodes,
                 ImmutableMap.of(),
                 computeNodes,
-                true
+                true,
+                0
         );
 
         HDFSBackendSelector selector =
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
-                        false, false, false);
+                        false, false, false, context);
         selector.computeScanRangeAssignment();
 
         long avg = (scanRangeNumber * scanRangeSize) / hostNumber + 1;
@@ -245,24 +248,27 @@ public class HDFSBackendSelectorTest {
                 computeNodes,
                 ImmutableMap.of(),
                 computeNodes,
-                true
+                true,
+                0
         );
         HDFSBackendSelector selector =
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
-                        false, false, false);
-        HashRing hashRing = selector.makeHashRing();
+                        false, false, false, context);
+
+
+        HashRing hashRing = selector.makeHashRing(computeNodes.values());
         Assert.assertTrue(hashRing.policy().equals("ConsistentHash"));
         ConsistentHashRing consistentHashRing = (ConsistentHashRing) hashRing;
         Assert.assertTrue(consistentHashRing.getVirtualNumber() ==
                 HDFSBackendSelector.CONSISTENT_HASH_RING_VIRTUAL_NUMBER);
 
         sessionVariable.setHdfsBackendSelectorHashAlgorithm("rendezvous");
-        hashRing = selector.makeHashRing();
+        hashRing = selector.makeHashRing(computeNodes.values());
         Assert.assertTrue(hashRing.policy().equals("RendezvousHash"));
 
         sessionVariable.setHdfsBackendSelectorHashAlgorithm("consistent");
         sessionVariable.setConsistentHashVirtualNodeNum(64);
-        hashRing = selector.makeHashRing();
+        hashRing = selector.makeHashRing(computeNodes.values());
         Assert.assertTrue(hashRing.policy().equals("ConsistentHash"));
         consistentHashRing = (ConsistentHashRing) hashRing;
         Assert.assertTrue(consistentHashRing.getVirtualNumber() == 64);
@@ -304,12 +310,13 @@ public class HDFSBackendSelectorTest {
                 computeNodes,
                 ImmutableMap.of(),
                 computeNodes,
-                true
+                true,
+                0
         );
 
         HDFSBackendSelector selector =
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
-                        true, false, false);
+                        true, false, false, context);
         selector.computeScanRangeAssignment();
 
         Map<Long, Long> stats = computeWorkerIdToReadBytes(assignment, scanNodeId);
@@ -351,12 +358,13 @@ public class HDFSBackendSelectorTest {
                 computeNodes,
                 ImmutableMap.of(),
                 computeNodes,
-                true
+                true,
+                0
         );
 
         HDFSBackendSelector selector =
                 new HDFSBackendSelector(hdfsScanNode, locations, assignment, workerProvider,
-                        false, false, true);
+                        false, false, true, context);
         selector.computeScanRangeAssignment();
         Assert.assertEquals(assignment.size(), 3);
         int scanRanges = 0;
