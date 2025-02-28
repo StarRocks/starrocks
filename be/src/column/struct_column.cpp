@@ -490,14 +490,6 @@ ColumnPtr StructColumn::field_column(const std::string& field_name) const {
 }
 
 ColumnPtr& StructColumn::field_column(const std::string& field_name) {
-    std::stringstream ss;
-    ss << "field size = " << _field_names.size() << ", [";
-    for (size_t i = 0; i < _field_names.size(); i++) {
-        ss << _field_names[i] << ", ";
-    }
-    ss << "]. looking for field_name = " << field_name;
-    VLOG_FILE << "[xxx]" << ss.str();
-
     for (size_t i = 0; i < _field_names.size(); i++) {
         if (field_name == _field_names[i]) {
             return _fields[i];
