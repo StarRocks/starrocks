@@ -182,6 +182,11 @@ public class QueryOptimizer extends Optimizer {
             try (Timer ignored = Tracers.watchScope("MVTextRewrite")) {
                 logicOperatorTree = new TextMatchBasedRewriteRule(context.getConnectContext(), context.getStatement(),
                         context.getMvTransformerContext()).transform(logicOperatorTree, context).get(0);
+                // NOTE: PruneColum rules will not care projection required columns, so separate project after text match based
+                // rewrite to avoid pruning columns
+                if (context.getQueryMaterializationContext().hasRewrittenSuccess()) {
+                    logicOperatorTree = new SeparateProjectRule().rewrite(logicOperatorTree, context.getTaskContext());
+                }
             }
 
             OptExpression result = optimizerOptions.isRuleBased() ?
