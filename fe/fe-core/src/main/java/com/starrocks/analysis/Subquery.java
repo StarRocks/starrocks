@@ -127,6 +127,6 @@ public class Subquery extends Expr {
 
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) throws SemanticException {
-        return visitor.visitSubquery(this, context);
+        return visitor.visitSubqueryExpr(this, context);
     }
 }

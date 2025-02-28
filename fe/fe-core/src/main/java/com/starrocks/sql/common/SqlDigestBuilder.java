@@ -45,7 +45,7 @@ public class SqlDigestBuilder {
 
         @Override
         public String visitInPredicate(InPredicate node, Void context) {
-            if (!node.isLiteralChildren()) {
+            if (!node.isConstantValues()) {
                 return super.visitInPredicate(node, context);
             } else {
                 StringBuilder strBuilder = new StringBuilder();

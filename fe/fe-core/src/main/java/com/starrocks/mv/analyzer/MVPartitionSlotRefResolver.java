@@ -127,7 +127,7 @@ public class MVPartitionSlotRefResolver {
         }
 
         @Override
-        public Expr visitSubquery(SubqueryRelation node, SlotRef slot) {
+        public Expr visitSubqueryRelation(SubqueryRelation node, SlotRef slot) {
             if (slot.getTblNameWithoutAnalyzed() != null) {
                 String tableName = slot.getTblNameWithoutAnalyzed().getTbl();
                 if (!node.getAlias().getTbl().equalsIgnoreCase(tableName)) {

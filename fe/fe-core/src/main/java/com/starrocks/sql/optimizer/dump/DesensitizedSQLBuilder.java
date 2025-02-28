@@ -347,7 +347,7 @@ public class DesensitizedSQLBuilder {
         }
 
         @Override
-        public String visitSubquery(SubqueryRelation node, Void context) {
+        public String visitSubqueryRelation(SubqueryRelation node, Void context) {
             StringBuilder sqlBuilder = new StringBuilder("(" + visit(node.getQueryStatement()) + ")");
 
             if (node.getAlias() != null) {

@@ -314,7 +314,7 @@ public class AggregationAnalyzer {
         }
 
         @Override
-        public Boolean visitSubquery(Subquery node, Void context) {
+        public Boolean visitSubqueryExpr(Subquery node, Void context) {
             QueryStatement queryStatement = node.getQueryStatement();
             for (Map.Entry<Expr, FieldId> entry : queryStatement.getQueryRelation().getColumnReferences().entrySet()) {
                 Expr expr = entry.getKey();

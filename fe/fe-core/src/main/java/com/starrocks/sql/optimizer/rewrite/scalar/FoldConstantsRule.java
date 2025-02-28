@@ -151,7 +151,7 @@ public class FoldConstantsRule extends BottomUpScalarOperatorRewriteRule {
         Optional<ConstantOperator> result = child.castTo(operator.getType());
         if (!result.isPresent()) {
             if (LOG.isDebugEnabled()) {
-                LOG.debug("Fold cast constant error: " + operator + ", " + child.toString());
+                LOG.debug("Fold cast constant error: " + operator + ", " + child);
             }
             return operator;
         } else {

@@ -636,7 +636,7 @@ public class AstToStringBuilder {
         }
 
         @Override
-        public String visitSubquery(SubqueryRelation node, Void context) {
+        public String visitSubqueryRelation(SubqueryRelation node, Void context) {
             StringBuilder sqlBuilder = new StringBuilder("(" + visit(node.getQueryStatement()) + ")");
 
             if (node.getAlias() != null) {
@@ -1309,7 +1309,7 @@ public class AstToStringBuilder {
         }
 
         @Override
-        public String visitSubquery(Subquery node, Void context) {
+        public String visitSubqueryExpr(Subquery node, Void context) {
             return "(" + visit(node.getQueryStatement()) + ")";
         }
 

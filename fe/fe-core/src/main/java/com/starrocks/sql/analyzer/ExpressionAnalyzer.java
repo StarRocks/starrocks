@@ -1395,7 +1395,7 @@ public class ExpressionAnalyzer {
         }
 
         @Override
-        public Void visitSubquery(Subquery node, Scope context) {
+        public Void visitSubqueryExpr(Subquery node, Scope context) {
             QueryAnalyzer queryAnalyzer = new QueryAnalyzer(session);
             queryAnalyzer.analyze(node.getQueryStatement(), context);
             node.setType(node.getQueryStatement().getQueryRelation().getRelationFields().getFieldByIndex(0).getType());

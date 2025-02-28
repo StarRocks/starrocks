@@ -240,7 +240,7 @@ public class QueryAnalyzer {
         }
 
         @Override
-        public Void visitSubquery(SubqueryRelation subquery, Scope scope) {
+        public Void visitSubqueryRelation(SubqueryRelation subquery, Scope scope) {
             QueryRelation queryRelation = subquery.getQueryStatement().getQueryRelation();
             if (queryRelation instanceof SelectRelation) {
                 SelectRelation childSelectRelation = (SelectRelation) queryRelation;
@@ -927,7 +927,7 @@ public class QueryAnalyzer {
         }
 
         @Override
-        public Scope visitSubquery(SubqueryRelation subquery, Scope context) {
+        public Scope visitSubqueryRelation(SubqueryRelation subquery, Scope context) {
             if (subquery.getResolveTableName() != null && subquery.getResolveTableName().getTbl() == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DERIVED_MUST_HAVE_ALIAS);
             }
