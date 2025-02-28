@@ -140,7 +140,7 @@ protected:
     // If the owner data is mutable, it can call non-const method of derived class, but
     // one mutable data should only have one owner and it can not be shared with others.
     template <typename T>
-    class Mutable : public Owner<T> {
+    class MutableOwner : public Owner<T> {
     private:
         using Base = Owner<T>;
 
@@ -149,19 +149,19 @@ protected:
         template <typename, typename, typename>
         friend class CowFactory;
 
-        explicit Mutable(T* ptr, bool add_ref = true) : Base(ptr, add_ref) {}
+        explicit MutableOwner(T* ptr, bool add_ref = true) : Base(ptr, add_ref) {}
 
     public:
         // Copy: not possible.
-        Mutable(const Mutable&) = delete;
+        MutableOwner(const MutableOwner&) = delete;
         // Move: ok.
-        Mutable(Mutable&&) = default;
-        Mutable& operator=(Mutable&&) = default;
+        MutableOwner(MutableOwner&&) = default;
+        MutableOwner& operator=(MutableOwner&&) = default;
         // Initializing from temporary of compatible type.
         template <typename U>
-        Mutable(Mutable<U>&& other) : Base(std::move(other)) {}
-        Mutable() = default;
-        Mutable(std::nullptr_t) {}
+        MutableOwner(MutableOwner<U>&& other) : Base(std::move(other)) {}
+        MutableOwner() = default;
+        MutableOwner(std::nullptr_t) {}
     };
 
     // If the owner data is immutable, it can only call non const methods of derived class ideally, but
@@ -171,33 +171,33 @@ protected:
     // NOTE: To be compatible with old codes, it can call non-const methods of derived class if the Immutable data
     // is not `const` or `const&` or called from `const method`; otherwise, it can only call const methods of derived class.
     template <typename T>
-    class Immutable : public Owner<const T> {
+    class ImmutableOwner : public Owner<const T> {
     public:
         template <typename... Args>
-        Immutable(Args&&... args) : Base(std::forward<Args>(args)...) {}
+        ImmutableOwner(Args&&... args) : Base(std::forward<Args>(args)...) {}
 
         template <typename U>
-        Immutable(std::initializer_list<U>&& arg) : Base(std::forward<std::initializer_list<U>>(arg)) {}
+        ImmutableOwner(std::initializer_list<U>&& arg) : Base(std::forward<std::initializer_list<U>>(arg)) {}
 
         // Copy constructor/assignment
-        Immutable(const Immutable&) = default;
-        Immutable& operator=(const Immutable&) = default;
+        ImmutableOwner(const ImmutableOwner&) = default;
+        ImmutableOwner& operator=(const ImmutableOwner&) = default;
         template <typename U>
-        Immutable(const Immutable<U>& other) : Base(other) {}
+        ImmutableOwner(const ImmutableOwner<U>& other) : Base(other) {}
 
         // Move constructor/assignment
-        Immutable(Immutable&&) = default;
-        Immutable& operator=(Immutable&&) = default;
+        ImmutableOwner(ImmutableOwner&&) = default;
+        ImmutableOwner& operator=(ImmutableOwner&&) = default;
         template <typename U>
-        Immutable(Immutable<U>&& other) : Base(std::move(other)) {}
+        ImmutableOwner(ImmutableOwner<U>&& other) : Base(std::move(other)) {}
         template <typename U>
-        Immutable(Mutable<U>&& other) : Base(std::move(other)) {}
+        ImmutableOwner(MutableOwner<U>&& other) : Base(std::move(other)) {}
 
         // Copy from mutable ptr: not possible.
         template <typename U>
-        Immutable(const Mutable<U>&) = delete;
-        Immutable() = default;
-        Immutable(std::nullptr_t) {}
+        ImmutableOwner(const MutableOwner<U>&) = delete;
+        ImmutableOwner() = default;
+        ImmutableOwner(std::nullptr_t) {}
 
         const T* get() const { return this->_t; }
         T* get() { return const_cast<T*>(this->_t); }
@@ -216,12 +216,12 @@ protected:
         template <typename, typename, typename>
         friend class CowFactory;
 
-        explicit Immutable(const T* ptr, bool add_ref = true) : Base(ptr, add_ref) {}
+        explicit ImmutableOwner(const T* ptr, bool add_ref = true) : Base(ptr, add_ref) {}
     };
 
 public:
-    using MutablePtr = Mutable<Derived>;
-    using Ptr = Immutable<Derived>;
+    using MutablePtr = MutableOwner<Derived>;
+    using Ptr = ImmutableOwner<Derived>;
 
 protected:
     // trigger clone-on-write, deep clone if the data is shared with others, otherwise shadow clone.
@@ -268,8 +268,8 @@ class CowFactory : public Base {
 public:
     using BasePtr = typename AncestorBase::Ptr;
     using BaseMutablePtr = typename AncestorBase::MutablePtr;
-    using Ptr = typename Base::template Immutable<Derived>;
-    using MutablePtr = typename Base::template Mutable<Derived>;
+    using Ptr = typename Base::template ImmutableOwner<Derived>;
+    using MutablePtr = typename Base::template MutableOwner<Derived>;
 
     // AncestorBase is root class of inheritance hierarchy
     // if Derived class is the direct subclass of the root, then AncestorBase is just the Base class

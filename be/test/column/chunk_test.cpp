@@ -84,7 +84,7 @@ public:
             extra_data_metas.push_back(
                     ChunkExtraColumnsMeta{.type = TypeDescriptor(TYPE_INT), .is_null = false, .is_const = false});
         }
-        auto extra_data_cols = std::vector<ColumnPtr>{make_columns(num_cols, size)};
+        auto extra_data_cols = make_columns(num_cols, size);
         return std::make_shared<ChunkExtraColumnsData>(std::move(extra_data_metas), std::move(extra_data_cols));
     }
 };
