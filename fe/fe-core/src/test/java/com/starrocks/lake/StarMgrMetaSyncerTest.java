@@ -23,6 +23,10 @@ import com.staros.proto.S3FileStoreInfo;
 import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
+import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.MaterializedViewHandler;
+import com.starrocks.alter.SchemaChangeHandler;
+import com.starrocks.alter.SchemaChangeJobV2;
 import com.starrocks.catalog.ColocateTableIndex;
 import com.starrocks.catalog.ColocateTableIndex.GroupId;
 import com.starrocks.catalog.Column;
@@ -42,7 +46,11 @@ import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.concurrent.lock.LockManager;
+import com.starrocks.lake.snapshot.ClusterSnapshotJob;
+import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
+import com.starrocks.lake.snapshot.ClusterSnapshotUtils;
+import com.starrocks.persist.EditLog;
 import com.starrocks.proto.DeleteTabletRequest;
 import com.starrocks.proto.DeleteTabletResponse;
 import com.starrocks.proto.StatusPB;
@@ -75,6 +83,7 @@ import java.util.List;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Future;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -100,7 +109,16 @@ public class StarMgrMetaSyncerTest {
     @Mocked
     private LocalMetastore localMetastore;
 
+    @Mocked
+    private EditLog editLog;
+
+    private ClusterSnapshotMgr clusterSnapshotMgr = new ClusterSnapshotMgr();
+
     long shardGroupId = 12L;
+
+    long tableId = 15L;
+
+    private AtomicLong nextId = new AtomicLong(0);
 
     @Before
     public void setUp() throws Exception {
@@ -142,7 +160,7 @@ public class StarMgrMetaSyncerTest {
 
                 globalStateMgr.getClusterSnapshotMgr();
                 minTimes = 0;
-                result = new ClusterSnapshotMgr();
+                result = clusterSnapshotMgr;
             }
         };
 
@@ -222,6 +240,7 @@ public class StarMgrMetaSyncerTest {
         for (long groupId : allShardGroupId) {
             ShardGroupInfo info = ShardGroupInfo.newBuilder()
                     .setGroupId(groupId)
+                    .putLabels("tableId", String.valueOf(tableId))
                     .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
                     .build();
             shardGroupInfos.add(info);
@@ -461,6 +480,7 @@ public class StarMgrMetaSyncerTest {
         for (long groupId : allShardGroupId) {
             ShardGroupInfo info = ShardGroupInfo.newBuilder()
                     .setGroupId(groupId)
+                    .putLabels("tableId", String.valueOf(tableId))
                     .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
                     .addAllShardIds(allShardIds)
                     .build();
@@ -543,6 +563,7 @@ public class StarMgrMetaSyncerTest {
         List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
         ShardGroupInfo info = ShardGroupInfo.newBuilder()
                 .setGroupId(groupIdToClear)
+                .putLabels("tableId", String.valueOf(tableId))
                 .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
                 .addAllShardIds(allShardIds)
                 .build();
@@ -589,6 +610,7 @@ public class StarMgrMetaSyncerTest {
         List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
         ShardGroupInfo info = ShardGroupInfo.newBuilder()
                 .setGroupId(groupIdToClear)
+                .putLabels("tableId", String.valueOf(tableId))
                 .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
                 .addAllShardIds(allShardIds)
                 .build();
@@ -653,6 +675,7 @@ public class StarMgrMetaSyncerTest {
         List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
         ShardGroupInfo info = ShardGroupInfo.newBuilder()
                 .setGroupId(groupIdToClear)
+                .putLabels("tableId", String.valueOf(tableId))
                 .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
                 .addAllShardIds(allShardIds)
                 .build();
@@ -730,6 +753,7 @@ public class StarMgrMetaSyncerTest {
         List<ShardGroupInfo> shardGroupInfos = new ArrayList<>();
         ShardGroupInfo info = ShardGroupInfo.newBuilder()
                 .setGroupId(groupIdToClear)
+                .putLabels("tableId", String.valueOf(tableId))
                 .putProperties("createTime", String.valueOf(System.currentTimeMillis() - 86400 * 1000))
                 .addAllShardIds(allShardIds)
                 .build();
@@ -889,5 +913,111 @@ public class StarMgrMetaSyncerTest {
         shards.add(333L);
         starMgrMetaSyncer.syncTableMetaInternal(db, (OlapTable) table, true);
         Assert.assertEquals(3, shards.size());
+    }
+
+    @Test
+    public void testSyncerRejectByClusterSnapshot() {
+        final ClusterSnapshotMgr localClusterSnapshotMgr = new ClusterSnapshotMgr();
+        final StarMgrMetaSyncer syncer = new StarMgrMetaSyncer();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public ClusterSnapshotMgr getClusterSnapshotMgr() {
+                return localClusterSnapshotMgr;
+            }
+        };
+
+        MaterializedViewHandler rollupHandler = new MaterializedViewHandler();
+        SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public EditLog getEditLog() {
+                return editLog;
+            }
+
+            @Mock
+            public SchemaChangeHandler getSchemaChangeHandler() {
+                return schemaChangeHandler;
+            }
+
+            @Mock
+            public MaterializedViewHandler getRollupHandler() {
+                return rollupHandler;
+            }
+        };
+
+        AlterJobV2 alterjob = new SchemaChangeJobV2(1, 2, 100L, "table3", 100000);
+        alterjob.setJobState(AlterJobV2.JobState.FINISHED);
+        alterjob.setFinishedTimeMs(1000);
+        schemaChangeHandler.addAlterJobV2(alterjob);
+
+        ShardGroupInfo info1 = ShardGroupInfo.newBuilder()
+                .setGroupId(99L)
+                .putLabels("tableId", String.valueOf(100L))
+                .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
+                .build();
+        ShardGroupInfo info2 = ShardGroupInfo.newBuilder()
+                .setGroupId(100L)
+                .putLabels("tableId", String.valueOf(111L))
+                .putProperties("createTime", String.valueOf(System.currentTimeMillis()))
+                .build();
+        List<ShardGroupInfo> shardGroupsInfo = new ArrayList();
+        shardGroupsInfo.add(info1);
+        shardGroupsInfo.add(info2);
+        
+        new MockUp<LocalMetastore>() {
+            @Mock
+            public List<Table> getTablesIncludeRecycleBin(Database db) {
+                List<Column> baseSchema = new ArrayList<>();
+                KeysType keysType = KeysType.AGG_KEYS;
+                PartitionInfo partitionInfo = new PartitionInfo(PartitionType.RANGE);
+                DistributionInfo defaultDistributionInfo = new HashDistributionInfo();
+                Table table = new LakeTable(100, "lake_table", baseSchema, keysType, partitionInfo, defaultDistributionInfo);
+                List<Table> tableList = new ArrayList<>();
+                tableList.add(table);
+                return tableList;
+            }
+        };
+    
+        new MockUp<StarOSAgent>() {
+            @Mock
+            public List<ShardGroupInfo> listShardGroup() {
+                return shardGroupsInfo;
+            }
+        };
+
+        new MockUp<ClusterSnapshotMgr>() {
+            @Mock
+            public boolean isAutomatedSnapshotOn() {
+                return true;
+            }
+        };
+
+        new MockUp<ClusterSnapshotUtils>() {
+            @Mock
+            public static void clearAutomatedSnapshotFromRemote(String snapshotName) {
+                return;
+            }
+        };
+
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public long getNextId() {
+                long id = nextId.incrementAndGet();
+                return id;
+            }
+        };
+
+        long oldConfig = Config.shard_group_clean_threshold_sec;
+        Config.shard_group_clean_threshold_sec = 0;
+        syncer.runAfterCatalogReady();
+        ClusterSnapshotJob j3 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+        j3.setState(ClusterSnapshotJobState.FINISHED);
+        syncer.runAfterCatalogReady();
+        ClusterSnapshotJob j4 = localClusterSnapshotMgr.createAutomatedSnapshotJob();
+        j4.setState(ClusterSnapshotJobState.FINISHED);
+        syncer.runAfterCatalogReady();
+        Config.shard_group_clean_threshold_sec = oldConfig;
     }
 }
