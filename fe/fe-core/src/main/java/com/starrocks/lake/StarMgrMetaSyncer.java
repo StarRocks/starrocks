@@ -190,10 +190,26 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 .collect(Collectors.toList());
         LOG.debug("diff.size is {}, diff: {}", diffList.size(), diffList);
 
+        Map<Long, Long> groupIdToTableId = new HashMap<>();
+        for (ShardGroupInfo shardInfo : shardGroupsInfo) {
+            String tableIdString = shardInfo.getLabels().get("tableId");
+            if (tableIdString != null) {
+                groupIdToTableId.put(shardInfo.getGroupId(), Long.parseLong(tableIdString));
+            }
+        }
+
         // 1.4.collect redundant shard groups and delete
         long nowMs = System.currentTimeMillis();
         List<Long> emptyShardGroup = new ArrayList<>();
         for (long groupId : diffList) {
+            Long tableId = groupIdToTableId.get(groupId);
+            if (tableId != null &&
+                    !GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isTableSafeToDeleteTablet(tableId.longValue())) {
+                LOG.debug("table with id: {} can not be delete shard for now, because of automated cluster snapshot",
+                          tableId.longValue());
+                continue;
+            }
+
             if (Config.shard_group_clean_threshold_sec * 1000L + Long.parseLong(groupToCreateTimeMap.get(groupId)) < nowMs) {
                 cleanOneGroup(groupId, starOSAgent, emptyShardGroup);
             }

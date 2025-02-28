@@ -167,7 +167,7 @@ public class TabletSchedulerTest {
 
         long now = System.currentTimeMillis();
         CatalogRecycleBin recycleBin = new CatalogRecycleBin();
-        recycleBin.recycleDatabase(badDb, new HashSet<>());
+        recycleBin.recycleDatabase(badDb, new HashSet<>(), true);
         recycleBin.recycleTable(goodDB.getId(), badTable, true);
         RecyclePartitionInfo recyclePartitionInfo = new RecycleRangePartitionInfo(goodDB.getId(), goodTable.getId(),
                 badPartition, null, new DataProperty(TStorageMedium.HDD), (short) 2, false, null);
