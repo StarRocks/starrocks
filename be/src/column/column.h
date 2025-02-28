@@ -453,7 +453,7 @@ public:
     /// Shallow: doesn't do recursive calls; don't do call for itself.
     using ColumnCallback = std::function<void(Ptr&)>;
     template <typename T>
-    static void do_callback(ColumnCallback callback, T::Ptr& ans) {
+    static void do_callback(ColumnCallback callback, typename T::Ptr& ans) {
         Ptr ptr;
         callback(ptr);
         ans = T::static_pointer_cast(std::move(ptr));

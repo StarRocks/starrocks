@@ -51,7 +51,7 @@ public:
 
     const NullColumnPtr& null_column() const { return _null_column; };
 
-    RunTimeColumnType<Type>::Ptr column() const { return _column; };
+    typename RunTimeColumnType<Type>::Ptr column() const { return _column; };
 
 private:
     // column ptr
