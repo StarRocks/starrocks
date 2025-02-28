@@ -22,7 +22,7 @@ SHOW TABLE STATUS;
 -- !result
 show create view view1;
 -- result:
-E: (5203, 'Access denied; you need (at least one of) the ANY privilege(s) on TABLE view1 for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
+E: (5204, 'Access denied; you need (at least one of) the ANY privilege(s) on VIEW view1 for this operation. Please ask the admin to grant permission(s) or try activating existing roles using <set [default] role>. Current role(s): NONE. Inactivated role(s): NONE.')
 -- !result
 execute as root with no revert;
 -- result:
