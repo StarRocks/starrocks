@@ -343,7 +343,6 @@ TEST_P(LakeTabletWriterTest, test_write_sdk) {
 
     Tablet tablet(_tablet_mgr.get(), next_id(), provider, _tablet_metadata);
     auto meta_location = tablet.metadata_location(0);
-    auto column_size = tablet.get_schema()->get()->num_columns();
     auto txn_log_location = tablet.txn_log_location(0);
     auto txn_vlog_location = tablet.txn_vlog_location(0);
     auto test_segment_location = tablet.segment_location("test_segment");

@@ -19,13 +19,9 @@
 #include "cache/object_cache/lrucache_module.h"
 #include "common/logging.h"
 #include "common/statusor.h"
+#include "runtime/exec_env.h"
 
 namespace starrocks {
-
-ObjectCache* ObjectCache::instance() {
-    static ObjectCache cache;
-    return &cache;
-}
 
 ObjectCache::~ObjectCache() {
     (void)shutdown();
