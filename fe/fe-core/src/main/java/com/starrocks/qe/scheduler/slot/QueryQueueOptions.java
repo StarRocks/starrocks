@@ -18,13 +18,20 @@ import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.common.Config;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.system.BackendResourceStat;
+import org.apache.commons.lang3.EnumUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
 import java.util.Objects;
 
 public class QueryQueueOptions {
+
+    private static final Logger LOG = LogManager.getLogger(QueryQueueOptions.class);
+
     private final boolean enableQueryQueueV2;
     private final V2 v2;
+    private final SchedulePolicy policy;
 
     public static QueryQueueOptions createFromEnvAndQuery(DefaultCoordinator coord) {
         if (!coord.getJobSpec().isEnableQueue() || !coord.getJobSpec().isNeedQueued()) {
@@ -45,13 +52,25 @@ public class QueryQueueOptions {
                 BackendResourceStat.getInstance().getAvgMemLimitBytes(),
                 Config.query_queue_v2_num_rows_per_slot,
                 Config.query_queue_v2_cpu_costs_per_slot);
-        return new QueryQueueOptions(true, v2);
+        SchedulePolicy policy = SchedulePolicy.create(Config.query_queue_v2_schedule_strategy);
+        if (policy == null) {
+            LOG.error("unknown query_queue_v2_schedule_policy: {}", Config.query_queue_v2_schedule_strategy);
+            policy = SchedulePolicy.createDefault();
+        }
+        return new QueryQueueOptions(true, v2, policy);
     }
 
     @VisibleForTesting
     QueryQueueOptions(boolean enableQueryQueueV2, V2 v2) {
         this.enableQueryQueueV2 = enableQueryQueueV2 && v2 != null;
         this.v2 = v2;
+        this.policy = SchedulePolicy.createDefault();
+    }
+
+    QueryQueueOptions(boolean enableQueryQueueV2, V2 v2, SchedulePolicy policy) {
+        this.enableQueryQueueV2 = enableQueryQueueV2 && v2 != null;
+        this.v2 = v2;
+        this.policy = policy;
     }
 
     public boolean isEnableQueryQueueV2() {
@@ -60,6 +79,10 @@ public class QueryQueueOptions {
 
     public V2 v2() {
         return v2;
+    }
+
+    public SchedulePolicy getPolicy() {
+        return policy;
     }
 
     @Override
@@ -71,12 +94,24 @@ public class QueryQueueOptions {
             return false;
         }
         QueryQueueOptions that = (QueryQueueOptions) o;
-        return enableQueryQueueV2 == that.enableQueryQueueV2 && Objects.equals(v2, that.v2);
+        return enableQueryQueueV2 == that.enableQueryQueueV2
+                && Objects.equals(v2, that.v2)
+                && policy.equals(that.policy);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(enableQueryQueueV2, v2);
+        return Objects.hash(enableQueryQueueV2, v2, policy);
+    }
+
+    @Override
+    public String toString() {
+        final StringBuffer sb = new StringBuffer("QueryQueueOptions{");
+        sb.append("enableQueryQueueV2=").append(enableQueryQueueV2);
+        sb.append(", v2=").append(v2);
+        sb.append(", policy=").append(policy);
+        sb.append('}');
+        return sb.toString();
     }
 
     public static class V2 {
@@ -159,8 +194,33 @@ public class QueryQueueOptions {
         public int hashCode() {
             return Objects.hash(numWorkers, numRowsPerSlot, totalSlots, memBytesPerSlot, totalSmallSlots, cpuCostsPerSlot);
         }
+
+        @Override
+        public String toString() {
+            final StringBuffer sb = new StringBuffer("V2{");
+            sb.append("numWorkers=").append(numWorkers);
+            sb.append(", numRowsPerSlot=").append(numRowsPerSlot);
+            sb.append(", totalSlots=").append(totalSlots);
+            sb.append(", memBytesPerSlot=").append(memBytesPerSlot);
+            sb.append(", cpuCostsPerSlot=").append(cpuCostsPerSlot);
+            sb.append(", totalSmallSlots=").append(totalSmallSlots);
+            sb.append('}');
+            return sb.toString();
+        }
     }
 
+    public enum SchedulePolicy {
+        SWRR, // Smooth Weighted Round Robin, which is suitable for hybrid workload without significant priority
+        SJF; // Short Job First + Aging, which is suitable for workload needs significant priority
+
+        public static SchedulePolicy createDefault() {
+            return SWRR;
+        }
+
+        public static SchedulePolicy create(String value) {
+            return EnumUtils.getEnumIgnoreCase(SchedulePolicy.class, value);
+        }
+    }
     private static boolean isAnyZero(long... values) {
         return Arrays.stream(values).anyMatch(val -> val == 0);
     }
