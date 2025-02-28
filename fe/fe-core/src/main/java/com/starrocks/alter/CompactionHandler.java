@@ -28,6 +28,7 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.lake.compaction.PartitionIdentifier;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -68,7 +69,8 @@ public class CompactionHandler  {
                         PartitionIdentifier partitionIdentifier =
                                 new PartitionIdentifier(db.getId(), olapTable.getId(), physicalPartition.getId());
                         CompactionMgr compactionManager = GlobalStateMgr.getCurrentState().getCompactionMgr();
-                        compactionManager.triggerManualCompaction(partitionIdentifier);
+                        long currentWarehouseId = ConnectContext.get().getCurrentWarehouseId();
+                        compactionManager.triggerManualCompaction(partitionIdentifier, currentWarehouseId);
                     }
                 }
             } finally {
