@@ -378,4 +378,26 @@ PARALLEL_TEST(ConstColumnTest, test_reference_memory_usage) {
     }
 }
 
+// NOLINTNEXTLINE
+PARALLEL_TEST(ConstColumnTest, test_append_with_zero_count) {
+    auto data_column = FixedLengthColumn<int32_t>::create();
+    data_column->append(2020);
+
+    auto create_const_column = [](int32_t value, size_t size) {
+        auto c = Int32Column::create();
+        c->append_numbers(&value, sizeof(value));
+        return ConstColumn::create(c, size);
+    };
+
+    auto c1 = create_const_column(1, 3);
+    // append with count==0
+    c1->append(*data_column, 0, 0);
+
+    std::vector<uint32_t> index;
+    c1->append_selective(*data_column, index.data(), 0, 0);
+
+    ASSERT_EQ(true, c1->is_constant());
+    ASSERT_EQ(3, c1->size());
+}
+
 } // namespace starrocks

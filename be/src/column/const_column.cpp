@@ -37,7 +37,7 @@ ConstColumn::ConstColumn(ColumnPtr data, size_t size) : _data(std::move(data)), 
 }
 
 void ConstColumn::append(const Column& src, size_t offset, size_t count) {
-    if (_size == 0) {
+    if (_size == 0 && count > 0) {
         const auto& src_column = down_cast<const ConstColumn&>(src);
         _data->append(*src_column.data_column(), 0, 1);
     }
@@ -45,7 +45,9 @@ void ConstColumn::append(const Column& src, size_t offset, size_t count) {
 }
 
 void ConstColumn::append_selective(const Column& src, const uint32_t* indexes, uint32_t from, uint32_t size) {
-    append(src, indexes[from], size);
+    if (LIKELY(size > 0)) {
+        append(src, indexes[from], size);
+    }
 }
 
 void ConstColumn::append_value_multiple_times(const Column& src, uint32_t index, uint32_t size) {
