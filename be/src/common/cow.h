@@ -12,9 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// This file is based on code available under the Apache license here:
-//  https://github.com/ClickHouse/ClickHouse/blob/master/src/Common/COW.h
-
 #pragma once
 
 #include <atomic>
@@ -22,81 +19,22 @@
 #include <type_traits>
 #include <vector>
 
-#include "logging.h" // DCHECK
+#include "logging.h"
 
 namespace starrocks {
 
-/** Copy-on-write shared ptr.
-  * Allows to work with shared immutable objects and sometimes unshare and mutate you own unique copy.
-  *
-  * Usage:
-    class Column : public COW<Column>
-    {
-    private:
-        friend class COW<Column>;
-        /// Leave all constructors in private section. They will be available through 'create' method.
-        Column();
-        /// Provide 'clone' method. It can be virtual if you want polymorphic behaviour.
-        virtual Column * clone() const;
-    public:
-        /// Correctly use const qualifiers in your interface.
-        virtual ~Column() {}
-    };
-  * It will provide 'create' and 'mutate' methods.
-  * And 'Ptr' and 'MutablePtr' types.
-  * Ptr is refcounted pointer to immutable object.
-  * MutablePtr is refcounted noncopyable pointer to mutable object.
-  * MutablePtr can be assigned to Ptr through move assignment.
-  *
-  * 'create' method creates MutablePtr: you cannot share mutable objects.
-  * To share, move-assign to immutable pointer.
-  * 'mutate' method allows to create mutable noncopyable object from immutable object:
-  *   either by cloning or by using directly, if it is not shared.
-  * These methods are thread-safe.
-  *
-  * Example:
-  *
-    /// Creating and assigning to immutable ptr.
-    Column::Ptr x = Column::create(1);
-    /// Sharing single immutable object in two ptrs.
-    Column::Ptr y = x;
-    /// Now x and y are shared.
-    /// Change value of x.
-    {
-        /// Creating mutable ptr. It can clone an object under the hood if it was shared.
-        Column::MutablePtr mutate_x = std::move(*x).mutate();
-        /// Using non-const methods of an object.
-        mutate_x->set(2);
-        /// Assigning pointer 'x' to mutated object.
-        x = std::move(mutate_x);
-    }
-    /// Now x and y are unshared and have different values.
-  * Note. You may have heard that COW is bad practice.
-  * Actually it is, if your values are small or if copying is done implicitly.
-  * This is the case for string implementations.
-  *
-  * In contrast, COW is intended for the cases when you need to share states of large objects,
-  * (when you usually will use std::shared_ptr) but you also want precise control over modification
-  * of this shared state.
-  *
-  * Caveats:
-  * - after a call to 'mutate' method, you can still have a reference to immutable ptr somewhere.
-  * - as 'mutable_ptr' should be unique, it's refcount is redundant - probably it would be better
-  *   to use std::unique_ptr for it somehow.
-  */
 template <typename Derived>
-class COW {
+class Cow {
+    typedef std::atomic<uint32_t> AtomicCounter;
+
 protected:
-    COW() : _ref_counter(0) {}
+    Cow() : _use_count(0) {}
+    Cow(Cow const&) : _use_count(0) {}
+    Cow& operator=(Cow const&) { return *this; }
 
-    COW(COW const&) : _ref_counter(0) {}
-
-    COW& operator=(COW const&) { return *this; }
-
-    void add_ref() { ++_ref_counter; }
-
+    void add_ref() { ++_use_count; }
     void release_ref() {
-        if (--_ref_counter == 0) {
+        if (--_use_count == 0) {
             delete static_cast<const Derived*>(this);
         }
     }
@@ -105,258 +43,188 @@ protected:
     const Derived* derived() const { return static_cast<const Derived*>(this); }
 
     template <typename T>
-    class intrusive_ptr {
+    class Owner {
     public:
-        intrusive_ptr() : _t(nullptr) {}
-
-        intrusive_ptr(T* t, bool add_ref = true) : _t(t) {
+        Owner() : _t(nullptr) {}
+        Owner(T* t, bool add_ref = true) : _t(t) {
             if (_t && add_ref) {
                 ((std::remove_const_t<T>*)_t)->add_ref();
             }
         }
-
-        template <typename U>
-        intrusive_ptr(intrusive_ptr<U> const& rhs) : _t(rhs.get()) {
-            if (_t) {
-                ((std::remove_const_t<T>*)_t)->add_ref();
-            }
-        }
-
-        intrusive_ptr(intrusive_ptr const& rhs) : _t(rhs.get()) {
-            if (_t) {
-                ((std::remove_const_t<T>*)_t)->add_ref();
-            }
-        }
-
-        ~intrusive_ptr() {
+        ~Owner() {
             if (_t) {
                 ((std::remove_const_t<T>*)_t)->release_ref();
             }
         }
 
+        template <class U>
+        friend class Owner;
+
+        /// Copy construct/assignment
         template <typename U>
-        intrusive_ptr& operator=(intrusive_ptr<U> const& rhs) {
-            intrusive_ptr(rhs).swap(*this);
+        Owner(Owner<U> const& rhs) : _t(rhs.get()) {
+            if (_t) {
+                ((std::remove_const_t<T>*)_t)->add_ref();
+            }
+        }
+        Owner(Owner const& rhs) : _t(rhs.get()) {
+            if (_t) {
+                ((std::remove_const_t<T>*)_t)->add_ref();
+            }
+        }
+        template <typename U>
+        Owner& operator=(Owner<U> const& rhs) {
+            Owner(rhs).swap(*this);
+            return *this;
+        }
+        Owner& operator=(Owner const& rhs) {
+            Owner(rhs).swap(*this);
+            return *this;
+        }
+        Owner& operator=(T* rhs) {
+            Owner(rhs).swap(*this);
             return *this;
         }
 
-        intrusive_ptr(intrusive_ptr&& rhs) : _t(rhs._t) { rhs._t = nullptr; }
-
-        intrusive_ptr& operator=(intrusive_ptr&& rhs) {
-            intrusive_ptr(static_cast<intrusive_ptr&&>(rhs)).swap(*this);
-            return *this;
-        }
-
+        /// Move onstruct/assignment
+        Owner(Owner&& rhs) : _t(rhs._t) { rhs._t = nullptr; }
         template <class U>
-        friend class intrusive_ptr;
-
-        template <class U>
-        intrusive_ptr(intrusive_ptr<U>&& rhs) : _t(rhs._t) {
+        Owner(Owner<U>&& rhs) : _t(rhs._t) {
             rhs._t = nullptr;
         }
-
+        Owner& operator=(Owner&& rhs) {
+            Owner(static_cast<Owner&&>(rhs)).swap(*this);
+            return *this;
+        }
         template <class U>
-        intrusive_ptr& operator=(intrusive_ptr<U>&& rhs) {
-            intrusive_ptr(static_cast<intrusive_ptr<U>&&>(rhs)).swap(*this);
+        Owner& operator=(Owner<U>&& rhs) {
+            Owner(static_cast<Owner<U>&&>(rhs)).swap(*this);
             return *this;
         }
-
-        intrusive_ptr& operator=(intrusive_ptr const& rhs) {
-            intrusive_ptr(rhs).swap(*this);
-            return *this;
-        }
-
-        intrusive_ptr& operator=(T* rhs) {
-            intrusive_ptr(rhs).swap(*this);
-            return *this;
-        }
-
-        void reset() { intrusive_ptr().swap(*this); }
-
-        void reset(T* rhs) { intrusive_ptr(rhs).swap(*this); }
-
-        void reset(T* rhs, bool add_ref) { intrusive_ptr(rhs, add_ref).swap(*this); }
 
         T* get() const { return _t; }
+        T& operator*() const& { return *_t; }
+        T&& operator*() const&& { return const_cast<std::remove_const_t<T>&&>(*_t); }
+        T* operator->() const { return _t; }
+        operator bool() const { return _t != nullptr; }
+        operator T*() const { return _t; }
 
+        /// @brief swap the pointer with others
+        void swap(Owner& rhs) {
+            T* tmp = _t;
+            _t = rhs._t;
+            rhs._t = tmp;
+        }
+        /// @brief detach and return the pointer
         T* detach() {
             T* ret = _t;
             _t = nullptr;
             return ret;
         }
 
-        void swap(intrusive_ptr& rhs) {
-            T* tmp = _t;
-            _t = rhs._t;
-            rhs._t = tmp;
-        }
-
-        T& operator*() const& { return *_t; }
-
-        T&& operator*() const&& { return const_cast<std::remove_const_t<T>&&>(*_t); }
-
-        T* operator->() const { return _t; }
-
-        operator bool() const { return _t != nullptr; }
-
-        operator T*() const { return _t; }
+        /// @brief reset the pointer with others
+        void reset() { Owner().swap(*this); }
+        void reset(T* rhs) { Owner(rhs).swap(*this); }
+        void reset(T* rhs, bool add_ref) { Owner(rhs, add_ref).swap(*this); }
 
     protected:
         T* _t = nullptr;
     };
 
     template <typename T>
-    class mutable_ptr : public intrusive_ptr<T> {
+    class Mutable : public Owner<T> {
     private:
-        using Base = intrusive_ptr<T>;
+        using Base = Owner<T>;
 
         template <typename>
-        friend class COW;
+        friend class Cow;
         template <typename, typename, typename>
-        friend class COWHelper;
+        friend class CowFactory;
 
-        explicit mutable_ptr(T* ptr, bool add_ref = true) : Base(ptr, add_ref) {}
+        explicit Mutable(T* ptr, bool add_ref = true) : Base(ptr, add_ref) {}
 
     public:
         /// Copy: not possible.
-        mutable_ptr(const mutable_ptr&) = delete;
-
+        Mutable(const Mutable&) = delete;
         /// Move: ok.
-        mutable_ptr(mutable_ptr&&) = default;
-        mutable_ptr& operator=(mutable_ptr&&) = default;
-
+        Mutable(Mutable&&) = default;
+        Mutable& operator=(Mutable&&) = default;
         /// Initializing from temporary of compatible type.
         template <typename U>
-        mutable_ptr(mutable_ptr<U>&& other) : Base(std::move(other)) {}
-
-        mutable_ptr() = default;
-
-        mutable_ptr(std::nullptr_t) {}
+        Mutable(Mutable<U>&& other) : Base(std::move(other)) {}
+        Mutable() = default;
+        Mutable(std::nullptr_t) {}
     };
 
     template <typename T>
-    class immutable_ptr : public intrusive_ptr<const T> {
+    class Immutable : public Owner<const T> {
     private:
-        using Base = intrusive_ptr<const T>;
+        using Base = Owner<const T>;
 
         template <typename>
-        friend class COW;
+        friend class Cow;
         template <typename, typename, typename>
-        friend class COWHelper;
+        friend class CowFactory;
 
-        explicit immutable_ptr(const T* ptr, bool add_ref = true) : Base(ptr, add_ref) {}
+        explicit Immutable(const T* ptr, bool add_ref = true) : Base(ptr, add_ref) {}
 
     public:
-        /// Copy from immutable ptr: ok.
-        immutable_ptr(const immutable_ptr&) = default;
-        immutable_ptr& operator=(const immutable_ptr&) = default;
-
+        /// Copy constructor/assignment
+        Immutable(const Immutable&) = default;
+        Immutable& operator=(const Immutable&) = default;
         template <typename U>
-        immutable_ptr(const immutable_ptr<U>& other) : Base(other) {}
+        Immutable(const Immutable<U>& other) : Base(other) {}
 
-        /// Move: ok.
-        immutable_ptr(immutable_ptr&&) = default;
-        immutable_ptr& operator=(immutable_ptr&&) = default;
-
-        /// Initializing from temporary of compatible type.
+        /// Move constructor/assignment
+        Immutable(Immutable&&) = default;
+        Immutable& operator=(Immutable&&) = default;
         template <typename U>
-        immutable_ptr(immutable_ptr<U>&& other) : Base(std::move(other)) {}
-
-        /// Move from mutable ptr: ok.
+        Immutable(Immutable<U>&& other) : Base(std::move(other)) {}
         template <typename U>
-        immutable_ptr(mutable_ptr<U>&& other) : Base(std::move(other)) {}
+        Immutable(Mutable<U>&& other) : Base(std::move(other)) {}
 
         /// Copy from mutable ptr: not possible.
         template <typename U>
-        immutable_ptr(const mutable_ptr<U>&) = delete;
-
-        immutable_ptr() = default;
-
-        immutable_ptr(std::nullptr_t) {}
+        Immutable(const Mutable<U>&) = delete;
+        Immutable() = default;
+        Immutable(std::nullptr_t) {}
 
         const T* get() const { return this->_t; }
-        // TODO(COW): remove const_cast if we can guarantee that immutable_ptr is not modified.
-        // NOTE: This only to be compatible with old codes to avoid too much changes.
         T* get() { return const_cast<T*>(this->_t); }
 
         const T* operator->() const { return this->_t; }
-        // TODO(COW): remove const_cast if we can guarantee that immutable_ptr is not modified.
-        // NOTE: This only to be compatible with old codes to avoid too much changes.
         T* operator->() { return const_cast<T*>(this->_t); }
 
         const T& operator*() const { return *get(); }
         T& operator*() { return *get(); }
     };
 
-    /** Use this type in class members for compositions.
-      * It works as immutable_ptr if it is const and as mutable_ptr if it is non const.
-      * NOTE:
-      * For classes with WrappedPtr members,
-      * you must reimplement 'mutate' method, so it will call 'mutate' of all subobjects (do deep mutate).
-      * It will guarantee, that mutable object have all subobjects unshared.
-      *
-      * NOTE:
-      * If you override 'mutate' method in inherited classes, don't forget to make it virtual in base class or to make it call a virtual method.
-      * (COW itself doesn't force any methods to be virtual).
-      *
-      * See example in "cow_compositions.cpp".
-      */
-    template <typename T>
-    class chameleon_ptr {
-    private:
-        immutable_ptr<T> value;
-
-    public:
-        template <typename... Args>
-        chameleon_ptr(Args&&... args) : value(std::forward<Args>(args)...) {}
-
-        template <typename U>
-        chameleon_ptr(std::initializer_list<U>&& arg) : value(std::forward<std::initializer_list<U>>(arg)) {}
-
-        const T* get() const { return value.get(); }
-        T* get() { return value->template assume_mutable_ptr<T>(); }
-
-        const T* operator->() const { return get(); }
-        T* operator->() { return get(); }
-
-        const T& operator*() const { return *value; }
-        T& operator*() { return *(value->template assume_mutable_ptr<T>()); }
-
-        operator const immutable_ptr<T>&() const { return value; }
-        operator immutable_ptr<T>&() { return value; }
-
-        /// Get internal immutable ptr. Does not change internal use counter.
-        immutable_ptr<T> detach() && { return std::move(value); }
-
-        operator bool() const { return value != nullptr; }
-        bool operator!() const { return value == nullptr; }
-
-        bool operator==(const chameleon_ptr& rhs) const { return value == rhs.value; }
-        bool operator!=(const chameleon_ptr& rhs) const { return value != rhs.value; }
-    };
-
 public:
-    using MutablePtr = mutable_ptr<Derived>;
-    using Ptr = immutable_ptr<Derived>;
-    using WrappedPtr = chameleon_ptr<Derived>;
+    using MutablePtr = Mutable<Derived>;
+    using Ptr = Immutable<Derived>;
 
 protected:
     MutablePtr shallow_mutate() const {
 #ifndef NDEBUG
         if (VLOG_IS_ON(1)) {
-            VLOG(1) << "[COW] trigger COW: " << this << ", use_count=" << this->use_count() << ", try to "
+            VLOG(1) << "[Cow] trigger Cow: " << this << ", use_count=" << this->use_count() << ", try to "
                     << (this->use_count() > 1 ? "deep" : "shadow") << " clone";
         }
 #endif
         if (this->use_count() > 1) {
             return derived()->clone();
         } else {
-            return assume_mutable();
+            return as_mutable_ptr();
         }
     }
 
+    template <typename To = Derived>
+    To* as_mutable_raw_ptr() const {
+        return const_cast<To*>(static_cast<const To*>(derived()));
+    }
+
 public:
-    uint32_t use_count() const { return _ref_counter.load(); }
+    uint32_t use_count() const { return _use_count.load(); }
 
     template <typename... Args>
     static MutablePtr create(Args&&... args) {
@@ -369,60 +237,20 @@ public:
     }
 
     Ptr get_ptr() const { return Ptr(derived()); }
-
     MutablePtr get_ptr() { return MutablePtr(derived()); }
-
-    MutablePtr mutate() const&& { return shallow_mutate(); }
-
-    MutablePtr assume_mutable() const { return const_cast<COW*>(this)->get_ptr(); }
-
-    template <typename To = Derived>
-    To& assume_mutable_ref() const {
-        return const_cast<To&>(static_cast<const To&>(derived()));
-    }
-
-    template <typename To = Derived>
-    To* assume_mutable_ptr() const {
-        return const_cast<To*>(static_cast<const To*>(derived()));
-    }
+    MutablePtr as_mutable_ptr() const { return const_cast<Cow*>(this)->get_ptr(); }
 
 private:
-    std::atomic<uint32_t> _ref_counter;
+    AtomicCounter _use_count;
 };
 
-/** Helper class to support inheritance.
-  * Example:
-  *
-  * class IColumn : public COW<IColumn>
-  * {
-  *     friend class COW<IColumn>;
-  *     virtual MutablePtr clone() const = 0;
-  *     virtual ~IColumn() {}
-  * };
-  *
-  * class ConcreteColumn : public COWHelper<IColumn, ConcreteColumn>
-  * {
-  *     friend class COWHelper<IColumn, ConcreteColumn>;
-  * };
-  *
-  * Here is complete inheritance diagram:
-  *
-  * ConcreteColumn
-  *  COWHelper<IColumn, ConcreteColumn>
-  *   IColumn
-  *    CowPtr<IColumn>
-  *     boost::intrusive_ref_counter<IColumn>
-  *
-  * See example in "cow_columns.cpp".
-  */
 template <typename Base, typename Derived, typename AncestorBase = Base>
-class COWHelper : public Base {
+class CowFactory : public Base {
 public:
     using BasePtr = typename AncestorBase::Ptr;
     using BaseMutablePtr = typename AncestorBase::MutablePtr;
-    using Ptr = typename Base::template immutable_ptr<Derived>;
-    using MutablePtr = typename Base::template mutable_ptr<Derived>;
-    using DerivedWrappedPtr = typename Base::template chameleon_ptr<Derived>;
+    using Ptr = typename Base::template Immutable<Derived>;
+    using MutablePtr = typename Base::template Mutable<Derived>;
 
     // AncestorBase is root class of inheritance hierarchy
     // if Derived class is the direct subclass of the root, then AncestorBase is just the Base class
@@ -432,7 +260,7 @@ public:
     using AncestorBaseType = std::enable_if_t<std::is_base_of_v<AncestorBase, Base>, AncestorBase>;
 
     template <typename... Args>
-    COWHelper(Args&&... args) : Base(std::forward<Args>(args)...) {}
+    CowFactory(Args&&... args) : Base(std::forward<Args>(args)...) {}
 
     template <typename... Args>
     static MutablePtr create(Args&&... args) {
@@ -453,19 +281,20 @@ public:
         DCHECK(static_cast<Derived*>(ptr.get()) != nullptr);
         return MutablePtr(static_cast<Derived*>(ptr.detach()), false);
     }
-
     static Ptr static_pointer_cast(const BasePtr& ptr) {
         DCHECK(ptr.get() != nullptr);
         DCHECK(static_cast<const Derived*>(ptr.get()) != nullptr);
         return Ptr(static_cast<const Derived*>(ptr.get()));
     }
-
     static Ptr static_pointer_cast(BasePtr&& ptr) {
         DCHECK(ptr.get() != nullptr);
         DCHECK(static_cast<const Derived*>(ptr.get()) != nullptr);
         return Ptr(static_cast<const Derived*>(ptr.detach()), false);
     }
 
+    /// @brief : dynamic cast base ptr to derived ptr, like std::dynamic_pointer_cast; if failed, return nullptr.
+    /// @param ptr : base ptr to cast, NOTE: it will be released if cast success.
+    /// @return    : derived ptr if cast success, otherwise nullptr.
     static MutablePtr dynamic_pointer_cast(BaseMutablePtr&& ptr) {
         DCHECK(ptr.get() != nullptr);
         if (auto* _p = dynamic_cast<Derived*>(ptr.detach())) {
@@ -474,7 +303,6 @@ public:
             return Ptr();
         }
     }
-
     static Ptr dynamic_pointer_cast(const BasePtr& ptr) {
         DCHECK(ptr.get() != nullptr);
         if (auto* _ptr = dynamic_cast<const Derived*>(ptr.get())) {
@@ -483,7 +311,6 @@ public:
             return Ptr();
         }
     }
-
     static Ptr dynamic_pointer_cast(BasePtr&& ptr) {
         DCHECK(ptr.get() != nullptr);
         if (auto* _ptr = dynamic_cast<const Derived*>(ptr.detach())) {

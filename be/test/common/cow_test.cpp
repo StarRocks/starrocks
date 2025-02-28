@@ -22,15 +22,15 @@
 #include "common/status.h"
 namespace starrocks {
 
-class COWTest : public testing::Test {
+class CowTest : public testing::Test {
 public:
-    class IColumn : public COW<IColumn> {
+    class IColumn : public Cow<IColumn> {
     private:
-        friend class COW<IColumn>;
+        friend class Cow<IColumn>;
 
     public:
-        IColumn() { std::cerr << "IColumn constructor" << std::endl; }
-        IColumn(const IColumn&) { std::cerr << "IColumn copy constructor" << std::endl; }
+        IColumn() { std::cout << "IColumn constructor" << std::endl; }
+        IColumn(const IColumn&) { std::cout << "IColumn copy constructor" << std::endl; }
         virtual ~IColumn() = default;
 
         virtual MutablePtr clone() const = 0;
@@ -39,20 +39,19 @@ public:
 
         /// If the column contains subcolumns (such as Array, Nullable, etc), do callback on them.
         /// Shallow: doesn't do recursive calls; don't do call for itself.
-        using ColumnCallback = std::function<void(WrappedPtr&)>;
+        using ColumnCallback = std::function<void(Ptr&)>;
         virtual void for_each_subcolumn(ColumnCallback) {}
 
         MutablePtr mutate() const&& {
             MutablePtr res = shallow_mutate();
-            res->for_each_subcolumn([](WrappedPtr& subcolumn) { subcolumn = std::move(*subcolumn).mutate(); });
+            res->for_each_subcolumn([](Ptr& subcolumn) { subcolumn = std::move(*subcolumn).mutate(); });
             return res;
         }
 
         [[nodiscard]] static MutablePtr mutate(Ptr ptr) {
             MutablePtr res = ptr->shallow_mutate(); /// Now use_count is 2.
             ptr.reset();                            /// Reset use_count to 1.
-            res->for_each_subcolumn(
-                    [](WrappedPtr& subcolumn) { subcolumn = IColumn::mutate(std::move(subcolumn).detach()); });
+            res->for_each_subcolumn([](Ptr& subcolumn) { subcolumn = IColumn::mutate(std::move(subcolumn)); });
             return res;
         }
     };
@@ -76,19 +75,24 @@ public:
     };
 
     // use ColumnFactory to create ConcreteColumn
-    class ConcreteColumn final : public COWHelper<ColumnFactory<IColumn, ConcreteColumn>, ConcreteColumn> {
+    class ConcreteColumn final : public CowFactory<ColumnFactory<IColumn, ConcreteColumn>, ConcreteColumn> {
+    public:
+        int get() const override { return _data; }
+        void set(int value) override { _data = value; }
+
+        // not override
+        void set_value(int val) { _data = val; }
+        int get_value() { return _data; }
+
     private:
-        friend class COWHelper<ColumnFactory<IColumn, ConcreteColumn>, ConcreteColumn>;
+        friend class CowFactory<ColumnFactory<IColumn, ConcreteColumn>, ConcreteColumn>;
 
-        int data;
-
-        explicit ConcreteColumn(int data_) : data(data_) {
-            std::cerr << "ConcreteColumn constructor:" << data << std::endl;
+        explicit ConcreteColumn(int data) : _data(data) {
+            std::cout << "ConcreteColumn constructor:" << _data << std::endl;
         }
-
         ConcreteColumn(const ConcreteColumn& col) {
-            std::cerr << "ConcreteColumn copy constructor" << std::endl;
-            this->data = col.data;
+            std::cout << "ConcreteColumn copy constructor" << std::endl;
+            this->_data = col._data;
         }
 
         // ConcreteColumn(const ConcreteColumn & col) = delete;
@@ -96,57 +100,50 @@ public:
         ConcreteColumn(ConcreteColumn&& col) = delete;
         ConcreteColumn& operator=(ConcreteColumn&&) = delete;
 
-    public:
-        int get() const override { return data; }
-        void set(int value) override { data = value; }
-
-        // not override
-        void set_value(int val) { data = val; }
-        int get_value() { return data; }
+    private:
+        int _data;
     };
     using ConcreteColumnPtr = ConcreteColumn::Ptr;
     using ConcreteColumnMutablePtr = ConcreteColumn::MutablePtr;
-    using ConcreteColumnWrappedPtr = ConcreteColumn::DerivedWrappedPtr;
 
     template <typename T>
     class MFixedLengthColumnBase
-            : public COWHelper<ColumnFactory<IColumn, MFixedLengthColumnBase<T>>, MFixedLengthColumnBase<T>> {
-        friend class COWHelper<ColumnFactory<IColumn, MFixedLengthColumnBase<T>>, MFixedLengthColumnBase<T>>;
+            : public CowFactory<ColumnFactory<IColumn, MFixedLengthColumnBase<T>>, MFixedLengthColumnBase<T>> {
+        friend class CowFactory<ColumnFactory<IColumn, MFixedLengthColumnBase<T>>, MFixedLengthColumnBase<T>>;
 
     public:
         using ValueType = T;
     };
 
     template <typename T>
-    class MFixedLengthColumn final : public COWHelper<ColumnFactory<MFixedLengthColumnBase<T>, MFixedLengthColumn<T>>,
-                                                      MFixedLengthColumn<T>, IColumn> {
-        friend class COWHelper<ColumnFactory<MFixedLengthColumnBase<T>, MFixedLengthColumn<T>>, MFixedLengthColumn<T>,
-                               IColumn>;
+    class MFixedLengthColumn final : public CowFactory<ColumnFactory<MFixedLengthColumnBase<T>, MFixedLengthColumn<T>>,
+                                                       MFixedLengthColumn<T>, IColumn> {
+        friend class CowFactory<ColumnFactory<MFixedLengthColumnBase<T>, MFixedLengthColumn<T>>, MFixedLengthColumn<T>,
+                                IColumn>;
 
         MFixedLengthColumn(const MFixedLengthColumn& col) {
-            std::cerr << "MFixedLengthColumn copy constructor" << std::endl;
+            std::cout << "MFixedLengthColumn copy constructor" << std::endl;
         }
 
     public:
         using ValueType = T;
-        using SuperClass = COWHelper<ColumnFactory<MFixedLengthColumnBase<T>, MFixedLengthColumn<T>>,
-                                     MFixedLengthColumn<T>, IColumn>;
+        using SuperClass = CowFactory<ColumnFactory<MFixedLengthColumnBase<T>, MFixedLengthColumn<T>>,
+                                      MFixedLengthColumn<T>, IColumn>;
         MFixedLengthColumn() = default;
     };
     using MNullColumn = MFixedLengthColumn<uint8_t>;
 
-    class ConcreteColumn2 final : public COWHelper<ColumnFactory<IColumn, ConcreteColumn2>, ConcreteColumn2> {
+    class ConcreteColumn2 final : public CowFactory<ColumnFactory<IColumn, ConcreteColumn2>, ConcreteColumn2> {
     private:
-        friend class COWHelper<ColumnFactory<IColumn, ConcreteColumn2>, ConcreteColumn2>;
-        using ConcreteColumnWrappedPtr = ConcreteColumn::WrappedPtr;
+        friend class CowFactory<ColumnFactory<IColumn, ConcreteColumn2>, ConcreteColumn2>;
 
         ConcreteColumn2(MutableColumnPtr&& ptr) {
-            std::cerr << "ConcreteColumn2 constructor" << std::endl;
+            std::cout << "ConcreteColumn2 constructor" << std::endl;
             _inner = ConcreteColumn::static_pointer_cast(std::move(ptr));
         }
 
         ConcreteColumn2(const ConcreteColumn2& col) {
-            std::cerr << "ConcreteColumn copy constructor" << std::endl;
+            std::cout << "ConcreteColumn copy constructor" << std::endl;
             this->_inner = col._inner->clone();
             this->_null_column = MNullColumn::static_pointer_cast(col._null_column->clone());
         }
@@ -156,16 +153,16 @@ public:
         void set(int value) override { _inner->set(value); }
 
         void for_each_subcolumn(ColumnCallback callback) override {
-            callback(_inner);
-            // callback(_null_column);
-            MNullColumn::WrappedPtr null_column = MNullColumn::static_pointer_cast(std::move(_null_column).detach());
-            callback(null_column);
-            _null_column = MNullColumn::static_pointer_cast(std::move(null_column));
+            // callback(_inner);
+            // // callback(_null_column);
+            // MNullColumn::Ptr null_column = MNullColumn::static_pointer_cast(std::move(_null_column));
+            // callback(null_column);
+            // _null_column = MNullColumn::static_pointer_cast(std::move(null_column));
         }
 
     private:
-        ConcreteColumnWrappedPtr _inner;
-        MNullColumn::DerivedWrappedPtr _null_column;
+        ConcreteColumnPtr _inner;
+        MNullColumn::Ptr _null_column;
     };
 
     MutableColumnPtr move_func1(MutableColumnPtr&& col) { return std::move(col); }
@@ -174,7 +171,7 @@ public:
     MutableColumns move_func2(MutableColumns&& cols) { return std::move(cols); }
 };
 
-TEST_F(COWTest, TestPtr) {
+TEST_F(CowTest, TestPtr) {
     {
         // mutable ptr can convert to immutable ptr
         ConcreteColumnPtr x = ConcreteColumn::create(1);
@@ -205,7 +202,7 @@ TEST_F(COWTest, TestPtr) {
     }
 }
 
-TEST_F(COWTest, TestAssumeMutable) {
+TEST_F(CowTest, TestAssumeMutable) {
     MutableColumnPtr y;
     {
         auto x = ConcreteColumn::create(1);
@@ -213,7 +210,7 @@ TEST_F(COWTest, TestAssumeMutable) {
         EXPECT_EQ(1, x->use_count());
 
         // assume will add refcount
-        y = x->assume_mutable();
+        y = x->as_mutable_ptr();
         EXPECT_EQ(1, y->get());
         EXPECT_EQ(2, y->use_count());
         EXPECT_EQ(2, x->use_count());
@@ -227,7 +224,7 @@ TEST_F(COWTest, TestAssumeMutable) {
     EXPECT_EQ(1, y->use_count());
 }
 
-TEST_F(COWTest, TestColumnMoveFunc1) {
+TEST_F(CowTest, TestColumnMoveFunc1) {
     MutableColumnPtr x = ConcreteColumn::create(1);
     EXPECT_EQ(1, x->get());
 
@@ -236,7 +233,7 @@ TEST_F(COWTest, TestColumnMoveFunc1) {
     EXPECT_EQ(nullptr, x);
 }
 
-TEST_F(COWTest, TestColumnsMove1) {
+TEST_F(CowTest, TestColumnsMove1) {
     MutableColumns v1;
     auto x = ConcreteColumn::create(1);
     v1.emplace_back(std::move(x));
@@ -249,7 +246,7 @@ TEST_F(COWTest, TestColumnsMove1) {
     EXPECT_EQ(0, v1.size());
 }
 
-TEST_F(COWTest, TestColumnsMove2) {
+TEST_F(CowTest, TestColumnsMove2) {
     MutableColumns v1;
     for (int i = 0; i < 10; i++) {
         auto x = ConcreteColumn::create(1);
@@ -271,7 +268,7 @@ TEST_F(COWTest, TestColumnsMove2) {
     }
 }
 
-TEST_F(COWTest, TestColumnsMove3) {
+TEST_F(CowTest, TestColumnsMove3) {
     MutableColumns v1;
     for (int i = 0; i < 10; i++) {
         auto x = ConcreteColumn::create(1);
@@ -287,7 +284,7 @@ TEST_F(COWTest, TestColumnsMove3) {
     }
 }
 
-TEST_F(COWTest, TestColumnPtrStaticPointerCast) {
+TEST_F(CowTest, TestColumnPtrStaticPointerCast) {
     ColumnPtr x = ConcreteColumn::create(1);
     EXPECT_EQ(1, x->get());
     {
@@ -313,7 +310,7 @@ TEST_F(COWTest, TestColumnPtrStaticPointerCast) {
         EXPECT_EQ(2, x->use_count());
     }
     {
-        MutableColumnPtr x2 = x->assume_mutable();
+        MutableColumnPtr x2 = x->as_mutable_ptr();
         x2->set(3);
         EXPECT_EQ(3, x2->get());
         EXPECT_EQ(3, x->get());
@@ -334,7 +331,7 @@ TEST_F(COWTest, TestColumnPtrStaticPointerCast) {
     }
 }
 
-TEST_F(COWTest, TestColumnPtrDynamicPointerCast) {
+TEST_F(CowTest, TestColumnPtrDynamicPointerCast) {
     ColumnPtr x = ConcreteColumn::create(1);
     EXPECT_EQ(1, x->get());
     {
@@ -360,7 +357,7 @@ TEST_F(COWTest, TestColumnPtrDynamicPointerCast) {
         EXPECT_EQ(2, x->use_count());
     }
     {
-        MutableColumnPtr x2 = x->assume_mutable();
+        MutableColumnPtr x2 = x->as_mutable_ptr();
         x2->set(3);
         EXPECT_EQ(3, x2->get());
         EXPECT_EQ(3, x->get());
@@ -381,15 +378,15 @@ TEST_F(COWTest, TestColumnPtrDynamicPointerCast) {
     }
 }
 
-TEST_F(COWTest, TestConcreteColumn2) {
+TEST_F(CowTest, TestConcreteColumn2) {
     {
         ColumnPtr x = ConcreteColumn::create(1);
-        ColumnPtr y = ConcreteColumn2::create(x->assume_mutable());
+        ColumnPtr y = ConcreteColumn2::create(x->as_mutable_ptr());
     }
     { ColumnPtr y = ConcreteColumn2::create(ConcreteColumn::create(1)); }
     {
         auto x = ConcreteColumn::create(1);
-        ColumnPtr y = ConcreteColumn2::create(x->assume_mutable());
+        ColumnPtr y = ConcreteColumn2::create(x->as_mutable_ptr());
     }
     {
         auto x = ConcreteColumn::create(1);
@@ -405,7 +402,7 @@ TEST_F(COWTest, TestConcreteColumn2) {
     }
 }
 
-TEST_F(COWTest, TestClone) {
+TEST_F(CowTest, TestClone) {
     ColumnPtr x = ConcreteColumn::create(1);
 
     EXPECT_EQ(1, x->get());
@@ -420,7 +417,7 @@ TEST_F(COWTest, TestClone) {
     EXPECT_EQ(3, cloned->get());
 }
 
-TEST_F(COWTest, TestMutate) {
+TEST_F(CowTest, TestMutate) {
     ColumnPtr x = ConcreteColumn::create(1);
 
     {
@@ -444,7 +441,7 @@ TEST_F(COWTest, TestMutate) {
     }
 }
 
-TEST_F(COWTest, TestCOW) {
+TEST_F(CowTest, TestCow) {
     using IColumnPtr = const IColumn*;
     IColumnPtr x_ptr;
     IColumnPtr y_ptr;
@@ -526,7 +523,7 @@ TEST_F(COWTest, TestCOW) {
     EXPECT_TRUE(y_ptr != y.get());
 }
 
-TEST_F(COWTest, TestColumnMutate1) {
+TEST_F(CowTest, TestColumnMutate1) {
     ConcreteColumn::MutablePtr x = ConcreteColumn::create(1);
     // ensure x is not used again.
     auto y = (std::move(*x)).mutate();
@@ -551,7 +548,7 @@ TEST_F(COWTest, TestColumnMutate1) {
     EXPECT_EQ(1, z->use_count());
 }
 
-TEST_F(COWTest, TestColumnMutate2) {
+TEST_F(CowTest, TestColumnMutate2) {
     const ConcreteColumn::Ptr x = ConcreteColumn::create(1);
     // ensure x is not used again.
     auto y = (std::move(*x)).mutate();
