@@ -24,6 +24,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.sql.ast.StatementBase;
 import io.trino.sql.tree.CreateTableAsSelect;
+import io.trino.sql.tree.DescribeOutput;
 import io.trino.sql.tree.Explain;
 import io.trino.sql.tree.ExplainAnalyze;
 import io.trino.sql.tree.Insert;
@@ -41,7 +42,8 @@ public class TrinoParserUtils {
         String trimmedQuery = query.trim();
         Statement statement = TrinoParser.parse(trimmedQuery);
         if (statement instanceof Query || statement instanceof Explain || statement instanceof ExplainAnalyze
-                || statement instanceof CreateTableAsSelect || statement instanceof Insert) {
+                || statement instanceof CreateTableAsSelect || statement instanceof Insert ||
+                statement instanceof DescribeOutput) {
             return (StatementBase) statement.accept(new AstBuilder(sqlMode), new ParseTreeContext());
         } else {
             throw trinoParserUnsupportedException("Unsupported statement type: " + statement.getClass().getName());
