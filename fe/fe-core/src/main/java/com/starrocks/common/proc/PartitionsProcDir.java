@@ -90,7 +90,7 @@ import java.util.stream.Collectors;
  */
 public class PartitionsProcDir implements ProcDirInterface {
     private final PartitionType partitionType;
-    private ImmutableList<String> titleNames;
+    public ImmutableList<String> titleNames;
     private Database db;
     private OlapTable table;
     private boolean isTempPartition = false;
@@ -103,7 +103,11 @@ public class PartitionsProcDir implements ProcDirInterface {
         this.createTitleNames();
     }
 
-    private void createTitleNames() {
+    public PartitionsProcDir(PartitionType partitionType) {
+        this.partitionType = partitionType;
+    }
+
+    public void createTitleNames() {
         if (table.isCloudNativeTableOrMaterializedView()) {
             ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
                     .add("PartitionId")
@@ -273,7 +277,7 @@ public class PartitionsProcDir implements ProcDirInterface {
         return result;
     }
 
-    private List<List<Comparable>> getPartitionInfos() {
+    public List<List<Comparable>> getPartitionInfos() {
         Preconditions.checkNotNull(db);
         Preconditions.checkNotNull(table);
 
