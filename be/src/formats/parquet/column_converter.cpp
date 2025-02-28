@@ -658,7 +658,7 @@ Status Int96ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
                         (static_cast<uint64_t>(src_data[i].hi) << TIMESTAMP_BITS) | (src_data[i].lo / 1000);
                 int offset = _offset;
                 if constexpr (!FAST_TZ) {
-                    offset = timestamp::get_offset_by_timezone(timestamp, _ctz);
+                    offset = timestamp::get_timezone_offset_by_timestamp(timestamp, _ctz);
                 }
                 dst_data[i].set_timestamp(timestamp::add<TimeUnit::SECOND>(timestamp, offset));
             }
@@ -758,8 +758,7 @@ Status Int64ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
                 if constexpr (UTC_TO_TZ) {
                     int offset = _offset;
                     if constexpr (!FAST_TZ) {
-                        int offset = timestamp::get_timezone_offset_by_epoch_seconds(seconds, _ctz);
-                        offset = _ctz.lookup(tp).offset;
+                        offset = timestamp::get_timezone_offset_by_epoch_seconds(seconds, _ctz);
                     }
                     seconds += offset;
                 }
