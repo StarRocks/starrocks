@@ -17,13 +17,13 @@ package com.starrocks.statistic.base;
 import com.starrocks.catalog.Type;
 import com.starrocks.statistic.sample.SampleInfo;
 
-public class PrimitiveTypeColumnStats extends ColumnStats {
+public class PrimitiveTypeColumnStats extends BaseColumnStats {
     public PrimitiveTypeColumnStats(String columnName, Type columnType) {
         super(columnName, columnType);
     }
 
     @Override
-    public String getFullDateSize() {
+    public String getFullDataSize() {
         if (columnType.getPrimitiveType().isCharFamily()) {
             return "IFNULL(SUM(CHAR_LENGTH(" + getQuotedColumnName() + ")), 0)";
         }

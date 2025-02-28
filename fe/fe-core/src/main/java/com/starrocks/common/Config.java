@@ -2176,6 +2176,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean statistic_use_meta_statistics = true;
 
+    @ConfField(mutable = true, comment = "collect multi-column combined statistics max column nums")
+    public static int statistics_max_multi_column_combined_num = 10;
+
     /**
      * default bucket size of histogram statistics
      */

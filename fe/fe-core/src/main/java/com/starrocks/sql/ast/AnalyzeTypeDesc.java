@@ -16,9 +16,11 @@ package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.statistic.StatsConstants;
+
+import java.util.List;
 
 public abstract class AnalyzeTypeDesc implements ParseNode {
-
     protected final NodePosition pos;
 
     protected AnalyzeTypeDesc(NodePosition pos) {
@@ -32,5 +34,13 @@ public abstract class AnalyzeTypeDesc implements ParseNode {
 
     public boolean isHistogram() {
         return false;
+    }
+
+    public boolean isBasic() {
+        return false;
+    }
+
+    public List<StatsConstants.StatisticsType> getStatsTypes() {
+        return List.of();
     }
 }

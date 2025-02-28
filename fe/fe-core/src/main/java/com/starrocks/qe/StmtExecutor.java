@@ -149,9 +149,9 @@ import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.AddBackendBlackListStmt;
 import com.starrocks.sql.ast.AddSqlBlackListStmt;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
-import com.starrocks.sql.ast.AnalyzeHistogramDesc;
 import com.starrocks.sql.ast.AnalyzeProfileStmt;
 import com.starrocks.sql.ast.AnalyzeStmt;
+import com.starrocks.sql.ast.AnalyzeTypeDesc;
 import com.starrocks.sql.ast.CreateTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableAsSelectStmt;
 import com.starrocks.sql.ast.CreateTemporaryTableStmt;
@@ -1477,14 +1477,11 @@ public class StmtExecutor {
         }
 
         StatsConstants.AnalyzeType analyzeType;
-        if (analyzeStmt.getAnalyzeTypeDesc() instanceof AnalyzeHistogramDesc) {
+        AnalyzeTypeDesc analyzeTypeDesc = analyzeStmt.getAnalyzeTypeDesc();
+        if (analyzeTypeDesc.isHistogram()) {
             analyzeType = StatsConstants.AnalyzeType.HISTOGRAM;
         } else {
-            if (analyzeStmt.isSample()) {
-                analyzeType = StatsConstants.AnalyzeType.SAMPLE;
-            } else {
-                analyzeType = StatsConstants.AnalyzeType.FULL;
-            }
+            analyzeType = analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE : StatsConstants.AnalyzeType.FULL;
         }
 
         AnalyzeStatus analyzeStatus;
@@ -1579,14 +1576,14 @@ public class StmtExecutor {
             AuditEvent event = statsConnectCtx.getAuditEventBuilder().build();
             context.getAuditEventBuilder().copyExecStatsFrom(event);
         }
-
     }
 
-    private void executeAnalyze(ConnectContext statsConnectCtx, AnalyzeStmt analyzeStmt, AnalyzeStatus analyzeStatus,
-                                Database db, Table table) {
+    private void executeAnalyze(ConnectContext statsConnectCtx, AnalyzeStmt analyzeStmt,
+                                AnalyzeStatus analyzeStatus, Database db, Table table) {
+        AnalyzeTypeDesc analyzeTypeDesc = analyzeStmt.getAnalyzeTypeDesc();
         StatisticExecutor statisticExecutor = new StatisticExecutor();
         if (analyzeStmt.isExternal()) {
-            if (analyzeStmt.getAnalyzeTypeDesc().isHistogram()) {
+            if (analyzeTypeDesc.isHistogram()) {
                 statisticExecutor.collectStatistics(statsConnectCtx,
                         new ExternalHistogramStatisticsCollectJob(analyzeStmt.getTableName().getCatalog(),
                                 db, table, analyzeStmt.getColumnNames(), analyzeStmt.getColumnTypes(),
@@ -1609,7 +1606,7 @@ public class StmtExecutor {
                         false);
             }
         } else {
-            if (analyzeStmt.getAnalyzeTypeDesc().isHistogram()) {
+            if (analyzeTypeDesc.isHistogram()) {
                 statisticExecutor.collectStatistics(statsConnectCtx,
                         new HistogramStatisticsCollectJob(db, table, analyzeStmt.getColumnNames(),
                                 analyzeStmt.getColumnTypes(), StatsConstants.ScheduleType.ONCE,
@@ -1618,17 +1615,19 @@ public class StmtExecutor {
                         // Sync load cache, auto-populate column statistic cache after Analyze table manually
                         false);
             } else {
-                StatsConstants.AnalyzeType analyzeType = analyzeStmt.isSample() ? StatsConstants.AnalyzeType.SAMPLE :
-                        StatsConstants.AnalyzeType.FULL;
+                StatsConstants.AnalyzeType analyzeType = analyzeStatus.getType();
                 statisticExecutor.collectStatistics(statsConnectCtx,
                         StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table, analyzeStmt.getPartitionIds(),
                                 analyzeStmt.getColumnNames(),
                                 analyzeStmt.getColumnTypes(),
                                 analyzeType,
-                                StatsConstants.ScheduleType.ONCE, analyzeStmt.getProperties()),
-                        analyzeStatus,
-                        // Sync load cache, auto-populate column statistic cache after Analyze table manually
-                        false);
+                                StatsConstants.ScheduleType.ONCE,
+                                analyzeStmt.getProperties(),
+                                analyzeTypeDesc.getStatsTypes(),
+                                analyzeStmt.getColumnNames() != null ? List.of(analyzeStmt.getColumnNames()) : null),
+                                analyzeStatus,
+                                // Sync load cache, auto-populate column statistic cache after Analyze table manually
+                                false);
             }
         }
     }
@@ -1653,11 +1652,15 @@ public class StmtExecutor {
         } else {
             List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
                     .collect(Collectors.toList());
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropMultiColumnStatsMetaAndData(
+                    StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
 
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeStatus(table.getId());
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr()
-                    .dropBasicStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
-            GlobalStateMgr.getCurrentState().getStatisticStorage().expireTableAndColumnStatistics(table, columns);
+            if (!dropStatsStmt.isMultiColumn()) {
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeStatus(table.getId());
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr()
+                        .dropBasicStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
+                GlobalStateMgr.getCurrentState().getStatisticStorage().expireTableAndColumnStatistics(table, columns);
+            }
         }
     }
 

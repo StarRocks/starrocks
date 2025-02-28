@@ -15,19 +15,20 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.statistic.StatsConstants;
 
-public class AnalyzeBasicDesc extends AnalyzeTypeDesc {
+import java.util.List;
 
-    public AnalyzeBasicDesc() {
-        this(NodePosition.ZERO);
+public class AnalyzeMultiColumnDesc extends AnalyzeTypeDesc {
+    // we will support more statistics type on multi column like ndv/dependencies/mcv...
+    private final List<StatsConstants.StatisticsType> statsTypes;
+
+    public AnalyzeMultiColumnDesc(List<StatsConstants.StatisticsType> statsTypes) {
+        super(NodePosition.ZERO);
+        this.statsTypes = statsTypes;
     }
 
-    public AnalyzeBasicDesc(NodePosition pos) {
-        super(pos);
-    }
-
-    @Override
-    public boolean isBasic() {
-        return true;
+    public List<StatsConstants.StatisticsType> getStatsTypes() {
+        return statsTypes;
     }
 }

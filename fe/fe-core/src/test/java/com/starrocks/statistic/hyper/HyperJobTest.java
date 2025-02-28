@@ -114,7 +114,7 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
                 .findAny().orElse(null);
 
         VelocityContext context = HyperStatisticSQLs.buildBaseContext(db, table, table.getPartition(pid), columnStat);
-        context.put("dataSize", columnStat.getFullDateSize());
+        context.put("dataSize", columnStat.getFullDataSize());
         context.put("countNullFunction", columnStat.getFullNullCount());
         context.put("hllFunction", columnStat.getNDV());
         context.put("maxFunction", columnStat.getMax());
