@@ -61,6 +61,7 @@
 #include "storage/olap_common.h"
 #include "storage/olap_define.h"
 #include "storage/options.h"
+#include "storage/persistent_index.h"
 #include "storage/primary_key_dump.h"
 #include "storage/rowset/binary_plain_page.h"
 #include "storage/rowset/column_iterator.h"
@@ -98,7 +99,7 @@ DEFINE_string(root_path, "", "storage root path");
 DEFINE_string(operation, "",
               "valid operation: get_meta, flag, load_meta, delete_meta, delete_rowset_meta, get_persistent_index_meta, "
               "delete_persistent_index_meta, show_meta, check_table_meta_consistency, print_lake_metadata, "
-              "print_lake_txn_log, print_lake_schema");
+              "print_lake_txn_log, print_lake_schema, replay_pk_upsert");
 DEFINE_int64(tablet_id, 0, "tablet_id for tablet meta");
 DEFINE_string(tablet_uid, "", "tablet_uid for tablet meta");
 DEFINE_int64(table_id, 0, "table id for table meta");
@@ -171,6 +172,8 @@ std::string get_usage(const std::string& progname) {
       cat <tablet_schema_file> | {progname} --operation=print_lake_schema
     lake_datafile_gc:
       {progname} --operation=lake_datafile_gc --root_path=<path> --expired_sec=<86400> --conf_file=<path> --audit_file=<path> --do_delete=<true|false>
+    replay_pk_upsert:
+      {progname} --operation=replay_pk_upsert
     )";
     return fmt::format(usage_msg, fmt::arg("progname", progname));
 }
@@ -285,6 +288,15 @@ void get_persistent_index_meta(DataDir* data_dir) {
         return;
     }
     std::cout << json << '\n';
+}
+
+void replay_pk_upsert() {
+    auto st = starrocks::PersistentIndex::replay_pk_upsert();
+    if (!st.ok()) {
+         std::cerr << "replay pk upsert failed, status: " << st.to_string() << std::endl;
+    } else {
+        std::cout << "replay pk upsert success";
+    }
 }
 
 void delete_persistent_index_meta(DataDir* data_dir) {
@@ -1234,7 +1246,8 @@ int meta_tool_main(int argc, char** argv) {
                                                   "get_meta_stats",
                                                   "ls",
                                                   "check_table_meta_consistency",
-                                                  "scan_dcgs"};
+                                                  "scan_dcgs",
+                                                  "replay_pk_upsert"};
         if (valid_operations.find(FLAGS_operation) == valid_operations.end()) {
             std::cout << "invalid operation: " << FLAGS_operation << std::endl << std::endl;
             show_usage();
@@ -1244,7 +1257,7 @@ int meta_tool_main(int argc, char** argv) {
         bool read_only = false;
         if (FLAGS_operation == "get_meta" || FLAGS_operation == "get_meta_stats" || FLAGS_operation == "ls" ||
             FLAGS_operation == "check_table_meta_consistency" || FLAGS_operation == "scan_dcgs" ||
-            FLAGS_operation == "get_persistent_index_meta") {
+            FLAGS_operation == "get_persistent_index_meta" || FLAGS_operation == "replay_pk_upsert") {
             read_only = true;
         }
 
@@ -1281,6 +1294,8 @@ int meta_tool_main(int argc, char** argv) {
             check_meta_consistency(data_dir.get());
         } else if (FLAGS_operation == "scan_dcgs") {
             scan_dcgs(data_dir.get());
+        } else if (FLAGS_operation == "replay_pk_upsert") {
+            replay_pk_upsert();
         } else {
             std::cout << "invalid operation: " << FLAGS_operation << std::endl << std::endl;
             show_usage();

@@ -188,6 +188,8 @@ public:
     virtual Status get(const Slice* keys, IndexValue* values, KeysInfo* not_found, size_t* num_found,
                        const std::vector<size_t>& idxes) const = 0;
 
+    virtual Status upsert() = 0;
+    
     // batch upsert and get old value
     // |keys|: key array as raw buffer
     // |values|: value array
@@ -811,6 +813,8 @@ public:
     void test_calc_memory_usage() { return _calc_memory_usage(); }
 
     void test_force_dump();
+
+    static Status replay_pk_upsert();
 
 protected:
     Status _delete_expired_index_file(const EditVersion& l0_version, const EditVersion& l1_version,
