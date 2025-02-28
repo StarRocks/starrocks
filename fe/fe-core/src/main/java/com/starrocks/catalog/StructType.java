@@ -168,6 +168,10 @@ public class StructType extends Type {
         return fields;
     }
 
+    public boolean isAllNull() {
+        return getFields().stream().allMatch(field -> field.getType().isNull());
+    }
+
     public StructField getField(String fieldName) {
         return fieldMap.get(StringUtils.lowerCase(fieldName));
     }
