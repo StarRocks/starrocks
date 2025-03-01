@@ -395,7 +395,6 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
         response->mutable_status()->add_error_msgs("out-of-order packet");
         return;
     }
-    size_t chunk_size = chunk != nullptr ? chunk->bytes_usage() : 0;
 
     auto res = _create_write_context(chunk, request, response);
     if (!res.ok()) {
@@ -566,6 +565,7 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     auto wait_writer_ns = finish_wait_writer_ts - start_wait_writer_ts;
 #ifndef BE_TEST
     _table_metrics->load_rows.increment(total_row_num);
+    size_t chunk_size = chunk != nullptr ? chunk->bytes_usage() : 0;
     _table_metrics->load_bytes.increment(chunk_size);
 #endif
     COUNTER_UPDATE(_add_chunk_counter, 1);
