@@ -42,6 +42,7 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.NetUtils;
 import com.starrocks.mysql.ssl.SSLContextLoader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -157,10 +158,14 @@ public class MysqlProto {
                 return new NegotiateResult(null, NegotiateState.READ_SSL_AUTH_PKG_FAILED);
             }
         } else if (Config.ssl_force_secure_transport) {
-            LOG.warn("Connections using insecure transport are prohibited");
-            ErrorReport.report(ErrorCode.ERR_SECURE_TRANSPORT_REQUIRED);
-            sendResponsePacket(context);
-            return new NegotiateResult(null, NegotiateState.INSECURE_TRANSPORT_PROHIBITED);
+            if (!NetUtils.isIPLocalAddress(context.getRemoteIP())) {
+                LOG.warn("Connections using insecure transport are prohibited");
+                ErrorReport.report(ErrorCode.ERR_SECURE_TRANSPORT_REQUIRED);
+                sendResponsePacket(context);
+                return new NegotiateResult(null, NegotiateState.INSECURE_TRANSPORT_PROHIBITED);
+            } else {
+                LOG.info("Connection made from a local IP, no secure transport enforced");
+            }
         }
 
         // check capability
