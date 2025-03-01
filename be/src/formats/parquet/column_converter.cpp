@@ -662,7 +662,9 @@ Status Int96ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
             }
         }
     };
-    if (config::parquet_fast_timezone_conversion) {
+    // use fixed offset to adjust to local timezone(potentially could get wrong result but faster)
+    // or when it's UTC timezone.
+    if (config::parquet_fast_timezone_conversion || _offset == 0) {
         fill_dst_fn.operator()<true>();
     } else {
         fill_dst_fn.operator()<false>();
@@ -767,7 +769,9 @@ Status Int64ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     };
 
     if (_is_adjusted_to_utc) {
-        if (config::parquet_fast_timezone_conversion) {
+        // use fixed offset to adjust to local timezone(potentially could get wrong result but faster)
+        // or when it's UTC timezone.
+        if (config::parquet_fast_timezone_conversion || _offset == 0) {
             fill_dst_fn.operator()<true, true>();
         } else {
             fill_dst_fn.operator()<true, false>();
