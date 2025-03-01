@@ -233,8 +233,6 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         }
     }
 
-    size_t chunk_size = chunk != nullptr ? chunk->bytes_usage() : 0;
-
     auto res = _create_write_context(chunk, request, response);
     if (!res.ok()) {
         res.status().to_protobuf(response->mutable_status());
@@ -466,6 +464,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     StarRocksMetrics::instance()->load_channel_add_chunks_wait_replica_duration_us.increment(wait_replica_ns / 1000);
 #ifndef BE_TEST
     _table_metrics->load_rows.increment(total_row_num);
+    size_t chunk_size = chunk != nullptr ? chunk->bytes_usage() : 0;
     _table_metrics->load_bytes.increment(chunk_size);
 #endif
 
