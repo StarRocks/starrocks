@@ -355,7 +355,7 @@ Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx
     DeferOp defer([&] { delete[] values; });
 
     for (size_t i = 0; i < col->size(); i++) {
-        auto offset = timestamp::get_offset_by_timezone(data_col[i]._timestamp, _ctz);
+        auto offset = timestamp::get_timezone_offset_by_timestamp(data_col[i]._timestamp, _ctz);
 
         auto timestamp = use_int96_timestamp_encoding ? timestamp::sub<TimeUnit::SECOND>(data_col[i]._timestamp, offset)
                                                       : data_col[i]._timestamp;
