@@ -480,6 +480,31 @@ const ColumnPredicateMap& PredicateTree::get_immediate_column_predicate_map() co
     return _compound_node_contexts[0].cid_to_col_preds(_root);
 }
 
+// std::optional<ConstPredicateNodePtr> PredicateTree::get_keth_leaf_predicate(int k, 
+//         const std::variant<PredicateAndNode, PredicateOrNode> &node) const {
+//     if (k < 0) return std::nullopt;
+//     return std::visit([this, &k](auto&& node_ref) -> std::optional<ConstPredicateNodePtr> {
+//         if (k < node_ref.col_children_map().size()) {
+//             auto it = node_ref.col_children_map().begin();
+//             std::advance(it, k);
+//             return ConstPredicateNodePtr(&it->second.front());
+//         } else {
+//             k -= node_ref.col_children_map().size();
+//             for (auto& child : node_ref.compound_children()) {
+//                 if (auto res = get_keth_leaf_predicate(k, child); res.has_value()) {
+//                     return res;
+//                 }
+//             }
+//         }
+//         return std::nullopt;
+//     }, node);
+// }
+
+// std::optional<ConstPredicateNodePtr> PredicateTree::get_kth_leaf_predicate(int k) const {
+    
+//     return std::nullopt;
+// }
+
 // ------------------------------------------------------------------------------------
 // PredicateNodeIterator
 // ------------------------------------------------------------------------------------

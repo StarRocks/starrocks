@@ -484,6 +484,7 @@ public:
         static_assert(field_type != TYPE_HLL, "TODO");
         static_assert(field_type != TYPE_OBJECT, "TODO");
         static_assert(field_type != TYPE_PERCENTILE, "TODO");
+        std::cout << Base::debug_string() << " exist in bloom filter: " << bf->test_bytes(reinterpret_cast<const char*>(&this->_value), sizeof(this->_value));
         return bf->test_bytes(reinterpret_cast<const char*>(&this->_value), sizeof(this->_value));
     }
 
@@ -666,6 +667,8 @@ public:
 
     bool original_bloom_filter(const BloomFilter* bf) const override {
         Slice padded(Base::_zero_padded_str);
+        std::cout <<Base::debug_string() << " bloom filter test:" << Base::_zero_padded_str << " " <<Base::_zero_padded_str.length()
+                        << " " << padded.size << " existed: " << bf->test_bytes(padded.data, padded.size) << std::endl;
         return bf->test_bytes(padded.data, padded.size);
     }
 

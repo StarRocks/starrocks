@@ -43,6 +43,7 @@
 #include "gutil/strings/substitute.h"
 #include "storage/utils.h"
 #include "util/murmur_hash3.h"
+#include "util/hash_util.hpp"
 
 namespace starrocks {
 class Slice;
@@ -50,6 +51,36 @@ class Slice;
 static const std::string FPP_KEY = "bloom_filter_fpp";
 static const std::string GRAM_NUM_KEY = "gram_num";
 static const std::string CASE_SENSITIVE_KEY = "case_sensitive";
+
+class Hasher {
+    public:
+        Hasher() = default;
+        virtual ~Hasher() = default;
+        virtual uint64_t hash(const void* buf, uint32_t size) const = 0;
+};
+
+class MurmurHasher : public Hasher {
+    public:
+        explicit MurmurHasher(uint32_t seed) : _seed(seed) {}
+        uint64_t hash(const void* buf, uint32_t size) const override;
+    private:
+        uint32_t _seed;
+};
+
+class XXHasher : public Hasher {
+    public:
+        explicit XXHasher(uint32_t seed) : _seed(seed) {}
+        uint64_t hash(const void* buf, uint32_t size) const override;
+    private:
+        uint32_t _seed;
+};
+
+
+class HasherFactory {
+    public:
+        static std::unique_ptr<Hasher> create(HashStrategyPB strategy, uint32_t seed = 0);
+};
+
 // used in write
 struct BloomFilterOptions {
     // false positive probablity
@@ -97,11 +128,8 @@ public:
 
     // for write
     Status init(uint64_t n, double fpp, HashStrategyPB strategy) {
-        if (strategy == HASH_MURMUR3_X64_64) {
-            _hash_func = murmur_hash3_x64_64;
-        } else {
-            return Status::InvalidArgument(strings::Substitute("invalid strategy:$0", strategy));
-        }
+        _hasher = HasherFactory::create(strategy);
+        DCHECK(_hasher);
         _num_bytes = _optimal_bit_num(n, fpp) / 8;
         // make sure _num_bytes is power of 2
         DCHECK((_num_bytes & (_num_bytes - 1)) == 0);
@@ -118,11 +146,8 @@ public:
     // use deep copy to acquire the data
     Status init(const char* buf, uint32_t size, HashStrategyPB strategy) {
         DCHECK(size > 1);
-        if (strategy == HASH_MURMUR3_X64_64) {
-            _hash_func = murmur_hash3_x64_64;
-        } else {
-            return Status::InvalidArgument(strings::Substitute("invalid strategy:$0", strategy));
-        }
+        _hasher = HasherFactory::create(strategy);
+        DCHECK(_hasher);
         if (size == 0) {
             return Status::InvalidArgument(strings::Substitute("invalid size:$0", size));
         }
@@ -137,9 +162,7 @@ public:
     void reset() { memset(_data, 0, _size); }
 
     uint64_t hash(const char* buf, uint32_t size) const {
-        uint64_t hash_code;
-        _hash_func(buf, size, DEFAULT_SEED, &hash_code);
-        return hash_code;
+        return _hasher->hash(buf, size);
     }
 
     void add_bytes(const char* buf, uint32_t size) {
@@ -196,7 +219,7 @@ protected:
     bool* _has_null{nullptr};
 
 private:
-    std::function<void(const void*, const int, const uint64_t, void*)> _hash_func;
+    std::unique_ptr<Hasher> _hasher;
 };
 
 } // namespace starrocks

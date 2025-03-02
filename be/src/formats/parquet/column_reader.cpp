@@ -139,4 +139,119 @@ Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnR
     return Status::OK();
 }
 
+bool ColumnReader::check_type_can_apply_bloom_filter(const TypeDescriptor& col_type, const ParquetField& field) const {
+    bool appliable = false;
+    auto type = col_type.type;
+    auto parquet_type = field.physical_type;
+    if (type == LogicalType::TYPE_BOOLEAN) {
+        if (parquet_type == tparquet::Type::type::BOOLEAN) {
+            appliable = true;
+        }
+    } else if (type == LogicalType::TYPE_DATE) {
+        if (parquet_type == tparquet::Type::type::INT32) {
+            // appliable = true;
+            // TODO:
+            // sr._julian - date::UNIX_EPOCH_JULIAN == parquet INT32;
+        }
+    } else if (type == LogicalType::TYPE_TINYINT || type == LogicalType::TYPE_SMALLINT ||
+               type == LogicalType::TYPE_INT) {
+        if (parquet_type == tparquet::Type::type::INT32) {
+            appliable = true;
+        }
+        //TODO: if parquet type is int64, convert the val;
+    } else if (type == LogicalType::TYPE_BIGINT) {
+        if (parquet_type == tparquet::Type::type::INT64) {
+            appliable = true;
+        }
+    } else if (type == LogicalType::TYPE_DOUBLE) {
+        if (parquet_type == tparquet::Type::type::DOUBLE) {
+            appliable = true;
+        }
+    } else if (type == LogicalType::TYPE_FLOAT) {
+        if (parquet_type == tparquet::Type::type::FLOAT) {
+            appliable = true;
+        }
+    } else if (type == LogicalType::TYPE_VARCHAR || type == LogicalType::TYPE_VARBINARY) {
+        if (parquet_type == tparquet::Type::type::BYTE_ARRAY) {
+            appliable = true;
+        }
+        //TODO: FLBA type should check the length and pad space.
+    } else if (type == LogicalType::TYPE_CHAR || type == LogicalType::TYPE_BINARY) {
+        //TODO: The char type will be padded with space
+        //      And we should care about if 'a' == 'a  ' is ture, in SR it is false.
+        //      Thus only the flba type can match the SR type char.
+        //      And the length of the flba should be the same as the type char.
+        //      And any convert should be disabled, because the length cannot change.
+    } else if (type == LogicalType::TYPE_DECIMAL32 || type == LogicalType::TYPE_DECIMAL64 ||
+               type == LogicalType::TYPE_DECIMAL128 || type == LogicalType::TYPE_DECIMALV2) {
+        //TODO: Decimal can be stored as INT32, INT64, BYTE_ARRAY, FLBA in parquet
+        //      SR stores the decimalxx as intxx with precision and scale,
+        //      First the int type should match the parquet's physical type
+        //      And the logical type of sr and parquet's scale and precision should also be the same
+        //      Ohterwise, we need to convert the value.
+        //      But we should notice that if the convert will cause precision loss, otherwise it should be disabled.
+    } else {
+        //TODO: Other types like TYPE_TIME, TYPE_DATE_V1, TYPE_DATETIME, TYPE_DATETIME_V1 is stored different with int type in sr
+        //    should be converted as int32_t or int64_t.
+    }
+    //TODO: be/src/formats/parquet/level_builder.cpp have methods of the above data changing.
+    return appliable;
+}
+
+StatusOr<bool> ColumnReader::adaptive_judge_if_apply_bloom_filter(int64_t span_size) const {
+    std::cout << "adaptive_judge_if_apply_bloom_filter0" << std::endl;
+    if (!config::parquet_enable_adpative_bloom_filter) {
+        return true;
+    } else if (get_chunk_metadata() == nullptr) {
+        return true;
+    }
+    std::cout << "adaptive_judge_if_apply_bloom_filter" << std::endl;
+    auto& column_metadata = get_chunk_metadata()->meta_data;
+    std::cout <<"isset statistics" << column_metadata.__isset.statistics << "set distinct count" << column_metadata.statistics.__isset.distinct_count << std::endl;
+    if (column_metadata.__isset.statistics && column_metadata.statistics.__isset.distinct_count) {
+        auto distinct_count = column_metadata.statistics.distinct_count;
+        std::cout <<"isset bloom filter" << column_metadata.__isset.bloom_filter_length  << "distinct val: " << distinct_count<< std::endl;
+        if (column_metadata.__isset.bloom_filter_length) {
+            if (1.0 * distinct_count / column_metadata.bloom_filter_length >
+                config::parquet_bloom_filter_ndv_size_ratio_threshold) {
+                return false;
+            }
+        }
+        std::cout <<"isset statistic min max" << column_metadata.statistics.__isset.min_value << " and " <<
+           column_metadata.statistics.__isset.max_value << std::endl;
+        if (column_metadata.statistics.__isset.min_value && column_metadata.statistics.__isset.max_value) {
+            auto field = get_column_parquet_field();
+            std::cout << "logical type is int" << field->schema_element.logicalType.__isset.INTEGER << std::endl;
+            if (field && (field->schema_element.logicalType.__isset.INTEGER)) {
+                if (field->physical_type == tparquet::Type::type::INT32) {
+                    int32_t min_val, max_val;
+                    RETURN_IF_ERROR(PlainDecoder<int32_t>::decode(column_metadata.statistics.min_value, &min_val));
+                    RETURN_IF_ERROR(PlainDecoder<int32_t>::decode(column_metadata.statistics.max_value, &max_val));
+                    std::cout << "int32 physical type" << min_val << " " << max_val << std::endl;
+                    if (1.0 * distinct_count / (max_val - min_val) >
+                        config::parquet_bloom_filter_ndv_range_ratio_threshold) {
+                        return false;
+                    }
+                } else if (field->physical_type == tparquet::Type::type::INT64) {
+                    int64_t min_val, max_val;
+                    RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(column_metadata.statistics.min_value, &min_val));
+                    RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(column_metadata.statistics.max_value, &max_val));
+                    if (1.0 * distinct_count / (max_val - min_val) >
+                        config::parquet_bloom_filter_ndv_range_ratio_threshold) {
+                        return false;
+                    }
+                }
+            }
+        }
+    }
+    std::cout << "bf lgength set: " << column_metadata.__isset.bloom_filter_length;
+    if (column_metadata.__isset.bloom_filter_length) {
+        if (1.0 * span_size / column_metadata.num_values * column_metadata.total_compressed_size <=
+            column_metadata.bloom_filter_length) {
+            return false;
+        }
+    }
+    return true;
+}
+
 } // namespace starrocks::parquet

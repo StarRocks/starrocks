@@ -197,6 +197,7 @@ std::string DateValue::day_name() const {
 }
 
 std::string DateValue::to_string() const {
+    std::cout << "Julia:" + std::to_string(this->_julian) << std::endl;
     return date::to_string(_julian);
 }
 

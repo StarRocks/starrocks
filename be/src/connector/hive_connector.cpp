@@ -744,6 +744,10 @@ Status HiveDataSource::_init_scanner(RuntimeState* state) {
     } else if (use_kudu_jni_reader) {
         scanner = create_kudu_jni_scanner(jni_scanner_create_options).release();
     } else if (format == THdfsFileFormat::PARQUET) {
+        scanner_params.parquet_page_index_enable = config::parquet_page_index_enable ?
+                                       state->query_options().enable_parquet_reader_page_index ? true : false : false;
+        scanner_params.parquet_bloom_filter_enable = config::enable_index_page_level_zonemap_filter ?
+                                       state->query_options().enable_parquet_reader_bloom_filter ? true : false : false;
         scanner = new HdfsParquetScanner();
     } else if (format == THdfsFileFormat::ORC) {
         scanner_params.orc_use_column_names = state->query_options().orc_use_column_names;

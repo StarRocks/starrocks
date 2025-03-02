@@ -80,7 +80,7 @@ public:
     void get_levels(int16_t** def_levels, int16_t** rep_levels, size_t* num_levels) override {}
 
     void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
-                                 ColumnIOType type, bool active) override {}
+                                 ColumnIOTypeFlags types, bool active) override {}
 
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
 
@@ -481,8 +481,8 @@ TEST_F(GroupReaderTest, FixedValueColumnReaderTest) {
     predicates.push_back(is_null_predicate);
     predicates.push_back(is_not_null_predicate);
 
-    ASSERT_FALSE(col1->row_group_zone_map_filter(predicates, CompoundNodeType::AND, 1, 100).value());
-    ASSERT_TRUE(col1->row_group_zone_map_filter(predicates, CompoundNodeType::OR, 1, 100).value());
+    ASSERT_TRUE(col1->row_group_zone_map_filter(predicates, CompoundNodeType::AND, 1, 100).value());
+    ASSERT_FALSE(col1->row_group_zone_map_filter(predicates, CompoundNodeType::OR, 1, 100).value());
 }
 
 } // namespace starrocks::parquet

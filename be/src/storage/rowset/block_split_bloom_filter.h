@@ -45,6 +45,18 @@ namespace starrocks {
 // Bloom filter is 32 bytes to take advantage of 32-byte SIMD instruction.
 class BlockSplitBloomFilter : public BloomFilter {
 public:
+    enum mode {
+        DEFAULT = 0,
+        PARQUET = 1,
+    };
+
+    explicit BlockSplitBloomFilter(int mode = 0) {
+        if (mode == mode::PARQUET) {
+            _get_block_index = _get_block_index_parquet;
+        } else {
+            _get_block_index = _get_block_index_default;
+        }
+    }
     void add_hash(uint64_t hash) override;
 
     bool test_hash(uint64_t hash) const override;
@@ -60,6 +72,15 @@ private:
             masks[i] = 0x1 << masks[i];
         }
     }
+
+    static uint32_t _get_block_index_default(uint64_t hash, uint32_t block_size) {
+        return (uint32_t)(hash >> 32) & (block_size - 1);
+    }
+    static uint32_t _get_block_index_parquet(uint64_t hash, uint32_t block_size) {
+        return (uint32_t)(((hash >> 32) * block_size) >> 32);
+    }
+
+    std::function<uint32(uint64_t, uint32_t)> _get_block_index;
 
 private:
     // Bytes in a tiny Bloom filter block.

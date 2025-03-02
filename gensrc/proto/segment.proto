@@ -291,6 +291,7 @@ message BitmapIndexPB {
 
 enum HashStrategyPB {
     HASH_MURMUR3_X64_64 = 0;
+    XXHASH64 = 1;
 }
 
 enum BloomFilterAlgorithmPB {

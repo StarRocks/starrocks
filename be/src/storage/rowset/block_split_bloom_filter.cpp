@@ -46,7 +46,7 @@ void BlockSplitBloomFilter::add_hash(uint64_t hash) {
     // power of 2)
     DCHECK(_num_bytes >= BYTES_PER_BLOCK);
     uint32_t block_size = _num_bytes / BYTES_PER_BLOCK;
-    uint32_t block_index = (uint32_t)(hash >> 32) & (block_size - 1);
+    uint32_t block_index = _get_block_index(hash, block_size);
     auto key = (uint32_t)hash;
 
     // Calculate masks for bucket.
@@ -62,7 +62,7 @@ bool BlockSplitBloomFilter::test_hash(uint64_t hash) const {
     // most significant 32 bit mod block size as block index(BTW:block size is
     // power of 2)
     uint32_t block_size = _num_bytes / BYTES_PER_BLOCK;
-    uint32_t block_index = (uint32_t)(hash >> 32) & (block_size - 1);
+    uint32_t block_index = _get_block_index(hash, block_size);
     auto key = (uint32_t)hash;
     // Calculate masks for bucket.
     uint32_t masks[BITS_SET_PER_BLOCK];

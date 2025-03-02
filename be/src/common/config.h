@@ -936,9 +936,14 @@ CONF_mInt32(orc_writer_version, "-1");
 // parquet reader
 CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_Bool(parquet_late_materialization_enable, "true");
-CONF_Bool(parquet_page_index_enable, "true");
+CONF_mBool(parquet_page_index_enable, "true");
+CONF_mBool(parquet_reader_bloom_filter_enable, "true");
 CONF_mBool(parquet_statistics_process_more_filter_enable, "true");
 CONF_mBool(parquet_fast_timezone_conversion, "false");
+
+CONF_mBool(parquet_enable_adpative_bloom_filter, "true");
+CONF_mDouble(parquet_bloom_filter_ndv_size_ratio_threshold, "1");
+CONF_mDouble(parquet_bloom_filter_ndv_range_ratio_threshold, "0.95");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");

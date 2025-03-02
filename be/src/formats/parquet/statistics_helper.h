@@ -38,6 +38,9 @@ public:
 
     static bool has_correct_min_max_stats(const FileMetaData* file_metadata,
                                           const tparquet::ColumnMetaData& column_meta, const SortOrder& sort_order);
+
+    // template <LogicalType LType, tparquet::Type::type PType>
+    // static bool encode_logical_type_to_physical_type(const LType *value, PType encoded_value);
 };
 
 } // namespace starrocks::parquet

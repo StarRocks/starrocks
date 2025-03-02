@@ -174,6 +174,8 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.enable_split_tasks = _scanner_params.enable_split_tasks;
     ctx.connector_max_split_size = _scanner_params.connector_max_split_size;
     ctx.global_dictmaps = _scanner_params.global_dictmaps;
+    ctx.parquet_bloom_filter_enable = _scanner_params.parquet_bloom_filter_enable;
+    ctx.parquet_page_index_enable = _scanner_params.parquet_page_index_enable;
 
     ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &_scanner_params.all_conjunct_ctxs;
@@ -504,7 +506,9 @@ void HdfsScannerContext::update_with_none_existed_slot(SlotDescriptor* slot) {
 
 Status HdfsScannerContext::update_materialized_columns(const std::unordered_set<std::string>& names) {
     std::vector<ColumnInfo> updated_columns;
-
+    for (auto i : names) {
+        std::cout<<"exist col name: " << i << std::endl;
+    }
     // special handling for ___count__ optimization.
     {
         for (auto& column : materialized_columns) {
@@ -603,7 +607,10 @@ Status HdfsScannerContext::evaluate_on_conjunct_ctxs_by_slot(ChunkPtr* chunk, Fi
 
 StatusOr<bool> HdfsScannerContext::should_skip_by_evaluating_not_existed_slots() {
     if (not_existed_slots.size() == 0) return false;
-
+    std::cout << not_existed_slots.size() << std::endl;
+    for (auto i : not_existed_slots) {
+        std::cout<<"SLOT:" << i->col_name() << std::endl;
+    }
     // build chunk for evaluation.
     ChunkPtr chunk = std::make_shared<Chunk>();
     RETURN_IF_ERROR(append_or_update_not_existed_columns_to_chunk(&chunk, 1));

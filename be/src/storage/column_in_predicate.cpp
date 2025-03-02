@@ -363,6 +363,20 @@ public:
         return true;
     }
 
+    std::string debug_string() const override {
+        std::stringstream ss;
+        ss << "((columnId=" << _column_id << ")IN(";
+        int i = 0;
+        for (auto& item : _zero_padded_strs) {
+            if (i++ != 0) {
+                ss << ",";
+            }
+            ss << this->type_info()->to_string(&item);
+        }
+        ss << "))";
+        return ss.str();
+    }
+
 private:
     std::vector<std::string> _zero_padded_strs;
     ItemHashSet<Slice> _slices;

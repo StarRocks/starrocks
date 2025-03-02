@@ -189,6 +189,7 @@ public:
     }
 
     static uint64_t xx_hash3_64(const void* key, int32_t len, uint64_t seed);
+    static uint64_t xx_hash64(const void* key, int32_t len, uint64_t seed);
 
     // default values recommended by http://isthe.com/chongo/tech/comp/fnv/
     static const uint32_t FNV_PRIME = 0x01000193;    //   16777619

@@ -93,7 +93,7 @@ enum ColumnType { SCALAR = 0, ARRAY, MAP, STRUCT };
 
 std::string column_type_to_string(const ColumnType& column_type);
 
-struct ParquetField {
+struct  ParquetField {
     std::string name;
     tparquet::SchemaElement schema_element;
 

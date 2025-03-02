@@ -60,6 +60,9 @@ class ColumnConverterFactory {
 public:
     static Status create_converter(const ParquetField& field, const TypeDescriptor& typeDescriptor,
                                    const std::string& timezone, std::unique_ptr<ColumnConverter>* converter);
+
+    static Status create_converter(const TypeDescriptor& typeDescriptor, const ParquetField& field,
+                                   const std::string& timezone, std::unique_ptr<ColumnConverter>* converter);
 };
 
 } // namespace starrocks::parquet

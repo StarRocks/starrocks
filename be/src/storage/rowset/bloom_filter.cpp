@@ -43,9 +43,29 @@
 
 namespace starrocks {
 
+uint64_t MurmurHasher::hash(const void* buf, uint32_t size) const {
+    uint64_t hash_code;
+    murmur_hash3_x64_64(buf, size, _seed, &hash_code);
+    return hash_code;
+}
+
+uint64_t XXHasher::hash(const void* buf, uint32_t size) const {
+    return HashUtil::xx_hash64(buf, size, _seed);
+}
+
+std::unique_ptr<Hasher> HasherFactory::create(HashStrategyPB strategy, uint32_t seed) {
+    if (strategy == HASH_MURMUR3_X64_64) {
+        return std::make_unique<MurmurHasher>(seed);
+    } else if (strategy == XXHASH64) {
+        return std::make_unique<XXHasher>(0);
+    } else {
+        return nullptr;
+    }    
+}
+
 Status BloomFilter::create(BloomFilterAlgorithmPB algorithm, std::unique_ptr<BloomFilter>* bf) {
     if (algorithm == BLOCK_BLOOM_FILTER) {
-        *bf = std::make_unique<BlockSplitBloomFilter>();
+        *bf = std::make_unique<BlockSplitBloomFilter>(BlockSplitBloomFilter::mode::DEFAULT);
     } else {
         return Status::InternalError(strings::Substitute("invalid bloom filter algorithm:$0", algorithm));
     }

@@ -43,7 +43,7 @@
 #include "formats/parquet/schema.h"
 #include "formats/parquet/statistics_helper.h"
 #include "formats/parquet/utils.h"
-#include "formats/parquet/zone_map_filter_evaluator.h"
+#include "formats/parquet/predicate_filter_evaluator.h"
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
 #include "gutil/casts.h"
@@ -67,6 +67,7 @@ FileReader::FileReader(int chunk_size, RandomAccessFile* file, size_t file_size,
 FileReader::~FileReader() = default;
 
 Status FileReader::init(HdfsScannerContext* ctx) {
+    std::cout << "init file reader" << std::endl;
     _scanner_ctx = ctx;
 #ifdef WITH_STARCACHE
     // Only support file metacache in starcache engine
@@ -75,28 +76,40 @@ Status FileReader::init(HdfsScannerContext* ctx) {
     }
 #endif
     // parse FileMetadata
+    std::cout << "init file reader1" << std::endl;
     FileMetaDataParser file_metadata_parser{_file, ctx, _cache, &_datacache_options, _file_size};
+    std::cout << "init file reader2" << std::endl;
     ASSIGN_OR_RETURN(_file_metadata, file_metadata_parser.get_file_metadata());
 
     // set existed SlotDescriptor in this parquet file
+    std::cout << "init file reader3" << std::endl;
     std::unordered_set<std::string> existed_column_names;
     _meta_helper = _build_meta_helper();
     _prepare_read_columns(existed_column_names);
+    std::cout << "init file reader4" << std::endl;
     RETURN_IF_ERROR(_scanner_ctx->update_materialized_columns(existed_column_names));
-
+    std::cout << "init file reader5" << std::endl;
     ASSIGN_OR_RETURN(_is_file_filtered, _scanner_ctx->should_skip_by_evaluating_not_existed_slots());
+    std::cout << "init file reader6" << std::endl;
     if (_is_file_filtered) {
         return Status::OK();
     }
-
+    std::cout << "init file reader7" << std::endl;
     RETURN_IF_ERROR(_build_split_tasks());
+    std::cout << "init file reader8" << std::endl;
     if (_scanner_ctx->split_tasks.size() > 0) {
         _scanner_ctx->has_split_tasks = true;
         _is_file_filtered = true;
         return Status::OK();
     }
 
+    if (_scanner_ctx->rf_scan_range_pruner != nullptr) {
+        _rf_scan_range_pruner = std::make_shared<RuntimeScanRangePruner>(*_scanner_ctx->rf_scan_range_pruner);
+    }
+    std::cout << "init group readers" << std::endl;
     RETURN_IF_ERROR(_init_group_readers());
+    std::cout << "finish init group readers" << std::endl;
+    std::cout << "finish init file reader" << std::endl;
     return Status::OK();
 }
 
@@ -180,20 +193,33 @@ Status FileReader::_build_split_tasks() {
 // when doing row group filter, there maybe some error, but we'd better just ignore it instead of returning the error
 // status and lead to the query failed.
 bool FileReader::_filter_group(const GroupReaderPtr& group_reader) {
-    if (_scanner_ctx->rf_scan_range_pruner != nullptr) {
-        _rf_scan_range_pruner = std::make_shared<RuntimeScanRangePruner>(*_scanner_ctx->rf_scan_range_pruner);
+    std::cout<<"filter group begin" << std::endl;
+    bool &filtered = group_reader->get_is_group_filtered();
+    filtered = false;
+    for (auto i : _scanner_ctx->materialized_columns) {
+        std::cout << "materialize column:" << i.name() <<" slot id:" << i.slot_id() << " id:" << i.slot_desc->id()<< std::endl;
     }
-    auto res = _scanner_ctx->predicate_tree.visit(
-            ZoneMapEvaluator<FilterLevel::ROW_GROUP>{_scanner_ctx->predicate_tree, group_reader.get()});
-    if (!res.ok()) {
-        LOG(WARNING) << "filter row group failed: " << res.status().message();
-        return false;
+    auto visitor = PredicateFilterEvaluator {
+            _scanner_ctx->predicate_tree, group_reader.get(), _scanner_ctx->parquet_page_index_enable, 
+                    _scanner_ctx->parquet_bloom_filter_enable};
+    auto sparse_range = _scanner_ctx->predicate_tree.visit(visitor);
+    _group_reader_param.stats->_optimzation_counter += visitor.counter;
+    std::cout<<"filter group after predicate visit" << std::endl;
+    if (!sparse_range.ok()) {
+        LOG(WARNING) << "filter row group failed: " << sparse_range.status().message();
+    } else if (sparse_range.value().has_value()) {
+        if (sparse_range.value()->span_size() == 0) {
+            // no rows selected, the whole row group can be filtered
+            std::cout << " row group filter success" << std::endl;
+            filtered = true;
+        } else if (sparse_range.value()->span_size() < group_reader->get_row_group_metadata()->num_rows) {
+            // some pages have been filtered
+            std::cout << " page index filter success" << std::endl;
+            group_reader->get_range() = sparse_range.value().value();
+        }
     }
-    if (res.value().has_value() && res.value()->span_size() == 0) {
-        // no rows selected, the whole row group can be filtered
-        return true;
-    }
-    return false;
+    std::cout<<"filter group:" << filtered << std::endl;
+    return filtered;
 }
 
 StatusOr<bool> FileReader::_update_rf_and_filter_group(const GroupReaderPtr& group_reader) {
@@ -201,17 +227,18 @@ StatusOr<bool> FileReader::_update_rf_and_filter_group(const GroupReaderPtr& gro
     if (_rf_scan_range_pruner != nullptr) {
         RETURN_IF_ERROR(_rf_scan_range_pruner->update_range_if_arrived(
                 _scanner_ctx->global_dictmaps,
-                [&filter, &group_reader](auto cid, const PredicateList& predicates) {
+                [this, &filter, &group_reader](auto cid, const PredicateList& predicates) {
                     PredicateCompoundNode<CompoundNodeType::AND> pred_tree;
                     for (const auto& pred : predicates) {
                         pred_tree.add_child(PredicateColumnNode{pred});
                     }
                     auto real_tree = PredicateTree::create(std::move(pred_tree));
-
-                    auto res = real_tree.visit(ZoneMapEvaluator<FilterLevel::ROW_GROUP>{real_tree, group_reader.get()});
+                    auto visitor = PredicateFilterEvaluator{real_tree, group_reader.get(), true, true};
+                    auto res = real_tree.visit(visitor);
                     if (res.ok() && res->has_value() && res->value().span_size() == 0) {
                         filter = true;
                     }
+                    this->_group_reader_param.stats->_optimzation_counter += visitor.counter;
                     return Status::OK();
                 },
                 true, 0));
@@ -245,6 +272,26 @@ bool FileReader::_select_row_group(const tparquet::RowGroup& row_group) {
     return false;
 }
 
+Status FileReader::_collect_row_group_io(std::shared_ptr<GroupReader>& group_reader) {
+    // collect io ranges.
+    if (config::parquet_coalesce_read_enable && _sb_stream != nullptr) { //should move to scanner_ctx
+        std::vector<io::SharedBufferedInputStream::IORange> ranges;
+        int64_t end_offset = 0;
+        ColumnIOTypeFlags flags = 0;
+        if (_scanner_ctx->parquet_page_index_enable) {
+            flags |= ColumnIOType::PAGE_INDEX;
+        }
+        if (_scanner_ctx->parquet_bloom_filter_enable) {
+            flags |= ColumnIOType::BLOOM_FILTER;
+        }
+        group_reader->collect_io_ranges(&ranges, &end_offset, flags);
+        std::cout << "prepare page index ranges:" << ranges.size() << " " << _sb_stream->current_range_ref_sum()<< std::endl;
+        RETURN_IF_ERROR(_sb_stream->set_io_ranges(ranges));
+        std::cout << "prepare page index ranges:" << ranges.size() << " " << _sb_stream->current_range_ref_sum()<< std::endl;
+    }
+    return Status::OK();
+}
+
 Status FileReader::_init_group_readers() {
     const HdfsScannerContext& fd_scanner_ctx = *_scanner_ctx;
 
@@ -268,6 +315,7 @@ Status FileReader::_init_group_readers() {
 
     int64_t row_group_first_row = 0;
     // select and create row group readers.
+    std::cout << "row group size:" << _file_metadata->t_metadata().row_groups.size() << std::endl;
     for (size_t i = 0; i < _file_metadata->t_metadata().row_groups.size(); i++) {
         if (i > 0) {
             row_group_first_row += _file_metadata->t_metadata().row_groups[i - 1].num_rows;
@@ -283,9 +331,12 @@ Status FileReader::_init_group_readers() {
 
         _group_reader_param.stats->parquet_total_row_groups += 1;
 
+        RETURN_IF_ERROR(_collect_row_group_io(row_group_reader));
+        std::cout << "page index enable:" << _scanner_ctx->parquet_page_index_enable << std::endl;
+        std::cout << "bloom filter enable:" << _scanner_ctx->parquet_bloom_filter_enable << std::endl;
         // You should call row_group_reader->init() before _filter_group()
         if (_filter_group(row_group_reader)) {
-            DLOG(INFO) << "row group " << i << " of file has been filtered by min/max conjunct";
+            DLOG(INFO) << "row group " << i << " of file has been filtered";
             _group_reader_param.stats->parquet_filtered_row_groups += 1;
             continue;
         }
@@ -301,16 +352,6 @@ Status FileReader::_init_group_readers() {
         _total_row_count += num_rows;
     }
     _row_group_size = _row_group_readers.size();
-
-    // collect pageIndex io ranges.
-    if (config::parquet_coalesce_read_enable && _sb_stream != nullptr && config::parquet_page_index_enable) {
-        std::vector<io::SharedBufferedInputStream::IORange> ranges;
-        int64_t end_offset = 0;
-        for (auto& r : _row_group_readers) {
-            r->collect_io_ranges(&ranges, &end_offset, ColumnIOType::PAGE_INDEX);
-        }
-        RETURN_IF_ERROR(_sb_stream->set_io_ranges(ranges));
-    }
 
     if (!_row_group_readers.empty()) {
         // prepare first row group
