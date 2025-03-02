@@ -857,6 +857,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_REWRITE_OR_TO_UNION_ALL_JOIN = "enable_rewrite_or_to_union_all_join";
 
+    public static final String MAX_OR_TO_UNION_ALL_JOIN_PREDICATES = "max_or_to_union_all_join_predicates";
+
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
             .add(MAX_EXECUTION_TIME)
@@ -2506,6 +2508,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_REWRITE_OR_TO_UNION_ALL_JOIN)
     private boolean enabledRewriteOrToUnionAllJoin = false;
+
+    @VarAttr(name = MAX_OR_TO_UNION_ALL_JOIN_PREDICATES)
+    private int maxOrToUnionAllPredicates = 3;
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
@@ -4582,6 +4587,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnabledRewriteOrToUnionAllJoin(boolean enabledRewriteOrToUnionAllJoin) {
         this.enabledRewriteOrToUnionAllJoin = enabledRewriteOrToUnionAllJoin;
+    }
+
+    public int getMaxOrToUnionAllPredicates() {
+        return maxOrToUnionAllPredicates;
+    }
+
+    public void setMaxOrToUnionAllPredicates(int maxOrToUnionAllPredicates) {
+        this.maxOrToUnionAllPredicates = maxOrToUnionAllPredicates;
     }
 
     // Serialize to thrift object
