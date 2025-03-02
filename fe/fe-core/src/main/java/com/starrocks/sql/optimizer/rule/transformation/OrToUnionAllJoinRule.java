@@ -134,7 +134,7 @@ public class OrToUnionAllJoinRule extends TransformationRule {
             return false;
         }
 
-        CompoundPredicateOperator compoundPredicate = (CompoundPredicateOperator) predicate;
+        CompoundPredicateOperator compoundPredicate = predicate.cast();
         if (compoundPredicate.getCompoundType() != CompoundPredicateOperator.CompoundType.OR) {
             return false;
         }
