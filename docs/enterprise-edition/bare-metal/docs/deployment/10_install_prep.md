@@ -32,7 +32,7 @@ In addition to the CelerData Manager server, you will need to prepare hardware f
 - StarRocks does not have strict requirements on hardware. It can run on machines of both low and high configurations. The recommended configuration for a test environment is 8 logical cores and 32 GB memory or higher, and the recommended configuration for an online environment is 16 cores or higher.
 
   :::note
-  If you are using Intel CPUs on the BE servers, the CPUs must support the AVX2 instruction set for high performance. You can run the following command to check whether your Intel CPU supports AVX2 instruction sets.
+  If you are using x86-64 CPUs on the BE servers, the CPUs must support the AVX2 instruction set for high performance. You can run the following command to check whether your x86-64 CPU supports AVX2 instruction sets.
 
   ```bash
   cat /proc/cpuinfo | grep avx2
@@ -136,48 +136,48 @@ sudo chown celerdata /data
 The default ports used by CelerData Manager and StarRocks Enterprise Edition are:
 
 ### Common (all servers)
-| <div style="width:200px">Port name</div> | <div style="width:60px">Default</div> | <div style="width:125px">Direction</div> | Explanation | 
+| <div style={{width: '200px'}}>Port name</div> | <div style={{width: '60px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
 |-----------|--------------|-------------------------|-------------|
-| SSH | 22 | All <--> All | Management processes communicate via SSH |
+| SSH | 22 | All `<-->` All | Management processes communicate via SSH |
 
 ### BE and CN instances
-| <div style="width:200px">Port name</div> | <div style="width:60px">Default</div> | <div style="width:125px">Direction</div> | Explanation | 
+| <div style={{width: '200px'}}>Port name</div> | <div style={{width: '60px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
 |-----------|--------------|-------------------------|-------------|
-| be_port | 9060 | FE --> BE/CN | Port of thrift server on BE/CN, receiving requests from FE |
-| webserver_port | 8040 | BE/CN <--> BE/CN | Port of http server on BE/CN |
-| heartbeat_service_port | 9050 | FE --> BE | Heartbeat server level port (thrift) on BE, receive heartbeat from FE |
-| brpc_port | 8060 | FE <--> BE | BRPC port on BE for communication between BEs | BE <--> BE |
-| starlet_port | 9070 | FE --> BE | Port for BE/CN heartbeat service in storage and calculation separation mode | (In the integrated storage and computing mode, BE also needs to open this port.) |
+| be_port | 9060 | FE `-->` BE/CN | Port of thrift server on BE/CN, receiving requests from FE |
+| webserver_port | 8040 | BE/CN `<-->` BE/CN | Port of http server on BE/CN |
+| heartbeat_service_port | 9050 | FE `-->` BE | Heartbeat server level port (thrift) on BE, receive heartbeat from FE |
+| brpc_port | 8060 | FE `<-->` BE | BRPC port on BE for communication between BEs | BE `<-->` BE |
+| starlet_port | 9070 | FE `-->` BE | Port for BE/CN heartbeat service in storage and calculation separation mode | (In the integrated storage and computing mode, BE also needs to open this port.) |
 
 ### FE instances
-| <div style="width:200px">Port name</div> | <div style="width:60px">Default</div> | <div style="width:125px">Direction</div> | Explanation | 
+| <div style={{width: '200px'}}>Port name</div> | <div style={{width: '60px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
 |-----------|--------------|-------------------------|-------------|
-| http_port | 8030 | FE <--> FE | Port of http server on FE | User < -- > FE |
-| rpc_port | 9020 | BE --> FE | Thrift server port on FE | FE <--> FE |
-| query_port | 9030 | User < -- > FE | Port of mysql server on FE |
-| edit_log_port | 9010 | FE <--> FE | Port for communication between bdbje on FE |
-| cloud_native_meta_port | 6090 | FE <--> BE | Cloud Native metadata service listening port in storage and calculation separation mode | FE <--> FE |
+| http_port | 8030 | FE `<-->` FE | Port of http server on FE | User `<-->` FE |
+| rpc_port | 9020 | BE `-->` FE | Thrift server port on FE | FE `<-->` FE |
+| query_port | 9030 | User `<-->` FE | Port of mysql server on FE |
+| edit_log_port | 9010 | FE `<-->` FE | Port for communication between bdbje on FE |
+| cloud_native_meta_port | 6090 | FE `<-->` BE | Cloud Native metadata service listening port in storage and calculation separation mode | FE `<-->` FE |
 
 ### Broker instances
-| <div style="width:200px">Port name</div> | <div style="width:60px">Default</div> | <div style="width:125px">Direction</div> | Explanation | 
+| <div style={{width: '200px'}}>Port name</div> | <div style={{width: '60px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
 |-----------|--------------|-------------------------|-------------|
-| broker_rpc_port | 8000 | FE --> Broker | Thrift server on Broker for receiving requests | | BE --> Broker |
+| broker_rpc_port | 8000 | FE `-->` Broker | Thrift server on Broker for receiving requests | | BE `-->` Broker |
 
 ### Manager
-| <div style="width:200px">Port name</div> | <div style="width:60px">Default</div> | <div style="width:125px">Direction</div> | Explanation | 
+| <div style={{width: '200px'}}>Port name</div> | <div style={{width: '60px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
 |-----------|--------------|-------------------------|-------------|
 | admin_console_port | 19321 | Manager external | Nginx does port forwarding for external web ports |
 
 ### Agent service
-| <div style="width:200px">Port name</div> | <div style="width:60px">Default</div> | <div style="width:125px">Direction</div> | Explanation | 
+| <div style={{width: '200px'}}>Port name</div> | <div style={{width: '60px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
 |-----------|--------------|-------------------------|-------------|
 | supervisor_http_port | 19320 | Internal | Supervisor management process | Center Service | 19319 | Supervisor management process |
-| agent_port | 19323 | Agent --> Center | Agent and Center Service communicate, and users report monitoring information |
+| agent_port | 19323 | Agent `-->` Center | Agent and Center Service communicate, and users report monitoring information |
 
 ### Center service
-| <div style="width:200px">Port name</div> | <div style="width:60px">Default</div> | <div style="width:125px">Direction</div> | Explanation | 
+| <div style={{width: '200px'}}>Port name</div> | <div style={{width: '60px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
 |-----------|--------------|-------------------------|-------------|
-| center_rpc_port | 19322 | Web --> Center | Communication ports for Web and Center Services |
+| center_rpc_port | 19322 | Web `-->` Center | Communication ports for Web and Center Services |
 
 During the deployment of the Supervisor and the Agent processes on the FE and BE servers, and the deployment of the FEs and BEs you will see timeout messages if any ports are blocked by your firewall. After opening the ports retry the step that displayed the timeout.
 
@@ -301,17 +301,19 @@ Multiple StarRocks clusters can use the same MySQL installation. We recommend th
 
 Provide the MySQL configuration information. For example, if you installed MySQL on the same server as CelerData Manager:
 
-|  |  |
-|------|---------|
-| IP   | 127.0.0.1     |
-|  Port    |    3306     |
-|  Database    |   manager_console      |
-| User name | root |
-| Password | Password set with `mysql_secure_installation` |
+|           |                                               |
+|-----------|-----------------------------------------------|
+| IP        | 127.0.0.1                                     |
+| Port      | 3306                                          |
+| Database  | manager_console                               |
+| User name | root                                          |
+| Password  | Password set with `mysql_secure_installation` |
 
-Test Connection, look for OK.
+After configuring the MySQL connection **Test connection** and look for **OK**.
 
-![MySQL config](../_assets/manager/MySQL.png)
+import mySQLConfig from '../_assets/manager/MySQL.png';
+
+<img src={mySQLConfig} alt="MySQL Config" style={{width: 500}} />;
 
 ### Nodes Setup
 
@@ -320,7 +322,9 @@ At this point, you are not deploying FEs or BEs: you are provisioning management
 - **Supervisor** (`supervisord`) is used to manage the start and stop of processes.
 - **Agent** (`agent_service`) is responsible for collecting statistical information of the machine.
 
-![Nodes config](../_assets/manager/NodesSetup.png)
+import NodesSetup from '../_assets/manager/NodesSetup.png';
+
+<img src={NodesSetup} alt="Nodes Config" style={{width: 500}} />;
 
 ### FE deployment
 
@@ -328,7 +332,9 @@ You can identify which nodes to deploy FEs on, the dropdown is populated with th
 
 After clicking Next it takes a while, you can check progress by looking at the disk activity on the servers.
 
-![FE config](../_assets/manager/FE_Setup.png)
+import FE_Setup from '../_assets/manager/FE_Setup.png';
+
+<img src={FE_Setup} alt="FE Config" style={{width: 500}} />;
 
 ### BE deployment
 
@@ -336,7 +342,9 @@ Manager will choose all of the nodes for BEs. If you would like to prevent a BE 
 
 Make sure to set the Install Path to a disk with space, and edit it for each of the BEs being deployed. In the screenshot, the Install Path is set to `/data/sr`
 
-![BE config](../_assets/manager/BE_Setup.png)
+import BE_Setup from '../_assets/manager/BE_Setup.png';
+
+<img src={BE_Setup} alt="BE Config" style={{width: 700}} />;
 
 ### Brokers
 

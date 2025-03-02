@@ -1,15 +1,16 @@
 {
-  "name": "generatepdf",
+  "name": "scrape-to-pdf",
   "version": "1.0.0",
-  "description": "",
-  "main": "generatePdf.js",
-  "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
-  },
-  "author": "",
-  "license": "ISC",
+  "description": "scrape Docusaurus docs and generate PDF",
+  "main": "docusaurus-puppeteer-pdf.js",
+  "repository": "git@github.com:DanRoscigno/scrape-to-pdf.git",
+  "author": "DanRoscigno <dan@roscigno.com>",
+  "license": "MIT",
+  "private": false,
   "dependencies": {
-    "axios": "^1.7.9",
-    "cheerio": "^1.0.0"
+    "dotenv": "^16.4.5",
+    "pdfkit": "^0.15.1",
+    "puppeteer": "^23.7.0",
+    "scroll-to-bottomjs": "^1.1.0"
   }
 }
