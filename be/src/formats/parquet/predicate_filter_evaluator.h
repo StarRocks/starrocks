@@ -22,7 +22,7 @@ namespace starrocks::parquet {
 class PredicateFilterEvaluatorUtils {
 public:
     static bool zonemap_satisfy(const std::vector<const ColumnPredicate*>& predicates, const ZoneMapDetail& detail,
-                           const CompoundNodeType pred_relation) {
+                                const CompoundNodeType pred_relation) {
         if (pred_relation == CompoundNodeType::AND) {
             return std::ranges::all_of(predicates, [&](const auto* pred) { return pred->zone_map_filter(detail); });
         } else {
@@ -54,12 +54,7 @@ struct PredicateFilterEvaluator {
         const uint64_t rg_num_rows = group_reader->get_row_group_metadata()->num_rows;
         const auto& ctx = pred_tree.compound_node_context(node.id());
         const auto& cid_to_col_preds = ctx.cid_to_col_preds(node);
-        std::cout << "before filter:" << cid_to_col_preds.size() << " " << std::endl;
         for (const auto& [cid, col_preds] : cid_to_col_preds) {
-            std::cout << "predicate filter:" << cid << " " << col_preds.size()<< std::endl;
-            for (auto pred : col_preds) {
-                std::cout << "pred:" << pred->debug_string() << std::endl;
-            }
             SparseRange<uint64_t> cur_row_ranges;
             auto* column_reader = group_reader->get_column_reader(cid);
             if (column_reader == nullptr) {
@@ -72,11 +67,10 @@ struct PredicateFilterEvaluator {
                 row_group_filtered = ret.value_or(false);
                 counter.statistics_tried_counter++;
                 counter.statistics_success_counter += row_group_filtered;
-                std::cout << "before page index filter:" << row_group_filtered << " " << enable_page_index << std::endl;
                 if (!row_group_filtered && enable_page_index) {
                     auto ret = column_reader->page_index_zone_map_filter(
-                                            col_preds, &cur_row_ranges, Type, group_reader->get_row_group_first_row(),
-                                            group_reader->get_row_group_metadata()->num_rows);
+                            col_preds, &cur_row_ranges, Type, group_reader->get_row_group_first_row(),
+                            group_reader->get_row_group_metadata()->num_rows);
                     page_filtered = ret.value_or(false);
                     counter.page_index_tried_counter++;
                     counter.page_index_success_counter += page_filtered;
@@ -84,16 +78,15 @@ struct PredicateFilterEvaluator {
                         row_group_filtered = cur_row_ranges.span_size() == 0 ? true : false;
                         counter.page_index_filter_group_counter += row_group_filtered;
                     }
-                    std::cout << "page index filter:" << page_filtered << " " << std::endl;
                 }
-                std::cout << "before bloom filter:" << row_group_filtered << " " << enable_bloom_filter << std::endl;
                 if (!row_group_filtered && enable_bloom_filter) {
-                    ret = column_reader->adaptive_judge_if_apply_bloom_filter(page_filtered ? cur_row_ranges.span_size() : rg_num_rows);
+                    ret = column_reader->adaptive_judge_if_apply_bloom_filter(page_filtered ? cur_row_ranges.span_size()
+                                                                                            : rg_num_rows);
                     if (ret.value_or(true)) {
                         ret = column_reader->row_group_bloom_filter(col_preds, Type, rg_first_row, rg_num_rows);
                         row_group_filtered = ret.value_or(false);
                         counter.bloom_filter_tried_counter++;
-                        counter.bloom_filter_success_counter++;
+                        counter.bloom_filter_success_counter += row_group_filtered;
                     }
                 }
 
@@ -102,7 +95,7 @@ struct PredicateFilterEvaluator {
                 } else if (row_group_filtered) {
                     cur_row_ranges.clear();
                 }
-            } 
+            }
 
             PredicateFilterEvaluatorUtils::merge_row_ranges<Type>(row_ranges, cur_row_ranges);
             if (Type == CompoundNodeType::AND && row_ranges->span_size() == 0) {

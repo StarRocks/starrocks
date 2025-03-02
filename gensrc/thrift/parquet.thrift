@@ -758,7 +758,7 @@ struct ColumnMetaData {
   /** Byte offset from beginning of file to Bloom filter data. **/
   14: optional i64 bloom_filter_offset;
 
-  15: optional i64 bloom_filter_length;
+  15: optional i32 bloom_filter_length;
 }
 
 struct EncryptionWithFooterKey {

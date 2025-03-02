@@ -15,9 +15,10 @@
 #include "formats/parquet/scalar_column_reader.h"
 
 #include "formats/parquet/column_reader.h"
+#include "formats/parquet/parquet_block_split_bloom_filter.h"
+#include "formats/parquet/predicate_filter_evaluator.h"
 #include "formats/parquet/stored_column_reader_with_index.h"
 #include "formats/parquet/utils.h"
-#include "formats/parquet/predicate_filter_evaluator.h"
 #include "gutil/casts.h"
 #include "io/shared_buffered_input_stream.h"
 #include "runtime/global_dict/dict_column.h"
@@ -25,7 +26,6 @@
 #include "simd/gather.h"
 #include "simd/simd.h"
 #include "statistics_helper.h"
-#include "storage/rowset/block_split_bloom_filter.h"
 
 namespace starrocks::parquet {
 
@@ -44,7 +44,7 @@ StatusOr<bool> FixedValueColumnReader::page_index_zone_map_filter(const std::vec
                                                                   CompoundNodeType pred_relation,
                                                                   const uint64_t rg_first_row,
                                                                   const uint64_t rg_num_rows) {
-    (void)row_ranges;
+    DCHECK(row_ranges->empty());
     ZoneMapDetail zone_map{_fixed_value, _fixed_value, _fixed_value.is_null()};
 
     // is_satisfy = true means no filter happened, return false
@@ -81,11 +81,9 @@ void RawColumnReader::collect_column_io_range(std::vector<io::SharedBufferedInpu
             ranges->emplace_back(r);
             *end_offset = std::max(*end_offset, offset + size);
         }
-    } 
-    std::cout << "collect page index if true:" << (types & ColumnIOType::PAGE_INDEX) << std::endl;
+    }
     if ((types & ColumnIOType::PAGE_INDEX) != 0) {
         // only active column need column index
-        std::cout << "collect page index:" << active << std::endl;
         if (column.__isset.column_index_offset && active) {
             auto r = io::SharedBufferedInputStream::IORange(column.column_index_offset, column.column_index_length);
             ranges->emplace_back(r);
@@ -93,13 +91,6 @@ void RawColumnReader::collect_column_io_range(std::vector<io::SharedBufferedInpu
         // all column need offset index
         if (column.__isset.offset_index_offset) {
             auto r = io::SharedBufferedInputStream::IORange(column.offset_index_offset, column.offset_index_length);
-            ranges->emplace_back(r);
-        }
-    }
-    if ((types & ColumnIOType::BLOOM_FILTER) != 0) {
-        if (column.meta_data.__isset.bloom_filter_offset && column.meta_data.__isset.bloom_filter_length && active) {
-            auto r = io::SharedBufferedInputStream::IORange(column.meta_data.bloom_filter_offset,
-                                                            column.meta_data.bloom_filter_length);
             ranges->emplace_back(r);
         }
     }
@@ -120,7 +111,6 @@ void RawColumnReader::select_offset_index(const SparseRange<uint64_t>& range, co
 
     size_t range_idx = 0;
     Range<uint64_t> r = range[range_idx++];
-    std::cout << "do select offset index:" << range.size() <<' ' << page_num<< ' ' << r.begin() << ' ' << r.end() << std::endl;
     for (size_t i = 0; i < page_num; i++) {
         int64_t first_row = _offset_index_ctx->offset_index.page_locations[i].first_row_index + rg_first_row;
         int64_t end_row = first_row;
@@ -216,7 +206,7 @@ StatusOr<bool> RawColumnReader::_row_group_zone_map_filter(const std::vector<con
                                                            const uint64_t rg_num_rows) const {
     bool filtered = false;
     if (!get_chunk_metadata()->meta_data.__isset.statistics || get_column_parquet_field() == nullptr) {
-        // statistics is not existed, select all
+        // statistics is not existed, don't filter
         return filtered;
     }
 
@@ -229,7 +219,7 @@ StatusOr<bool> RawColumnReader::_row_group_zone_map_filter(const std::vector<con
     } else {
         return filtered;
     }
-    
+
     std::optional<ZoneMapDetail> zone_map_detail = std::nullopt;
 
     // used to hold min/max slice values
@@ -258,7 +248,7 @@ StatusOr<bool> RawColumnReader::_row_group_zone_map_filter(const std::vector<con
     }
 
     if (!zone_map_detail.has_value()) {
-        // ZoneMapDetail not set, means select all
+        // ZoneMapDetail not set, means select all, dont filter
         return filtered;
     }
 
@@ -270,7 +260,6 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
                                                             CompoundNodeType pred_relation,
                                                             const TypeDescriptor& col_type, const uint64_t rg_first_row,
                                                             const uint64_t rg_num_rows) {
-    std::cout << "begin page index zone map filter" << row_ranges->size() << std::endl;
     const tparquet::ColumnChunk* chunk_meta = get_chunk_metadata();
     if (!chunk_meta->__isset.column_index_offset || !chunk_meta->__isset.offset_index_offset ||
         !chunk_meta->__isset.meta_data) {
@@ -341,7 +330,6 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
     }
 
     for (int i = 0; i < page_num; i++) {
-        std::cout <<"page"<< i << ":" << (int)selected[i] << std::endl;
         if (selected[i]) {
             int64_t first_row = offset_index->page_locations[i].first_row_index + rg_first_row;
             int64_t end_row = first_row;
@@ -356,7 +344,7 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
     return true;
 }
 
-Status RawColumnReader::_init_column_bloom_filter(int offset, int length, BloomFilter &bloom_filter) const {
+Status RawColumnReader::_init_column_bloom_filter(int offset, int length, BloomFilter& bloom_filter) const {
     std::vector<char> bloom_filter_data;
     tparquet::BloomFilterHeader header;
     uint32_t header_len = SBBF_HEADER_SIZE_ESTIMATE;
@@ -369,14 +357,15 @@ Status RawColumnReader::_init_column_bloom_filter(int offset, int length, BloomF
         RETURN_IF_ERROR(_opts.file->read_at_fully(offset, bloom_filter_data.data(), header_len));
     }
 
-    RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8*>(bloom_filter_data.data()), 
-                                                 &header_len, TProtocolType::COMPACT, &header));
+    RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8*>(bloom_filter_data.data()), &header_len,
+                                           TProtocolType::COMPACT, &header));
     if (length == 0) {
         bloom_filter_data.resize(header_len + header.numBytes + 1);
-        RETURN_IF_ERROR(_opts.file->read_at_fully(offset + header_len, bloom_filter_data.data() + header_len, header.numBytes));
+        RETURN_IF_ERROR(
+                _opts.file->read_at_fully(offset + header_len, bloom_filter_data.data() + header_len, header.numBytes));
     }
-    std::cout << "bloom filter data size:" <<  bloom_filter_data.size() << std::endl;
-    if (get_chunk_metadata()->meta_data.__isset.statistics && get_chunk_metadata()->meta_data.statistics.__isset.null_count) {
+    if (get_chunk_metadata()->meta_data.__isset.statistics &&
+        get_chunk_metadata()->meta_data.statistics.__isset.null_count) {
         if (get_chunk_metadata()->meta_data.statistics.null_count > 0) {
             bloom_filter_data.back() = 1;
         } else {
@@ -388,47 +377,53 @@ Status RawColumnReader::_init_column_bloom_filter(int offset, int length, BloomF
         bloom_filter_data.back() = 0;
     }
 
-    return bloom_filter.init(bloom_filter_data.data() + header_len, header.numBytes + 1, HashStrategyPB::XXHASH64);
+    return bloom_filter.init(bloom_filter_data.data() + header_len, header.numBytes + 1, Hasher::HashStrategy::XXHASH64,
+                             0);
 }
 
 StatusOr<bool> RawColumnReader::_row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                       CompoundNodeType pred_relation, 
-                                       const TypeDescriptor& col_type,
-                                       const uint64_t rg_first_row,
-                                       const uint64_t rg_num_rows) const {
+                                                        CompoundNodeType pred_relation, const TypeDescriptor& col_type,
+                                                        const uint64_t rg_first_row, const uint64_t rg_num_rows) const {
     bool filtered = false;
-    auto &column_metadata = get_chunk_metadata()->meta_data;
+    if (get_chunk_metadata() == nullptr) {
+        return filtered;
+    }
+    auto& column_metadata = get_chunk_metadata()->meta_data;
     bool has_bloom_filter = column_metadata.__isset.bloom_filter_offset;
-    std::cout << "try bloom filter exist:" << std::to_string(has_bloom_filter) << std::endl;
     if (!has_bloom_filter) {
-        // bloom filter is not existed, select all
+        // bloom filter is not existed, select all, dont filtered
         return filtered = false;
     } else if (get_column_parquet_field() == nullptr) {
         // which scenerio will reach here? is it unexpected?
         return filtered = false;
     }
-    std::cout << "try bloom filter here 2" << col_type <<" " << get_column_parquet_field()->physical_type <<std::endl;
-    bool appliable = check_type_can_apply_bloom_filter(col_type, *get_column_parquet_field());
-    std::cout << "try bloom filter here 3"<< std::endl;
-    if (appliable) { 
-        std::cout << "try bloom filter here 5"<< std::endl;
 
+    bool applicable = check_type_can_apply_bloom_filter(col_type, *get_column_parquet_field());
+    if (applicable) {
         int32_t offset = column_metadata.bloom_filter_offset;
-        BlockSplitBloomFilter bloom_filter(BlockSplitBloomFilter::mode::PARQUET);
-        std::cout << "try bloom filter here 6"<< std::endl;
-        //parquet format version>= 2.10 has the bloom filter length info. 
-        if (column_metadata.__isset.bloom_filter_length) {
-            RETURN_IF_ERROR(_init_column_bloom_filter(offset, column_metadata.bloom_filter_length, bloom_filter));
-        } else {
-            RETURN_IF_ERROR(_init_column_bloom_filter(offset, 0, bloom_filter));
-        }
-        std::cout << "try bloom filter here 7"<< std::endl;
+        ParquetBlockSplitBloomFilter bloom_filter;
+        //parquet format version>= 2.10 has the bloom filter length info.
         if (predicates.empty()) {
             return filtered = false;
-        } else if (pred_relation == CompoundNodeType::AND) {
+        } else {
+            bool has_bloom_filter_pred =
+                    std::ranges::any_of(predicates, [](auto& pred) { return pred->support_original_bloom_filter(); });
+
+            if (has_bloom_filter_pred) {
+                if (column_metadata.__isset.bloom_filter_length) {
+                    RETURN_IF_ERROR(
+                            _init_column_bloom_filter(offset, column_metadata.bloom_filter_length, bloom_filter));
+                } else {
+                    RETURN_IF_ERROR(_init_column_bloom_filter(offset, 0, bloom_filter));
+                }
+            } else {
+                return filtered = false;
+            }
+        }
+
+        if (pred_relation == CompoundNodeType::AND) {
             filtered = std::ranges::any_of(predicates, [&bloom_filter](auto& pred) {
-                std::cout << "try bloom filter here 8" << pred->debug_string() << std::endl;
-                //TODO: implement parquet_bloom_filter(bloom_filter, col_type, parquet_logical_type, parquet_physical_type) interface, 
+                //TODO: implement parquet_bloom_filter(bloom_filter, col_type, parquet_logical_type, parquet_physical_type) interface,
                 //      and change the value data type to parquet value data type.
                 return pred->support_original_bloom_filter() && !pred->original_bloom_filter(&bloom_filter);
             });
@@ -439,8 +434,6 @@ StatusOr<bool> RawColumnReader::_row_group_bloom_filter(const std::vector<const 
         }
     }
 
-    std::cout << "if bloom filter filter the row group:" << filtered << std::endl;
-    
     return filtered;
 }
 
@@ -584,6 +577,21 @@ Status ScalarColumnReader::_fill_dst_column_impl(ColumnPtr& dst, ColumnPtr& src)
     return Status::OK();
 }
 
+void ScalarColumnReader::collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
+                                                 int64_t* end_offset, ColumnIOTypeFlags types, bool active) {
+    RawColumnReader::collect_column_io_range(ranges, end_offset, types, active);
+    const auto& column = *get_chunk_metadata();
+    if ((types & ColumnIOType::BLOOM_FILTER) != 0) {
+        if (column.meta_data.__isset.bloom_filter_offset && column.meta_data.__isset.bloom_filter_length && active) {
+            if (check_type_can_apply_bloom_filter(*_col_type, *get_column_parquet_field())) {
+                auto r = io::SharedBufferedInputStream::IORange(column.meta_data.bloom_filter_offset,
+                                                                column.meta_data.bloom_filter_length);
+                ranges->emplace_back(r);
+            }
+        }
+    }
+}
+
 // LowCardColumnReader
 
 Status LowCardColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
@@ -703,6 +711,21 @@ Status LowCardColumnReader::_check_current_dict() {
     return Status::OK();
 }
 
+void LowCardColumnReader::collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
+                                                  int64_t* end_offset, ColumnIOTypeFlags types, bool active) {
+    RawColumnReader::collect_column_io_range(ranges, end_offset, types, active);
+    const auto& column = *get_chunk_metadata();
+    if ((types & ColumnIOType::BLOOM_FILTER) != 0) {
+        if (column.meta_data.__isset.bloom_filter_offset && column.meta_data.__isset.bloom_filter_length && active) {
+            if (check_type_can_apply_bloom_filter(TypeDescriptor(TYPE_VARCHAR), *get_column_parquet_field())) {
+                auto r = io::SharedBufferedInputStream::IORange(column.meta_data.bloom_filter_offset,
+                                                                column.meta_data.bloom_filter_length);
+                ranges->emplace_back(r);
+            }
+        }
+    }
+}
+
 // LowRowsColumnReader
 
 Status LowRowsColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
@@ -755,4 +778,20 @@ Status LowRowsColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
 
     return Status::OK();
 }
+
+void LowRowsColumnReader::collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
+                                                  int64_t* end_offset, ColumnIOTypeFlags types, bool active) {
+    RawColumnReader::collect_column_io_range(ranges, end_offset, types, active);
+    const auto& column = *get_chunk_metadata();
+    if ((types & ColumnIOType::BLOOM_FILTER) != 0) {
+        if (column.meta_data.__isset.bloom_filter_offset && column.meta_data.__isset.bloom_filter_length && active) {
+            if (check_type_can_apply_bloom_filter(TypeDescriptor(TYPE_VARCHAR), *get_column_parquet_field())) {
+                auto r = io::SharedBufferedInputStream::IORange(column.meta_data.bloom_filter_offset,
+                                                                column.meta_data.bloom_filter_length);
+                ranges->emplace_back(r);
+            }
+        }
+    }
+}
+
 } // namespace starrocks::parquet

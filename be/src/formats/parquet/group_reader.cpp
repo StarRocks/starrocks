@@ -29,9 +29,9 @@
 #include "exprs/expr_context.h"
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/metadata.h"
+#include "formats/parquet/predicate_filter_evaluator.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
-#include "formats/parquet/predicate_filter_evaluator.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
@@ -75,12 +75,11 @@ Status GroupReader::init() {
     return Status::OK();
 }
 
-
 Status GroupReader::prepare() {
     RETURN_IF_ERROR(_prepare_column_readers());
     // we need deal with page index first, so that it can work on collect_io_range,
     // and pageindex's io has been collected in FileReader
-//    RETURN_IF_ERROR(_deal_with_pageindex());
+
     if (_range.span_size() != get_row_group_metadata()->num_rows) {
         for (const auto& pair : _column_readers) {
             pair.second->select_offset_index(_range, _row_group_first_row);
@@ -102,9 +101,7 @@ Status GroupReader::prepare() {
             _param.stats->group_active_lazy_coalesce_seperately += 1;
         }
         _set_end_offset(end_offset);
-        std::cout << "prepare ranges:" << ranges.size() << " " << _param.sb_stream->current_range_ref_sum()<< std::endl;
-         RETURN_IF_ERROR(_param.sb_stream->set_io_ranges(ranges, counter >= 0));
-         std::cout << "prepare ranges2:" << ranges.size() << " " << _param.sb_stream->current_range_ref_sum()<< std::endl;
+        RETURN_IF_ERROR(_param.sb_stream->set_io_ranges(ranges, counter >= 0));
     }
 
     RETURN_IF_ERROR(_rewrite_conjunct_ctxs_to_predicates(&_is_group_filtered));
@@ -462,7 +459,6 @@ void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::I
                                     ColumnIOTypeFlags types) {
     int64_t end = 0;
     // collect io of active column
-    std::cout << "collect io ranges:" << types << " cols:" << _active_column_indices.size() <<" "<< _lazy_column_indices.size() << std::endl;
     for (const auto& index : _active_column_indices) {
         const auto& column = _param.read_cols[index];
         SlotId slot_id = column.slot_id();

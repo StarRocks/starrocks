@@ -51,8 +51,9 @@ public:
                                               SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
                                               const uint64_t rg_first_row, const uint64_t rg_num_rows) override;
 
-    StatusOr<bool> row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates, CompoundNodeType pred_relation,
-                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) const override {
+    StatusOr<bool> row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                          CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                          const uint64_t rg_num_rows) const override {
         //row_group_zone_map_filter should always be effective, bloom filter is not neccessary.
         return Status::NotSupported("Not implemented");
     }
@@ -111,7 +112,7 @@ public:
     bool column_all_pages_dict_encoded() const;
 
 private:
-    Status _init_column_bloom_filter(int32_t offset, int32_t length, BloomFilter &bloom_filter) const;
+    Status _init_column_bloom_filter(int32_t offset, int32_t length, BloomFilter& bloom_filter) const;
 
 protected:
     StatusOr<bool> _row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
@@ -124,10 +125,8 @@ protected:
                                                const uint64_t rg_num_rows);
 
     StatusOr<bool> _row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                           CompoundNodeType pred_relation, 
-                                           const TypeDescriptor& col_type,
-                                           const uint64_t rg_first_row,
-                                           const uint64_t rg_num_rows) const;
+                                           CompoundNodeType pred_relation, const TypeDescriptor& col_type,
+                                           const uint64_t rg_first_row, const uint64_t rg_num_rows) const;
 
     const ColumnReaderOptions& _opts;
 
@@ -183,17 +182,18 @@ public:
     StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                               SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
                                               const uint64_t rg_first_row, const uint64_t rg_num_rows) override {
-        std::cout << "page index: scalar value column reader " << std::endl;
         return _page_index_zone_map_filter(predicates, row_ranges, pred_relation, *_col_type, rg_first_row,
                                            rg_num_rows);
     }
 
     StatusOr<bool> row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                              CompoundNodeType pred_relation,
-                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) const override {
-        return _row_group_bloom_filter(predicates, pred_relation,
-                                           *_col_type, rg_first_row, rg_num_rows);
+                                          CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                          const uint64_t rg_num_rows) const override {
+        return _row_group_bloom_filter(predicates, pred_relation, *_col_type, rg_first_row, rg_num_rows);
     }
+
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOTypeFlags types, bool active) override;
 
 private:
     template <bool LAZY_DICT_DECODE, bool LAZY_CONVERT>
@@ -256,16 +256,19 @@ public:
     StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                               SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
                                               const uint64_t rg_first_row, const uint64_t rg_num_rows) override {
-        std::cout << "page index:  low card column reader " << std::endl;
         return _page_index_zone_map_filter(predicates, row_ranges, pred_relation,
                                            TypeDescriptor(LogicalType::TYPE_VARCHAR), rg_first_row, rg_num_rows);
     }
 
-    StatusOr<bool> row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates, CompoundNodeType pred_relation,
-                                              const uint64_t rg_first_row, const uint64_t rg_num_rows) const override {
-        return _row_group_bloom_filter(predicates, pred_relation,
-                                           TypeDescriptor(LogicalType::TYPE_VARCHAR), rg_first_row, rg_num_rows);
+    StatusOr<bool> row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                          CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                          const uint64_t rg_num_rows) const override {
+        return _row_group_bloom_filter(predicates, pred_relation, TypeDescriptor(LogicalType::TYPE_VARCHAR),
+                                       rg_first_row, rg_num_rows);
     }
+
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOTypeFlags types, bool active) override;
 
 private:
     Status _check_current_dict();
@@ -300,10 +303,12 @@ public:
     StatusOr<bool> page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                               SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
                                               const uint64_t rg_first_row, const uint64_t rg_num_rows) override {
-        std::cout << "page index:  low rows column reader " << std::endl;
         return _page_index_zone_map_filter(predicates, row_ranges, pred_relation,
                                            TypeDescriptor(LogicalType::TYPE_VARCHAR), rg_first_row, rg_num_rows);
     }
+
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOTypeFlags types, bool active) override;
 
 private:
     const GlobalDictMap* _dict = nullptr;

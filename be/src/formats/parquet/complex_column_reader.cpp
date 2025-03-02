@@ -18,8 +18,8 @@
 #include "column/map_column.h"
 #include "column/struct_column.h"
 #include "exprs/literal.h"
-#include "formats/parquet/schema.h"
 #include "formats/parquet/predicate_filter_evaluator.h"
+#include "formats/parquet/schema.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "storage/column_expr_predicate.h"
@@ -358,12 +358,12 @@ StatusOr<bool> StructColumnReader::row_group_zone_map_filter(const std::vector<c
 
     std::vector<const ColumnPredicate*> rewritten_predicates;
     RETURN_IF_ERROR(_rewrite_column_expr_predicate(&pool, predicates, rewritten_predicates));
-
-    if (pred_relation == CompoundNodeType::AND) {
+    if (rewritten_predicates.empty()) {
+        return false;
+    } else if (pred_relation == CompoundNodeType::AND) {
         return std::ranges::any_of(rewritten_predicates, [&](const auto* pred) { return is_filtered(pred); });
     } else {
-        return !rewritten_predicates.empty() ||
-               std::ranges::all_of(rewritten_predicates, [&](const auto* pred) { return is_filtered(pred); });
+        return std::ranges::all_of(rewritten_predicates, [&](const auto* pred) { return is_filtered(pred); });
     }
 }
 
@@ -371,7 +371,6 @@ StatusOr<bool> StructColumnReader::page_index_zone_map_filter(const std::vector<
                                                               SparseRange<uint64_t>* row_ranges,
                                                               CompoundNodeType pred_relation,
                                                               const uint64_t rg_first_row, const uint64_t rg_num_rows) {
-    std::cout << "page index: struct value column reader " << std::endl;
     DCHECK(row_ranges->empty());
     ObjectPool pool;
 
@@ -427,42 +426,44 @@ StatusOr<bool> StructColumnReader::page_index_zone_map_filter(const std::vector<
 }
 
 StatusOr<bool> StructColumnReader::row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                                             CompoundNodeType pred_relation,
-                                                             const uint64_t rg_first_row,
-                                                             const uint64_t rg_num_rows) const {
+                                                          CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                                          const uint64_t rg_num_rows) const {
     ObjectPool pool;
 
     auto is_filtered = [&](const ColumnPredicate* predicate) -> bool {
         std::vector<std::string> subfield{};
         auto res = _try_to_rewrite_subfield_expr(&pool, predicate, &subfield);
         // rewrite failed, always return true, select all
-        std::cout << "struct group bloom filter1" << std::endl;
         RETURN_IF(!res.ok(), false);
 
         ColumnPredicate* rewritten_subfield_predicate = res.value();
         pool.add(rewritten_subfield_predicate);
-        //down_cast<ColumnExprPredicate*>(rewritten_subfield_predicate)->get_expr_ctxs().front()->root()->get_child(1)->evaluate_checked()->);
-        auto root = down_cast<ColumnExprPredicate*>(rewritten_subfield_predicate)->get_expr_ctxs().front()->root();
-        auto literal = down_cast<const VectorizedLiteral*>(root->get_child(1));
-        auto val = down_cast<const ConstColumn *>(literal->value().get())->data_column()->debug_item(0);
-        std::cout << "right value:" << val << std::endl;
+        const auto root =
+                down_cast<ColumnExprPredicate*>(rewritten_subfield_predicate)->get_expr_ctxs().front()->root();
+        if (root->op() != TExprOpcode::EQ) {
+            return false;
+        }
+        if (!root->get_child(1)->is_literal()) {
+            return false;
+        }
+        auto val = down_cast<const VectorizedLiteral*>(root->get_child(1))->value();
+        if (!val || !val->is_constant()) {
+            return false;
+        }
+        auto val_str = down_cast<const ConstColumn*>(val.get())->data_column()->debug_item(0);
         auto t = get_type_info(root->get_child(1)->type().type);
-        std::cout << "Type:" << t->type() << " OP:" << rewritten_subfield_predicate->type() << std::endl;
-        auto pred = new_column_cmp_predicate(rewritten_subfield_predicate->type(), t, rewritten_subfield_predicate->column_id(), val);
-        std::cout << " more info :" << pred->debug_string() << std::endl;
+        ColumnPredicate* pred = nullptr;
+        pred = new_column_eq_predicate(t, rewritten_subfield_predicate->column_id(), val_str);
+        DCHECK(pred != nullptr);
+        pool.add(pred);
+
         const ColumnReader* column_reader = get_child_column_reader(subfield);
-        std::cout << "struct group bloom filter2" << std::endl;
         RETURN_IF(column_reader == nullptr, false);
-        std::cout << "struct group bloom filter3" << std::endl;
         // make sure ColumnReader is scalar column
         RETURN_IF(column_reader->get_column_parquet_field()->type != ColumnType::SCALAR, false);
-        std::cout << "struct group bloom filter4" << std::endl;
-        auto ret = column_reader->row_group_bloom_filter({pred}, pred_relation, rg_first_row,
-                                                            rg_num_rows);
-        std::cout << "struct group bloom filter5:" <<subfield[0] << " " <<  ret.value_or(false) << std::endl;
+        auto ret = column_reader->row_group_bloom_filter({pred}, pred_relation, rg_first_row, rg_num_rows);
         return ret.value_or(false);
     };
-    std::cout << "struct group bloom filter" << std::endl;
     if (predicates.empty()) {
         return false;
     } else if (pred_relation == CompoundNodeType::AND) {
@@ -501,18 +502,16 @@ ColumnReader* StructColumnReader::get_child_column_reader(const std::vector<std:
 StatusOr<ColumnPredicate*> StructColumnReader::_try_to_rewrite_subfield_expr(
         ObjectPool* pool, const ColumnPredicate* predicate, std::vector<std::string>* subfield_output) const {
     // make sure it's expr predicate
-    std::cout << "try to rewrite subfield expr0" <<std::endl;
     if (!predicate->is_expr_predicate()) {
         return Status::InternalError("Predicate is not an expression predicate");
     }
-    std::cout << "try to rewrite subfield expr1" <<std::endl;
+
     const ColumnExprPredicate* expr_predicate = down_cast<const ColumnExprPredicate*>(predicate);
     const std::vector<ExprContext*>& expr_contexts = expr_predicate->get_expr_ctxs();
     if (expr_contexts.size() != 1) {
         // just defense code, make sure each ColumnExprPredicate has only one ExprContext
         return Status::InternalError("ColumnExprPredicate should has one ExprContext");
     }
-    std::cout << "try to rewrite subfield expr2" <<std::endl;
 
     ExprContext* expr_context = expr_contexts[0];
     // Get root_expr like:
@@ -528,9 +527,6 @@ StatusOr<ColumnPredicate*> StructColumnReader::_try_to_rewrite_subfield_expr(
 
     Expr* subfield_expr = expr_children[0];
     Expr* right_expr = expr_children[1];
-    std::cout << "try to rewrite subfield expr3" <<root_expr->debug_string()<<':'<< root_expr->is_monotonic() 
-            <<" "<<subfield_expr->debug_string()<< ':' <<subfield_expr->is_monotonic() << ' ' << right_expr->debug_string()
-            << ":" <<right_expr->is_monotonic() <<std::endl;
 
     // check exprs are monotonic
     if (root_expr->op() != TExprOpcode::type::EQ && !root_expr->is_monotonic()) {
@@ -538,7 +534,6 @@ StatusOr<ColumnPredicate*> StructColumnReader::_try_to_rewrite_subfield_expr(
     } else if (!subfield_expr->is_monotonic() || !right_expr->is_monotonic()) {
         return Status::InternalError("Predicate's expr is not monotonic");
     }
-    std::cout << "try to rewrite subfield expr4" <<std::endl;
 
     std::vector<std::vector<std::string>> subfields{};
     int num_subfield = subfield_expr->get_subfields(&subfields);
@@ -546,14 +541,13 @@ StatusOr<ColumnPredicate*> StructColumnReader::_try_to_rewrite_subfield_expr(
         // must only exist one subfield
         return Status::InternalError("Should have only one subfield path");
     }
-    std::cout << "try to rewrite subfield expr5" <<std::endl;
+
     subfield_output->insert(subfield_output->end(), subfields[0].begin(), subfields[0].end());
 
     // check subfield expr has only one child, and it's a SlotRef
     if (subfield_expr->children().size() != 1 && !subfield_expr->get_child(0)->is_slotref()) {
         return Status::InternalError("Invalid pattern for predicate");
     }
-    std::cout << "try to rewrite subfield expr6" <<std::endl;
 
     // extract subfield expr's SlotRef, and copy it
     Expr* new_slot_expr = Expr::copy(pool, subfield_expr->get_child(0));
@@ -566,7 +560,6 @@ StatusOr<ColumnPredicate*> StructColumnReader::_try_to_rewrite_subfield_expr(
     const auto rewritten_expr = std::make_unique<ExprContext>(new_root_expr);
     RETURN_IF_ERROR(rewritten_expr->prepare(expr_predicate->runtime_state()));
     RETURN_IF_ERROR(rewritten_expr->open(expr_predicate->runtime_state()));
-    std::cout << "try to rewrite subfield expr7" <<std::endl;
     return ColumnExprPredicate::make_column_expr_predicate(
             get_type_info(subfield_expr->type().type, subfield_expr->type().precision, subfield_expr->type().scale),
             expr_predicate->column_id(), expr_predicate->runtime_state(), rewritten_expr.get(),

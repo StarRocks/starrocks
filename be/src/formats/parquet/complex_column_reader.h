@@ -223,8 +223,8 @@ public:
                                               const uint64_t rg_first_row, const uint64_t rg_num_rows) override;
 
     StatusOr<bool> row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                             CompoundNodeType pred_relation, const uint64_t rg_first_row,
-                                             const uint64_t rg_num_rows) const override;
+                                          CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                          const uint64_t rg_num_rows) const override;
 
     ColumnReader* get_child_column_reader(const std::string& subfield) const;
 

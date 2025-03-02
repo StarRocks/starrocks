@@ -41,8 +41,8 @@
 #include "column/column_helper.h"
 #include "column/column_viewer.h"
 #include "storage/chunk_helper.h"
-#include "storage/rowset/bloom_filter.h"
 #include "storage/types.h"
+#include "util/bloom_filter.h"
 
 namespace starrocks {
 

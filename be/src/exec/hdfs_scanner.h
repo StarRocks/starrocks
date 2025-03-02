@@ -56,7 +56,7 @@ struct OptimizationCounter {
     int page_index_tried_counter = 0;
     int page_index_filter_group_counter = 0;
     int page_index_success_counter = 0;
-    OptimizationCounter& operator += (const OptimizationCounter& counter) {
+    OptimizationCounter& operator+=(const OptimizationCounter& counter) {
         bloom_filter_tried_counter += counter.bloom_filter_tried_counter;
         bloom_filter_success_counter += counter.bloom_filter_success_counter;
         statistics_tried_counter += counter.statistics_tried_counter;

@@ -14,13 +14,13 @@
 
 #pragma once
 
+#include <parquet/types.h>
 #include <stddef.h>
 #include <stdint.h>
 
 #include <memory>
 #include <string>
 #include <vector>
-#include <parquet/types.h>
 
 #include "column/column.h"
 #include "column/vectorized_fwd.h"
@@ -35,7 +35,6 @@
 #include "storage/predicate_tree/predicate_tree_fwd.h"
 #include "storage/range.h"
 #include "types/logical_type.h"
-#include "formats/parquet/encoding_plain.h"
 
 namespace tparquet {
 class ColumnChunk;
@@ -169,11 +168,11 @@ public:
 
     virtual void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) = 0;
 
-    // Return true means selected, return false means not selected
+    // Return true means filtered, return false means don't filter
     virtual StatusOr<bool> row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                                      CompoundNodeType pred_relation, const uint64_t rg_first_row,
                                                      const uint64_t rg_num_rows) const {
-        // not implemented, select the whole row group by default
+        // not implemented, don't filter
         return false;
     }
 
@@ -187,8 +186,8 @@ public:
     }
 
     virtual StatusOr<bool> row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
-                                                  CompoundNodeType pred_relation,
-                                                      const uint64_t rg_first_row, const uint64_t rg_num_rows) const {
+                                                  CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                                  const uint64_t rg_num_rows) const {
         return false;
     }
 

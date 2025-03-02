@@ -127,9 +127,9 @@ public:
 
     SparseRange<uint64_t> get_range() const { return _range; }
     SparseRange<uint64_t>& get_range() { return _range; }
-    std::unordered_map<SlotId, std::unique_ptr<ColumnReader>>& get_column_readers() { return _column_readers; }
     const bool get_is_group_filtered() const { return _is_group_filtered; }
     bool& get_is_group_filtered() { return _is_group_filtered; }
+
 private:
     void _set_end_offset(int64_t value) { _end_offset = value; }
 

@@ -199,59 +199,22 @@ bool ColumnReader::check_type_can_apply_bloom_filter(const TypeDescriptor& col_t
 }
 
 StatusOr<bool> ColumnReader::adaptive_judge_if_apply_bloom_filter(int64_t span_size) const {
-    std::cout << "adaptive_judge_if_apply_bloom_filter0" << std::endl;
-    if (!config::parquet_enable_adpative_bloom_filter) {
-        return true;
+    bool apply_bloom_filter = true;
+    if (!config::parquet_reader_enable_adpative_bloom_filter) {
+        return apply_bloom_filter = false;
     } else if (get_chunk_metadata() == nullptr) {
-        return true;
+        return apply_bloom_filter = true;
     }
-    std::cout << "adaptive_judge_if_apply_bloom_filter" << std::endl;
+
     auto& column_metadata = get_chunk_metadata()->meta_data;
-    std::cout <<"isset statistics" << column_metadata.__isset.statistics << "set distinct count" << column_metadata.statistics.__isset.distinct_count << std::endl;
-    if (column_metadata.__isset.statistics && column_metadata.statistics.__isset.distinct_count) {
-        auto distinct_count = column_metadata.statistics.distinct_count;
-        std::cout <<"isset bloom filter" << column_metadata.__isset.bloom_filter_length  << "distinct val: " << distinct_count<< std::endl;
-        if (column_metadata.__isset.bloom_filter_length) {
-            if (1.0 * distinct_count / column_metadata.bloom_filter_length >
-                config::parquet_bloom_filter_ndv_size_ratio_threshold) {
-                return false;
-            }
-        }
-        std::cout <<"isset statistic min max" << column_metadata.statistics.__isset.min_value << " and " <<
-           column_metadata.statistics.__isset.max_value << std::endl;
-        if (column_metadata.statistics.__isset.min_value && column_metadata.statistics.__isset.max_value) {
-            auto field = get_column_parquet_field();
-            std::cout << "logical type is int" << field->schema_element.logicalType.__isset.INTEGER << std::endl;
-            if (field && (field->schema_element.logicalType.__isset.INTEGER)) {
-                if (field->physical_type == tparquet::Type::type::INT32) {
-                    int32_t min_val, max_val;
-                    RETURN_IF_ERROR(PlainDecoder<int32_t>::decode(column_metadata.statistics.min_value, &min_val));
-                    RETURN_IF_ERROR(PlainDecoder<int32_t>::decode(column_metadata.statistics.max_value, &max_val));
-                    std::cout << "int32 physical type" << min_val << " " << max_val << std::endl;
-                    if (1.0 * distinct_count / (max_val - min_val) >
-                        config::parquet_bloom_filter_ndv_range_ratio_threshold) {
-                        return false;
-                    }
-                } else if (field->physical_type == tparquet::Type::type::INT64) {
-                    int64_t min_val, max_val;
-                    RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(column_metadata.statistics.min_value, &min_val));
-                    RETURN_IF_ERROR(PlainDecoder<int64_t>::decode(column_metadata.statistics.max_value, &max_val));
-                    if (1.0 * distinct_count / (max_val - min_val) >
-                        config::parquet_bloom_filter_ndv_range_ratio_threshold) {
-                        return false;
-                    }
-                }
-            }
-        }
-    }
-    std::cout << "bf lgength set: " << column_metadata.__isset.bloom_filter_length;
+
     if (column_metadata.__isset.bloom_filter_length) {
         if (1.0 * span_size / column_metadata.num_values * column_metadata.total_compressed_size <=
             column_metadata.bloom_filter_length) {
-            return false;
+            return apply_bloom_filter = false;
         }
     }
-    return true;
+    return apply_bloom_filter;
 }
 
 } // namespace starrocks::parquet

@@ -23,8 +23,8 @@
 #include "storage/column_predicate.h"
 #include "storage/in_predicate_utils.h"
 #include "storage/rowset/bitmap_index_reader.h"
-#include "storage/rowset/bloom_filter.h"
 #include "types/logical_type.h"
+#include "util/bloom_filter.h"
 
 namespace starrocks {
 

@@ -116,7 +116,6 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* bloom_filter_tried_counter = nullptr;
     RuntimeProfile::Counter* bloom_filter_success_counter = nullptr;
 
-
     ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::NONE);
     request_bytes_read = ADD_CHILD_COUNTER(root, "RequestBytesRead", TUnit::BYTES, kParquetProfileSectionPrefix);
     request_bytes_read_uncompressed =
@@ -159,7 +158,8 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     filtered_row_groups = ADD_CHILD_COUNTER(root, "FilteredRowGroups", TUnit::UNIT, kParquetProfileSectionPrefix);
     ADD_CHILD_COUNTER(root, "ReaderFilterCounter", TUnit::NONE, kParquetProfileSectionPrefix);
     statistics_tried_counter = ADD_CHILD_COUNTER(root, "StatisticsTriedCounter", TUnit::UNIT, "ReaderFilterCounter");
-    statistics_success_counter = ADD_CHILD_COUNTER(root, "StatisticsSuccessCounter", TUnit::UNIT, "ReaderFilterCounter");
+    statistics_success_counter =
+            ADD_CHILD_COUNTER(root, "StatisticsSuccessCounter", TUnit::UNIT, "ReaderFilterCounter");
     page_index_tried_counter = ADD_CHILD_COUNTER(root, "PageIndexTriedCounter", TUnit::UNIT, "ReaderFilterCounter");
     page_index_success_counter = ADD_CHILD_COUNTER(root, "PageIndexSuccessCounter", TUnit::UNIT, "ReaderFilterCounter");
     page_index_filter_group_counter =
