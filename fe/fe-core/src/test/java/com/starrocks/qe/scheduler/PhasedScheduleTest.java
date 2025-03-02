@@ -20,6 +20,7 @@ import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.FragmentInstanceExecState;
 import com.starrocks.qe.scheduler.slot.DeployState;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import mockit.Mock;
 import mockit.MockUp;
@@ -123,6 +124,40 @@ public class PhasedScheduleTest extends SchedulerTestBase {
         Assert.assertFalse(noDispatched.isEmpty());
 
         parallelReport(noDispatched, executionDAG, coordinator);
+
+    }
+
+    @Test
+    public void testScheduleWithException() throws Exception {
+        connectContext.getSessionVariable().setEnablePhasedScheduler(true);
+        connectContext.getSessionVariable().setPhasedSchedulerMaxConcurrency(1);
+
+        String sql = "select count(1) from lineitem " +
+                "UNION ALL select count(1) from lineitem " +
+                "UNION ALL select count(1) from lineitem";
+
+        Set<FragmentInstanceExecState> dispatched = Sets.newHashSet();
+        // deploy
+        new MockUp<FragmentInstanceExecState>() {
+            @Mock
+            public void deployAsync() {
+
+            }
+
+            @Mock
+            public FragmentInstanceExecState.DeploymentResult waitForDeploymentCompletion(long deployTimeoutMs) {
+                return new FragmentInstanceExecState.DeploymentResult(TStatusCode.CANCELLED,
+                        "QueryFinished", null);
+            }
+        };
+
+        // firstly schedule
+        final DefaultCoordinator coordinator = startScheduling(sql);
+        final ExecutionDAG executionDAG = coordinator.getExecutionDAG();
+
+        parallelReport(Sets.newHashSet(dispatched), executionDAG, coordinator);
+
+        executionDAG.getExecutions();
 
     }
 

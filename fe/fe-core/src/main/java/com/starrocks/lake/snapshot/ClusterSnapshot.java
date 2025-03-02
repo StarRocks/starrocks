@@ -21,7 +21,9 @@ import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TClusterSnapshotsItem;
 
 public class ClusterSnapshot {
-    public enum ClusterSnapshotType { AUTOMATED, MANUAL, INCREMENTAL }
+    public enum ClusterSnapshotType {
+        AUTOMATED, MANUAL, INCREMENTAL
+    }
 
     @SerializedName(value = "id")
     private long id;
@@ -40,10 +42,11 @@ public class ClusterSnapshot {
     @SerializedName(value = "starMgrJournal")
     private long starMgrJournalId;
 
-    public ClusterSnapshot() {}
+    public ClusterSnapshot() {
+    }
 
     public ClusterSnapshot(long id, String snapshotName, String storageVolumeName, long createdTimeMs,
-                           long finishedTimeMs, long feJournalId, long starMgrJournalId) {
+            long finishedTimeMs, long feJournalId, long starMgrJournalId) {
         this.id = id;
         this.snapshotName = snapshotName;
         this.type = ClusterSnapshotType.AUTOMATED;

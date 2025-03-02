@@ -3888,11 +3888,11 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### datacache_enable
 
-- 默认值：false
+- 默认值：true
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：是否启用 Data Cache。`true` 表示启用，`false` 表示不启用。
+- 描述：是否启用 Data Cache。`true` 表示启用，`false` 表示不启用。自 v3.3 起，默认值变为 `true`。
 - 引入版本：-
 
 ##### datacache_mem_size
@@ -3987,7 +3987,7 @@ curl http://<BE_IP>:<BE_HTTP_PORT>/varz
 
 ##### datacache_tiered_cache_enable
 
-- 默认值：true
+- 默认值：false
 - 类型：Boolean
 - 单位：-
 - 是否动态：否

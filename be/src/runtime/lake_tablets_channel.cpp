@@ -45,6 +45,7 @@
 #include "util/countdown_latch.h"
 #include "util/runtime_profile.h"
 #include "util/stack_trace_mutex.h"
+#include "util/starrocks_metrics.h"
 
 namespace starrocks {
 
@@ -301,6 +302,9 @@ Status LakeTabletsChannel::open(const PTabletWriterOpenRequest& params, PTabletW
     _txn_id = params.txn_id();
     _index_id = params.index_id();
     _schema = schema;
+#ifndef BE_TEST
+    _table_metrics = StarRocksMetrics::instance()->table_metrics(_schema->table_id());
+#endif
     _is_incremental_channel = is_incremental;
     if (params.has_lake_tablet_params() && params.lake_tablet_params().has_write_txn_log()) {
         _finish_mode = params.lake_tablet_params().write_txn_log() ? lake::DeltaWriterFinishMode::kWriteTxnLog
@@ -559,6 +563,11 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
     }
 
     auto wait_writer_ns = finish_wait_writer_ts - start_wait_writer_ts;
+#ifndef BE_TEST
+    _table_metrics->load_rows.increment(total_row_num);
+    size_t chunk_size = chunk != nullptr ? chunk->bytes_usage() : 0;
+    _table_metrics->load_bytes.increment(chunk_size);
+#endif
     COUNTER_UPDATE(_add_chunk_counter, 1);
     COUNTER_UPDATE(_add_chunk_timer, watch.elapsed_time());
     COUNTER_UPDATE(_add_row_num, total_row_num);
@@ -588,10 +597,12 @@ void LakeTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequ
 }
 
 int LakeTabletsChannel::_close_sender(const int64_t* partitions, size_t partitions_size) {
+    // Notice: `_num_remaining_senders` and `_dirty_partitions` should be protected by same lock,
+    // so we can make sure the last sender request can get the dirty partitions from `_dirty_partitions`.
+    std::lock_guard l(_dirty_partitions_lock);
     int n = _num_remaining_senders.fetch_sub(1);
     // if sender close means data send finished, we need to decrease _num_initial_senders
     _num_initial_senders.fetch_sub(1);
-    std::lock_guard l(_dirty_partitions_lock);
     for (int i = 0; i < partitions_size; i++) {
         _dirty_partitions.insert(partitions[i]);
     }

@@ -44,8 +44,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "block_cache/block_cache.h"
-#include "block_cache/datacache_utils.h"
+#include "cache/block_cache/block_cache.h"
+#include "cache/block_cache/datacache_utils.h"
 #include "cctz/time_zone.h"
 #include "common/global_types.h"
 #include "common/object_pool.h"
@@ -509,6 +509,11 @@ public:
     bool enable_event_scheduler() const { return _enable_event_scheduler; }
     void set_enable_event_scheduler(bool enable) { _enable_event_scheduler = enable; }
 
+    bool enable_join_runtime_filter_pushdown() const {
+        return _query_options.__isset.enable_join_runtime_filter_pushdown &&
+               _query_options.enable_join_runtime_filter_pushdown;
+    }
+
     DebugActionMgr& debug_action_mgr() { return _debug_action_mgr; }
 
 private:
@@ -658,58 +663,11 @@ private:
     bool _enable_event_scheduler = false;
 };
 
-#define LIMIT_EXCEEDED(tracker, state, msg)                                                                         \
-    do {                                                                                                            \
-        stringstream str;                                                                                           \
-        str << "Memory of " << tracker->label() << " exceed limit. " << msg << " ";                                 \
-        str << "Backend: " << BackendOptions::get_localhost() << ", ";                                              \
-        if (state != nullptr) {                                                                                     \
-            str << "fragment: " << print_id(state->fragment_instance_id()) << " ";                                  \
-        }                                                                                                           \
-        str << "Used: " << tracker->consumption() << ", Limit: " << tracker->limit() << ". ";                       \
-        switch (tracker->type()) {                                                                                  \
-        case MemTracker::NO_SET:                                                                                    \
-            break;                                                                                                  \
-        case MemTracker::QUERY:                                                                                     \
-            str << "Mem usage has exceed the limit of single query, You can change the limit by "                   \
-                   "set session variable query_mem_limit.";                                                         \
-            break;                                                                                                  \
-        case MemTracker::PROCESS:                                                                                   \
-            str << "Mem usage has exceed the limit of BE";                                                          \
-            break;                                                                                                  \
-        case MemTracker::QUERY_POOL:                                                                                \
-            str << "Mem usage has exceed the limit of query pool";                                                  \
-            break;                                                                                                  \
-        case MemTracker::LOAD:                                                                                      \
-            str << "Mem usage has exceed the limit of load";                                                        \
-            break;                                                                                                  \
-        case MemTracker::SCHEMA_CHANGE_TASK:                                                                        \
-            str << "You can change the limit by modify BE config [memory_limitation_per_thread_for_schema_change]"; \
-            break;                                                                                                  \
-        case MemTracker::RESOURCE_GROUP:                                                                            \
-            /* TODO: make default_wg configuable. */                                                                \
-            if (tracker->label() == "default_wg") {                                                                 \
-                str << "Mem usage has exceed the limit of query pool";                                              \
-            } else {                                                                                                \
-                str << "Mem usage has exceed the limit of the resource group [" << tracker->label() << "]. "        \
-                    << "You can change the limit by modifying [mem_limit] of this group";                           \
-            }                                                                                                       \
-            break;                                                                                                  \
-        case MemTracker::RESOURCE_GROUP_BIG_QUERY:                                                                  \
-            str << "Mem usage has exceed the big query limit of the resource group [" << tracker->label() << "]. "  \
-                << "You can change the limit by modifying [big_query_mem_limit] of this group";                     \
-            break;                                                                                                  \
-        default:                                                                                                    \
-            break;                                                                                                  \
-        }                                                                                                           \
-        return Status::MemoryLimitExceeded(str.str());                                                              \
-    } while (false)
-
 #define RETURN_IF_LIMIT_EXCEEDED(state, msg)                                                \
     do {                                                                                    \
         MemTracker* tracker = state->instance_mem_tracker()->find_limit_exceeded_tracker(); \
         if (tracker != nullptr) {                                                           \
-            LIMIT_EXCEEDED(tracker, state, msg);                                            \
+            return Status::MemoryLimitExceeded(tracker->err_msg(msg, state));               \
         }                                                                                   \
     } while (false)
 

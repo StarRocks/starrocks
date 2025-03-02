@@ -11,7 +11,7 @@ DUPLICATE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 4
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -26,3 +26,46 @@ select array_unique_agg(s_1) from array_unique_agg_test group by id order by id;
 select array_unique_agg(i_1) from array_unique_agg_test group by id order by id;
 select array_unique_agg(f_1) from array_unique_agg_test group by id order by id;
 select array_unique_agg(d_1) from array_unique_agg_test group by id order by id;
+
+-- name: test_array_unique_agg_different_types
+create table test_array_agg (
+    id INT,
+    col_boolean ARRAY<BOOLEAN>,
+    col_tinyint ARRAY<TINYINT>,
+    col_smallint ARRAY<SMALLINT>,
+    col_int ARRAY<INT>,
+    col_bigint ARRAY<BIGINT>,
+    col_largeint ARRAY<LARGEINT>,
+    col_float ARRAY<FLOAT>,
+    col_double ARRAY<DOUBLE>,
+    col_varchar ARRAY<VARCHAR(100)>,
+    col_char ARRAY<CHAR(10)>,
+    col_datetime ARRAY<DATETIME>,
+    col_date ARRAY<DATE>,
+    col_array ARRAY<ARRAY<INT>>,
+    col_map ARRAY<MAP<STRING, INT>>,
+    col_struct ARRAY<STRUCT<f1 INT, f2 STRING>>
+) DUPLICATE KEY(id) DISTRIBUTED BY HASH(id) BUCKETS 3
+PROPERTIES ("replication_num" = "1");
+
+insert into test_array_agg values
+(1, [true, false, true], [10, 20, 10], [100, 200, 100], [1000, 2000, 1000], [10000, 20000, 10000], [100000, 200000, 100000], [1.1, 2.2, 1.1], [2.2, 3.3, 2.2], ['hello', 'world', 'hello'], ['char1', 'char2', 'char1'], ['2024-01-01 12:00:00', '2024-02-02 13:00:00', '2024-01-01 12:00:00'], ['2024-01-01', '2024-02-02', '2024-01-01'], [[1,2,3,1]], [map{"key1": 1, "key2": 2}], [row(1, "test1")]),
+(2, [false, true, false], [20, 30, 20], [200, 300, 200], [2000, 3000, 2000], [20000, 30000, 20000], [200000, 300000, 200000], [3.3, 4.4, 3.3], [4.4, 5.5, 4.4], ['world', 'hello', 'world'], ['char2', 'char3', 'char2'], ['2024-02-02 13:00:00', '2024-03-03 14:00:00', '2024-02-02 13:00:00'], ['2024-02-02', '2024-03-03', '2024-02-02'], [[4,5,6,4]], [map{"key3": 3, "key4": 4}], [row(2, "test2")]),
+(3, [false, true, false], [20, 30, 20], [200, 300, 200], [2000, 3000, 2000], [20000, 30000, 20000], [200000, 300000, 200000], [3.3, 4.4, 3.3], [4.4, 5.5, 4.4], ['world', 'hello', 'world'], ['char2', 'char3', 'char2'], ['2024-02-02 13:00:00', '2024-03-03 14:00:00', '2024-02-02 13:00:00'], ['2024-02-02', '2024-03-03', '2024-02-02'], [[4,5,6,4]], [map{"key3": 3, "key4": 4}], [row(2, "test2")]),
+(1, [false, true, false], [20, NULL, 20], [200, 300, 200], [2000, 3000, 2000], [20000, 30000, 20000], [200000, 300000, 200000], [3.3, 4.4, 3.3], [4.4, 5.5, 4.4], ['world', 'hello', 'world', NULL], ['char2', 'char3', 'char2'], ['2024-02-02 13:00:00', '2024-03-03 14:00:00', '2024-02-02 13:00:00'], ['2024-02-02', '2024-03-03', '2024-02-02', NULL], [[4,5,6,4]], [map{"key3": 3, "key4": 4}], [row(2, "test2")]),
+(2, [false, NULL, false], [20, 30, 20], [200, NULL, 200], [2000, 3000, NULL], [20000, 30000, 20000], [200000, 300000, NULL], [3.3, 4.4, 3.3, NULL], [4.4, 5.5, 4.4], ['world', 'hello', 'world'], [NULL, 'char2', 'char3', 'char2'], ['2024-02-02 13:00:00', '2024-03-03 14:00:00', '2024-02-02 13:00:00', NULL], ['2024-02-02', '2024-03-03', '2024-02-02'], [[4,5,6,4]], [map{"key3": 3, "key4": 4}], [row(2, "test2")]),
+(3, [false, true, false], [20, 30, 20], [200, 300, 200], [2000, 3000, 2000], [20000, 30000, NULL], [200000, 300000, 200000], [3.3, 4.4, 3.3], [4.4, 5.5, 4.4, NULL], ['world', 'hello', 'world'], ['char2', 'char3', 'char2'], ['2024-02-02 13:00:00', '2024-03-03 14:00:00', '2024-02-02 13:00:00'], ['2024-02-02', '2024-03-03', '2024-02-02'], [[4,5,6,4]], [map{"key3": 3, "key4": 4}], [row(2, "test2")]),
+(3, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+
+SELECT id, ARRAY_MIN(ARRAY_UNIQUE_AGG(col_boolean)), ARRAY_MAX(ARRAY_UNIQUE_AGG(col_boolean)) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_MIN(ARRAY_UNIQUE_AGG(col_tinyint)), ARRAY_MAX(ARRAY_UNIQUE_AGG(col_tinyint)) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_MIN(ARRAY_UNIQUE_AGG(col_smallint)), ARRAY_MAX(ARRAY_UNIQUE_AGG(col_smallint)) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_MIN(ARRAY_UNIQUE_AGG(col_int)), ARRAY_MAX(ARRAY_UNIQUE_AGG(col_int)) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_MIN(ARRAY_UNIQUE_AGG(col_bigint)), ARRAY_MAX(ARRAY_UNIQUE_AGG(col_bigint)) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_MIN(ARRAY_UNIQUE_AGG(col_largeint)), ARRAY_MAX(ARRAY_UNIQUE_AGG(col_largeint)) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_MIN(ARRAY_UNIQUE_AGG(col_float)), ARRAY_MAX(ARRAY_UNIQUE_AGG(col_float)) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_MIN(ARRAY_UNIQUE_AGG(col_double)), ARRAY_MAX(ARRAY_UNIQUE_AGG(col_double)) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_MIN(ARRAY_UNIQUE_AGG(col_varchar)), ARRAY_MAX(ARRAY_UNIQUE_AGG(col_varchar)) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_MIN(ARRAY_UNIQUE_AGG(col_char)), ARRAY_MAX(ARRAY_UNIQUE_AGG(col_char)) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_MIN(ARRAY_UNIQUE_AGG(col_datetime)), ARRAY_MAX(ARRAY_UNIQUE_AGG(col_datetime)) FROM test_array_agg GROUP BY id ORDER BY id;
+SELECT id, ARRAY_MIN(ARRAY_UNIQUE_AGG(col_date)), ARRAY_MAX(ARRAY_UNIQUE_AGG(col_date)) FROM test_array_agg GROUP BY id ORDER BY id;

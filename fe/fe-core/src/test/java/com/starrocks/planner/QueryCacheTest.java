@@ -221,7 +221,7 @@ public class QueryCacheTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");";
 
@@ -371,7 +371,7 @@ public class QueryCacheTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\"\n" +
+                "\"enable_persistent_index\" = \"true\"\n" +
                 ");";
 
         String createTbl9StmtStr = "" +

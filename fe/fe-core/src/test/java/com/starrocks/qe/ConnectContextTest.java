@@ -54,15 +54,15 @@ import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.xnio.StreamConnection;
 
-import java.nio.channels.SocketChannel;
 import java.util.List;
 
 public class ConnectContextTest {
     @Mocked
     private MysqlChannel channel;
     @Mocked
-    private SocketChannel socketChannel;
+    private StreamConnection connection;
     @Mocked
     private GlobalStateMgr globalStateMgr;
     @Mocked
@@ -94,7 +94,7 @@ public class ConnectContextTest {
 
     @Test
     public void testNormal() {
-        ConnectContext ctx = new ConnectContext(socketChannel);
+        ConnectContext ctx = new ConnectContext(connection);
 
         // State
         Assert.assertNotNull(ctx.getState());
@@ -175,7 +175,7 @@ public class ConnectContextTest {
 
     @Test
     public void testSleepTimeout() {
-        ConnectContext ctx = new ConnectContext(socketChannel);
+        ConnectContext ctx = new ConnectContext(connection);
         ctx.setCommand(MysqlCommand.COM_SLEEP);
 
         // sleep no time out
@@ -203,7 +203,7 @@ public class ConnectContextTest {
 
     @Test
     public void testQueryTimeout() {
-        ConnectContext ctx = new ConnectContext(socketChannel);
+        ConnectContext ctx = new ConnectContext(connection);
         ctx.setCommand(MysqlCommand.COM_QUERY);
         ctx.setThreadLocalInfo();
 
@@ -231,7 +231,7 @@ public class ConnectContextTest {
 
     @Test
     public void testInsertTimeout() {
-        ConnectContext ctx = new ConnectContext(socketChannel);
+        ConnectContext ctx = new ConnectContext(connection);
         ctx.setCommand(MysqlCommand.COM_QUERY);
         ctx.setThreadLocalInfo();
 
@@ -260,7 +260,7 @@ public class ConnectContextTest {
 
     @Test
     public void testThreadLocal() {
-        ConnectContext ctx = new ConnectContext(socketChannel);
+        ConnectContext ctx = new ConnectContext(connection);
         Assert.assertNull(ConnectContext.get());
         ctx.setThreadLocalInfo();
         Assert.assertNotNull(ConnectContext.get());
@@ -282,7 +282,7 @@ public class ConnectContextTest {
             }
         };
 
-        ConnectContext ctx = new ConnectContext(socketChannel);
+        ConnectContext ctx = new ConnectContext(connection);
         ctx.setGlobalStateMgr(globalStateMgr);
         ctx.setCurrentWarehouse("wh1");
         Assert.assertEquals("wh1", ctx.getCurrentWarehouseName());
@@ -293,7 +293,7 @@ public class ConnectContextTest {
 
     @Test
     public void testGetNormalizedErrorCode() {
-        ConnectContext ctx = new ConnectContext(socketChannel);
+        ConnectContext ctx = new ConnectContext(connection);
         ctx.setState(new QueryState());
         Status status = new Status(new TStatus(TStatusCode.MEM_LIMIT_EXCEEDED));
 

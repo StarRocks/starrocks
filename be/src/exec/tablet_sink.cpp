@@ -154,16 +154,33 @@ Status OlapTableSink::init(const TDataSink& t_sink, RuntimeState* state) {
         _colocate_mv_index = table_sink.enable_colocate_mv_index && config::enable_load_colocate_mv;
     }
 
-    // Query context is only available for pipeline engine
-    auto query_ctx = state->query_ctx();
-    if (query_ctx) {
+    if (state->query_ctx()) {
+        // Query context is only available for pipeline engine (insert/broker load)
+        auto query_ctx = state->query_ctx();
         _load_channel_profile_config.set_enable_profile(query_ctx->get_enable_profile_flag());
         _load_channel_profile_config.set_big_query_profile_threshold_ns(
                 query_ctx->get_big_query_profile_threshold_ns());
         _load_channel_profile_config.set_runtime_profile_report_interval_ns(
                 query_ctx->get_runtime_profile_report_interval_ns());
+    } else {
+        // For non-pipeline engine (stream load/routine load), get the profile config from query options
+        auto& query_options = state->query_options();
+        bool enable_profile = query_options.__isset.enable_profile && query_options.enable_profile;
+        int64_t load_profile_collect_second =
+                query_options.__isset.load_profile_collect_second ? query_options.load_profile_collect_second : -1;
+        // when enable_profile and load_profile_collect_second are set, use big query threshold to control the profile
+        if (enable_profile && load_profile_collect_second > 0) {
+            _load_channel_profile_config.set_enable_profile(false);
+            _load_channel_profile_config.set_big_query_profile_threshold_ns(load_profile_collect_second * 1e9);
+        } else if (enable_profile) {
+            _load_channel_profile_config.set_enable_profile(true);
+            _load_channel_profile_config.set_big_query_profile_threshold_ns(-1);
+        } else {
+            _load_channel_profile_config.set_enable_profile(false);
+            _load_channel_profile_config.set_big_query_profile_threshold_ns(-1);
+        }
+        _load_channel_profile_config.set_runtime_profile_report_interval_ns(std::numeric_limits<int64_t>::max());
     }
-
     return Status::OK();
 }
 

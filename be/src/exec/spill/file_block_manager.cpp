@@ -70,12 +70,15 @@ public:
     Status flush();
 
     bool pre_allocate(size_t allocate_size) {
-        if (_dir->inc_size(allocate_size)) {
-            _acquired_data_size += allocate_size;
+        if (_data_size + allocate_size <= _acquired_data_size) {
             return true;
-        } else {
-            return false;
         }
+        size_t extra_size = _data_size + allocate_size - _acquired_data_size;
+        if (_dir->inc_size(extra_size)) {
+            _acquired_data_size += extra_size;
+            return true;
+        }
+        return false;
     }
 
     StatusOr<std::unique_ptr<io::InputStreamWrapper>> get_readable();
@@ -231,7 +234,10 @@ StatusOr<FileBlockContainerPtr> FileBlockManager::get_or_create_container(const 
                     << plan_node_name;
     uint64_t id = _next_container_id++;
     std::string container_dir = dir->dir() + "/" + print_id(_query_id);
-    RETURN_IF_ERROR(dir->fs()->create_dir_if_missing(container_dir));
+    if (_last_created_container_dir != container_dir) {
+        RETURN_IF_ERROR(dir->fs()->create_dir_if_missing(container_dir));
+        _last_created_container_dir = container_dir;
+    }
     ASSIGN_OR_RETURN(auto block_container, FileBlockContainer::create(dir, _query_id, fragment_instance_id,
                                                                       plan_node_id, plan_node_name, id, block_size));
     RETURN_IF_ERROR(block_container->open());

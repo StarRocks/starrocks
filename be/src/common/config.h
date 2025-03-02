@@ -201,9 +201,6 @@ CONF_Int32(be_service_threads, "64");
 // key=value pair of default query options for StarRocks, separated by ','
 CONF_String(default_query_options, "");
 
-// If non-zero, StarRocks will output memory usage every log_mem_usage_interval'th fragment completion.
-// CONF_Int32(log_mem_usage_interval, "0");
-
 // Controls the number of threads to run work per core.  It's common to pick 2x
 // or 3x the number of cores.  This keeps the cores busy without causing excessive
 // thrashing.
@@ -472,6 +469,19 @@ CONF_mInt32(olap_table_sink_send_interval_ms, "10");
 // if smaller than this value, will reduce slow log print frequency.
 // 0 is print slow log every time.
 CONF_mInt32(load_rpc_slow_log_frequency_threshold_seconds, "60");
+// Whether to enable load diagnose. The diagnosis is initiated by OlapTableSink when meeting brpc timeout
+// from LoadChannel. It will send rpc to LoadChannel to check the status.
+CONF_mBool(enable_load_diagnose, "true");
+// If the rpc timeout exceeds this threshold, then diagnostics will be performed every time a timeout occurs;
+// if it is below this threshold, diagnostics will be performed once every 20 timeouts. This is used to avoid
+// frequent diagnostics for real-time loads which have a smaller brpc timeout.
+CONF_mInt32(load_diagnose_small_rpc_timeout_threshold_ms, "60000");
+// The timeout of the diagnosis rpc sent from OlapTableSink to LoadChannel
+CONF_mInt32(load_diagnose_send_rpc_timeout_ms, "2000");
+// Used in load fail point. The brpc timeout used to simulate brpc exception "[E1008]Reached timeout"
+CONF_mInt32(load_fp_brpc_timeout_ms, "-1");
+// Used in load fail point. The block time to simulate TabletsChannel::add_chunk spends much time
+CONF_mInt32(load_fp_tablets_channel_add_chunk_block_ms, "-1");
 
 CONF_Bool(enable_load_segment_parallel, "false");
 CONF_Int32(load_segment_thread_pool_num_max, "128");
@@ -1050,13 +1060,14 @@ CONF_mInt32(starlet_fslib_s3client_connect_timeout_ms, "1000");
 // NOTE: need to handle the negative value properly
 CONF_Alias(object_storage_request_timeout_ms, starlet_fslib_s3client_request_timeout_ms);
 CONF_mInt32(starlet_delete_files_max_key_in_batch, "1000");
+CONF_mInt32(starlet_filesystem_instance_cache_capacity, "10000");
 #endif
 
 CONF_mInt64(lake_metadata_cache_limit, /*2GB=*/"2147483648");
 CONF_mBool(lake_print_delete_log, "false");
 CONF_mInt64(lake_compaction_stream_buffer_size_bytes, "1048576"); // 1MB
 // The interval to check whether lake compaction is valid. Set to <= 0 to disable the check.
-CONF_mInt32(lake_compaction_check_valid_interval_minutes, "30"); // 30 minutes
+CONF_mInt32(lake_compaction_check_valid_interval_minutes, "10"); // 10 minutes
 // Used to ensure service availability in extreme situations by sacrificing a certain degree of correctness
 CONF_mBool(experimental_lake_ignore_lost_segment, "false");
 CONF_mInt64(experimental_lake_wait_per_put_ms, "0");
@@ -1084,6 +1095,9 @@ CONF_mBool(lake_clear_corrupted_cache, "true");
 // The maximum number of files which need to rebuilt in cloud native pk index.
 // If files which need to rebuilt larger than this, we will flush memtable immediately.
 CONF_mInt32(cloud_native_pk_index_rebuild_files_threshold, "50");
+// if set to true, CACHE SELECT will only read file, save CPU time
+// if set to false, CACHE SELECT will behave like SELECT
+CONF_mBool(lake_cache_select_in_physical_way, "true");
 
 CONF_mBool(dependency_librdkafka_debug_enable, "false");
 
@@ -1183,7 +1197,7 @@ CONF_Double(datacache_scheduler_threads_per_cpu, "0.125");
 // If false, the raw data will be written to disk directly and read from disk without promotion.
 // For object data, such as parquet footer object, which can only be cached in memory are not affected
 // by this configuration.
-CONF_Bool(datacache_tiered_cache_enable, "true");
+CONF_Bool(datacache_tiered_cache_enable, "false");
 // Whether to persist cached data
 CONF_Bool(datacache_persistence_enable, "true");
 // DataCache engines, alternatives: starcache.
@@ -1566,4 +1580,11 @@ CONF_mInt32(json_parse_many_batch_size, "1000000");
 CONF_mBool(enable_dynamic_batch_size_for_json_parse_many, "true");
 CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
 CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
+// used to control whether the metrics/ interface collects table metrics
+CONF_mBool(enable_collect_table_metrics, "true");
+// some internal parameters are used to control the execution strategy of join runtime filter pushdown.
+// Do not modify them unless necessary.
+CONF_mInt64(rf_sample_rows, "1024");
+CONF_mInt64(rf_sample_ratio, "32");
+CONF_mInt64(rf_branchless_ratio, "8");
 } // namespace starrocks::config

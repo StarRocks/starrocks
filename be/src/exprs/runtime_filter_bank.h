@@ -56,10 +56,9 @@ public:
     static size_t serialize_runtime_filter(RuntimeState* state, const RuntimeFilter* rf, uint8_t* data);
     static size_t serialize_runtime_filter(int serialize_version, const RuntimeFilter* rf, uint8_t* data);
     static int deserialize_runtime_filter(ObjectPool* pool, RuntimeFilter** rf, const uint8_t* data, size_t size);
-    static RuntimeFilter* create_join_runtime_filter(ObjectPool* pool, LogicalType type);
+    static RuntimeFilter* create_join_runtime_filter(ObjectPool* pool, LogicalType type, int8_t join_mode);
 
     // ====================================
-    static RuntimeFilter* create_runtime_bloom_filter(ObjectPool* pool, LogicalType type);
     static Status fill_runtime_bloom_filter(const ColumnPtr& column, LogicalType type, RuntimeFilter* filter,
                                             size_t column_offset, bool eq_null);
     static Status fill_runtime_bloom_filter(const std::vector<ColumnPtr>& column, LogicalType type,
@@ -68,9 +67,6 @@ public:
                                             LogicalType type, RuntimeFilter* filter, size_t column_offset);
     static StatusOr<ExprContext*> rewrite_runtime_filter_in_cross_join_node(ObjectPool* pool, ExprContext* conjunct,
                                                                             Chunk* chunk);
-
-    static bool filter_zonemap_with_min_max(LogicalType type, const RuntimeFilter* filter, const Column* min_column,
-                                            const Column* max_column);
 
     // create min/max predicate from filter.
     static void create_min_max_value_predicate(ObjectPool* pool, SlotId slot_id, LogicalType slot_type,
@@ -201,6 +197,9 @@ public:
         _observable.add_observer(state, observer);
     }
 
+    void set_has_push_down_to_storage(bool v) { _has_push_down_to_storage = v; }
+    bool has_push_down_to_storage() const { return _has_push_down_to_storage; }
+
 private:
     friend class HashJoinNode;
     friend class hashJoiner;
@@ -216,6 +215,7 @@ private:
     int64_t _ready_timestamp = 0;
     int8_t _join_mode;
     bool _is_topn_filter = false;
+
     bool _skip_wait = false;
     // Indicates that the runtime filter was built from the colocate group execution build side.
     bool _is_group_colocate_rf = false;
@@ -224,6 +224,7 @@ private:
     std::atomic<const RuntimeFilter*> _runtime_filter = nullptr;
     std::shared_ptr<const RuntimeFilter> _shared_runtime_filter = nullptr;
     pipeline::Observable _observable;
+    bool _has_push_down_to_storage = false;
 };
 
 // RuntimeFilterProbeCollector::do_evaluate function apply runtime bloom filter to Operators to filter chunk.
@@ -231,7 +232,12 @@ private:
 // into RuntimeBloomFilterEvalContext and make do_evaluate function can be called concurrently.
 struct RuntimeBloomFilterEvalContext {
     RuntimeBloomFilterEvalContext() = default;
-
+    enum Mode {
+        M_ALL,
+        M_WITHOUT_TOPN,
+        M_ONLY_TOPN,
+    };
+    Mode mode = Mode::M_ALL;
     std::map<double, RuntimeFilterProbeDescriptor*> selectivity;
     size_t input_chunk_nums = 0;
     int run_filter_nums = 0;

@@ -20,7 +20,6 @@ import com.starrocks.alter.AlterJobV2;
 import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.lake.snapshot.ClusterSnapshotJob.ClusterSnapshotJobState;
-import com.starrocks.leader.CheckpointController;
 import com.starrocks.persist.ClusterSnapshotLog;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.gson.GsonPostProcessable;
@@ -33,6 +32,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOffStmt;
 import com.starrocks.sql.ast.AdminSetAutomatedSnapshotOnStmt;
+import com.starrocks.staros.StarMgrServer;
 import com.starrocks.storagevolume.StorageVolume;
 import com.starrocks.thrift.TClusterSnapshotJobsResponse;
 import com.starrocks.thrift.TClusterSnapshotsResponse;
@@ -42,6 +42,7 @@ import org.apache.logging.log4j.Logger;
 import java.io.IOException;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.NavigableMap;
 import java.util.concurrent.ConcurrentSkipListMap;
 
@@ -57,7 +58,8 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
 
     private ClusterSnapshotCheckpointScheduler clusterSnapshotCheckpointScheduler;
 
-    public ClusterSnapshotMgr() {}
+    public ClusterSnapshotMgr() {
+    }
 
     // Turn on automated snapshot, use stmt for extension in future
     public void setAutomatedSnapshotOn(AdminSetAutomatedSnapshotOnStmt stmt) {
@@ -83,13 +85,13 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
 
     // Turn off automated snapshot, use stmt for extension in future
     public void setAutomatedSnapshotOff(AdminSetAutomatedSnapshotOffStmt stmt) {
-        ClusterSnapshotLog log = new ClusterSnapshotLog();
-        log.setAutomatedSnapshotOff();
-        GlobalStateMgr.getCurrentState().getEditLog().logClusterSnapshotLog(log);
-
         clearFinishedAutomatedClusterSnapshot(null);
 
         setAutomatedSnapshotOff();
+
+        ClusterSnapshotLog log = new ClusterSnapshotLog();
+        log.setAutomatedSnapshotOff();
+        GlobalStateMgr.getCurrentState().getEditLog().logClusterSnapshotLog(log);
     }
 
     protected void setAutomatedSnapshotOff() {
@@ -132,14 +134,14 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         ClusterSnapshotJob job = new ClusterSnapshotJob(id, snapshotName, storageVolumeName, createTimeMs);
         job.logJob();
 
-        addJob(job);
-    
+        addSnapshotJob(job);
+
         LOG.info("Create automated cluster snapshot job successfully, job id: {}, snapshot name: {}", id, snapshotName);
 
         return job;
     }
 
-    public StorageVolume getAutomatedSnapshotSv() {
+    public StorageVolume getAutomatedSnapshotStorageVolume() {
         if (storageVolumeName == null) {
             return null;
         }
@@ -166,7 +168,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         return job.getSnapshot();
     }
 
-    public synchronized void addJob(ClusterSnapshotJob job) {
+    public void addSnapshotJob(ClusterSnapshotJob job) {
         automatedSnapshotJobs.put(job.getId(), job);
 
         int maxSize = Math.max(Config.max_historical_automated_cluster_snapshot_jobs, 2);
@@ -175,7 +177,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         }
     }
 
-    public synchronized long getValidDeletionTimeMsByAutomatedSnapshot() {
+    public long getSafeDeletionTimeMs() {
         if (!isAutomatedSnapshotOn()) {
             return Long.MAX_VALUE;
         }
@@ -197,38 +199,65 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         return previousAutomatedSnapshotCreatedTimsMs;
     }
 
-    public synchronized boolean isTableSafeToDeleteTablet(long tableId) {
+    public boolean isTableSafeToDeleteTablet(long tableId) {
         if (!isAutomatedSnapshotOn()) {
             return true;
         }
 
-        boolean valid = true;
+        boolean safe = true;
         Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().getRollupHandler().getAlterJobsV2();
         alterJobs.putAll(GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2());
         for (Map.Entry<Long, AlterJobV2> entry : alterJobs.entrySet()) {
             AlterJobV2 alterJob = entry.getValue();
             if (alterJob.getTableId() == tableId) {
-                valid = (alterJob.getFinishedTimeMs() < getValidDeletionTimeMsByAutomatedSnapshot());
+                safe = (alterJob.getFinishedTimeMs() < getSafeDeletionTimeMs());
                 break;
             }
         }
-        return valid;
+        return safe;
     }
 
     public boolean isDeletionSafeToExecute(long deletionCreatedTimeMs) {
-        return deletionCreatedTimeMs < getValidDeletionTimeMsByAutomatedSnapshot();
+        return deletionCreatedTimeMs < getSafeDeletionTimeMs();
     }
 
     public NavigableMap<Long, ClusterSnapshotJob> getAutomatedSnapshotJobs() {
         return automatedSnapshotJobs;
     }
 
-    public void resetAutomatedJobsStateForTheFirstRun() {
+    public void resetSnapshotJobsStateAfterRestarted(RestoredSnapshotInfo restoredSnapshotInfo) {
+        setLastJobFinishedAfterRestored(restoredSnapshotInfo);
         resetLastUnFinishedAutomatedSnapshotJob();
-        clearFinishedAutomatedClusterSnapshotExceptLastFinished();
+        clearFinishedAutomatedClusterSnapshotExceptLast();
     }
 
-    public void clearFinishedAutomatedClusterSnapshotExceptLastFinished() {
+    public void setLastJobFinishedAfterRestored(RestoredSnapshotInfo restoredSnapshotInfo) {
+        if (restoredSnapshotInfo == null) {
+            return;
+        }
+
+        String restoredSnapshotName = restoredSnapshotInfo.getSnapshotName();
+        long feJournalId = restoredSnapshotInfo.getFeJournalId();
+        long starMgrJournalId = restoredSnapshotInfo.getStarMgrJournalId();
+        if (restoredSnapshotName == null) {
+            return;
+        }
+
+        Entry<Long, ClusterSnapshotJob> entry = automatedSnapshotJobs.lastEntry();
+        if (entry != null) {
+            ClusterSnapshotJob job = entry.getValue();
+            // Last snapshot may in init state, because the last snapshot checkpoint does not include the
+            // editlog for the state transtition after ClusterSnapshotJobState.INITIALIZING
+            if (job.getSnapshotName().equals(restoredSnapshotName) && job.isInitializing()) {
+                job.setJournalIds(feJournalId, starMgrJournalId);
+                job.setState(ClusterSnapshotJobState.FINISHED);
+                job.setDetailInfo("Finished time was reset after cluster restored");
+                job.logJob();
+            }
+        }
+    }
+
+    public void clearFinishedAutomatedClusterSnapshotExceptLast() {
         ClusterSnapshotJob lastFinishedJob = getLastFinishedAutomatedClusterSnapshotJob();
         if (lastFinishedJob != null) {
             clearFinishedAutomatedClusterSnapshot(lastFinishedJob.getSnapshotName());
@@ -236,8 +265,9 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
     }
 
     public void resetLastUnFinishedAutomatedSnapshotJob() {
-        if (!automatedSnapshotJobs.isEmpty()) {
-            ClusterSnapshotJob job = automatedSnapshotJobs.lastEntry().getValue();
+        Entry<Long, ClusterSnapshotJob> entry = automatedSnapshotJobs.lastEntry();
+        if (entry != null) {
+            ClusterSnapshotJob job = entry.getValue();
             if (job.isUnFinishedState()) {
                 job.setErrMsg("Snapshot job has been failed because of FE restart or leader change");
                 job.setState(ClusterSnapshotJobState.ERROR);
@@ -261,7 +291,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
                 --removeCount;
             }
 
-            if (removeCount == 0) {
+            if (removeCount <= 0) {
                 break;
             }
         }
@@ -271,22 +301,24 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
         }
     }
 
-    public void startCheckpointScheduler(CheckpointController feController, CheckpointController starMgrController) {
+    public void start() {
         if (RunMode.isSharedDataMode() && clusterSnapshotCheckpointScheduler == null) {
-            clusterSnapshotCheckpointScheduler = new ClusterSnapshotCheckpointScheduler(feController, starMgrController);
+            clusterSnapshotCheckpointScheduler = new ClusterSnapshotCheckpointScheduler(
+                    GlobalStateMgr.getCurrentState().getCheckpointController(),
+                    StarMgrServer.getCurrentState().getCheckpointController());
             clusterSnapshotCheckpointScheduler.start();
         }
     }
 
-    public TClusterSnapshotJobsResponse getAllJobsInfo() {
+    public TClusterSnapshotJobsResponse getAllSnapshotJobsInfo() {
         TClusterSnapshotJobsResponse response = new TClusterSnapshotJobsResponse();
-        for (Map.Entry<Long, ClusterSnapshotJob> entry : automatedSnapshotJobs.entrySet()) {
-            response.addToItems(entry.getValue().getInfo());
+        for (ClusterSnapshotJob job : automatedSnapshotJobs.values()) {
+            response.addToItems(job.getInfo());
         }
         return response;
     }
 
-    public TClusterSnapshotsResponse getAllInfo() {
+    public TClusterSnapshotsResponse getAllSnapshotsInfo() {
         TClusterSnapshotsResponse response = new TClusterSnapshotsResponse();
         ClusterSnapshot automatedSnapshot = getAutomatedSnapshot();
         if (isAutomatedSnapshotOn() && automatedSnapshot != null) {
@@ -313,7 +345,7 @@ public class ClusterSnapshotMgr implements GsonPostProcessable {
 
                 switch (state) {
                     case INITIALIZING: {
-                        addJob(job);
+                        addSnapshotJob(job);
                         break;
                     }
                     case SNAPSHOTING:

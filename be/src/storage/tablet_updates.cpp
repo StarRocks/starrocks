@@ -84,7 +84,7 @@ std::string EditVersion::to_string() const {
 TabletUpdates::TabletUpdates(Tablet& tablet) : _tablet(tablet), _unused_rowsets(UINT64_MAX) {}
 
 TabletUpdates::~TabletUpdates() {
-    _stop_and_wait_apply_done();
+    stop_and_wait_apply_done();
 }
 
 template <class Itr1, class Itr2>
@@ -1028,7 +1028,7 @@ void TabletUpdates::_wait_apply_done() {
     }
 }
 
-void TabletUpdates::_stop_and_wait_apply_done() {
+void TabletUpdates::stop_and_wait_apply_done() {
     _apply_stopped = true;
     _wait_apply_done();
 }
@@ -2273,6 +2273,7 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     if (!st.ok()) {
         std::string msg = strings::Substitute("_apply_compaction_commit error: load primary index failed: $0 $1",
                                               st.to_string(), debug_string());
+        manager->index_cache().remove(index_entry);
         failure_handler(msg, st.code());
         return apply_st;
     }
@@ -2283,7 +2284,7 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
     // release or remove index entry when function end
     DeferOp index_defer([&]() {
         index.reset_cancel_major_compaction();
-        if (enable_persistent_index ^ _tablet.get_enable_persistent_index()) {
+        if ((enable_persistent_index ^ _tablet.get_enable_persistent_index()) || !index.get_load_status().ok()) {
             manager->index_cache().remove(index_entry);
         } else {
             manager->index_cache().release(index_entry);
@@ -4911,7 +4912,7 @@ Status TabletUpdates::load_snapshot(const SnapshotMeta& snapshot_meta, bool rest
             RETURN_IF_ERROR(check_rowset_files(rowset_meta_pb));
         }
         // Stop apply thread.
-        _stop_and_wait_apply_done();
+        stop_and_wait_apply_done();
 
         DeferOp defer([&]() {
             if (!_error.load()) {
@@ -5643,7 +5644,7 @@ Status TabletUpdates::recover() {
     }
     LOG(INFO) << "Tablet " << _tablet.tablet_id() << " begin do recover: " << _error_msg;
     // Stop apply thread.
-    _stop_and_wait_apply_done();
+    stop_and_wait_apply_done();
 
     DeferOp defer([&]() {
         if (!_error.load()) {
@@ -5717,6 +5718,7 @@ void TabletUpdates::_reset_apply_status(const EditVersionInfo& version_info_appl
             auto& index = index_entry->value();
             index.unload();
             manager->index_cache().update_object_size(index_entry, index.memory_usage());
+            manager->index_cache().release(index_entry);
         }
     }
 }

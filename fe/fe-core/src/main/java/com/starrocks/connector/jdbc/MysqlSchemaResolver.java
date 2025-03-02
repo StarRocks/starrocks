@@ -147,8 +147,12 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
                 primitiveType = PrimitiveType.DATETIME;
                 break;
             default:
-                primitiveType = PrimitiveType.UNKNOWN_TYPE;
-                break;
+                // The mysql-connector-j will convert the JSON type in MySQL to Types.LONGVARCHAR(1073741824).
+                // However, the mariadb-java-client does not handle the JSON type,
+                // so it will be converted to Types.Other. Here, in order to handle JSON, for the Types.Other,
+                // it is uniformly converted to Types.LONGVARCHAR(1073741824).
+                // If later mariadb-java-client support json, this code can be reverted.
+                return ScalarType.createVarcharType(1073741824);
         }
 
         if (primitiveType != PrimitiveType.DECIMAL32) {
@@ -221,21 +225,26 @@ public class MysqlSchemaResolver extends JDBCSchemaResolver {
             ps.setString(2, jdbcTable.getCatalogTableName());
             ResultSet rs = ps.executeQuery();
             ImmutableList.Builder<Partition> list = ImmutableList.builder();
+            long createTime = TimeUtils.getEpochSeconds();
             if (null != rs) {
                 while (rs.next()) {
                     String[] partitionNames = rs.getString("NAME").
                             replace("'", "").split(",");
-                    long createTime = rs.getTimestamp("MODIFIED_TIME").getTime();
+                    try {
+                        createTime = rs.getTimestamp("MODIFIED_TIME").getTime();
+                    } catch (Exception e) {
+                        // ignore exception
+                    }
                     for (String partitionName : partitionNames) {
                         list.add(new Partition(partitionName, createTime));
                     }
                 }
                 ImmutableList<Partition> partitions = list.build();
                 return partitions.isEmpty()
-                        ? Lists.newArrayList(new Partition(table.getName(), TimeUtils.getEpochSeconds()))
+                        ? Lists.newArrayList(new Partition(table.getName(), createTime))
                         : partitions;
             } else {
-                return Lists.newArrayList(new Partition(table.getName(), TimeUtils.getEpochSeconds()));
+                return Lists.newArrayList(new Partition(table.getName(), createTime));
             }
         } catch (SQLException | NullPointerException e) {
             throw new StarRocksConnectorException(e.getMessage(), e);

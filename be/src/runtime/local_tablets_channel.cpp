@@ -47,11 +47,14 @@
 #include "storage/txn_manager.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/block_compression.h"
+#include "util/failpoint/fail_point.h"
 #include "util/faststring.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 
 namespace starrocks {
+
+DEFINE_FAIL_POINT(tablets_channel_add_chunk_wait_write_block);
 
 std::atomic<uint64_t> LocalTabletsChannel::_s_tablet_writer_count;
 
@@ -100,6 +103,9 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
     _schema = schema;
     _tuple_desc = _schema->tuple_desc();
     _node_id = params.node_id();
+#ifndef BE_TEST
+    _table_metrics = StarRocksMetrics::instance()->table_metrics(_schema->table_id());
+#endif
 
     _senders = std::vector<Sender>(params.num_senders());
     if (is_incremental) {
@@ -321,6 +327,12 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     auto start_wait_writer_ts = watch.elapsed_time();
     // This will only block the bthread, will not block the pthread
     count_down_latch.wait();
+    FAIL_POINT_TRIGGER_EXECUTE(tablets_channel_add_chunk_wait_write_block, {
+        int32_t timeout_ms = config::load_fp_tablets_channel_add_chunk_block_ms;
+        if (timeout_ms > 0) {
+            bthread_usleep(timeout_ms * 1000);
+        }
+    });
     auto finish_wait_writer_ts = watch.elapsed_time();
 
     // Abort tablets which primary replica already failed
@@ -450,6 +462,11 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
             wait_memtable_flush_time_us);
     StarRocksMetrics::instance()->load_channel_add_chunks_wait_writer_duration_us.increment(wait_writer_ns / 1000);
     StarRocksMetrics::instance()->load_channel_add_chunks_wait_replica_duration_us.increment(wait_replica_ns / 1000);
+#ifndef BE_TEST
+    _table_metrics->load_rows.increment(total_row_num);
+    size_t chunk_size = chunk != nullptr ? chunk->bytes_usage() : 0;
+    _table_metrics->load_bytes.increment(chunk_size);
+#endif
 
     COUNTER_UPDATE(_add_chunk_counter, 1);
     COUNTER_UPDATE(_add_chunk_timer, watch.elapsed_time());

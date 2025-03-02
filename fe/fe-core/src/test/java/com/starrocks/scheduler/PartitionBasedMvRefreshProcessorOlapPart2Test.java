@@ -15,8 +15,6 @@
 package com.starrocks.scheduler;
 
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.ExpressionRangePartitionInfo;
-import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
@@ -38,8 +36,6 @@ import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.junit.Assert;
@@ -519,46 +515,6 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVTestBase {
                             });
                 }
         );
-    }
-
-
-    private String toPartitionVal(String val) {
-        return val == null ? "NULL" : String.format("'%s'", val);
-    }
-
-    private void addRangePartition(String tbl, String pName, String pVal1, String pVal2, boolean isInsertValue) {
-        // mock the check to ensure test can run
-        new MockUp<ExpressionRangePartitionInfo>() {
-            @Mock
-            public boolean isAutomaticPartition() {
-                return false;
-            }
-        };
-        new MockUp<ExpressionRangePartitionInfoV2>() {
-            @Mock
-            public boolean isAutomaticPartition() {
-                return false;
-            }
-        };
-        try {
-            String addPartitionSql = String.format("ALTER TABLE %s ADD " +
-                    "PARTITION %s VALUES [(%s),(%s))", tbl, pName, toPartitionVal(pVal1), toPartitionVal(pVal2));
-            System.out.println(addPartitionSql);
-            starRocksAssert.alterTable(addPartitionSql);
-
-            // insert values
-            if (isInsertValue) {
-                String insertSql = String.format("insert into %s partition(%s) values('%s', 1, 1);",
-                        tbl, pName, pVal1);
-                executeInsertSql(insertSql);
-            }
-        } catch (Exception e) {
-            LOG.error("Failed to add partition", e);
-        }
-    }
-
-    private void addRangePartition(String tbl, String pName, String pVal1, String pVal2) {
-        addRangePartition(tbl, pName, pVal1, pVal2, false);
     }
 
     private void withTablePartitions(String tableName) {

@@ -43,7 +43,7 @@
 
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
-#include "block_cache/block_cache.h"
+#include "cache/block_cache/block_cache.h"
 #include "common/configbase.h"
 #include "common/status.h"
 #include "exec/workgroup/scan_executor.h"
@@ -129,8 +129,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 }
                 space.size = disk_size;
             }
-            Status st = BlockCache::instance()->adjust_disk_spaces(spaces);
-            return st;
+            return BlockCache::instance()->update_disk_spaces(spaces);
         });
         _config_callback.emplace("max_compaction_concurrency", [&]() -> Status {
             if (!config::enable_event_based_compaction_framework) {
@@ -368,6 +367,15 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         UPDATE_STARLET_CONFIG(s3_use_list_objects_v1, fslib_s3client_use_list_objects_v1);
         UPDATE_STARLET_CONFIG(starlet_delete_files_max_key_in_batch, delete_files_max_key_in_batch);
 #undef UPDATE_STARLET_CONFIG
+
+        _config_callback.emplace("starlet_filesystem_instance_cache_capacity", [&]() -> Status {
+            LOG(INFO) << "set starlet_filesystem_instance_cache_capacity:"
+                      << config::starlet_filesystem_instance_cache_capacity;
+            if (g_worker) {
+                g_worker->set_fs_cache_capacity(config::starlet_filesystem_instance_cache_capacity);
+            }
+            return Status::OK();
+        });
 #endif // USE_STAROS
     });
 

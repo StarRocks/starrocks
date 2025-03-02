@@ -148,6 +148,14 @@ import com.starrocks.sql.ast.UninstallPluginStmt;
 import com.starrocks.sql.ast.UpdateStmt;
 import com.starrocks.sql.ast.UseCatalogStmt;
 import com.starrocks.sql.ast.UseDbStmt;
+import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
+import com.starrocks.sql.ast.group.DropGroupProviderStmt;
+import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
+import com.starrocks.sql.ast.group.ShowGroupProvidersStmt;
+import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
+import com.starrocks.sql.ast.integration.CreateSecurityIntegrationStatement;
+import com.starrocks.sql.ast.integration.DropSecurityIntegrationStatement;
+import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.pipe.AlterPipeStmt;
 import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
@@ -799,6 +807,62 @@ public class Analyzer {
         @Override
         public Void visitShowGrantsStatement(ShowGrantsStmt stmt, ConnectContext session) {
             AuthorizationAnalyzer.analyze(stmt, session);
+            return null;
+        }
+
+        // ---------------------------------------- Security Integration Statement -------------------------------------
+
+        @Override
+        public Void visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement,
+                                                            ConnectContext context) {
+            SecurityIntegrationStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitAlterSecurityIntegrationStatement(AlterSecurityIntegrationStatement statement,
+                                                           ConnectContext context) {
+            SecurityIntegrationStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropSecurityIntegrationStatement(DropSecurityIntegrationStatement statement,
+                                                          ConnectContext context) {
+            SecurityIntegrationStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowCreateSecurityIntegrationStatement(ShowCreateSecurityIntegrationStatement statement,
+                                                                ConnectContext context) {
+            SecurityIntegrationStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        // ---------------------------------------- Group Provider Statement -------------------------------------
+
+        @Override
+        public Void visitCreateGroupProviderStatement(CreateGroupProviderStmt statement, ConnectContext context) {
+            GroupProviderStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitDropGroupProviderStatement(DropGroupProviderStmt statement, ConnectContext context) {
+            GroupProviderStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowCreateGroupProviderStatement(ShowCreateGroupProviderStmt statement, ConnectContext context) {
+            GroupProviderStatementAnalyzer.analyze(statement, context);
+            return null;
+        }
+
+        @Override
+        public Void visitShowGroupProvidersStatement(ShowGroupProvidersStmt statement, ConnectContext context) {
+            GroupProviderStatementAnalyzer.analyze(statement, context);
             return null;
         }
 

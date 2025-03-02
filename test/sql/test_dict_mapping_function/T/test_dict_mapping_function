@@ -9,7 +9,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -24,7 +24,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -176,7 +176,7 @@ DISTRIBUTED BY HASH(`k`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
 "in_memory" = "false",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -200,7 +200,7 @@ DISTRIBUTED BY HASH(`k`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
 "in_memory" = "false",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );

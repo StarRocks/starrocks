@@ -19,6 +19,7 @@
 #include "exec/tablet_scanner.h"
 #include "exprs/column_ref.h"
 #include "exprs/in_const_predicate.hpp"
+#include "exprs/runtime_filter.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "storage/predicate_parser.h"
 #include "testutil/column_test_helper.h"
@@ -88,7 +89,7 @@ StatusOr<RuntimeFilterProbeDescriptor*> ChunkPredicateBuilderTest::_gen_runtime_
 
 StatusOr<RuntimeFilterProbeCollector*> ChunkPredicateBuilderTest::_gen_runtime_filter_collector(SlotId slot_id,
                                                                                                 bool has_null) {
-    auto* rf = _pool.add(new RuntimeBloomFilter<TYPE_INT>());
+    auto* rf = _pool.add(new ComposedRuntimeFilter<TYPE_INT>());
     rf->insert(10);
     rf->insert(20);
     if (has_null) {
@@ -106,7 +107,7 @@ StatusOr<RuntimeFilterProbeCollector*> ChunkPredicateBuilderTest::_gen_runtime_f
 
 StatusOr<RuntimeFilterProbeCollector*> ChunkPredicateBuilderTest::_gen_varchar_runtime_filter_collector(SlotId slot_id,
                                                                                                         bool has_null) {
-    auto* rf = _pool.add(new RuntimeBloomFilter<TYPE_VARCHAR>());
+    auto* rf = _pool.add(new ComposedRuntimeFilter<TYPE_VARCHAR>());
     rf->insert(Slice("111"));
     rf->insert(Slice("222"));
     if (has_null) {
@@ -125,7 +126,7 @@ StatusOr<RuntimeFilterProbeCollector*> ChunkPredicateBuilderTest::_gen_varchar_r
 template <bool IsMin>
 StatusOr<RuntimeFilterProbeCollector*> ChunkPredicateBuilderTest::_gen_range_runtime_filter_collector(SlotId slot_id,
                                                                                                       bool has_null) {
-    auto* rf = RuntimeBloomFilter<TYPE_INT>::create_with_range<IsMin>(&_pool, 10, false);
+    auto* rf = MinMaxRuntimeFilter<TYPE_INT>::create_with_range<IsMin>(&_pool, 10, false);
     if (has_null) {
         rf->insert_null();
     }

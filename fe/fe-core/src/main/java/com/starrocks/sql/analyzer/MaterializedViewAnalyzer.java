@@ -383,6 +383,8 @@ public class MaterializedViewAnalyzer {
                 checkMVPartitionInfoType(statement, aliasTableMap);
                 // deduce generate partition infos for list partition expressions
                 checkMVGeneratedPartitionColumns(statement, changedPartitionByExprs, aliasTableMap);
+                // check list partition expr is valid
+                checkMVListPartitionExpr(statement, aliasTableMap);
             }
             // check and analyze distribution
             checkDistribution(statement, aliasTableMap);
@@ -1043,6 +1045,59 @@ public class MaterializedViewAnalyzer {
                         statement.setPartitionType(PartitionType.RANGE);
                         checkRangePartitionColumnLimit(mvPartitionByExprs);
                     }
+                }
+            }
+        }
+
+        /**
+         * List partitioned mv can only support 1:1 mapping with ref base table's partition column which means
+         * mv's partition expression must exactly be the same with ref base table's partition expression,
+         */
+        private void checkMVListPartitionExpr(CreateMaterializedViewStatement statement,
+                                              Map<TableName, Table> tableNameTableMap) {
+            if (statement.getPartitionType() != PartitionType.LIST) {
+                return;
+            }
+            // refPartitionByExprs means mv's specific partition column expr of ref base table's partition column
+            List<Expr> refPartitionByExprs = statement.getPartitionRefTableExpr();
+            Map<Integer, Column> generatedColsMap = statement.getGeneratedPartitionCols();
+            for (int i = 0; i < refPartitionByExprs.size(); i++) {
+                // if ref base table & mv's partition expression is the same, mv's partition expression will be a
+                // generated column, so skip it.
+                if (generatedColsMap.containsKey(i)) {
+                    continue;
+                }
+                Expr mvPartitionByExpr = refPartitionByExprs.get(i);
+                SlotRef slotRef = getSlotRef(mvPartitionByExpr);
+                Table refBaseTable = tableNameTableMap.get(slotRef.getTblNameWithoutAnalyzed());
+                if (refBaseTable == null) {
+                    LOG.warn("Materialized view partition expression %s could only ref to base table",
+                            slotRef.toSql());
+                    continue;
+                }
+                if (refBaseTable.isNativeTableOrMaterializedView()) {
+                    if (!(mvPartitionByExpr instanceof SlotRef)) {
+                        throw new SemanticException("List materialized view's partition expression can only " +
+                                "refer ref-base-table's partition expression without transforms but contains: %s",
+                                mvPartitionByExpr.toSql());
+                    }
+                    OlapTable olapTable = (OlapTable) refBaseTable;
+                    PartitionInfo refPartitionInfo = olapTable.getPartitionInfo();
+                    if (!refPartitionInfo.isListPartition()) {
+                        throw new SemanticException("List Materialized view's ref olap table " +
+                                "must be list partitioned", refPartitionByExprs.get(i).getPos());
+                    }
+                    List<Column> refPartitionCols = refBaseTable.getPartitionColumns();
+                    Optional<Column> refPartitionColOpt = refPartitionCols.stream()
+                            .filter(col -> col.getName().equals(slotRef.getColumnName()))
+                            .findFirst();
+                    if (refPartitionColOpt.isEmpty()) {
+                        throw new SemanticException("Materialized view partition column in partition exp " +
+                                "must be base table partition column", mvPartitionByExpr.getPos());
+                    }
+                } else if (refBaseTable.isIcebergTable()) {
+                    // mv based iceberg table's partition expression can be function call and will be checked in
+                    // #checkPartitionColumnWithBaseIcebergTable.
                 }
             }
         }

@@ -423,7 +423,13 @@ if [ $AWS_SDK_CPP_SOURCE = "aws-sdk-cpp-1.11.267" ]; then
         bash ./prefetch_crt_dependency.sh
         touch prefetch_crt_dep_ok
     fi
+    if [ ! -f $PATCHED_MARK ]; then
+        patch -p1  < $TP_PATCH_DIR/aws-cpp-sdk-1.11.267-disable-chunked-upload.patch
+        touch $PATCHED_MARK
+    fi
 fi
+cd -
+echo "Finished patching $AWS_SDK_CPP_SOURCE"
 
 # patch jemalloc_hook
 cd $TP_SOURCE_DIR/$JEMALLOC_SOURCE
@@ -464,8 +470,8 @@ cd -
 echo "Finished patching $VPACK_SOURCE"
 
 # patch avro-c
+cd $TP_SOURCE_DIR/$AVRO_SOURCE
 if [ ! -f $PATCHED_MARK ] && [ $AVRO_SOURCE = "avro-release-1.10.2" ]; then
-    touch $PATCHED_MARK
     cd $TP_SOURCE_DIR/$AVRO_SOURCE/lang/c
     patch -p0 < $TP_PATCH_DIR/avro-1.10.2.c.patch
     cd $TP_SOURCE_DIR/$AVRO_SOURCE

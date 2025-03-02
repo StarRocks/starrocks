@@ -1,0 +1,24 @@
+-- name: test_group_provider
+create group provider foo properties("type" = "foo");
+-- result:
+E: (1064, "Getting analyzing error. Detail message: unsupported group provider type 'foo'.")
+-- !result
+create group provider unix_group_provider properties("type" = "unix");
+-- result:
+-- !result
+show create group provider unix_group_provider;
+-- result:
+unix_group_provider	CREATE GROUP PROVIDER `unix_group_provider` PROPERTIES (
+"type" = "unix"
+)
+-- !result
+show group providers;
+-- result:
+unix_group_provider	unix	None
+-- !result
+drop group provider unix_group_provider;
+-- result:
+-- !result
+show group providers;
+-- result:
+-- !result

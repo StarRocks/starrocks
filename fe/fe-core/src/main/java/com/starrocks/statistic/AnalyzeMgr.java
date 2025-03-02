@@ -444,11 +444,12 @@ public class AnalyzeMgr implements Writable {
         tableIdHasDeleted.removeAll(tables);
 
         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
-        statsConnectCtx.setThreadLocalInfo();
-        statsConnectCtx.setStatisticsConnection(true);
+        try (var guard = statsConnectCtx.bindScope()) {
+            statsConnectCtx.setStatisticsConnection(true);
 
-        dropBasicStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
-        dropHistogramStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
+            dropBasicStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
+            dropHistogramStatsMetaAndData(statsConnectCtx, tableIdHasDeleted);
+        }
     }
 
     public void clearStatisticFromExternalDroppedTable() {
@@ -648,17 +649,19 @@ public class AnalyzeMgr implements Writable {
 
     public void dropBasicStatsMetaAndData(ConnectContext statsConnectCtx, Set<Long> tableIdHasDeleted) {
         StatisticExecutor statisticExecutor = new StatisticExecutor();
-        for (Long tableId : tableIdHasDeleted) {
-            BasicStatsMeta basicStatsMeta = basicStatsMetaMap.get(tableId);
-            if (basicStatsMeta == null) {
-                continue;
+        try (var guard = statsConnectCtx.bindScope()) {
+            for (Long tableId : tableIdHasDeleted) {
+                BasicStatsMeta basicStatsMeta = basicStatsMetaMap.get(tableId);
+                if (basicStatsMeta == null) {
+                    continue;
+                }
+                // Both types of tables need to be deleted, because there may have been a switch of
+                // collecting statistics types, leaving some discarded statistics data.
+                statisticExecutor.dropTableStatistics(statsConnectCtx, tableId, StatsConstants.AnalyzeType.SAMPLE);
+                statisticExecutor.dropTableStatistics(statsConnectCtx, tableId, StatsConstants.AnalyzeType.FULL);
+                GlobalStateMgr.getCurrentState().getEditLog().logRemoveBasicStatsMeta(basicStatsMetaMap.get(tableId));
+                basicStatsMetaMap.remove(tableId);
             }
-            // Both types of tables need to be deleted, because there may have been a switch of
-            // collecting statistics types, leaving some discarded statistics data.
-            statisticExecutor.dropTableStatistics(statsConnectCtx, tableId, StatsConstants.AnalyzeType.SAMPLE);
-            statisticExecutor.dropTableStatistics(statsConnectCtx, tableId, StatsConstants.AnalyzeType.FULL);
-            GlobalStateMgr.getCurrentState().getEditLog().logRemoveBasicStatsMeta(basicStatsMetaMap.get(tableId));
-            basicStatsMetaMap.remove(tableId);
         }
     }
 

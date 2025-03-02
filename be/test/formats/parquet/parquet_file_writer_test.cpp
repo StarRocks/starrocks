@@ -546,6 +546,7 @@ TEST_F(ParquetFileWriterTest, TestWriteDatetimeCompatibleWithHiveReader) {
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ParquetWriterOptions>();
     writer_options->use_int96_timestamp_encoding = true;
+    writer_options->time_zone = "Asia/Shanghai";
     auto writer = std::make_unique<formats::ParquetFileWriter>(
             _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
             TCompressionType::NO_COMPRESSION, writer_options, []() {});
@@ -563,11 +564,14 @@ TEST_F(ParquetFileWriterTest, TestWriteDatetimeCompatibleWithHiveReader) {
             data_column->append_datum(datum);
             datum.set_timestamp(TimestampValue::create(1999, 9, 11, 2, 2, 2));
             data_column->append_datum(datum);
+            // Daylight Saving Time value
+            datum.set_timestamp(TimestampValue::create(1986, 8, 25, 0, 0, 0));
+            data_column->append_datum(datum);
             data_column->append_default();
         }
 
         auto null_column = UInt8Column::create();
-        std::vector<uint8_t> nulls = {1, 0, 1, 0};
+        std::vector<uint8_t> nulls = {1, 0, 1, 0, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
         auto nullable_column = NullableColumn::create(data_column, null_column);
         chunk->append_column(nullable_column, chunk->num_columns());
@@ -578,11 +582,11 @@ TEST_F(ParquetFileWriterTest, TestWriteDatetimeCompatibleWithHiveReader) {
     auto result = writer->commit();
 
     ASSERT_TRUE(result.io_status.ok());
-    ASSERT_EQ(result.file_statistics.record_count, 4);
+    ASSERT_EQ(result.file_statistics.record_count, 5);
 
     auto read_chunk = _read_chunk(type_descs);
     ASSERT_TRUE(read_chunk != nullptr);
-    ASSERT_EQ(read_chunk->num_rows(), 4);
+    ASSERT_EQ(read_chunk->num_rows(), 5);
     parquet::Utils::assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
@@ -1126,6 +1130,45 @@ TEST_F(ParquetFileWriterTest, TestFactory) {
     ASSERT_OK(factory.init());
     auto maybe_writer = factory.create(_file_path);
     ASSERT_OK(maybe_writer.status());
+}
+
+TEST_F(ParquetFileWriterTest, TestWriteJson) {
+    auto type_json = TypeDescriptor::from_logical_type(TYPE_JSON);
+    std::vector<TypeDescriptor> type_descs{type_json};
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs.new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<parquet::ParquetOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ParquetWriterOptions>();
+    auto writer = std::make_unique<formats::ParquetFileWriter>(
+            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
+            TCompressionType::NO_COMPRESSION, writer_options, []() {});
+    ASSERT_OK(writer->init());
+
+    // nullable column
+    auto data_column = JsonColumn::create();
+    auto json1 = JsonValue::parse(R"({"a": 1, "b": 2})");
+    data_column->append(&json1.value());
+    data_column->append(&json1.value());
+    auto json2 = JsonValue::parse(R"({"a": 3})");
+    data_column->append(&json2.value());
+
+    auto null_column = UInt8Column::create();
+    std::vector<uint8_t> nulls = {1, 0, 1};
+    null_column->append_numbers(nulls.data(), nulls.size());
+    auto nullable_column = NullableColumn::create(data_column, null_column);
+
+    auto chunk = std::make_shared<Chunk>();
+    chunk->append_column(nullable_column, chunk->num_columns());
+
+    // write chunk
+    ASSERT_TRUE(writer->write(chunk.get()).ok());
+    auto result = writer->commit();
+
+    ASSERT_TRUE(result.io_status.ok());
+    ASSERT_EQ(result.file_statistics.record_count, 3);
+
+    // _read_chunk does not support read json
 }
 
 } // namespace starrocks::formats

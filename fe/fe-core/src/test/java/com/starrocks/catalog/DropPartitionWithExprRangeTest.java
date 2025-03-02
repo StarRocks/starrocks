@@ -16,20 +16,15 @@ package com.starrocks.catalog;
 
 import com.google.common.collect.ImmutableList;
 import com.starrocks.clone.DynamicPartitionScheduler;
-import com.starrocks.common.util.UUIDUtil;
-import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
-import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticsMetaManager;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
-import mockit.Mock;
-import mockit.MockUp;
 import org.junit.AfterClass;
 import org.junit.Assert;
 import org.junit.BeforeClass;
@@ -87,52 +82,6 @@ public class DropPartitionWithExprRangeTest extends MVTestBase {
 
     @AfterClass
     public static void afterClass() throws Exception {
-    }
-
-    public static void executeInsertSql(String sql) throws Exception {
-        connectContext.setQueryId(UUIDUtil.genUUID());
-        StatementBase statement = SqlParser.parseSingleStatement(sql, connectContext.getSessionVariable().getSqlMode());
-        new StmtExecutor(connectContext, statement).execute();
-    }
-
-    private String toPartitionVal(String val) {
-        return val == null ? "NULL" : String.format("'%s'", val);
-    }
-
-    private void addRangePartition(String tbl, String pName, String pVal1, String pVal2) {
-        addRangePartition(tbl, pName, pVal1, pVal2, false);
-    }
-
-    private void addRangePartition(String tbl, String pName, String pVal1, String pVal2, boolean isInsertValue) {
-        // mock the check to ensure test can run
-        new MockUp<ExpressionRangePartitionInfo>() {
-            @Mock
-            public boolean isAutomaticPartition() {
-                return false;
-            }
-        };
-        new MockUp<ExpressionRangePartitionInfoV2>() {
-            @Mock
-            public boolean isAutomaticPartition() {
-                return false;
-            }
-        };
-        try {
-            String addPartitionSql = String.format("ALTER TABLE %s ADD " +
-                    "PARTITION %s VALUES [(%s),(%s))", tbl, pName, toPartitionVal(pVal1), toPartitionVal(pVal2));
-            System.out.println(addPartitionSql);
-            starRocksAssert.alterTable(addPartitionSql);
-
-            // insert values
-            if (isInsertValue) {
-                String insertSql = String.format("insert into %s partition(%s) values('%s', 1, 1);",
-                        tbl, pName, pVal1);
-                executeInsertSql(insertSql);
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            LOG.error("Failed to add partition", e);
-        }
     }
 
     private void withTablePartitions(String tableName) {

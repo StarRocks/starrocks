@@ -1302,6 +1302,13 @@ public class ExpressionAnalyzer {
                     }
                     break;
                 }
+                case FunctionSet.FIELD: {
+                    if (node.getChildren().size() < 2) {
+                        throw new SemanticException("Incorrect parameter count in" +
+                               " the call to native function 'field'");
+                    }
+                    break;
+                }
             }
         }
 

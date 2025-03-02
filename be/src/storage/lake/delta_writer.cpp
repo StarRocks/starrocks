@@ -55,13 +55,15 @@ public:
 
     DISALLOW_COPY_AND_MOVE(TabletWriterSink);
 
-    Status flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment = nullptr, bool eos = false) override {
+    Status flush_chunk(const Chunk& chunk, starrocks::SegmentPB* segment = nullptr, bool eos = false,
+                       int64_t* flush_data_size = nullptr) override {
         RETURN_IF_ERROR(_writer->write(chunk, segment));
         return _writer->flush(segment);
     }
 
     Status flush_chunk_with_deletes(const Chunk& upserts, const Column& deletes,
-                                    starrocks::SegmentPB* segment = nullptr, bool eos = false) override {
+                                    starrocks::SegmentPB* segment = nullptr, bool eos = false,
+                                    int64_t* flush_data_size = nullptr) override {
         RETURN_IF_ERROR(_writer->flush_del_file(deletes));
         RETURN_IF_ERROR(_writer->write(upserts, segment));
         return _writer->flush(segment);
@@ -275,7 +277,7 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         if (config::enable_load_spill &&
             !(_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS &&
               (!_merge_condition.empty() || is_partial_update() || _tablet_schema->has_separate_sort_key()))) {
-            if (_load_spill_block_mgr == nullptr) {
+            if (_load_spill_block_mgr == nullptr || !_load_spill_block_mgr->is_initialized()) {
                 _load_spill_block_mgr =
                         std::make_unique<LoadSpillBlockManager>(UniqueId(_load_id).to_thrift(), _tablet_id, _txn_id,
                                                                 _tablet_manager->tablet_root_location(_tablet_id));
@@ -318,21 +320,25 @@ inline Status DeltaWriterImpl::flush_async() {
         if (_miss_auto_increment_column && _mem_table->get_result_chunk() != nullptr) {
             RETURN_IF_ERROR(fill_auto_increment_id(*_mem_table->get_result_chunk()));
         }
-        st = _flush_token->submit(std::move(_mem_table), _eos, [this](std::unique_ptr<SegmentPB> seg, bool eos) {
-            if (_immutable_tablet_size > 0 && !_is_immutable.load(std::memory_order_relaxed)) {
-                if (seg) {
-                    _tablet_manager->add_in_writing_data_size(_tablet_id, seg->data_size());
-                }
-                if (_tablet_manager->in_writing_data_size(_tablet_id) > _immutable_tablet_size) {
-                    _is_immutable.store(true, std::memory_order_relaxed);
-                }
-                VLOG(2) << "flush memtable, tablet=" << _tablet_id << ", txn=" << _txn_id
-                        << " _immutable_tablet_size=" << _immutable_tablet_size
-                        << ", segment_size=" << (seg ? seg->data_size() : 0)
-                        << ", in_writing_data_size=" << _tablet_manager->in_writing_data_size(_tablet_id)
-                        << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
-            }
-        });
+        st = _flush_token->submit(
+                std::move(_mem_table), _eos, [this](SegmentPBPtr seg, bool eos, int64_t flush_data_size) {
+                    if (_immutable_tablet_size > 0 && !_is_immutable.load(std::memory_order_relaxed)) {
+                        if (seg) {
+                            _tablet_manager->add_in_writing_data_size(_tablet_id, seg->data_size());
+                        } else if (flush_data_size > 0) {
+                            // When enable load spill, seg is nullptr, so we need to use flush_data_size
+                            _tablet_manager->add_in_writing_data_size(_tablet_id, flush_data_size);
+                        }
+                        if (_tablet_manager->in_writing_data_size(_tablet_id) > _immutable_tablet_size) {
+                            _is_immutable.store(true, std::memory_order_relaxed);
+                        }
+                        VLOG(2) << "flush memtable, tablet=" << _tablet_id << ", txn=" << _txn_id
+                                << " _immutable_tablet_size=" << _immutable_tablet_size
+                                << ", flush data size=" << (seg ? seg->data_size() : flush_data_size)
+                                << ", in_writing_data_size=" << _tablet_manager->in_writing_data_size(_tablet_id)
+                                << ", is_immutable=" << _is_immutable.load(std::memory_order_relaxed);
+                    }
+                });
         _mem_table.reset(nullptr);
         _last_write_ts = 0;
     }
@@ -557,8 +563,11 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
     op_write->mutable_rowset()->set_overlapped(op_write->rowset().segments_size() > 1);
 
-    if (is_partial_update() && !_merge_condition.empty()) {
-        return Status::NotSupported("partial update and condition update at the same time");
+    // We can support partial update with row mode to be used with condition update at the same time.
+    if (is_partial_update() && !_merge_condition.empty() &&
+        (_partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE ||
+         _partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE)) {
+        return Status::NotSupported("partial update with column mode and condition update at the same time");
     }
 
     // handle partial update

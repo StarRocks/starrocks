@@ -166,6 +166,7 @@ set(EXEC_FILES
     schema_scanner/schema_cluster_snapshot_jobs_scanner.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
+    sorting/merge.cpp
     sorting/merge_column.cpp
     sorting/merge_path.cpp
     sorting/merge_cascade.cpp
@@ -238,6 +239,7 @@ set(EXEC_FILES
     pipeline/sort/spillable_partition_sort_sink_operator.cpp
     pipeline/sort/local_parallel_merge_sort_source_operator.cpp
     pipeline/sort/sort_context.cpp
+    pipeline/pipeline_metrics.cpp
     pipeline/pipeline_driver_executor.cpp
     pipeline/pipeline_driver_queue.cpp
     pipeline/pipeline_driver_poller.cpp

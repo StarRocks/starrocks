@@ -10,7 +10,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -27,7 +27,7 @@ COMMENT "OLAP"
 DISTRIBUTED BY HASH(`v1`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "light_schema_change" = "true",
 "compression" = "LZ4"
@@ -307,11 +307,11 @@ insert into s2 select * from s2;
 -- !result
 [UC] analyze full table s1;
 -- result:
-test_db_3569e679a63f46fcb95f5e935f2b4716.s1	analyze	status	OK
+test_db_b2ce4f72f18e49288a5dbce50a0cb798.s1	analyze	status	OK
 -- !result
 [UC] analyze full table s2;
 -- result:
-test_db_3569e679a63f46fcb95f5e935f2b4716.s2	analyze	status	OK
+test_db_b2ce4f72f18e49288a5dbce50a0cb798.s2	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('v3', 's1')
 -- result:
@@ -460,8 +460,8 @@ where x2 = "anhui"
 GROUP BY x1
 HAVING MAX(y2) = "JX";
 -- result:
-nauhciS	anhui	SH1	JX
 ixgnauG	anhui	QH1	JX
+nauhciS	anhui	SH1	JX
 -- !result
 CREATE TABLE `supplier` (
   `s_suppkey` int(11) NOT NULL COMMENT "",
@@ -488,7 +488,7 @@ FROM
 -- !result
 [UC] analyze full table supplier;
 -- result:
-test_db_3569e679a63f46fcb95f5e935f2b4716.supplier	analyze	status	OK
+test_db_b2ce4f72f18e49288a5dbce50a0cb798.supplier	analyze	status	OK
 -- !result
 function: wait_global_dict_ready('s_region', 'supplier')
 -- result:
@@ -523,4 +523,11 @@ with a as ( select s_region, S_NAME from supplier where S_SUPPKEY < 10 limit 10 
 0
 0
 0
+-- !result
+select s_region, array_map(x -> concat(x, date_format(cast(concat('202001', s_region) as datetime), "%Y%m")), ['a', 'b', 'c']) 
+from supplier where s_suppkey > 4093;
+-- result:
+15	["a202001","b202001","c202001"]
+14	["a202001","b202001","c202001"]
+0	[null,null,null]
 -- !result

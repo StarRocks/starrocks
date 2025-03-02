@@ -49,17 +49,6 @@ struct DataSegment {
 
     void init(const std::vector<ExprContext*>* sort_exprs, const ChunkPtr& cnk);
 
-    // There is two compares in the method,
-    // the first is:
-    //     compare every row in every DataSegment of data_segments with `rows_to_sort - 1` row of this DataSegment,
-    //     obtain every row compare result in compare_results_array, if <= 0, mark it with `INCLUDE_IN_SEGMENT`.
-    // the second is:
-    //     compare every row in compare_results_array that <= 0 (i.e. `INCLUDE_IN_SEGMENT` part) with the first row of this DataSegment,
-    //     if < 0, then mark it with `SMALLER_THAN_MIN_OF_SEGMENT`
-    Status get_filter_array(std::vector<DataSegment>& data_segments, size_t rows_to_sort,
-                            std::vector<std::vector<uint8_t>>& filter_array, const SortDescs& sort_order_flags,
-                            uint32_t& least_num, uint32_t& middle_num);
-
     void clear() {
         chunk.reset(std::make_unique<Chunk>().release());
         order_by_columns.clear();
@@ -133,8 +122,6 @@ public:
     // Return accurate output rows of this operator
     virtual size_t get_output_rows() const = 0;
 
-    size_t get_next_output_row() { return _next_output_row; }
-
     virtual int64_t mem_usage() const = 0;
 
     virtual bool is_full() { return false; }
@@ -163,8 +150,6 @@ protected:
     const std::string _sort_keys;
     const bool _is_topn;
 
-    size_t _next_output_row = 0;
-
     RuntimeProfile::Counter* _build_timer = nullptr;
     RuntimeProfile::Counter* _sort_timer = nullptr;
     RuntimeProfile::Counter* _merge_timer = nullptr;
@@ -187,10 +172,10 @@ struct SortRuntimeFilterBuilder {
             if (column->is_null(rid)) {
                 if (is_close_interval) {
                     // Null first and all values is null, only need to read null value later.
-                    return RuntimeBloomFilter<ltype>::create_with_only_null_range(pool);
+                    return MinMaxRuntimeFilter<ltype>::create_with_only_null_range(pool);
                 } else {
                     // Null first and all values is null, no need to read any value.
-                    return RuntimeBloomFilter<ltype>::create_with_empty_range_without_null(pool);
+                    return MinMaxRuntimeFilter<ltype>::create_with_empty_range_without_null(pool);
                 }
             }
         } else {
@@ -200,7 +185,7 @@ struct SortRuntimeFilterBuilder {
                     return nullptr;
                 } else {
                     // Null last and all values is null, need to read all values without null.
-                    return RuntimeBloomFilter<ltype>::create_with_full_range_without_null(pool);
+                    return MinMaxRuntimeFilter<ltype>::create_with_full_range_without_null(pool);
                 }
             }
         }
@@ -209,11 +194,11 @@ struct SortRuntimeFilterBuilder {
         auto runtime_data_column = down_cast<RunTimeColumnType<ltype>*>(data_column);
         auto data = runtime_data_column->get_data()[rid];
         if (asc) {
-            return RuntimeBloomFilter<ltype>::template create_with_range<false>(pool, data, is_close_interval,
-                                                                                need_null);
+            return MinMaxRuntimeFilter<ltype>::template create_with_range<false>(pool, data, is_close_interval,
+                                                                                 need_null);
         } else {
-            return RuntimeBloomFilter<ltype>::template create_with_range<true>(pool, data, is_close_interval,
-                                                                               need_null);
+            return MinMaxRuntimeFilter<ltype>::template create_with_range<true>(pool, data, is_close_interval,
+                                                                                need_null);
         }
     }
 };
@@ -226,10 +211,10 @@ struct SortRuntimeFilterUpdater {
             if (column->is_null(rid)) {
                 if (is_close_interval) {
                     // all values is null, only need to read null.
-                    down_cast<RuntimeBloomFilter<ltype>*>(filter)->update_to_all_null();
+                    down_cast<MinMaxRuntimeFilter<ltype>*>(filter)->update_to_all_null();
                 } else {
                     // all values is null, no need to read any value.
-                    down_cast<RuntimeBloomFilter<ltype>*>(filter)->update_to_empty_and_not_null();
+                    down_cast<MinMaxRuntimeFilter<ltype>*>(filter)->update_to_empty_and_not_null();
                 }
                 return nullptr;
             }
@@ -243,11 +228,11 @@ struct SortRuntimeFilterUpdater {
 
         auto data_column = ColumnHelper::get_data_column(column.get());
         auto runtime_data_column = down_cast<RunTimeColumnType<ltype>*>(data_column);
-        auto data = runtime_data_column->get_data()[rid];
+        auto data = GetContainer<ltype>::get_data(runtime_data_column)[rid];
         if (asc) {
-            down_cast<RuntimeBloomFilter<ltype>*>(filter)->template update_min_max<false>(data);
+            down_cast<MinMaxRuntimeFilter<ltype>*>(filter)->template update_min_max<false>(data);
         } else {
-            down_cast<RuntimeBloomFilter<ltype>*>(filter)->template update_min_max<true>(data);
+            down_cast<MinMaxRuntimeFilter<ltype>*>(filter)->template update_min_max<true>(data);
         }
         return nullptr;
     }
