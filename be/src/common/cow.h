@@ -49,62 +49,62 @@ protected:
     const Derived* derived() const { return static_cast<const Derived*>(this); }
 
     template <typename T>
-    class Owner {
+    class RCPtr {
     public:
-        Owner() : _t(nullptr) {}
-        Owner(T* t, bool add_ref = true) : _t(t) {
+        RCPtr() : _t(nullptr) {}
+        RCPtr(T* t, bool add_ref = true) : _t(t) {
             if (_t && add_ref) {
                 ((std::remove_const_t<T>*)_t)->add_ref();
             }
         }
-        ~Owner() {
+        ~RCPtr() {
             if (_t) {
                 ((std::remove_const_t<T>*)_t)->release_ref();
             }
         }
 
         template <class U>
-        friend class Owner;
+        friend class RCPtr;
 
         // Copy construct/assignment
         template <typename U>
-        Owner(Owner<U> const& rhs) : _t(rhs.get()) {
+        RCPtr(RCPtr<U> const& rhs) : _t(rhs.get()) {
             if (_t) {
                 ((std::remove_const_t<T>*)_t)->add_ref();
             }
         }
-        Owner(Owner const& rhs) : _t(rhs.get()) {
+        RCPtr(RCPtr const& rhs) : _t(rhs.get()) {
             if (_t) {
                 ((std::remove_const_t<T>*)_t)->add_ref();
             }
         }
         template <typename U>
-        Owner& operator=(Owner<U> const& rhs) {
-            Owner(rhs).swap(*this);
+        RCPtr& operator=(RCPtr<U> const& rhs) {
+            RCPtr(rhs).swap(*this);
             return *this;
         }
-        Owner& operator=(Owner const& rhs) {
-            Owner(rhs).swap(*this);
+        RCPtr& operator=(RCPtr const& rhs) {
+            RCPtr(rhs).swap(*this);
             return *this;
         }
-        Owner& operator=(T* rhs) {
-            Owner(rhs).swap(*this);
+        RCPtr& operator=(T* rhs) {
+            RCPtr(rhs).swap(*this);
             return *this;
         }
 
         // Move onstruct/assignment
-        Owner(Owner&& rhs) : _t(rhs._t) { rhs._t = nullptr; }
+        RCPtr(RCPtr&& rhs) : _t(rhs._t) { rhs._t = nullptr; }
         template <class U>
-        Owner(Owner<U>&& rhs) : _t(rhs._t) {
+        RCPtr(RCPtr<U>&& rhs) : _t(rhs._t) {
             rhs._t = nullptr;
         }
-        Owner& operator=(Owner&& rhs) {
-            Owner(static_cast<Owner&&>(rhs)).swap(*this);
+        RCPtr& operator=(RCPtr&& rhs) {
+            RCPtr(static_cast<RCPtr&&>(rhs)).swap(*this);
             return *this;
         }
         template <class U>
-        Owner& operator=(Owner<U>&& rhs) {
-            Owner(static_cast<Owner<U>&&>(rhs)).swap(*this);
+        RCPtr& operator=(RCPtr<U>&& rhs) {
+            RCPtr(static_cast<RCPtr<U>&&>(rhs)).swap(*this);
             return *this;
         }
 
@@ -116,7 +116,7 @@ protected:
         operator T*() const { return _t; }
 
         // swap the pointer with others
-        void swap(Owner& rhs) {
+        void swap(RCPtr& rhs) {
             T* tmp = _t;
             _t = rhs._t;
             rhs._t = tmp;
@@ -129,9 +129,9 @@ protected:
         }
 
         // reset the pointer with others
-        void reset() { Owner().swap(*this); }
-        void reset(T* rhs) { Owner(rhs).swap(*this); }
-        void reset(T* rhs, bool add_ref) { Owner(rhs, add_ref).swap(*this); }
+        void reset() { RCPtr().swap(*this); }
+        void reset(T* rhs) { RCPtr(rhs).swap(*this); }
+        void reset(T* rhs, bool add_ref) { RCPtr(rhs, add_ref).swap(*this); }
 
     protected:
         T* _t = nullptr;
@@ -140,28 +140,28 @@ protected:
     // If the owner data is mutable, it can call non-const method of derived class, but
     // one mutable data should only have one owner and it can not be shared with others.
     template <typename T>
-    class MutableOwner : public Owner<T> {
+    class MutPtr : public RCPtr<T> {
     private:
-        using Base = Owner<T>;
+        using Base = RCPtr<T>;
 
         template <typename>
         friend class Cow;
         template <typename, typename, typename>
         friend class CowFactory;
 
-        explicit MutableOwner(T* ptr, bool add_ref = true) : Base(ptr, add_ref) {}
+        explicit MutPtr(T* ptr, bool add_ref = true) : Base(ptr, add_ref) {}
 
     public:
         // Copy: not possible.
-        MutableOwner(const MutableOwner&) = delete;
+        MutPtr(const MutPtr&) = delete;
         // Move: ok.
-        MutableOwner(MutableOwner&&) = default;
-        MutableOwner& operator=(MutableOwner&&) = default;
+        MutPtr(MutPtr&&) = default;
+        MutPtr& operator=(MutPtr&&) = default;
         // Initializing from temporary of compatible type.
         template <typename U>
-        MutableOwner(MutableOwner<U>&& other) : Base(std::move(other)) {}
-        MutableOwner() = default;
-        MutableOwner(std::nullptr_t) {}
+        MutPtr(MutPtr<U>&& other) : Base(std::move(other)) {}
+        MutPtr() = default;
+        MutPtr(std::nullptr_t) {}
     };
 
     // If the owner data is immutable, it can only call non const methods of derived class ideally, but
@@ -171,33 +171,31 @@ protected:
     // NOTE: To be compatible with old codes, it can call non-const methods of derived class if the Immutable data
     // is not `const` or `const&` or called from `const method`; otherwise, it can only call const methods of derived class.
     template <typename T>
-    class ImmutableOwner : public Owner<const T> {
+    class ImmutPtr : public RCPtr<const T> {
     public:
-        template <typename... Args>
-        ImmutableOwner(Args&&... args) : Base(std::forward<Args>(args)...) {}
-
-        template <typename U>
-        ImmutableOwner(std::initializer_list<U>&& arg) : Base(std::forward<std::initializer_list<U>>(arg)) {}
-
         // Copy constructor/assignment
-        ImmutableOwner(const ImmutableOwner&) = default;
-        ImmutableOwner& operator=(const ImmutableOwner&) = default;
+        ImmutPtr(const ImmutPtr&) = default;
+        ImmutPtr& operator=(const ImmutPtr&) = default;
         template <typename U>
-        ImmutableOwner(const ImmutableOwner<U>& other) : Base(other) {}
+        ImmutPtr(const ImmutPtr<U>& other) : Base(other) {}
 
         // Move constructor/assignment
-        ImmutableOwner(ImmutableOwner&&) = default;
-        ImmutableOwner& operator=(ImmutableOwner&&) = default;
+        ImmutPtr(ImmutPtr&&) = default;
+        ImmutPtr& operator=(ImmutPtr&&) = default;
         template <typename U>
-        ImmutableOwner(ImmutableOwner<U>&& other) : Base(std::move(other)) {}
+        ImmutPtr(ImmutPtr<U>&& other) : Base(std::move(other)) {}
         template <typename U>
-        ImmutableOwner(MutableOwner<U>&& other) : Base(std::move(other)) {}
+        ImmutPtr(MutPtr<U>&& other) : Base(std::move(other)) {}
+        template <typename... Args>
+        ImmutPtr(Args&&... args) : Base(std::forward<Args>(args)...) {}
+        template <typename U>
+        ImmutPtr(std::initializer_list<U>&& arg) : Base(std::forward<std::initializer_list<U>>(arg)) {}
 
         // Copy from mutable ptr: not possible.
         template <typename U>
-        ImmutableOwner(const MutableOwner<U>&) = delete;
-        ImmutableOwner() = default;
-        ImmutableOwner(std::nullptr_t) {}
+        ImmutPtr(const MutPtr<U>&) = delete;
+        ImmutPtr() = default;
+        ImmutPtr(std::nullptr_t) {}
 
         const T* get() const { return this->_t; }
         T* get() { return const_cast<T*>(this->_t); }
@@ -209,26 +207,26 @@ protected:
         T& operator*() { return *get(); }
 
     private:
-        using Base = Owner<const T>;
+        using Base = RCPtr<const T>;
 
         template <typename>
         friend class Cow;
         template <typename, typename, typename>
         friend class CowFactory;
 
-        explicit ImmutableOwner(const T* ptr, bool add_ref = true) : Base(ptr, add_ref) {}
+        explicit ImmutPtr(const T* ptr, bool add_ref = true) : Base(ptr, add_ref) {}
     };
 
 public:
-    using MutablePtr = MutableOwner<Derived>;
-    using Ptr = ImmutableOwner<Derived>;
+    using MutablePtr = MutPtr<Derived>;
+    using Ptr = ImmutPtr<Derived>;
 
 protected:
     // trigger clone-on-write, deep clone if the data is shared with others, otherwise shadow clone.
     MutablePtr try_mutate() const {
 #ifndef NDEBUG
         if (VLOG_IS_ON(1)) {
-            VLOG(1) << "[Cow] trigger Cow: " << this << ", use_count=" << this->use_count() << ", try to "
+            VLOG(1) << "[COW] trigger COW: " << this << ", use_count=" << this->use_count() << ", try to "
                     << (this->use_count() > 1 ? "deep" : "shadow") << " clone";
         }
 #endif
@@ -268,8 +266,8 @@ class CowFactory : public Base {
 public:
     using BasePtr = typename AncestorBase::Ptr;
     using BaseMutablePtr = typename AncestorBase::MutablePtr;
-    using Ptr = typename Base::template ImmutableOwner<Derived>;
-    using MutablePtr = typename Base::template MutableOwner<Derived>;
+    using Ptr = typename Base::template ImmutPtr<Derived>;
+    using MutablePtr = typename Base::template MutPtr<Derived>;
 
     // AncestorBase is root class of inheritance hierarchy
     // if Derived class is the direct subclass of the root, then AncestorBase is just the Base class
