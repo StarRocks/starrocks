@@ -61,6 +61,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private QueryStatement queryStatement;
     private DistributionDesc distributionDesc;
     private final int queryStartIndex;
+    private final int queryStopIndex;
     private final List<String> sortKeys;
     private KeysType keysType = KeysType.DUP_KEYS;
     // view definition of the mv which has been rewritten by AstToSQLBuilder#toSQL
@@ -104,6 +105,11 @@ public class CreateMaterializedViewStatement extends DdlStmt {
                                            Map<String, String> properties,
                                            QueryStatement queryStatement,
                                            int queryStartIndex,
+<<<<<<< HEAD
+=======
+                                           int queryStopIndex,
+                                           String originalDBName,
+>>>>>>> 53737b1b8 ([BugFix] Fix materialized view originalViewDefineSql error (#56172))
                                            NodePosition pos) {
         super(pos);
         this.tableName = tableName;
@@ -117,6 +123,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.sortKeys = sortKeys;
         this.properties = properties;
         this.queryStartIndex = queryStartIndex;
+        this.queryStopIndex = queryStopIndex;
         this.queryStatement = queryStatement;
     }
 
@@ -237,6 +244,10 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public int getQueryStartIndex() {
         return queryStartIndex;
+    }
+
+    public int getQueryStopIndex() {
+        return queryStopIndex;
     }
 
     public QueryStatement getQueryStatement() {
