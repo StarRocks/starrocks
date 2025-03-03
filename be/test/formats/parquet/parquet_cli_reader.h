@@ -35,7 +35,13 @@ public:
         _scanner_ctx->stats = _scan_stats.get();
         _scanner_ctx->lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
     }
-    ~ParquetCLIReader() = default;
+    ~ParquetCLIReader() {
+        _file_reader = nullptr;
+        _file = nullptr;
+        _scanner_ctx = nullptr;
+        _scan_stats = nullptr;
+        _chunk = nullptr;
+    }
 
     Status init() {
         if (_file == nullptr) {
@@ -46,17 +52,15 @@ public:
 
         // create temporary reader to load schema.
         FileMetaData* file_metadata = nullptr;
+        HdfsScannerContext ctx;
+        HdfsScanStats stats;
+        ctx.stats = &stats;
+        ctx.scan_range = scan_range;
+        ctx.lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
         std::shared_ptr<FileReader> reader =
                 std::make_shared<FileReader>(4096, _file.get(), std::filesystem::file_size(_filepath));
-        {
-            HdfsScannerContext ctx;
-            HdfsScanStats stats;
-            ctx.stats = &stats;
-            ctx.scan_range = scan_range;
-            ctx.lazy_column_coalesce_counter = _pool.add(new std::atomic<int32_t>(0));
-            RETURN_IF_ERROR(reader->init(&ctx));
-            file_metadata = reader->get_file_metadata();
-        }
+        RETURN_IF_ERROR(reader->init(&ctx));
+        file_metadata = reader->get_file_metadata();
 
         std::vector<SlotDesc> slot_descs;
         std::vector<TypeDescriptor> column_types;
@@ -245,11 +249,10 @@ private:
     }
 
     const std::string _filepath;
-    const std::unique_ptr<RandomAccessFile> _file;
-    const std::shared_ptr<HdfsScannerContext> _scanner_ctx;
-    const std::shared_ptr<HdfsScanStats> _scan_stats;
-
     std::shared_ptr<FileReader> _file_reader;
+    std::unique_ptr<RandomAccessFile> _file;
+    std::shared_ptr<HdfsScannerContext> _scanner_ctx;
+    std::shared_ptr<HdfsScanStats> _scan_stats;
     std::shared_ptr<Chunk> _chunk;
     ObjectPool _pool;
 };
