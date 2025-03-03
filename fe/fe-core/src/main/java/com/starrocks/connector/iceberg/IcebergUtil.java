@@ -14,34 +14,8 @@
 
 package com.starrocks.connector.iceberg;
 
-import org.apache.iceberg.types.Type.PrimitiveType;
-import org.apache.iceberg.types.Types.NestedField;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Map.Entry;
-import java.util.stream.Stream;
-
 public final class IcebergUtil {
     private IcebergUtil() {}
-
-    private static Stream<Entry<Integer, PrimitiveType>> primitiveFieldTypes(List<NestedField> nestedFields) {
-        return nestedFields.stream()
-                .flatMap(IcebergUtil::primitiveFieldTypes);
-    }
-
-    private static Stream<Entry<Integer, PrimitiveType>> primitiveFieldTypes(NestedField nestedField) {
-        org.apache.iceberg.types.Type fieldType = nestedField.type();
-        if (fieldType.isPrimitiveType()) {
-            return Stream.of(Map.entry(nestedField.fieldId(), fieldType.asPrimitiveType()));
-        }
-
-        if (fieldType.isNestedType()) {
-            return primitiveFieldTypes(fieldType.asNestedType().fields());
-        }
-
-        throw new IllegalStateException("Unsupported field type: " + nestedField);
-    }
 
     public static String fileName(String path) {
         return path.substring(path.lastIndexOf('/') + 1);
