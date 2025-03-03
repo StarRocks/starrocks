@@ -49,16 +49,11 @@ public:
     ~StarRocksMetricsTest() override = default;
 
 protected:
-    void SetUp() override {
-        StoragePageCache::release_global_cache();
-        ObjectCacheOptions options{.capacity = 1024 * 1024, .module = ObjectCacheModuleType::LRUCACHE};
-        ASSERT_OK(_obj_cache.init(options));
-        StoragePageCache::create_global_cache(&_obj_cache);
-    }
+    void SetUp() override { _page_cache = CacheEnv::GetInstance()->page_cache(); }
 
-    void TearDown() override { StoragePageCache::instance()->prune(); }
+    void TearDown() override {}
 
-    ObjectCache _obj_cache;
+    StoragePageCache* _page_cache;
 };
 
 class TestMetricsVisitor : public MetricsVisitor {
@@ -106,7 +101,7 @@ private:
 
 TEST_F(StarRocksMetricsTest, Normal) {
     TestMetricsVisitor visitor;
-    auto instance = std::make_unique<StarRocksMetrics>();
+    auto instance = StarRocksMetrics::instance();
     auto metrics = instance->metrics();
     metrics->collect(&visitor);
     LOG(INFO) << "\n" << visitor.to_string();
@@ -281,25 +276,25 @@ TEST_F(StarRocksMetricsTest, PageCacheMetrics) {
     ASSERT_TRUE(hit_metric != nullptr);
     auto capacity_metric = metrics->get_metric("page_cache_capacity");
     ASSERT_TRUE(capacity_metric != nullptr);
-    auto cache = StoragePageCache::instance();
     {
-        StoragePageCache::CacheKey key("abc", 0);
-        PageCacheHandle handle;
-        Slice data(new char[1024], 1024);
-        cache->insert(key, data, &handle, false);
-        auto found = cache->lookup(key, &handle);
-        ASSERT_TRUE(found);
+        {
+            StoragePageCache::CacheKey key("abc", 0);
+            PageCacheHandle handle;
+            Slice data(new char[1024], 1024);
+            ASSERT_OK(_page_cache->insert(key, data, &handle, false));
+            ASSERT_TRUE(_page_cache->lookup(key, &handle));
+        }
         for (int i = 0; i < 1024; i++) {
             PageCacheHandle handle;
             StoragePageCache::CacheKey key(std::to_string(i), 0);
-            cache->lookup(key, &handle);
+            _page_cache->lookup(key, &handle);
         }
     }
     config::enable_metric_calculator = false;
     metrics->collect(&visitor);
     ASSERT_STREQ("1025", lookup_metric->to_string().c_str());
     ASSERT_STREQ("1", hit_metric->to_string().c_str());
-    ASSERT_STREQ(std::to_string(cache->get_capacity()).c_str(), capacity_metric->to_string().c_str());
+    ASSERT_STREQ(std::to_string(_page_cache->get_capacity()).c_str(), capacity_metric->to_string().c_str());
 }
 
 void assert_threadpool_metrics_register(const std::string& pool_name, MetricRegistry* instance) {
