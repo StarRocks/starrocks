@@ -141,7 +141,7 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
 
     public static final long DEFAULT_TASK_SCHED_INTERVAL_SECOND = 10;
     public static final boolean DEFAULT_STRICT_MODE = false; // default is false
-    public static final boolean DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR = true;
+    public static final boolean DEFAULT_PAUSE_ON_FATAL_PARSE_ERROR = false;
 
     protected static final String STAR_STRING = "*";
 

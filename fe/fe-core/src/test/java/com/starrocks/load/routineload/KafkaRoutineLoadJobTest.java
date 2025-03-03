@@ -563,12 +563,12 @@ public class KafkaRoutineLoadJobTest {
 
         {
             KafkaRoutineLoadJob kafkaRoutineLoadJob = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
-            Assert.assertTrue(kafkaRoutineLoadJob.isPauseOnFatalParseError());
+            Assert.assertFalse(kafkaRoutineLoadJob.isPauseOnFatalParseError());
         }
         {
-            Deencapsulation.setField(createRoutineLoadStmt, "pauseOnFatalParseError", false);
+            Deencapsulation.setField(createRoutineLoadStmt, "pauseOnFatalParseError", true);
             KafkaRoutineLoadJob kafkaRoutineLoadJob = KafkaRoutineLoadJob.fromCreateStmt(createRoutineLoadStmt);
-            Assert.assertFalse(kafkaRoutineLoadJob.isPauseOnFatalParseError());
+            Assert.assertTrue(kafkaRoutineLoadJob.isPauseOnFatalParseError());
         }
     }
 }

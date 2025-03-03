@@ -797,21 +797,6 @@ public class RoutineLoadJobTest {
             }
         };
 
-        // pauseOnFatalParseError = true
-        {
-            List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
-            routineLoadTaskInfoList.add(routineLoadTaskInfo);
-            RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
-            Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
-            Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
-            routineLoadJob.afterAborted(transactionState, true,
-                    TxnStatusChangeReason.PARSE_ERROR.toString());
-            Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
-            String errorMsg =
-                    "ErrorReason{errCode = 5611, msg='parse error. Check the 'TrackingSQL' field for detailed information.'}";
-            Assert.assertEquals(errorMsg, routineLoadJob.getPauseReason());
-        }
-
         // pauseOnFatalParseError = false
         {
             new MockUp<GlobalStateMgr>() {
@@ -826,12 +811,27 @@ public class RoutineLoadJobTest {
             RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
             Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
             Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
-            ((Map<String, String>) Deencapsulation.getField(routineLoadJob, "jobProperties"))
-                    .put("pause_on_fatal_parse_error", "false");
             routineLoadJob.afterAborted(transactionState, true,
                     TxnStatusChangeReason.PARSE_ERROR.toString());
             System.out.println(routineLoadJob.getPauseReason());
             Assert.assertEquals(RoutineLoadJob.JobState.RUNNING, routineLoadJob.getState());
+        }
+
+        // pauseOnFatalParseError = true
+        {
+            List<RoutineLoadTaskInfo> routineLoadTaskInfoList = Lists.newArrayList();
+            routineLoadTaskInfoList.add(routineLoadTaskInfo);
+            RoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
+            Deencapsulation.setField(routineLoadJob, "routineLoadTaskInfoList", routineLoadTaskInfoList);
+            Deencapsulation.setField(routineLoadJob, "state", RoutineLoadJob.JobState.RUNNING);
+            ((Map<String, String>) Deencapsulation.getField(routineLoadJob, "jobProperties"))
+                    .put("pause_on_fatal_parse_error", "true");
+            routineLoadJob.afterAborted(transactionState, true,
+                    TxnStatusChangeReason.PARSE_ERROR.toString());
+            Assert.assertEquals(RoutineLoadJob.JobState.PAUSED, routineLoadJob.getState());
+            String errorMsg =
+                    "ErrorReason{errCode = 5611, msg='parse error. Check the 'TrackingSQL' field for detailed information.'}";
+            Assert.assertEquals(errorMsg, routineLoadJob.getPauseReason());
         }
     }
 }
