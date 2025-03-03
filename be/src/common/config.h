@@ -923,11 +923,8 @@ CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_Bool(parquet_late_materialization_enable, "true");
 CONF_Bool(parquet_page_index_enable, "true");
 CONF_mBool(parquet_statistics_process_more_filter_enable, "true");
-<<<<<<< HEAD
 CONF_mBool(parquet_advance_zonemap_filter, "true");
-=======
 CONF_mBool(parquet_fast_timezone_conversion, "false");
->>>>>>> 4e623fed9 ([Enhancement] provide a faster but potentially wrong way to do timezone conversion (#56443))
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
