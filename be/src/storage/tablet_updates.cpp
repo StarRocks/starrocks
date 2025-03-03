@@ -2095,6 +2095,18 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, con
 // at last, we will commit this compaction in version (3.1). But this compaction will miss the partial update.
 // So we need `_check_conflict_with_partial_update` to detect this conflict and cancel this compaction.
 Status TabletUpdates::_check_conflict_with_partial_update(CompactionInfo* info) {
+    TEST_SYNC_POINT_CALLBACK("TabletUpdates::_check_conflict_with_partial_update", &info->start_version);
+    // check if compaction's start version is too old to decide whether conflict happens
+    if (info->start_version < _edit_version_infos[0]->version) {
+        std::string msg = strings::Substitute(
+                "compaction's start version is too old to decide whether conflict happens, so abort it, "
+                "tabletid:$0 ver:$1-$2",
+                _tablet.tablet_id(), info->start_version.major_number(),
+                _edit_version_infos[0]->version.major_number());
+        LOG(WARNING) << msg;
+        _compaction_state.reset();
+        return Status::Cancelled(msg);
+    }
     // check edit version info from latest to info->start_version
     for (auto i = _edit_version_infos.rbegin(); i != _edit_version_infos.rend() && info->start_version < (*i)->version;
          i++) {
@@ -5750,6 +5762,11 @@ void TabletUpdates::_reset_apply_status(const EditVersionInfo& version_info_appl
                 strings::Substitute("$0_$1", _tablet.tablet_id(), rowset->rowset_id().to_string()));
         if (state_entry != nullptr) {
             manager->update_state_cache().remove(state_entry);
+        }
+        auto column_state_entry = manager->update_column_state_cache().get(
+                strings::Substitute("$0_$1", _tablet.tablet_id(), rowset->rowset_id().to_string()));
+        if (column_state_entry != nullptr) {
+            manager->update_column_state_cache().remove(column_state_entry);
         }
     } else if (version_info_apply.compaction) {
         // reset compaction state
