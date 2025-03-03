@@ -1400,6 +1400,5 @@ public class RefreshMaterializedViewTest extends MVTestBase {
         starRocksAssert.dropTable("dim_data");
         starRocksAssert.dropMaterializedView("mv_dim_data1");
         starRocksAssert.dropMaterializedView("mv_test1");
-
     }
 }
