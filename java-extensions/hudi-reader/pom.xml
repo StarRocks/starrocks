@@ -90,6 +90,14 @@
                     <groupId>com.fasterxml.jackson.core</groupId>
                     <artifactId>jackson-databind</artifactId>
                 </exclusion>
+                <exclusion>
+                    <groupId>org.apache.hbase</groupId>
+                    <artifactId>hbase-protocol-shaded</artifactId>
+                </exclusion>
+                <exclusion>
+                    <groupId>org.apache.htrace</groupId>
+                    <artifactId>htrace-core4</artifactId>
+                </exclusion>
             </exclusions>
         </dependency>
 

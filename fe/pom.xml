@@ -772,6 +772,16 @@ under the License.
                 <groupId>org.apache.hudi</groupId>
                 <artifactId>hudi-common</artifactId>
                 <version>${hudi.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.apache.hbase</groupId>
+                        <artifactId>hbase-protocol-shaded</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.htrace</groupId>
+                        <artifactId>htrace-core4</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.hudi/hudi-io -->
