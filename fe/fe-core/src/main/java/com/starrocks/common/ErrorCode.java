@@ -254,6 +254,8 @@ public enum ErrorCode {
                     ErrorCode.ERR_ACCESS_DENIED_HINT_MSG_FORMAT),
     ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER(5204, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation."),
+    ERR_GROUP_ACCESS_DENY(5205, new byte[] {'4', '2', '0', '0', '0'},
+            "Group Access Denied"),
 
     /**
      * 5300 - 5399: Lock and Transaction

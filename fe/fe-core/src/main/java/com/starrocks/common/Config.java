@@ -3522,6 +3522,12 @@ public class Config extends ConfigBase {
     public static String oidc_required_audience = "";
 
     @ConfField(mutable = true)
+    public static String[] authenticated_group_list = {};
+
+    @ConfField(mutable = false)
+    public static String group_provider = "unix";
+
+    @ConfField(mutable = true)
     public static boolean transaction_state_print_partition_info = true;
 
     @ConfField(mutable = true)

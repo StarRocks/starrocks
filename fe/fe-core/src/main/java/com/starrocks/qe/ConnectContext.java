@@ -170,6 +170,7 @@ public class ConnectContext {
     // `execute as` will modify currentRoleIds and assign the active role of the impersonate user to currentRoleIds.
     // For specific logic, please refer to setCurrentRoleIds.
     protected Set<Long> currentRoleIds = new HashSet<>();
+    protected Set<String> groups = new HashSet<>();
     // Serializer used to pack MySQL packet.
     protected MysqlSerializer serializer;
     // Variables belong to this session.
@@ -457,6 +458,14 @@ public class ConnectContext {
 
     public void setCurrentRoleIds(Set<Long> roleIds) {
         this.currentRoleIds = roleIds;
+    }
+
+    public Set<String> getGroups() {
+        return groups;
+    }
+
+    public void setGroups(Set<String> groups) {
+        this.groups = groups;
     }
 
     public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
