@@ -62,11 +62,14 @@ import org.apache.iceberg.Transaction;
 import org.apache.iceberg.UpdateProperties;
 import org.apache.iceberg.UpdateSchema;
 import org.apache.iceberg.relocated.com.google.common.base.Preconditions;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
@@ -88,10 +91,16 @@ import static org.apache.iceberg.ReachableFileUtil.metadataFileLocations;
 import static org.apache.iceberg.ReachableFileUtil.statisticsFilesLocations;
 
 public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
+    private static final Logger LOGGER = LoggerFactory.getLogger(IcebergAlterTableExecutor.class);
     private Table table;
     private IcebergCatalog icebergCatalog;
     private Transaction transaction;
     private HdfsEnvironment hdfsEnvironment;
+
+    private static final int DELETE_BATCH_SIZE = 1000;
+
+    // TODO:Support using session to set default retention_threshold.
+    private static final Duration DEFAULT_RETENTION_THRESHOLD = Duration.ofDays(7);
 
     public IcebergAlterTableExecutor(AlterTableStmt stmt,
             Table table,
@@ -531,7 +540,8 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
 
         long olderThanMillis;
         if (args.isEmpty()) {
-            olderThanMillis = -1L;
+            LocalDateTime time = LocalDateTime.now(TimeUtils.getTimeZone().toZoneId());
+            olderThanMillis = time.minus(DEFAULT_RETENTION_THRESHOLD).toInstant(ZoneOffset.UTC).toEpochMilli();
         } else {
             LocalDateTime time = Optional.ofNullable(args.get(0))
                     .flatMap(arg -> arg.castTo(Type.DATETIME)
@@ -599,12 +609,13 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
                 FileStatus status = fileSystem.getFileStatus(entry.getPath());
                 if (status.getModificationTime() < expiration && !validFiles.contains(entry.getPath().getName())) {
                     filesToDelete.add(entry.getPath());
-                    if (filesToDelete.size() >= 5000) {
+                    if (filesToDelete.size() >= DELETE_BATCH_SIZE) {
                         filesToDelete.forEach(path -> {
                             try {
                                 fileSystem.delete(path, false);
+                                LOGGER.debug("Deleted file {}", path);
                             } catch (IOException e) {
-                                throw new RuntimeException(e);
+                                LOGGER.error("Failed to delete file {}", path, e);
                             }
                         });
                         filesToDelete.clear();
@@ -615,8 +626,9 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
                 filesToDelete.forEach(path -> {
                     try {
                         fileSystem.delete(path, false);
+                        LOGGER.debug("Deleted file {}", path);
                     } catch (IOException e) {
-                        throw new RuntimeException(e);
+                        LOGGER.error("Failed to delete file {}", path, e);
                     }
                 });
                 filesToDelete.clear();
