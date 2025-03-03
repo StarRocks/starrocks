@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
+import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -34,8 +35,8 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.OptExpressionDuplicator;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -129,7 +130,7 @@ public class OrToUnionAllJoinRule extends TransformationRule {
             return false;
         }
 
-        ScalarOperator predicate = joinOp.getOriginalOnPredicate();
+        ScalarOperator predicate = joinOp.getOnPredicate();
         if (!(predicate instanceof CompoundPredicateOperator)) {
             return false;
         }
@@ -164,7 +165,7 @@ public class OrToUnionAllJoinRule extends TransformationRule {
     @Override
     public List<OptExpression> transform(OptExpression input, OptimizerContext context) {
         LogicalJoinOperator joinOp = (LogicalJoinOperator) input.getOp();
-        CompoundPredicateOperator compoundPredicate = (CompoundPredicateOperator) joinOp.getOriginalOnPredicate();
+        CompoundPredicateOperator compoundPredicate = (CompoundPredicateOperator) joinOp.getOnPredicate();
 
         List<BinaryPredicateOperator> binaryPredicateList = Utils.extractDisjunctive(compoundPredicate)
                 .stream()
@@ -177,8 +178,8 @@ public class OrToUnionAllJoinRule extends TransformationRule {
         }
 
         Map<Integer, List<BinaryPredicateOperator>> cumulativePredicateMap =
-                createCumulativePredicateMap(binaryPredicateList);
-        
+                createCumulativePredicateMap(binaryPredicateList, context);
+
         for (int j = 0; j < cumulativePredicateMap.size(); j++) {
             List<BinaryPredicateOperator> branchPredicates = cumulativePredicateMap.get(j);
             int branchSize = branchPredicates.size();
@@ -290,41 +291,25 @@ public class OrToUnionAllJoinRule extends TransformationRule {
     }
 
     private Map<Integer, List<BinaryPredicateOperator>> createCumulativePredicateMap(
-            List<BinaryPredicateOperator> binaryPredicateList) {
+            List<BinaryPredicateOperator> binaryPredicateList, OptimizerContext context) {
 
         Map<Integer, List<BinaryPredicateOperator>> cumulativePredicateMap = new HashMap<>();
+        ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
 
         for (int i = 0; i < binaryPredicateList.size(); i++) {
             List<BinaryPredicateOperator> currentBranchPredicates = new ArrayList<>();
-
-
             for (int j = 0; j <= i; j++) {
                 BinaryPredicateOperator originalPredicate = binaryPredicateList.get(j);
-                Map<ColumnRefOperator, ColumnRefOperator> columnMapping = new HashMap<>();
-                collectColumnRefs(originalPredicate, columnMapping);
 
-                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(columnMapping);
-                ScalarOperator rewrittenPredicate = rewriter.rewrite(originalPredicate);
+                OptExpressionDuplicator duplicator = new OptExpressionDuplicator(columnRefFactory, context);
+                ScalarOperator rewrittenPredicate = duplicator.rewriteAfterDuplicate(originalPredicate);
+
                 currentBranchPredicates.add((BinaryPredicateOperator) rewrittenPredicate);
-
             }
             cumulativePredicateMap.put(i, currentBranchPredicates);
         }
 
         return cumulativePredicateMap;
-    }
-
-    private void collectColumnRefs(ScalarOperator expr,
-                                   Map<ColumnRefOperator, ColumnRefOperator> columnMapping) {
-        if (expr instanceof ColumnRefOperator) {
-            ColumnRefOperator columnRef = (ColumnRefOperator) expr;
-            if (!columnMapping.containsKey(columnRef)) {
-                columnMapping.put(columnRef, columnRef);
-            }
-        }
-        for (ScalarOperator child : expr.getChildren()) {
-            collectColumnRefs(child, columnMapping);
-        }
     }
 
     private ScalarOperator buildAndPredicate(List<ScalarOperator> predicates) {
