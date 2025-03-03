@@ -251,8 +251,13 @@ public class PaimonMetadata implements ConnectorMetadata {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         PaimonTable paimonTable = (PaimonTable) table;
         long latestSnapshotId = -1L;
-        if (paimonTable.getNativeTable().latestSnapshotId().isPresent()) {
-            latestSnapshotId = paimonTable.getNativeTable().latestSnapshotId().getAsLong();
+        try {
+            if (paimonTable.getNativeTable().latestSnapshotId().isPresent()) {
+                latestSnapshotId = paimonTable.getNativeTable().latestSnapshotId().getAsLong();
+            }
+        } catch (Exception e) {
+            // System table does not have snapshotId, ignore it.
+            LOG.warn("Cannot get snapshot because {}", e.getMessage());
         }
         PredicateSearchKey filter = PredicateSearchKey.of(paimonTable.getCatalogDBName(),
                 paimonTable.getCatalogTableName(), latestSnapshotId, params.getPredicate());
