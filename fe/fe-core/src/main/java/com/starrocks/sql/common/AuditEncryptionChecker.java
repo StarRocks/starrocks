@@ -119,7 +119,9 @@ public class AuditEncryptionChecker implements AstVisitorEPack<Boolean, Void> {
         if (properties.containsKey(CloudConfigurationConstants.AWS_S3_ACCESS_KEY) ||
                 properties.containsKey(CloudConfigurationConstants.AWS_S3_SECRET_KEY) ||
                 properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY) ||
-                properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN)) {
+                properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN) ||
+                properties.containsKey(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY) ||
+                properties.containsKey(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN)) {
             return true;
         }
         return false;
@@ -132,7 +134,9 @@ public class AuditEncryptionChecker implements AstVisitorEPack<Boolean, Void> {
         if (properties.containsKey(CloudConfigurationConstants.AWS_S3_ACCESS_KEY) ||
                 properties.containsKey(CloudConfigurationConstants.AWS_S3_SECRET_KEY) ||
                 properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY) ||
-                properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN)) {
+                properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN) ||
+                properties.containsKey(CloudConfigurationConstants.AZURE_ADLS2_SHARED_KEY) ||
+                properties.containsKey(CloudConfigurationConstants.AZURE_ADLS2_SAS_TOKEN)) {
             return true;
         }
         return false;
