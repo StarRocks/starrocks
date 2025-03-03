@@ -153,6 +153,7 @@ import com.starrocks.sql.ast.warehouse.CreateWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.DropWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.ResumeWarehouseStmt;
 import com.starrocks.sql.ast.warehouse.SuspendWarehouseStmt;
+import com.starrocks.sql.spm.SPMStmtExecutor;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.ExternalAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeJob;
@@ -1267,11 +1268,17 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateBaselinePlanStatement(CreateBaselinePlanStmt statement,
                                                               ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                SPMStmtExecutor.execute(context, statement);
+            });
             return null;
         }
 
         @Override
         public ShowResultSet visitDropBaselinePlanStatement(DropBaselinePlanStmt statement, ConnectContext context) {
+            ErrorReport.wrapWithRuntimeException(() -> {
+                SPMStmtExecutor.execute(context, statement);
+            });
             return null;
         }
     }

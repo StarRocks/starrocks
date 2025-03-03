@@ -1605,7 +1605,7 @@ public interface AstVisitor<R, C> {
         return visitNode(node, context);
     }
 
-    // -------------------------------------------BaselinePlan -------------------------------------------------------
+    // ------------------------------------------- BaselinePlan -------------------------------------------------------
 
     default R visitCreateBaselinePlanStatement(CreateBaselinePlanStmt statement, C context) {
         return visitDDLStatement(statement, context);
