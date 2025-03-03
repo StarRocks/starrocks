@@ -1334,6 +1334,7 @@ public class DatabaseTransactionMgr {
                 PartitionCommitInfo partitionCommitInfo = partitionCommitInfoIterator.next();
                 long partitionId = partitionCommitInfo.getPhysicalPartitionId();
                 PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+                long parentPartitionId = partition.getParentId();
                 // partition maybe dropped between commit and publish version, ignore this error
                 if (partition == null) {
                     partitionCommitInfoIterator.remove();
@@ -1365,20 +1366,20 @@ public class DatabaseTransactionMgr {
                         partitionCommitInfo.setVersionEpoch(partition.nextVersionEpoch());
                     }
                 } else {
+                    // double write logic partition
                     Map<Long, Long> doubleWritePartitions = table.getDoubleWritePartitions();
                     if (doubleWritePartitions != null && !doubleWritePartitions.isEmpty()) {
-                        // double write partition
-                        if (doubleWritePartitions.containsValue(partitionId)) {
-                            doubleWritePartitionCommitInfos.put(partitionId, partitionCommitInfo);
+                        if (doubleWritePartitions.containsValue(parentPartitionId)) {
+                            doubleWritePartitionCommitInfos.put(parentPartitionId, partitionCommitInfo);
                         } else {
                             // double write partition version is the same as the original partition
-                            if (doubleWritePartitions.containsKey(partitionId)) {
-                                doubleWritePartitionVersions.put(doubleWritePartitions.get(partitionId),
+                            if (doubleWritePartitions.containsKey(parentPartitionId)) {
+                                doubleWritePartitionVersions.put(doubleWritePartitions.get(parentPartitionId),
                                         partition.getNextVersion());
                             }
                             partitionCommitInfo.setVersion(partition.getNextVersion());
-                            LOG.info("set partition {} version to {} in transaction {}",
-                                    partitionId, partitionCommitInfo.getVersion(), transactionState);
+                            LOG.info("set partition {}:{} version to {} in transaction {}",
+                                    parentPartitionId, partitionId, partitionCommitInfo.getVersion(), transactionState);
                         }
                     } else {
                         partitionCommitInfo.setVersion(partition.getNextVersion());
@@ -1406,8 +1407,9 @@ public class DatabaseTransactionMgr {
                 if (partitionCommitInfo != null) {
                     partitionCommitInfo.setVersion(entry.getValue());
                     partitionCommitInfo.setIsDoubleWrite(true);
-                    LOG.info("set double write partition {} version to {} in transaction {}",
-                            entry.getKey(), entry.getValue(), transactionState);
+                    LOG.info("set double write partition {}:{} version to {} in transaction {}",
+                            entry.getKey(), table.getPartition(entry.getKey()).getDefaultPhysicalPartition().getId(),
+                            entry.getValue(), transactionState);
                 }
             }
         }
