@@ -197,7 +197,8 @@ public class PaimonMetadataTest {
 
     @Test
     public void testGetSystemTable(@Mocked ManifestsTable paimonSystemTable,
-                                   @Mocked ReadBuilder readBuilder) throws Exception {
+                                   @Mocked ReadBuilder readBuilder,
+                                   @Mocked InnerTableScan scan) throws Exception {
         new Expectations() {
             {
                 paimonNativeCatalog.getTable((Identifier) any);
@@ -206,8 +207,8 @@ public class PaimonMetadataTest {
                 result = new Exception("Readonly Table tbl1$manifests does not support currentSnapshot.");
                 paimonSystemTable.newReadBuilder();
                 result = readBuilder;
-                readBuilder.withFilter((List<Predicate>) any).withProjection((int[]) any).newScan().plan().splits();
-                result = splits;
+                readBuilder.withFilter((List<Predicate>) any).withProjection((int[]) any).newScan();
+                result = scan;
             }
         };
         PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1$manifests");
