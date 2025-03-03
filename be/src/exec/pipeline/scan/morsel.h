@@ -344,6 +344,10 @@ public:
     virtual StatusOr<bool> ready_for_next() const { return true; }
     virtual void append_morsels(Morsels&& morsels) {}
     virtual Type type() const = 0;
+    void set_tablet_schema(TabletSchemaCSPtr tablet_schema) {
+        DCHECK(tablet_schema != nullptr);
+        _tablet_schema = tablet_schema;
+    }
 
 protected:
     Morsels _morsels;
@@ -351,6 +355,7 @@ protected:
     MorselPtr _unget_morsel = nullptr;
     std::vector<BaseTabletSharedPtr> _tablets;
     std::vector<std::vector<BaseRowsetSharedPtr>> _tablet_rowsets;
+    TabletSchemaCSPtr _tablet_schema = nullptr;
 };
 
 // The morsel queue with a fixed number of morsels, which is determined in the constructor.
