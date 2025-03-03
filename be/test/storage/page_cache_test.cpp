@@ -34,9 +34,12 @@
 
 #include "storage/page_cache.h"
 
+#include <gflags/gflags.h>
 #include <gtest/gtest.h>
 
 #include "testutil/assert.h"
+
+DECLARE_int32(v);
 
 namespace starrocks {
 
@@ -155,6 +158,8 @@ TEST_F(StoragePageCacheTest, normal) {
         _page_cache->set_capacity(0);
         ASSERT_EQ(_page_cache->get_capacity(), 0);
     }
+
+    obj_cache->shutdown();
 }
 
 TEST_F(StoragePageCacheTest, metrics) {
@@ -196,5 +201,7 @@ TEST_F(StoragePageCacheTest, metrics) {
         ASSERT_EQ(_page_cache->get_hit_count(), 2);
     }
 }
+
+INSTANTIATE_TEST_SUITE_P(StoragePageCacheTest, StoragePageCacheTest, ::testing::Values(false, true));
 
 } // namespace starrocks

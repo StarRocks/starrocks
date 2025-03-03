@@ -15,17 +15,16 @@
 #pragma once
 
 #include "cache/object_cache/cache_module.h"
-#include "util/lru_cache.h"
+#include "starcache/star_cache.h"
 
 namespace starrocks {
 
-class Cache;
-
-class LRUCacheModule : public ObjectCacheModule {
+class StarCacheModule : public ObjectCacheModule {
 public:
-    LRUCacheModule(const ObjectCacheOptions& options) : _options(options) {}
+    StarCacheModule(const ObjectCacheOptions& options): _options(options), _own_star_cache(true) {}
+    StarCacheModule(std::shared_ptr<starcache::StarCache> star_cache) : _cache(star_cache) {}
 
-    ~LRUCacheModule();
+    ~StarCacheModule() = default;
 
     Status init() override;
 
@@ -61,10 +60,11 @@ public:
     Status shutdown() override;
 
 private:
-    bool _check_write(size_t charge, ObjectCacheWriteOptions* options) const;
+    bool _try_release_obj_handle(ObjectCacheHandlePtr handle);
 
     ObjectCacheOptions _options;
-    std::shared_ptr<Cache> _cache;
+    std::shared_ptr<starcache::StarCache> _cache;
+    bool _own_star_cache = false;
 };
 
 } // namespace starrocks
