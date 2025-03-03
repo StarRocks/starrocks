@@ -303,7 +303,7 @@ void SystemMetrics::_update_datacache_mem_tracker() {
     auto* datacache_mem_tracker = GlobalEnv::GetInstance()->datacache_mem_tracker();
     if (datacache_mem_tracker) {
         BlockCache* block_cache = BlockCache::instance();
-        if (block_cache->is_initialized()) {
+        if (block_cache != nullptr && block_cache->is_initialized()) {
             auto datacache_metrics = block_cache->cache_metrics();
             datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;
         }
