@@ -139,7 +139,7 @@ SortContextFactory::SortContextFactory(RuntimeState* state, const TTopNType::typ
                                        const std::vector<bool>& is_null_first,
                                        [[maybe_unused]] const std::vector<TExpr>& partition_exprs, int64_t offset,
                                        int64_t limit, const std::string& sort_keys,
-                                       const std::vector<OrderByType>& order_by_types,
+                                       const std::vector<OrderByType>& order_by_types, bool has_outer_join_child,
                                        const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters)
         : _state(state),
           _topn_type(topn_type),
