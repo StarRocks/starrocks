@@ -59,6 +59,7 @@
 #include "storage/rowset/rowid_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
+#include "storage/runtime_filter_predicate.h"
 #include "storage/runtime_range_pruner.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "storage/types.h"
@@ -333,6 +334,7 @@ private:
 
     PredicateTree _non_expr_pred_tree;
     PredicateTree _expr_pred_tree;
+    RuntimeFilterPredicates _runtime_filter_preds;
 
     // _selection is used to accelerate
     Buffer<uint8_t> _selection;
@@ -834,7 +836,6 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
 template <bool check_global_dict>
 Status SegmentIterator::_init_column_iterators(const Schema& schema) {
     SCOPED_RAW_TIMER(&_opts.stats->column_iterator_init_ns);
-
     const size_t n = std::max<size_t>(1 + ChunkHelper::max_column_id(schema), _column_iterators.size());
     _column_iterators.resize(n);
     if constexpr (check_global_dict) {
@@ -859,7 +860,6 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
             } else {
                 check_dict_enc = has_predicate;
             }
-
             RETURN_IF_ERROR(_init_column_iterator_by_cid(cid, f->uid(), check_dict_enc));
 
             if constexpr (check_global_dict) {
@@ -928,6 +928,7 @@ void SegmentIterator::_init_column_predicates() {
                                   &non_expr_pred_root);
     _expr_pred_tree = PredicateTree::create(std::move(expr_pred_root));
     _non_expr_pred_tree = PredicateTree::create(std::move(non_expr_pred_root));
+    _runtime_filter_preds = _opts.runtime_filter_preds;
 }
 
 Status SegmentIterator::_get_row_ranges_by_keys() {
@@ -1418,7 +1419,6 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
         if (buf_size <= 0) {
             buf_size = 1048576; // 1MB
         }
-        std::unique_ptr<char[]> buf(new char[buf_size]);
         for (auto& [cid, stream] : _column_files) {
             ASSIGN_OR_RETURN(auto vec, _column_iterators[cid]->get_io_range_vec(_scan_range));
             for (auto e : vec) {
@@ -1428,7 +1428,7 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
                 size_t size = e.second + (e.first % buf_size);
                 while (size > 0) {
                     size_t cur_size = std::min(buf_size, size);
-                    RETURN_IF_ERROR(stream->read_at_fully(offset, buf.get(), cur_size));
+                    RETURN_IF_ERROR(stream->touch_cache(offset, cur_size));
                     offset += cur_size;
                     size -= cur_size;
                 }
@@ -1652,6 +1652,15 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_non_expr_predicates(Chunk* chunk,
     }
 
     auto hit_count = SIMD::count_nonzero(&_selection[from], to - from);
+    if (_opts.enable_join_runtime_filter_pushdown && !_runtime_filter_preds.empty()) {
+        SCOPED_RAW_TIMER(&_opts.stats->rf_cond_evaluate_ns);
+        size_t input_count = hit_count;
+        RETURN_IF_ERROR(_runtime_filter_preds.evaluate(chunk, _selection.data(), from, to));
+        hit_count = SIMD::count_nonzero(&_selection[from], to - from);
+        _opts.stats->rf_cond_input_rows += input_count;
+        _opts.stats->rf_cond_output_rows += hit_count;
+    }
+
     uint16_t chunk_size = to;
     SCOPED_RAW_TIMER(&_opts.stats->vec_cond_chunk_copy_ns);
     if (hit_count == 0) {
@@ -1876,7 +1885,6 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
 
 Status SegmentIterator::_init_context() {
     _late_materialization_ratio = config::late_materialization_ratio;
-
     RETURN_IF_ERROR(_init_global_dict_decoder());
 
     if (_predicate_columns == 0 || _opts.pred_tree.empty() ||
@@ -1930,6 +1938,10 @@ Status SegmentIterator::_rewrite_predicates() {
         ColumnPredicateRewriter rewriter(_column_iterators, _schema, _predicate_need_rewrite, _predicate_columns,
                                          _scan_range);
         RETURN_IF_ERROR(rewriter.rewrite_predicate(&_obj_pool, _opts.pred_tree));
+    }
+    if (_opts.enable_join_runtime_filter_pushdown) {
+        RETURN_IF_ERROR(RuntimeFilterPredicatesRewriter::rewrite(&_obj_pool, _opts.runtime_filter_preds,
+                                                                 _column_iterators, _schema));
     }
 
     // for each delete predicate,
@@ -2537,7 +2549,6 @@ void SegmentIterator::close() {
 // materialization easier.
 inline Schema reorder_schema(const Schema& input, const PredicateTree& pred_tree) {
     const std::vector<FieldPtr>& fields = input.fields();
-
     Schema output;
     output.reserve(fields.size());
     for (const auto& field : fields) {

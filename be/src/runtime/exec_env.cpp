@@ -245,7 +245,6 @@ Status GlobalEnv::_init_mem_tracker() {
 
     MemChunkAllocator::init_instance(_chunk_allocator_mem_tracker.get(), config::chunk_reserved_bytes_limit);
 
-    _init_storage_page_cache(); // TODO: move to StorageEngine
     return Status::OK();
 }
 
@@ -270,12 +269,6 @@ void GlobalEnv::_reset_tracker() {
     for (auto& iter : _mem_tracker_map) {
         iter.second.reset();
     }
-}
-
-void GlobalEnv::_init_storage_page_cache() {
-    int64_t storage_cache_limit = get_storage_page_cache_size();
-    storage_cache_limit = check_storage_page_cache_size(storage_cache_limit);
-    StoragePageCache::create_global_cache(page_cache_mem_tracker(), storage_cache_limit);
 }
 
 int64_t GlobalEnv::get_storage_page_cache_size() {
@@ -316,6 +309,197 @@ int64_t GlobalEnv::calc_max_query_memory(int64_t process_mem_limit, int64_t perc
         percent = 90;
     }
     return process_mem_limit * percent / 100;
+}
+
+bool parse_resource_str(const string& str, string* value) {
+    if (!str.empty()) {
+        std::string tmp_str = str;
+        StripLeadingWhiteSpace(&tmp_str);
+        StripTrailingWhitespace(&tmp_str);
+        if (tmp_str.empty()) {
+            return false;
+        } else {
+            *value = tmp_str;
+            std::transform(value->begin(), value->end(), value->begin(), [](char c) { return std::tolower(c); });
+            return true;
+        }
+    } else {
+        return false;
+    }
+}
+
+CacheEnv* CacheEnv::GetInstance() {
+    static CacheEnv s_cache_env;
+    return &s_cache_env;
+}
+
+Status CacheEnv::init(const std::vector<StorePath>& store_paths) {
+    _global_env = GlobalEnv::GetInstance();
+    _store_paths = store_paths;
+
+    RETURN_IF_ERROR(_init_datacache());
+    RETURN_IF_ERROR(_init_lru_base_object_cache());
+    RETURN_IF_ERROR(_init_page_cache());
+
+    return Status::OK();
+}
+
+void CacheEnv::destroy() {
+    _page_cache.reset();
+    LOG(INFO) << "pagecache shutdown successfully";
+
+    _lru_based_object_cache.reset();
+    LOG(INFO) << "lru based object cache shutdown successfully";
+
+    _block_cache.reset();
+    LOG(INFO) << "datacache shutdown successfully";
+}
+
+Status CacheEnv::_init_lru_base_object_cache() {
+    _lru_based_object_cache = std::make_shared<ObjectCache>();
+
+    ObjectCacheOptions options;
+    int64_t storage_cache_limit = _global_env->get_storage_page_cache_size();
+    storage_cache_limit = _global_env->check_storage_page_cache_size(storage_cache_limit);
+    options.capacity = storage_cache_limit;
+    RETURN_IF_ERROR(_lru_based_object_cache->init(options));
+
+    LOG(INFO) << "object cache init successfully";
+    return Status::OK();
+}
+
+Status CacheEnv::_init_page_cache() {
+    _page_cache = std::make_shared<StoragePageCache>(_lru_based_object_cache.get());
+    _page_cache->init_metrics();
+    LOG(INFO) << "storage page cache init successfully";
+    return Status::OK();
+}
+
+Status CacheEnv::_init_datacache() {
+    _block_cache = std::make_shared<BlockCache>();
+
+    // When configured old `block_cache` configurations, use the old items for compatibility.
+    if (config::block_cache_enable) {
+        config::datacache_enable = true;
+        config::datacache_mem_size = std::to_string(config::block_cache_mem_size);
+        config::datacache_disk_size = std::to_string(config::block_cache_disk_size);
+        config::datacache_block_size = config::block_cache_block_size;
+        config::datacache_max_concurrent_inserts = config::block_cache_max_concurrent_inserts;
+        config::datacache_checksum_enable = config::block_cache_checksum_enable;
+        config::datacache_direct_io_enable = config::block_cache_direct_io_enable;
+        config::datacache_engine = config::block_cache_engine;
+        LOG(WARNING) << "The configuration items prefixed with `block_cache_` will be deprecated soon"
+                     << ", you'd better use the configuration items prefixed `datacache` instead!";
+    }
+
+#if !defined(WITH_STARCACHE)
+    if (config::datacache_enable) {
+        LOG(WARNING) << "No valid engines supported, skip initializing datacache module";
+        config::datacache_enable = false;
+    }
+#endif
+
+    if (config::datacache_enable) {
+        CacheOptions cache_options;
+        int64_t mem_limit = MemInfo::physical_mem();
+        if (_global_env->process_mem_tracker()->has_limit()) {
+            mem_limit = _global_env->process_mem_tracker()->limit();
+        }
+        RETURN_IF_ERROR(DataCacheUtils::parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit,
+                                                                      &cache_options.mem_space_size));
+
+        size_t total_quota_bytes = 0;
+        for (auto& root_path : _store_paths) {
+            // Because we have unified the datacache between datalake and starlet, we also need to unify the
+            // cache path and quota.
+            // To reuse the old cache data in `starlet_cache` directory, we try to rename it to the new `datacache`
+            // directory if it exists. To avoid the risk of cross disk renaming of a large amount of cached data,
+            // we do not automatically rename it when the source and destination directories are on different disks.
+            // In this case, users should manually remount the directories and restart them.
+            std::string datacache_path = root_path.path + "/datacache";
+            std::string starlet_cache_path = root_path.path + "/starlet_cache/star_cache";
+#ifdef USE_STAROS
+            if (config::datacache_unified_instance_enable) {
+                RETURN_IF_ERROR(DataCacheUtils::change_disk_path(starlet_cache_path, datacache_path));
+            }
+#endif
+            // Create it if not exist
+            Status st = FileSystem::Default()->create_dir_if_missing(datacache_path);
+            if (!st.ok()) {
+                LOG(ERROR) << "Fail to create datacache directory: " << datacache_path << ", reason: " << st.message();
+                return Status::InternalError("Fail to create datacache directory");
+            }
+
+            int64_t disk_size =
+                    DataCacheUtils::parse_conf_datacache_disk_size(datacache_path, config::datacache_disk_size, -1);
+#ifdef USE_STAROS
+            // If the `datacache_disk_size` is manually set a positive value, we will use the maximum cache quota between
+            // dataleke and starlet cache as the quota of the unified cache. Otherwise, the cache quota will remain zero
+            // and then automatically adjusted based on the current avalible disk space.
+            if (config::datacache_unified_instance_enable && (!config::datacache_auto_adjust_enable || disk_size > 0)) {
+                int64_t starlet_cache_size = DataCacheUtils::parse_conf_datacache_disk_size(
+                        datacache_path, fmt::format("{}%", config::starlet_star_cache_disk_size_percent), -1);
+                disk_size = std::max(disk_size, starlet_cache_size);
+            }
+#endif
+            cache_options.disk_spaces.push_back({.path = datacache_path, .size = static_cast<size_t>(disk_size)});
+            total_quota_bytes += disk_size;
+        }
+
+        if (cache_options.disk_spaces.empty() || total_quota_bytes != 0) {
+            config::datacache_auto_adjust_enable = false;
+        }
+
+        // Adjust the default engine based on build switches.
+        if (config::datacache_engine == "") {
+#if defined(WITH_STARCACHE)
+            config::datacache_engine = "starcache";
+#endif
+        }
+        cache_options.block_size = config::datacache_block_size;
+        cache_options.max_flying_memory_mb = config::datacache_max_flying_memory_mb;
+        cache_options.max_concurrent_inserts = config::datacache_max_concurrent_inserts;
+        cache_options.enable_checksum = config::datacache_checksum_enable;
+        cache_options.enable_direct_io = config::datacache_direct_io_enable;
+        cache_options.enable_tiered_cache = config::datacache_tiered_cache_enable;
+        cache_options.skip_read_factor = config::datacache_skip_read_factor;
+        cache_options.scheduler_threads_per_cpu = config::datacache_scheduler_threads_per_cpu;
+        cache_options.enable_datacache_persistence = config::datacache_persistence_enable;
+        cache_options.inline_item_count_limit = config::datacache_inline_item_count_limit;
+        cache_options.engine = config::datacache_engine;
+        cache_options.eviction_policy = config::datacache_eviction_policy;
+        RETURN_IF_ERROR(_block_cache->init(cache_options));
+        LOG(INFO) << "datacache init successfully";
+    } else {
+        LOG(INFO) << "starts by skipping the datacache initialization";
+    }
+    return Status::OK();
+}
+
+void CacheEnv::try_release_resource_before_core_dump() {
+    std::set<std::string> modules;
+    bool release_all = false;
+    if (config::try_release_resource_before_core_dump.value() == "*") {
+        release_all = true;
+    } else {
+        SplitStringAndParseToContainer(StringPiece(config::try_release_resource_before_core_dump), ",",
+                                       &parse_resource_str, &modules);
+    }
+
+    auto need_release = [&release_all, &modules](const std::string& name) {
+        return release_all || modules.contains(name);
+    };
+
+    if (_page_cache != nullptr && need_release("data_cache")) {
+        _page_cache->set_capacity(0);
+        LOG(INFO) << "release storage page cache memory";
+    }
+    if (_block_cache != nullptr && _block_cache->available() && need_release("data_cache")) {
+        // TODO: Currently, block cache don't support shutdown now,
+        //  so here will temporary use update_mem_quota instead to release memory.
+        (void)_block_cache->update_mem_quota(0, false);
+        LOG(INFO) << "release block cache";
+    }
 }
 
 ExecEnv* ExecEnv::GetInstance() {
@@ -583,8 +767,6 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     auto capacity = std::max<size_t>(config::query_cache_capacity, 4L * 1024 * 1024);
     _cache_mgr = new query_cache::CacheManager(capacity);
 
-    _block_cache = BlockCache::instance();
-
     _spill_dir_mgr = std::make_shared<spill::DirManager>();
     RETURN_IF_ERROR(_spill_dir_mgr->init(config::spill_local_storage_dir));
 
@@ -810,23 +992,6 @@ ThreadPool* ExecEnv::delete_file_thread_pool() {
     return _agent_server ? _agent_server->get_thread_pool(TTaskType::DROP) : nullptr;
 }
 
-bool parse_resource_str(const string& str, string* value) {
-    if (!str.empty()) {
-        std::string tmp_str = str;
-        StripLeadingWhiteSpace(&tmp_str);
-        StripTrailingWhitespace(&tmp_str);
-        if (tmp_str.empty()) {
-            return false;
-        } else {
-            *value = tmp_str;
-            std::transform(value->begin(), value->end(), value->begin(), [](char c) { return std::tolower(c); });
-            return true;
-        }
-    } else {
-        return false;
-    }
-}
-
 void ExecEnv::try_release_resource_before_core_dump() {
     std::set<std::string> modules;
     bool release_all = false;
@@ -872,17 +1037,6 @@ void ExecEnv::try_release_resource_before_core_dump() {
     if (_workgroup_manager != nullptr && need_release("wg_driver_executor")) {
         _workgroup_manager->for_each_executors([](auto& executors) { executors.driver_executor()->close(); });
         LOG(INFO) << "stop worker group driver executor";
-    }
-    auto* storage_page_cache = StoragePageCache::instance();
-    if (storage_page_cache != nullptr && need_release("data_cache")) {
-        storage_page_cache->set_capacity(0);
-        LOG(INFO) << "release storage page cache memory";
-    }
-    if (_block_cache != nullptr && _block_cache->available() && need_release("data_cache")) {
-        // TODO: Currently, block cache don't support shutdown now,
-        //  so here will temporary use update_mem_quota instead to release memory.
-        (void)_block_cache->update_mem_quota(0, false);
-        LOG(INFO) << "release block cache";
     }
 }
 

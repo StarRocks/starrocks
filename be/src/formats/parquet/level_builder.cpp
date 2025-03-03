@@ -151,6 +151,9 @@ Status LevelBuilder::_write_column_chunk(const LevelBuilderContext& ctx, const T
     case TYPE_TIME: {
         return _write_time_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
     }
+    case TYPE_JSON: {
+        return _write_json_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
+    }
     default: {
         return Status::NotSupported(fmt::format("Doesn't support to write {} type data", type_desc.debug_string()));
     }
@@ -352,7 +355,7 @@ Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx
     DeferOp defer([&] { delete[] values; });
 
     for (size_t i = 0; i < col->size(); i++) {
-        auto offset = timestamp::get_offset_by_timezone(data_col[i]._timestamp, _ctz);
+        auto offset = timestamp::get_timezone_offset_by_timestamp(data_col[i]._timestamp, _ctz);
 
         auto timestamp = use_int96_timestamp_encoding ? timestamp::sub<TimeUnit::SECOND>(data_col[i]._timestamp, offset)
                                                       : data_col[i]._timestamp;
@@ -596,6 +599,41 @@ Status LevelBuilder::_write_struct_column_chunk(const LevelBuilderContext& ctx, 
         RETURN_IF_ERROR(_write_column_chunk(derived_ctx, type_desc.children[i], struct_node->field(i), sub_col,
                                             write_leaf_callback));
     }
+    return Status::OK();
+}
+
+Status LevelBuilder::_write_json_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                              const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                              const CallbackFunction& write_leaf_callback) {
+    const auto* data_col = down_cast<const JsonColumn*>(ColumnHelper::get_data_column(col.get()));
+    const auto* null_col = get_raw_null_column(col);
+
+    // Use the rep_levels in the context from caller since node is primitive.
+    auto& rep_levels = ctx._rep_levels;
+    auto def_levels = _make_def_levels(ctx, node, null_col, col->size());
+    auto null_bitset = _make_null_bitset(ctx, null_col, col->size());
+
+    auto values = new ::parquet::ByteArray[col->size()];
+    DeferOp defer([&] { delete[] values; });
+
+    std::vector<std::string> datas;
+    datas.reserve(col->size());
+    for (size_t i = 0; i < col->size(); i++) {
+        auto json_value = data_col->get_object(i);
+        datas.emplace_back(json_value->to_string_uncheck());
+        const std::string& v = datas.back();
+        values[i].len = static_cast<uint32_t>(v.size());
+        values[i].ptr = reinterpret_cast<const uint8_t*>(v.c_str());
+    }
+
+    write_leaf_callback(LevelBuilderResult{
+            .num_levels = ctx._num_levels,
+            .def_levels = def_levels ? def_levels->data() : nullptr,
+            .rep_levels = rep_levels ? rep_levels->data() : nullptr,
+            .values = reinterpret_cast<uint8_t*>(values),
+            .null_bitset = null_bitset ? null_bitset->data() : nullptr,
+    });
+
     return Status::OK();
 }
 

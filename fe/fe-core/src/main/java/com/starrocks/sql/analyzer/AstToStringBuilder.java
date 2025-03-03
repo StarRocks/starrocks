@@ -1114,7 +1114,11 @@ public class AstToStringBuilder {
             if (isImplicit) {
                 return visit(node.getChild(0));
             }
-            return "CAST(" + printWithParentheses(node.getChild(0)) + " AS " + node.getTargetTypeDef().toString() + ")";
+            if (node.getTargetTypeDef() == null) {
+                return "CAST(" + printWithParentheses(node.getChild(0)) + " AS " + node.getType().toString() + ")";
+            } else {
+                return "CAST(" + printWithParentheses(node.getChild(0)) + " AS " + node.getTargetTypeDef().toString() + ")";
+            }
         }
 
         public String visitCompoundPredicate(CompoundPredicate node, Void context) {
@@ -1605,6 +1609,12 @@ public class AstToStringBuilder {
             sb.append(Joiner.on(", ").join(colDef));
             sb.append(")");
             addTableComment(sb, view);
+
+            if (view.isSecurity()) {
+                sb.append(" SECURITY INVOKER");
+            } else {
+                sb.append(" SECURITY NONE");
+            }
 
             sb.append(" AS ").append(view.getInlineViewDef()).append(";");
             createTableStmt.add(sb.toString());

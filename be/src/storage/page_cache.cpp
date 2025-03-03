@@ -49,84 +49,65 @@ METRIC_DEFINE_UINT_GAUGE(page_cache_lookup_count, MetricUnit::OPERATIONS);
 METRIC_DEFINE_UINT_GAUGE(page_cache_hit_count, MetricUnit::OPERATIONS);
 METRIC_DEFINE_UINT_GAUGE(page_cache_capacity, MetricUnit::BYTES);
 
-StoragePageCache* StoragePageCache::_s_instance = nullptr;
-
-static void init_metrics() {
+void StoragePageCache::init_metrics() {
     StarRocksMetrics::instance()->metrics()->register_metric("page_cache_lookup_count", &page_cache_lookup_count);
-    StarRocksMetrics::instance()->metrics()->register_hook("page_cache_lookup_count", []() {
-        page_cache_lookup_count.set_value(StoragePageCache::instance()->get_lookup_count());
-    });
+    StarRocksMetrics::instance()->metrics()->register_hook(
+            "page_cache_lookup_count", [this]() { page_cache_lookup_count.set_value(get_lookup_count()); });
 
     StarRocksMetrics::instance()->metrics()->register_metric("page_cache_hit_count", &page_cache_hit_count);
-    StarRocksMetrics::instance()->metrics()->register_hook("page_cache_hit_count", []() {
-        page_cache_hit_count.set_value(StoragePageCache::instance()->get_hit_count());
-    });
+    StarRocksMetrics::instance()->metrics()->register_hook(
+            "page_cache_hit_count", [this]() { page_cache_hit_count.set_value(get_hit_count()); });
 
     StarRocksMetrics::instance()->metrics()->register_metric("page_cache_capacity", &page_cache_capacity);
-    StarRocksMetrics::instance()->metrics()->register_hook("page_cache_capacity", []() {
-        page_cache_capacity.set_value(StoragePageCache::instance()->get_capacity());
-    });
-}
-
-void StoragePageCache::create_global_cache(MemTracker* mem_tracker, size_t capacity) {
-    if (_s_instance == nullptr) {
-        _s_instance = new StoragePageCache(mem_tracker, capacity);
-        init_metrics();
-    }
-}
-
-void StoragePageCache::release_global_cache() {
-    if (_s_instance != nullptr) {
-        delete _s_instance;
-        _s_instance = nullptr;
-    }
+    StarRocksMetrics::instance()->metrics()->register_hook("page_cache_capacity",
+                                                           [this]() { page_cache_capacity.set_value(get_capacity()); });
 }
 
 void StoragePageCache::prune() {
-    _cache->prune();
+    (void)_cache->prune();
 }
 
-StoragePageCache::StoragePageCache(MemTracker* mem_tracker, size_t capacity)
-        : _mem_tracker(mem_tracker), _cache(new_lru_cache(capacity)) {}
-
-StoragePageCache::~StoragePageCache() = default;
-
 void StoragePageCache::set_capacity(size_t capacity) {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
-    _cache->set_capacity(capacity);
+    Status st = _cache->set_capacity(capacity);
+    LOG_IF(INFO, !st.ok()) << "Fail to set cache capacity to " << capacity << ", reason: " << st.message();
 }
 
 size_t StoragePageCache::get_capacity() {
-    return _cache->get_capacity();
+    return _cache->capacity();
 }
 
 uint64_t StoragePageCache::get_lookup_count() {
-    return _cache->get_lookup_count();
+    return _cache->lookup_count();
 }
 
 uint64_t StoragePageCache::get_hit_count() {
-    return _cache->get_hit_count();
+    return _cache->hit_count();
 }
 
 bool StoragePageCache::adjust_capacity(int64_t delta, size_t min_capacity) {
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
-    return _cache->adjust_capacity(delta, min_capacity);
-}
-
-bool StoragePageCache::lookup(const CacheKey& key, PageCacheHandle* handle) {
-    auto* lru_handle = _cache->lookup(key.encode());
-    if (lru_handle == nullptr) {
+    Status st = _cache->adjust_capacity(delta, min_capacity);
+    if (!st.ok()) {
+        LOG_IF(INFO, !st.ok()) << "Fail to adjust cache capacity, delta: " << delta << ", reason: " << st.message();
         return false;
     }
-    *handle = PageCacheHandle(_cache.get(), lru_handle);
     return true;
 }
 
-void StoragePageCache::insert(const CacheKey& key, const Slice& data, PageCacheHandle* handle, bool in_memory) {
+bool StoragePageCache::lookup(const CacheKey& key, PageCacheHandle* handle) {
+    ObjectCacheHandle* obj_handle = nullptr;
+    Status st = _cache->lookup(key.encode(), &obj_handle);
+    if (!st.ok()) {
+        return false;
+    }
+    *handle = PageCacheHandle(_cache, obj_handle);
+    return true;
+}
+
+Status StoragePageCache::insert(const CacheKey& key, const Slice& data, PageCacheHandle* handle, bool in_memory) {
 #ifndef BE_TEST
     int64_t mem_size = malloc_usable_size(data.data);
     tls_thread_status.mem_release(mem_size);
-    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(_mem_tracker);
+    SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
     tls_thread_status.mem_consume(mem_size);
 #else
     int64_t mem_size = data.size;
@@ -134,14 +115,16 @@ void StoragePageCache::insert(const CacheKey& key, const Slice& data, PageCacheH
 
     auto deleter = [](const starrocks::CacheKey& key, void* value) { delete[](uint8_t*) value; };
 
-    CachePriority priority = CachePriority::NORMAL;
-    if (in_memory) {
-        priority = CachePriority::DURABLE;
+    ObjectCacheWriteOptions options;
+    options.priority = in_memory ? 1 : 0;
+    ObjectCacheHandle* obj_handle = nullptr;
+    // Use mem size managed by memory allocator as this record charge size.
+    // At the same time, we should record this record size for data fetching when lookup.
+    Status st = _cache->insert(key.encode(), data.data, data.size, mem_size, deleter, &obj_handle, &options);
+    if (st.ok()) {
+        *handle = PageCacheHandle(_cache, obj_handle);
     }
-    // Use mem size managed by memory allocator as this record charge size. At the same time, we should record this record size
-    // for data fetching when lookup.
-    auto* lru_handle = _cache->insert(key.encode(), data.data, data.size, mem_size, deleter, priority);
-    *handle = PageCacheHandle(_cache.get(), lru_handle);
+    return st;
 }
 
 } // namespace starrocks

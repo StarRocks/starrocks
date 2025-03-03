@@ -22,6 +22,8 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.profile.Timer;
+import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorMetadata;
@@ -45,13 +47,20 @@ import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.paimon.catalog.CachingCatalog;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.InternalRow;
+import org.apache.paimon.io.DataFileMeta;
+import org.apache.paimon.metrics.Gauge;
+import org.apache.paimon.metrics.Metric;
+import org.apache.paimon.operation.metrics.ScanMetrics;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.predicate.PredicateBuilder;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
+import org.apache.paimon.table.source.DataSplit;
+import org.apache.paimon.table.source.InnerTableScan;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.table.system.PartitionsTable;
@@ -68,8 +77,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
+import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 import static com.starrocks.connector.ConnectorTableId.CONNECTOR_ID_GENERATOR;
 
 public class PaimonMetadata implements ConnectorMetadata {
@@ -251,8 +262,13 @@ public class PaimonMetadata implements ConnectorMetadata {
         RemoteFileInfo remoteFileInfo = new RemoteFileInfo();
         PaimonTable paimonTable = (PaimonTable) table;
         long latestSnapshotId = -1L;
-        if (paimonTable.getNativeTable().latestSnapshotId().isPresent()) {
-            latestSnapshotId = paimonTable.getNativeTable().latestSnapshotId().getAsLong();
+        try {
+            if (paimonTable.getNativeTable().latestSnapshotId().isPresent()) {
+                latestSnapshotId = paimonTable.getNativeTable().latestSnapshotId().getAsLong();
+            }
+        } catch (Exception e) {
+            // System table does not have snapshotId, ignore it.
+            LOG.warn("Cannot get snapshot because {}", e.getMessage());
         }
         PredicateSearchKey filter = PredicateSearchKey.of(paimonTable.getCatalogDBName(),
                 paimonTable.getCatalogTableName(), latestSnapshotId, params.getPredicate());
@@ -261,19 +277,77 @@ public class PaimonMetadata implements ConnectorMetadata {
             int[] projected =
                     params.getFieldNames().stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
             List<Predicate> predicates = extractPredicates(paimonTable, params.getPredicate());
-            List<Split> splits = readBuilder.withFilter(predicates).withProjection(projected).newScan().plan().splits();
+            InnerTableScan scan = (InnerTableScan) readBuilder.withFilter(predicates).withProjection(projected).newScan();
+            PaimonMetricRegistry paimonMetricRegistry = new PaimonMetricRegistry();
+            List<Split> splits = scan.withMetricsRegistry(paimonMetricRegistry).plan().splits();
+            traceScanMetrics(paimonMetricRegistry, splits, table.getCatalogTableName(), predicates);
+
             PaimonSplitsInfo paimonSplitsInfo = new PaimonSplitsInfo(predicates, splits);
             paimonSplits.put(filter, paimonSplitsInfo);
             List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
-                    PaimonRemoteFileDesc.createPamonRemoteFileDesc(paimonSplitsInfo));
+                    PaimonRemoteFileDesc.createPaimonRemoteFileDesc(paimonSplitsInfo));
             remoteFileInfo.setFiles(remoteFileDescs);
         } else {
             List<RemoteFileDesc> remoteFileDescs = ImmutableList.of(
-                    PaimonRemoteFileDesc.createPamonRemoteFileDesc(paimonSplits.get(filter)));
+                    PaimonRemoteFileDesc.createPaimonRemoteFileDesc(paimonSplits.get(filter)));
             remoteFileInfo.setFiles(remoteFileDescs);
         }
 
         return Lists.newArrayList(remoteFileInfo);
+    }
+
+    private void traceScanMetrics(PaimonMetricRegistry metricRegistry,
+                                  List<Split> splits,
+                                  String tableName,
+                                  List<Predicate> predicates) {
+        // Don't need scan metrics when selecting system table, in which metric group is null.
+        if (metricRegistry.getMetricGroup() == null) {
+            return;
+        }
+        String prefix = "Paimon.plan.";
+
+        if (paimonNativeCatalog instanceof CachingCatalog) {
+            CachingCatalog.CacheSizes cacheSizes = ((CachingCatalog) paimonNativeCatalog).estimatedCacheSizes();
+            Tracers.record(EXTERNAL, prefix + "total.cachedDatabaseNumInCatalog",
+                    String.valueOf(cacheSizes.databaseCacheSize()));
+            Tracers.record(EXTERNAL, prefix + "total.cachedTableNumInCatalog",
+                    String.valueOf(cacheSizes.tableCacheSize()));
+            Tracers.record(EXTERNAL, prefix + "total.cachedManifestNumInCatalog",
+                    String.valueOf(cacheSizes.manifestCacheSize()));
+            Tracers.record(EXTERNAL, prefix + "total.cachedManifestBytesInCatalog",
+                    cacheSizes.manifestCacheBytes() + " B");
+            Tracers.record(EXTERNAL, prefix + "total.cachedPartitionNumInCatalog",
+                    String.valueOf(cacheSizes.partitionCacheSize()));
+        }
+
+        for (int i = 0; i < predicates.size(); i++) {
+            Tracers.record(EXTERNAL, prefix + tableName + ".filter." + i, predicates.get(i).toString());
+        }
+
+        Map<String, Metric> metrics = metricRegistry.getMetrics();
+        long manifestFileReadTime = (long) ((Gauge<?>) metrics.get(ScanMetrics.LAST_SCAN_DURATION)).getValue();
+        long scannedManifestFileNum = (long) ((Gauge<?>) metrics.get(ScanMetrics.LAST_SCANNED_MANIFESTS)).getValue();
+        long skippedDataFilesNum = (long) ((Gauge<?>) metrics.get(ScanMetrics.LAST_SCAN_SKIPPED_TABLE_FILES)).getValue();
+        long resultedDataFilesNum = (long) ((Gauge<?>) metrics.get(ScanMetrics.LAST_SCAN_RESULTED_TABLE_FILES)).getValue();
+        long manifestNumReadFromCache = (long) ((Gauge<?>) metrics.get(ScanMetrics.MANIFEST_HIT_CACHE)).getValue();
+        long manifestNumReadFromRemote = (long) ((Gauge<?>) metrics.get(ScanMetrics.MANIFEST_MISSED_CACHE)).getValue();
+
+        Tracers.record(EXTERNAL, prefix + tableName + "." + "manifestFileReadTime", manifestFileReadTime + "ms");
+        Tracers.record(EXTERNAL, prefix + tableName + "." + "scannedManifestFileNum", String.valueOf(scannedManifestFileNum));
+        Tracers.record(EXTERNAL, prefix + tableName + "." + "skippedDataFilesNum", String.valueOf(skippedDataFilesNum));
+        Tracers.record(EXTERNAL, prefix + tableName + "." + "resultedDataFilesNum", String.valueOf(resultedDataFilesNum));
+        Tracers.record(EXTERNAL, prefix + tableName + "." + "manifestNumReadFromCache",
+                String.valueOf(manifestNumReadFromCache));
+        Tracers.record(EXTERNAL, prefix + tableName + "." + "manifestNumReadFromRemote",
+                String.valueOf(manifestNumReadFromRemote));
+        Tracers.record(EXTERNAL, prefix + "total.resultSplitsNum", String.valueOf(splits.size()));
+
+        AtomicLong resultedTableFilesSize = new AtomicLong(0);
+        for (Split split : splits) {
+            List<DataFileMeta> dataFileMetas = ((DataSplit) split).dataFiles();
+            dataFileMetas.forEach(dataFileMeta -> resultedTableFilesSize.addAndGet(dataFileMeta.fileSize()));
+        }
+        Tracers.record(EXTERNAL, prefix + tableName + "." + "resultedDataFilesSize", resultedTableFilesSize.get() + " B");
     }
 
     @Override
@@ -284,29 +358,31 @@ public class PaimonMetadata implements ConnectorMetadata {
                                          ScalarOperator predicate,
                                          long limit,
                                          TableVersionRange versionRange) {
-        if (!properties.enableGetTableStatsFromExternalMetadata()) {
-            return StatisticsUtils.buildDefaultStatistics(columns.keySet());
-        }
+        try (Timer ignored = Tracers.watchScope(EXTERNAL, "GetPaimonTableStatistics")) {
+            if (!properties.enableGetTableStatsFromExternalMetadata()) {
+                return StatisticsUtils.buildDefaultStatistics(columns.keySet());
+            }
 
-        Statistics.Builder builder = Statistics.builder();
-        for (ColumnRefOperator columnRefOperator : columns.keySet()) {
-            builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
-        }
+            Statistics.Builder builder = Statistics.builder();
+            for (ColumnRefOperator columnRefOperator : columns.keySet()) {
+                builder.addColumnStatistic(columnRefOperator, ColumnStatistic.unknown());
+            }
 
-        List<String> fieldNames = columns.keySet().stream().map(ColumnRefOperator::getName).collect(Collectors.toList());
-        GetRemoteFilesParams params =
-                GetRemoteFilesParams.newBuilder().setPredicate(predicate).setFieldNames(fieldNames).setLimit(limit).build();
-        List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, params);
-        PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
-        List<Split> splits = remoteFileDesc.getPaimonSplitsInfo().getPaimonSplits();
-        long rowCount = getRowCount(splits);
-        if (rowCount == 0) {
-            builder.setOutputRowCount(1);
-        } else {
-            builder.setOutputRowCount(rowCount);
-        }
+            List<String> fieldNames = columns.keySet().stream().map(ColumnRefOperator::getName).collect(Collectors.toList());
+            GetRemoteFilesParams params =
+                    GetRemoteFilesParams.newBuilder().setPredicate(predicate).setFieldNames(fieldNames).setLimit(limit).build();
+            List<RemoteFileInfo> fileInfos = GlobalStateMgr.getCurrentState().getMetadataMgr().getRemoteFiles(table, params);
+            PaimonRemoteFileDesc remoteFileDesc = (PaimonRemoteFileDesc) fileInfos.get(0).getFiles().get(0);
+            List<Split> splits = remoteFileDesc.getPaimonSplitsInfo().getPaimonSplits();
+            long rowCount = getRowCount(splits);
+            if (rowCount == 0) {
+                builder.setOutputRowCount(1);
+            } else {
+                builder.setOutputRowCount(rowCount);
+            }
 
-        return builder.build();
+            return builder.build();
+        }
     }
 
     public static long getRowCount(List<? extends Split> splits) {

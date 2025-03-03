@@ -53,9 +53,11 @@ import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
 import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
+import org.apache.paimon.table.source.InnerTableScan;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.table.source.TableScan;
+import org.apache.paimon.table.system.ManifestsTable;
 import org.apache.paimon.table.system.PartitionsTable;
 import org.apache.paimon.table.system.SchemasTable;
 import org.apache.paimon.table.system.SnapshotsTable;
@@ -196,6 +198,28 @@ public class PaimonMetadataTest {
     }
 
     @Test
+    public void testGetSystemTable(@Mocked ManifestsTable paimonSystemTable,
+                                   @Mocked ReadBuilder readBuilder) throws Exception {
+        new Expectations() {
+            {
+                paimonNativeCatalog.getTable((Identifier) any);
+                result = paimonSystemTable;
+                paimonSystemTable.latestSnapshotId();
+                result = new Exception("Readonly Table tbl1$manifests does not support currentSnapshot.");
+                paimonSystemTable.newReadBuilder();
+                result = readBuilder;
+                readBuilder.withFilter((List<Predicate>) any).withProjection((int[]) any).newScan().plan().splits();
+                result = splits;
+            }
+        };
+        PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1$manifests");
+        List<String> requiredNames = Lists.newArrayList("file_name", "file_size");
+        List<RemoteFileInfo> result =
+                metadata.getRemoteFiles(paimonTable, GetRemoteFilesParams.newBuilder().setFieldNames(requiredNames).build());
+        Assert.assertEquals(1, result.size());
+    }
+
+    @Test
     public void testListPartitionNames(@Mocked FileStoreTable mockPaimonTable,
                                        @Mocked PartitionsTable mockPartitionTable,
                                        @Mocked RecordReader<InternalRow> mockRecordReader)
@@ -276,7 +300,8 @@ public class PaimonMetadataTest {
 
     @Test
     public void testGetRemoteFiles(@Mocked FileStoreTable paimonNativeTable,
-                                   @Mocked ReadBuilder readBuilder)
+                                   @Mocked ReadBuilder readBuilder,
+                                   @Mocked InnerTableScan scan)
             throws Catalog.TableNotExistException {
         new MockUp<PaimonMetadata>() {
             @Mock
@@ -292,6 +317,8 @@ public class PaimonMetadataTest {
                 result = readBuilder;
                 readBuilder.withFilter((List<Predicate>) any).withProjection((int[]) any).newScan().plan().splits();
                 result = splits;
+                readBuilder.newScan();
+                result = scan;
             }
         };
         PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1");
@@ -427,7 +454,7 @@ public class PaimonMetadataTest {
             @Mock
             public List<RemoteFileInfo> getRemoteFiles(Table table, GetRemoteFilesParams params) {
                 return Lists.newArrayList(RemoteFileInfo.builder()
-                        .setFiles(Lists.newArrayList(PaimonRemoteFileDesc.createPamonRemoteFileDesc(
+                        .setFiles(Lists.newArrayList(PaimonRemoteFileDesc.createPaimonRemoteFileDesc(
                                 new PaimonSplitsInfo(null, Lists.newArrayList((Split) splits.get(0))))))
                         .build());
             }

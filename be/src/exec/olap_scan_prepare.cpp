@@ -27,9 +27,11 @@
 #include "exprs/runtime_filter.h"
 #include "gutil/map_util.h"
 #include "runtime/descriptors.h"
+#include "storage/column_placeholder_predicate.h"
 #include "storage/column_predicate.h"
 #include "storage/predicate_parser.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/runtime_filter_predicate.h"
 #include "storage/runtime_range_pruner.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "types/date_value.hpp"
@@ -423,8 +425,8 @@ requires(!lt_is_date<SlotType>) Status ChunkPredicateBuilder<E, Type>::normalize
             SQLFilterOp op;
             ValueType value;
             ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
-            bool ok =
-                    get_predicate_value<Negative>(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
+            bool ok = get_predicate_value<Negative>(_opts.obj_pool, slot, get_root_expr(expr_context), expr_context,
+                                                    &value, &op, &status);
             if (ok && range->add_fixed_values(FILTER_IN, std::set<RangeValueType>{value}).ok()) {
                 _normalized_exprs[i] = true;
             }
@@ -534,8 +536,8 @@ requires lt_is_date<SlotType> Status ChunkPredicateBuilder<E, Type>::normalize_i
             SQLFilterOp op;
             DateValue value{0};
             ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
-            bool ok =
-                    get_predicate_value<Negative>(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
+            bool ok = get_predicate_value<Negative>(_opts.obj_pool, slot, get_root_expr(expr_context), expr_context,
+                                                    &value, &op, &status);
             if (ok && range->add_fixed_values(FILTER_IN, std::set<DateValue>{value}).ok()) {
                 _normalized_exprs[i] = true;
             }
@@ -568,7 +570,8 @@ Status ChunkPredicateBuilder<E, Type>::normalize_binary_predicate(const SlotDesc
         SQLFilterOp op;
         ValueType value;
         ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
-        bool ok = get_predicate_value<Negative>(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
+        bool ok = get_predicate_value<Negative>(_opts.obj_pool, slot, get_root_expr(expr_context), expr_context, &value,
+                                                &op, &status);
         if (ok && range->add_range(op, static_cast<RangeValueType>(value)).ok()) {
             _normalized_exprs[i] = true;
         }
@@ -771,8 +774,8 @@ Status ChunkPredicateBuilder<E, Type>::normalize_not_in_or_not_equal_predicate(
             SQLFilterOp op;
             ValueType value;
             ASSIGN_OR_RETURN(auto* expr_context, _exprs[i].expr_context(_opts.obj_pool, _opts.runtime_state));
-            bool ok =
-                    get_predicate_value<Negative>(_opts.obj_pool, slot, root_expr, expr_context, &value, &op, &status);
+            bool ok = get_predicate_value<Negative>(_opts.obj_pool, slot, get_root_expr(expr_context), expr_context,
+                                                    &value, &op, &status);
             if (ok && range->add_fixed_values(FILTER_NOT_IN, std::set<RangeValueType>{value}).ok()) {
                 _normalized_exprs[i] = true;
             }
@@ -1044,6 +1047,32 @@ Status ChunkPredicateBuilder<E, Type>::_get_column_predicates(PredicateParser* p
             }
         }
     }
+    if (_opts.runtime_state->enable_join_runtime_filter_pushdown()) {
+        for (const auto& it : _opts.runtime_filters->descriptors()) {
+            RuntimeFilterProbeDescriptor* desc = it.second;
+            SlotId slot_id;
+            if (!desc->is_probe_slot_ref(&slot_id)) {
+                continue;
+            }
+            auto slot_desc = _opts.tuple_desc->get_slot_by_id(slot_id);
+            if (slot_desc == nullptr) {
+                continue;
+            }
+            if (desc->is_topn_filter()) {
+                continue;
+            }
+
+            auto column_id = parser->column_id(*slot_desc);
+            desc->set_has_push_down_to_storage(true);
+            // add placeholder predicates, so that the columns needed by runtime filter can be read in the first stage of late materialization
+            std::unique_ptr<ColumnPredicate> p(
+                    new_column_placeholder_predicate(get_type_info(slot_desc->type().type), column_id));
+            VLOG_FILE << "add runtime filter predicate, slot_id=" << slot_id << ", column_id:" << column_id
+                      << ", rf=" << desc->debug_string() << ", driver_sequence: " << _opts.driver_sequence
+                      << ", desc:" << (void*)desc << ", " << (void*)(p.get());
+            col_preds_owner.emplace_back(std::move(p));
+        }
+    }
 
     return Status::OK();
 }
@@ -1213,6 +1242,29 @@ StatusOr<PredicateTree> ScanConjunctsManager::get_predicate_tree(PredicateParser
                                                                  ColumnPredicatePtrs& col_preds_owner) {
     ASSIGN_OR_RETURN(auto pred_root, _root_builder.get_predicate_tree_root(parser, col_preds_owner));
     return PredicateTree::create(std::move(pred_root));
+}
+
+StatusOr<RuntimeFilterPredicates> ScanConjunctsManager::get_runtime_filter_predicates(ObjectPool* obj_pool,
+                                                                                      PredicateParser* parser) {
+    RuntimeFilterPredicates predicates(_opts.driver_sequence);
+    for (const auto& it : _opts.runtime_filters->descriptors()) {
+        RuntimeFilterProbeDescriptor* desc = it.second;
+        SlotId slot_id;
+        if (!desc->is_probe_slot_ref(&slot_id)) {
+            continue;
+        }
+        auto slot_desc = _opts.tuple_desc->get_slot_by_id(slot_id);
+        if (slot_desc == nullptr) {
+            continue;
+        }
+        if (desc->is_topn_filter()) {
+            continue;
+        }
+        auto column_id = parser->column_id(*slot_desc);
+        desc->set_has_push_down_to_storage(true);
+        predicates.add_predicate(obj_pool->add(new RuntimeFilterPredicate(desc, column_id)));
+    }
+    return predicates;
 }
 
 Status ScanConjunctsManager::get_key_ranges(std::vector<std::unique_ptr<OlapScanRange>>* key_ranges) {

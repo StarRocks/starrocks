@@ -328,9 +328,12 @@ TEST_F(CacheInputStreamTest, test_read_with_zero_range) {
 }
 
 TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
+    const std::string cache_dir = "./cache_input_stream_cache_dir";
+    fs::create_directories(cache_dir);
+
     CacheOptions options = cache_options();
     // Because the cache adaptor only work for disk cache.
-    options.disk_spaces.push_back({.path = "./block_disk_cache", .size = 300 * 1024 * 1024});
+    options.disk_spaces.push_back({.path = cache_dir, .size = 300 * 1024 * 1024});
     options.enable_tiered_cache = false;
     ASSERT_OK(BlockCache::instance()->init(options));
 
@@ -393,6 +396,7 @@ TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
         ASSERT_TRUE(check_data_content(buffer + block_size, block_size, 'b'));
         ASSERT_EQ(stats.read_cache_count, block_count);
     }
+    fs::remove_all(cache_dir);
 }
 
 TEST_F(CacheInputStreamTest, test_read_with_shared_buffer) {

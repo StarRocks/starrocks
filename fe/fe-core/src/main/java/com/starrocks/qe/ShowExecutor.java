@@ -46,6 +46,7 @@ import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TableRef;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.GroupProvider;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authorization.AccessDeniedException;
@@ -229,6 +230,8 @@ import com.starrocks.sql.ast.ShowUserPropertyStmt;
 import com.starrocks.sql.ast.ShowUserStmt;
 import com.starrocks.sql.ast.ShowVariablesStmt;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
+import com.starrocks.sql.ast.group.ShowGroupProvidersStmt;
 import com.starrocks.sql.ast.integration.ShowCreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.integration.ShowSecurityIntegrationStatement;
 import com.starrocks.sql.ast.pipe.DescPipeStmt;
@@ -310,7 +313,14 @@ public class ShowExecutor {
         @Override
         public ShowResultSet visitShowMaterializedViewStatement(ShowMaterializedViewsStmt statement, ConnectContext context) {
             String dbName = statement.getDb();
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            String catalogName = statement.getCatalogName();
+            Database db;
+            if (catalogName == null) {
+                db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            } else {
+                db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalogName, dbName);
+            }
+
             MetaUtils.checkDbNullAndReport(db, dbName);
 
             List<MaterializedView> materializedViews = Lists.newArrayList();
@@ -2103,6 +2113,54 @@ public class ShowExecutor {
                         .collect(Collectors.joining(",\n"));
                 infos.add(Lists.newArrayList(name,
                         "CREATE SECURITY INTEGRATION `" + name +
+                                "` PROPERTIES (\n" + propString + "\n)"));
+            }
+            return new ShowResultSet(statement.getMetaData(), infos);
+        }
+
+        @Override
+        public ShowResultSet visitShowGroupProvidersStatement(ShowGroupProvidersStmt statement, ConnectContext context) {
+            AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+            List<GroupProvider> groupProviderLogs = authenticationManager.getAllGroupProviders();
+            List<List<String>> infos = new ArrayList<>();
+            for (GroupProvider groupProviderLog : groupProviderLogs) {
+                List<String> info = new ArrayList<>();
+                info.add(groupProviderLog.getName());
+                info.add(groupProviderLog.getType());
+                if (groupProviderLog.getComment().isEmpty()) {
+                    info.add(FeConstants.NULL_STRING);
+                } else {
+                    info.add(groupProviderLog.getComment());
+                }
+                infos.add(info);
+            }
+
+            // sort by type, then by name
+            List<List<String>> sortedList = infos.stream()
+                    .sorted(
+                            Comparator.comparing((List<String> sublist) -> sublist.get(1))
+                                    .thenComparing((List<String> sublist) -> sublist.get(0))
+                    )
+                    .collect(Collectors.toList());
+
+            return new ShowResultSet(statement.getMetaData(), sortedList);
+        }
+
+        @Override
+        public ShowResultSet visitShowCreateGroupProviderStatement(ShowCreateGroupProviderStmt statement,
+                                                                   ConnectContext context) {
+            AuthenticationMgr authenticationManager = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+
+            String name = statement.getName();
+            List<List<String>> infos = new ArrayList<>();
+            GroupProvider groupProviderLog = authenticationManager.getGroupProvider(name);
+            if (groupProviderLog != null) {
+                Map<String, String> propertyMap = groupProviderLog.getProperties();
+                String propString = propertyMap.entrySet().stream()
+                        .map(entry -> "\"" + entry.getKey() + "\" = \"" + entry.getValue() + "\"")
+                        .collect(Collectors.joining(",\n"));
+                infos.add(Lists.newArrayList(name,
+                        "CREATE GROUP PROVIDER `" + name +
                                 "` PROPERTIES (\n" + propString + "\n)"));
             }
             return new ShowResultSet(statement.getMetaData(), infos);

@@ -136,7 +136,10 @@ public class LakeRollupJobTest {
         lakeRollupJob.runRunningJob();
         Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, lakeRollupJob.getJobState());
 
-        lakeRollupJob.runFinishedRewritingJob();
+        while (lakeRollupJob.getJobState() != AlterJobV2.JobState.FINISHED) {
+            lakeRollupJob.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, lakeRollupJob.getJobState());
     }
 

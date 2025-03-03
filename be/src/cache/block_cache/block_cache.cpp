@@ -16,6 +16,8 @@
 
 #include <fmt/format.h>
 
+#include "runtime/exec_env.h"
+
 #ifdef WITH_STARCACHE
 #include "cache/block_cache/starcache_wrapper.h"
 #endif
@@ -31,8 +33,7 @@ namespace fs = std::filesystem;
 const size_t BlockCache::MAX_BLOCK_SIZE = 2 * 1024 * 1024;
 
 BlockCache* BlockCache::instance() {
-    static BlockCache cache;
-    return &cache;
+    return CacheEnv::GetInstance()->block_cache();
 }
 
 BlockCache::~BlockCache() {
@@ -46,8 +47,9 @@ Status BlockCache::init(const CacheOptions& options) {
     if (cache_options.engine == "starcache") {
         _kv_cache = std::make_unique<StarCacheWrapper>();
         _disk_space_monitor = std::make_unique<DiskSpaceMonitor>(this);
-        _disk_space_monitor->adjust_spaces(&cache_options.disk_spaces);
-        LOG(INFO) << "init starcache engine, block_size: " << _block_size;
+        RETURN_IF_ERROR(_disk_space_monitor->init(&cache_options.disk_spaces));
+        LOG(INFO) << "init starcache engine, block_size: " << _block_size
+                  << ", disk_spaces: " << _disk_space_monitor->to_string(cache_options.disk_spaces);
     }
 #endif
     if (!_kv_cache) {
@@ -157,15 +159,6 @@ Status BlockCache::update_disk_spaces(const std::vector<DirSpace>& spaces) {
     Status st = _kv_cache->update_disk_spaces(spaces);
     _refresh_quota();
     return st;
-}
-
-Status BlockCache::adjust_disk_spaces(const std::vector<DirSpace>& spaces) {
-    if (_disk_space_monitor) {
-        auto adjusted_spaces = spaces;
-        _disk_space_monitor->adjust_spaces(&adjusted_spaces);
-        return _disk_space_monitor->adjust_cache_quota(adjusted_spaces);
-    }
-    return update_disk_spaces(spaces);
 }
 
 void BlockCache::record_read_remote(size_t size, int64_t lateny_us) {

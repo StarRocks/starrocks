@@ -1,4 +1,4 @@
--- name: test_mv_with_multi_partition_columns_iceberg1
+-- name: test_mv_with_multi_partition_columns_iceberg1 @slow
 
 -- !!!! SCIPRTS: prepare iceberg table before tests !!!!
 -- CREATE DATABASE sql_test_db;
@@ -134,6 +134,8 @@
 -- ) USING ICEBERG
 -- PARTITIONED BY (l_returnflag, l_linestatus, years(l_shipdate));
 -- INSERT INTO lineitem_years SELECT l_orderkey, l_partkey, l_suppkey, l_linenumber, l_quantity, l_extendedprice, l_discount, l_tax, l_returnflag, l_linestatus, to_date(l_shipdate), to_date(l_commitdate), to_date(l_receiptdate), l_shipinstruct, l_shipmode, l_comment FROM t1;
+
+set new_planner_optimize_timeout=10000;
 
 -- create mv
 create database db_${uuid0};

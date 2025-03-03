@@ -1295,7 +1295,7 @@ public class ExpressionTest extends PlanTestBase {
 
         sql = "select cast(cast(id_datetime as string) as date) from test_all_type;";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "CAST(CAST(8: id_datetime AS VARCHAR(65533)) AS DATE)");
+        assertContains(plan, "CAST(8: id_datetime AS DATE)");
 
         sql = "select cast(cast(t1d as int) as boolean) from test_all_type;";
         plan = getFragmentPlan(sql);

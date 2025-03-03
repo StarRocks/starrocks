@@ -32,7 +32,6 @@ import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.Utils;
-import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
@@ -44,15 +43,12 @@ import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.OptExpressionDuplicator;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensation;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensationBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -177,7 +173,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         List<ColumnRefOperator> expectOutputColumns = mvColumns.stream()
                 .map(c -> columnToColumnRefMap.get(c))
                 .collect(Collectors.toList());
-        OptExpression result = getMvTransparentPlan(mvContext, input, expectOutputColumns);
+        OptExpression result = MvPartitionCompensator.getMvTransparentPlan(mvContext, input, expectOutputColumns);
         if (result != null) {
             logMVRewrite(mvContext, "Success to generate transparent plan");
             return result;
@@ -225,43 +221,6 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                 .map(c -> columnToColumnRefMap.get(c))
                 .collect(Collectors.toList());
         return getMvDefinedQueryPlan(mvPlanContext.getLogicalPlan(), mvContext, expectOutputColumns);
-    }
-
-    /**
-     * Get transparent plan if possible.
-     * What's the transparent plan?
-     * see {@link MvPartitionCompensator#getMvTransparentPlan(MaterializationContext, MVCompensation, List, ColumnRefSet)}
-     */
-    private OptExpression getMvTransparentPlan(MaterializationContext mvContext,
-                                               OptExpression input,
-                                               List<ColumnRefOperator> expectOutputColumns) {
-        // NOTE: MV's mvSelectPartitionIds is not trusted in transparent since it is targeted for the whole partitions(refresh
-        //  and no refreshed).
-        // 1. Decide ref base table partition ids to refresh in optimizer.
-        // 2. consider partition prunes for the input olap scan operator
-        MvUpdateInfo mvUpdateInfo = mvContext.getMvUpdateInfo();
-        if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
-            logMVRewrite(mvContext, "Failed to get mv to refresh partition info: {}", mvContext.getMv().getName());
-            return null;
-        }
-        MVCompensationBuilder mvCompensationBuilder = new MVCompensationBuilder(mvContext, mvUpdateInfo);
-        MVCompensation mvCompensation = mvCompensationBuilder.buildMvCompensation(Optional.empty());
-        if (mvCompensation == null) {
-            logMVRewrite(mvContext, "Failed to get mv compensation info: {}", mvContext.getMv().getName());
-            return null;
-        }
-        logMVRewrite(mvContext, "Get mv compensation info: {}", mvCompensation);
-        if (mvCompensation.isNoCompensate()) {
-            return input;
-        }
-        if (mvCompensation.isUncompensable()) {
-            logMVRewrite(mvContext, "Return directly because mv compensation info cannot compensate: {}",
-                    mvCompensation);
-            return null;
-        }
-        OptExpression transparentPlan = MvPartitionCompensator.getMvTransparentPlan(mvContext, mvCompensation,
-                expectOutputColumns, false);
-        return transparentPlan;
     }
 
     /**
