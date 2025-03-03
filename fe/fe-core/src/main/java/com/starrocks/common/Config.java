@@ -2527,7 +2527,7 @@ public class Config extends ConfigBase {
     public static boolean enable_query_cost_prediction = false;
     @ConfField(mutable = true)
     public static String query_cost_prediction_service_address = "http://localhost:5000";
-    @ConfField(mutable = true)
+    @ConfField(mutable = false)
     public static int query_cost_predictor_healthchk_interval = 30;
 
     @ConfField
