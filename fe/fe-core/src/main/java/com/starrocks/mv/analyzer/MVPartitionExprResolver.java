@@ -330,7 +330,7 @@ public class MVPartitionExprResolver {
         }
 
         @Override
-        public Exprs visitSubquery(SubqueryRelation node, MVExprContext context) {
+        public Exprs visitSubqueryRelation(SubqueryRelation node, MVExprContext context) {
             SlotRef slot = context.getSlotRef();
             if (slot.getTblNameWithoutAnalyzed() != null) {
                 String tableName = slot.getTblNameWithoutAnalyzed().getTbl();

@@ -1334,7 +1334,7 @@ public interface AstVisitor<R, C> {
         return visitRelation(node, context);
     }
 
-    default R visitSubquery(SubqueryRelation node, C context) {
+    default R visitSubqueryRelation(SubqueryRelation node, C context) {
         return visitRelation(node, context);
     }
 
@@ -1500,7 +1500,7 @@ public interface AstVisitor<R, C> {
         return visitExpression(node, context);
     }
 
-    default R visitSubquery(Subquery node, C context) {
+    default R visitSubqueryExpr(Subquery node, C context) {
         return visitExpression(node, context);
     }
 
@@ -1602,4 +1602,17 @@ public interface AstVisitor<R, C> {
         return visitNode(node, context);
     }
 
+    // ------------------------------------------- BaselinePlan -------------------------------------------------------
+    //
+    //    default R visitCreateBaselinePlanStatement(CreateBaselinePlanStmt statement, C context) {
+    //        return visitDDLStatement(statement, context);
+    //    }
+    //
+    //    default R visitDropBaselinePlanStatement(DropBaselinePlanStmt statement, C context) {
+    //        return visitDDLStatement(statement, context);
+    //    }
+    //
+    //    default R visitShowBaselinePlanStatement(ShowBaselinePlanStmt statement, C context) {
+    //        return visitShowStatement(statement, context);
+    //    }
 }
