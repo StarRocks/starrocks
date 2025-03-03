@@ -43,6 +43,7 @@ public:
             const std::function<Status(const CompactConflictResolveParams&, const std::vector<ChunkIteratorPtr>&,
                                        const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>&)>& handler)
             override;
+    Status breakpoint_check() override;
 
 private:
     // input

@@ -388,6 +388,8 @@ public:
 
     void stop_and_wait_apply_done();
 
+    Status breakpoint_check();
+
 private:
     friend class Tablet;
     friend class PrimaryIndex;
@@ -525,7 +527,8 @@ private:
                                           vector<std::pair<uint32_t, DelVectorPtr>>* delvecs);
 
     bool _check_status_msg(std::string_view msg);
-    bool _is_tolerable(Status& status);
+    bool _is_retryable(Status& status);
+    bool _is_breakpoint(Status& status);
 
     void _reset_apply_status(const EditVersionInfo& version_info_apply);
 

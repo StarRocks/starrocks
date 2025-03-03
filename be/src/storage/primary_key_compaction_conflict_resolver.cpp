@@ -41,6 +41,7 @@ Status PrimaryKeyCompactionConflictResolver::execute() {
                 const std::function<void(uint32_t, const DelVectorPtr&, uint32_t)>& handle_delvec_result_func) {
                 std::map<uint32_t, DelVectorPtr> rssid_to_delvec;
                 for (size_t segment_id = 0; segment_id < segment_iters.size(); segment_id++) {
+                    RETURN_IF_ERROR(breakpoint_check());
                     // only hold pkey, so can use larger chunk size
                     ChunkUniquePtr chunk_shared_ptr;
                     TRY_CATCH_BAD_ALLOC(chunk_shared_ptr =
