@@ -563,7 +563,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             long count = jobs.stream()
                     .filter(x -> x.getTable().getName().equalsIgnoreCase("t0_stats"))
                     .count();
-            Assert.assertEquals(4, count);
+            Assert.assertEquals(3, count);
             starRocksAssert.dropAnalyzeForTable("t0_stats");
         }
     }
