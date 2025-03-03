@@ -71,12 +71,6 @@ Status EngineChecksumTask::_compute_checksum() {
         return Status::NotFound(fmt::format("Not found tablet: {}", _tablet_id));
     }
 
-    if (tablet->updates() != nullptr) {
-        *_checksum = 0;
-        LOG(INFO) << "Skipped compute checksum for updatable tablet";
-        return Status::OK();
-    }
-
     std::vector<uint32_t> return_columns;
     auto tablet_schema = tablet->tablet_schema();
 

@@ -150,7 +150,7 @@ public class LocalTabletsProcDirTest {
 
         // Check
         LocalTabletsProcDir tabletsProcDir = new LocalTabletsProcDir(db, table, index);
-        List<List<Comparable>> result = tabletsProcDir.fetchComparableResult(-1, -1, null, false);
+        List<List<Comparable>> result = tabletsProcDir.fetchComparableResult(-1, -1, null, null, false);
         System.out.println(result);
         Assert.assertEquals(3, result.size());
         Assert.assertEquals((long) result.get(0).get(0), tablet1Id);
