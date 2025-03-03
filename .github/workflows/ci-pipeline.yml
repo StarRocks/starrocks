@@ -30,8 +30,7 @@ jobs:
       - name: Sync Check
         id: check
         if: >
-          (!contains(github.event.pull_request.title, '(sync #') &&
-          !contains(github.event.pull_request.labels.*.name, 'sync') &&
+          (!contains(github.event.pull_request.labels.*.name, 'sync') &&
           (!startsWith(github.head_ref, github.base_ref) || !contains(github.head_ref, '-sync-'))) ||
           contains(github.event.pull_request.labels.*.name, 'force-check')
         run: |
