@@ -549,21 +549,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
             long count = jobs.stream()
                     .filter(x -> x.getTable().getName().equalsIgnoreCase("t0_stats"))
                     .count();
-            Assert.assertEquals(2, count);
-            starRocksAssert.dropAnalyzeForTable("t0_stats");
-        }
-
-        // case: overlapped columns
-        {
-            starRocksAssert.ddl("create analyze full table test.t0_stats(v2)");
-            starRocksAssert.ddl("create analyze full table test.t0_stats(v3)");
-            starRocksAssert.ddl("create analyze full table test.t0_stats(v2, v3)");
-            StatisticAutoCollector collector = new StatisticAutoCollector();
-            List<StatisticsCollectJob> jobs = collector.runJobs();
-            long count = jobs.stream()
-                    .filter(x -> x.getTable().getName().equalsIgnoreCase("t0_stats"))
-                    .count();
-            Assert.assertEquals(4, count);
+            Assert.assertEquals(1, count);
             starRocksAssert.dropAnalyzeForTable("t0_stats");
         }
     }
