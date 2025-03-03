@@ -64,6 +64,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
     private QueryStatement queryStatement;
     private DistributionDesc distributionDesc;
     private final int queryStartIndex;
+    private final int queryStopIndex;
     private final List<String> sortKeys;
     private KeysType keysType = KeysType.DUP_KEYS;
     // view definition of the mv which has been rewritten by AstToSQLBuilder#toSQL
@@ -112,6 +113,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
                                            Map<String, String> properties,
                                            QueryStatement queryStatement,
                                            int queryStartIndex,
+                                           int queryStopIndex,
                                            String originalDBName,
                                            NodePosition pos) {
         super(pos);
@@ -126,6 +128,7 @@ public class CreateMaterializedViewStatement extends DdlStmt {
         this.sortKeys = sortKeys;
         this.properties = properties;
         this.queryStartIndex = queryStartIndex;
+        this.queryStopIndex = queryStopIndex;
         this.queryStatement = queryStatement;
         this.originalDBName = originalDBName;
     }
@@ -267,6 +270,10 @@ public class CreateMaterializedViewStatement extends DdlStmt {
 
     public int getQueryStartIndex() {
         return queryStartIndex;
+    }
+
+    public int getQueryStopIndex() {
+        return queryStopIndex;
     }
 
     public QueryStatement getQueryStatement() {
