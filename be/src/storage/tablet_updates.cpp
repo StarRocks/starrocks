@@ -72,6 +72,8 @@
 
 namespace starrocks {
 
+const std::string kBreakpointMsg = "primary key apply stopped";
+
 std::string EditVersion::to_string() const {
     if (minor_number() == 0) {
         return strings::Substitute("$0", major_number());
@@ -868,7 +870,7 @@ bool TabletUpdates::_check_status_msg(std::string_view msg) {
     return has_memory && (has_exceed_limit || has_alloc_failed);
 }
 
-bool TabletUpdates::_is_tolerable(Status& status) {
+bool TabletUpdates::_is_retryable(Status& status) {
     switch (status.code()) {
     case TStatusCode::OK:
     case TStatusCode::MEM_LIMIT_EXCEEDED:
@@ -877,6 +879,20 @@ bool TabletUpdates::_is_tolerable(Status& status) {
         return true;
     default:
         return _check_status_msg(status.message());
+    }
+}
+
+bool TabletUpdates::_is_breakpoint(Status& status) {
+    if (status.code() == TStatusCode::ABORTED) {
+        std::string_view msg = status.message();
+        std::string lower_msg;
+        lower_msg.reserve(msg.size());
+        for (char ch : msg) {
+            lower_msg.push_back(std::tolower(static_cast<unsigned char>(ch)));
+        }
+        return lower_msg.find(kBreakpointMsg) != std::string::npos;
+    } else {
+        return false;
     }
 }
 
@@ -985,7 +1001,7 @@ void TabletUpdates::do_apply() {
         }
         first = false;
         // submit a delay apply task to storage_engine
-        if (config::enable_retry_apply && _is_tolerable(apply_st) && !apply_st.ok()) {
+        if (config::enable_retry_apply && _is_retryable(apply_st) && !apply_st.ok()) {
             //reset pk index, reset rowset_update_states, reset compaction_state
             _reset_apply_status(*version_info_apply);
             auto time_point =
@@ -995,6 +1011,11 @@ void TabletUpdates::do_apply() {
                                                   _tablet.tablet_id(), apply_st.to_string());
             LOG(WARNING) << msg;
             _apply_schedule.store(true);
+            break;
+        } else if (_is_breakpoint(apply_st)) {
+            // apply stopped, clean states and quit.
+            _reset_apply_status(*version_info_apply);
+            LOG(INFO) << "apply stopped, clean states and quit tablet id: " << _tablet.tablet_id();
             break;
         } else {
             if (!apply_st.ok()) {
@@ -1023,8 +1044,21 @@ void TabletUpdates::_wait_apply_done() {
 }
 
 void TabletUpdates::stop_and_wait_apply_done() {
+    int64_t start_time = MonotonicMicros();
     _apply_stopped = true;
     _wait_apply_done();
+    int64_t duration = MonotonicMicros() - start_time;
+    StarRocksMetrics::instance()->primary_key_wait_apply_done_duration_ms.increment(duration / 1000);
+    StarRocksMetrics::instance()->primary_key_wait_apply_done_total.increment(1);
+}
+
+Status TabletUpdates::breakpoint_check() {
+    if (_apply_stopped) {
+        // apply stopped, return error and stop the apply process
+        return Status::Aborted(kBreakpointMsg);
+    } else {
+        return Status::OK();
+    }
 }
 
 Status TabletUpdates::get_latest_applied_version(EditVersion* latest_applied_version) {
@@ -1865,6 +1899,8 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
 Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
                                  const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
                                  DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema) {
+    TEST_SYNC_POINT_CALLBACK("TabletUpdates::_do_update", &rowset_id);
+    RETURN_IF_ERROR(breakpoint_check());
     if (condition_column >= 0) {
         auto tablet_column = tablet_schema->column(condition_column);
         std::vector<uint32_t> read_column_ids;
@@ -2356,6 +2392,7 @@ Status TabletUpdates::_apply_compaction_commit(const EditVersionInfo& version_in
         max_src_rssid = max_rowset_id + rowset->num_segments() - 1;
 
         for (size_t i = 0; i < _compaction_state->pk_cols.size(); i++) {
+            RETURN_IF_ERROR(breakpoint_check());
             st = _compaction_state->load_segments(output_rowset, i);
             FAIL_POINT_TRIGGER_EXECUTE(tablet_apply_load_segments_failed,
                                        { st = Status::InternalError("inject tablet_apply_load_segments_failed"); });
