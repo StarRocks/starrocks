@@ -162,7 +162,8 @@ public class MaterializedViewAnalyzer {
                     Table.TableType.DELTALAKE,
                     Table.TableType.VIEW,
                     Table.TableType.HIVE_VIEW,
-                    Table.TableType.ICEBERG_VIEW);
+                    Table.TableType.ICEBERG_VIEW,
+                    Table.TableType.PAIMON_VIEW);
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new MaterializedViewAnalyzerVisitor().visit(stmt, session);

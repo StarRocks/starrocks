@@ -44,6 +44,7 @@ import org.apache.paimon.types.BooleanType;
 import org.apache.paimon.types.CharType;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataTypeDefaultVisitor;
+import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.types.DateType;
 import org.apache.paimon.types.DecimalType;
 import org.apache.paimon.types.DoubleType;
@@ -578,6 +579,87 @@ public class ColumnTypeConverter {
         protected Type defaultMethod(org.apache.paimon.types.DataType dataType) {
             return ScalarType.createType(PrimitiveType.UNKNOWN_TYPE);
         }
+    }
+
+    public static List<Column> fromPaimonSchemas(List<DataField> fields) {
+        List<Column> columns = new ArrayList<>(fields.size());
+        for (DataField field : fields) {
+            String fieldName = field.name();
+            org.apache.paimon.types.DataType type = field.type();
+            Type fieldType = ColumnTypeConverter.fromPaimonType(type);
+            Column column = new Column(fieldName, fieldType, true, field.description());
+            columns.add(column);
+        }
+        return columns;
+    }
+
+    public static org.apache.paimon.types.RowType toPaimonRowType(List<Column> columns) {
+        org.apache.paimon.types.RowType.Builder rowTypeBuilder = org.apache.paimon.types.RowType.builder();
+        for (Column column : columns) {
+            org.apache.paimon.types.DataType dataType = toPaimonDataType(column.getType());
+            rowTypeBuilder.field(column.getName(), dataType, column.getComment());
+        }
+        return rowTypeBuilder.build();
+    }
+
+    public static org.apache.paimon.types.DataType toPaimonDataType(Type type) {
+        if (type.isScalarType()) {
+            PrimitiveType primitiveType = type.getPrimitiveType();
+
+            switch (primitiveType) {
+                case BOOLEAN:
+                    return DataTypes.BOOLEAN();
+                case TINYINT:
+                case SMALLINT:
+                case INT:
+                    return DataTypes.INT();
+                case BIGINT:
+                    return DataTypes.BIGINT();
+                case FLOAT:
+                    return DataTypes.FLOAT();
+                case DOUBLE:
+                    return DataTypes.DOUBLE();
+                case DATE:
+                    return DataTypes.DATE();
+                case DATETIME:
+                    return DataTypes.TIMESTAMP();
+                case VARCHAR:
+                    return DataTypes.VARCHAR(VarCharType.MAX_LENGTH);
+                case CHAR:
+                    return DataTypes.CHAR(CharType.MAX_LENGTH);
+                case VARBINARY:
+                    return DataTypes.VARBINARY(VarBinaryType.MAX_LENGTH);
+                case DECIMAL32:
+                case DECIMAL64:
+                case DECIMAL128:
+                    ScalarType scalarType = (ScalarType) type;
+                    return DataTypes.DECIMAL(scalarType.getScalarPrecision(), scalarType.getScalarScale());
+                default:
+                    throw new StarRocksConnectorException("Unsupported primitive column type %s", primitiveType);
+            }
+        }
+
+        if (type.isArrayType()) {
+            ArrayType arrayType = (ArrayType) type;
+            return DataTypes.ARRAY(toPaimonDataType(arrayType.getItemType()));
+        }
+
+        if (type.isMapType()) {
+            MapType mapType = (MapType) type;
+            return DataTypes.MAP(toPaimonDataType(mapType.getKeyType()), toPaimonDataType(mapType.getValueType()));
+        }
+
+        if (type.isStructType()) {
+            StructType structType = (StructType) type;
+            List<DataField> fieldList = new ArrayList<>();
+            for (StructField structField : structType.getFields()) {
+                fieldList.add(new DataField(structField.getPosition(), structField.getName(),
+                        toPaimonDataType(structField.getType())));
+            }
+            return DataTypes.ROW(fieldList.toArray(new DataField[0]));
+        }
+
+        throw new StarRocksConnectorException("Unsupported complex column type %s", type);
     }
 
     public static Type fromKuduType(ColumnSchema columnSchema) {
