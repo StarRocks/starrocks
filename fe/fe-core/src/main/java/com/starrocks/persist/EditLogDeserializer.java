@@ -264,6 +264,8 @@ public class EditLogDeserializer {
             .put(OperationType.OP_CREATE_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
             .put(OperationType.OP_ALTER_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
             .put(OperationType.OP_DROP_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
+            .put(OperationType.OP_CREATE_GROUP_PROVIDER, GroupProviderLog.class)
+            .put(OperationType.OP_DROP_GROUP_PROVIDER, GroupProviderLog.class)
             .put(OperationTypeEPack.OP_CREATE_ROLE_MAPPING, RoleMappingPersistInfo.class)
             .put(OperationTypeEPack.OP_ALTER_ROLE_MAPPING, RoleMappingPersistInfo.class)
             .put(OperationTypeEPack.OP_DROP_ROLE_MAPPING, RoleMappingPersistInfo.class)

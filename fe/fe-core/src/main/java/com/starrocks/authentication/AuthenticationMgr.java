@@ -29,13 +29,16 @@ import com.starrocks.epack.sql.ast.UserPasswordOption;
 import com.starrocks.mysql.MysqlPassword;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.persist.EditLog;
+import com.starrocks.persist.GroupProviderLog;
 import com.starrocks.persist.ImageWriter;
+import com.starrocks.persist.OperationType;
 import com.starrocks.persist.metablock.MapEntryConsumer;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -44,6 +47,8 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DropUserStmt;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserLockOption;
+import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
+import com.starrocks.sql.ast.group.DropGroupProviderStmt;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TUserSecurityPolicyRequest;
@@ -56,6 +61,7 @@ import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -78,6 +84,9 @@ public class AuthenticationMgr {
     // For legacy reason, user property are set by username instead of full user identity.
     @SerializedName(value = "m")
     private Map<String, UserProperty> userNameToProperty = new HashMap<>();
+
+    @SerializedName("gp")
+    protected Map<String, GroupProvider> nameToGroupProviderMap = new ConcurrentHashMap<>();
 
     @SerializedName("sim")
     protected Map<String, SecurityIntegration> nameToSecurityIntegrationMap = new ConcurrentHashMap<>();
@@ -709,6 +718,17 @@ public class AuthenticationMgr {
         this.userNameToProperty = ret.userNameToProperty;
         this.nameToSecurityIntegrationMap = ret.nameToSecurityIntegrationMap;
         this.userToAuthenticationInfo = ret.userToAuthenticationInfo;
+
+        this.nameToSecurityIntegrationMap = ret.nameToSecurityIntegrationMap;
+        this.nameToGroupProviderMap = ret.nameToGroupProviderMap;
+
+        for (Map.Entry<String, GroupProvider> entry : nameToGroupProviderMap.entrySet()) {
+            try {
+                entry.getValue().init();
+            } catch (Exception e) {
+                LOG.error("failed to init group provider", e);
+            }
+        }
     }
 
     public UserProperty getUserProperty(String userName) {
@@ -823,5 +843,45 @@ public class AuthenticationMgr {
     public void replayDropSecurityIntegration(String name)
             throws DdlException {
         dropSecurityIntegration(name, true);
+    }
+
+    // ---------------------------------------- Group Provider Statement --------------------------------------
+
+    public void createGroupProviderStatement(CreateGroupProviderStmt stmt, ConnectContext context) throws DdlException {
+        GroupProvider groupProvider = GroupProviderFactory.createGroupProvider(stmt.getName(), stmt.getPropertyMap());
+        groupProvider.init();
+        this.nameToGroupProviderMap.put(stmt.getName(), groupProvider);
+
+        GlobalStateMgr.getCurrentState().getEditLog().logEdit(OperationType.OP_CREATE_GROUP_PROVIDER,
+                new GroupProviderLog(stmt.getName(), stmt.getPropertyMap()));
+    }
+
+    public void replayCreateGroupProvider(String name, Map<String, String> properties) {
+        GroupProvider groupProvider = GroupProviderFactory.createGroupProvider(name, properties);
+        try {
+            groupProvider.init();
+            this.nameToGroupProviderMap.put(name, groupProvider);
+        } catch (DdlException e) {
+            LOG.error("Failed to create group provider '{}'", name, e);
+        }
+    }
+
+    public void dropGroupProviderStatement(DropGroupProviderStmt stmt, ConnectContext context) {
+        this.nameToGroupProviderMap.remove(stmt.getName());
+
+        GlobalStateMgr.getCurrentState().getEditLog().logEdit(OperationType.OP_DROP_GROUP_PROVIDER,
+                new GroupProviderLog(stmt.getName(), null));
+    }
+
+    public void replayDropGroupProvider(String name) {
+        this.nameToGroupProviderMap.remove(name);
+    }
+
+    public List<GroupProvider> getAllGroupProviders() {
+        return new ArrayList<>(nameToGroupProviderMap.values());
+    }
+
+    public GroupProvider getGroupProvider(String name) {
+        return nameToGroupProviderMap.get(name);
     }
 }
