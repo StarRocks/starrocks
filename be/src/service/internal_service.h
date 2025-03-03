@@ -183,7 +183,7 @@ public:
                                   PProcessDictionaryCacheResult* response, google::protobuf::Closure* done) override;
 
     void fetch_arrow_schema(google::protobuf::RpcController* controller, const PFetchArrowSchemaRequest* request,
-                            PFetchArrowSchemaResult* result, google::protobuf::Closure* done);
+                            PFetchArrowSchemaResult* result, google::protobuf::Closure* done) override;
 
     void stream_load(google::protobuf::RpcController* controller, const PStreamLoadRequest* request,
                      PStreamLoadResponse* response, google::protobuf::Closure* done) override;
