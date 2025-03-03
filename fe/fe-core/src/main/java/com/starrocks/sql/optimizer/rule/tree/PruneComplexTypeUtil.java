@@ -219,7 +219,8 @@ public class PruneComplexTypeUtil {
                 return null;
             }
 
-            if (scalarOperator.getType().isMapType() || scalarOperator.getType().isStructType()) {
+            if (scalarOperator.getType().isMapType() || scalarOperator.getType().isStructType() ||
+                    scalarOperator.getType().isFunctionType()) {
                 // New expression maybe added, and it's not be handled when go here, so we need disable prune subfields
                 // to prevent error prune.
                 context.setEnablePruneComplexTypes(false);
