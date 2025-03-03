@@ -126,4 +126,5 @@ public class MultiColumnStats implements ColumnStats {
     public String getSampleNullCount(SampleInfo info) {
         return "";
     }
+    
 }

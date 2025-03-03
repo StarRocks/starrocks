@@ -135,6 +135,10 @@ public class AnalyzeStmtAnalyzer {
                 if (statement.getPartitionNames() != null) {
                     throw new SemanticException("not support specify partition names on multi-column analyze statement");
                 }
+
+                if (statement.isAsync()) {
+                    throw new SemanticException("not support async analyze on multi-column analyze statement");
+                }
             }
 
             if (CollectionUtils.isNotEmpty(columns)) {

@@ -18,7 +18,7 @@ insert into t1 values (2, 2, 's2', 's2');
 insert into t1 values (3, 3, 's3', 's3');
 -- result:
 -- !result
-[UC]analyze full table t1 mcdistinct (c1, c2);
+[UC]analyze full table t1 multi_columns (c1, c2);
 -- result:
 analyze_test_1e6b633984734138afdcd352934c9306.t1	analyze	status	OK
 -- !result
@@ -26,14 +26,14 @@ select count(1) from _statistics_.multi_column_statistics where table_name like 
 -- result:
 1
 -- !result
-drop multi_column stats t1;
+drop multi_columns stats t1;
 -- result:
 -- !result
 select count(1) from _statistics_.multi_column_statistics where table_name like "%t1%" and column_names = "c1,c2";
 -- result:
 0
 -- !result
-[UC]analyze sample table t1 mcdistinct (c1, c2);
+[UC]analyze sample table t1 multi_columns (c1, c2);
 -- result:
 analyze_test_1e6b633984734138afdcd352934c9306.t1	sample	status	OK
 -- !result

@@ -55,6 +55,7 @@ public abstract class MultiColumnQueryJob extends HyperQueryJob {
         List<String> params = Lists.newArrayList();
         params.add(String.valueOf(table.getId()));
         params.add("'" + StringEscapeUtils.escapeSql(data.getColumnName()) + "'");
+        params.add(String.valueOf(db.getId()));
         params.add("'" + tableName + "'");
         params.add("'" + StringEscapeUtils.escapeSql(getColumnNames(data.getColumnName())) + "'");
         params.add(String.valueOf(data.getCountDistinct()));
@@ -66,6 +67,7 @@ public abstract class MultiColumnQueryJob extends HyperQueryJob {
         List<Expr> row = Lists.newArrayList();
         row.add(new IntLiteral(table.getId(), Type.BIGINT));
         row.add(new StringLiteral(data.getColumnName()));
+        row.add(new IntLiteral(db.getId(), Type.BIGINT));
         row.add(new StringLiteral(tableName));
         row.add(new StringLiteral(getColumnNames(data.getColumnName())));
         row.add(new IntLiteral(data.getCountDistinct(), Type.BIGINT));

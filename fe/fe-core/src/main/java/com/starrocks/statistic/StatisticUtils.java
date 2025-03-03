@@ -380,6 +380,7 @@ public class StatisticUtils {
             return ImmutableList.of(
                     new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                     new ColumnDef("column_ids", new TypeDef(ScalarType.createVarcharType(65530))),
+                    new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                     new ColumnDef("table_name", new TypeDef(tableNameType)),
                     new ColumnDef("column_names", new TypeDef(columnNameType)),
                     new ColumnDef("ndv",  new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),

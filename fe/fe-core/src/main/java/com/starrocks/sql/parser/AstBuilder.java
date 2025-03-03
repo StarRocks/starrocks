@@ -2769,7 +2769,6 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         boolean isSample = context.SAMPLE() != null;
-        boolean isAsync = context.ASYNC() != null;
 
         Pair<Boolean, List<Expr>> analyzeColumn = visitAnalyzeColumnClause(context.analyzeColumnClause());
         AnalyzeTypeDesc analyzeTypeDesc = new AnalyzeBasicDesc();
@@ -2779,13 +2778,12 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
             // we use sample strategy to collect multi-column combined statistics as default.
             isSample = context.FULL() == null;
-            isAsync = false;
             analyzeTypeDesc = new AnalyzeMultiColumnDesc(statisticsTypes);
         }
 
         return new AnalyzeStmt(tableName, analyzeColumn.second, partitionNames, properties,
                 isSample,
-                isAsync,
+                context.ASYNC() != null,
                 analyzeColumn.first,
                 analyzeTypeDesc, createPos(context));
     }
@@ -2794,7 +2792,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitDropStatsStatement(StarRocksParser.DropStatsStatementContext context) {
         QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
         TableName tableName = qualifiedNameToTableName(qualifiedName);
-        return new DropStatsStmt(tableName, context.MULTI_COLUMN() != null, createPos(context));
+        return new DropStatsStmt(tableName, context.MULTI_COLUMNS() != null, createPos(context));
     }
 
     @Override
