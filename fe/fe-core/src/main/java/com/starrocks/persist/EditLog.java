@@ -786,6 +786,11 @@ public class EditLog {
                     }
                     break;
                 }
+                case OperationType.OP_ALTER_ROUTINE_LOAD_JOB: {
+                    AlterRoutineLoadJobOperationLog log = (AlterRoutineLoadJobOperationLog) journal.data();
+                    globalStateMgr.getRoutineLoadMgr().replayAlterRoutineLoadJob(log);
+                    break;
+                }
                 case OperationType.OP_ALTER_LOAD_JOB: {
                     AlterLoadJobOperationLog log = (AlterLoadJobOperationLog) journal.data();
                     globalStateMgr.getLoadMgr().replayAlterLoadJob(log);
