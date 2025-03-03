@@ -104,8 +104,15 @@ public:
     SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging,
                        std::vector<ExprContext*> sort_exprs, const std::vector<bool>& is_asc_order,
                        const std::vector<bool>& is_null_first, const std::vector<TExpr>& partition_exprs,
+<<<<<<< HEAD
                        int64_t offset, int64_t limit, const std::string& sort_keys,
                        const std::vector<OrderByType>& order_by_types,
+=======
+                       bool enable_pre_agg, const std::vector<TExpr>& t_pre_agg_exprs,
+                       const std::vector<TSlotId>& t_pre_agg_output_slot_id, int64_t offset, int64_t limit,
+                       const std::string& sort_keys, const std::vector<OrderByType>& order_by_types,
+                       bool has_outer_join_child,
+>>>>>>> 186e595e5c ([BugFix] Fix BE crash when LocalPartitionTopn has nullable child (#56432))
                        const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters);
 
     SortContextPtr create(int32_t idx);
