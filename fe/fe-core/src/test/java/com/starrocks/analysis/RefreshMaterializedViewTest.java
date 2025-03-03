@@ -1331,7 +1331,7 @@ public class RefreshMaterializedViewTest extends MVTestBase {
 
 
     @Test
-    public void testExcludedRefreshTablesSupportMV() throws Exception {
+    public void testCreateExcludedRefreshTablesSupportMV() throws Exception {
         starRocksAssert
                 .createDatabaseIfNotExists("mvtest")
                 .useDatabase("mvtest")
@@ -1392,8 +1392,14 @@ public class RefreshMaterializedViewTest extends MVTestBase {
                         "group by date_trunc(\"day\", a.datekey), a.item_id;");
 
         starRocksAssert.refreshMV("refresh materialized view mvtest.mv_test1");
-        MaterializedView mv1 = getMv("mvtest", "mv_test1");
-        Assert.assertTrue(starRocksAssert.waitRefreshFinished(mv1.getId()));
+        MaterializedView mv = getMv("mvtest", "mv_test1");
+        Assert.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));
+
+        starRocksAssert.dropTable("par_tbl1");
+        starRocksAssert.dropTable("par_tbl2");
+        starRocksAssert.dropTable("dim_data");
+        starRocksAssert.dropMaterializedView("mv_dim_data1");
+        starRocksAssert.dropMaterializedView("mv_test1");
 
     }
 }
