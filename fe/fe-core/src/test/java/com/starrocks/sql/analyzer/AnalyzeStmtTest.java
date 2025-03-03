@@ -383,10 +383,14 @@ public class AnalyzeStmtTest {
     @Test
     public void testDropTableOnMultiColumnStats() {
 <<<<<<< HEAD
+<<<<<<< HEAD
         String sql = "drop multi_columns stats t0";
 =======
         String sql = "drop multi_column stats t0";
 >>>>>>> 14cb479803 (xxx)
+=======
+        String sql = "drop multi_columns stats t0";
+>>>>>>> e21ea51de2 ([Feature] support manual collection of multi-columns combined ndv)
         DropStatsStmt dropStatsStmt = (DropStatsStmt) analyzeSuccess(sql);
         Assert.assertEquals("t0", dropStatsStmt.getTableName().getTbl());
         Assert.assertTrue(dropStatsStmt.isMultiColumn());
@@ -537,7 +541,6 @@ public class AnalyzeStmtTest {
 
     @Test
     public void testAnalyzeMultiColumnStats() {
-<<<<<<< HEAD
         analyzeFail("analyze table db.tbl multi_columns");
         analyzeFail("analyze table db.tbl multi_columns (kk1)",
                 "must greater than 1 column on multi-column combined analyze statement");
@@ -554,22 +557,6 @@ public class AnalyzeStmtTest {
         analyzeSuccess("analyze sample table db.tbl multi_columns (kk1, kk2)");
 
         AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess("analyze table db.tbl multi_columns (kk1, kk2)");
-=======
-        analyzeFail("analyze table db.tbl mcdistinct");
-        analyzeFail("analyze table db.tbl mcdistinct (kk1)",
-                "must greater than 1 column on multi-column combined analyze statement");
-        analyzeFail("analyze table db.tbl mcdistinct (kk1, kk2) partition(`tbl`)",
-                "not support specify partition names on multi-column analyze statement");
-        analyzeFail("analyze table db.tbl mcdistinct (k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11)",
-                "column size 11 exceeded max size of 10 on multi-column combined analyze statement");
-        analyzeFail("analyze table hive0.tpch.customer mcdistinct (C_NAME, C_PHONE)",
-                "Don't support analyze multi-columns combined statistics on external table");
-
-        analyzeSuccess("analyze full table db.tbl mcdistinct (kk1, kk2)");
-        analyzeSuccess("analyze sample table db.tbl mcdistinct (kk1, kk2)");
-
-        AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess("analyze table db.tbl mcdistinct (kk1, kk2)");
->>>>>>> 14cb479803 (xxx)
         Assert.assertFalse(stmt.isAsync());
         Assert.assertTrue(stmt.isSample());
         Assert.assertTrue(stmt.getAnalyzeTypeDesc() instanceof AnalyzeMultiColumnDesc);
