@@ -96,6 +96,7 @@ import com.starrocks.catalog.View;
 import com.starrocks.clone.DynamicPartitionScheduler;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CaseSensibility;
+import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -3141,7 +3142,11 @@ public class ShowExecutor {
             // task run status
             final List<TaskRunStatus> taskTaskStatusJob = mvNameTaskMap.get(TaskBuilder.getMvTaskName(mvId));
             mvStatus.setLastJobTaskRunStatus(taskTaskStatusJob);
-            mvStatus.setQueryRewriteStatus(mvTable.getQueryRewriteStatus());
+            if (Config.enable_query_rewrite_status_while_show_materialized_view) {
+                mvStatus.setQueryRewriteStatus(mvTable.getQueryRewriteStatus());
+            } else {
+                mvStatus.setQueryRewriteStatus("");
+            }
         } catch (Exception e) {
             LOG.warn("get async mv status failed, mvId: {}, dbName: {}, mvName: {}, error: {}",
                     mvId, dbName, mvTable.getName(), e.getMessage());

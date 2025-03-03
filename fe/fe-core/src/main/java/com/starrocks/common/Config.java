@@ -1408,6 +1408,21 @@ public class Config extends ConfigBase {
     public static int materialized_view_min_refresh_interval = 60; // 1 min
 
     /**
+     * EMR Serverless
+     *
+     * Branch 3.3 added `query_rewrite_status` to information_schema.materialized_views
+     * (ref https://github.com/StarRocks/starrocks/pull/39993)
+     * However, if there are many materialized views (e.g. we have customer with nearly 1000 mvs) in the cluster,
+     * the time cost to query all those mv's rewrite status is huge.
+     * So we add a config to control whether to show query_rewrite_status in show materialized view.
+     *
+     * This config is introduced since version 3.3.8-1.90 in EMR Serverless. The open-source community is trying to
+     * optimize the performance. But before that day comes, we should keep this config.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_query_rewrite_status_while_show_materialized_view = true;
+
+    /**
      * To avoid too many related materialized view causing too much fe memory and decreasing performance, set N
      * to determine which strategy you choose:
      * N <0      : always use non lock optimization and no copy related materialized views which
