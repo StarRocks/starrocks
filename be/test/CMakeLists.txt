@@ -509,6 +509,7 @@ set(EXEC_FILES
 
 if ("${WITH_STARCACHE}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./cache/block_cache/block_cache_test.cpp)
+    list(APPEND EXEC_FILES ./cache/object_cache/starcache_module_test.cpp)
     list(APPEND EXEC_FILES ./cache/block_cache/disk_space_monitor_test.cpp)
     list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)
 endif ()

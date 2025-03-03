@@ -2922,13 +2922,15 @@ TEST_F(FileReaderTest, TestStructSubfieldNoDecodeNotOutput) {
 }
 
 TEST_F(FileReaderTest, TestReadFooterCache) {
-    std::unique_ptr<BlockCache> cache(new BlockCache);
+    auto block_cache = std::make_shared<BlockCache>();
     CacheOptions options;
     options.mem_space_size = 100 * 1024 * 1024;
     options.max_concurrent_inserts = 100000;
     options.engine = "starcache";
-    Status status = cache->init(options);
+    Status status = block_cache->init(options);
     ASSERT_TRUE(status.ok());
+    auto cache = std::make_shared<ObjectCache>();
+    ASSERT_OK(cache->init(block_cache->starcache_instance()));
 
     auto file = _create_file(_file1_path);
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),

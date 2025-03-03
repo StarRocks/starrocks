@@ -71,7 +71,7 @@ Status FileReader::init(HdfsScannerContext* ctx) {
 #ifdef WITH_STARCACHE
     // Only support file metacache in starcache engine
     if (ctx->use_file_metacache && config::datacache_enable) {
-        _cache = BlockCache::instance();
+        _cache = CacheEnv::GetInstance()->external_table_meta_cache();
     }
 #endif
     // parse FileMetadata
