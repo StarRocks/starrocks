@@ -292,11 +292,20 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
         context->interpolate_spill_process(id(), spill_channel_factory, degree_of_parallelism);
     }
 
+    bool has_outer_join_child = _tnode.sort_node.__isset.has_outer_join_child && _tnode.sort_node.has_outer_join_child;
+
     // create context factory
     auto context_factory = std::make_shared<ContextFactory>(
+<<<<<<< HEAD
             runtime_state(), _tnode.sort_node.topn_type, is_merging, _sort_exec_exprs.lhs_ordering_expr_ctxs(),
             _is_asc_order, _is_null_first, _tnode.sort_node.partition_exprs, _offset, partition_limit, _sort_keys,
             _order_by_types, _build_runtime_filters);
+=======
+            runtime_state(), _tnode.sort_node.topn_type, need_merge, _sort_exec_exprs.lhs_ordering_expr_ctxs(),
+            _is_asc_order, _is_null_first, _tnode.sort_node.partition_exprs, enable_pre_agg,
+            _tnode.sort_node.pre_agg_exprs, _tnode.sort_node.pre_agg_output_slot_id, _offset, partition_limit,
+            _sort_keys, _order_by_types, has_outer_join_child, _build_runtime_filters);
+>>>>>>> 186e595e5c ([BugFix] Fix BE crash when LocalPartitionTopn has nullable child (#56432))
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
