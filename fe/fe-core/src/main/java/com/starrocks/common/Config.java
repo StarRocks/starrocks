@@ -1936,6 +1936,12 @@ public class Config extends ConfigBase {
     public static int max_running_rollup_job_num_per_table = 1;
 
     /**
+     * if set to true, the FE will check the corrupt file when check fragment exec status and set bad.
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_corrupt_check_set_bad = false;
+
+    /**
      * if set to false, auth check will be disabled, in case something goes wrong with the new privilege system.
      */
     @ConfField

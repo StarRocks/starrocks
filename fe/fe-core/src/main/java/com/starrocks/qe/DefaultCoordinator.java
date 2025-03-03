@@ -34,6 +34,7 @@
 
 package com.starrocks.qe;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
@@ -44,6 +45,7 @@ import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.FsBroker;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.common.Config;
+import com.starrocks.common.CorruptCode;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.FeConstants;
@@ -84,6 +86,7 @@ import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.plan.ExecPlan;
@@ -120,6 +123,8 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class DefaultCoordinator extends Coordinator {
@@ -1179,6 +1184,10 @@ public class DefaultCoordinator extends Coordinator {
         // update status
         Status status = new Status(params.status);
         if (!(returnedAllResults && status.isCancelled()) && !status.ok()) {
+            if (RunMode.isSharedNothingMode() && Config.enable_corrupt_check_set_bad
+                    && status.getErrorCode() == TStatusCode.CORRUPTION) {
+                updateReplicaStatus(params, status);
+            }
             ConnectContext ctx = connectContext;
             if (ctx != null) {
                 ctx.setErrorCodeOnce(status.getErrorCodeString());
@@ -1225,6 +1234,44 @@ public class DefaultCoordinator extends Coordinator {
         } else {
             AuditStatisticsUtil.mergeProtobuf(newAuditStatistics, auditStatistics);
         }
+    }
+
+    @VisibleForTesting
+    protected boolean updateReplicaStatus(TReportExecStatusParams params, Status status) {
+        CorruptCode code = CorruptCode.fromMessage(status.getErrorMsg());
+        switch (code) {
+            case BAD_PAGE:
+                try {
+                    // do not use pre-compiled regex expression here since this is not a common case
+                    Pattern filePattern = Pattern.compile("\\bfile=([^\\s]+)");
+                    Matcher fileMatcher = filePattern.matcher(status.getErrorMsg());
+                    String filePath = "";
+                    if (fileMatcher.find()) {
+                        filePath = fileMatcher.group(1);
+                        Pattern numPattern = Pattern.compile("/data/\\d+/(\\d+)/");
+                        Matcher numMatcher = numPattern.matcher(filePath);
+                        String tabletId = "";
+                        if (numMatcher.find()) {
+                            tabletId = numMatcher.group(1);
+                            GlobalStateMgr.getCurrentState().getLocalMetastore().setReplicaStatusAsBad(
+                                    Long.parseLong(tabletId), params.getBackend_id());
+                            LOG.info("update replica status to bad: {}, tablet {}, backend {}",
+                                    status.getErrorMsg(), tabletId, params.getBackend_id());
+                            return true;
+                        }
+                    }
+                    LOG.info("try to update replica status finish: {}", status.getErrorMsg());
+                } catch (Exception e) {
+                    // catch all and print log message since this is not critical
+                    LOG.warn("failed to update replica status: {}", e.getMessage());
+                }
+                break;
+            case UNKNOWN_ERROR:
+            default:
+                LOG.warn("unknown error: {}", status.getErrorMsg());
+                break;
+        }
+        return false;
     }
 
     private void updateJobProgress(TReportExecStatusParams params) {

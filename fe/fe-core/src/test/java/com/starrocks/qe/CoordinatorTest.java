@@ -23,6 +23,7 @@ import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Status;
 import com.starrocks.planner.BinlogScanNode;
 import com.starrocks.planner.DataPartition;
 import com.starrocks.planner.EmptySetNode;
@@ -37,13 +38,17 @@ import com.starrocks.planner.stream.StreamAggNode;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
 import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.statistic.StatisticUtils;
 import com.starrocks.system.Backend;
+import com.starrocks.thrift.FrontendServiceVersion;
 import com.starrocks.thrift.TBinlogOffset;
 import com.starrocks.thrift.TDescriptorTable;
 import com.starrocks.thrift.TPartitionType;
+import com.starrocks.thrift.TReportExecStatusParams;
 import com.starrocks.thrift.TScanRangeParams;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Mock;
@@ -128,6 +133,30 @@ public class CoordinatorTest extends PlanTestBase {
     @Test
     public void testBucketShuffleRuntimeFilter() throws IOException {
         testComputeBucketSeq2InstanceOrdinal(JoinNode.DistributionMode.LOCAL_HASH_BUCKET);
+    }
+
+    @Test
+    public void testCorruptUpdateReplicaStatus() throws IOException {
+        new MockUp<LocalMetastore>() {
+            @Mock
+            void setReplicaStatus(long tabletId, long backendId) {
+                return;
+            }
+        };
+
+        TReportExecStatusParams params = new TReportExecStatusParams(FrontendServiceVersion.V1);
+        String badPageError = "Bad page: checksum mismatch (actual=1105931262 vs expect=641462518), " +
+                "file=/opt/starrocks/be/storage/disk4/data/380/11355763/128304565/" +
+                "020000000002f71a50416c3b648adfc3c79014dcc6546eb0_0.dat," +
+                " query_id=47e5ca28-f4be-11ef-91f4-f2646351dfcf," +
+                " instance_id=47e5ca28-f4be-11ef-91f4-f2646351dfd4, backend_id=18092";
+        Assert.assertTrue(coordinator.updateReplicaStatus(params, new Status(TStatusCode.CORRUPTION, badPageError)));
+
+        String unknownError = "Unknown error: java.lang.NullPointerException, " +
+                "query_id=47e5ca28-f4be-11ef-91f4-f2646351dfcf," +
+                " instance_id=47e5ca28-f4be-11ef-91f4-f2646351dfd4, backend_id=18092";
+        Assert.assertFalse(coordinator.updateReplicaStatus(params, new Status(TStatusCode.CORRUPTION, unknownError)));
+        Assert.assertFalse(coordinator.updateReplicaStatus(params, new Status(TStatusCode.CANCELLED, "")));
     }
 
     @Test

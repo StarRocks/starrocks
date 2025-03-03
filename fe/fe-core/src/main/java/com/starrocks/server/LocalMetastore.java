@@ -4879,6 +4879,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         setReplicaStatusInternal(log.getTabletId(), log.getBackendId(), log.getReplicaStatus(), true);
     }
 
+    public void setReplicaStatusAsBad(long tabletId, long backendId) {
+        setReplicaStatusInternal(tabletId, backendId, Replica.ReplicaStatus.BAD, false);
+    }
+
     private void setReplicaStatusInternal(long tabletId, long backendId, Replica.ReplicaStatus status,
                                           boolean isReplay) {
         TabletMeta meta = stateMgr.getTabletInvertedIndex().getTabletMeta(tabletId);
