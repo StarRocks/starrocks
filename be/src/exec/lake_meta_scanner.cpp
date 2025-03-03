@@ -41,7 +41,9 @@ Status LakeMetaScanner::_real_init() {
     reader_params.chunk_size = _runtime_state->chunk_size();
     reader_params.id_to_names = &_parent->_meta_scan_node.id_to_names;
     reader_params.desc_tbl = &_parent->_desc_tbl;
-    reader_params.low_card_threshold = _parent->_meta_scan_node.__isset.low_cardinality_threshold ? _parent->_meta_scan_node.low_cardinality_threshold : DICT_DECODE_MAX_SIZE;
+    reader_params.low_card_threshold = _parent->_meta_scan_node.__isset.low_cardinality_threshold
+                                               ? _parent->_meta_scan_node.low_cardinality_threshold
+                                               : DICT_DECODE_MAX_SIZE;
 
     _reader = std::make_unique<LakeMetaReader>();
     TEST_SYNC_POINT_CALLBACK("lake_meta_scanner:open_mock_reader", &_reader);
