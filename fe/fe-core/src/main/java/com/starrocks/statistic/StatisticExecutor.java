@@ -321,8 +321,8 @@ public class StatisticExecutor {
         ExecPlan execPlan = StatementPlanner.plan(parsedStmt, context, TResultSinkType.STATISTIC);
 
         assert execPlan != null;
-        ScanNode scanNode = execPlan.getScanNodes().get(0);
-        scanNode.setScanSampleStrategy(strategy);
+        List<ScanNode> scanNodes = execPlan.getScanNodes();
+        scanNodes.forEach(scanNode -> scanNode.setScanSampleStrategy(strategy));
 
         StmtExecutor executor = StmtExecutor.newInternalExecutor(context, parsedStmt);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(context, execPlan);
