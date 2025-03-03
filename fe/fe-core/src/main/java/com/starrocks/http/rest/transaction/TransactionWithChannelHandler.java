@@ -49,7 +49,8 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
         Long timeoutMillis = txnOperationParams.getTimeoutMillis();
         String label = txnOperationParams.getLabel();
         Channel channel = txnOperationParams.getChannel();
-        LOG.info("Handle transaction with channel info, label: {}", label);
+        LOG.info("Handle transaction with channel info, label: {}, warehouse: {}", label,
+                txnOperationParams.getWarehouseName());
 
         TransactionResult result = new TransactionResult();
         switch (txnOperation) {

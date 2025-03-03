@@ -62,7 +62,8 @@ public class TransactionWithoutChannelHandler implements TransactionOperationHan
         String dbName = txnOperationParams.getDbName();
         String label = txnOperationParams.getLabel();
         Long timeoutMillis = txnOperationParams.getTimeoutMillis();
-        LOG.info("Handle transaction without channel info, label: {}", label);
+        LOG.info("Handle transaction without channel info, label: {}, warehouse: {}", label,
+                txnOperationParams.getWarehouseName());
 
         Database db = Optional.ofNullable(GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName))
                 .orElseThrow(() -> new StarRocksException(String.format("Database[%s] does not exist.", dbName)));

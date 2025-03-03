@@ -67,6 +67,7 @@ import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.LoadJobSourceType;
+import com.starrocks.warehouse.Warehouse;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 import org.apache.commons.lang3.StringUtils;
@@ -269,8 +270,9 @@ public class TransactionLoadAction extends RestBaseAction {
             redirectAddress = new TNetworkAddress(node.getHost(), node.getHttpPort());
         }
 
-        LOG.info("Redirect transaction action to destination={}, db: {}, table: {}, op: {}, label: {}",
-                redirectAddress, txnOperationParams.getDbName(), txnOperationParams.getTableName(), txnOperation, label);
+        LOG.info("Redirect transaction action to destination={}, db: {}, table: {}, op: {}, label: {}, warehouse: {}",
+                redirectAddress, txnOperationParams.getDbName(), txnOperationParams.getTableName(), txnOperation, label,
+                txnOperationParams.getWarehouseName());
         redirectTo(request, response, redirectAddress);
     }
 
