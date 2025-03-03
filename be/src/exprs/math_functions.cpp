@@ -547,7 +547,7 @@ StatusOr<ColumnPtr> MathFunctions::decimal_round(FunctionContext* context, const
             res = ColumnHelper::create_const_null_column(size);
         } else {
             res->resize(1);
-            res = ConstColumn::create(res, size);
+            res = ConstColumn::create(std::move(res), size);
         }
     } else if (c0_is_const) {
         for (auto i = 0; i < size; i++) {
@@ -779,13 +779,13 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
                             base->has_null() ? "base" : "target"));
     }
     if (base->is_constant()) {
-        auto* const_column = down_cast<const ConstColumn*>(base);
-        const_column->data_column()->assign(base->size(), 0);
+        const auto* const_column = down_cast<const ConstColumn*>(base);
+        const_column->data_column()->as_mutable_ptr()->assign(base->size(), 0);
         base = const_column->data_column().get();
     }
     if (target->is_constant()) {
-        auto* const_column = down_cast<const ConstColumn*>(target);
-        const_column->data_column()->assign(target->size(), 0);
+        const auto* const_column = down_cast<const ConstColumn*>(target);
+        const_column->data_column()->as_mutable_ptr()->assign(target->size(), 0);
         target = const_column->data_column().get();
     }
 
@@ -826,7 +826,7 @@ StatusOr<ColumnPtr> MathFunctions::cosine_similarity(FunctionContext* context, c
     const CppType* target_data_head = down_cast<const ColumnType*>(target_flat)->get_data().data();
 
     // prepare result with nullable value.
-    ColumnPtr result = ColumnHelper::create_column(TypeDescriptor{TYPE}, false, false, target_size);
+    MutableColumnPtr result = ColumnHelper::create_column(TypeDescriptor{TYPE}, false, false, target_size);
     ColumnType* data_result = down_cast<ColumnType*>(result.get());
     CppType* result_data = data_result->get_data().data();
 
@@ -922,12 +922,12 @@ StatusOr<ColumnPtr> MathFunctions::l2_distance(FunctionContext* context, const C
     }
     if (base->is_constant()) {
         auto* const_column = down_cast<const ConstColumn*>(base);
-        const_column->data_column()->assign(base->size(), 0);
+        const_column->data_column()->as_mutable_ptr()->assign(base->size(), 0);
         base = const_column->data_column().get();
     }
     if (target->is_constant()) {
         auto* const_column = down_cast<const ConstColumn*>(target);
-        const_column->data_column()->assign(target->size(), 0);
+        const_column->data_column()->as_mutable_ptr()->assign(target->size(), 0);
         target = const_column->data_column().get();
     }
     if (base->is_nullable()) {
@@ -967,7 +967,7 @@ StatusOr<ColumnPtr> MathFunctions::l2_distance(FunctionContext* context, const C
     const CppType* target_data_head = down_cast<const ColumnType*>(target_flat)->get_data().data();
 
     // prepare result with nullable value.
-    ColumnPtr result = ColumnHelper::create_column(TypeDescriptor{TYPE}, false, false, target_size);
+    MutableColumnPtr result = ColumnHelper::create_column(TypeDescriptor{TYPE}, false, false, target_size);
     ColumnType* data_result = down_cast<ColumnType*>(result.get());
     CppType* result_data = data_result->get_data().data();
 

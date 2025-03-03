@@ -333,13 +333,13 @@ private:
                                   size_t* total_chunk, OlapReaderStatistics* stats,
                                   RowSourceMaskBuffer* mask_buffer = nullptr,
                                   std::vector<std::unique_ptr<RowSourceMaskBuffer>>* rowsets_mask_buffer = nullptr) {
-        std::unique_ptr<Column> sort_column;
+        MutableColumnPtr sort_column;
         if (schema.sort_key_idxes().size() > 1) {
             if (!PrimaryKeyEncoder::create_column(schema, &sort_column, schema.sort_key_idxes()).ok()) {
                 LOG(FATAL) << "create column for primary key encoder failed";
             }
         } else if (schema.sort_key_idxes().size() == 1 && schema.field(schema.sort_key_idxes()[0])->is_nullable()) {
-            sort_column = std::make_unique<BinaryColumn>();
+            sort_column = BinaryColumn::create();
         }
         _chunk_size = calculate_chunk_size_for_column_group(schema, rowsets);
         if (tablet.is_column_with_row_store() && config::update_compaction_chunk_size_for_row_store > 0) {
@@ -373,7 +373,7 @@ private:
             }
             if (sort_column) {
                 entry.encode_schema = &schema;
-                entry.chunk_pk_column = sort_column->clone_shared();
+                entry.chunk_pk_column = sort_column->clone();
                 entry.chunk_pk_column->reserve(_chunk_size);
             }
             if (rowsets_mask_buffer && rowset->rowset_meta()->is_segments_overlapping()) {

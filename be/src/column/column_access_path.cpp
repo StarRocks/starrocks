@@ -56,7 +56,7 @@ Status ColumnAccessPath::init(const std::string& parent_path, const TColumnAcces
         return Status::InternalError("error column access null path.");
     }
 
-    Column* data = ColumnHelper::get_data_column(column.get());
+    const Column* data = ColumnHelper::get_data_column(column.get());
     if (!data->is_binary()) {
         return Status::InternalError("error column access string path.");
     }

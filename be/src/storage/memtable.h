@@ -124,7 +124,7 @@ private:
     void _init_aggregator_if_needed();
     void _aggregate(bool is_final);
 
-    Status _split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, std::unique_ptr<Column>* deletes);
+    Status _split_upserts_deletes(ChunkPtr& src, ChunkPtr* upserts, MutableColumnPtr* deletes);
 
     ChunkPtr _chunk;
     ChunkPtr _result_chunk;
@@ -148,7 +148,7 @@ private:
     uint64_t _merge_count = 0;
 
     bool _has_op_slot = false;
-    std::unique_ptr<Column> _deletes;
+    MutableColumnPtr _deletes;
 
     std::string _merge_condition;
 

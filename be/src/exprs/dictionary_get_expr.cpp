@@ -58,7 +58,7 @@ StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Ch
     }
     value_chunk->reserve(size);
 
-    ColumnPtr null_column = UInt8Column::create(size, 0);
+    MutableColumnPtr null_column = UInt8Column::create(size, 0);
     // assign the value chunk
     RETURN_IF_ERROR(DictionaryCacheManager::probe_given_dictionary_cache(
             *_key_chunk->schema().get(), *_value_chunk->schema().get(), _dictionary, key_chunk, value_chunk,
@@ -121,11 +121,11 @@ Status DictionaryGetExpr::prepare(RuntimeState* state, ExprContext* context) {
     Columns sub_columns;
     for (const ColumnPtr& column : _value_chunk->columns()) {
         auto sub_null_column = UInt8Column::create(0, 0);
-        sub_columns.emplace_back(NullableColumn::create(column, sub_null_column));
+        sub_columns.emplace_back(NullableColumn::create(column, std::move(sub_null_column)));
     }
     auto null_column = UInt8Column::create(0, 0);
-    _nullable_struct_column =
-            NullableColumn::create(StructColumn::create(sub_columns, value_columns_name), null_column);
+    _nullable_struct_column = NullableColumn::create(
+            StructColumn::create(std::move(sub_columns), std::move(value_columns_name)), std::move(null_column));
     DCHECK(_nullable_struct_column != nullptr);
 
     return Status::OK();

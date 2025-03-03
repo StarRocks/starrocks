@@ -29,8 +29,8 @@ TEST_F(StringFunctionRepeatTest, repeatTest) {
         times->append(j);
     }
 
-    columns.emplace_back(str);
-    columns.emplace_back(times);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(times));
 
     ColumnPtr result = StringFunctions::repeat(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
@@ -55,8 +55,8 @@ TEST_F(StringFunctionRepeatTest, repeatLargeTest) {
     str->append(std::to_string(1));
     times->append(get_olap_string_max_length() + 100);
 
-    columns.emplace_back(str);
-    columns.emplace_back(times);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(times));
 
     ColumnPtr result = StringFunctions::repeat(ctx.get(), columns).value();
     ASSERT_EQ(1, result->size());
@@ -76,8 +76,8 @@ TEST_F(StringFunctionRepeatTest, repeatConstTest) {
     int32_t repeat_times = get_olap_string_max_length() / 100 + 10;
     times->append(repeat_times);
 
-    columns.emplace_back(str);
-    columns.emplace_back(ConstColumn::create(times, 1));
+    columns.emplace_back(str->clone());
+    columns.emplace_back(ConstColumn::create(std::move(times), 1));
 
     ColumnPtr result = StringFunctions::repeat(ctx.get(), columns).value();
     const auto num_rows = str->size();

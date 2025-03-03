@@ -70,7 +70,7 @@ int64_t CSVFileWriter::get_allocated_bytes() {
 Status CSVFileWriter::write(Chunk* chunk) {
     _num_rows += chunk->num_rows();
 
-    auto columns = std::vector<ColumnPtr>();
+    auto columns = Columns();
     for (auto& e : _column_evaluators) {
         ASSIGN_OR_RETURN(auto column, e->evaluate(chunk));
         columns.push_back(std::move(column));
