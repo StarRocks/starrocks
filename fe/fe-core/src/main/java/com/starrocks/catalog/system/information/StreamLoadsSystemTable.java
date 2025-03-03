@@ -57,6 +57,7 @@ public class StreamLoadsSystemTable {
                         .column("CHANNEL_STATE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("TYPE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("TRACKING_SQL", ScalarType.createVarchar(NAME_CHAR_LEN))
+                        .column("WAREHOUSE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_STREAM_LOADS);
     }
 }

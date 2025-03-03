@@ -54,6 +54,7 @@ public class RoutineLoadJobsSystemTable {
                         .column("LATEST_SOURCE_POSITION", ScalarType.createJsonType())
                         .column("OFFSET_LAG", ScalarType.createJsonType())
                         .column("TIMESTAMP_PROGRESS", ScalarType.createJsonType())
+                        .column("WAREHOUSE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .build(), TSchemaTableType.SCH_ROUTINE_LOAD_JOBS);
     }
 }

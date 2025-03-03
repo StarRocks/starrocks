@@ -47,7 +47,8 @@ SchemaScanner::ColumnDesc SchemaStreamLoadsScanner::_s_tbls_columns[] = {
         {"END_TIME_MS", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
         {"CHANNEL_STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-        {"TRACKING_SQL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true}};
+        {"TRACKING_SQL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"WAREHOUSE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true}};
 
 SchemaStreamLoadsScanner::SchemaStreamLoadsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -79,7 +80,7 @@ Status SchemaStreamLoadsScanner::fill_chunk(ChunkPtr* chunk) {
     for (; _cur_idx < _result.loads.size(); _cur_idx++) {
         auto& info = _result.loads[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            if (slot_id < 1 || slot_id > 25) {
+            if (slot_id < 1 || slot_id > 26) {
                 return Status::InternalError(fmt::format("invalid slot id:{}", slot_id));
             }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
@@ -298,6 +299,16 @@ Status SchemaStreamLoadsScanner::fill_chunk(ChunkPtr* chunk) {
                 if (info.__isset.tracking_sql) {
                     Slice tracking_sql = Slice(info.tracking_sql);
                     fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&tracking_sql);
+                } else {
+                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
+                }
+                break;
+            }
+            case 26: {
+                // WAREHOUSE
+                if (info.__isset.warehouse) {
+                    Slice warehouse = Slice(info.warehouse);
+                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&warehouse);
                 } else {
                     down_cast<NullableColumn*>(column.get())->append_nulls(1);
                 }

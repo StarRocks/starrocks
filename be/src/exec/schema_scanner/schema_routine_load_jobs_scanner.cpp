@@ -47,7 +47,8 @@ SchemaScanner::ColumnDesc SchemaRoutineLoadJobsScanner::_s_tbls_columns[] = {
         {"OTHER_MSG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"LATEST_SOURCE_POSITION", TypeDescriptor::from_logical_type(TYPE_JSON), kJsonDefaultSize, true},
         {"OFFSET_LAG", TypeDescriptor::from_logical_type(TYPE_JSON), kJsonDefaultSize, true},
-        {"TIMESTAMP_PROGRESS", TypeDescriptor::from_logical_type(TYPE_JSON), kJsonDefaultSize, true}};
+        {"TIMESTAMP_PROGRESS", TypeDescriptor::from_logical_type(TYPE_JSON), kJsonDefaultSize, true},
+        {"WAREHOUSE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true}};
 
 SchemaRoutineLoadJobsScanner::SchemaRoutineLoadJobsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -80,7 +81,7 @@ Status SchemaRoutineLoadJobsScanner::fill_chunk(ChunkPtr* chunk) {
     for (; _cur_idx < _result.loads.size(); _cur_idx++) {
         auto& info = _result.loads[_cur_idx];
         for (const auto& [slot_id, index] : slot_id_to_index_map) {
-            if (slot_id < 1 || slot_id > 22) {
+            if (slot_id < 1 || slot_id > 23) {
                 return Status::InternalError(strings::Substitute("invalid slot id: $0", slot_id));
             }
             ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
@@ -274,6 +275,13 @@ Status SchemaRoutineLoadJobsScanner::fill_chunk(ChunkPtr* chunk) {
                     down_cast<NullableColumn*>(column.get())->append_nulls(1);
                 } else {
                     fill_column_with_slot<TYPE_JSON>(column.get(), (void*)&json_value_ptr);
+            case 23: {
+                // warehouse
+                if (info.__isset.warehouse) {
+                    Slice warehouse = Slice(info.warehouse);
+                    fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&warehouse);
+                } else {
+                    down_cast<NullableColumn*>(column.get())->append_nulls(1);
                 }
                 break;
             }

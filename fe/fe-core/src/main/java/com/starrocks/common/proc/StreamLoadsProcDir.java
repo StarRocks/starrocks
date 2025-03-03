@@ -22,6 +22,7 @@ import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 
 import java.util.List;
 
@@ -34,14 +35,19 @@ import java.util.List;
  */
 public class StreamLoadsProcDir implements ProcDirInterface {
 
-    private static final ImmutableList<String> TITLE_NAMES =
-            new ImmutableList.Builder<String>()
-                    .add("Label")
-                    .add("Id")
-                    .add("DbName")
-                    .add("TableName")
-                    .add("State")
-                    .build();
+    private static final ImmutableList<String> TITLE_NAMES;
+    static {
+        ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
+                .add("Label")
+                .add("Id")
+                .add("DbName")
+                .add("TableName")
+                .add("State");
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            builder.add("Warehouse");
+        }
+        TITLE_NAMES = builder.build();
+    }
 
     @Override
     public boolean register(String name, ProcNodeInterface node) {

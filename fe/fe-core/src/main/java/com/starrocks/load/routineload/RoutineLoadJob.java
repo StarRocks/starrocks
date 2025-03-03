@@ -1619,6 +1619,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
                 } catch (Exception e) {
                     row.add(e.getMessage());
                 }
+            } else {
+                row.add("");
             }
             row.add(getSourceProgressString());
             row.add(getSourceLagString(progressJsonStr));
@@ -2104,6 +2106,16 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback
             info.setLatest_source_position(getSourceProgressString());
             info.setOffset_lag(getSourceLagString(progressJsonStr));
             info.setTimestamp_progress(getTimestampProgress().toJsonString());
+            if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+                try {
+                    Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                    info.setWarehouse(warehouse.getName());
+                } catch (Exception e) {
+                    info.setWarehouse(e.getMessage());
+                }
+            } else {
+                info.setWarehouse("");
+            }
             return info;
         } finally {
             readUnlock();
