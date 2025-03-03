@@ -81,6 +81,8 @@ class RuntimeFilterCache;
 class ProfileReportWorker;
 class QuerySpillManager;
 class BlockCache;
+class ObjectCache;
+class StoragePageCache;
 struct RfTracePoint;
 
 class BackendServiceClient;
@@ -239,6 +241,31 @@ private:
     std::map<MemTrackerType, std::shared_ptr<MemTracker>> _mem_tracker_map;
 };
 
+class CacheEnv {
+public:
+    static CacheEnv* GetInstance();
+
+    Status init(const std::vector<StorePath>& store_paths);
+    void destroy();
+
+    void try_release_resource_before_core_dump();
+
+    BlockCache* block_cache() const { return _block_cache.get(); }
+    StoragePageCache* page_cache() const { return _page_cache.get(); }
+
+private:
+    Status _init_datacache();
+    Status _init_lru_base_object_cache();
+    Status _init_page_cache();
+
+    GlobalEnv* _global_env;
+    std::vector<StorePath> _store_paths;
+
+    std::shared_ptr<BlockCache> _block_cache;
+    std::shared_ptr<ObjectCache> _lru_based_object_cache;
+    std::shared_ptr<StoragePageCache> _page_cache;
+};
+
 // Execution environment for queries/plan fragments.
 // Contains all required global structures, and handles to
 // singleton services. Clients must call StartServices exactly
@@ -345,15 +372,11 @@ public:
 
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
 
-    BlockCache* block_cache() const { return _block_cache; }
-
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
 
     ThreadPool* delete_file_thread_pool();
 
     void try_release_resource_before_core_dump();
-
-    static Status init_object_cache(GlobalEnv* global_env);
 
 private:
     void _wait_for_fragments_finish();
@@ -422,7 +445,6 @@ private:
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;
-    BlockCache* _block_cache = nullptr;
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
 };
 

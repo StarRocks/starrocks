@@ -409,7 +409,7 @@ public:
     pipeline::PipelineExecutorMetrics* get_pipeline_executor_metrics() { return &pipeline_executor_metrics; }
 
 private:
-    // Don't allow constrctor
+    // Don't allow constructor
     StarRocksMetrics();
 
     void _update();

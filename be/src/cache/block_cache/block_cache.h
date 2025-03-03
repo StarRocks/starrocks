@@ -30,6 +30,7 @@ public:
     // Return a singleton block cache instance
     static BlockCache* instance();
 
+    BlockCache() = default;
     ~BlockCache();
 
     // Init the block cache instance
@@ -98,9 +99,6 @@ public:
     static const size_t MAX_BLOCK_SIZE;
 
 private:
-#ifndef BE_TEST
-    BlockCache() = default;
-#endif
     void _refresh_quota();
 
     size_t _block_size = 0;

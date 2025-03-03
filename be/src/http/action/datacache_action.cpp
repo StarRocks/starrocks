@@ -71,13 +71,12 @@ void DataCacheAction::handle(HttpRequest* req) {
     if (!_check_request(req)) {
         return;
     }
-    auto block_cache = _exec_env->block_cache();
-    if (!block_cache || !block_cache->is_initialized()) {
+    if (!_block_cache || !_block_cache->is_initialized()) {
         _handle_error(req, strings::Substitute("Cache system is not ready"));
-    } else if (block_cache->engine_type() != DataCacheEngineType::STARCACHE) {
+    } else if (_block_cache->engine_type() != DataCacheEngineType::STARCACHE) {
         _handle_error(req, strings::Substitute("No more metrics for current cache engine type"));
     } else if (req->param(ACTION_KEY) == ACTION_STAT) {
-        _handle_stat(req, block_cache);
+        _handle_stat(req);
     } else {
         _handle_app_stat(req);
     }
@@ -94,11 +93,11 @@ void DataCacheAction::_handle(HttpRequest* req, const std::function<void(rapidjs
     HttpChannel::send_reply(req, HttpStatus::OK, strbuf.GetString());
 }
 
-void DataCacheAction::_handle_stat(HttpRequest* req, BlockCache* cache) {
+void DataCacheAction::_handle_stat(HttpRequest* req) {
     _handle(req, [=](rapidjson::Document& root) {
 #ifdef WITH_STARCACHE
         auto& allocator = root.GetAllocator();
-        auto&& metrics = cache->cache_metrics(2);
+        auto&& metrics = _block_cache->cache_metrics(2);
         std::string status = cache_status_str(metrics.status);
 
         rapidjson::Value status_value;
