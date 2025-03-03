@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -140,7 +141,7 @@ public class OrToUnionAllJoinRule extends TransformationRule {
             return false;
         }
 
-        if (containsLimitOrNonDeterministicFunction(input)) {
+        if (containsNonDeterministicFunction(input)) {
             return false;
         }
 
@@ -193,23 +194,41 @@ public class OrToUnionAllJoinRule extends TransformationRule {
             }
         }
 
+        LogicalLimitOperator limitOp = getLimitOperator(input);
+        long limit = 0;
+        if (limitOp != null) {
+            limit = limitOp.getLimit();
+        }
+        boolean hasLimit = limit > 0;
+
         List<LogicalJoinOperator> joinBranchList = new ArrayList<>();
         for (int i = 0; i < cumulativePredicateMap.size(); i++) {
             List<BinaryPredicateOperator> branchPredicates = cumulativePredicateMap.get(i);
             LogicalJoinOperator branchJoin;
             if (branchPredicates.size() == 1) {
                 BinaryPredicateOperator predicate0 = branchPredicates.get(0);
-                branchJoin = new LogicalJoinOperator.Builder().withOperator(joinOp).setOnPredicate(predicate0)
-                        .setOriginalOnPredicate(predicate0).build();
+                LogicalJoinOperator.Builder builder =
+                        new LogicalJoinOperator.Builder().withOperator(joinOp).setOnPredicate(predicate0);
+
+                if (hasLimit) {
+                    builder.setLimit(limit);
+                }
+
+                branchJoin = builder.build();
             } else {
                 List<ScalarOperator> scalarOps = new ArrayList<>(branchPredicates);
                 ScalarOperator combinedPredicate = buildAndPredicate(scalarOps);
                 ScalarOperator lastPredicate = branchPredicates.get(branchPredicates.size() - 1);
-                branchJoin = new LogicalJoinOperator.Builder()
+                LogicalJoinOperator.Builder builder = new LogicalJoinOperator.Builder()
                         .withOperator(joinOp)
                         .setOnPredicate(combinedPredicate)
-                        .setOriginalOnPredicate(lastPredicate)
-                        .build();
+                        .setOriginalOnPredicate(lastPredicate);
+
+                if (hasLimit) {
+                    builder.setLimit(limit);
+                }
+
+                branchJoin = builder.build();
             }
             joinBranchList.add(branchJoin);
         }
@@ -232,21 +251,23 @@ public class OrToUnionAllJoinRule extends TransformationRule {
             childOutputColumns.add(outputColumns);
         }
 
-        LogicalUnionOperator unionOp =
+        LogicalUnionOperator.Builder builder =
                 new LogicalUnionOperator.Builder().isUnionAll(true).setProjection(joinOp.getProjection())
-                        .setChildOutputColumns(childOutputColumns).setOutputColumnRefOp(outputColumns).build();
+                        .setChildOutputColumns(childOutputColumns).setOutputColumnRefOp(outputColumns);
+
+        if (hasLimit) {
+            builder.setLimit(limit);
+        }
+
+        LogicalUnionOperator unionOp = builder.build();
 
         OptExpression result = OptExpression.create(unionOp, unionChildren);
+
         return Lists.newArrayList(result);
     }
 
-    private boolean containsLimitOrNonDeterministicFunction(OptExpression expr) {
-        if (expr.getOp().getOpType() == OperatorType.LOGICAL_LIMIT) {
-            return true;
-        }
-
-        if (expr.getOp() instanceof LogicalOperator) {
-            LogicalOperator logicalOp = (LogicalOperator) expr.getOp();
+    private boolean containsNonDeterministicFunction(OptExpression expr) {
+        if (expr.getOp() instanceof LogicalOperator logicalOp) {
 
             if (logicalOp.getPredicate() != null &&
                     containsNonDeterministicFn(logicalOp.getPredicate())) {
@@ -263,7 +284,7 @@ public class OrToUnionAllJoinRule extends TransformationRule {
         }
 
         for (OptExpression child : expr.getInputs()) {
-            if (containsLimitOrNonDeterministicFunction(child)) {
+            if (containsNonDeterministicFunction(child)) {
                 return true;
             }
         }
@@ -272,8 +293,7 @@ public class OrToUnionAllJoinRule extends TransformationRule {
     }
 
     private boolean containsNonDeterministicFn(ScalarOperator expr) {
-        if (expr instanceof CallOperator) {
-            CallOperator callOp = (CallOperator) expr;
+        if (expr instanceof CallOperator callOp) {
             String functionName = callOp.getFnName();
             if (functionName != null &&
                     FunctionSet.allNonDeterministicFunctions.contains(functionName)) {
@@ -327,5 +347,12 @@ public class OrToUnionAllJoinRule extends TransformationRule {
                     predicates.get(i));
         }
         return result;
+    }
+
+    private LogicalLimitOperator getLimitOperator(OptExpression expr) {
+        if (expr.getOp().getOpType() == OperatorType.LOGICAL_LIMIT) {
+            return (LogicalLimitOperator) expr.getOp();
+        }
+        return null;
     }
 }
