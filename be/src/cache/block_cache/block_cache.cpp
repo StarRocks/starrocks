@@ -16,6 +16,8 @@
 
 #include <fmt/format.h>
 
+#include "runtime/exec_env.h"
+
 #ifdef WITH_STARCACHE
 #include "cache/block_cache/starcache_wrapper.h"
 #endif
@@ -31,8 +33,7 @@ namespace fs = std::filesystem;
 const size_t BlockCache::MAX_BLOCK_SIZE = 2 * 1024 * 1024;
 
 BlockCache* BlockCache::instance() {
-    static BlockCache cache;
-    return &cache;
+    return CacheEnv::GetInstance()->block_cache();
 }
 
 BlockCache::~BlockCache() {

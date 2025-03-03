@@ -26,9 +26,7 @@ namespace starrocks {
 
 class ObjectCache {
 public:
-    // Return a singleton object cache instance.
-    static ObjectCache* instance();
-
+    ObjectCache() = default;
     ~ObjectCache();
 
     // Init the object cache instance with options.
