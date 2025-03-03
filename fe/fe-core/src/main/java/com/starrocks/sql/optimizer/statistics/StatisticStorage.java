@@ -38,6 +38,9 @@ public interface StatisticStorage {
     default void refreshColumnStatistics(Table table, List<String> columns, boolean isSync) {
     }
 
+    default void refreshMultiColumnStatistics(Long tableId) {
+    }
+
     /**
      * Overwrite the statistics of `targetPartition` with `sourcePartition`
      */
@@ -82,6 +85,13 @@ public interface StatisticStorage {
 
     default Map<String, Histogram> getConnectorHistogramStatisticsSync(Table table, List<String> columns) {
         return getConnectorHistogramStatistics(table, columns);
+    }
+
+    default MultiColumnCombinedStatistics getMultiColumnCombinedStatistics(Long tableId) {
+        return MultiColumnCombinedStatistics.EMPTY;
+    }
+
+    default void expireMultiColumnStatistics(Long tableId) {
     }
 
     default void expireHistogramStatistics(Long tableId, List<String> columns) {

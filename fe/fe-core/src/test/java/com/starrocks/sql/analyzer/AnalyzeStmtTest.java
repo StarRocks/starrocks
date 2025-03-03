@@ -382,15 +382,7 @@ public class AnalyzeStmtTest {
 
     @Test
     public void testDropTableOnMultiColumnStats() {
-<<<<<<< HEAD
-<<<<<<< HEAD
         String sql = "drop multi_columns stats t0";
-=======
-        String sql = "drop multi_column stats t0";
->>>>>>> 14cb479803 (xxx)
-=======
-        String sql = "drop multi_columns stats t0";
->>>>>>> e21ea51de2 ([Feature] support manual collection of multi-columns combined ndv)
         DropStatsStmt dropStatsStmt = (DropStatsStmt) analyzeSuccess(sql);
         Assert.assertEquals("t0", dropStatsStmt.getTableName().getTbl());
         Assert.assertTrue(dropStatsStmt.isMultiColumn());

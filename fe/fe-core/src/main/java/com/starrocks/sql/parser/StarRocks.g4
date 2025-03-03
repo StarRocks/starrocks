@@ -1330,7 +1330,7 @@ analyzeColumnClause
     | qualifiedName  (',' qualifiedName)*                       #regularColumns
     | ALL COLUMNS                                               #allColumns
     | PREDICATE COLUMNS                                         #predicateColumns
-    | MULTI_COLUMNS '(' qualifiedName  (',' qualifiedName)* ')' #combinedMultiColumns
+    | MULTI_COLUMNS '(' qualifiedName  (',' qualifiedName)* ')' #multiColumnSet
     ;
 
 dropStatsStatement
