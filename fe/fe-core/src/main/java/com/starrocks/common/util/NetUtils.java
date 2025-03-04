@@ -203,16 +203,4 @@ public class NetUtils {
         // so prefixLength = 32 - log2(addressCount) = 32 - (63 - leadingZeros(addressCount)) = leadingZeros(addressCount) - 31
         return Long.numberOfLeadingZeros(subnetUtils.getInfo().getAddressCountLong()) - 31;
     }
-
-    public static boolean isIPLocalAddress(String ip) {
-        if (ip == null) {
-            return false;
-        }
-        try {
-            InetAddress inetAddress = InetAddress.getByName(ip.startsWith("/") ? ip.substring(1) : ip);
-            return getHosts().stream().anyMatch(addr -> inetAddress.equals(addr));
-        } catch (UnknownHostException e) {
-            return false;
-        }
-    }
 }

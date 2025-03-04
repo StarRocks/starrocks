@@ -14,14 +14,7 @@
 
 package com.starrocks.common.util;
 
-import org.junit.Assert;
 import org.junit.Test;
-import org.mockito.MockedStatic;
-import org.mockito.Mockito;
-
-import java.net.InetAddress;
-import java.net.UnknownHostException;
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -44,19 +37,5 @@ public class NetUtilsTest {
         assertThat(NetUtils.isIPInSubnet("192.168.0.1", "192.168.1.0/24")).isFalse();
 
         assertThat(NetUtils.isIPInSubnet("192.168.0.1", "10.0.0.0/8")).isFalse();
-    }
-
-    @Test
-    public void testIsIPLocalAddress() throws UnknownHostException {
-        try (MockedStatic<NetUtils> netUtilsMockedStatic = Mockito.mockStatic(NetUtils.class, Mockito.CALLS_REAL_METHODS)) {
-            List<InetAddress> hosts = List.of(
-                    InetAddress.getByName("192.168.0.1"),
-                    InetAddress.getByName("192.168.0.2"),
-                    InetAddress.getByName("127.0.0.1"));
-            netUtilsMockedStatic.when(NetUtils::getHosts).thenReturn(hosts);
-            Assert.assertTrue(NetUtils.isIPLocalAddress("/192.168.0.1"));
-            Assert.assertTrue(NetUtils.isIPLocalAddress("127.0.0.1"));
-            Assert.assertFalse(NetUtils.isIPLocalAddress("192.168.0.3"));
-        }
     }
 }
