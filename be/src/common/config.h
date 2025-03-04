@@ -1113,7 +1113,7 @@ CONF_String(dependency_librdkafka_debug, "all");
 CONF_mInt16(pulsar_client_log_level, "2");
 
 // max loop count when be waiting its fragments finish. It has no effect if the var is configured with value <= 0.
-CONF_Int64(loop_count_wait_fragments_finish, "0");
+CONF_mInt64(loop_count_wait_fragments_finish, "2");
 
 // the maximum number of connections in the connection pool for a single jdbc url
 CONF_Int16(jdbc_connection_pool_size, "8");
