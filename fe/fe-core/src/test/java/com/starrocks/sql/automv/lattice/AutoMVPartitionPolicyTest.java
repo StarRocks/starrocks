@@ -548,4 +548,6 @@ public class AutoMVPartitionPolicyTest {
             AutoMVUtil.restoreGlobalVariable(vars);
         }
     }
+
+
 }

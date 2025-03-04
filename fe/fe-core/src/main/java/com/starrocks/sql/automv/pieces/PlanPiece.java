@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.pn.Op;
+import com.starrocks.sql.automv.pn.OpUtil;
 import com.starrocks.sql.automv.qe.PartitionExtractor;
 import com.starrocks.sql.automv.qe.PartitionPlus;
 import com.starrocks.sql.automv.util.TieredList;
@@ -143,11 +144,16 @@ public abstract class PlanPiece {
                 inputColumnIds.union(e.first);
             }
         });
-        getConjuncts().forEach(op -> inputColumnIds.union(op.getIds()));
         getTopAggregateIfFlatTable().ifPresent(aggPiece -> {
             Preconditions.checkState(aggPiece.getFlatTable().getFlexibleConjuncts().isEmpty());
-            aggPiece.getFlatTable().getStiffConjuncts().forEach(op -> inputColumnIds.union(op.getIds()));
         });
+        TieredList<Op> conjuncts = getConjuncts().concat(getTopAggregateIfFlatTable()
+                .map(aggPiece -> aggPiece.getFlatTable().getStiffConjuncts())
+                .orElse(TieredList.<Op>genesis()));
+
+        conjuncts.stream().flatMap(op -> op.getIdSet().stream())
+                .map(id -> OpUtil.columnToOp(id, getColumns().get(id)))
+                .forEach(op -> inputColumnIds.union(op.getIds()));
         return inputColumnIds;
     }
 

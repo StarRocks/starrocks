@@ -100,6 +100,12 @@ public class TestUtil {
         return getSqlList("sql/partitioned_tables/", "hits_daily", "hits_hourly", "hits_daily_list");
     }
 
+    public static List<String> getFlatTpcdsTableSqlList() {
+        return getSqlList("sql/flat_tpcds/", "catalog_returns_flat_table", "catalog_sales_flat_table",
+                "customer_flat_table", "inventory_flat_table", "item_flat_table", "store_returns_flat_table",
+                "store_sales_flat_table", "web_returns_flat_table", "web_sales_flat_table");
+    }
+
     public static List<Pair<String, String>> getClickBenchQueryList() {
         if (cachedClickBenchQueryList == null) {
             cachedClickBenchQueryList = getQueryList("sql/click_bench/", Pattern.compile("(Q\\d+)\\.sql"));

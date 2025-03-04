@@ -80,6 +80,7 @@ public class TimeGranuleExtractPolicy extends AggregatePolicy.SimplePolicy {
         TieredList<Op> newConjuncts = newConjunctsBuilder.build();
         ColumnRefSet rollupDimensionIds = ColumnRefSet.of();
         newConjuncts.forEach(op -> rollupDimensionIds.union(op.getIds()));
+        rollupDimensionIds.except(ColumnRefSet.createByIds(aggPiece.getDimensions().keySet()));
 
         TieredMap<Integer, GenericColumn> newRollupDimensions = newColumns.entrySet()
                 .stream()
