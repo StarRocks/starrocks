@@ -20,6 +20,7 @@
 #include "storage/local_primary_key_recover.h"
 #include "storage/primary_key_dump.h"
 #include "storage/rowset/rowset_meta_manager.h"
+#include "storage/task/engine_checksum_task.h"
 #include "storage/txn_manager.h"
 #include "util/failpoint/fail_point.h"
 
@@ -368,6 +369,18 @@ void TabletUpdatesTest::test_writeread(bool enable_persistent_index) {
     // get tablet info
     TTabletInfo tablet_info;
     _tablet->updates()->get_tablet_info_extra(&tablet_info);
+
+    ASSERT_TRUE(_tablet->get_average_row_size() > 0);
+
+    // calulate checksum
+    uint32_t checksum = 0;
+    std::unique_ptr<MemTracker> tracker = std::make_unique<MemTracker>(-1);
+    EngineChecksumTask task(tracker.get(), _tablet->tablet_id(), 4, &checksum);
+    ASSERT_TRUE(task.execute().ok());
+    // add limit to tracker
+    tracker->set_limit(100000000);
+    EngineChecksumTask task2(tracker.get(), _tablet->tablet_id(), 4, &checksum);
+    ASSERT_TRUE(task2.execute().ok());
 }
 
 TEST_F(TabletUpdatesTest, writeread) {
