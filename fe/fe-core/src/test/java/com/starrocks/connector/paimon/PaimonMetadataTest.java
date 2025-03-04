@@ -52,6 +52,7 @@ import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
 import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
+import org.apache.paimon.table.source.InnerTableScan;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.table.source.TableScan;
@@ -274,7 +275,8 @@ public class PaimonMetadataTest {
 
     @Test
     public void testGetRemoteFileInfos(@Mocked FileStoreTable paimonNativeTable,
-                                       @Mocked ReadBuilder readBuilder)
+                                   @Mocked ReadBuilder readBuilder,
+                                   @Mocked InnerTableScan scan)
             throws Catalog.TableNotExistException {
         new MockUp<PaimonMetadata>() {
             @Mock
@@ -290,6 +292,8 @@ public class PaimonMetadataTest {
                 result = readBuilder;
                 readBuilder.withFilter((List<Predicate>) any).withProjection((int[]) any).newScan().plan().splits();
                 result = splits;
+                readBuilder.newScan();
+                result = scan;
             }
         };
         PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1");
@@ -426,7 +430,7 @@ public class PaimonMetadataTest {
                                                            long snapshotId, ScalarOperator predicate, List<String> fieldNames,
                                                            long limit) {
                 return Lists.newArrayList(RemoteFileInfo.builder()
-                        .setFiles(Lists.newArrayList(PaimonRemoteFileDesc.createPamonRemoteFileDesc(
+                        .setFiles(Lists.newArrayList(PaimonRemoteFileDesc.createPaimonRemoteFileDesc(
                                 new PaimonSplitsInfo(null, Lists.newArrayList((Split) splits.get(0))))))
                         .build());
             }
