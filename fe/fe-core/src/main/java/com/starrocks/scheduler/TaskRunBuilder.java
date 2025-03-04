@@ -22,9 +22,10 @@ import java.util.Map;
 
 public class TaskRunBuilder {
     private final Task task;
+    private ExecuteOption executeOption;
+
     private Map<String, String> properties = new HashMap<>();
     private ConnectContext connectContext;
-    private ExecuteOption executeOption = new ExecuteOption(false);
 
     public static TaskRunBuilder newBuilder(Task task) {
         return new TaskRunBuilder(task);
@@ -32,6 +33,7 @@ public class TaskRunBuilder {
 
     private TaskRunBuilder(Task task) {
         this.task = task;
+        this.executeOption = new ExecuteOption(task);
     }
 
     public TaskRunBuilder setConnectContext(ConnectContext connectContext) {
