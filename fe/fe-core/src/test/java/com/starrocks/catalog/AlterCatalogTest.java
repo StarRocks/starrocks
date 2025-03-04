@@ -14,6 +14,7 @@
 package com.starrocks.catalog;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -68,6 +69,14 @@ public class AlterCatalogTest {
                     connectContext), connectContext);
             Assert.fail();
         } catch (AnalysisException e) {
+        }
+
+        try {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "alter catalog hive0 set (\"hive.metastore.uris\"  =  \"xx\");",
+                    connectContext), connectContext);
+            Assert.fail();
+        } catch (DdlException e) {
         }
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
