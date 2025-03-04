@@ -21,6 +21,8 @@ public enum IcebergCatalogType {
     GLUE_CATALOG,
     REST_CATALOG,
     HADOOP_CATALOG,
+    JDBC_CATALOG,
+
     UNKNOWN;
     // TODO: add more iceberg catalog type
 
