@@ -1633,4 +1633,13 @@ public class WindowTest extends PlanTestBase {
                 "  1:SORT\n" +
                 "  |  order by: <slot 1> 1: v1 ASC, <slot 2> 2: v2 DESC");
     }
+
+    @Test
+    public void testFirstValueIgnoreNulls() throws Exception {
+        String sql =
+                "select v1,v2,v3, first_value(v3 ignore nulls) over (partition by v1 order by v2" +
+                        " rows between unbounded PRECEDING and unbounded following) from t0";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "window: ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING");
+    }
 }
