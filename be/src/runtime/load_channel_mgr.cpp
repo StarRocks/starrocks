@@ -85,23 +85,60 @@ LoadChannelMgr::~LoadChannelMgr() {
 }
 
 void LoadChannelMgr::close() {
-    std::lock_guard l(_lock);
-    for (auto iter = _load_channels.begin(); iter != _load_channels.end();) {
-        iter->second->cancel();
-        iter->second->abort();
-        iter = _load_channels.erase(iter);
+    {
+        std::lock_guard l(_lock);
+        for (auto iter = _load_channels.begin(); iter != _load_channels.end();) {
+            iter->second->cancel();
+            iter->second->abort();
+            iter = _load_channels.erase(iter);
+        }
+    }
+    if (_async_rpc_pool) {
+        _async_rpc_pool->shutdown();
     }
 }
 
 Status LoadChannelMgr::init(MemTracker* mem_tracker) {
     _mem_tracker = mem_tracker;
     RETURN_IF_ERROR(_start_bg_worker());
+    int num_threads = config::load_channel_rpc_thread_pool_num;
+    if (num_threads <= 0) {
+        num_threads = CpuInfo::num_cores();
+    }
+    RETURN_IF_ERROR(ThreadPoolBuilder("load_channel_mgr")
+                            .set_min_threads(5)
+                            .set_max_threads(num_threads)
+                            .set_max_queue_size(config::load_channel_rpc_thread_pool_queue_size)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
+                            .build(&_async_rpc_pool));
+    REGISTER_THREAD_POOL_METRICS(load_channel_mgr, _async_rpc_pool.get());
     return Status::OK();
 }
 
 void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request,
                           PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
-    ClosureGuard done_guard(done);
+    LoadChannelOpenRequest open_request;
+    open_request.cntl = cntl;
+    open_request.request = &request;
+    open_request.response = response;
+    open_request.done = done;
+    open_request.receive_rpc_time_ns = MonotonicNanos();
+    if (!config::enable_load_channel_rpc_async) {
+        _open(open_request);
+        return;
+    }
+    auto task = [=]() { this->_open(open_request); };
+    Status status = _async_rpc_pool->submit_func(std::move(task));
+    if (!status.ok()) {
+        ClosureGuard closure_guard(done);
+        status.to_protobuf(response->mutable_status());
+    }
+}
+
+void LoadChannelMgr::_open(LoadChannelOpenRequest open_request) {
+    ClosureGuard done_guard(open_request.done);
+    const PTabletWriterOpenRequest& request = *open_request.request;
+    PTabletWriterOpenResult* response = open_request.response;
     if (!request.encryption_meta().empty()) {
         Status st = KeyCache::instance().refresh_keys(request.encryption_meta());
         if (!st.ok()) {
@@ -143,7 +180,8 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
             return;
         }
     }
-    channel->open(cntl, request, response, done_guard.release());
+    done_guard.release();
+    channel->open(open_request);
 }
 
 void LoadChannelMgr::add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
