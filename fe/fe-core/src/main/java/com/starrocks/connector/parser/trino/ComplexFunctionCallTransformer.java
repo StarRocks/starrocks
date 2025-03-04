@@ -115,6 +115,15 @@ public class ComplexFunctionCallTransformer {
                 throw new SemanticException("isnotnull function must have 1 argument");
             }
             return new IsNullPredicate(args[0], true);
+        } else if (functionName.equalsIgnoreCase("parse_datetime")) {
+            // parse_datetime -> str_to_jodatime
+            if (args.length == 2 && args[1] instanceof StringLiteral) {
+                StringLiteral format = (StringLiteral) args[1];
+                String formatString = format.getStringValue();
+                // "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'" -> "yyyy-MM-ddTHH:mm:ss.SSS"
+                formatString = formatString.replace("'T'", "T").replace("'Z'", "");
+                return new FunctionCallExpr("str_to_jodatime", ImmutableList.of(args[0], new StringLiteral(formatString)));
+            }
         }
         return null;
     }
