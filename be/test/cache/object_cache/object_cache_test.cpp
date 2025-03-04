@@ -15,9 +15,9 @@
 #include "cache/object_cache/object_cache.h"
 
 #include <gtest/gtest.h>
-#include "fs/fs_util.h"
-#include "cache/block_cache/block_cache.h"
 
+#include "cache/block_cache/block_cache.h"
+#include "fs/fs_util.h"
 #include "testutil/assert.h"
 
 namespace starrocks {

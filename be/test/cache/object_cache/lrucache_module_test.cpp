@@ -21,9 +21,7 @@
 namespace starrocks {
 class LRUCacheModuleTest : public ::testing::Test {
 protected:
-    void SetUp() override {
-        _cache = std::make_shared<LRUCacheModule>(_cache_opt);
-    }
+    void SetUp() override { _cache = std::make_shared<LRUCacheModule>(_cache_opt); }
     void TearDown() override {}
 
 protected:
