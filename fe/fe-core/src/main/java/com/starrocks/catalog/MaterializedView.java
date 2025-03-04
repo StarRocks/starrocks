@@ -1711,8 +1711,9 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * Return the status and reason about query rewrite
      */
     public String getQueryRewriteStatus() {
-        Pair<Boolean, String> status =
-                MvRewritePreprocessor.isMVValidToRewriteQuery(ConnectContext.get(), this, true, Sets.newHashSet());
+        // since check mv valid to rewrite query is a heavy operation, we only check it when it's in the plan cache.
+        Pair<Boolean, String> status = MvRewritePreprocessor.isMVValidToRewriteQuery(ConnectContext.get(),
+                this, false, Sets.newHashSet(), true);
         if (status.first) {
             return "VALID";
         }
