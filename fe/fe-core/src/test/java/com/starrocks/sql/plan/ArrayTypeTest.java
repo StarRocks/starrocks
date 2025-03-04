@@ -762,5 +762,12 @@ public class ArrayTypeTest extends PlanTestBase {
         assertContains(plan, "3:Project\n" +
                 "  |  <slot 4> : 4: dense_rank()\n" +
                 "  |  <slot 6> : array_filter(3: v3, array_map(<slot 5> -> array_contains(3: v3, <slot 5>), 3: v3))");
+
+        sql =
+                "explain costs SELECT array_filter( s_1, " +
+                        "x -> array_length(array_filter(d_1, y -> y > 0)) > 0 ) AS filtered_activity_name," +
+                        " array_length(d_1) AS col_double_length FROM adec;";
+        plan = getCostExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath: [/d_1/OFFSET]");
     }
 }

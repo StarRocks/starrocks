@@ -35,6 +35,7 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
     private final List<ScalarOperator> complexExpressions = Lists.newArrayList();
     private Set<String> checkFunctions;
     private final boolean enableJsonCollect;
+    private boolean forPushDownSubFiled;
 
     public List<ScalarOperator> getComplexExpressions() {
         return complexExpressions;
@@ -58,6 +59,7 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
     public static SubfieldExpressionCollector buildPushdownCollector() {
         SubfieldExpressionCollector collector = new SubfieldExpressionCollector();
         collector.checkFunctions = Sets.newHashSet(PruneSubfieldRule.PUSHDOWN_FUNCTIONS);
+        collector.forPushDownSubFiled = true;
         return collector;
     }
 
@@ -97,7 +99,11 @@ public class SubfieldExpressionCollector extends ScalarOperatorVisitor<Void, Voi
 
     @Override
     public Void visitLambdaFunctionOperator(LambdaFunctionOperator operator, Void context) {
-        return null;
+        // we should not collect subfield expression in lambda when push down sub filed
+        if (forPushDownSubFiled) {
+            return null;
+        }
+        return visit(operator, context);
     }
 
     @Override
