@@ -99,9 +99,4 @@ public class SelectListItem implements ParseNode {
     public void setAlias(String alias) {
         this.alias = alias;
     }
-
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitSelectItem(this, context);
-    }
 }
