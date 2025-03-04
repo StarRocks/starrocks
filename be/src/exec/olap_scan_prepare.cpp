@@ -1260,6 +1260,9 @@ StatusOr<RuntimeFilterPredicates> ScanConjunctsManager::get_runtime_filter_predi
         if (desc->is_topn_filter()) {
             continue;
         }
+        if (!parser->can_pushdown(slot_desc)) {
+            continue;
+        }
         auto column_id = parser->column_id(*slot_desc);
         desc->set_has_push_down_to_storage(true);
         predicates.add_predicate(obj_pool->add(new RuntimeFilterPredicate(desc, column_id)));
