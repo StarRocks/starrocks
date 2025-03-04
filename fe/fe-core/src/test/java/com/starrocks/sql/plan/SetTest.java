@@ -706,4 +706,18 @@ public class SetTest extends PlanTestBase {
                 "         3 | 4\n" +
                 "         5 | 6\n");
     }
+
+    @Test
+    public void testStruct() throws Exception {
+        connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
+        String sql = "with input as ("
+                + "select struct([1, 2, 3], [4, 5, 6]) as s "
+                + "union all "
+                + "select struct([5, 6, 7], [6, 7]) as s"
+                + ") select s, s.col1 from input;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "constant exprs: \n"
+                + "         row([1,2,3], [4,5,6]) | row([1,2,3], [4,5,6]).col1[true]\n"
+                + "         row([5,6,7], [6,7]) | row([5,6,7], [6,7]).col1[true]");
+    }
 }
