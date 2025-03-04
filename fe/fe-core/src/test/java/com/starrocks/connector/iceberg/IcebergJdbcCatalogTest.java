@@ -59,7 +59,7 @@ public class IcebergJdbcCatalogTest {
                 assertThrows(IllegalArgumentException.class, () -> new IcebergJdbcCatalog("catalog",
                         new Configuration(), ImmutableMap.of("iceberg.catalog.warehouse", LOCATION)));
         assertEquals(e.getMessage(),
-                String.format("Iceberg jdbc catalog must set uri  (\"%s\" = \"jdbc:mysql://host:port/db_name\").",
+                String.format("Iceberg jdbc catalog must set uri  (\"%s\" = \"jdbc:[mysql|postgresql]://host:port/db_name\").",
                         ICEBERG_CUSTOM_PROPERTIES_PREFIX + CatalogProperties.URI));
 
         IllegalArgumentException e1 =

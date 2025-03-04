@@ -79,7 +79,7 @@ public class IcebergJdbcCatalog implements IcebergCatalog {
         }
 
         if (!copiedProperties.containsKey(CatalogProperties.URI)) {
-            throw new IllegalArgumentException(String.format("Iceberg jdbc catalog must set uri  (\"%s\" = \"jdbc:mysql://host:port/db_name\").",
+            throw new IllegalArgumentException(String.format("Iceberg jdbc catalog must set uri  (\"%s\" = \"jdbc:[mysql|postgresql]://host:port/db_name\").",
                     ICEBERG_CUSTOM_PROPERTIES_PREFIX + CatalogProperties.URI));
         }
 
