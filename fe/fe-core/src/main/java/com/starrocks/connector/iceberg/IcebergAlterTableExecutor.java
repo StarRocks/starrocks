@@ -626,7 +626,7 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
 
     // TODO:implement deleteFiles in FsUtils
     private void deleteFiles(FileSystem fs, List<Path> files) {
-        files.forEach(file-> {
+        files.forEach(file -> {
             try {
                 fs.delete(file, false);
                 LOGGER.debug("Deleted file {}", file);
