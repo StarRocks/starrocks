@@ -59,12 +59,7 @@ public class ConnectorMgr {
     }
 
     public CatalogConnector createHiddenConnector(ConnectorContext context, boolean isReplay) throws StarRocksConnectorException {
-        readLock();
-        try {
-            return ConnectorFactory.createConnector(context, isReplay);
-        } finally {
-            readUnlock();
-        }
+        return ConnectorFactory.createConnector(context, isReplay);
     }
 
     public void addConnector(String catalogName, CatalogConnector connector) {

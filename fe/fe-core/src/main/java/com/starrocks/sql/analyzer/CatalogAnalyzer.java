@@ -41,16 +41,8 @@ public class CatalogAnalyzer {
 
     private static final String WHITESPACE = "\\s+";
 
-    private static final Set<String> SUPPORT_ALTER_PROPERTIES = Sets.newHashSet(
-            "ranger.plugin.hive.service.name",
-            "hive.metastore.uris",
-            "enable_metastore_cache",
-            "enable_remote_file_cache",
-            "metastore_cache_refresh_interval_sec",
-            "remote_file_cache_refresh_interval_sec",
-            "metastore_cache_ttl_sec",
-            "remote_file_cache_ttl_sec",
-            "enable_cache_list_names"
+    private static final Set<String> NOT_SUPPORT_ALTER_PROPERTIES = Sets.newHashSet(
+            "type"
     );
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
@@ -140,15 +132,10 @@ public class CatalogAnalyzer {
                         (ModifyTablePropertiesClause) statement.getAlterClause();
                 Map<String, String> properties = modifyTablePropertiesClause.getProperties();
 
-                String catalogType = GlobalStateMgr.getCurrentState().getCatalogMgr().getCatalogType(statement.getCatalogName());
                 for (Map.Entry<String, String> property : properties.entrySet()) {
                     String confName = property.getKey();
 
-                    if (("hive".equals(catalogType) || "hudi".equals(catalogType))) {
-                        if (!SUPPORT_ALTER_PROPERTIES.contains(confName)) {
-                            throw new SemanticException("Not support alter hive/hudi catalog property " + property.getKey());
-                        }
-                    } else if (!"ranger.plugin.hive.service.name".equals(confName)) {
+                    if (NOT_SUPPORT_ALTER_PROPERTIES.contains(confName)) {
                         throw new SemanticException("Not support alter catalog property " + property.getKey());
                     }
                 }

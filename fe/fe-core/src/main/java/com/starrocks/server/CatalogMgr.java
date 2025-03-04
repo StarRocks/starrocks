@@ -56,6 +56,7 @@ import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.DropCatalogStmt;
 import com.starrocks.sql.ast.ModifyTablePropertiesClause;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -187,7 +188,7 @@ public class CatalogMgr {
             connectorMgr.addConnector(catalogName, newConnector);
 
             String serviceName = newProperties.get("ranger.plugin.hive.service.name");
-            if (serviceName == null || serviceName.isEmpty()) {
+            if (StringUtils.isEmpty(serviceName)) {
                 if (Config.access_control.equals("ranger")) {
                     Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
                 } else {
@@ -205,7 +206,7 @@ public class CatalogMgr {
                 newConnector.shutdown();
             }
 
-            throw e;
+            throw new DdlException(String.format("Recreate catalog failed, msg: [%s]", e.getMessage()), e);
         } finally {
             writeUnLock();
         }
@@ -303,12 +304,8 @@ public class CatalogMgr {
     }
 
     private boolean needRecreateCatalog(Catalog catalog, Map<String, String> properties) {
-        if ("hive".equals(catalog.getType()) || "hudi".equals(catalog.getType())) {
-            boolean containsRanger = properties.containsKey("ranger.plugin.hive.service.name");
-            return !containsRanger || properties.size() != 1;
-        }
-
-        return false;
+        boolean containsRanger = properties.containsKey("ranger.plugin.hive.service.name");
+        return !containsRanger || properties.size() != 1;
     }
 
     // TODO @caneGuy we should put internal catalog into catalogmgr
