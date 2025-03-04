@@ -454,8 +454,10 @@ StatusOr<FileMetaDataPtr> FileMetaDataParser::get_file_metadata() {
         SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_cache_read_ns);
         Status st = _cache->lookup(metacache_key, &cache_handle);
         if (st.ok()) {
+            auto file_metadata = *(static_cast<const FileMetaDataPtr*>(_cache->value(cache_handle)));
             _scanner_ctx->stats->footer_cache_read_count += 1;
-            return *(static_cast<const FileMetaDataPtr*>(_cache->value(cache_handle)));
+            _cache->release(cache_handle);
+            return st;
         }
     }
 
@@ -467,10 +469,11 @@ StatusOr<FileMetaDataPtr> FileMetaDataParser::get_file_metadata() {
         // so we have to new an object to hold this shared ptr.
         FileMetaDataPtr* capture = new FileMetaDataPtr(file_metadata);
         Status st = Status::InternalError("write footer cache failed");
-        DeferOp op([&st, this, capture, file_metadata_size]() {
+        DeferOp op([&st, this, capture, file_metadata_size, &cache_handle]() {
             if (st.ok()) {
                 _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
                 _scanner_ctx->stats->footer_cache_write_count += 1;
+                _cache->release(cache_handle);
             } else {
                 _scanner_ctx->stats->footer_cache_write_fail_count += 1;
                 delete capture;
