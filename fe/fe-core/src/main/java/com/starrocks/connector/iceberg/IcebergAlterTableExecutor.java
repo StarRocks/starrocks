@@ -610,31 +610,30 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
                 if (status.getModificationTime() < expiration && !validFiles.contains(entry.getPath().getName())) {
                     filesToDelete.add(entry.getPath());
                     if (filesToDelete.size() >= DELETE_BATCH_SIZE) {
-                        filesToDelete.forEach(path -> {
-                            try {
-                                fileSystem.delete(path, false);
-                                LOGGER.debug("Deleted file {}", path);
-                            } catch (IOException e) {
-                                LOGGER.error("Failed to delete file {}", path, e);
-                            }
-                        });
+                        deleteFiles(fileSystem, filesToDelete);
                         filesToDelete.clear();
                     }
                 }
             }
             if (!filesToDelete.isEmpty()) {
-                filesToDelete.forEach(path -> {
-                    try {
-                        fileSystem.delete(path, false);
-                        LOGGER.debug("Deleted file {}", path);
-                    } catch (IOException e) {
-                        LOGGER.error("Failed to delete file {}", path, e);
-                    }
-                });
+                deleteFiles(fileSystem, filesToDelete);
                 filesToDelete.clear();
             }
         } catch (IOException e) {
             throw new StarRocksConnectorException("Failed accessing data: ", e);
         }
+    }
+
+    // TODO:implement deleteFiles in FsUtils
+    private void deleteFiles(FileSystem fs, List<Path> files) {
+        files.forEach(file-> {
+            try {
+                fs.delete(file, false);
+                LOGGER.debug("Deleted file {}", file);
+            } catch (IOException e) {
+                LOGGER.error("Failed to delete file {}", file, e);
+                throw new StarRocksConnectorException("Failed to delete file " + file, e);
+            }
+        });
     }
 }
