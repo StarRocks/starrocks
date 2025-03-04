@@ -321,13 +321,16 @@ public class SPMPlanTest extends PlanTestBase {
         generator.execute();
 
         assertContains(generator.getBindSqlDigest(), """
-                SELECT `test`.`t0`.`v2`, sum(`test`.`t0`.`v3`)
+                SELECT `test`.`t0`.`v2`, sum(`test`.`t0`.`v3`) AS `sum(v3)`
                 FROM `test`.`t0`
                 WHERE `test`.`t0`.`v1` = ?
                 GROUP BY `test`.`t0`.`v2`""");
 
-        assertContains(generator.getBindSql(), "SELECT `test`.`t0`.`v2`, sum(`test`.`t0`.`v3`)\n" + "FROM `test`.`t0`\n"
-                + "WHERE `test`.`t0`.`v1` = _spm_const_var(1, 1)\n" + "GROUP BY `test`.`t0`.`v2`");
+        assertContains(generator.getBindSql(), """
+                SELECT `test`.`t0`.`v2`, sum(`test`.`t0`.`v3`) AS `sum(v3)`
+                FROM `test`.`t0`
+                WHERE `test`.`t0`.`v1` = _spm_const_var(1, 1)
+                GROUP BY `test`.`t0`.`v2""");
 
         assertContains(generator.getPlanStmtSQL(), "SELECT v2, sum(v3) AS c_4 "
                 + "FROM (SELECT v2, v3 FROM t0 WHERE v1 = _spm_const_var(1, 1)) t_0 "
@@ -341,12 +344,17 @@ public class SPMPlanTest extends PlanTestBase {
         SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
         generator.execute();
 
-        assertContains(generator.getBindSqlDigest(),
-                "SELECT `test`.`t0`.`v2`, sum(`test`.`t0`.`v3`)\n" + "FROM `test`.`t0`\n"
-                        + "WHERE `test`.`t0`.`v1` = ?\n" + "GROUP BY `test`.`t0`.`v2`");
+        assertContains(generator.getBindSqlDigest(), "SELECT `test`.`t0`.`v2`, sum(`test`.`t0`.`v3`) AS `sum(v3)`\n"
+                + "FROM `test`.`t0`\n"
+                + "WHERE `test`.`t0`.`v1` = ?\n"
+                + "GROUP BY `test`.`t0`.`v2`\n"
+                + "HAVING (sum(`test`.`t0`.`v3`)) > ?");
 
-        assertContains(generator.getBindSql(), "SELECT `test`.`t0`.`v2`, sum(`test`.`t0`.`v3`)\n" + "FROM `test`.`t0`\n"
-                + "WHERE `test`.`t0`.`v1` = _spm_const_var(1, 1)\n" + "GROUP BY `test`.`t0`.`v2`");
+        assertContains(generator.getBindSql(), "SELECT `test`.`t0`.`v2`, sum(`test`.`t0`.`v3`) AS `sum(v3)`\n"
+                + "FROM `test`.`t0`\n"
+                + "WHERE `test`.`t0`.`v1` = _spm_const_var(1, 1)\n"
+                + "GROUP BY `test`.`t0`.`v2`\n"
+                + "HAVING (sum(`test`.`t0`.`v3`)) > _spm_const_var(2, 100)");
 
         assertContains(generator.getPlanStmtSQL(), "SELECT v2, sum(v3) AS c_4 "
                 + "FROM (SELECT v2, v3 FROM t0 WHERE v1 = _spm_const_var(1, 1)) t_0 "
@@ -497,19 +505,18 @@ public class SPMPlanTest extends PlanTestBase {
         SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
         generator.execute();
 
-        assertContains(generator.getBindSqlDigest(), """
-                SELECT `test`.`t0`.`v3`, \
-                avg(`test`.`t0`.`v2`) OVER \
-                (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`.`v2` DESC ), \
-                sum(`test`.`t0`.`v2`) OVER \
-                (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`.`v2` DESC ) AS `sum1`
-                FROM `test`.`t0`""");
+        assertContains(generator.getBindSqlDigest(),
+                "SELECT `test`.`t0`.`v3`, avg(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3`"
+                        + " ORDER BY `test`.`t0`.`v2` DESC ) AS `avg(v2) OVER (PARTITION BY v2, v3 ORDER BY v2 DESC )"
+                        + "`, sum(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY "
+                        + "`test`.`t0`.`v2` DESC ) AS `sum1`\n"
+                        + "FROM `test`.`t0`");
 
-        assertContains(generator.getBindSql(), "SELECT `test`.`t0`.`v3`, "
-                + "avg(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`"
-                + ".`v2` DESC ), "
-                + "sum(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`"
-                + ".`v2` DESC ) AS `sum1`\n"
+        assertContains(generator.getBindSql(),
+                "SELECT `test`.`t0`.`v3`, avg(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3`"
+                        + " ORDER BY `test`.`t0`.`v2` DESC ) AS `avg(v2) OVER (PARTITION BY v2, v3 ORDER BY v2 DESC )"
+                        + "`, sum(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY "
+                        + "`test`.`t0`.`v2` DESC ) AS `sum1`\n"
                 + "FROM `test`.`t0`");
 
         assertContains(generator.getPlanStmtSQL(),
@@ -527,19 +534,20 @@ public class SPMPlanTest extends PlanTestBase {
         SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
         generator.execute();
 
-        assertContains(generator.getBindSqlDigest(), """
-                SELECT `test`.`t0`.`v3`, sum(`test`.`t0`.`v2`), \
-                avg(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`.`v2` DESC ), \
-                sum(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`.`v2` DESC ) AS `sum1`
-                FROM `test`.`t0`
-                GROUP BY `test`.`t0`.`v2`, `test`.`t0`.`v3`
-                HAVING (sum(`test`.`t0`.`v2`)) > ?""");
+        assertContains(generator.getBindSqlDigest(),
+                "SELECT `test`.`t0`.`v3`, sum(`test`.`t0`.`v2`) AS `sum(v2)`, avg(`test`.`t0`.`v2`) OVER (PARTITION "
+                        + "BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`.`v2` DESC ) AS `avg(v2) OVER "
+                        + "(PARTITION BY v2, v3 ORDER BY v2 DESC )`, sum(`test`.`t0`.`v2`) OVER (PARTITION BY `test`"
+                        + ".`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`.`v2` DESC ) AS `sum1`\n"
+                        + "FROM `test`.`t0`\n"
+                        + "GROUP BY `test`.`t0`.`v2`, `test`.`t0`.`v3`\n"
+                        + "HAVING (sum(`test`.`t0`.`v2`)) > ?");
 
-        assertContains(generator.getBindSql(), "SELECT `test`.`t0`.`v3`, sum(`test`.`t0`.`v2`), "
-                + "avg(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` "
-                + "ORDER BY `test`.`t0`.`v2` DESC ), "
-                + "sum(`test`.`t0`.`v2`) OVER (PARTITION BY `test`.`t0`.`v2`, `test`.`t0`.`v3` "
-                + "ORDER BY `test`.`t0`.`v2` DESC ) AS `sum1`\n"
+        assertContains(generator.getBindSql(),
+                "SELECT `test`.`t0`.`v3`, sum(`test`.`t0`.`v2`) AS `sum(v2)`, avg(`test`.`t0`.`v2`) OVER (PARTITION "
+                        + "BY `test`.`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`.`v2` DESC ) AS `avg(v2) OVER "
+                        + "(PARTITION BY v2, v3 ORDER BY v2 DESC )`, sum(`test`.`t0`.`v2`) OVER (PARTITION BY `test`"
+                        + ".`t0`.`v2`, `test`.`t0`.`v3` ORDER BY `test`.`t0`.`v2` DESC ) AS `sum1`\n"
                 + "FROM `test`.`t0`\n"
                 + "GROUP BY `test`.`t0`.`v2`, `test`.`t0`.`v3`\n"
                 + "HAVING (sum(`test`.`t0`.`v2`)) > _spm_const_var(1, 100)");
@@ -559,14 +567,16 @@ public class SPMPlanTest extends PlanTestBase {
         SPMPlanBuilder generator = new SPMPlanBuilder(connectContext, stmt);
         generator.execute();
 
-        assertContains(generator.getBindSqlDigest(),
-                "SELECT `test`.`t0`.`v1`, `test`.`t0`.`v2`, grouping(`test`.`t0`.`v1`, `test`.`t0`.`v2`) AS `b`, sum"
-                        + "(`test`.`t0`.`v3`)\n" + "FROM `test`.`t0`\n"
-                        + "GROUP BY GROUPING SETS ((), (`test`.`t0`.`v1`, `test`.`t0`.`v2`))");
+        assertContains(generator.getBindSqlDigest(), """
+                SELECT `test`.`t0`.`v1`, `test`.`t0`.`v2`, grouping(`test`.`t0`.`v1`, `test`.`t0`.`v2`) AS `b`, \
+                sum(`test`.`t0`.`v3`) AS `sum(v3)`
+                FROM `test`.`t0`
+                GROUP BY GROUPING SETS ((), (`test`.`t0`.`v1`, `test`.`t0`.`v2`))""");
 
         assertContains(generator.getBindSql(),
                 "SELECT `test`.`t0`.`v1`, `test`.`t0`.`v2`, grouping(`test`.`t0`.`v1`, `test`.`t0`.`v2`) AS `b`, sum"
-                        + "(`test`.`t0`.`v3`)\n" + "FROM `test`.`t0`\n"
+                        + "(`test`.`t0`.`v3`) AS `sum(v3)`\n"
+                        + "FROM `test`.`t0`\n"
                         + "GROUP BY GROUPING SETS ((), (`test`.`t0`.`v1`, `test`.`t0`.`v2`))");
 
         assertContains(generator.getPlanStmtSQL(), "SELECT c_1, c_2, c_6, c_4 FROM "
