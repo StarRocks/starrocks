@@ -24,7 +24,9 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
@@ -163,24 +165,6 @@ public class OrToUnionAllJoinRule extends TransformationRule {
             return false;
         }
 
-        for (BinaryPredicateOperator predOp : equalPredicates) {
-            if (predOp.getBinaryType() != BinaryType.EQ) {
-                return false;
-            }
-
-            if (predOp.isNullable()) {
-                return false;
-            }
-
-            ScalarOperator left = predOp.getChild(0);
-            ScalarOperator right = predOp.getChild(1);
-
-            if ((left instanceof ColumnRefOperator && left.isNullable()) ||
-                    (right instanceof ColumnRefOperator && right.isNullable())) {
-                return false;
-            }
-        }
-
         return true;
     }
 
@@ -237,26 +221,38 @@ public class OrToUnionAllJoinRule extends TransformationRule {
         }
 
         List<OptExpression> unionChildren = new ArrayList<>();
-        List<ColumnRefOperator> outputColumns;
-        if (joinOp.getProjection() != null) {
-            outputColumns = joinOp.getProjection().getOutputColumns();
-        } else {
-            outputColumns = new ArrayList<>();
-            for (OptExpression child : input.getInputs()) {
-                ColumnRefSet childColumns = child.getOutputColumns();
-                childColumns.getColumnRefOperators(context.getColumnRefFactory()).forEach(outputColumns::add);
-            }
-        }
-
+        List<ColumnRefOperator> outputColumns =  new ArrayList<>();
+        boolean isFirst = true;
         List<List<ColumnRefOperator>> childOutputColumns = new ArrayList<>();
         for (LogicalJoinOperator branchJoin : joinBranchList) {
-            unionChildren.add(OptExpression.create(branchJoin, input.getInputs()));
-            childOutputColumns.add(outputColumns);
+            if (isFirst) {
+                OptExpression branchOpt = OptExpression.create(branchJoin, input.getInputs());
+                unionChildren.add(branchOpt);
+                outputColumns = context.getColumnRefFactory().getColumnRefs(input.getOutputColumns()).stream().toList();
+                childOutputColumns.add(outputColumns);
+                isFirst = false;
+                continue;
+            }
+
+            OptExpression branchOpt = OptExpression.create(branchJoin, input.getInputs());
+            OptExpressionDuplicator finalDuplicator =
+                    new OptExpressionDuplicator(context.getColumnRefFactory(), context);
+            branchOpt = finalDuplicator.duplicate(branchOpt);
+            List<ColumnOutputInfo> outputInfo = input.getRowOutputInfo().getColumnOutputInfo();
+
+            List<ColumnRefOperator> newOutputColumns = new ArrayList<>();
+            for (ColumnOutputInfo colInfo : outputInfo) {
+                newOutputColumns.add(finalDuplicator.getColumnMapping().get(colInfo.getColumnRef()));
+            }
+
+            unionChildren.add(branchOpt);
+            childOutputColumns.add(newOutputColumns);
         }
 
         LogicalUnionOperator.Builder builder =
-                new LogicalUnionOperator.Builder().isUnionAll(true).setProjection(joinOp.getProjection())
-                        .setChildOutputColumns(childOutputColumns).setOutputColumnRefOp(outputColumns);
+                new LogicalUnionOperator.Builder().isUnionAll(true)
+                        .setChildOutputColumns(childOutputColumns)
+                        .setOutputColumnRefOp(outputColumns);
 
         if (joinOp.hasLimit()) {
             builder.setLimit(joinOp.getLimit());
@@ -265,11 +261,8 @@ public class OrToUnionAllJoinRule extends TransformationRule {
         LogicalUnionOperator unionOp = builder.build();
         OptExpression unionExpr = OptExpression.create(unionOp, unionChildren);
 
-        OptExpressionDuplicator finalDuplicator =
-                new OptExpressionDuplicator(context.getColumnRefFactory(), context);
-        OptExpression result = finalDuplicator.duplicate(unionExpr);
 
-        return Lists.newArrayList(result);
+        return Lists.newArrayList(unionExpr);
     }
 
     private boolean containsNonDeterministicFunction(OptExpression expr) {
