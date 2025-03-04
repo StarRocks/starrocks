@@ -263,7 +263,11 @@ public class OrToUnionAllJoinRule extends TransformationRule {
         }
 
         LogicalUnionOperator unionOp = builder.build();
-        OptExpression result = OptExpression.create(unionOp, unionChildren);
+        OptExpression unionExpr = OptExpression.create(unionOp, unionChildren);
+
+        OptExpressionDuplicator finalDuplicator =
+                new OptExpressionDuplicator(context.getColumnRefFactory(), context);
+        OptExpression result = finalDuplicator.duplicate(unionExpr);
 
         return Lists.newArrayList(result);
     }
