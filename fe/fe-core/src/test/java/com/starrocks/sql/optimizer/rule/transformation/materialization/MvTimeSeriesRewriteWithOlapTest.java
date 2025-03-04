@@ -335,6 +335,7 @@ public class MvTimeSeriesRewriteWithOlapTest extends MVTestBase {
                 PlanTestBase.assertContains(plan, "     TABLE: t0");
             }
             starRocksAssert.dropMaterializedView(mvName);
+            i++;
         }
     }
 
