@@ -21,27 +21,20 @@ import com.nimbusds.jose.jwk.JWK;
 import com.nimbusds.jose.jwk.JWKSet;
 import com.nimbusds.jwt.JWTClaimsSet;
 import com.nimbusds.jwt.SignedJWT;
-import org.json.JSONObject;
 
 import java.security.interfaces.RSAPublicKey;
 import java.text.ParseException;
 
 public class OpenIdConnectVerifier {
 
-    public static void verify(String oidcToken,
+    public static void verify(String idToken,
                               String userName,
                               JWKSet jwkSet,
                               String principalFiled,
                               String requiredIssuer,
                               String requiredAudience) throws AuthenticationException {
         try {
-            JSONObject openIdConnectJson = new JSONObject(oidcToken);
-            String accessToken = openIdConnectJson.getString("access_token");
-            OpenIdConnectVerifier.verifyJWT(accessToken, jwkSet);
-
-            String idToken = openIdConnectJson.getString("id_token");
             OpenIdConnectVerifier.verifyJWT(idToken, jwkSet);
-
             SignedJWT signedJWT = SignedJWT.parse(idToken);
             JWTClaimsSet claims = signedJWT.getJWTClaimsSet();
             String jwtUserName = claims.getStringClaim(principalFiled);
