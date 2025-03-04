@@ -22,9 +22,18 @@ public class MVPlanValidationResult {
         VALID,
         INVALID,
         UNKNOWN;
-        public boolean isValid() { return this == VALID; }
-        public boolean isInvalid() { return this == INVALID; }
-        public boolean isUnKnown() { return this == UNKNOWN; }
+
+        public boolean isValid() {
+            return this == VALID;
+        }
+
+        public boolean isInvalid() {
+            return this == INVALID;
+        }
+
+        public boolean isUnKnown() {
+            return this == UNKNOWN;
+        }
     }
 
     private final Status status;
