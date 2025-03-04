@@ -10,6 +10,13 @@ E: (5064, 'Getting analyzing error. Detail message: Random distribution table al
 
 
 
+
+
+
+
+
+
+
 -- name: test_change_partial_partition_distribution
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
 (
@@ -103,11 +110,6 @@ PROPERTIES (
 
 
 
-
-
-
-
-
 -- name: test_alter_key_buckets
 CREATE TABLE demo2_alter_0 (    
     `user_name` VARCHAR(32) DEFAULT '',
@@ -132,227 +134,13 @@ None
 
 
 
-
-
-
--- name: test_online_optimize_table
-create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
-(
-    PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
-    PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
-    PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
-) distributed by hash(k) buckets 10;
--- result:
--- !result
-insert into t values(1, '2020-06-01'),(2, '2020-07-01'),(3, '2020-08-01');
--- result:
--- !result
-show create table t;
--- result:
-t	CREATE TABLE `t` (
-  `k` int(11) NULL COMMENT "",
-  `k1` date NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`, `k1`)
-PARTITION BY RANGE(`k1`)
-(PARTITION p202006 VALUES [("0000-01-01"), ("2020-07-01")),
-PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
-PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
-DISTRIBUTED BY HASH(`k`) BUCKETS 10 
-PROPERTIES (
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "3"
-);
--- !result
-alter table t distributed by hash(k);
--- result:
--- !result
-insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
--- result:
--- !result
-select sleep(1);
--- result:
-1
--- !result
-insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
--- result:
--- !result
-select sleep(1);
--- result:
-1
--- !result
-insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
--- result:
--- !result
-select sleep(1);
--- result:
-1
--- !result
-insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
--- result:
--- !result
-select sleep(1);
--- result:
-1
--- !result
-insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
--- result:
--- !result
-select sleep(1);
--- result:
-1
--- !result
-insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
--- result:
--- !result
-select sleep(1);
--- result:
-1
--- !result
-insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
--- result:
--- !result
-select sleep(1);
--- result:
-1
--- !result
-insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
--- result:
--- !result
-select sleep(1);
--- result:
-1
--- !result
-insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
--- result:
--- !result
-select sleep(1);
--- result:
-1
--- !result
-insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
--- result:
--- !result
-select sleep(1);
--- result:
-1
--- !result
-insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
--- result:
--- !result
-select sleep(1);
--- result:
-1
--- !result
-insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
--- result:
--- !result
-select sleep(1);
--- result:
-1
--- !result
-insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
--- result:
--- !result
-select sleep(1);
--- result:
-1
--- !result
-insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
--- result:
--- !result
-select sleep(1);
--- result:
-1
--- !result
-insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
--- result:
--- !result
-select sleep(1);
--- result:
-1
--- !result
-insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
--- result:
--- !result
-select sleep(1);
--- result:
-1
--- !result
-insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
--- result:
--- !result
-select sleep(1);
--- result:
-1
--- !result
-insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
--- result:
--- !result
-select sleep(1);
--- result:
-1
--- !result
-insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
--- result:
--- !result
-select sleep(1);
--- result:
-1
--- !result
-insert into t values(4, '2020-06-01'),(5, '2020-07-01'),(6, '2020-08-01');
--- result:
--- !result
-select sleep(1);
--- result:
-1
--- !result
-select count(*) from t;
--- result:
-63
--- !result
-function: wait_optimize_table_finish()
--- result:
-None
--- !result
-show create table t;
--- result:
-t	CREATE TABLE `t` (
-  `k` int(11) NULL COMMENT "",
-  `k1` date NULL COMMENT ""
-) ENGINE=OLAP 
-DUPLICATE KEY(`k`, `k1`)
-PARTITION BY RANGE(`k1`)
-(PARTITION p202006 VALUES [("0000-01-01"), ("2020-07-01")),
-PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
-PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
-DISTRIBUTED BY HASH(`k`)
-PROPERTIES (
-"compression" = "LZ4",
-"fast_schema_evolution" = "true",
-"replicated_storage" = "true",
-"replication_num" = "3"
-);
--- !result
-select count(*) from t;
--- result:
-63
--- !result
-
-
-
-
-
-
 -- name: test_online_optimize_table_pk
-create table t(k int) primary key(k) distributed by hash(k) buckets 10;
+create table tpk(k int) primary key(k) distributed by hash(k) buckets 10;
 -- result:
 -- !result
-show create table t;
+show create table tpk;
 -- result:
-t	CREATE TABLE `t` (
+tpk	CREATE TABLE `tpk` (
   `k` int(11) NOT NULL COMMENT ""
 ) ENGINE=OLAP 
 PRIMARY KEY(`k`)
@@ -365,142 +153,142 @@ PROPERTIES (
 "replication_num" = "3"
 );
 -- !result
-insert into t values(1);
+insert into tpk values(1);
 -- result:
 -- !result
-alter table t distributed by hash(k);
+alter table tpk distributed by hash(k);
 -- result:
 -- !result
-insert into t values(2);
--- result:
--- !result
-select sleep(1);
--- result:
-1
--- !result
-insert into t values(3);
+insert into tpk values(2);
 -- result:
 -- !result
 select sleep(1);
 -- result:
 1
 -- !result
-insert into t values(4);
+insert into tpk values(3);
 -- result:
 -- !result
 select sleep(1);
 -- result:
 1
 -- !result
-insert into t values(5);
+insert into tpk values(4);
 -- result:
 -- !result
 select sleep(1);
 -- result:
 1
 -- !result
-insert into t values(6);
+insert into tpk values(5);
 -- result:
 -- !result
 select sleep(1);
 -- result:
 1
 -- !result
-insert into t values(7);
+insert into tpk values(6);
 -- result:
 -- !result
 select sleep(1);
 -- result:
 1
 -- !result
-insert into t values(8);
+insert into tpk values(7);
 -- result:
 -- !result
 select sleep(1);
 -- result:
 1
 -- !result
-insert into t values(9);
+insert into tpk values(8);
 -- result:
 -- !result
 select sleep(1);
 -- result:
 1
 -- !result
-insert into t values(10);
+insert into tpk values(9);
 -- result:
 -- !result
 select sleep(1);
 -- result:
 1
 -- !result
-insert into t values(11);
+insert into tpk values(10);
 -- result:
 -- !result
 select sleep(1);
 -- result:
 1
 -- !result
-insert into t values(12);
+insert into tpk values(11);
 -- result:
 -- !result
 select sleep(1);
 -- result:
 1
 -- !result
-insert into t values(13);
+insert into tpk values(12);
 -- result:
 -- !result
 select sleep(1);
 -- result:
 1
 -- !result
-insert into t values(14);
+insert into tpk values(13);
 -- result:
 -- !result
 select sleep(1);
 -- result:
 1
 -- !result
-insert into t values(15);
+insert into tpk values(14);
 -- result:
 -- !result
 select sleep(1);
 -- result:
 1
 -- !result
-insert into t values(16);
+insert into tpk values(15);
 -- result:
 -- !result
 select sleep(1);
 -- result:
 1
 -- !result
-insert into t values(17);
+insert into tpk values(16);
 -- result:
 -- !result
 select sleep(1);
 -- result:
 1
 -- !result
-insert into t values(18);
+insert into tpk values(17);
 -- result:
 -- !result
 select sleep(1);
 -- result:
 1
 -- !result
-insert into t values(19);
+insert into tpk values(18);
 -- result:
 -- !result
 select sleep(1);
 -- result:
 1
 -- !result
-insert into t values(20);
+insert into tpk values(19);
 -- result:
 -- !result
-select * from t;
+select sleep(1);
+-- result:
+1
+-- !result
+insert into tpk values(20);
+-- result:
+-- !result
+select * from tpk;
 -- result:
 1
 2
@@ -508,28 +296,28 @@ select * from t;
 4
 5
 6
-7
-8
 9
-10
 11
 12
-13
 14
-15
 16
-17
 18
-19
 20
+7
+8
+10
+13
+15
+17
+19
 -- !result
 function: wait_optimize_table_finish()
 -- result:
 None
 -- !result
-show create table t;
+show create table tpk;
 -- result:
-t	CREATE TABLE `t` (
+tpk	CREATE TABLE `tpk` (
   `k` int(11) NOT NULL COMMENT ""
 ) ENGINE=OLAP 
 PRIMARY KEY(`k`)
@@ -542,7 +330,7 @@ PROPERTIES (
 "replication_num" = "3"
 );
 -- !result
-select * from t;
+select * from tpk;
 -- result:
 1
 2
@@ -551,7 +339,6 @@ select * from t;
 5
 6
 7
-8
 9
 10
 11
@@ -564,11 +351,8 @@ select * from t;
 18
 19
 20
+8
 -- !result
-
-
-
-
 
 -- name: test_online_optimize_table_stream_load
 create database db_${uuid0};
@@ -884,7 +668,19 @@ select count(*) from t;
 
 
 
--- name: test_optimize_table_with_special_characters
+
+
+
+
+
+
+
+
+
+
+
+
+-- name: test_optimize_table_with_special_characters @sequential
 create table `t#t`(k int) distributed by hash(k) buckets 10;
 -- result:
 -- !result
@@ -950,7 +746,6 @@ PROPERTIES (
 admin set frontend config ('enable_online_optimize_table'='true');
 -- result:
 -- !result
-
 -- name: test_online_optimize_table_expr_partition
 create table t(k int, k1 date) PARTITION BY date_trunc('day', k1)
 distributed by hash(k) buckets 10;
@@ -1146,6 +941,18 @@ select count(*) from t;
 -- result:
 63
 -- !result
+
+
+
+
+
+
+
+
+
+
+
+
 -- name: test_cancel_optimize
 create table t(k int) distributed by hash(k) buckets 10;
 -- result:
@@ -1159,4 +966,675 @@ cancel alter table optimize from t;
 function: wait_optimize_table_finish(expect_status="CANCELLED")
 -- result:
 None
+-- !result
+
+
+
+
+
+
+
+
+
+
+
+-- name: test_online_optimize_table_batch
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
+(
+    PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
+    PARTITION `p202007` VALUES LESS THAN ("2020-08-01"),
+    PARTITION `p202008` VALUES LESS THAN ("2020-09-01")
+) distributed by hash(k) buckets 10;
+-- result:
+-- !result
+alter table t distributed by hash(k);
+-- result:
+-- !result
+shell: bash ${root_path}/sql/test_optimize_table/T/insert.sh "${mysql_cmd}" db_${uuid0}
+-- result:
+0
+
+-- !result
+select * from t;
+-- result:
+107	2020-07-01
+109	2020-07-01
+161	2020-07-01
+174	2020-07-01
+182	2020-07-01
+195	2020-07-01
+197	2020-07-01
+203	2020-08-01
+231	2020-08-01
+237	2020-08-01
+104	2020-07-01
+112	2020-07-01
+115	2020-07-01
+122	2020-07-01
+127	2020-07-01
+129	2020-07-01
+135	2020-07-01
+171	2020-07-01
+191	2020-07-01
+207	2020-08-01
+221	2020-08-01
+224	2020-08-01
+236	2020-08-01
+241	2020-08-01
+242	2020-08-01
+254	2020-08-01
+282	2020-08-01
+287	2020-08-01
+256	2020-08-01
+261	2020-08-01
+279	2020-08-01
+288	2020-08-01
+297	2020-08-01
+102	2020-07-01
+105	2020-07-01
+111	2020-07-01
+123	2020-07-01
+125	2020-07-01
+126	2020-07-01
+134	2020-07-01
+157	2020-07-01
+166	2020-07-01
+175	2020-07-01
+196	2020-07-01
+199	2020-07-01
+130	2020-07-01
+132	2020-07-01
+147	2020-07-01
+153	2020-07-01
+154	2020-07-01
+181	2020-07-01
+206	2020-08-01
+208	2020-08-01
+214	2020-08-01
+220	2020-08-01
+225	2020-08-01
+228	2020-08-01
+232	2020-08-01
+249	2020-08-01
+250	2020-08-01
+262	2020-08-01
+268	2020-08-01
+274	2020-08-01
+188	2020-07-01
+198	2020-07-01
+213	2020-08-01
+217	2020-08-01
+235	2020-08-01
+238	2020-08-01
+252	2020-08-01
+266	2020-08-01
+273	2020-08-01
+276	2020-08-01
+280	2020-08-01
+300	2020-08-01
+211	2020-08-01
+223	2020-08-01
+226	2020-08-01
+240	2020-08-01
+243	2020-08-01
+255	2020-08-01
+259	2020-08-01
+271	2020-08-01
+293	2020-08-01
+101	2020-07-01
+113	2020-07-01
+116	2020-07-01
+131	2020-07-01
+137	2020-07-01
+146	2020-07-01
+148	2020-07-01
+151	2020-07-01
+152	2020-07-01
+165	2020-07-01
+172	2020-07-01
+184	2020-07-01
+190	2020-07-01
+245	2020-08-01
+299	2020-08-01
+202	2020-08-01
+204	2020-08-01
+210	2020-08-01
+212	2020-08-01
+230	2020-08-01
+234	2020-08-01
+247	2020-08-01
+251	2020-08-01
+253	2020-08-01
+258	2020-08-01
+260	2020-08-01
+269	2020-08-01
+284	2020-08-01
+289	2020-08-01
+292	2020-08-01
+119	2020-07-01
+133	2020-07-01
+140	2020-07-01
+145	2020-07-01
+155	2020-07-01
+158	2020-07-01
+169	2020-07-01
+178	2020-07-01
+200	2020-07-01
+117	2020-07-01
+118	2020-07-01
+124	2020-07-01
+139	2020-07-01
+144	2020-07-01
+162	2020-07-01
+185	2020-07-01
+186	2020-07-01
+285	2020-08-01
+192	2020-07-01
+294	2020-08-01
+215	2020-08-01
+216	2020-08-01
+219	2020-08-01
+222	2020-08-01
+227	2020-08-01
+233	2020-08-01
+248	2020-08-01
+263	2020-08-01
+264	2020-08-01
+272	2020-08-01
+275	2020-08-01
+278	2020-08-01
+283	2020-08-01
+286	2020-08-01
+291	2020-08-01
+106	2020-07-01
+108	2020-07-01
+120	2020-07-01
+143	2020-07-01
+160	2020-07-01
+177	2020-07-01
+180	2020-07-01
+183	2020-07-01
+193	2020-07-01
+103	2020-07-01
+110	2020-07-01
+121	2020-07-01
+136	2020-07-01
+141	2020-07-01
+142	2020-07-01
+149	2020-07-01
+150	2020-07-01
+156	2020-07-01
+159	2020-07-01
+164	2020-07-01
+167	2020-07-01
+168	2020-07-01
+173	2020-07-01
+176	2020-07-01
+179	2020-07-01
+239	2020-08-01
+244	2020-08-01
+267	2020-08-01
+270	2020-08-01
+1	2020-06-01
+2	2020-06-01
+3	2020-06-01
+4	2020-06-01
+5	2020-06-01
+6	2020-06-01
+7	2020-06-01
+8	2020-06-01
+9	2020-06-01
+10	2020-06-01
+11	2020-06-01
+12	2020-06-01
+13	2020-06-01
+14	2020-06-01
+15	2020-06-01
+16	2020-06-01
+17	2020-06-01
+18	2020-06-01
+19	2020-06-01
+20	2020-06-01
+21	2020-06-01
+22	2020-06-01
+23	2020-06-01
+24	2020-06-01
+25	2020-06-01
+26	2020-06-01
+27	2020-06-01
+28	2020-06-01
+29	2020-06-01
+30	2020-06-01
+31	2020-06-01
+32	2020-06-01
+33	2020-06-01
+34	2020-06-01
+35	2020-06-01
+36	2020-06-01
+37	2020-06-01
+38	2020-06-01
+39	2020-06-01
+40	2020-06-01
+41	2020-06-01
+42	2020-06-01
+43	2020-06-01
+44	2020-06-01
+45	2020-06-01
+46	2020-06-01
+47	2020-06-01
+48	2020-06-01
+49	2020-06-01
+50	2020-06-01
+51	2020-06-01
+52	2020-06-01
+53	2020-06-01
+54	2020-06-01
+55	2020-06-01
+56	2020-06-01
+57	2020-06-01
+58	2020-06-01
+59	2020-06-01
+60	2020-06-01
+61	2020-06-01
+62	2020-06-01
+63	2020-06-01
+64	2020-06-01
+65	2020-06-01
+66	2020-06-01
+67	2020-06-01
+68	2020-06-01
+69	2020-06-01
+70	2020-06-01
+71	2020-06-01
+72	2020-06-01
+73	2020-06-01
+74	2020-06-01
+75	2020-06-01
+76	2020-06-01
+77	2020-06-01
+78	2020-06-01
+79	2020-06-01
+80	2020-06-01
+81	2020-06-01
+82	2020-06-01
+83	2020-06-01
+84	2020-06-01
+85	2020-06-01
+86	2020-06-01
+87	2020-06-01
+88	2020-06-01
+89	2020-06-01
+90	2020-06-01
+91	2020-06-01
+92	2020-06-01
+93	2020-06-01
+94	2020-06-01
+95	2020-06-01
+96	2020-06-01
+97	2020-06-01
+98	2020-06-01
+99	2020-06-01
+100	2020-06-01
+281	2020-08-01
+114	2020-07-01
+128	2020-07-01
+138	2020-07-01
+163	2020-07-01
+170	2020-07-01
+187	2020-07-01
+189	2020-07-01
+194	2020-07-01
+290	2020-08-01
+205	2020-08-01
+218	2020-08-01
+246	2020-08-01
+265	2020-08-01
+295	2020-08-01
+201	2020-08-01
+209	2020-08-01
+229	2020-08-01
+257	2020-08-01
+277	2020-08-01
+298	2020-08-01
+296	2020-08-01
+-- !result
+select count(*) from t;
+-- result:
+300
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+show create table t;
+-- result:
+t	CREATE TABLE `t` (
+  `k` int(11) NULL COMMENT "",
+  `k1` date NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`, `k1`)
+PARTITION BY RANGE(`k1`)
+(PARTITION p202006 VALUES [("0000-01-01"), ("2020-07-01")),
+PARTITION p202007 VALUES [("2020-07-01"), ("2020-08-01")),
+PARTITION p202008 VALUES [("2020-08-01"), ("2020-09-01")))
+DISTRIBUTED BY HASH(`k`)
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "3"
+);
+-- !result
+select * from t;
+-- result:
+1	2020-06-01
+2	2020-06-01
+3	2020-06-01
+4	2020-06-01
+5	2020-06-01
+6	2020-06-01
+7	2020-06-01
+8	2020-06-01
+9	2020-06-01
+10	2020-06-01
+11	2020-06-01
+12	2020-06-01
+13	2020-06-01
+14	2020-06-01
+15	2020-06-01
+16	2020-06-01
+17	2020-06-01
+18	2020-06-01
+19	2020-06-01
+20	2020-06-01
+21	2020-06-01
+22	2020-06-01
+23	2020-06-01
+24	2020-06-01
+25	2020-06-01
+26	2020-06-01
+27	2020-06-01
+28	2020-06-01
+29	2020-06-01
+30	2020-06-01
+31	2020-06-01
+32	2020-06-01
+33	2020-06-01
+34	2020-06-01
+35	2020-06-01
+36	2020-06-01
+37	2020-06-01
+38	2020-06-01
+39	2020-06-01
+40	2020-06-01
+41	2020-06-01
+42	2020-06-01
+43	2020-06-01
+44	2020-06-01
+45	2020-06-01
+46	2020-06-01
+47	2020-06-01
+48	2020-06-01
+49	2020-06-01
+50	2020-06-01
+51	2020-06-01
+52	2020-06-01
+53	2020-06-01
+54	2020-06-01
+55	2020-06-01
+56	2020-06-01
+57	2020-06-01
+58	2020-06-01
+59	2020-06-01
+60	2020-06-01
+61	2020-06-01
+62	2020-06-01
+63	2020-06-01
+64	2020-06-01
+65	2020-06-01
+66	2020-06-01
+67	2020-06-01
+68	2020-06-01
+69	2020-06-01
+70	2020-06-01
+71	2020-06-01
+72	2020-06-01
+73	2020-06-01
+74	2020-06-01
+75	2020-06-01
+76	2020-06-01
+77	2020-06-01
+78	2020-06-01
+79	2020-06-01
+80	2020-06-01
+81	2020-06-01
+82	2020-06-01
+83	2020-06-01
+84	2020-06-01
+85	2020-06-01
+86	2020-06-01
+87	2020-06-01
+88	2020-06-01
+89	2020-06-01
+90	2020-06-01
+91	2020-06-01
+92	2020-06-01
+93	2020-06-01
+94	2020-06-01
+95	2020-06-01
+96	2020-06-01
+97	2020-06-01
+98	2020-06-01
+99	2020-06-01
+100	2020-06-01
+101	2020-07-01
+102	2020-07-01
+103	2020-07-01
+104	2020-07-01
+105	2020-07-01
+106	2020-07-01
+107	2020-07-01
+108	2020-07-01
+109	2020-07-01
+110	2020-07-01
+111	2020-07-01
+112	2020-07-01
+113	2020-07-01
+114	2020-07-01
+115	2020-07-01
+116	2020-07-01
+117	2020-07-01
+118	2020-07-01
+119	2020-07-01
+120	2020-07-01
+121	2020-07-01
+122	2020-07-01
+123	2020-07-01
+124	2020-07-01
+125	2020-07-01
+126	2020-07-01
+127	2020-07-01
+128	2020-07-01
+129	2020-07-01
+130	2020-07-01
+131	2020-07-01
+132	2020-07-01
+133	2020-07-01
+134	2020-07-01
+135	2020-07-01
+136	2020-07-01
+137	2020-07-01
+138	2020-07-01
+139	2020-07-01
+140	2020-07-01
+141	2020-07-01
+142	2020-07-01
+143	2020-07-01
+144	2020-07-01
+145	2020-07-01
+146	2020-07-01
+147	2020-07-01
+148	2020-07-01
+149	2020-07-01
+150	2020-07-01
+151	2020-07-01
+152	2020-07-01
+153	2020-07-01
+154	2020-07-01
+155	2020-07-01
+156	2020-07-01
+157	2020-07-01
+158	2020-07-01
+159	2020-07-01
+160	2020-07-01
+161	2020-07-01
+162	2020-07-01
+163	2020-07-01
+164	2020-07-01
+165	2020-07-01
+166	2020-07-01
+167	2020-07-01
+168	2020-07-01
+169	2020-07-01
+170	2020-07-01
+171	2020-07-01
+172	2020-07-01
+173	2020-07-01
+174	2020-07-01
+175	2020-07-01
+176	2020-07-01
+177	2020-07-01
+178	2020-07-01
+179	2020-07-01
+180	2020-07-01
+181	2020-07-01
+182	2020-07-01
+183	2020-07-01
+184	2020-07-01
+185	2020-07-01
+186	2020-07-01
+187	2020-07-01
+188	2020-07-01
+189	2020-07-01
+190	2020-07-01
+191	2020-07-01
+192	2020-07-01
+193	2020-07-01
+194	2020-07-01
+195	2020-07-01
+196	2020-07-01
+197	2020-07-01
+198	2020-07-01
+199	2020-07-01
+200	2020-07-01
+201	2020-08-01
+202	2020-08-01
+203	2020-08-01
+204	2020-08-01
+205	2020-08-01
+206	2020-08-01
+207	2020-08-01
+208	2020-08-01
+209	2020-08-01
+210	2020-08-01
+211	2020-08-01
+212	2020-08-01
+213	2020-08-01
+214	2020-08-01
+215	2020-08-01
+216	2020-08-01
+217	2020-08-01
+218	2020-08-01
+219	2020-08-01
+220	2020-08-01
+221	2020-08-01
+222	2020-08-01
+223	2020-08-01
+224	2020-08-01
+225	2020-08-01
+226	2020-08-01
+227	2020-08-01
+228	2020-08-01
+229	2020-08-01
+230	2020-08-01
+231	2020-08-01
+232	2020-08-01
+233	2020-08-01
+234	2020-08-01
+235	2020-08-01
+236	2020-08-01
+237	2020-08-01
+238	2020-08-01
+239	2020-08-01
+240	2020-08-01
+241	2020-08-01
+242	2020-08-01
+243	2020-08-01
+244	2020-08-01
+245	2020-08-01
+246	2020-08-01
+247	2020-08-01
+248	2020-08-01
+249	2020-08-01
+250	2020-08-01
+251	2020-08-01
+252	2020-08-01
+253	2020-08-01
+254	2020-08-01
+255	2020-08-01
+256	2020-08-01
+257	2020-08-01
+258	2020-08-01
+259	2020-08-01
+260	2020-08-01
+261	2020-08-01
+262	2020-08-01
+263	2020-08-01
+264	2020-08-01
+265	2020-08-01
+266	2020-08-01
+267	2020-08-01
+268	2020-08-01
+269	2020-08-01
+270	2020-08-01
+271	2020-08-01
+272	2020-08-01
+273	2020-08-01
+274	2020-08-01
+275	2020-08-01
+276	2020-08-01
+277	2020-08-01
+278	2020-08-01
+279	2020-08-01
+280	2020-08-01
+281	2020-08-01
+282	2020-08-01
+283	2020-08-01
+284	2020-08-01
+285	2020-08-01
+286	2020-08-01
+287	2020-08-01
+288	2020-08-01
+289	2020-08-01
+290	2020-08-01
+291	2020-08-01
+292	2020-08-01
+293	2020-08-01
+294	2020-08-01
+295	2020-08-01
+296	2020-08-01
+297	2020-08-01
+298	2020-08-01
+299	2020-08-01
+300	2020-08-01
+-- !result
+select count(*) from t;
+-- result:
+300
 -- !result
