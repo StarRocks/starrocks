@@ -61,7 +61,6 @@ private:
 
     ObjectCacheOptions _options;
     std::shared_ptr<starcache::StarCache> _cache;
-    bool _own_star_cache = false;
 };
 
 } // namespace starrocks
