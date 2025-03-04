@@ -34,6 +34,7 @@ public class MultiOpPattern extends Pattern {
             .add(OperatorType.LOGICAL_BINLOG_SCAN)
             .add(OperatorType.LOGICAL_VIEW_SCAN)
             .add(OperatorType.LOGICAL_PAIMON_SCAN)
+            .add(OperatorType.LOGICAL_ODPS_SCAN)
             .add(OperatorType.PATTERN_SCAN)
             .build();
 

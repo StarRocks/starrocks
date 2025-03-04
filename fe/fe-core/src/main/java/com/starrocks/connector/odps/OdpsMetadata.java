@@ -405,12 +405,12 @@ public class OdpsMetadata implements ConnectorMetadata {
         long numRecord = 0;
         for (long i = rowsPerSplit; i < totalRowCount; i += rowsPerSplit) {
             InputSplitWithRowRange splitByRowOffset =
-                    (InputSplitWithRowRange) inputSplitAssigner.getSplitByRowOffset(numRecord, i);
+                    (InputSplitWithRowRange) inputSplitAssigner.getSplitByRowOffset(numRecord, rowsPerSplit);
             splits.add(splitByRowOffset);
             numRecord = i;
         }
         InputSplitWithRowRange splitByRowOffset =
-                (InputSplitWithRowRange) inputSplitAssigner.getSplitByRowOffset(numRecord, totalRowCount);
+                (InputSplitWithRowRange) inputSplitAssigner.getSplitByRowOffset(numRecord, totalRowCount - numRecord);
         splits.add(splitByRowOffset);
         odpsSplitsInfo = new OdpsSplitsInfo(splits, rowScan,
                 OdpsSplitsInfo.SplitPolicy.ROW_OFFSET, splitProperties);

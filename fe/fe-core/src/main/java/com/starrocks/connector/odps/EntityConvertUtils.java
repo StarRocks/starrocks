@@ -49,6 +49,11 @@ public class EntityConvertUtils {
                 return Type.FLOAT;
             case DECIMAL:
                 DecimalTypeInfo decimalTypeInfo = (DecimalTypeInfo) typeInfo;
+                //In odps 2.0, the maximum length of decimal is 38, while in 1.0 it is 54. You need to convert it to String type for processing.
+                //https://help.aliyun.com/zh/maxcompute/user-guide/maxcompute-v2-0-data-type-edition?spm=a2c4g.11186623.help-menu-27797.d_2_15_0_2.1c01123dDL8rEV
+                if (decimalTypeInfo.getPrecision() > 38) {
+                    return ScalarType.createDefaultCatalogString();
+                }
                 return ScalarType.createUnifiedDecimalType(decimalTypeInfo.getPrecision(), decimalTypeInfo.getScale());
             case DOUBLE:
                 return Type.DOUBLE;
