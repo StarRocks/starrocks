@@ -449,16 +449,18 @@ public:
     // current only used by adaptive_nullable_column
     virtual void materialized_nullable() const {}
 
-    /// If the column contains subcolumns (such as Array, Nullable, etc), do callback on them.
-    /// Shallow: doesn't do recursive calls; don't do call for itself.
+    // If the column contains subcolumns (such as Array, Nullable, etc), do callback on them.
+    // Shallow: doesn't do recursive calls; don't do call for itself.
     virtual void mutate_each_subcolumn() {}
 
+    // mutate the column to mutable column, but doesn't reset the column
     MutablePtr mutate() const&& {
         MutablePtr res = try_mutate();
         res->mutate_each_subcolumn();
         return res;
     }
 
+    // mutate the column to mutable column, and reset the column to nullptr
     static MutablePtr mutate(Ptr ptr) {
         MutablePtr res = ptr->try_mutate(); /// Now use_count is 2.
         ptr.reset();                        /// Reset use_count to 1.
@@ -494,8 +496,8 @@ struct IsMutableColumns<> {
 template <typename Base, typename Derived>
 class ColumnFactory : public Base {
 private:
-    Derived* derived() { return static_cast<Derived*>(this); }
-    const Derived* derived() const { return static_cast<const Derived*>(this); }
+    Derived* derived() { return down_cast<Derived*>(this); }
+    const Derived* derived() const { return down_cast<const Derived*>(this); }
 
 public:
     template <typename... Args>
