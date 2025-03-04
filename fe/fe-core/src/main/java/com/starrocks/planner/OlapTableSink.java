@@ -162,7 +162,7 @@ public class OlapTableSink extends DataSink {
             for (int i = 0; i < this.tupleDescriptor.getSlots().size(); ++i) {
                 SlotDescriptor slot = this.tupleDescriptor.getSlots().get(i);
                 if (slot.getColumn().isAutoIncrement()) {
-                    this.autoIncrementSlotId = i;
+                    this.autoIncrementSlotId = slot.getId().asInt();
                     break;
                 }
             }
