@@ -18,7 +18,7 @@
 
 #include <memory>
 
-#include "block_cache/block_cache.h"
+#include "cache/block_cache/block_cache.h"
 #include "column/column_helper.h"
 #include "exec/hdfs_scanner_orc.h"
 #include "exec/hdfs_scanner_parquet.h"
@@ -1682,8 +1682,8 @@ TEST_F(HdfsScannerTest, TestParquetRuntimeFilter) {
         ASSERT_TRUE(status.ok()) << status.message();
 
         // build runtime filter.
-        JoinRuntimeFilter* f = RuntimeFilterHelper::create_join_runtime_filter(&_pool, LogicalType::TYPE_BIGINT);
-        f->init(10);
+        RuntimeFilter* f = RuntimeFilterHelper::create_join_runtime_filter(&_pool, LogicalType::TYPE_BIGINT, 0);
+        f->get_bloom_filter()->init(10);
         ColumnPtr column = ColumnHelper::create_column(tuple_desc->slots()[0]->type(), false);
         auto c = ColumnHelper::cast_to_raw<LogicalType::TYPE_BIGINT>(column);
         c->append(tc.max_value);

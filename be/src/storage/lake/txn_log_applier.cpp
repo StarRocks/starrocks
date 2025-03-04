@@ -176,8 +176,11 @@ public:
         SCOPED_THREAD_LOCAL_CHECK_MEM_LIMIT_SETTER(true);
         SCOPED_THREAD_LOCAL_SINGLETON_CHECK_MEM_TRACKER_SETTER(
                 config::enable_pk_strict_memcheck ? _tablet.update_mgr()->mem_tracker() : nullptr);
+        // local persistent index will update index version, so we need to load first
         // still need prepre primary index even there is an empty compaction
-        if (_index_entry == nullptr && _has_empty_compaction) {
+        if (_index_entry == nullptr &&
+            (_has_empty_compaction || (_metadata->enable_persistent_index() &&
+                                       _metadata->persistent_index_type() == PersistentIndexTypePB::LOCAL))) {
             // get lock to avoid gc
             _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
             DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
@@ -249,11 +252,11 @@ private:
         _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
         DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
 
-        RETURN_IF_ERROR(prepare_primary_index());
         if (op_write.dels_size() == 0 && op_write.rowset().num_rows() == 0 &&
             !op_write.rowset().has_delete_predicate()) {
             return Status::OK();
         }
+        RETURN_IF_ERROR(prepare_primary_index());
         if (is_column_mode_partial_update(op_write)) {
             return _tablet.update_mgr()->publish_column_mode_partial_update(op_write, txn_id, _metadata, &_tablet,
                                                                             &_builder, _base_version);
@@ -268,15 +271,19 @@ private:
         _tablet.update_mgr()->lock_shard_pk_index_shard(_tablet.id());
         DeferOp defer([&]() { _tablet.update_mgr()->unlock_shard_pk_index_shard(_tablet.id()); });
 
-        RETURN_IF_ERROR(prepare_primary_index());
         if (op_compaction.input_rowsets().empty()) {
             DCHECK(!op_compaction.has_output_rowset() || op_compaction.output_rowset().num_rows() == 0);
             // Apply the compaction operation to the cloud native pk index.
             // This ensures that the pk index is updated with the compaction changes.
             _builder.remove_compacted_sst(op_compaction);
+            if (op_compaction.input_sstables().empty() || !op_compaction.has_output_sstable()) {
+                return Status::OK();
+            }
+            RETURN_IF_ERROR(prepare_primary_index());
             RETURN_IF_ERROR(_index_entry->value().apply_opcompaction(*_metadata, op_compaction));
             return Status::OK();
         }
+        RETURN_IF_ERROR(prepare_primary_index());
         return _tablet.update_mgr()->publish_primary_compaction(op_compaction, txn_id, *_metadata, _tablet,
                                                                 _index_entry, &_builder, _base_version);
     }
@@ -308,23 +315,29 @@ private:
     }
 
     Status apply_replication_log(const TxnLogPB_OpReplication& op_replication, int64_t txn_id) {
-        if (op_replication.txn_meta().txn_state() != ReplicationTxnStatePB::TXN_REPLICATED) {
+        const auto& txn_meta = op_replication.txn_meta();
+
+        if (txn_meta.txn_state() != ReplicationTxnStatePB::TXN_REPLICATED) {
             LOG(WARNING) << "Fail to apply replication log, invalid txn meta state: "
-                         << ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state());
-            return Status::Corruption("Invalid txn meta state: " +
-                                      ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state()));
-        }
-        if (op_replication.txn_meta().snapshot_version() != _new_version) {
-            LOG(WARNING) << "Fail to apply replication log, mismatched snapshot version and new version"
-                         << ", snapshot version: " << op_replication.txn_meta().snapshot_version()
-                         << ", new version: " << _new_version;
-            return Status::Corruption("mismatched snapshot version and new version");
+                         << ReplicationTxnStatePB_Name(txn_meta.txn_state());
+            return Status::Corruption("Invalid txn meta state: " + ReplicationTxnStatePB_Name(txn_meta.txn_state()));
         }
 
-        if (op_replication.txn_meta().incremental_snapshot()) {
-            DCHECK(_new_version - _base_version == op_replication.op_writes_size())
-                    << ", base_version: " << _base_version << ", new_version: " << _new_version
-                    << ", op_write_size: " << op_replication.op_writes_size();
+        if (txn_meta.data_version() == 0) {
+            if (txn_meta.snapshot_version() != _new_version) {
+                LOG(WARNING) << "Fail to apply replication log, mismatched snapshot version and new version"
+                             << ", snapshot version: " << txn_meta.snapshot_version()
+                             << ", base version: " << txn_meta.visible_version() << ", new version: " << _new_version;
+                return Status::Corruption("mismatched snapshot version and new version");
+            }
+        } else if (txn_meta.snapshot_version() - txn_meta.data_version() + txn_meta.visible_version() != _new_version) {
+            LOG(WARNING) << "Fail to apply replication log, mismatched version, snapshot version: "
+                         << txn_meta.snapshot_version() << ", data version: " << txn_meta.data_version()
+                         << ", old version: " << txn_meta.visible_version() << ", new version: " << _new_version;
+            return Status::Corruption("mismatched version");
+        }
+
+        if (txn_meta.incremental_snapshot()) {
             for (const auto& op_write : op_replication.op_writes()) {
                 RETURN_IF_ERROR(apply_write_log(op_write, txn_id));
             }
@@ -582,26 +595,35 @@ private:
     }
 
     Status apply_replication_log(const TxnLogPB_OpReplication& op_replication) {
-        if (op_replication.txn_meta().txn_state() != ReplicationTxnStatePB::TXN_REPLICATED) {
+        const auto& txn_meta = op_replication.txn_meta();
+
+        if (txn_meta.txn_state() != ReplicationTxnStatePB::TXN_REPLICATED) {
             LOG(WARNING) << "Fail to apply replication log, invalid txn meta state: "
-                         << ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state());
-            return Status::Corruption("Invalid txn meta state: " +
-                                      ReplicationTxnStatePB_Name(op_replication.txn_meta().txn_state()));
-        }
-        if (op_replication.txn_meta().snapshot_version() != _new_version) {
-            LOG(WARNING) << "Fail to apply replication log, mismatched snapshot version and new version"
-                         << ", snapshot version: " << op_replication.txn_meta().snapshot_version()
-                         << ", new version: " << _new_version;
-            return Status::Corruption("mismatched snapshot version and new version");
+                         << ReplicationTxnStatePB_Name(txn_meta.txn_state());
+            return Status::Corruption("Invalid txn meta state: " + ReplicationTxnStatePB_Name(txn_meta.txn_state()));
         }
 
-        if (op_replication.txn_meta().incremental_snapshot()) {
+        if (txn_meta.data_version() == 0) {
+            if (txn_meta.snapshot_version() != _new_version) {
+                LOG(WARNING) << "Fail to apply replication log, mismatched snapshot version and new version"
+                             << ", snapshot version: " << txn_meta.snapshot_version()
+                             << ", base version: " << txn_meta.visible_version() << ", new version: " << _new_version;
+                return Status::Corruption("mismatched snapshot version and new version");
+            }
+        } else if (txn_meta.snapshot_version() - txn_meta.data_version() + txn_meta.visible_version() != _new_version) {
+            LOG(WARNING) << "Fail to apply replication log, mismatched version, snapshot version: "
+                         << txn_meta.snapshot_version() << ", data version: " << txn_meta.data_version()
+                         << ", old version: " << txn_meta.visible_version() << ", new version: " << _new_version;
+            return Status::Corruption("mismatched version");
+        }
+
+        if (txn_meta.incremental_snapshot()) {
             for (const auto& op_write : op_replication.op_writes()) {
                 RETURN_IF_ERROR(apply_write_log(op_write));
             }
             LOG(INFO) << "Apply incremental replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << _metadata->version() << ", new_version: " << _new_version
-                      << ", txn_id: " << op_replication.txn_meta().txn_id();
+                      << ", txn_id: " << txn_meta.txn_id();
         } else {
             auto old_rowsets = std::move(*_metadata->mutable_rowsets());
             _metadata->mutable_rowsets()->Clear();
@@ -615,7 +637,7 @@ private:
 
             LOG(INFO) << "Apply full replication log finish. tablet_id: " << _tablet.id()
                       << ", base_version: " << _metadata->version() << ", new_version: " << _new_version
-                      << ", txn_id: " << op_replication.txn_meta().txn_id();
+                      << ", txn_id: " << txn_meta.txn_id();
         }
 
         if (op_replication.has_source_schema()) {

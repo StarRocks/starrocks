@@ -134,6 +134,8 @@ public abstract class HyperQueryJob {
             LOG.error(message, e);
             lastFailure = new RuntimeException(message, e);
             return Collections.emptyList();
+        } finally {
+            context.setStartTime();
         }
     }
 

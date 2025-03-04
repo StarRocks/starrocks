@@ -252,6 +252,8 @@ public class AlterMaterializedViewTest {
         // create the table and refresh
         starRocksAssert.dropTable("treload_1");
         starRocksAssert.withTable(createBaseTable);
+        checker.runForTest(true);
+        checker.runForTest(true);
         starRocksAssert.refreshMV("refresh materialized view mvreload_1");
         starRocksAssert.refreshMV("refresh materialized view mvreload_2");
         starRocksAssert.refreshMV("refresh materialized view mvreload_3");
@@ -295,7 +297,7 @@ public class AlterMaterializedViewTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"replicated_storage\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ")");

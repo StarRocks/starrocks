@@ -1,7 +1,7 @@
 {
   "statement":"select * from view2",
   "table_meta":{
-    "test.t3":"CREATE TABLE `t3` (\n  `c1` int(11) NULL COMMENT \"\",\n  `c2` int(11) NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`c1`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`c1`) BUCKETS 10 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\",\n\"enable_persistent_index\" \u003d \"false\"\n);"
+    "test.t3":"CREATE TABLE `t3` (\n  `c1` int(11) NULL COMMENT \"\",\n  `c2` int(11) NULL COMMENT \"\"\n) ENGINE\u003dOLAP \nDUPLICATE KEY(`c1`)\nCOMMENT \"OLAP\"\nDISTRIBUTED BY HASH(`c1`) BUCKETS 10 \nPROPERTIES (\n\"replication_num\" \u003d \"1\",\n\"in_memory\" \u003d \"false\",\n\"storage_format\" \u003d \"DEFAULT\",\n\"enable_persistent_index\" \u003d \"true\"\n);"
   },
   "table_row_count":{
     "test.t3":{

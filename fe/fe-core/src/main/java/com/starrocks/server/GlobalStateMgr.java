@@ -47,6 +47,7 @@ import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.JwkMgr;
 import com.starrocks.authorization.AccessControlProvider;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.DefaultAuthorizationProvider;
@@ -265,6 +266,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -303,6 +305,7 @@ public class GlobalStateMgr {
      * Alter Job Manager
      */
     private final AlterJobMgr alterJobMgr;
+    private final ThreadPoolExecutor lakeAlterPublishExecutor;
 
     private final PortConnectivityChecker portConnectivityChecker;
 
@@ -526,6 +529,8 @@ public class GlobalStateMgr {
     private final ReportHandler reportHandler;
     private final TabletCollector tabletCollector;
 
+    private JwkMgr jwkMgr;
+
     public NodeMgr getNodeMgr() {
         return nodeMgr;
     }
@@ -649,6 +654,8 @@ public class GlobalStateMgr {
                 new SchemaChangeHandler(),
                 new MaterializedViewHandler(),
                 new SystemHandler());
+        this.lakeAlterPublishExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
+                Config.lake_publish_version_max_threads, "alter-publish", false);
 
         this.load = new Load();
         this.streamLoadMgr = new StreamLoadMgr();
@@ -834,6 +841,8 @@ public class GlobalStateMgr {
 
         this.reportHandler = new ReportHandler();
         this.tabletCollector = new TabletCollector();
+
+        this.jwkMgr = new JwkMgr();
     }
 
     public static void destroyCheckpoint() {
@@ -1418,6 +1427,10 @@ public class GlobalStateMgr {
         taskRunStateSynchronizer.start();
 
         if (RunMode.isSharedDataMode()) {
+            // Need to rebuild active lake compaction transactions before lake scheduler starting to run
+            // Lake compactionMgr is started on all FE nodes and scheduler only starts to run when the FE is leader
+            compactionMgr.buildActiveCompactionTransactionMap();
+
             starMgrMetaSyncer.start();
             autovacuumDaemon.start();
         }
@@ -1436,8 +1449,7 @@ public class GlobalStateMgr {
         temporaryTableCleaner.start();
 
         if (RunMode.isSharedDataMode()) {
-            clusterSnapshotMgr.startCheckpointScheduler(checkpointController,
-                                                        StarMgrServer.getCurrentState().getCheckpointController());
+            clusterSnapshotMgr.start();
         }
         reportHandler.start();
         tabletCollector.start();
@@ -2171,6 +2183,10 @@ public class GlobalStateMgr {
         return alterJobMgr;
     }
 
+    public ThreadPoolExecutor getLakeAlterPublishExecutor() {
+        return lakeAlterPublishExecutor;
+    }
+
     public SchemaChangeHandler getSchemaChangeHandler() {
         return this.alterJobMgr.getSchemaChangeHandler();
     }
@@ -2723,5 +2739,13 @@ public class GlobalStateMgr {
 
     public ReportHandler getReportHandler() {
         return reportHandler;
+    }
+
+    public JwkMgr getJwkMgr() {
+        return jwkMgr;
+    }
+
+    public void setJwkMgr(JwkMgr jwkMgr) {
+        this.jwkMgr = jwkMgr;
     }
 }

@@ -27,6 +27,7 @@
 #include "column/vectorized_fwd.h"
 #include "exprs/cast_expr.h"
 #include "exprs/literal.h"
+#include "exprs/runtime_filter.h"
 #include "formats/orc/orc_mapping.h"
 #include "formats/orc/orc_memory_pool.h"
 #include "formats/orc/utils.h"
@@ -1047,36 +1048,36 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct,
         return true;                                          \
     }
 
-#define ADD_RF_BOOLEAN_TYPE(type)                                      \
-    case type: {                                                       \
-        auto* xrf = dynamic_cast<const RuntimeBloomFilter<type>*>(rf); \
-        if (xrf == nullptr) return false;                              \
-        auto lower = orc::Literal(bool(xrf->min_value(&_pool)));       \
-        auto upper = orc::Literal(bool(xrf->max_value(&_pool)));       \
-        ADD_RF_TO_BUILDER                                              \
+#define ADD_RF_BOOLEAN_TYPE(type)                                           \
+    case type: {                                                            \
+        auto* xrf = dynamic_cast<const MinMaxRuntimeFilter<type>*>(minmax); \
+        if (xrf == nullptr) return false;                                   \
+        auto lower = orc::Literal(bool(xrf->min_value(&_pool)));            \
+        auto upper = orc::Literal(bool(xrf->max_value(&_pool)));            \
+        ADD_RF_TO_BUILDER                                                   \
     }
 
-#define ADD_RF_INT_TYPE(type)                                          \
-    case type: {                                                       \
-        auto* xrf = dynamic_cast<const RuntimeBloomFilter<type>*>(rf); \
-        if (xrf == nullptr) return false;                              \
-        auto lower = orc::Literal(int64_t(xrf->min_value(&_pool)));    \
-        auto upper = orc::Literal(int64_t(xrf->max_value(&_pool)));    \
-        ADD_RF_TO_BUILDER                                              \
+#define ADD_RF_INT_TYPE(type)                                               \
+    case type: {                                                            \
+        auto* xrf = dynamic_cast<const MinMaxRuntimeFilter<type>*>(minmax); \
+        if (xrf == nullptr) return false;                                   \
+        auto lower = orc::Literal(int64_t(xrf->min_value(&_pool)));         \
+        auto upper = orc::Literal(int64_t(xrf->max_value(&_pool)));         \
+        ADD_RF_TO_BUILDER                                                   \
     }
 
-#define ADD_RF_DOUBLE_TYPE(type)                                       \
-    case type: {                                                       \
-        auto* xrf = dynamic_cast<const RuntimeBloomFilter<type>*>(rf); \
-        if (xrf == nullptr) return false;                              \
-        auto lower = orc::Literal(double(xrf->min_value(&_pool)));     \
-        auto upper = orc::Literal(double(xrf->max_value(&_pool)));     \
-        ADD_RF_TO_BUILDER                                              \
+#define ADD_RF_DOUBLE_TYPE(type)                                            \
+    case type: {                                                            \
+        auto* xrf = dynamic_cast<const MinMaxRuntimeFilter<type>*>(minmax); \
+        if (xrf == nullptr) return false;                                   \
+        auto lower = orc::Literal(double(xrf->min_value(&_pool)));          \
+        auto upper = orc::Literal(double(xrf->max_value(&_pool)));          \
+        ADD_RF_TO_BUILDER                                                   \
     }
 
 #define ADD_RF_STRING_TYPE(type)                                                             \
     case type: {                                                                             \
-        auto* xrf = dynamic_cast<const RuntimeBloomFilter<type>*>(rf);                       \
+        auto* xrf = dynamic_cast<const MinMaxRuntimeFilter<type>*>(minmax);                  \
         if (xrf == nullptr) return false;                                                    \
         auto lower = orc::Literal(xrf->min_value(&_pool).data, xrf->min_value(&_pool).size); \
         auto upper = orc::Literal(xrf->max_value(&_pool).data, xrf->max_value(&_pool).size); \
@@ -1085,7 +1086,7 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct,
 
 #define ADD_RF_DATE_TYPE(type)                                                                     \
     case type: {                                                                                   \
-        auto* xrf = dynamic_cast<const RuntimeBloomFilter<type>*>(rf);                             \
+        auto* xrf = dynamic_cast<const MinMaxRuntimeFilter<type>*>(minmax);                        \
         if (xrf == nullptr) return false;                                                          \
         auto lower = orc::Literal(orc::PredicateDataType::DATE,                                    \
                                   OrcDateHelper::native_date_to_orc_date(xrf->min_value(&_pool))); \
@@ -1096,7 +1097,7 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct,
 
 #define ADD_RF_DECIMALV2_TYPE(type)                                                                            \
     case type: {                                                                                               \
-        auto* xrf = dynamic_cast<const RuntimeBloomFilter<type>*>(rf);                                         \
+        auto* xrf = dynamic_cast<const MinMaxRuntimeFilter<type>*>(minmax);                                    \
         if (xrf == nullptr) return false;                                                                      \
         auto lower = orc::Literal(to_orc128(xrf->min_value(&_pool).value()), xrf->min_value(&_pool).PRECISION, \
                                   xrf->min_value(&_pool).SCALE);                                               \
@@ -1107,7 +1108,7 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct,
 
 #define ADD_RF_DECIMALV3_TYPE(xtype)                                                                                \
     case xtype: {                                                                                                   \
-        auto* xrf = dynamic_cast<const RuntimeBloomFilter<xtype>*>(rf);                                             \
+        auto* xrf = dynamic_cast<const MinMaxRuntimeFilter<xtype>*>(minmax);                                        \
         if (xrf == nullptr) return false;                                                                           \
         auto lower = orc::Literal(orc::Int128(xrf->min_value(&_pool)), slot->type().precision, slot->type().scale); \
         auto upper = orc::Literal(orc::Int128(xrf->max_value(&_pool)), slot->type().precision, slot->type().scale); \
@@ -1116,7 +1117,7 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct,
 
 #define ADD_RF_DECIMAL128_TYPE(xtype)                                                                \
     case xtype: {                                                                                    \
-        auto* xrf = dynamic_cast<const RuntimeBloomFilter<xtype>*>(rf);                              \
+        auto* xrf = dynamic_cast<const MinMaxRuntimeFilter<xtype>*>(minmax);                         \
         if (xrf == nullptr) return false;                                                            \
         auto lower = orc::Literal(orc::Int128(xrf->min_value(&_pool) >> 64, xrf->min_value(&_pool)), \
                                   slot->type().precision, slot->type().scale);                       \
@@ -1125,13 +1126,14 @@ Status OrcChunkReader::_add_conjunct(const Expr* conjunct,
         ADD_RF_TO_BUILDER                                                                            \
     }
 
-bool OrcChunkReader::_add_runtime_filter(const uint64_t column_id, const SlotDescriptor* slot,
-                                         const JoinRuntimeFilter* rf,
+bool OrcChunkReader::_add_runtime_filter(const uint64_t column_id, const SlotDescriptor* slot, const RuntimeFilter* rf,
                                          std::unique_ptr<orc::SearchArgumentBuilder>& builder) {
     LogicalType ltype = slot->type().type;
     auto type_it = _supported_logical_types.find(ltype);
     if (type_it == _supported_logical_types.end()) return false;
     orc::PredicateDataType pred_type = type_it->second;
+    auto minmax = rf->get_min_max_filter();
+    if (minmax == nullptr) return false;
     switch (ltype) {
         ADD_RF_BOOLEAN_TYPE(LogicalType::TYPE_BOOLEAN);
         ADD_RF_INT_TYPE(LogicalType::TYPE_TINYINT);
@@ -1186,7 +1188,7 @@ Status OrcChunkReader::build_search_argument_by_predicates(const OrcPredicates* 
     if (orc_predicates->rf_collector != nullptr) {
         for (auto& it : orc_predicates->rf_collector->descriptors()) {
             RuntimeFilterProbeDescriptor* rf_desc = it.second;
-            const JoinRuntimeFilter* filter = rf_desc->runtime_filter(-1);
+            const RuntimeFilter* filter = rf_desc->runtime_filter(-1);
             SlotId probe_slot_id;
             if (filter == nullptr || filter->has_null() || !rf_desc->is_probe_slot_ref(&probe_slot_id)) continue;
             auto it2 = slot_id_to_pos_in_src_slot_descriptors.find(probe_slot_id);

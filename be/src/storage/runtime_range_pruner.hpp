@@ -64,19 +64,21 @@ struct RuntimeColumnPredicateBuilder {
             RangeType& range = full_range;
             range.set_index_filter_only(true);
 
-            const JoinRuntimeFilter* rf = desc->runtime_filter(driver_sequence);
+            const RuntimeFilter* rf = desc->runtime_filter(driver_sequence);
 
             // applied global-dict optimized column
+            auto* minmax = rf->get_min_max_filter();
+            if (minmax == nullptr) return preds;
             if constexpr (ltype == TYPE_VARCHAR) {
                 auto cid = parser->column_id(*slot);
                 if (auto iter = global_dictmaps->find(cid); iter != global_dictmaps->end()) {
-                    build_minmax_range<RangeType, limit_type, LowCardDictType, GlobalDictCodeDecoder>(range, rf, pool,
-                                                                                                      iter->second);
+                    build_minmax_range<RangeType, limit_type, LowCardDictType, GlobalDictCodeDecoder>(
+                            range, minmax, pool, iter->second);
                 } else {
-                    build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(range, rf, pool, nullptr);
+                    build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(range, minmax, pool, nullptr);
                 }
             } else {
-                build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(range, rf, pool, nullptr);
+                build_minmax_range<RangeType, limit_type, mapping_type, DummyDecoder>(range, minmax, pool, nullptr);
             }
 
             std::vector<TCondition> filters;
@@ -193,13 +195,13 @@ struct RuntimeColumnPredicateBuilder {
 
     template <class Range, LogicalType SlotType, LogicalType mapping_type, template <class> class Decoder,
               class... Args>
-    static void build_minmax_range(Range& range, const JoinRuntimeFilter* rf, ObjectPool* pool, Args&&... args) {
+    static void build_minmax_range(Range& range, const RuntimeFilter* rf, ObjectPool* pool, Args&&... args) {
         using ValueType = typename RunTimeTypeTraits<SlotType>::CppType;
 
-        const RuntimeBloomFilter<mapping_type>* filter = down_cast<const RuntimeBloomFilter<mapping_type>*>(rf);
+        auto* filter = down_cast<const MinMaxRuntimeFilter<mapping_type>*>(rf->get_min_max_filter());
         using DecoderType = Decoder<typename RunTimeTypeTraits<mapping_type>::CppType>;
         DecoderType decoder(std::forward<Args>(args)...);
-        MinMaxParser<RuntimeBloomFilter<mapping_type>, DecoderType> parser(filter, &decoder);
+        MinMaxParser<MinMaxRuntimeFilter<mapping_type>, DecoderType> parser(filter, &decoder);
         if (filter->is_empty_range()) {
             range.clear_to_empty();
             return;

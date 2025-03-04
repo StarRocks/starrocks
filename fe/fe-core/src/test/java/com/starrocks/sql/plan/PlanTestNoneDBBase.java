@@ -553,6 +553,7 @@ public class PlanTestNoneDBBase {
                 Assert.assertEquals(exceptString.toString(), ex.getMessage());
                 return true;
             }
+            ex.printStackTrace();
             Assert.fail("Planning failed, message: " + ex.getMessage() + ", sql: " + sql);
         }
 

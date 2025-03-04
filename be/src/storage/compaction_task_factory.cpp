@@ -70,7 +70,7 @@ std::shared_ptr<CompactionTask> CompactionTaskFactory::create_compaction_task() 
     compaction_task->set_segment_iterator_num(segment_iterator_num);
     compaction_task->set_tablet_schema(tablet_schema);
     std::unique_ptr<MemTracker> mem_tracker = std::make_unique<MemTracker>(
-            MemTracker::COMPACTION, -1, "Compaction-" + std::to_string(compaction_task->task_id()),
+            MemTrackerType::COMPACTION_TASK, -1, "Compaction-" + std::to_string(compaction_task->task_id()),
             GlobalEnv::GetInstance()->compaction_mem_tracker());
     compaction_task->set_mem_tracker(mem_tracker.release());
     return compaction_task;

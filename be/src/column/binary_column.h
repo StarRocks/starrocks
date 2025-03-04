@@ -19,6 +19,7 @@
 #include "column/datum.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "gutil/strings/fastmem.h"
 #include "util/slice.h"
 
 namespace starrocks {
@@ -224,16 +225,31 @@ public:
 
     uint32_t max_one_element_serialize_size() const override;
 
-    uint32_t serialize(size_t idx, uint8_t* pos) override;
+    ALWAYS_INLINE uint32_t serialize(size_t idx, uint8_t* pos) override {
+        // max size of one string is 2^32, so use uint32_t not T
+        auto binary_size = static_cast<uint32_t>(_offsets[idx + 1] - _offsets[idx]);
+        T offset = _offsets[idx];
+
+        strings::memcpy_inlined(pos, &binary_size, sizeof(uint32_t));
+        strings::memcpy_inlined(pos + sizeof(uint32_t), &_bytes[offset], binary_size);
+
+        return sizeof(uint32_t) + binary_size;
+    }
 
     uint32_t serialize_default(uint8_t* pos) override;
 
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
                          uint32_t max_one_row_size) override;
 
+    void serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
+                                         uint32_t max_one_row_size, uint8_t* null_masks, bool has_null) override;
+
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
+
+    void deserialize_and_append_batch_nullable(Buffer<Slice>& srcs, size_t chunk_size, Buffer<uint8_t>& is_nulls,
+                                               bool& has_null) override;
 
     uint32_t serialize_size(size_t idx) const override {
         // max size of one string is 2^32, so use sizeof(uint32_t) not sizeof(T)
@@ -248,8 +264,12 @@ public:
     int compare_at(size_t left, size_t right, const Column& rhs, int nan_direction_hint) const override;
 
     void fnv_hash(uint32_t* hashes, uint32_t from, uint32_t to) const override;
+    void fnv_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const override;
+    void fnv_hash_selective(uint32_t* hashes, uint16_t* sel, uint16_t sel_size) const override;
 
     void crc32_hash(uint32_t* hash, uint32_t from, uint32_t to) const override;
+    void crc32_hash_with_selection(uint32_t* seed, uint8_t* selection, uint16_t from, uint16_t to) const override;
+    void crc32_hash_selective(uint32_t* hashes, uint16_t* sel, uint16_t sel_size) const override;
 
     int64_t xor_checksum(uint32_t from, uint32_t to) const override;
 

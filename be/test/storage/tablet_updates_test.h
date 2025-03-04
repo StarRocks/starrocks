@@ -792,6 +792,7 @@ public:
     void test_load_from_pb(bool enable_persistent_index);
     void test_remove_expired_versions(bool enable_persistent_index);
     void test_apply(bool enable_persistent_index, bool has_merge_condition);
+    void test_apply_breakpoint_check(bool enable_persistent_index);
     void test_condition_update_apply(bool enable_persistent_index);
     void test_concurrent_write_read_and_gc(bool enable_persistent_index);
     void test_compaction_score_not_enough(bool enable_persistent_index);

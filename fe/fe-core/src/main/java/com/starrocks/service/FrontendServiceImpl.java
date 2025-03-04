@@ -47,6 +47,8 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
@@ -83,7 +85,6 @@ import com.starrocks.catalog.system.sys.SysFeMemoryUsage;
 import com.starrocks.catalog.system.sys.SysObjectDependencies;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.AuthenticationException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
@@ -135,8 +136,6 @@ import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.metric.TableMetricsEntity;
-import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.StreamLoadPlanner;
@@ -362,6 +361,7 @@ import org.apache.thrift.TException;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -1216,12 +1216,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     private void checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,
                                           String clientIp) throws AuthenticationException {
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        UserIdentity currentUser =
-                globalStateMgr.getAuthenticationMgr().checkPlainPassword(user, clientIp, passwd);
-        if (currentUser == null) {
-            throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
-        }
+        UserIdentity currentUser = AuthenticationHandler.authenticate(new ConnectContext(), user, clientIp,
+                passwd.getBytes(StandardCharsets.UTF_8), null);
         // check INSERT action on table
         try {
             Authorizer.checkTableAction(currentUser, null, db, tbl, PrivilegeType.INSERT);
@@ -1435,7 +1431,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (null == tbl) {
             return;
         }
-        TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tbl.getId());
         StreamLoadTask streamLoadtask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
                 getSyncSteamLoadTaskByTxnId(request.getTxnId());
 
@@ -1444,15 +1439,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 if (!(attachment instanceof RLTaskTxnCommitAttachment)) {
                     break;
                 }
-                RLTaskTxnCommitAttachment routineAttachment = (RLTaskTxnCommitAttachment) attachment;
-                entity.counterRoutineLoadFinishedTotal.increase(1L);
-                entity.counterRoutineLoadBytesTotal.increase(routineAttachment.getReceivedBytes());
-                entity.counterRoutineLoadRowsTotal.increase(routineAttachment.getLoadedRows());
-                entity.counterRoutineLoadErrorRowsTotal.increase(routineAttachment.getFilteredRows());
-                entity.counterRoutineLoadUnselectedRowsTotal.increase(routineAttachment.getUnselectedRows());
 
                 if (streamLoadtask != null) {
-                    streamLoadtask.setLoadState(routineAttachment, "");
+                    streamLoadtask.setLoadState(attachment, "");
                 }
 
                 break;
@@ -1460,13 +1449,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 if (!(attachment instanceof ManualLoadTxnCommitAttachment)) {
                     break;
                 }
-                ManualLoadTxnCommitAttachment streamAttachment = (ManualLoadTxnCommitAttachment) attachment;
-                entity.counterStreamLoadFinishedTotal.increase(1L);
-                entity.counterStreamLoadBytesTotal.increase(streamAttachment.getReceivedBytes());
-                entity.counterStreamLoadRowsTotal.increase(streamAttachment.getLoadedRows());
 
                 if (streamLoadtask != null) {
-                    streamLoadtask.setLoadState(streamAttachment, "");
+                    streamLoadtask.setLoadState(attachment, "");
                 }
 
                 break;
@@ -1947,8 +1932,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     }
                 }
             }
-
-            ConfigBase.setFrontendConfig(configs);
+            ConfigBase.setFrontendConfig(configs, request.isIs_persistent(),
+                    request.getUser_identity());
             return new TSetConfigResponse(new TStatus(TStatusCode.OK));
         } catch (DdlException e) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
@@ -2992,7 +2977,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (options.isSetTemporary_table_only() && options.temporary_table_only) {
             TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
             Set<UUID> sessions = ExecuteEnv.getInstance().getScheduler().listAllSessionsId();
-            sessions.retainAll(temporaryTableMgr.listSessions());
+            sessions.retainAll(temporaryTableMgr.listSessions().keySet());
             List<TSessionInfo> sessionInfos = new ArrayList<>();
             for (UUID session : sessions) {
                 TSessionInfo sessionInfo = new TSessionInfo();
@@ -3179,11 +3164,11 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TClusterSnapshotsResponse getClusterSnapshotsInfo(TClusterSnapshotsRequest params) {
-        return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllInfo();
+        return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotsInfo();
     }
 
     @Override
     public TClusterSnapshotJobsResponse getClusterSnapshotJobsInfo(TClusterSnapshotJobsRequest params) {
-        return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllJobsInfo();
+        return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo();
     }
 }

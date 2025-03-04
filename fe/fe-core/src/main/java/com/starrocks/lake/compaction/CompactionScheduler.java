@@ -133,10 +133,13 @@ public class CompactionScheduler extends Daemon {
                     try {
                         commitCompaction(partition, job,
                                 taskResult == CompactionTask.TaskResult.PARTIAL_SUCCESS /* forceCommit */);
-                        assert job.transactionHasCommitted();
+                        if (!job.transactionHasCommitted()) { // should not happen
+                            errorMsg = String.format("Fail to commit transaction %s", job.getDebugString());
+                            LOG.error(errorMsg);
+                        }
                     } catch (Exception e) {
-                        LOG.error("Fail to commit compaction. {} error={}", job.getDebugString(), e.getMessage());
-                        errorMsg = "fail to commit transaction: " + e.getMessage();
+                        LOG.error("Fail to commit compaction, {} error={}", job.getDebugString(), e.getMessage());
+                        errorMsg = "Fail to commit transaction: " + e.getMessage();
                     }
                 } else if (taskResult == CompactionTask.TaskResult.PARTIAL_SUCCESS ||
                            taskResult == CompactionTask.TaskResult.NONE_SUCCESS) {
@@ -408,8 +411,10 @@ public class CompactionScheduler extends Daemon {
         } finally {
             locker.unLockTablesWithIntensiveDbLock(db.getId(), tableIdList, LockType.WRITE);
         }
-        job.setVisibleStateWaiter(waiter);
-        job.setCommitTs(System.currentTimeMillis());
+        if (waiter != null) {
+            job.setVisibleStateWaiter(waiter);
+            job.setCommitTs(System.currentTimeMillis());
+        }
     }
 
     private void abortTransactionIgnoreError(CompactionJob job, String reason) {

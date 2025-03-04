@@ -54,7 +54,7 @@ static void do_benchmark_hash_partitioned(benchmark::State& state, TRuntimeFilte
         ++num_rows_per_partitions[hash_values[i]];
     }
 
-    JoinRuntimeFilter::RunningContext running_ctx;
+    RuntimeFilter::RunningContext running_ctx;
     running_ctx.selection.assign(num_rows, 2);
     running_ctx.use_merged_selection = false;
     running_ctx.compatibility = true;
@@ -66,8 +66,8 @@ static void do_benchmark_hash_partitioned(benchmark::State& state, TRuntimeFilte
     }
 
     int32_t num_column = columns.size();
-    std::vector<RuntimeBloomFilter<TYPE_INT>> bfs(num_column * num_partitions);
-    std::vector<RuntimeBloomFilter<TYPE_INT>> gfs(num_column);
+    std::vector<TRuntimeBloomFilter<TYPE_INT>> bfs(num_column * num_partitions);
+    std::vector<TRuntimeBloomFilter<TYPE_INT>> gfs(num_column);
     for (int i = 0; i < num_column; i++) {
         auto& column = columns[i];
         for (auto p = 0; p < num_partitions; ++p) {

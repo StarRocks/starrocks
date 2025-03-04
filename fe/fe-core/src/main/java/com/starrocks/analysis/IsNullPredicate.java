@@ -88,8 +88,8 @@ public class IsNullPredicate extends Predicate {
         return Objects.hashCode(super.hashCode(), isNotNull);
     }
     @Override
-    public boolean equals(Object obj) {
-        if (!super.equals(obj)) {
+    public boolean equalsWithoutChild(Object obj) {
+        if (!super.equalsWithoutChild(obj)) {
             return false;
         }
         return ((IsNullPredicate) obj).isNotNull == isNotNull;

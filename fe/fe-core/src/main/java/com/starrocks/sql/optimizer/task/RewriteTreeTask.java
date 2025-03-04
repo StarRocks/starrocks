@@ -58,6 +58,10 @@ public class RewriteTreeTask extends OptimizerTask {
 
     @Override
     public void execute() {
+        if (rules.stream().allMatch(rule -> context.getOptimizerContext()
+                .getOptimizerOptions().isRuleDisable(rule.type()))) {
+            return;
+        }
         // first node must be RewriteAnchorNode
         rewrite(planTree, 0, planTree.getInputs().get(0));
         // pushdownNotNullPredicates should task-bind, reset it before another RewriteTreeTask
@@ -69,7 +73,6 @@ public class RewriteTreeTask extends OptimizerTask {
     }
 
     protected void rewrite(OptExpression parent, int childIndex, OptExpression root) {
-
         root = applyRules(parent, childIndex, root, rules);
         // prune cte column depend on prune right child first
         for (int i = root.getInputs().size() - 1; i >= 0; i--) {

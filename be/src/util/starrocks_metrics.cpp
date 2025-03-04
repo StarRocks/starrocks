@@ -36,6 +36,7 @@
 
 #include <unistd.h>
 
+#include "exec/pipeline/pipeline_metrics.h"
 #include "fs/fs.h"
 #include "util/system_metrics.h"
 
@@ -44,7 +45,7 @@ namespace starrocks {
 const std::string StarRocksMetrics::_s_registry_name = "starrocks_be";
 const std::string StarRocksMetrics::_s_hook_name = "starrocks_metrics";
 
-StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
+StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name), _table_metrics_mgr(&_metrics) {
 #define REGISTER_STARROCKS_METRIC(name) _metrics.register_metric(#name, &name)
     // You can put StarRocksMetrics's metrics initial code here
     REGISTER_STARROCKS_METRIC(fragment_requests_total);
@@ -54,6 +55,7 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(query_scan_bytes);
     REGISTER_STARROCKS_METRIC(query_scan_rows);
 
+    pipeline_executor_metrics.register_all_metrics(&_metrics);
     REGISTER_STARROCKS_METRIC(pipe_scan_executor_queuing);
     REGISTER_STARROCKS_METRIC(pipe_driver_schedule_count);
     REGISTER_STARROCKS_METRIC(pipe_driver_execution_time);
@@ -108,6 +110,8 @@ StarRocksMetrics::StarRocksMetrics() : _metrics(_s_registry_name) {
     REGISTER_STARROCKS_METRIC(delta_column_group_get_non_pk_total);
     REGISTER_STARROCKS_METRIC(delta_column_group_get_non_pk_hit_cache);
     REGISTER_STARROCKS_METRIC(primary_key_table_error_state_total);
+    REGISTER_STARROCKS_METRIC(primary_key_wait_apply_done_duration_ms);
+    REGISTER_STARROCKS_METRIC(primary_key_wait_apply_done_total);
 
     // push request
     _metrics.register_metric("push_requests_total", MetricLabels().add("status", "SUCCESS"),

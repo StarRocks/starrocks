@@ -202,6 +202,13 @@ public abstract class ScanNode extends PlanNode {
     public void setScanSampleStrategy(RemoteFilesSampleStrategy strategy) {
     }
 
+    public boolean isConnectorScanNode() {
+        return this instanceof HdfsScanNode || this instanceof IcebergScanNode ||
+                this instanceof HudiScanNode || this instanceof DeltaLakeScanNode ||
+                this instanceof FileTableScanNode || this instanceof PaimonScanNode ||
+                this instanceof OdpsScanNode || this instanceof IcebergMetadataScanNode;
+    }
+
     protected String explainColumnDict(String prefix) {
         StringBuilder output = new StringBuilder();
         if (!appliedDictStringColumns.isEmpty()) {

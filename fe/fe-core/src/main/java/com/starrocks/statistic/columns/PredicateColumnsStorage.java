@@ -25,7 +25,6 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
@@ -50,8 +49,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.stream.Collectors;
+
 
 /**
  * 1. Persistence:
@@ -65,7 +67,7 @@ import java.util.stream.Collectors;
  * Before restoring persisted state into memory, some queries may already come up, so we need to merge these two
  * kinds of state. Before restoring state we cannot persist otherwise they would conflict
  */
-public class PredicateColumnsStorage extends FrontendDaemon {
+public class PredicateColumnsStorage {
 
     private static final Logger LOG = LogManager.getLogger(PredicateColumnsStorage.class);
 
@@ -148,12 +150,9 @@ public class PredicateColumnsStorage extends FrontendDaemon {
                 : meta.mayGetTable(tableName.getDb(), tableName.getTbl());
 
         StringBuilder sb = new StringBuilder(QUERY);
-        if (db.isPresent()) {
-            sb.append(" AND `db_id` = ").append(db.get().getId());
-        }
-        if (table.isPresent()) {
-            sb.append(" AND `table_id` = ").append(table.get().getId());
-        }
+        db.ifPresent(database -> sb.append(" AND `db_id` = ").append(database.getId()));
+        table.ifPresent(value -> sb.append(" AND `table_id` = ").append(value.getId()));
+
         if (!useCases.isEmpty()) {
             String useCaseRegex = useCases.stream().map(ColumnUsage.UseCase::toString).collect(Collectors.joining("|"));
             sb.append(String.format(" AND regexp(`usage`, '%s')", useCaseRegex));
@@ -161,7 +160,29 @@ public class PredicateColumnsStorage extends FrontendDaemon {
 
         String sql = sb.toString();
         List<TResultBatch> tResultBatches = executor.executeDQL(sql);
-        return resultToColumnUsage(tResultBatches);
+        List<ColumnUsage> columnUsages = resultToColumnUsage(tResultBatches);
+        if (GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends().size() == 1) {
+            return columnUsages;
+        } else {
+            return deduplicateColumnUsages(columnUsages);
+        }
+    }
+
+    public List<ColumnUsage> deduplicateColumnUsages(List<ColumnUsage> columnUsages) {
+        Map<ColumnUsage, ColumnUsage> merged = columnUsages.stream()
+                .collect(Collectors.toMap(
+                        Function.identity(),
+                        Function.identity(),
+                        (existing, current) -> {
+                            existing.getUseCases().addAll(current.getUseCases());
+                            if (current.getLastUsed().isAfter(existing.getLastUsed())) {
+                                existing.setLastUsed(current.getLastUsed());
+                            }
+                            return existing;
+                        }
+                ));
+
+        return new ArrayList<>(merged.values());
     }
 
     /**
@@ -204,7 +225,7 @@ public class PredicateColumnsStorage extends FrontendDaemon {
             if (!first) {
                 insert.append(", ");
             }
-            insert.append(sw.toString());
+            insert.append(sw);
             first = false;
         }
 

@@ -35,12 +35,14 @@
 package com.starrocks.mysql;
 
 import com.google.common.base.Strings;
-import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.Pair;
 import com.starrocks.mysql.ssl.SSLContextLoader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -54,53 +56,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
-import static com.starrocks.mysql.MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT;
-
 // MySQL protocol util
 public class MysqlProto {
     private static final Logger LOG = LogManager.getLogger(MysqlProto.class);
-
-    // scramble: data receive from server.
-    // randomString: data send by server in plug-in data field
-    // user_name#HIGH@cluster_name
-    private static boolean authenticate(ConnectContext context, byte[] scramble, byte[] randomString, String user) {
-        String usePasswd = scramble.length == 0 ? "NO" : "YES";
-
-        if (user == null || user.isEmpty()) {
-            ErrorReport.report(ErrorCode.ERR_AUTHENTICATION_FAIL, "", usePasswd);
-            return false;
-        }
-
-        String remoteIp = context.getMysqlChannel().getRemoteIp();
-
-        AuthenticationMgr authenticationManager = context.getGlobalStateMgr().getAuthenticationMgr();
-        UserIdentity currentUser = null;
-        if (Config.enable_auth_check) {
-            currentUser = authenticationManager.checkPassword(user, remoteIp, scramble, randomString);
-            if (currentUser == null) {
-                ErrorReport.report(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePasswd);
-                return false;
-            }
-        } else {
-            Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
-                    authenticationManager.getBestMatchedUserIdentity(user, remoteIp);
-            if (matchedUserIdentity == null) {
-                LOG.info("enable_auth_check is false, but cannot find user '{}'@'{}'", user, remoteIp);
-                ErrorReport.report(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePasswd);
-                return false;
-            } else {
-                currentUser = matchedUserIdentity.getKey();
-            }
-        }
-
-        context.setCurrentUserIdentity(currentUser);
-        if (!currentUser.isEphemeral()) {
-            context.setCurrentRoleIds(currentUser);
-            context.setAuthDataSalt(randomString);
-        }
-        context.setQualifiedUser(user);
-        return true;
-    }
 
     // send response packet(OK/EOF/ERR).
     // before call this function, should set information in state of ConnectContext
@@ -167,22 +125,17 @@ public class MysqlProto {
             return new NegotiateResult(authPacket, NegotiateState.NOT_SUPPORTED_AUTH_MODE);
         }
 
-        // Starting with MySQL 8.0.4, MySQL changed the default authentication plugin for MySQL client
-        // from mysql_native_password to caching_sha2_password.
-        // ref: https://mysqlserverteam.com/mysql-8-0-4-new-default-authentication-plugin-caching_sha2_password/
         // So, User use mysql client or ODBC Driver after 8.0.4 have problem to connect to StarRocks
         // with password.
         // So StarRocks support the Protocol::AuthSwitchRequest to tell client to keep the default password plugin
         // which StarRocks is using now.
-        //
-        // Older version mysql client does not send auth plugin info, like 5.1 version.
-        // So we check if auth plugin name is null and treat as mysql_native_password if is null.
+        Pair<Boolean, String> switchPair = shouldSwitchAuthPlugin(authPacket, context);
         String authPluginName = authPacket.getPluginName();
-        if (authPluginName != null && !handshakePacket.checkAuthPluginSameAsStarRocks(authPluginName)) {
+        if (switchPair.first) {
             // 1. clear the serializer
             serializer.reset();
             // 2. build the auth switch request and send to the client
-            if (authPluginName.equals(AUTHENTICATION_KERBEROS_CLIENT)) {
+            if (switchPair.second.equals(MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT)) {
                 if (GlobalStateMgr.getCurrentState().getAuthenticationMgr().isSupportKerberosAuth()) {
                     try {
                         handshakePacket.buildKrb5AuthRequest(serializer, context.getRemoteIP(), authPacket.getUser());
@@ -197,16 +150,16 @@ public class MysqlProto {
                     return new NegotiateResult(authPacket, NegotiateState.KERBEROS_PLUGIN_NOT_LOADED);
                 }
             } else {
-                handshakePacket.buildAuthSwitchRequest(serializer);
+                handshakePacket.buildAuthSwitchRequest(serializer, switchPair.second);
             }
+            authPluginName = switchPair.second;
             channel.sendAndFlush(serializer.toByteBuffer());
             // Server receive auth switch response packet from client.
             ByteBuffer authSwitchResponse = channel.fetchOnePacket();
             if (authSwitchResponse == null) {
                 // receive response failed.
-                LOG.error("Building handshake with kerberos error, msg: Failed to get a valid service ticket for" +
-                        " {} from the client", authPacket.getUser());
-                return new NegotiateResult(authPacket, NegotiateState.KERBEROS_HANDSHAKE_FAILED);
+                LOG.warn("read auth switch response failed for user {}", authPacket.getUser());
+                return new NegotiateResult(authPacket, NegotiateState.READ_AUTH_SWITCH_PKG_FAILED);
             }
             // 3. the client use default password plugin of StarRocks to dispose
             // password
@@ -221,8 +174,10 @@ public class MysqlProto {
         byte[] randomString =
                 Objects.equals(authPluginName, MysqlHandshakePacket.CLEAR_PASSWORD_PLUGIN_NAME) ?
                         null : handshakePacket.getAuthPluginData();
-        // check authenticate
-        if (!authenticate(context, authPacket.getAuthResponse(), randomString, authPacket.getUser())) {
+        try {
+            AuthenticationHandler.authenticate(context, authPacket.getUser(), context.getMysqlChannel().getRemoteIp(),
+                    authPacket.getAuthResponse(), randomString);
+        } catch (AuthenticationException e) {
             sendResponsePacket(context);
             return new NegotiateResult(authPacket, NegotiateState.AUTHENTICATION_FAILED);
         }
@@ -238,6 +193,45 @@ public class MysqlProto {
             }
         }
         return new NegotiateResult(authPacket, NegotiateState.OK);
+    }
+
+    private static Pair<Boolean, String> shouldSwitchAuthPlugin(MysqlAuthPacket authPacket, ConnectContext context) {
+        // Older version mysql client does not send auth plugin info, like 5.1 version.
+        // So we check if auth plugin name is null and treat as mysql_native_password if is null.
+        String authPluginName = authPacket.getPluginName();
+        if (authPluginName == null) {
+            return Pair.create(false, null);
+        }
+
+        // kerberos
+        if (authPluginName.equals(MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT)) {
+            return Pair.create(true, MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT);
+        }
+
+        // To compatible for mariadb client.
+        // mysql_clear_password cannot be specified in mariadb client, so if the user is a ldap user, switch to mysql_clear_password plugin.
+        if (!authPluginName.equals(MysqlHandshakePacket.CLEAR_PASSWORD_PLUGIN_NAME)
+                && isLDAPUser(authPacket.getUser(), context)) {
+            return Pair.create(true, MysqlHandshakePacket.CLEAR_PASSWORD_PLUGIN_NAME);
+        }
+
+        // Starting with MySQL 8.0.4, MySQL changed the default authentication plugin for MySQL client
+        // from mysql_native_password to caching_sha2_password.
+        // ref: https://mysqlserverteam.com/mysql-8-0-4-new-default-authentication-plugin-caching_sha2_password/
+        // But caching_sha2_password is not supported in starrocks. So switch to mysql_native_password.
+        if (!MysqlHandshakePacket.checkAuthPluginSameAsStarRocks(authPluginName)) {
+            return Pair.create(true, MysqlHandshakePacket.NATIVE_AUTH_PLUGIN_NAME);
+        }
+
+        return Pair.create(false, null);
+    }
+
+    private static boolean isLDAPUser(String user, ConnectContext context) {
+        Map.Entry<UserIdentity, UserAuthenticationInfo> localUser = context.getGlobalStateMgr().getAuthenticationMgr()
+                .getBestMatchedUserIdentity(user, context.getMysqlChannel().getRemoteIp());
+        // If the user can not be found in local, and there is more than 1 auth type in authentication_chain.
+        // It is speculated that the user may be a ldap user.
+        return localUser == null && Config.authentication_chain.length > 1;
     }
 
     private static MysqlAuthPacket readAuthPacket(ConnectContext context) throws IOException {
@@ -277,8 +271,11 @@ public class MysqlProto {
         String previousQualifiedUser = context.getQualifiedUser();
         String previousResourceGroup = context.getSessionVariable().getResourceGroup();
         // do authenticate again
-        if (!authenticate(context, changeUserPacket.getAuthResponse(), context.getAuthDataSalt(),
-                changeUserPacket.getUser())) {
+
+        try {
+            AuthenticationHandler.authenticate(context, changeUserPacket.getUser(), context.getMysqlChannel().getRemoteIp(),
+                    changeUserPacket.getAuthResponse(), context.getAuthDataSalt());
+        } catch (AuthenticationException e) {
             LOG.warn("Command `Change user` failed, from [{}] to [{}]. ", previousQualifiedUser,
                     changeUserPacket.getUser());
             sendResponsePacket(context);
@@ -397,21 +394,6 @@ public class MysqlProto {
         return buf;
     }
 
-    public static class NegotiateResult {
-        private final MysqlAuthPacket authPacket;
-        private final NegotiateState state;
-
-        public NegotiateResult(MysqlAuthPacket authPacket, NegotiateState state) {
-            this.authPacket = authPacket;
-            this.state = state;
-        }
-
-        public MysqlAuthPacket getAuthPacket() {
-            return authPacket;
-        }
-
-        public NegotiateState getState() {
-            return state;
-        }
+    public record NegotiateResult(MysqlAuthPacket authPacket, NegotiateState state) {
     }
 }

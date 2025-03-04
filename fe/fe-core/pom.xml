@@ -42,9 +42,9 @@ under the License.
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
         <jacoco.version>0.8.8</jacoco.version>
         <iceberg.version>1.7.1</iceberg.version>
-        <paimon.version>1.0.0</paimon.version>
+        <paimon.version>1.0.1</paimon.version>
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
-        <staros.version>3.4-rc3</staros.version>
+        <staros.version>3.4-rc4</staros.version>
         <python>python</python>
     </properties>
 
@@ -421,7 +421,6 @@ under the License.
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-all</artifactId>
-            <version>4.1.115.Final</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.google.protobuf/protobuf-java -->
@@ -950,6 +949,11 @@ under the License.
             <artifactId>mssql-jdbc</artifactId>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/com.mysql/mysql-connector-j -->
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+        </dependency>
         <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->
         <dependency>
             <groupId>com.mockrunner</groupId>
@@ -1110,6 +1114,7 @@ under the License.
         <dependency>
             <groupId>org.apache.arrow</groupId>
             <artifactId>flight-sql-jdbc-driver</artifactId>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.apache.arrow</groupId>
@@ -1397,7 +1402,7 @@ under the License.
                     <dependency>
                         <groupId>com.puppycrawl.tools</groupId>
                         <artifactId>checkstyle</artifactId>
-                        <version>8.40</version>
+                        <version>${puppycrawl.version}</version>
                     </dependency>
                 </dependencies>
                 <configuration>

@@ -17,6 +17,7 @@
 #include <memory>
 
 #include "agent/master_info.h"
+#include "exec/pipeline/pipeline_metrics.h"
 #include "exec/pipeline/stream_pipeline_driver.h"
 #include "exec/workgroup/work_group.h"
 #include "gutil/strings/substitute.h"
@@ -30,14 +31,19 @@
 namespace starrocks::pipeline {
 
 GlobalDriverExecutor::GlobalDriverExecutor(const std::string& name, std::unique_ptr<ThreadPool> thread_pool,
-                                           bool enable_resource_group, const CpuUtil::CpuIds& cpuids)
+                                           bool enable_resource_group, const CpuUtil::CpuIds& cpuids,
+                                           PipelineExecutorMetrics* metrics)
         : Base("pip_exec_" + name),
-          _driver_queue(enable_resource_group ? std::unique_ptr<DriverQueue>(std::make_unique<WorkGroupDriverQueue>())
-                                              : std::make_unique<QuerySharedDriverQueue>()),
+          _driver_queue(enable_resource_group
+                                ? std::unique_ptr<DriverQueue>(
+                                          std::make_unique<WorkGroupDriverQueue>(metrics->get_driver_queue_metrics()))
+                                : std::make_unique<QuerySharedDriverQueue>(metrics->get_driver_queue_metrics())),
           _thread_pool(std::move(thread_pool)),
-          _blocked_driver_poller(new PipelineDriverPoller(name, _driver_queue.get(), cpuids)),
+          _blocked_driver_poller(
+                  new PipelineDriverPoller(name, _driver_queue.get(), cpuids, metrics->get_poller_metrics())),
           _exec_state_reporter(new ExecStateReporter(cpuids)),
-          _audit_statistics_reporter(new AuditStatisticsReporter()) {}
+          _audit_statistics_reporter(new AuditStatisticsReporter()),
+          _metrics(metrics->get_driver_executor_metrics()) {}
 
 void GlobalDriverExecutor::close() {
     _driver_queue->close();
@@ -51,13 +57,6 @@ void GlobalDriverExecutor::initialize(int num_threads) {
     for (auto i = 0; i < num_threads; ++i) {
         (void)_thread_pool->submit_func([this]() { this->_worker_thread(); });
     }
-}
-
-DriverExecutorMetrics GlobalDriverExecutor::metrics() const {
-    return {.schedule_count = _schedule_count.load(),
-            .driver_execution_ns = _driver_execution_ns.load(),
-            .driver_queue_len = static_cast<int64_t>(_driver_queue->size()),
-            .driver_poller_block_queue_len = static_cast<int64_t>(_blocked_driver_poller->num_drivers())};
 }
 
 void GlobalDriverExecutor::change_num_threads(int32_t num_threads) {
@@ -74,7 +73,7 @@ void GlobalDriverExecutor::change_num_threads(int32_t num_threads) {
 
 void GlobalDriverExecutor::_finalize_driver(DriverRawPtr driver, RuntimeState* runtime_state, DriverState state) {
     DCHECK(driver);
-    driver->finalize(runtime_state, state, _schedule_count, _driver_execution_ns);
+    driver->finalize(runtime_state, state);
 }
 
 void GlobalDriverExecutor::_worker_thread() {
@@ -112,7 +111,7 @@ void GlobalDriverExecutor::_worker_thread() {
         auto* fragment_ctx = driver->fragment_ctx();
 
         driver->increment_schedule_times();
-        _schedule_count++;
+        _metrics->driver_schedule_count.increment(1);
 
         SCOPED_SET_TRACE_INFO(driver->driver_id(), query_ctx->query_id(), fragment_ctx->fragment_instance_id());
 
@@ -152,6 +151,7 @@ void GlobalDriverExecutor::_worker_thread() {
 
             StatusOr<DriverState> maybe_state;
             int64_t start_time = driver->get_active_time();
+            _metrics->exec_running_tasks.increment(1);
 #ifdef NDEBUG
             TRY_CATCH_ALL(maybe_state, driver->process(runtime_state, worker_id));
 #else
@@ -163,7 +163,9 @@ void GlobalDriverExecutor::_worker_thread() {
             Status status = maybe_state.status();
             this->_driver_queue->update_statistics(driver);
             int64_t end_time = driver->get_active_time();
-            _driver_execution_ns += end_time - start_time;
+            _metrics->driver_execution_time.increment(end_time - start_time);
+            _metrics->exec_running_tasks.increment(-1);
+            _metrics->exec_finished_tasks.increment(1);
 
             // Check big query
             if (!driver->is_query_never_expired() && status.ok() && driver->workgroup()) {

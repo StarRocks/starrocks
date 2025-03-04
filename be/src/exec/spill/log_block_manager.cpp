@@ -32,6 +32,7 @@
 #include "fs/fs.h"
 #include "gutil/casts.h"
 #include "io/input_stream.h"
+#include "io/io_profiler.h"
 #include "runtime/exec_env.h"
 #include "storage/options.h"
 #include "util/defer_op.h"
@@ -82,12 +83,15 @@ public:
     uint64_t id() const { return _id; }
 
     bool pre_allocate(size_t allocate_size) {
-        if (_dir->inc_size(allocate_size)) {
-            _acquired_data_size += allocate_size;
+        if (_data_size + allocate_size <= _acquired_data_size) {
             return true;
-        } else {
-            return false;
         }
+        size_t extra_size = _data_size + allocate_size - _acquired_data_size;
+        if (_dir->inc_size(extra_size)) {
+            _acquired_data_size += extra_size;
+            return true;
+        }
+        return false;
     }
 
     Status append_data(const std::vector<Slice>& data, size_t total_size);
@@ -141,6 +145,7 @@ Status LogBlockContainer::close() {
 
 Status LogBlockContainer::append_data(const std::vector<Slice>& data, size_t total_size) {
     RETURN_IF_ERROR(_writable_file->pre_allocate(total_size));
+    auto scope = IOProfiler::scope(IOProfiler::TAG::TAG_SPILL, 0);
     RETURN_IF_ERROR(_writable_file->appendv(data.data(), data.size()));
     _data_size += total_size;
     return Status::OK();
@@ -175,6 +180,11 @@ public:
     LogBlockReader(const Block* block, const BlockReaderOptions& options = {}) : BlockReader(block, options) {}
 
     ~LogBlockReader() override = default;
+
+    Status read_fully(void* data, int64_t count) override {
+        auto scope = IOProfiler::scope(IOProfiler::TAG_SPILL, 0);
+        return BlockReader::read_fully(data, count);
+    }
 
     std::string debug_string() override { return _block->debug_string(); }
 
@@ -327,5 +337,4 @@ StatusOr<LogBlockContainerPtr> LogBlockManager::get_or_create_container(
     RETURN_IF_ERROR(block_container->open());
     return block_container;
 }
-
 } // namespace starrocks::spill

@@ -102,9 +102,12 @@ pipeline::OpFactories AnalyticNode::decompose_to_pipeline(pipeline::PipelineBuil
         // analytic's dop must be 1 if with no partition clause
         ops_with_sink = context->maybe_interpolate_local_passthrough_exchange(runtime_state(), id(), ops_with_sink);
     } else if (_use_hash_based_partition) {
+        bool has_outer_join_child =
+                _tnode.analytic_node.__isset.has_outer_join_child && _tnode.analytic_node.has_outer_join_child;
+
         // analytic has only partition by columns but no order by columns
-        HashPartitionContextFactoryPtr hash_partition_ctx_factory =
-                std::make_shared<HashPartitionContextFactory>(_tnode.analytic_node.partition_exprs);
+        HashPartitionContextFactoryPtr hash_partition_ctx_factory = std::make_shared<HashPartitionContextFactory>(
+                has_outer_join_child, _tnode.analytic_node.partition_exprs);
 
         // prepend local shuffle to PartitionSortSinkOperator
         ops_with_sink = context->maybe_interpolate_local_shuffle_exchange(runtime_state(), id(), ops_with_sink,

@@ -274,7 +274,7 @@ PROPERTIES
     "replication_num" = "3",
     "colocate_with" = "groupxx1",
     "storage_format" = "DEFAULT",
-    "enable_persistent_index" = "false",
+    "enable_persistent_index" = "true",
     "compression" = "LZ4"
 );
 ```
@@ -573,7 +573,7 @@ Query Cache 支持多版本 Cache 机制。
    (
        "replication_num" = "3",
        "storage_format" = "DEFAULT",
-       "enable_persistent_index" = "false"
+       "enable_persistent_index" = "true"
    );
    ```
 

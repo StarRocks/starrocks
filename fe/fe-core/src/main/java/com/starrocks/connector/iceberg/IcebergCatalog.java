@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Database;
@@ -25,6 +26,7 @@ import com.starrocks.connector.ConnectorViewDefinition;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.memory.MemoryTrackable;
+import com.starrocks.sql.ast.AlterViewStmt;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetadataTableType;
 import org.apache.iceberg.MetadataTableUtils;
@@ -40,8 +42,11 @@ import org.apache.iceberg.catalog.TableIdentifier;
 import org.apache.iceberg.exceptions.NoSuchTableException;
 import org.apache.iceberg.io.CloseableIterable;
 import org.apache.iceberg.util.StructProjection;
+import org.apache.iceberg.view.SQLViewRepresentation;
 import org.apache.iceberg.view.View;
 import org.apache.iceberg.view.ViewBuilder;
+import org.apache.iceberg.view.ViewRepresentation;
+import org.apache.iceberg.view.ViewVersion;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -53,6 +58,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 
 import static com.google.common.base.Preconditions.checkArgument;
+import static com.starrocks.catalog.IcebergView.STARROCKS_DIALECT;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.buildViewProperties;
 import static com.starrocks.connector.iceberg.IcebergApiConverter.convertDbNameToNamespace;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
@@ -115,7 +121,7 @@ public interface IcebergCatalog extends MemoryTrackable {
         Namespace ns = convertDbNameToNamespace(definition.getDatabaseName());
         ViewBuilder viewBuilder = getViewBuilder(TableIdentifier.of(ns, definition.getViewName()));
         viewBuilder = viewBuilder.withSchema(schema)
-                .withQuery("starrocks", definition.getInlineViewDef())
+                .withQuery(STARROCKS_DIALECT, definition.getInlineViewDef())
                 .withDefaultNamespace(ns)
                 .withDefaultCatalog(definition.getCatalogName())
                 .withProperties(buildViewProperties(definition, catalogName))
@@ -131,7 +137,53 @@ public interface IcebergCatalog extends MemoryTrackable {
     }
 
     default ViewBuilder getViewBuilder(TableIdentifier identifier) {
-        throw new StarRocksConnectorException("This catalog doesn't support creating views");
+        throw new StarRocksConnectorException("This catalog doesn't support creating/alter views");
+    }
+
+    default boolean alterView(View currentView, ConnectorViewDefinition connectorViewDefinition) {
+        return alterViewDefault(currentView, connectorViewDefinition);
+    }
+
+    default boolean alterViewDefault(View currentView, ConnectorViewDefinition definition) {
+
+        Namespace ns = convertDbNameToNamespace(definition.getDatabaseName());
+        ViewBuilder viewBuilder = getViewBuilder(TableIdentifier.of(ns, definition.getViewName()));
+        Map<String, String> properties = currentView.properties();
+        Map<String, String> alterProperties = definition.getProperties();
+
+        boolean isAlterProperties = alterProperties != null && !alterProperties.isEmpty();
+        if (isAlterProperties) {
+            properties = Maps.newHashMap(properties);
+            properties.putAll(alterProperties);
+        }
+
+        Schema schema = isAlterProperties ? currentView.schema() :
+                IcebergApiConverter.toIcebergApiSchema(definition.getColumns());
+        ViewVersion currentViewVersion = currentView.currentVersion();
+
+        viewBuilder = viewBuilder.withSchema(schema)
+                .withDefaultNamespace(currentViewVersion.defaultNamespace())
+                .withDefaultCatalog(currentViewVersion.defaultCatalog())
+                .withProperties(properties)
+                .withLocation(currentView.location());
+
+        for (ViewRepresentation viewRepresentation : currentViewVersion.representations()) {
+            if (!(viewRepresentation instanceof SQLViewRepresentation sqlViewRepresentation)) {
+                throw new StarRocksConnectorException("Only support SQL view representation, do not support [{}] type view",
+                        viewRepresentation.type());
+            }
+            if (definition.getAlterDialectType() != AlterViewStmt.AlterDialectType.MODIFY ||
+                    !sqlViewRepresentation.dialect().equals(STARROCKS_DIALECT)) {
+                viewBuilder = viewBuilder.withQuery(sqlViewRepresentation.dialect(), sqlViewRepresentation.sql());
+            }
+        }
+
+        if (definition.getInlineViewDef() != null) {
+            viewBuilder = viewBuilder.withQuery(STARROCKS_DIALECT, definition.getInlineViewDef());
+        }
+        viewBuilder.createOrReplace();
+
+        return true;
     }
 
     default boolean dropView(String dbName, String viewName) {
@@ -193,7 +245,13 @@ public interface IcebergCatalog extends MemoryTrackable {
         PartitionsTable partitionsTable = (PartitionsTable) MetadataTableUtils.
                 createMetadataTableInstance(nativeTable, MetadataTableType.PARTITIONS);
         TableScan tableScan = partitionsTable.newScan();
+        // NOTE: if there is an exception raise because of snapshot id is not the latest one, it's expected
+        // using partition metadata table scan is more  efficient than doing file scan, but limitation is
+        // it only supports the latest snapshot id.
         if (snapshotId != -1) {
+            Preconditions.checkArgument(nativeTable.currentSnapshot().snapshotId() == snapshotId,
+                    "Ignore this error if snapshot id does not match. Iceberg partition metadata table only supports latest " +
+                            "snapshot. current = " + nativeTable.currentSnapshot().snapshotId() + ", expect = " + snapshotId);
             tableScan = tableScan.useSnapshot(snapshotId);
         }
         if (executorService != null) {
@@ -224,7 +282,10 @@ public interface IcebergCatalog extends MemoryTrackable {
                         try {
                             lastUpdated = row.get(7, Long.class);
                         } catch (NullPointerException e) {
-                            logger.error("The table [{}] snapshot [{}] has been expired", nativeTable.name(), snapshotId, e);
+                            // It is a known issue but we do not hanle it right now. If the refresh frequency of 
+                            // the materialized view is very high, an excessive number of error logs will be printed. 
+                            // Therefore, only brief logs are printed now.
+                            logger.error("The table [{}] snapshot [{}] has been expired", nativeTable.name(), snapshotId);
                         }
                         partition = new Partition(lastUpdated);
                         break;

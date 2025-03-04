@@ -3520,6 +3520,7 @@ TEST_F(TabletUpdatesTest, test_alter_state_not_correct) {
 TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
     config::retry_apply_interval_second = 1;
     _tablet = create_tablet(rand(), rand());
+    _tablet->updates()->stop_compaction(true);
     _tablet->set_enable_persistent_index(true);
     const int N = 10;
     std::vector<int64_t> keys;
@@ -3566,7 +3567,12 @@ TEST_F(TabletUpdatesTest, test_normal_apply_retry) {
         _tablet->updates()->check_for_apply();
 
         // Verify the read result
+        _tablet->updates()->wait_apply_done();
         ASSERT_EQ(expected_read_result, read_tablet(_tablet, version));
+        auto index_entry = StorageEngine::instance()->update_manager()->index_cache().get(_tablet->tablet_id());
+        ASSERT_TRUE(index_entry != nullptr);
+        ASSERT_EQ(index_entry->get_ref(), 2);
+        StorageEngine::instance()->update_manager()->index_cache().release(index_entry);
     };
 
     // 2. internal error
@@ -3933,6 +3939,53 @@ TEST_F(TabletUpdatesTest, test_skip_schema) {
         trigger_mode.set_mode(FailPointTriggerModeType::DISABLE);
         fp->setMode(trigger_mode);
     }
+}
+
+void TabletUpdatesTest::test_apply_breakpoint_check(bool enable_persistent_index) {
+    const int N = 10;
+    _tablet = create_tablet(rand(), rand());
+    _tablet->set_enable_persistent_index(enable_persistent_index);
+    ASSERT_EQ(1, _tablet->updates()->version_history_count());
+
+    std::vector<int64_t> keys(N);
+    for (int i = 0; i < N; i++) {
+        keys[i] = i;
+    }
+    std::vector<RowsetSharedPtr> rowsets;
+    rowsets.reserve(64);
+    for (int i = 0; i < 64; i++) {
+        rowsets.emplace_back(create_rowset(_tablet, keys, nullptr, false));
+    }
+    for (int i = 0; i < rowsets.size(); i++) {
+        auto version = i + 2;
+        auto st = _tablet->rowset_commit(version, rowsets[i]);
+        ASSERT_TRUE(st.ok()) << st.to_string();
+    }
+    ASSERT_EQ(N, read_tablet(_tablet, rowsets.size() + 1));
+
+    SyncPoint::GetInstance()->EnableProcessing();
+    SyncPoint::GetInstance()->SetCallBack("TabletUpdates::_do_update", [&](void* arg) { sleep(10); });
+    // commit rowset
+    auto st = _tablet->rowset_commit(rowsets.size() + 2, rowsets[0]);
+    ASSERT_TRUE(st.ok()) << st.to_string();
+    sleep(5);
+    // apply force quit
+    _tablet->updates()->stop_and_wait_apply_done();
+    // check breakpoint
+    ASSERT_FALSE(_tablet->updates()->breakpoint_check().ok());
+    ASSERT_TRUE(_tablet->updates()->is_apply_stop());
+    ASSERT_FALSE(_tablet->updates()->is_error());
+
+    SyncPoint::GetInstance()->ClearAllCallBacks();
+    SyncPoint::GetInstance()->DisableProcessing();
+}
+
+TEST_F(TabletUpdatesTest, test_apply_breakpoint_check) {
+    test_apply_breakpoint_check(false);
+}
+
+TEST_F(TabletUpdatesTest, test_apply_breakpoint_check_pindex) {
+    test_apply_breakpoint_check(true);
 }
 
 } // namespace starrocks

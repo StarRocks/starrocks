@@ -222,6 +222,19 @@ statement
     | revokePrivilegeStatement
     | showGrantsStatement
 
+    // Security Integration Statement
+    | createSecurityIntegrationStatement
+    | alterSecurityIntegrationStatement
+    | dropSecurityIntegrationStatement
+    | showSecurityIntegrationStatement
+    | showCreateSecurityIntegrationStatement
+
+    // Group Provider Statement
+    | createGroupProviderStatement
+    | dropGroupProviderStatement
+    | showGroupProvidersStatement
+    | showCreateGroupProviderStatement
+
     // Backup Restore Statement
     | backupStatement
     | cancelBackupStatement
@@ -616,6 +629,8 @@ createViewStatement
 alterViewStatement
     : ALTER VIEW qualifiedName ('(' columnNameWithComment (',' columnNameWithComment)* ')')? AS queryStatement
     | ALTER VIEW qualifiedName SET SECURITY (NONE | INVOKER)
+    | ALTER VIEW qualifiedName SET properties
+    | ALTER VIEW qualifiedName (ADD | MODIFY) DIALECT (STARROCKS)?  queryStatement
     ;
 
 dropViewStatement
@@ -698,7 +713,7 @@ cancelRefreshMaterializedViewStatement
 // ------------------------------------------- Admin Statement ---------------------------------------------------------
 
 adminSetConfigStatement
-    : ADMIN SET FRONTEND CONFIG '(' property ')'
+    : ADMIN SET FRONTEND CONFIG '(' property ')' (WITH PERSISTENT)?
     ;
 adminSetReplicaStatusStatement
     : ADMIN SET REPLICA STATUS properties
@@ -1770,6 +1785,46 @@ privObjectType
 privObjectTypePlural
     : CATALOGS | DATABASES | FUNCTIONS | GLOBAL FUNCTIONS | MATERIALIZED VIEWS | POLICIES | RESOURCES | RESOURCE GROUPS
     | STORAGE VOLUMES | TABLES | USERS | VIEWS | WAREHOUSES | PIPES
+    ;
+
+// ------------------------------------------- Security Integration Statement ----------------------------------------------------
+
+createSecurityIntegrationStatement
+    : CREATE SECURITY INTEGRATION identifier properties
+    ;
+
+alterSecurityIntegrationStatement
+    : ALTER SECURITY INTEGRATION identifier SET propertyList
+    ;
+
+dropSecurityIntegrationStatement
+    : DROP SECURITY INTEGRATION identifier
+    ;
+
+showSecurityIntegrationStatement
+    : SHOW SECURITY INTEGRATIONS
+    ;
+
+showCreateSecurityIntegrationStatement
+    : SHOW CREATE SECURITY INTEGRATION identifier
+    ;
+
+// ------------------------------------------- Group Provider Statement ------------------------------------------
+
+createGroupProviderStatement
+    : CREATE GROUP PROVIDER identifier properties
+    ;
+
+dropGroupProviderStatement
+    : DROP GROUP PROVIDER identifier
+    ;
+
+showGroupProvidersStatement
+    : SHOW GROUP PROVIDERS
+    ;
+
+showCreateGroupProviderStatement
+    : SHOW CREATE GROUP PROVIDER identifier
     ;
 
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
@@ -2959,7 +3014,7 @@ nonReserved
     | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
-    | DATA | DATE | DATACACHE | DATETIME | DAY | DAYS | DECOMMISSION | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
+    | DATA | DATE | DATACACHE | DATETIME | DAY | DAYS | DECOMMISSION | DIALECT | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
     | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
     | FAILPOINT | FAILPOINTS | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
     | FUNCTIONS
@@ -2973,12 +3028,12 @@ nonReserved
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE | OFF
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLAN | PLUGIN | PLUGINS | POLICY | POLICIES
-    | PERCENT_RANK | PREDICATE | PRECEDING | PRIORITY | PROC | PROCESSLIST | PROFILE | PROFILELIST | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
+    | PERCENT_RANK | PREDICATE | PRECEDING | PRIORITY | PROC | PROCESSLIST | PROFILE | PROFILELIST | PROVIDER | PROVIDERS | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
     | QUARTER | QUERY | QUERIES | QUEUE | QUOTA | QUALIFY
     | REASON | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETAIN | RETENTION | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
-    | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SQLBLACKLIST | START
+    | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SQLBLACKLIST | START | STARROCKS
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
     | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TABLETS | TAG | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE | TRANSLATE

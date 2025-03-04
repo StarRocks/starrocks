@@ -72,6 +72,8 @@ public class HiveMetastoreApiConverterTest {
                 Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.LONG)), "", null));
         hudiFields.add(new Schema.Field("col2",
                 Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.INT)), "", null));
+        hudiFields.add(new Schema.Field("col3",
+                Schema.createUnion(Schema.create(Schema.Type.NULL), Schema.create(Schema.Type.INT)), "", null));
         hudiSchema = Schema.createRecord(hudiFields);
     }
 
@@ -96,14 +98,14 @@ public class HiveMetastoreApiConverterTest {
         };
 
         List<Column> columns = HiveMetastoreApiConverter.toFullSchemasForHudiTable(table, hudiSchema);
-        Assert.assertEquals(7, columns.size());
+        Assert.assertEquals(8, columns.size());
     }
 
     @Test
     public void testToDataColumnNamesForHudiTable() {
         List<String> partColumns = Lists.newArrayList("col1");
         List<String> dataColumns = HiveMetastoreApiConverter.toDataColumnNamesForHudiTable(hudiSchema, partColumns);
-        Assert.assertEquals(6, dataColumns.size());
+        Assert.assertEquals(7, dataColumns.size());
     }
 
     @Test
@@ -152,8 +154,8 @@ public class HiveMetastoreApiConverterTest {
         Assert.assertEquals(inputFormat, params.get(HUDI_TABLE_INPUT_FOAMT));
         Assert.assertEquals("COPY_ON_WRITE", params.get(HUDI_TABLE_TYPE));
         Assert.assertEquals("_hoodie_commit_time,_hoodie_commit_seqno,_hoodie_record_key," +
-                "_hoodie_partition_path,_hoodie_file_name,col1,col2", params.get(HUDI_TABLE_COLUMN_NAMES));
-        Assert.assertEquals("string#string#string#string#string#bigint#int", params.get(HUDI_TABLE_COLUMN_TYPES));
+                "_hoodie_partition_path,_hoodie_file_name,col1,col2,col3", params.get(HUDI_TABLE_COLUMN_NAMES));
+        Assert.assertEquals("string#string#string#string#string#bigint#int#int", params.get(HUDI_TABLE_COLUMN_TYPES));
 
         final String catalogName = "hudi_catalog";
         new Expectations() {

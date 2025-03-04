@@ -172,9 +172,11 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                 auto view_column = ArrayViewColumn::from_array_column(captured_column);
                 ASSIGN_OR_RETURN(auto replicated_view_column, view_column->replicate(aligned_offsets->get_data()));
                 cur_chunk->append_column(replicated_view_column, slot_id);
+                RETURN_IF_ERROR(view_column->capacity_limit_reached());
             } else {
                 ASSIGN_OR_RETURN(auto replicated_column, captured_column->replicate(aligned_offsets->get_data()));
                 cur_chunk->append_column(replicated_column, slot_id);
+                RETURN_IF_ERROR(replicated_column->capacity_limit_reached());
             }
         }
     }
@@ -192,6 +194,8 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         tmp_col->check_or_die();
         ASSIGN_OR_RETURN(column, tmp_col->replicate(aligned_offsets->get_data()));
         column = ColumnHelper::align_return_type(column, type().children[0], column->size(), true);
+
+        RETURN_IF_ERROR(column->capacity_limit_reached());
     } else {
         // if all input arguments are constant and lambda expr doesn't rely on other capture columns,
         // we can evaluate it based on const column
@@ -225,6 +229,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
             }
         }
     }
+
     DCHECK(column != nullptr);
     column = ColumnHelper::cast_to_nullable_column(column);
 

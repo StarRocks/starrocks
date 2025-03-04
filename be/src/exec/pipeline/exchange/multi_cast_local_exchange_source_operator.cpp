@@ -18,6 +18,7 @@ namespace starrocks::pipeline {
 
 Status MultiCastLocalExchangeSourceOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(SourceOperator::prepare(state));
+    RETURN_IF_ERROR(_exchanger->init_metrics(_unique_metrics.get(), false));
     _exchanger->open_source_operator(_mcast_consumer_index);
     _exchanger->observable().attach_source_observer(state, observer());
     return Status::OK();

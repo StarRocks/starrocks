@@ -91,6 +91,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -963,6 +964,16 @@ public class StarRocksAssert {
         return this;
     }
 
+    public StarRocksAssert cancelMV(String sql) throws Exception {
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        if (stmt instanceof CancelAlterTableStmt) {
+            CancelAlterTableStmt cancelAlterTableStmt = (CancelAlterTableStmt) stmt;
+            GlobalStateMgr.getCurrentState().getLocalMetastore().cancelAlter(cancelAlterTableStmt);
+        }
+
+        return this;
+    }
+
     public StarRocksAssert refreshMvPartition(String sql) throws Exception {
         StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
         if (stmt instanceof RefreshMaterializedViewStatement) {
@@ -1160,6 +1171,26 @@ public class StarRocksAssert {
             Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(alterJobV2.getDbId());
             Table table =
                         GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), alterJobV2.getTableId());
+            Preconditions.checkState(table instanceof OlapTable);
+            OlapTable olapTable = (OlapTable) table;
+            int retry = 0;
+            while (olapTable.getState() != OlapTable.OlapTableState.NORMAL && retry++ < 6000) {
+                Thread.sleep(10);
+            }
+            Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
+        }
+    }
+
+    public void checkSchemaChangeJob() throws Exception {
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().
+                getSchemaChangeHandler().getAlterJobsV2();
+        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
+            if (alterJobV2.getJobState().isFinalState()) {
+                continue;
+            }
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(alterJobV2.getDbId());
+            Table table =
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), alterJobV2.getTableId());
             Preconditions.checkState(table instanceof OlapTable);
             OlapTable olapTable = (OlapTable) table;
             int retry = 0;

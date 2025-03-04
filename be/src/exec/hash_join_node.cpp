@@ -958,10 +958,11 @@ Status HashJoinNode::_do_publish_runtime_filters(RuntimeState* state, int64_t li
         // skip if ht.size() > limit and it's only for local.
         if (!rf_desc->has_remote_targets() && _ht.get_row_count() > limit) continue;
         LogicalType build_type = rf_desc->build_expr_type();
-        JoinRuntimeFilter* filter = RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type);
+        RuntimeFilter* filter =
+                RuntimeFilterHelper::create_join_runtime_filter(_pool, build_type, rf_desc->join_mode());
         if (filter == nullptr) continue;
-        filter->set_join_mode(rf_desc->join_mode());
-        filter->init(_ht.get_row_count());
+        filter->get_bloom_filter()->init(_ht.get_row_count());
+
         int expr_order = rf_desc->build_expr_order();
         ColumnPtr column = _ht.get_key_columns()[expr_order];
         bool eq_null = _is_null_safes[expr_order];

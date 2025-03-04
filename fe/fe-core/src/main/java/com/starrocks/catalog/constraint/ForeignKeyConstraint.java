@@ -259,6 +259,9 @@ public class ForeignKeyConstraint extends Constraint {
     }
 
     public static String getShowCreateTableConstraintDesc(OlapTable baseTable, List<ForeignKeyConstraint> constraints) {
+        if (CollectionUtils.isEmpty(constraints)) {
+            return "";
+        }
         List<String> constraintStrs = Lists.newArrayList();
         for (ForeignKeyConstraint constraint : constraints) {
             BaseTableInfo parentTableInfo = constraint.getParentTableInfo();

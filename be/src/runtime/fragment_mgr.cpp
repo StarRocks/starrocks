@@ -140,7 +140,8 @@ public:
     std::shared_ptr<RuntimeState> runtime_state() { return _runtime_state; }
 
 private:
-    void coordinator_callback(const Status& status, RuntimeProfile* profile, bool done);
+    void coordinator_callback(const Status& status, RuntimeProfile* profile, RuntimeProfile* load_channel_profile,
+                              bool done);
 
     std::shared_ptr<RuntimeState> _runtime_state = nullptr;
 
@@ -169,8 +170,9 @@ FragmentExecState::FragmentExecState(const TUniqueId& query_id, const TUniqueId&
           _backend_num(backend_num),
           _exec_env(exec_env),
           _coord_addr(coord_addr),
-          _executor(exec_env, std::bind<void>(std::mem_fn(&FragmentExecState::coordinator_callback), this,
-                                              std::placeholders::_1, std::placeholders::_2, std::placeholders::_3)) {
+          _executor(exec_env,
+                    std::bind<void>(std::mem_fn(&FragmentExecState::coordinator_callback), this, std::placeholders::_1,
+                                    std::placeholders::_2, std::placeholders::_3, std::placeholders::_3)) {
     _start_time = DateTimeValue::local_time();
 }
 
@@ -230,7 +232,8 @@ std::string FragmentExecState::to_http_path(const std::string& file_name) {
 // it is only invoked from the executor's reporting thread.
 // Also, the reported status will always reflect the most recent execution status,
 // including the final status when execution finishes.
-void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfile* profile, bool done) {
+void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfile* profile,
+                                             RuntimeProfile* load_channel_profile, bool done) {
     DCHECK(status.ok() || done); // if !status.ok() => done
     Status exec_status = update_status(status);
 
@@ -255,6 +258,9 @@ void FragmentExecState::coordinator_callback(const Status& status, RuntimeProfil
         }
         profile->to_thrift(&params.profile);
         params.__isset.profile = true;
+
+        load_channel_profile->to_thrift(&params.load_channel_profile);
+        params.__isset.load_channel_profile = true;
 
         if (!runtime_state->output_files().empty()) {
             params.__isset.delta_urls = true;
@@ -472,7 +478,7 @@ Status FragmentMgr::cancel(const TUniqueId& id, const PPlanFragmentCancelReason&
 }
 
 void FragmentMgr::receive_runtime_filter(const PTransmitRuntimeFilterParams& params,
-                                         const std::shared_ptr<const JoinRuntimeFilter>& shared_rf) {
+                                         const std::shared_ptr<const RuntimeFilter>& shared_rf) {
     std::shared_ptr<FragmentExecState> exec_state;
     const PUniqueId& query_id = params.query_id();
     _exec_env->add_rf_event({query_id, params.filter_id(), BackendOptions::get_localhost(), "RECV_TOTAL_RF_RPC"});

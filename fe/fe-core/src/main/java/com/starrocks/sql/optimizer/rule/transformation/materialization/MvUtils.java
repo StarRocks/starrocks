@@ -1252,7 +1252,8 @@ public class MvUtils {
      */
     public static MvPlanContext getMVPlanContext(ConnectContext connectContext,
                                                  MaterializedView mv,
-                                                 boolean isInlineView) {
+                                                 boolean isInlineView,
+                                                 boolean isCheckNonDeterministicFunction) {
         // step1: get from mv plan cache
         List<MvPlanContext> mvPlanContexts = CachingMvPlanContextBuilder.getInstance()
                 .getPlanContext(connectContext.getSessionVariable(), mv);
@@ -1261,7 +1262,7 @@ public class MvUtils {
             return mvPlanContexts.get(0);
         }
         // step2: get from optimize
-        return new MaterializedViewOptimizer().optimize(mv, connectContext, isInlineView);
+        return new MaterializedViewOptimizer().optimize(mv, connectContext, isInlineView, isCheckNonDeterministicFunction);
     }
 
     /**

@@ -23,8 +23,6 @@ class ArrayFunctions {
 public:
     DEFINE_VECTORIZED_FN(array_length);
 
-    DEFINE_VECTORIZED_FN(array_ndims);
-
     DEFINE_VECTORIZED_FN(array_append);
 
     DEFINE_VECTORIZED_FN(array_remove);

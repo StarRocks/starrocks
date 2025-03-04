@@ -66,6 +66,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 /*
  * Version 2 of AlterJob, for replacing the old version of AlterJob.
@@ -119,6 +122,8 @@ public abstract class AlterJobV2 implements Writable {
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     protected Span span;
+
+    protected Future<Boolean> publishVersionFuture = null;
 
     public AlterJobV2(long jobId, JobType jobType, long dbId, long tableId, String tableName, long timeoutMs) {
         this.jobId = jobId;
@@ -332,6 +337,30 @@ public abstract class AlterJobV2 implements Writable {
     protected abstract void getInfo(List<List<Comparable>> infos);
 
     public abstract void replay(AlterJobV2 replayedJob);
+
+    protected boolean lakePublishVersion() {
+        return true;
+    }
+
+    protected boolean publishVersion() {
+        if (publishVersionFuture == null) {
+            Callable<Boolean> task = () -> {
+                return lakePublishVersion();
+            };
+            publishVersionFuture = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor().submit(task);
+            return false;
+        } else {
+            if (publishVersionFuture.isDone()) {
+                try {
+                    return publishVersionFuture.get();
+                } catch (InterruptedException | ExecutionException e) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+    }
 
     private void finishHook() {
         WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);

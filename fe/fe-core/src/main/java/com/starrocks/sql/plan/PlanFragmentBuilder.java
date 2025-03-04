@@ -224,6 +224,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.starrocks.catalog.Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF;
 import static com.starrocks.sql.common.ErrorType.INTERNAL_ERROR;
@@ -1469,6 +1470,9 @@ public class PlanFragmentBuilder {
                 PhysicalIcebergScanOperator op = node.cast();
                 icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, planNodeName,
                         op.getTableFullMORParams(), op.getMORParams());
+                icebergScanNode.updateAppliedDictStringColumns(
+                        ((PhysicalIcebergScanOperator) node).getGlobalDicts().stream()
+                                .map(entry -> entry.first).collect(Collectors.toSet()));
             } else {
                 PhysicalIcebergEqualityDeleteScanOperator op = node.cast();
                 icebergScanNode = new IcebergScanNode(context.getNextNodeId(), tupleDescriptor, planNodeName,
@@ -1511,6 +1515,11 @@ public class PlanFragmentBuilder {
 
             PlanFragment fragment =
                     new PlanFragment(context.getNextFragmentId(), icebergScanNode, DataPartition.RANDOM);
+            if (!isEqDeleteScan) {
+                fragment.setQueryGlobalDicts(((PhysicalIcebergScanOperator) node).getGlobalDicts());
+                fragment.setQueryGlobalDictExprs(
+                        getGlobalDictsExprs(((PhysicalIcebergScanOperator) node).getGlobalDictsExpr(), context));
+            }
             context.getFragments().add(fragment);
             return fragment;
         }
@@ -3360,6 +3369,24 @@ public class PlanFragmentBuilder {
             }
             udtfOutputTuple.computeMemLayout();
 
+            ColumnRefSet fnResultsRequired = ColumnRefSet.of();
+            optExpression.getRowOutputInfo().getColumnRefMap().values()
+                    .forEach(expr -> fnResultsRequired.union(expr.getUsedColumns()));
+            Optional.ofNullable(physicalTableFunction.getPredicate())
+                    .ifPresent(pred -> fnResultsRequired.union(pred.getUsedColumns()));
+
+            // if projection exists, the table function's result may be used by both common sub-expressions and
+            // column ref of projections, so all of them must be take into consideration.
+            Map<ColumnRefOperator, ScalarOperator> commonSubMap =
+                    Optional.ofNullable(physicalTableFunction.getProjection()).map(Projection::getCommonSubOperatorMap)
+                            .orElseGet(Collections::emptyMap);
+            Map<ColumnRefOperator, ScalarOperator> columnRefMap =
+                    Optional.ofNullable(physicalTableFunction.getProjection()).map(Projection::getColumnRefMap)
+                            .orElseGet(Collections::emptyMap);
+            Stream.concat(commonSubMap.values().stream(), columnRefMap.values().stream())
+                    .forEach(expr -> fnResultsRequired.union(expr.getUsedColumns()));
+
+            fnResultsRequired.intersect(physicalTableFunction.getFnResultColRefs());
             TableFunctionNode tableFunctionNode = new TableFunctionNode(context.getNextNodeId(),
                     inputFragment.getPlanRoot(),
                     udtfOutputTuple,
@@ -3369,8 +3396,10 @@ public class PlanFragmentBuilder {
                     physicalTableFunction.getOuterColRefs().stream().map(ColumnRefOperator::getId)
                             .collect(Collectors.toList()),
                     physicalTableFunction.getFnResultColRefs().stream().map(ColumnRefOperator::getId)
-                            .collect(Collectors.toList())
+                            .collect(Collectors.toList()),
+                    !fnResultsRequired.isEmpty() || physicalTableFunction.getOuterColRefs().isEmpty()
             );
+
             tableFunctionNode.computeStatistics(optExpression.getStatistics());
             tableFunctionNode.setLimit(physicalTableFunction.getLimit());
             currentExecGroup.add(tableFunctionNode);

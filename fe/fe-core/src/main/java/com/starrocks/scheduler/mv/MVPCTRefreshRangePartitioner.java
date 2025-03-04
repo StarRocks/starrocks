@@ -214,9 +214,10 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         String end = mvRefreshParams.getRangeEnd();
         boolean force = mvRefreshParams.isForce();
         Set<String> mvRangePartitionNames = getMVPartitionNamesWithTTL(mv, mvRefreshParams, isAutoRefresh);
-        LOG.info("Get partition names by range with partition limit, start: {}, end: {}, force:{}, " +
+        LOG.info("Get partition names by range with partition limit, mv name: {}, start: {}, end: {}, force:{}, " +
                         "partitionTTLNumber: {}, isAutoRefresh: {}, mvRangePartitionNames: {}, isRefreshMvBaseOnNonRefTables:{}",
-                start, end, force, partitionTTLNumber, isAutoRefresh, mvRangePartitionNames, isRefreshMvBaseOnNonRefTables);
+                mv.getName(), start, end, force, partitionTTLNumber, isAutoRefresh, mvRangePartitionNames,
+                isRefreshMvBaseOnNonRefTables);
 
         // check non-ref base tables or force refresh
         if (force || isRefreshMvBaseOnNonRefTables) {

@@ -34,6 +34,7 @@
 namespace starrocks {
 
 class SlotDescriptor;
+class TableMetrics;
 
 namespace pipeline {
 
@@ -110,6 +111,8 @@ private:
     std::string _vector_distance_column_name;
     SlotId _vector_slot_id;
 
+    std::shared_ptr<starrocks::TableMetrics> _table_metrics;
+
     // The following are profile meatures
     int64_t _num_rows_read = 0;
 
@@ -126,6 +129,9 @@ private:
     RuntimeProfile::Counter* _pred_filter_counter = nullptr;
     RuntimeProfile::Counter* _del_vec_filter_counter = nullptr;
     RuntimeProfile::Counter* _pred_filter_timer = nullptr;
+    RuntimeProfile::Counter* _rf_pred_filter_timer = nullptr;
+    RuntimeProfile::Counter* _rf_pred_input_rows = nullptr;
+    RuntimeProfile::Counter* _rf_pred_output_rows = nullptr;
     RuntimeProfile::Counter* _chunk_copy_timer = nullptr;
     RuntimeProfile::Counter* _get_rowsets_timer = nullptr;
     RuntimeProfile::Counter* _get_delvec_timer = nullptr;

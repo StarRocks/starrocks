@@ -47,15 +47,18 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorPartitionTraits;
+import com.starrocks.http.HttpConnectContext;
 import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
+import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.warehouse.Warehouse;
@@ -89,7 +92,24 @@ public class StatisticUtils {
             .add("information_schema").build();
 
     public static ConnectContext buildConnectContext() {
-        ConnectContext context = ConnectContext.buildInner();
+        return buildConnectContext(TResultSinkType.MYSQL_PROTOCAL);
+    }
+
+    public static ConnectContext buildConnectContext(TResultSinkType connectType) {
+        ConnectContext context;
+        switch (connectType) {
+            case MYSQL_PROTOCAL:
+                context = ConnectContext.buildInner();
+                break;
+            case HTTP_PROTOCAL:
+                context = new HttpConnectContext();
+                break;
+            case ARROW_FLIGHT_PROTOCAL:
+                context = new ArrowFlightSqlConnectContext();
+                break;
+            default:
+                throw new IllegalStateException("Unexpected value: " + connectType);
+        }
         // Note: statistics query does not register query id to QeProcessorImpl::coordinatorMap,
         // but QeProcessorImpl::reportExecStatus will check query id,
         // So we must disable report query status from BE to FE

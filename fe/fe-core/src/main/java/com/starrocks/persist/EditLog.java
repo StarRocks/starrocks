@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.JsonParseException;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authentication.UserPropertyInfo;
@@ -785,6 +786,11 @@ public class EditLog {
                     }
                     break;
                 }
+                case OperationType.OP_ALTER_ROUTINE_LOAD_JOB: {
+                    AlterRoutineLoadJobOperationLog log = (AlterRoutineLoadJobOperationLog) journal.data();
+                    globalStateMgr.getRoutineLoadMgr().replayAlterRoutineLoadJob(log);
+                    break;
+                }
                 case OperationType.OP_ALTER_LOAD_JOB: {
                     AlterLoadJobOperationLog log = (AlterLoadJobOperationLog) journal.data();
                     globalStateMgr.getLoadMgr().replayAlterLoadJob(log);
@@ -1121,6 +1127,35 @@ public class EditLog {
                 case OperationType.OP_DELETE_SQL_QUERY_BLACK_LIST: {
                     DeleteSqlBlackLists deleteBlackListsRequest = (DeleteSqlBlackLists) journal.data();
                     GlobalStateMgr.getCurrentState().getSqlBlackList().delete(deleteBlackListsRequest.ids);
+                    break;
+                }
+                case OperationType.OP_CREATE_SECURITY_INTEGRATION: {
+                    SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.data();
+                    AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+                    authenticationMgr.replayCreateSecurityIntegration(info.name, info.propertyMap);
+                    break;
+                }
+                case OperationType.OP_ALTER_SECURITY_INTEGRATION: {
+                    SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.data();
+                    AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+                    authenticationMgr.replayAlterSecurityIntegration(info.name, info.propertyMap);
+                    break;
+                }
+                case OperationType.OP_DROP_SECURITY_INTEGRATION: {
+                    SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.data();
+                    AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+                    authenticationMgr.replayDropSecurityIntegration(info.name);
+                    break;
+                }
+                case OperationType.OP_CREATE_GROUP_PROVIDER: {
+                    GroupProviderLog groupProviderLog = (GroupProviderLog) journal.data();
+                    GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayCreateGroupProvider(
+                            groupProviderLog.getName(), groupProviderLog.getPropertyMap());
+                    break;
+                }
+                case OperationType.OP_DROP_GROUP_PROVIDER: {
+                    GroupProviderLog groupProviderLog = (GroupProviderLog) journal.data();
+                    GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayDropGroupProvider(groupProviderLog.getName());
                     break;
                 }
                 default: {
@@ -1878,6 +1913,21 @@ public class EditLog {
             short pluginVersion) {
         RolePrivilegeCollectionInfo info = new RolePrivilegeCollectionInfo(rolePrivCollectionModified, pluginId, pluginVersion);
         logEdit(OperationType.OP_DROP_ROLE_V2, info);
+    }
+
+    public void logCreateSecurityIntegration(String name, Map<String, String> propertyMap) {
+        SecurityIntegrationPersistInfo info = new SecurityIntegrationPersistInfo(name, propertyMap);
+        logEdit(OperationType.OP_CREATE_SECURITY_INTEGRATION, info);
+    }
+
+    public void logAlterSecurityIntegration(String name, Map<String, String> alterProps) {
+        SecurityIntegrationPersistInfo info = new SecurityIntegrationPersistInfo(name, alterProps);
+        logEdit(OperationType.OP_ALTER_SECURITY_INTEGRATION, info);
+    }
+
+    public void logDropSecurityIntegration(String name) {
+        SecurityIntegrationPersistInfo info = new SecurityIntegrationPersistInfo(name, null);
+        logEdit(OperationType.OP_DROP_SECURITY_INTEGRATION, info);
     }
 
     public void logModifyBinlogConfig(ModifyTablePropertyOperationLog log) {

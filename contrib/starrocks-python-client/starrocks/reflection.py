@@ -54,7 +54,7 @@ class StarRocksTableDefinitionParser(object):
                 self._parse_column(line, state)
             # the end of table definition, start of the options
             elif line.startswith(") "):
-                # 'ENGINE=OLAP \nDUPLICATE KEY(`a`, `b`)\nCOMMENT "OLAP"\nDISTRIBUTED BY RANDOM\nPROPERTIES (\n"replication_num" = "1",\n"datacache.enable" = "true",\n"storage_volume" = "plaid_volume",\n"enable_async_write_back" = "false",\n"enable_persistent_index" = "false",\n"compression" = "LZ4"\n);'
+                # 'ENGINE=OLAP \nDUPLICATE KEY(`a`, `b`)\nCOMMENT "OLAP"\nDISTRIBUTED BY RANDOM\nPROPERTIES (\n"replication_num" = "1",\n"datacache.enable" = "true",\n"storage_volume" = "plaid_volume",\n"enable_async_write_back" = "false",\n"enable_persistent_index" = "true",\n"compression" = "LZ4"\n);'
                 self._parse_table_options(re.split(r"\r?\n", show_create.rsplit(') ')[-1]), state)
                 break
 
@@ -261,7 +261,7 @@ class StarRocksTableDefinitionParser(object):
     # '"datacache.enable" = "true",'
     # '"storage_volume" = "plaid_volume",'
     # '"enable_async_write_back" = "false",'
-    # '"enable_persistent_index" = "false",'
+    # '"enable_persistent_index" = "true",'
     # '"compression" = "LZ4"'
     # ');'
 

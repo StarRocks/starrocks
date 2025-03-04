@@ -172,7 +172,7 @@ public:
                 Rowset::segment_file_path(rowset_writer_context.rowset_path_prefix, rowset_writer_context.rowset_id, 0);
         std::string index_path = IndexDescriptor::inverted_index_file_path(
                 rowset_writer_context.rowset_path_prefix, rowset_writer_context.rowset_id.to_string(), 0, 100);
-        FileSystem::Default()->new_random_access_file(seg_path);
+        (void)FileSystem::Default()->new_random_access_file(seg_path);
         fs::create_directories(index_path).ok();
         int* _num_segment = (int*)((char*)_rowset_writer.get() + offsetof(VerticalRowsetWriter, _num_segment));
         (*_num_segment) = 1;
