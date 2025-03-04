@@ -42,11 +42,17 @@ public class LoadLoadingTaskTest {
             }};
 
         Database database = new Database(10000L, "test");
+<<<<<<< HEAD
         OlapTable olapTable = new OlapTable(10001L, "tbl", new ArrayList<>(), KeysType.AGG_KEYS, null, null);
         LoadLoadingTask loadLoadingTask = new LoadLoadingTask(database, olapTable, null, null, 0,
                 0, true, 1, new BrokerLoadJob(), "UTC", 10,
                 System.currentTimeMillis(), false, null, null, null,
                 TLoadJobType.BROKER, 0, null, null);
+=======
+        OlapTable olapTable = new OlapTable(10001L, "tbl", null, KeysType.AGG_KEYS, null, null);
+        LoadLoadingTask loadLoadingTask =
+                new LoadLoadingTask.Builder().setDb(database).setTable(olapTable).setContext(ConnectContext.build()).build();
+>>>>>>> f769845f17 ([BugFix] Fix broker load set connection context (#56512))
 
         // database not exist
         boolean exceptionThrown = false;
