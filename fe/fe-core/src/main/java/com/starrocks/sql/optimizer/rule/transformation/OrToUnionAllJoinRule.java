@@ -159,7 +159,29 @@ public class OrToUnionAllJoinRule extends TransformationRule {
         List<BinaryPredicateOperator> equalPredicates =
                 JoinHelper.getEqualsPredicate(leftColumns, rightColumns, disjunctivePredicates);
 
-        return equalPredicates.size() == disjunctivePredicates.size();
+        if (equalPredicates.size() != disjunctivePredicates.size()) {
+            return false;
+        }
+
+        for (BinaryPredicateOperator predOp : equalPredicates) {
+            if (predOp.getBinaryType() != BinaryType.EQ) {
+                return false;
+            }
+
+            if (predOp.isNullable()) {
+                return false;
+            }
+
+            ScalarOperator left = predOp.getChild(0);
+            ScalarOperator right = predOp.getChild(1);
+
+            if ((left instanceof ColumnRefOperator && left.isNullable()) ||
+                    (right instanceof ColumnRefOperator && right.isNullable())) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     @Override
