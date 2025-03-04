@@ -2219,7 +2219,7 @@ public class Config extends ConfigBase {
     public static long connector_table_query_trigger_analyze_max_pending_task_num = 100;
 
     @ConfField(mutable = true)
-    public static long connector_table_query_trigger_analyze_schedule_interval = 30; // unit: second, default 30s
+    public static long connector_table_query_trigger_task_schedule_interval = 30; // unit: second, default 30s
 
     /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.

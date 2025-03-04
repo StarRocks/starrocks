@@ -1789,6 +1789,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：直方图最大采样行数。
 - 引入版本：-
 
+##### connector_table_query_trigger_task_schedule_interval
+
+- 默认值：30
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：Schedule 线程调度查询触发的后台任务的周期。我们将 “connector_table_query_trigger_analyze_schedule_interval” 改为了这个参数，它负责所有的后台任务。在 3.4版本中，后台任务是`ANALYZE`，在 3.4 版本之后，又增加了低基数字典收集任务。
+- 引入版本：v3.4.2
+
 ##### connector_table_query_trigger_analyze_small_table_rows
 
 - 默认值：10000000
@@ -1823,15 +1832,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：-
 - 是否动态：是
 - 描述：FE 中处于 Pending 状态的查询触发 ANALYZE 任务的最大数量。
-- 引入版本：v3.4.0
-
-##### connector_table_query_trigger_analyze_schedule_interval
-
-- 默认值：30
-- 类型：Int
-- 单位：秒
-- 是否动态：是
-- 描述：Schedule 线程调度查询触发 ANALYZE 任务的周期。
 - 引入版本：v3.4.0
 
 ##### connector_table_query_trigger_analyze_max_running_task_num
