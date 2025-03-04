@@ -49,7 +49,7 @@ Status ObjectCache::init(const ObjectCacheOptions& options) {
 }
 
 #ifdef WITH_STARCACHE
-Status ObjectCache::init(std::shared_ptr<starcache::StarCache> star_cache) {
+Status ObjectCache::init(const std::shared_ptr<starcache::StarCache>& star_cache) {
     if (_initialized.load(std::memory_order_acquire)) {
         LOG(WARNING) << "fail to initialize because it has already been initialized before";
         return Status::AlreadyExist("already initialized");
