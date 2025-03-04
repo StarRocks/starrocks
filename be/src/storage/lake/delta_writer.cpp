@@ -563,8 +563,11 @@ StatusOr<TxnLogPtr> DeltaWriterImpl::finish_with_txnlog(DeltaWriterFinishMode mo
     op_write->mutable_rowset()->set_data_size(_tablet_writer->data_size());
     op_write->mutable_rowset()->set_overlapped(op_write->rowset().segments_size() > 1);
 
-    if (is_partial_update() && !_merge_condition.empty()) {
-        return Status::NotSupported("partial update and condition update at the same time");
+    // We can support partial update with row mode to be used with condition update at the same time.
+    if (is_partial_update() && !_merge_condition.empty() &&
+        (_partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE ||
+         _partial_update_mode == PartialUpdateMode::COLUMN_UPSERT_MODE)) {
+        return Status::NotSupported("partial update with column mode and condition update at the same time");
     }
 
     // handle partial update

@@ -295,9 +295,6 @@ public class OperationType {
 
     public static final short OP_AUTH_UPGRADE_V2 = 10267;
 
-    @IgnorableOnReplayFailed
-    public static final short OP_CREATE_SECURITY_INTEGRATION = 10269;
-
     // integrate with starmgr
     public static final short OP_STARMGR = 11000;
 
@@ -596,6 +593,12 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DELETE_SQL_QUERY_BLACK_LIST = 13521;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_CREATE_GROUP_PROVIDER = 13530;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_GROUP_PROVIDER = 13531;
+
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
      */
@@ -605,6 +608,11 @@ public class OperationType {
     public static final short OP_CREATE_WAREHOUSE = 20101;
     public static final short OP_DROP_WAREHOUSE = 20102;
     public static final short OP_ALTER_WAREHOUSE = 20103;
+
+    // security integration and role mapping
+    public static final short OP_CREATE_SECURITY_INTEGRATION = 20269;
+    public static final short OP_DROP_SECURITY_INTEGRATION = 20271;
+    public static final short OP_ALTER_SECURITY_INTEGRATION = 20272;
 
     public static final ImmutableSet<Short> IGNORABLE_OPERATIONS = buildIgnorableOperations();
 
@@ -625,7 +633,12 @@ public class OperationType {
             }
 
             if (opType > OperationType.OP_TYPE_EOF &&
-                    opType != OP_CREATE_WAREHOUSE && opType != OP_DROP_WAREHOUSE && opType != OP_ALTER_WAREHOUSE) {
+                    opType != OP_CREATE_WAREHOUSE &&
+                    opType != OP_DROP_WAREHOUSE &&
+                    opType != OP_ALTER_WAREHOUSE &&
+                    opType != OP_CREATE_SECURITY_INTEGRATION &&
+                    opType != OP_DROP_SECURITY_INTEGRATION &&
+                    opType != OP_ALTER_SECURITY_INTEGRATION) {
                 LOG.fatal("OperationType cannot use a value exceeding 20000, " +
                         "and an error will be reported if it exceeds : {} = {}", field.getName(), opType);
                 System.exit(-1);

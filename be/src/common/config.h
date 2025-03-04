@@ -469,6 +469,19 @@ CONF_mInt32(olap_table_sink_send_interval_ms, "10");
 // if smaller than this value, will reduce slow log print frequency.
 // 0 is print slow log every time.
 CONF_mInt32(load_rpc_slow_log_frequency_threshold_seconds, "60");
+// Whether to enable load diagnose. The diagnosis is initiated by OlapTableSink when meeting brpc timeout
+// from LoadChannel. It will send rpc to LoadChannel to check the status.
+CONF_mBool(enable_load_diagnose, "true");
+// If the rpc timeout exceeds this threshold, then diagnostics will be performed every time a timeout occurs;
+// if it is below this threshold, diagnostics will be performed once every 20 timeouts. This is used to avoid
+// frequent diagnostics for real-time loads which have a smaller brpc timeout.
+CONF_mInt32(load_diagnose_small_rpc_timeout_threshold_ms, "60000");
+// The timeout of the diagnosis rpc sent from OlapTableSink to LoadChannel
+CONF_mInt32(load_diagnose_send_rpc_timeout_ms, "2000");
+// Used in load fail point. The brpc timeout used to simulate brpc exception "[E1008]Reached timeout"
+CONF_mInt32(load_fp_brpc_timeout_ms, "-1");
+// Used in load fail point. The block time to simulate TabletsChannel::add_chunk spends much time
+CONF_mInt32(load_fp_tablets_channel_add_chunk_block_ms, "-1");
 
 CONF_Bool(enable_load_segment_parallel, "false");
 CONF_Int32(load_segment_thread_pool_num_max, "128");
@@ -925,6 +938,7 @@ CONF_mBool(parquet_coalesce_read_enable, "true");
 CONF_Bool(parquet_late_materialization_enable, "true");
 CONF_Bool(parquet_page_index_enable, "true");
 CONF_mBool(parquet_statistics_process_more_filter_enable, "true");
+CONF_mBool(parquet_fast_timezone_conversion, "false");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
@@ -1099,7 +1113,7 @@ CONF_String(dependency_librdkafka_debug, "all");
 CONF_mInt16(pulsar_client_log_level, "2");
 
 // max loop count when be waiting its fragments finish. It has no effect if the var is configured with value <= 0.
-CONF_Int64(loop_count_wait_fragments_finish, "0");
+CONF_mInt64(loop_count_wait_fragments_finish, "2");
 
 // the maximum number of connections in the connection pool for a single jdbc url
 CONF_Int16(jdbc_connection_pool_size, "8");
@@ -1569,4 +1583,9 @@ CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
 CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
 // used to control whether the metrics/ interface collects table metrics
 CONF_mBool(enable_collect_table_metrics, "true");
+// some internal parameters are used to control the execution strategy of join runtime filter pushdown.
+// Do not modify them unless necessary.
+CONF_mInt64(rf_sample_rows, "1024");
+CONF_mInt64(rf_sample_ratio, "32");
+CONF_mInt64(rf_branchless_ratio, "8");
 } // namespace starrocks::config

@@ -353,7 +353,7 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void alterView(AlterViewStmt stmt) throws DdlException, StarRocksException {
+    public void alterView(AlterViewStmt stmt) throws StarRocksException {
         normal.alterView(stmt);
     }
 

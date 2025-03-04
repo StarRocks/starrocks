@@ -77,10 +77,12 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.IsoFields;
 import java.time.temporal.TemporalAdjusters;
 import java.time.temporal.TemporalUnit;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.PrimitiveType.BIGINT;
 import static com.starrocks.catalog.PrimitiveType.BITMAP;
@@ -703,6 +705,18 @@ public class ScalarOperatorFunctions {
     }
 
     @ConstantFunction.List(list = {
+            @ConstantFunction(name = "curtime", argTypes = {}, returnType = TIME),
+            @ConstantFunction(name = "current_time", argTypes = {}, returnType = TIME)
+    })
+    public static ConstantOperator curTime() {
+        ConnectContext connectContext = ConnectContext.get();
+        LocalDateTime startTime = Instant.ofEpochMilli(connectContext.getStartTime() / 1000 * 1000)
+                .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
+        double second = startTime.getHour() * 3600D + startTime.getMinute() * 60D + startTime.getSecond();
+        return ConstantOperator.createTime(second);
+    }
+
+    @ConstantFunction.List(list = {
             @ConstantFunction(name = "now", argTypes = {}, returnType = DATETIME),
             @ConstantFunction(name = "current_timestamp", argTypes = {}, returnType = DATETIME),
             @ConstantFunction(name = "localtime", argTypes = {}, returnType = DATETIME),
@@ -1285,15 +1299,13 @@ public class ScalarOperatorFunctions {
         if (split.isNull()) {
             return ConstantOperator.createNull(Type.VARCHAR);
         }
-        final StringBuilder resultBuilder = new StringBuilder();
-        for (int i = 0; i < values.length - 1; i++) {
-            if (values[i].isNull()) {
-                continue;
-            }
-            resultBuilder.append(values[i].getVarchar()).append(split.getVarchar());
-        }
-        resultBuilder.append(values[values.length - 1].getVarchar());
-        return ConstantOperator.createVarchar(resultBuilder.toString());
+        String separator = split.getVarchar();
+        return ConstantOperator.createVarchar(
+                Arrays.stream(values)
+                        .filter(v -> !v.isNull())
+                        .map(ConstantOperator::getVarchar)
+                        .collect(Collectors.joining(separator))
+        );
     }
 
     @ConstantFunction(name = "version", argTypes = {}, returnType = VARCHAR)

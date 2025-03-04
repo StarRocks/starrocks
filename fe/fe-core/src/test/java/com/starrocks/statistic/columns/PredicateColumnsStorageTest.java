@@ -34,6 +34,7 @@ import org.mockito.Mockito;
 
 import java.nio.ByteBuffer;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.EnumSet;
 import java.util.List;
 
@@ -146,4 +147,42 @@ class PredicateColumnsStorageTest extends PlanTestBase {
         Assertions.assertEquals(usage2, result.get(1));
     }
 
+    @Test
+    public void testDuplicateColumnUsages() {
+        Database db = starRocksAssert.getDb("test");
+        Table t1 = starRocksAssert.getTable("test", "t1");
+        Column v4 = t1.getColumn("v4");
+        Column v5 = t1.getColumn("v5");
+
+        List<ColumnUsage> duplicatedColumnUsages = new ArrayList<>();
+        ColumnUsage usage1 = new ColumnUsage(ColumnFullId.create(db, t1, v4),
+                TableName.fromString("default_catalog.test.t1"),
+                EnumSet.of(ColumnUsage.UseCase.PREDICATE, ColumnUsage.UseCase.DISTINCT));
+        usage1.setCreated(LocalDateTime.parse("2025-01-01T01:02:03"));
+        usage1.setLastUsed(LocalDateTime.parse("2025-01-02T01:02:03"));
+        duplicatedColumnUsages.add(usage1);
+
+        ColumnUsage usage2 = new ColumnUsage(ColumnFullId.create(db, t1, v4),
+                TableName.fromString("default_catalog.test.t1"),
+                EnumSet.of(ColumnUsage.UseCase.PREDICATE, ColumnUsage.UseCase.JOIN));
+        usage2.setCreated(LocalDateTime.parse("2025-01-01T01:02:03"));
+        usage2.setLastUsed(LocalDateTime.parse("2025-01-02T02:02:03"));
+        duplicatedColumnUsages.add(usage2);
+
+        ColumnUsage usage3 = new ColumnUsage(ColumnFullId.create(db, t1, v5),
+                TableName.fromString("default_catalog.test.t1"),
+                EnumSet.of(ColumnUsage.UseCase.GROUP_BY, ColumnUsage.UseCase.JOIN));
+        usage3.setCreated(LocalDateTime.parse("2025-01-01T01:02:03"));
+        usage3.setLastUsed(LocalDateTime.parse("2025-01-02T03:02:03"));
+        duplicatedColumnUsages.add(usage3);
+
+        List<ColumnUsage> result = PredicateColumnsStorage.getInstance().deduplicateColumnUsages(duplicatedColumnUsages);
+
+        Assertions.assertEquals(2, result.size());
+        ColumnUsage r1 = result.get(1);
+        Assertions.assertEquals(EnumSet.of(ColumnUsage.UseCase.PREDICATE, ColumnUsage.UseCase.JOIN,
+                ColumnUsage.UseCase.DISTINCT), r1.getUseCases());
+        Assertions.assertEquals(LocalDateTime.parse("2025-01-02T02:02:03"), r1.getLastUsed());
+
+    }
 }

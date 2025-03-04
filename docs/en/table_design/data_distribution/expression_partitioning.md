@@ -16,7 +16,7 @@ From v3.4 onwards, expression partitioning is further optimized to unify all par
 
 If you frequently query and manage data based on continuous time ranges, you only need to specify a date type (DATE or DATETIME) column as the partition column and specify year, month, day, or hour as the partition granularity in the time function expression. StarRocks will automatically create partitions and set the partitions' start and end dates or datetime based on the loaded data and partition expression.
 
-However, in some special scenarios, such as partitioning historical data into partitions by month and recent data into partitions by day, you must use [range partitioning](Data_distribution.md#range-partitioning) to create partitions.
+However, in some special scenarios, such as partitioning historical data into partitions by month and recent data into partitions by day, you must use [range partitioning](./Data_distribution.md#range-partitioning) to create partitions.
 
 ### Syntax
 
@@ -132,7 +132,7 @@ DISTRIBUTED BY HASH(event_day, site_id)
 
 If you frequently query and manage data of a specific type, you only need to specify the column representing the type as the partition column. StarRocks will automatically create partitions based on the partition column values of the loaded data.
 
-However, in some special scenarios, such as when the table contains a column `city`, and you frequently query and manage data based on countries and cities. You must use [list partitioning](list_partitioning.md) to store data of multiple cities within the same country in one partition.
+However, in some special scenarios, such as when the table contains a column `city`, and you frequently query and manage data based on countries and cities. You must use [list partitioning](./list_partitioning.md) to store data of multiple cities within the same country in one partition.
 
 ### Syntax
 
@@ -152,7 +152,7 @@ partition_columns ::=
 #### `partition_columns`
 
 **Required**: YES<br/>
-**Description**: The names of partition columns.<br/> <ul><li>The partition column values can be string (BINARY not supported), date or datetime, integer, and boolean values. The partition column allows `NULL` values.</li><li> Each partition can only contain data with the same value in the partition column. To include data with different values in a partition column in a partition, see [List partitioning](list_partitioning.md).</li></ul> <br/>
+**Description**: The names of partition columns.<br/> <ul><li>The partition column values can be string (BINARY not supported), date or datetime, integer, and boolean values. The partition column allows `NULL` values.</li><li> Each partition can only contain data with the same value in the partition column. To include data with different values in a partition column in a partition, see [List partitioning](./list_partitioning.md).</li></ul> <br/>
 
 
 ### Usage notes
@@ -188,7 +188,7 @@ INSERT INTO t_recharge_detail1
 View the partitions. The result shows that StarRocks automatically creates a partition `p20220401_Houston1` based on the loaded data. During subsequent loading, data with the values `2022-04-01` and `Houston` in the partition columns `dt` and `city` are stored in this partition.
 
 :::tip
-Each partition can only contain data with the specified one value for the partition column. To specify multiple values for a partition column in a partition, see [List partitions](list_partitioning.md).
+Each partition can only contain data with the specified one value for the partition column. To specify multiple values for a partition column in a partition, see [List partitions](./list_partitioning.md).
 :::
 
 ```SQL

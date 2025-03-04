@@ -245,32 +245,40 @@ TEST_F(CacheTest, Usage) {
     cache.set_capacity(1000);
 
     CacheKey key1("100");
+    size_t key_mem_usage = sizeof(LRUHandle) - 1 + key1.size();
     insert_LRUCache(cache, key1, 100, CachePriority::NORMAL);
-    ASSERT_EQ(100, cache.get_usage());
+    // 100 + 90
+    ASSERT_EQ(100 + key_mem_usage, cache.get_usage());
 
     CacheKey key2("200");
     insert_LRUCache(cache, key2, 200, CachePriority::DURABLE);
-    ASSERT_EQ(300, cache.get_usage());
+    // 300 + 180
+    ASSERT_EQ(300 + key_mem_usage * 2, cache.get_usage());
 
     CacheKey key3("300");
     insert_LRUCache(cache, key3, 300, CachePriority::NORMAL);
-    ASSERT_EQ(600, cache.get_usage());
+    // 600 + 270
+    ASSERT_EQ(600 + key_mem_usage * 3, cache.get_usage());
 
     CacheKey key4("400");
     insert_LRUCache(cache, key4, 400, CachePriority::NORMAL);
-    ASSERT_EQ(1000, cache.get_usage());
+    // 600 + 180
+    ASSERT_EQ(600 + key_mem_usage * 2, cache.get_usage());
 
     CacheKey key5("500");
     insert_LRUCache(cache, key5, 500, CachePriority::NORMAL);
-    ASSERT_EQ(700, cache.get_usage());
+    // 700 + 180
+    ASSERT_EQ(700 + key_mem_usage * 2, cache.get_usage());
 
     CacheKey key6("600");
     insert_LRUCache(cache, key6, 600, CachePriority::NORMAL);
-    ASSERT_EQ(800, cache.get_usage());
+    // 800 + 180
+    ASSERT_EQ(800 + key_mem_usage * 2, cache.get_usage());
 
     CacheKey key7("950");
-    insert_LRUCache(cache, key7, 950, CachePriority::DURABLE);
-    ASSERT_EQ(950, cache.get_usage());
+    // 900 + 90
+    insert_LRUCache(cache, key7, 900, CachePriority::DURABLE);
+    ASSERT_EQ(900 + key_mem_usage, cache.get_usage());
 }
 
 TEST_F(CacheTest, HeavyEntries) {
@@ -316,37 +324,43 @@ TEST_F(CacheTest, SetCapacity) {
     // returned capacity should be 2*kCacheSize, usage=32
     std::vector<Cache::Handle*> handles(64, nullptr);
     // Insert kCacheSize entries, but not releasing.
+    size_t key_mem_size_1 = 0;
     for (int i = 0; i < 32; i++) {
         std::string result;
-        handles[i] = _cache->insert(EncodeKey(&result, i), EncodeValue(1000 + kCacheSize), 1, 1, &CacheTest::Deleter);
+        auto cache_key = EncodeKey(&result, i);
+        key_mem_size_1 += sizeof(LRUHandle) - 1 + cache_key.size();
+        handles[i] = _cache->insert(cache_key, EncodeValue(1000 + kCacheSize), 1, 1, &CacheTest::Deleter);
     }
     ASSERT_EQ(kCacheSize, _cache->get_capacity());
-    ASSERT_EQ(32, _cache->get_memory_usage());
+    ASSERT_EQ(32 + key_mem_size_1, _cache->get_memory_usage());
     _cache->set_capacity(kCacheSize * 2);
     ASSERT_EQ(kCacheSize * 2, _cache->get_capacity());
-    ASSERT_EQ(32, _cache->get_memory_usage());
+    ASSERT_EQ(32 + key_mem_size_1, _cache->get_memory_usage());
 
     // Test2: decrease capacity
     // insert more elements to cache, then release 32,
     // then decrease capacity to 32, final capacity should be 32.
     // then release 32, usage should be 32.
+    size_t key_mem_size_2 = 0;
     for (int i = 32; i < 64; i++) {
         std::string result;
-        handles[i] = _cache->insert(EncodeKey(&result, i), EncodeValue(1000 + kCacheSize), 1, 1, &CacheTest::Deleter);
+        auto cache_key = EncodeKey(&result, i);
+        key_mem_size_2 += sizeof(LRUHandle) - 1 + cache_key.size();
+        handles[i] = _cache->insert(cache_key, EncodeValue(1000 + kCacheSize), 1, 1, &CacheTest::Deleter);
     }
     ASSERT_EQ(kCacheSize * 2, _cache->get_capacity());
-    ASSERT_EQ(64, _cache->get_memory_usage());
+    ASSERT_EQ(64 + key_mem_size_1 + key_mem_size_2, _cache->get_memory_usage());
     for (int i = 0; i < 32; i++) {
         _cache->release(handles[i]);
     }
     ASSERT_EQ(kCacheSize * 2, _cache->get_capacity());
-    ASSERT_EQ(64, _cache->get_memory_usage());
-    _cache->set_capacity(32);
-    ASSERT_EQ(32, _cache->get_capacity());
+    ASSERT_EQ(64 + key_mem_size_1 + key_mem_size_2, _cache->get_memory_usage());
+    _cache->set_capacity(32 + key_mem_size_2);
+    ASSERT_EQ(32 + key_mem_size_2, _cache->get_capacity());
     for (int i = 32; i < 64; i++) {
         _cache->release(handles[i]);
     }
-    ASSERT_EQ(32, _cache->get_memory_usage());
+    ASSERT_EQ(32 + key_mem_size_2, _cache->get_memory_usage());
 }
 
 } // namespace starrocks

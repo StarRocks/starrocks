@@ -85,7 +85,7 @@ DISTRIBUTED BY HASH(`k1`)
 PROPERTIES (
 "replication_num" = "3",
 "in_memory" = "false",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -127,7 +127,7 @@ DISTRIBUTED BY HASH(`k1`) BUCKETS 10
 PROPERTIES (
 "replication_num" = "3",
 "in_memory" = "false",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );

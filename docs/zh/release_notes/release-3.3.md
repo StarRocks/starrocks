@@ -10,6 +10,76 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.10 (已下线)
+
+发布日期：2025 年 2 月 21 日
+
+:::tip
+
+此版本由于**存算分离集群**存在元数据丢失问题已经下线。
+
+- **问题**：当存算分离集群中的 Leader FE 节点切换期间有已 Commit 但尚未 Publish 的 Compaction 事务时，节点切换后可能会发生元数据丢失。
+
+- **影响范围**：此问题仅影响存算分离群集。存算一体集群不受影响。
+
+- **临时解决方法**：当 Publish 任务返回错误时，可以执行 `SHOW PROC ‘compactions’` 检查是否有分区同时有两个 `FinishTime` 为空的 Compaction 事务。您可以执行 `ALTER TABLE DROP PARTITION FORCE` 来删除该分区，以避免 Publish 任务卡住。
+
+:::
+
+### 新增功能
+
+- 窗口函数支持 `max_by` 和 `min_by`。[#54961](https://github.com/StarRocks/starrocks/pull/54961)
+
+### 功能优化
+
+- 支持复杂类型的子列在表函数中下推。[#55425](https://github.com/StarRocks/starrocks/pull/55425)
+- 支持 MariaDB 客户端的 LDAP 用户登陆。[#55720](https://github.com/StarRocks/starrocks/pull/55720)
+- Paimon 版本升级到 1.0.1。[#54796](https://github.com/StarRocks/starrocks/pull/54796) [#55760](https://github.com/StarRocks/starrocks/pull/55760)
+- 查询执行过程中消除非必要的 `unnest` 计算，降低开销。[#55431](https://github.com/StarRocks/starrocks/pull/55431)
+- 跨集群同步过程中存算分离源集群支持开启 Compaction。[#54787](https://github.com/StarRocks/starrocks/pull/54787)
+- 当 DECIMAL 类型的除法这类代价较高出现在在 topN 计算之下时，将其提前至 topN 之上降低开销。[#55417](https://github.com/StarRocks/starrocks/pull/55417)
+- 基于 ARM 架构的性能提升。[#55072](https://github.com/StarRocks/starrocks/pull/55072) [#55510](https://github.com/StarRocks/starrocks/pull/55510)
+- 基于 Hive 外表的物化视图，如基表删除重建，刷新时会检查实际的分区更新而非全表重刷。[#45118](https://github.com/StarRocks/starrocks/pull/45118)
+- DELETE 操作支持分区裁剪。[#55400](https://github.com/StarRocks/starrocks/pull/55400)
+- 优化内表统计信息收集的优先级策略，以优化在表数量较多时的效率。[#55446](https://github.com/StarRocks/starrocks/pull/55446)
+- 导入任务涉及多个分区时，合并记录 Transaction Log 以提高导入性能。[#55143](https://github.com/StarRocks/starrocks/pull/55143)
+- 优化 Translate SQL 的报错信息。[#55327](https://github.com/StarRocks/starrocks/pull/55327)
+- 增加 Session 变量 `parallel_merge_late_materialization_mode` 控制并行合并行为。[#55082](https://github.com/StarRocks/starrocks/pull/55082)
+- 优化生成列的报错信息。[#54949](https://github.com/StarRocks/starrocks/pull/54949)
+- 优化 SHOW MATERIALIZED VIEWS 命令的性能。[#54374](https://github.com/StarRocks/starrocks/pull/54374)
+
+### 问题修复
+
+修复了如下问题：
+
+- CTE 优先下推 LIMIT 再下推谓词导致的错误。[#55768](https://github.com/StarRocks/starrocks/pull/55768)
+- Stream Load 因表 Schema Change 导致的错误。[#55773](https://github.com/StarRocks/starrocks/pull/55773)
+- DELETE 语句的执行计划包含 SELECT 导致的权限问题。[#55695](https://github.com/StarRocks/starrocks/pull/55695)
+- CN 下线时未停止 Compaction 任务导致的问题。[#55503](https://github.com/StarRocks/starrocks/pull/55503)
+- Follower FE 节点无法获取更新的导入信息。[#55758](https://github.com/StarRocks/starrocks/pull/55758)
+- 落盘路径容量统计错误。[#55703](https://github.com/StarRocks/starrocks/pull/55703)
+- 因缺少足够分区检查导致 List 分区的物化视图创建失败。[#55673](https://github.com/StarRocks/starrocks/pull/55673)
+- ALTER TABLE 因缺少元数据锁导致的问题。[#55605](https://github.com/StarRocks/starrocks/pull/55605)
+- SHOW CREATE TABLE 因 constraints 导致的错误。[#55592](https://github.com/StarRocks/starrocks/pull/55592)
+- Nestloop Join 因大 ARRAY 导致的 OOM。[#55603](https://github.com/StarRocks/starrocks/pull/55603)
+- DROP PARTITION 的锁问题。[#55549](https://github.com/StarRocks/starrocks/pull/55549)
+- min/max 窗口函数因未支持字符串类型导致的问题。[#55537](https://github.com/StarRocks/starrocks/pull/55537)
+- Parser 性能回退问题。[#54830](https://github.com/StarRocks/starrocks/pull/54830)
+- 部分更新时列名大小写敏感问题。[#55442](https://github.com/StarRocks/starrocks/pull/55442)
+- Stream Load 调度到 Alive 状态为 false 的节点时，导入失败。[#55371](https://github.com/StarRocks/starrocks/pull/55371)
+- 物化视图包含 ORDER BY，但输出列顺序错误。[#55355](https://github.com/StarRocks/starrocks/pull/55355)
+- 磁盘故障导致 BE Crash。[#55042](https://github.com/StarRocks/starrocks/pull/55042)
+- Query Cache 导致的结果错误。[#55287](https://github.com/StarRocks/starrocks/pull/55287)
+- Parquet Writer 写入包含时区的 TIMESTAMP 类型时未能进行时区转换的问题。[#55194](https://github.com/StarRocks/starrocks/pull/55194)
+- 因 ALTER 任务超时而导致导入任务卡住。[#55207](https://github.com/StarRocks/starrocks/pull/55207)
+- `date_format` 函数输入毫秒时间类型导致的错误。[#54854](https://github.com/StarRocks/starrocks/pull/54854)
+- 分区键为 DATE 类型导致的物化视图改写失败。[#54804](https://github.com/StarRocks/starrocks/pull/54804)
+
+### 行为变更
+
+- Iceberg 中 UUID 类型的映射更改为 BINARY。[#54978](https://github.com/StarRocks/starrocks/pull/54978)
+- 使用分区变更的行数而非分区可见时间来判断是否需要重新收集统计信息。[#55373](https://github.com/StarRocks/starrocks/pull/55373)
+
 ## 3.3.9
 
 发布日期：2025 年 1 月 12 日

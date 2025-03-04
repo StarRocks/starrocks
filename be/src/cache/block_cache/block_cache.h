@@ -30,6 +30,7 @@ public:
     // Return a singleton block cache instance
     static BlockCache* instance();
 
+    BlockCache() = default;
     ~BlockCache();
 
     // Init the block cache instance
@@ -70,9 +71,6 @@ public:
     // Update the datacache disk space infomation, such as disk quota or disk path.
     Status update_disk_spaces(const std::vector<DirSpace>& spaces);
 
-    // Adjust the disk spaces, the space quota will be adjusted based on current disk usage before updating.
-    Status adjust_disk_spaces(const std::vector<DirSpace>& spaces);
-
     void record_read_remote(size_t size, int64_t lateny_us);
 
     void record_read_cache(size_t size, int64_t lateny_us);
@@ -101,9 +99,6 @@ public:
     static const size_t MAX_BLOCK_SIZE;
 
 private:
-#ifndef BE_TEST
-    BlockCache() = default;
-#endif
     void _refresh_quota();
 
     size_t _block_size = 0;

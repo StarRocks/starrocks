@@ -35,6 +35,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Table.TableType;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.CaseSensibility;
+import com.starrocks.common.Config;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.proc.PartitionsProcDir;
 import com.starrocks.common.util.concurrent.lock.LockType;
@@ -69,10 +70,12 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.UUID;
 
 public class InformationSchemaDataSource {
@@ -256,63 +259,90 @@ public class InformationSchemaDataSource {
 
         AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
 
+        class Element {
+            public Element(String dbName, long dbId, Table table) {
+                this.dbName = dbName;
+                this.dbId = dbId;
+                this.table = table;
+            }
+            public long getTableId() {
+                return table.getId();
+            }
+            public String dbName;
+            public long dbId;
+            public Table table;
+        };
+        long startTableIdOffset = request.isSetStart_table_id_offset() ? request.getStart_table_id_offset() : 0;
+        TreeSet<Element> sortedElements = new TreeSet<>(Comparator.comparing(Element::getTableId));
         for (String dbName : result.authorizedDbs) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
             if (db == null) {
                 continue;
             }
-            List<Table> allTables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
-            for (Table table : allTables) {
-                try {
-                    Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
-                            null, dbName, table);
-                } catch (AccessDeniedException e) {
-                    LOG.warn("failed to check db: {} table: {} authorization", dbName, table, e);
+            List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
+            for (Table table : tables) {
+                if (table.getId() < startTableIdOffset) {
                     continue;
                 }
-                if (!table.isNativeTableOrMaterializedView()) {
-                    continue;
-                }
-                // only olap table/mv or cloud table/mv will reach here;
-                // use the same lock level with `SHOW PARTITIONS FROM XXX` to ensure other modification to
-                // partition does not trigger crash
-                Locker locker = new Locker();
-                locker.lockDatabase(db.getId(), LockType.READ);
-                try {
-                    OlapTable olapTable = (OlapTable) table;
-                    PartitionInfo tblPartitionInfo = olapTable.getPartitionInfo();
-                    // normal partition
-                    for (Partition partition : olapTable.getPartitions()) {
-                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                            TPartitionMetaInfo partitionMetaInfo = new TPartitionMetaInfo();
-                            partitionMetaInfo.setDb_name(dbName);
-                            partitionMetaInfo.setTable_name(olapTable.getName());
-                            genPartitionMetaInfo(db, olapTable, tblPartitionInfo, partition, physicalPartition,
-                                    partitionMetaInfo, false /* isTemp */);
-                            pList.add(partitionMetaInfo);
-                        }
+                sortedElements.add(new Element(dbName, db.getId(), table));
+            }
+        }
+
+        for (Element ele : sortedElements) {
+            Table table = ele.table;
+            if (!table.isNativeTableOrMaterializedView()) {
+                continue;
+            }
+            try {
+                Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
+                        null, ele.dbName, table);
+            } catch (AccessDeniedException e) {
+                LOG.warn("failed to check db: {} table: {} authorization", ele.dbName, table, e);
+                continue;
+            }
+            // only olap table/mv or cloud table/mv will reach here;
+            // use the same lock level with `SHOW PARTITIONS FROM XXX` to ensure other modification to
+            // partition does not trigger crash
+            Locker locker = new Locker();
+            locker.lockDatabase(ele.dbId, LockType.READ);
+            try {
+                OlapTable olapTable = (OlapTable) table;
+                PartitionInfo tblPartitionInfo = olapTable.getPartitionInfo();
+                // normal partition
+                for (Partition partition : olapTable.getPartitions()) {
+                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                        TPartitionMetaInfo partitionMetaInfo = new TPartitionMetaInfo();
+                        partitionMetaInfo.setDb_name(ele.dbName);
+                        partitionMetaInfo.setTable_name(olapTable.getName());
+                        genPartitionMetaInfo(ele.dbId, olapTable, tblPartitionInfo, partition, physicalPartition,
+                                partitionMetaInfo, false /* isTemp */);
+                        pList.add(partitionMetaInfo);
                     }
-                    // temp partition
-                    for (Partition partition : olapTable.getTempPartitions()) {
-                        for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
-                            TPartitionMetaInfo partitionMetaInfo = new TPartitionMetaInfo();
-                            partitionMetaInfo.setDb_name(dbName);
-                            partitionMetaInfo.setTable_name(olapTable.getName());
-                            genPartitionMetaInfo(db, olapTable, tblPartitionInfo, partition, physicalPartition,
-                                    partitionMetaInfo, true /* isTemp */);
-                            pList.add(partitionMetaInfo);
-                        }
-                    }
-                } finally {
-                    locker.unLockDatabase(db.getId(), LockType.READ);
                 }
+                // temp partition
+                for (Partition partition : olapTable.getTempPartitions()) {
+                    for (PhysicalPartition physicalPartition : partition.getSubPartitions()) {
+                        TPartitionMetaInfo partitionMetaInfo = new TPartitionMetaInfo();
+                        partitionMetaInfo.setDb_name(ele.dbName);
+                        partitionMetaInfo.setTable_name(olapTable.getName());
+                        genPartitionMetaInfo(ele.dbId, olapTable, tblPartitionInfo, partition, physicalPartition,
+                                partitionMetaInfo, true /* isTemp */);
+                        pList.add(partitionMetaInfo);
+                    }
+                }
+                if (pList.size() >= Config.max_get_partitions_meta_result_count) {
+                    resp.setNext_table_id_offset(table.getId() + 1);
+                    break;
+                }
+            } finally {
+                locker.unLockDatabase(ele.dbId, LockType.READ);
             }
         }
         resp.partitions_meta_infos = pList;
         return resp;
     }
 
-    private static void genPartitionMetaInfo(Database db, OlapTable table,
+    private static void genPartitionMetaInfo(long dbId, OlapTable table,
                                              PartitionInfo partitionInfo, Partition partition,
                                              PhysicalPartition physicalPartition,
                                              TPartitionMetaInfo partitionMetaInfo, boolean isTemp) {
@@ -356,7 +386,7 @@ public class InformationSchemaDataSource {
         // NEXT_VERSION
         partitionMetaInfo.setNext_version(physicalPartition.getNextVersion());
         if (table.isCloudNativeTableOrMaterializedView()) {
-            PartitionIdentifier identifier = new PartitionIdentifier(db.getId(), table.getId(), physicalPartition.getId());
+            PartitionIdentifier identifier = new PartitionIdentifier(dbId, table.getId(), physicalPartition.getId());
             PartitionStatistics statistics = GlobalStateMgr.getCurrentState().getCompactionMgr().getStatistics(identifier);
             Quantiles compactionScore = statistics != null ? statistics.getCompactionScore() : null;
             // COMPACT_VERSION

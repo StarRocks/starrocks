@@ -18,6 +18,7 @@ set(EXEC_FILES
         ./column/nullable_column_test.cpp
         ./column/object_column_test.cpp
         ./column/timestamp_value_test.cpp
+        ./common/cow_test.cpp
         ./column/schema_test.cpp
         ./common/config_test.cpp
         ./common/process_exit_test.cpp
@@ -206,6 +207,7 @@ set(EXEC_FILES
         ./formats/disk_range_test.cpp
         ./geo/geo_types_test.cpp
         ./geo/wkt_parse_test.cpp
+        ./http/default_path_handlers_test.cpp
         ./http/http_client_test.cpp
         ./http/http_utils_test.cpp
         ./http/message_body_sink_test.cpp
@@ -501,6 +503,8 @@ set(EXEC_FILES
         ./storage/lake/write_combined_txn_log_test.cpp
         ./cache/block_cache/datacache_utils_test.cpp
         ./cache/block_cache/block_cache_hit_rate_counter_test.cpp
+        ./cache/object_cache/lrucache_module_test.cpp
+        ./cache/object_cache/object_cache_test.cpp
         ./util/thrift_rpc_helper_test.cpp
         )
 

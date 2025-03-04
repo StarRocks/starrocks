@@ -32,6 +32,8 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
 
     private final CheckpointController feController;
     private final CheckpointController starMgrController;
+    // cluster snapshot information used for start
+    private final RestoredSnapshotInfo restoredSnapshotInfo;
 
     private boolean firstRun;
 
@@ -41,6 +43,12 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
         this.feController = feController;
         this.starMgrController = starMgrController;
         this.firstRun = true;
+        this.restoredSnapshotInfo = RestoreClusterSnapshotMgr.getRestoredSnapshotInfo();
+    }
+
+    @Override
+    public long getInterval() {
+        return Config.automated_cluster_snapshot_interval_seconds * 1000L;
     }
 
     @Override
@@ -51,7 +59,8 @@ public class ClusterSnapshotCheckpointScheduler extends FrontendDaemon {
 
         // skip first run when the scheduler start
         if (firstRun) {
-            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().resetAutomatedJobsStateForTheFirstRun();
+            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
+                                            .resetSnapshotJobsStateAfterRestarted(restoredSnapshotInfo);
             firstRun = false;
             return;
         }

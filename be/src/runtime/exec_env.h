@@ -81,6 +81,8 @@ class RuntimeFilterCache;
 class ProfileReportWorker;
 class QuerySpillManager;
 class BlockCache;
+class ObjectCache;
+class StoragePageCache;
 struct RfTracePoint;
 
 class BackendServiceClient;
@@ -143,6 +145,11 @@ public:
     MemTracker* short_key_index_mem_tracker() { return _short_key_index_mem_tracker.get(); }
     MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker.get(); }
     MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker.get(); }
+    // The value of `page_cache_mem_tracker` is manually counted and is attached to the process_mem_tracker tree.
+    // It is not based on the `ThreadLocalMemTracker`.
+    // Therefore, when counting the memory, the `MemTracker::set` interface can be used,
+    // while the consume/release interfaces cannot be used.
+    // Otherwise, it will cause problems in the memory statistics of the process.
     MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker.get(); }
     MemTracker* jit_cache_mem_tracker() { return _jit_cache_mem_tracker.get(); }
     MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
@@ -154,7 +161,8 @@ public:
     MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
     MemTracker* poco_connection_pool_mem_tracker() { return _poco_connection_pool_mem_tracker.get(); }
     MemTracker* jemalloc_metadata_traker() { return _jemalloc_metadata_tracker.get(); }
-    std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
+    std::shared_ptr<MemTracker> get_mem_tracker_by_type(MemTrackerType type);
+    std::vector<std::shared_ptr<MemTracker>> mem_trackers() const;
 
     int64_t get_storage_page_cache_size();
     int64_t check_storage_page_cache_size(int64_t storage_cache_limit);
@@ -165,8 +173,6 @@ private:
 
     Status _init_mem_tracker();
     void _reset_tracker();
-
-    void _init_storage_page_cache();
 
     std::shared_ptr<MemTracker> regist_tracker(MemTrackerType type, int64_t bytes_limit, MemTracker* parent);
 
@@ -232,7 +238,32 @@ private:
     // The memory used for poco connection pool
     std::shared_ptr<MemTracker> _poco_connection_pool_mem_tracker;
 
-    std::vector<std::shared_ptr<MemTracker>> _mem_trackers;
+    std::map<MemTrackerType, std::shared_ptr<MemTracker>> _mem_tracker_map;
+};
+
+class CacheEnv {
+public:
+    static CacheEnv* GetInstance();
+
+    Status init(const std::vector<StorePath>& store_paths);
+    void destroy();
+
+    void try_release_resource_before_core_dump();
+
+    BlockCache* block_cache() const { return _block_cache.get(); }
+    StoragePageCache* page_cache() const { return _page_cache.get(); }
+
+private:
+    Status _init_datacache();
+    Status _init_lru_base_object_cache();
+    Status _init_page_cache();
+
+    GlobalEnv* _global_env;
+    std::vector<StorePath> _store_paths;
+
+    std::shared_ptr<BlockCache> _block_cache;
+    std::shared_ptr<ObjectCache> _lru_based_object_cache;
+    std::shared_ptr<StoragePageCache> _page_cache;
 };
 
 // Execution environment for queries/plan fragments.
@@ -341,8 +372,6 @@ public:
 
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
 
-    BlockCache* block_cache() const { return _block_cache; }
-
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
 
     ThreadPool* delete_file_thread_pool();
@@ -416,7 +445,6 @@ private:
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;
-    BlockCache* _block_cache = nullptr;
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
 };
 

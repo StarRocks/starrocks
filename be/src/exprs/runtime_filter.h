@@ -31,6 +31,7 @@
 #include "gen_cpp/PlanNodes_types.h"
 #include "gen_cpp/Types_types.h"
 #include "types/logical_type.h"
+#include "util/hash_util.hpp"
 
 namespace starrocks {
 // 0x1. initial global runtime filter impl
@@ -219,9 +220,20 @@ public:
 
     virtual size_t num_hash_partitions() const { return 0; }
 
-    virtual void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<Column*>& columns,
+    virtual void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
                                          RunningContext* ctx) const = 0;
-    virtual void evaluate(Column* input_column, RunningContext* ctx) const = 0;
+    virtual void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                                         uint16_t* sel, uint16_t sel_size,
+                                         std::vector<uint32_t>& hash_values) const = 0;
+    virtual void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                                         uint8_t* selection, uint16_t from, uint16_t to,
+                                         std::vector<uint32_t>& hash_values) const = 0;
+    virtual void evaluate(const Column* input_column, RunningContext* ctx) const = 0;
+    virtual uint16_t evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint16_t* sel,
+                              uint16_t sel_size, uint16_t* dst_sel) const = 0;
+
+    virtual void evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint8_t* selection,
+                          uint16_t from, uint16_t to) const = 0;
 
     bool always_true() const { return _always_true; }
 
@@ -279,68 +291,149 @@ protected:
     std::vector<RuntimeFilter*> _group_colocate_filters;
 };
 
-template <typename ModuloFunc>
+struct HashValueIterator {
+    HashValueIterator(std::vector<uint32_t>& hash_values) : hash_values(hash_values) {}
+    virtual ~HashValueIterator() = default;
+    virtual void for_each(const std::function<void(size_t, uint32_t&)>& func) = 0;
+
+    std::vector<uint32_t>& hash_values;
+};
+
+struct FullScanIterator final : HashValueIterator {
+    typedef void (Column::*HashFuncType)(uint32_t*, uint32_t, uint32_t) const;
+    static constexpr HashFuncType FNV_HASH = &Column::fnv_hash;
+    static constexpr HashFuncType CRC32_HASH = &Column::crc32_hash;
+
+    FullScanIterator(std::vector<uint32_t>& hash_values, size_t num_rows)
+            : HashValueIterator(hash_values), num_rows(num_rows) {}
+
+    void for_each(const std::function<void(size_t, uint32_t&)>& func) override {
+        for (size_t i = 0; i < num_rows; i++) {
+            func(i, hash_values[i]);
+        }
+    }
+
+    void compute_hash(const std::vector<const Column*>& columns, HashFuncType hash_func) {
+        for (const Column* input_column : columns) {
+            (input_column->*hash_func)(hash_values.data(), 0, num_rows);
+        }
+    }
+
+    size_t num_rows;
+};
+
+struct SelectionIterator final : HashValueIterator {
+    typedef void (Column::*HashFuncType)(uint32_t*, uint8_t*, uint16_t, uint16_t) const;
+    static constexpr HashFuncType FNV_HASH = &Column::fnv_hash_with_selection;
+    static constexpr HashFuncType CRC32_HASH = &Column::crc32_hash_with_selection;
+
+    SelectionIterator(std::vector<uint32_t>& hash_values, uint8_t* selection, uint16_t from, uint16_t to)
+            : HashValueIterator(hash_values), selection(selection), from(from), to(to) {}
+
+    void for_each(const std::function<void(size_t, uint32_t&)>& func) override {
+        for (size_t i = from; i < to; i++) {
+            if (selection[i]) {
+                func(i, hash_values[i]);
+            }
+        }
+    }
+
+    void compute_hash(const std::vector<const Column*>& columns, HashFuncType hash_func) {
+        for (const Column* input_column : columns) {
+            (input_column->*hash_func)(hash_values.data(), selection, from, to);
+        }
+    }
+
+    uint8_t* selection;
+    uint16_t from;
+    uint16_t to;
+};
+
+struct SelectedIndexIterator final : HashValueIterator {
+    typedef void (Column::*HashFuncType)(uint32_t*, uint16_t*, uint16_t) const;
+    static constexpr HashFuncType FNV_HASH = &Column::fnv_hash_selective;
+    static constexpr HashFuncType CRC32_HASH = &Column::crc32_hash_selective;
+
+    SelectedIndexIterator(std::vector<uint32_t>& hash_values, uint16_t* sel, uint16_t sel_size)
+            : HashValueIterator(hash_values), sel(sel), sel_size(sel_size) {}
+
+    void for_each(const std::function<void(size_t, uint32_t&)>& func) override {
+        for (uint16_t i = 0; i < sel_size; i++) {
+            func(sel[i], hash_values[sel[i]]);
+        }
+    }
+
+    void compute_hash(const std::vector<const Column*>& columns, HashFuncType hash_func) {
+        for (const Column* input_column : columns) {
+            (input_column->*hash_func)(hash_values.data(), sel, sel_size);
+        }
+    }
+    uint16_t* sel;
+    uint16_t sel_size;
+};
+
+template <typename ModuloFunc, typename IteratorType = FullScanIterator>
 struct WithModuloArg {
     template <TRuntimeFilterLayoutMode::type M>
     struct HashValueCompute {
-        void operator()(const RuntimeFilterLayout& layout, const std::vector<Column*>& columns, size_t num_rows,
-                        size_t real_num_partitions, std::vector<uint32_t>& hash_values) const {
+        void operator()(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                        size_t real_num_partitions, IteratorType iterator) const {
             if constexpr (layout_is_singleton<M>) {
-                hash_values.assign(num_rows, 0);
+                iterator.for_each([&](size_t i, uint32_t& hash_value) { hash_value = 0; });
                 return;
             }
-
-            typedef void (Column::*HashFuncType)(uint32_t*, uint32_t, uint32_t) const;
-            auto compute_hash = [&columns, &num_rows, &hash_values](HashFuncType hash_func) {
-                for (Column* input_column : columns) {
-                    (input_column->*hash_func)(hash_values.data(), 0, num_rows);
-                }
-            };
-
             if constexpr (layout_is_shuffle<M>) {
-                hash_values.assign(num_rows, HashUtil::FNV_SEED);
-                compute_hash(&Column::fnv_hash);
-                [[maybe_unused]] const auto num_instances = layout.num_instances();
-                [[maybe_unused]] const auto num_drivers_per_instance = layout.num_drivers_per_instance();
-                [[maybe_unused]] const auto num_partitions = num_instances * num_drivers_per_instance;
-                for (auto i = 0; i < num_rows; ++i) {
-                    auto& hash_value = hash_values[i];
-                    if constexpr (layout_is_pipeline_shuffle<M>) {
-                        hash_value = ModuloFunc()(HashUtil::xorshift32(hash_value), num_drivers_per_instance);
-                    } else if constexpr (layout_is_global_shuffle_1l<M>) {
-                        hash_value = ModuloFunc()(hash_value, real_num_partitions);
-                    } else if constexpr (layout_is_global_shuffle_2l<M>) {
-                        auto instance_id = ModuloFunc()(hash_value, num_instances);
-                        auto driver_id = ModuloFunc()(HashUtil::xorshift32(hash_value), num_drivers_per_instance);
-                        hash_value = instance_id * num_drivers_per_instance + driver_id;
-                    }
-                }
+                process_shuffle(layout, columns, real_num_partitions, iterator);
             } else if (layout_is_bucket<M>) {
-                hash_values.assign(num_rows, 0);
-                compute_hash(&Column::crc32_hash);
-                [[maybe_unused]] const auto& bucketseq_to_instance = layout.bucketseq_to_instance();
-                [[maybe_unused]] const auto& bucketseq_to_driverseq = layout.bucketseq_to_driverseq();
-                [[maybe_unused]] const auto& bucketseq_to_partition = layout.bucketseq_to_partition();
-                [[maybe_unused]] const auto num_drivers_per_instance = layout.num_drivers_per_instance();
-                for (auto i = 0; i < num_rows; ++i) {
-                    auto& hash_value = hash_values[i];
-                    if constexpr (layout_is_pipeline_bucket<M>) {
-                        hash_value = bucketseq_to_driverseq[ModuloFunc()(hash_value, bucketseq_to_driverseq.size())];
-                    } else if constexpr (layout_is_pipeline_bucket_lx<M>) {
-                        hash_value = ModuloFunc()(HashUtil::xorshift32(hash_value), num_drivers_per_instance);
-                    } else if constexpr (layout_is_global_bucket_1l<M>) {
-                        hash_value = bucketseq_to_instance[ModuloFunc()(hash_value, bucketseq_to_instance.size())];
-                    } else if constexpr (layout_is_global_bucket_2l<M>) {
-                        hash_value = bucketseq_to_partition[ModuloFunc()(hash_value, bucketseq_to_partition.size())];
-                    } else if constexpr (layout_is_global_bucket_2l_lx<M>) {
-                        const auto bucketseq = ModuloFunc()(hash_value, bucketseq_to_instance.size());
-                        const auto instance = bucketseq_to_instance[bucketseq];
-                        const auto driverseq = ModuloFunc()(HashUtil::xorshift32(hash_value), num_drivers_per_instance);
-                        hash_value = (instance == BUCKET_ABSENT) ? BUCKET_ABSENT
-                                                                 : instance * num_drivers_per_instance + driverseq;
-                    }
-                }
+                process_bucket(layout, columns, real_num_partitions, iterator);
             }
+        }
+
+        void process_shuffle(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                             size_t real_num_partitions, IteratorType& iterator) const {
+            [[maybe_unused]] const auto num_instances = layout.num_instances();
+            [[maybe_unused]] const auto num_drivers_per_instance = layout.num_drivers_per_instance();
+            [[maybe_unused]] const auto num_partitions = num_instances * num_drivers_per_instance;
+            iterator.for_each([&](size_t i, uint32_t& hash_value) { hash_value = HashUtil::FNV_SEED; });
+            iterator.compute_hash(columns, IteratorType::FNV_HASH);
+            iterator.for_each([&](size_t i, uint32_t& hash_value) {
+                if constexpr (layout_is_pipeline_shuffle<M>) {
+                    hash_value = ModuloFunc()(HashUtil::xorshift32(hash_value), num_drivers_per_instance);
+                } else if constexpr (layout_is_global_shuffle_1l<M>) {
+                    hash_value = ModuloFunc()(hash_value, real_num_partitions);
+                } else if constexpr (layout_is_global_shuffle_2l<M>) {
+                    auto instance_id = ModuloFunc()(hash_value, num_instances);
+                    auto driver_id = ModuloFunc()(HashUtil::xorshift32(hash_value), num_drivers_per_instance);
+                    hash_value = instance_id * num_drivers_per_instance + driver_id;
+                }
+            });
+        }
+
+        void process_bucket(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                            size_t real_num_partitions, IteratorType& iterator) const {
+            [[maybe_unused]] const auto& bucketseq_to_instance = layout.bucketseq_to_instance();
+            [[maybe_unused]] const auto& bucketseq_to_driverseq = layout.bucketseq_to_driverseq();
+            [[maybe_unused]] const auto& bucketseq_to_partition = layout.bucketseq_to_partition();
+            [[maybe_unused]] const auto num_drivers_per_instance = layout.num_drivers_per_instance();
+            iterator.for_each([&](size_t i, uint32_t& hash_value) { hash_value = 0; });
+            iterator.compute_hash(columns, IteratorType::CRC32_HASH);
+            iterator.for_each([&](size_t i, uint32_t& hash_value) {
+                if constexpr (layout_is_pipeline_bucket<M>) {
+                    hash_value = bucketseq_to_driverseq[ModuloFunc()(hash_value, bucketseq_to_driverseq.size())];
+                } else if constexpr (layout_is_pipeline_bucket_lx<M>) {
+                    hash_value = ModuloFunc()(HashUtil::xorshift32(hash_value), num_drivers_per_instance);
+                } else if constexpr (layout_is_global_bucket_1l<M>) {
+                    hash_value = bucketseq_to_instance[ModuloFunc()(hash_value, bucketseq_to_instance.size())];
+                } else if constexpr (layout_is_global_bucket_2l<M>) {
+                    hash_value = bucketseq_to_partition[ModuloFunc()(hash_value, bucketseq_to_partition.size())];
+                } else if constexpr (layout_is_global_bucket_2l_lx<M>) {
+                    const auto bucketseq = ModuloFunc()(hash_value, bucketseq_to_instance.size());
+                    const auto instance = bucketseq_to_instance[bucketseq];
+                    const auto driverseq = ModuloFunc()(HashUtil::xorshift32(hash_value), num_drivers_per_instance);
+                    hash_value = (instance == BUCKET_ABSENT) ? BUCKET_ABSENT
+                                                             : instance * num_drivers_per_instance + driverseq;
+                }
+            });
         }
     };
 };
@@ -519,15 +612,17 @@ public:
     }
 
     template <bool evaluate_null>
-    void t_evaluate(Column* input_column, RunningContext* ctx) const {
+    void t_evaluate(const Column* input_column, RunningContext* ctx) const {
         size_t size = input_column->size();
         Filter& selection_filter = ctx->use_merged_selection ? ctx->merged_selection : ctx->selection;
         selection_filter.resize(size);
         uint8_t* selection = selection_filter.data();
         if (input_column->is_constant()) {
             const auto* const_column = down_cast<const ConstColumn*>(input_column);
-            if (const_column->only_null() && evaluate_null) {
-                selection[0] = _has_null;
+            if (const_column->only_null()) {
+                if constexpr (evaluate_null) {
+                    selection[0] = _has_null;
+                }
             } else {
                 const auto& input_data = GetContainer<Type>::get_data(const_column->data_column());
                 evaluate_min_max(input_data, selection, 1);
@@ -549,6 +644,57 @@ public:
         } else {
             const auto& input_data = GetContainer<Type>::get_data(input_column);
             evaluate_min_max(input_data, selection, size);
+        }
+    }
+
+    uint16_t t_evaluate(const Column* column, uint16_t* sel, uint16_t sel_size, uint16_t* dst_sel) const {
+        DCHECK(_has_min_max);
+        CHECK(dst_sel != nullptr) << "dst_sel must be set";
+        CHECK(!column->is_constant()) << "not support constant column";
+        uint16_t new_size = 0;
+        if (column->is_nullable()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(column);
+            const auto& data = GetContainer<Type>::get_data(nullable_column->data_column());
+            if (nullable_column->has_null()) {
+                const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
+                for (int i = 0; i < sel_size; i++) {
+                    uint16_t idx = sel[i];
+                    dst_sel[new_size] = idx;
+                    if (null_data[idx]) {
+                        new_size += _has_null;
+                    } else {
+                        new_size += evaluate_min_max(data[idx]);
+                    }
+                }
+            } else {
+                new_size = evaluate_min_max(data, sel, sel_size, dst_sel);
+            }
+        } else {
+            const auto& data = GetContainer<Type>::get_data(column);
+            new_size = evaluate_min_max(data, sel, sel_size, dst_sel);
+        }
+        return new_size;
+    }
+
+    void t_evaluate(const Column* column, uint8_t* selection, uint16_t from, uint16_t to) const {
+        DCHECK(_has_min_max);
+        CHECK(!column->is_constant()) << "not support constant column";
+
+        if (column->is_nullable()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(column);
+            const auto& data = GetContainer<Type>::get_data(nullable_column->data_column());
+            evaluate_min_max(data, selection, from, to);
+            if (nullable_column->has_null()) {
+                const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
+                for (int i = from; i < to; i++) {
+                    if (null_data[i]) {
+                        selection[i] = _has_null;
+                    }
+                }
+            }
+        } else {
+            const auto& data = GetContainer<Type>::get_data(column);
+            evaluate_min_max(data, selection, from, to);
         }
     }
 
@@ -579,6 +725,41 @@ public:
             }
         } else {
             memset(selection, 0x1, size);
+        }
+    }
+
+    ALWAYS_INLINE bool evaluate_min_max(const CppType& value) const {
+        if constexpr (!IsSlice<CppType>) {
+            bool left = _left_close_interval ? value >= _min : value > _min;
+            bool right = _right_close_interval ? value <= _max : value < _max;
+            return left && right;
+        }
+        return true;
+    }
+
+    uint16_t evaluate_min_max(const ContainerType& values, uint16_t* sel, uint16_t sel_size, uint16_t* dst_sel) const {
+        if constexpr (!IsSlice<CppType>) {
+            const auto* data = values.data();
+            uint16_t new_size = 0;
+            for (int i = 0; i < sel_size; i++) {
+                uint16_t idx = sel[i];
+                dst_sel[new_size] = idx;
+                new_size += evaluate_min_max(data[idx]);
+            }
+            return new_size;
+        } else {
+            return sel_size;
+        }
+    }
+
+    void evaluate_min_max(const ContainerType& values, uint8_t* selection, uint16_t from, uint16_t to) const {
+        if constexpr (!IsSlice<CppType>) {
+            const auto* data = values.data();
+            for (uint16_t i = from; i < to; i++) {
+                if (selection[i]) {
+                    selection[i] = evaluate_min_max(data[i]);
+                }
+            }
         }
     }
 
@@ -717,9 +898,25 @@ public:
         return dst - begin;
     }
 
-    void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<Column*>& columns,
+    void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
                                  RunningContext* ctx) const override {}
-    void evaluate(Column* input_column, RunningContext* ctx) const override { t_evaluate<true>(input_column, ctx); }
+    void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                                 uint16_t* sel, uint16_t sel_size, std::vector<uint32_t>& hash_values) const override {}
+    void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                                 uint8_t* selection, uint16_t from, uint16_t to,
+                                 std::vector<uint32_t>& hash_values) const override {}
+
+    void evaluate(const Column* input_column, RunningContext* ctx) const override {
+        t_evaluate<true>(input_column, ctx);
+    }
+    uint16_t evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint16_t* sel,
+                      uint16_t sel_size, uint16_t* dst_sel) const override {
+        return t_evaluate(input_column, sel, sel_size, dst_sel);
+    }
+    void evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint8_t* selection,
+                  uint16_t from, uint16_t to) const override {
+        t_evaluate(input_column, selection, from, to);
+    }
 
 private:
     void _init_min_max() {
@@ -912,13 +1109,37 @@ public:
 
     void insert_null() { _has_null = true; }
 
-    void evaluate(Column* input_column, RunningContext* ctx) const override {
+    void evaluate(const Column* input_column, RunningContext* ctx) const override {
         if (!_hash_partition_bf.empty()) {
             return _hash_partition_bf[0].can_use() ? _t_evaluate<true, true>(input_column, ctx)
                                                    : _t_evaluate<true, false>(input_column, ctx);
         } else {
             return _bf.can_use() ? _t_evaluate<false, true>(input_column, ctx)
                                  : _t_evaluate<false, false>(input_column, ctx);
+        }
+    }
+
+    uint16_t evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint16_t* sel,
+                      uint16_t sel_size, uint16_t* dst_sel) const override {
+        if (!_hash_partition_bf.empty()) {
+            return _hash_partition_bf[0].can_use()
+                           ? _t_evaluate<true, true>(input_column, hash_values, sel, sel_size, dst_sel)
+                           : _t_evaluate<true, false>(input_column, hash_values, sel, sel_size, dst_sel);
+        } else {
+            return _bf.can_use() ? _t_evaluate<false, true>(input_column, hash_values, sel, sel_size, dst_sel)
+                                 : _t_evaluate<false, false>(input_column, hash_values, sel, sel_size, dst_sel);
+        }
+    }
+
+    void evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint8_t* selection,
+                  uint16_t from, uint16_t to) const override {
+        if (!_hash_partition_bf.empty()) {
+            return _hash_partition_bf[0].can_use()
+                           ? _t_evaluate<true, true>(input_column, hash_values, selection, from, to)
+                           : _t_evaluate<true, false>(input_column, hash_values, selection, from, to);
+        } else {
+            return _bf.can_use() ? _t_evaluate<false, true>(input_column, hash_values, selection, from, to)
+                                 : _t_evaluate<false, false>(input_column, hash_values, selection, from, to);
         }
     }
 
@@ -938,7 +1159,7 @@ public:
         return size;
     }
 
-    void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<Column*>& columns,
+    void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
                                  RunningContext* ctx) const override {
         if (columns.empty() || _join_mode == TRuntimeFilterBuildJoinMode::NONE) return;
         size_t num_rows = columns[0]->size();
@@ -946,15 +1167,55 @@ public:
         // initialize hash_values.
         // reuse ctx's hash_values object.
         std::vector<uint32_t>& _hash_values = ctx->hash_values;
+        _hash_values.resize(num_rows);
         // compute hash_values
         auto use_reduce = !ctx->compatibility && (_join_mode == TRuntimeFilterBuildJoinMode::PARTITIONED ||
                                                   _join_mode == TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET);
         if (use_reduce) {
-            dispatch_layout<WithModuloArg<ReduceOp>::HashValueCompute>(_global, layout, columns, num_rows,
-                                                                       _hash_partition_bf.size(), _hash_values);
+            dispatch_layout<WithModuloArg<ReduceOp, FullScanIterator>::HashValueCompute>(
+                    _global, layout, columns, _hash_partition_bf.size(), FullScanIterator(_hash_values, num_rows));
         } else {
-            dispatch_layout<WithModuloArg<ModuloOp>::HashValueCompute>(_global, layout, columns, num_rows,
-                                                                       _hash_partition_bf.size(), _hash_values);
+            dispatch_layout<WithModuloArg<ModuloOp, FullScanIterator>::HashValueCompute>(
+                    _global, layout, columns, _hash_partition_bf.size(), FullScanIterator(_hash_values, num_rows));
+        }
+    }
+    void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                                 uint16_t* sel, uint16_t sel_size, std::vector<uint32_t>& hash_values) const override {
+        if (columns.empty() || _join_mode == TRuntimeFilterBuildJoinMode::NONE) return;
+
+        size_t num_rows = columns[0]->size();
+        DCHECK_EQ(hash_values.size(), num_rows);
+
+        auto use_reduce = (_join_mode == TRuntimeFilterBuildJoinMode::PARTITIONED ||
+                           _join_mode == TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET);
+        if (use_reduce) {
+            dispatch_layout<WithModuloArg<ReduceOp, SelectedIndexIterator>::HashValueCompute>(
+                    _global, layout, columns, _hash_partition_bf.size(),
+                    SelectedIndexIterator(hash_values, sel, sel_size));
+        } else {
+            dispatch_layout<WithModuloArg<ModuloOp, SelectedIndexIterator>::HashValueCompute>(
+                    _global, layout, columns, _hash_partition_bf.size(),
+                    SelectedIndexIterator(hash_values, sel, sel_size));
+        }
+    }
+
+    void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                                 uint8_t* selection, uint16_t from, uint16_t to,
+                                 std::vector<uint32_t>& hash_values) const override {
+        if (columns.empty() || _join_mode == TRuntimeFilterBuildJoinMode::NONE) return;
+        size_t num_rows = columns[0]->size();
+        DCHECK_EQ(hash_values.size(), num_rows);
+        auto use_reduce = (_join_mode == TRuntimeFilterBuildJoinMode::PARTITIONED ||
+                           _join_mode == TRuntimeFilterBuildJoinMode::SHUFFLE_HASH_BUCKET);
+        if (use_reduce) {
+            dispatch_layout<WithModuloArg<ReduceOp, SelectionIterator>::HashValueCompute>(
+                    _global, layout, columns, _hash_partition_bf.size(),
+                    SelectionIterator(hash_values, selection, from, to));
+
+        } else {
+            dispatch_layout<WithModuloArg<ModuloOp, SelectionIterator>::HashValueCompute>(
+                    _global, layout, columns, _hash_partition_bf.size(),
+                    SelectionIterator(hash_values, selection, from, to));
         }
     }
 
@@ -991,13 +1252,22 @@ private:
         }
     }
 
+    template <bool hash_partition>
+    bool _rf_test_data(const CppType& data, const uint32_t hash_value) const {
+        if constexpr (hash_partition) {
+            return _test_data_with_hash(data, hash_value);
+        } else {
+            return _test_data(data);
+        }
+    }
+
     // `multi_partition` parameters means if this runtime filter has multiple `simd-block-filter` underneath.
     // for local runtime filter, it only has once `simd-block-filter`, and `multi_partition` is false.
     // and for global runtime filter, since it concates multiple runtime filters from partitions
     // so it has multiple `simd-block-filter` and `multi_partition` is true.
     // For more information, you can refers to doc `shuffle-aware runtime filter`.
     template <bool multi_partition = false, bool can_use_bf = true>
-    void _t_evaluate(Column* input_column, RunningContext* ctx) const {
+    void _t_evaluate(const Column* input_column, RunningContext* ctx) const {
         size_t size = input_column->size();
         Filter& selection_filter = ctx->use_merged_selection ? ctx->merged_selection : ctx->selection;
         selection_filter.resize(size);
@@ -1050,6 +1320,106 @@ private:
             }
         }
     }
+
+    template <bool multi_partition = false, bool can_use_bf = true>
+    uint16_t _t_evaluate(const Column* column, const std::vector<uint32_t>& hash_values, uint16_t* sel,
+                         uint16_t sel_size, uint16_t* dst_sel) const {
+        if constexpr (multi_partition) {
+            CHECK_EQ(column->size(), hash_values.size())
+                    << "hash values size not equal to sel_size, " << column->size() << ", " << hash_values.size();
+        }
+        CHECK(dst_sel != nullptr) << "dst_sel must be set";
+        CHECK(!column->is_constant()) << "not support constant column";
+        uint16_t new_size = 0;
+        if (column->is_nullable()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(column);
+            const auto& data = GetContainer<Type>::get_data(nullable_column->data_column());
+            if (nullable_column->has_null()) {
+                const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
+                for (int i = 0; i < sel_size; i++) {
+                    uint16_t idx = sel[i];
+                    dst_sel[new_size] = idx;
+                    if (null_data[idx]) {
+                        new_size += _has_null;
+                    } else {
+                        if constexpr (can_use_bf) {
+                            new_size +=
+                                    _rf_test_data<multi_partition>(data[idx], multi_partition ? hash_values[idx] : 0);
+                        } else {
+                            new_size++;
+                        }
+                    }
+                }
+            } else {
+                if constexpr (can_use_bf) {
+                    for (int i = 0; i < sel_size; ++i) {
+                        uint16_t idx = dst_sel[i];
+                        dst_sel[new_size] = idx;
+                        new_size += _rf_test_data<multi_partition>(data[idx], multi_partition ? hash_values[idx] : 0);
+                    }
+                } else {
+                    new_size = sel_size;
+                }
+            }
+        } else {
+            const auto& data = GetContainer<Type>::get_data(column);
+            if constexpr (can_use_bf) {
+                for (int i = 0; i < sel_size; ++i) {
+                    uint16_t idx = dst_sel[i];
+                    dst_sel[new_size] = idx;
+                    new_size += _rf_test_data<multi_partition>(data[idx], multi_partition ? hash_values[idx] : 0);
+                }
+            } else {
+                new_size = sel_size;
+            }
+        }
+        return new_size;
+    }
+
+    template <bool multi_partition = false, bool can_use_bf = true>
+    void _t_evaluate(const Column* column, const std::vector<uint32_t>& hash_values, uint8_t* selection, uint16_t from,
+                     uint16_t to) const {
+        if constexpr (multi_partition) {
+            CHECK_EQ(column->size(), hash_values.size())
+                    << "hash values size not equal to column size, " << column->size() << ", " << hash_values.size();
+        }
+        CHECK(!column->is_constant()) << "not support constant column";
+        if (column->is_nullable()) {
+            const auto* nullable_column = down_cast<const NullableColumn*>(column);
+            const auto& data = GetContainer<Type>::get_data(nullable_column->data_column());
+            if (nullable_column->has_null()) {
+                const uint8_t* null_data = nullable_column->immutable_null_column_data().data();
+                for (uint16_t i = from; i < to; i++) {
+                    if (null_data[i]) {
+                        selection[i] = _has_null;
+                    } else if (selection[i]) {
+                        if constexpr (can_use_bf) {
+                            selection[i] =
+                                    _rf_test_data<multi_partition>(data[i], multi_partition ? hash_values[i] : 0);
+                        }
+                    }
+                }
+            } else {
+                if constexpr (can_use_bf) {
+                    for (uint16_t i = from; i < to; i++) {
+                        if (selection[i]) {
+                            selection[i] =
+                                    _rf_test_data<multi_partition>(data[i], multi_partition ? hash_values[i] : 0);
+                        }
+                    }
+                }
+            }
+        } else {
+            const auto& data = GetContainer<Type>::get_data(column);
+            if constexpr (can_use_bf) {
+                for (uint16_t i = from; i < to; i++) {
+                    if (selection[i]) {
+                        selection[i] = _rf_test_data<multi_partition>(data[i], multi_partition ? hash_values[i] : 0);
+                    }
+                }
+            }
+        }
+    }
 };
 
 template <LogicalType Type>
@@ -1089,9 +1459,22 @@ public:
     TRuntimeBloomFilter<Type>& bloom_filter() { return _bloom_filter; }
     const TRuntimeBloomFilter<Type>& bloom_filter() const { return _bloom_filter; }
 
-    void evaluate(Column* input_column, RunningContext* ctx) const override {
+    void evaluate(const Column* input_column, RunningContext* ctx) const override {
         _min_max_filter.template t_evaluate<false>(input_column, ctx);
         bloom_filter().evaluate(input_column, ctx);
+    }
+
+    uint16_t evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint16_t* sel,
+                      uint16_t sel_size, uint16_t* dst_sel) const override {
+        uint16_t new_size = _min_max_filter.t_evaluate(input_column, sel, sel_size, dst_sel);
+        new_size = bloom_filter().evaluate(input_column, hash_values, dst_sel, new_size, dst_sel);
+        return new_size;
+    }
+
+    void evaluate(const Column* input_column, const std::vector<uint32_t>& hash_values, uint8_t* selection,
+                  uint16_t from, uint16_t to) const override {
+        _min_max_filter.t_evaluate(input_column, selection, from, to);
+        bloom_filter().evaluate(input_column, hash_values, selection, from, to);
     }
 
     void merge(const RuntimeFilter* rf) override {
@@ -1161,9 +1544,18 @@ public:
         return offset;
     }
 
-    void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<Column*>& columns,
+    void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
                                  RunningContext* ctx) const override {
         bloom_filter().compute_partition_index(layout, columns, ctx);
+    }
+    void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                                 uint16_t* sel, uint16_t sel_size, std::vector<uint32_t>& hash_values) const override {
+        bloom_filter().compute_partition_index(layout, columns, sel, sel_size, hash_values);
+    }
+    void compute_partition_index(const RuntimeFilterLayout& layout, const std::vector<const Column*>& columns,
+                                 uint8_t* selection, uint16_t from, uint16_t to,
+                                 std::vector<uint32_t>& hash_values) const override {
+        bloom_filter().compute_partition_index(layout, columns, selection, from, to, hash_values);
     }
 
 private:

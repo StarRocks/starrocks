@@ -59,6 +59,7 @@ import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.connector.exception.GlobalDictNotMatchException;
 import com.starrocks.connector.exception.RemoteFileNotFoundException;
 import com.starrocks.datacache.DataCacheSelectMetrics;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.planner.PlanFragment;
 import com.starrocks.planner.PlanFragmentId;
@@ -363,6 +364,10 @@ public class DefaultCoordinator extends Coordinator {
     @Override
     public Status getExecStatus() {
         return queryStatus;
+    }
+
+    public QueryRuntimeProfile getQueryRuntimeProfile() {
+        return queryProfile;
     }
 
     @Override
@@ -671,6 +676,7 @@ public class DefaultCoordinator extends Coordinator {
                             this::handleErrorExecution, option.doDeploy);
             scheduler.prepareSchedule(this, deployer, executionDAG);
             this.scheduler.schedule(option);
+            MetricRepo.HISTO_DEPLOY_PLAN_FRAGMENTS_LATENCY.update(ignored.getTotalTime());
             queryProfile.attachExecutionProfiles(executionDAG.getExecutions());
         } finally {
             unlock();
@@ -732,19 +738,31 @@ public class DefaultCoordinator extends Coordinator {
         return updatedStates;
     }
 
+    private boolean isInternalCancelError(String errMsg) {
+        return errMsg.equals(FeConstants.LIMIT_REACH_ERROR) || errMsg.equals(FeConstants.QUERY_FINISHED_ERROR);
+    }
+
     private void handleErrorExecution(Status status, FragmentInstanceExecState execution, Throwable failure)
             throws StarRocksException, RpcException {
-        cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
         switch (Objects.requireNonNull(status.getErrorCode())) {
             case TIMEOUT:
+                cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
                 throw new StarRocksException("query timeout. backend id: " + execution.getWorker().getId());
             case THRIFT_RPC_ERROR:
+                cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
                 SimpleScheduler.addToBlocklist(execution.getWorker().getId());
                 throw new RpcException(
                         String.format("rpc failed with %s: %s", execution.getWorker().getHost(), status.getErrorMsg()),
                         failure);
+            case CANCELLED:
+                if (isInternalCancelError(status.getErrorMsg())) {
+                    // ignore the internal cancel error message
+                    break;
+                }
+                // fallthrough
             default:
-                throw new StarRocksException(status.getErrorMsg(), failure);
+                cancelInternal(PPlanFragmentCancelReason.INTERNAL_ERROR);
+                dealStatusToTryRetry(status);
         }
     }
 
@@ -883,6 +901,46 @@ public class DefaultCoordinator extends Coordinator {
         }
     }
 
+    private void dealStatusToTryRetry(Status status) throws RpcException, StarRocksException {
+        if (!status.ok()) {
+            if (Strings.isNullOrEmpty(status.getErrorMsg())) {
+                status.rewriteErrorMsg();
+            }
+
+            if (status.isRemoteFileNotFound()) {
+                throw new RemoteFileNotFoundException(status.getErrorMsg());
+            }
+
+            if (status.isGlobalDictNotMatch()) {
+                throw new GlobalDictNotMatchException(status.getErrorMsg());
+            }
+
+            if (status.isRpcError()) {
+                throw new RpcException("unknown", status.getErrorMsg());
+            } else {
+                String errMsg = status.getErrorMsg();
+                LOG.warn("query {} failed: {}", connectContext.queryId, errMsg);
+
+                // hide host info
+                int hostIndex = errMsg.indexOf("host");
+                if (hostIndex != -1) {
+                    errMsg = errMsg.substring(0, hostIndex);
+                }
+                InternalErrorCode ec = InternalErrorCode.INTERNAL_ERR;
+                if (status.isCancelled() &&
+                        status.getErrorMsg().equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
+                    ec = InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR;
+                } else if (status.isTimeout()) {
+                    ErrorReport.reportTimeoutException(
+                            ErrorCode.ERR_TIMEOUT, "Query", jobSpec.getQueryOptions().query_timeout,
+                            String.format("please increase the '%s' session variable and retry",
+                                    SessionVariable.QUERY_TIMEOUT));
+                }
+                throw new StarRocksException(ec, errMsg);
+            }
+        }
+    }
+
     @Override
     public RowBatch getNext() throws Exception {
         if (isShortCircuit) {
@@ -910,44 +968,7 @@ public class DefaultCoordinator extends Coordinator {
         } finally {
             unlock();
         }
-
-        if (!copyStatus.ok()) {
-            if (Strings.isNullOrEmpty(copyStatus.getErrorMsg())) {
-                copyStatus.rewriteErrorMsg();
-            }
-
-            if (copyStatus.isRemoteFileNotFound()) {
-                throw new RemoteFileNotFoundException(copyStatus.getErrorMsg());
-            }
-
-            if (copyStatus.isGlobalDictNotMatch()) {
-                throw new GlobalDictNotMatchException(copyStatus.getErrorMsg());
-            }
-
-            if (copyStatus.isRpcError()) {
-                throw new RpcException("unknown", copyStatus.getErrorMsg());
-            } else {
-                String errMsg = copyStatus.getErrorMsg();
-                LOG.warn("query {} failed: {}", connectContext.queryId, errMsg);
-
-                // hide host info
-                int hostIndex = errMsg.indexOf("host");
-                if (hostIndex != -1) {
-                    errMsg = errMsg.substring(0, hostIndex);
-                }
-                InternalErrorCode ec = InternalErrorCode.INTERNAL_ERR;
-                if (copyStatus.isCancelled() &&
-                        copyStatus.getErrorMsg().equals(FeConstants.BACKEND_NODE_NOT_FOUND_ERROR)) {
-                    ec = InternalErrorCode.CANCEL_NODE_NOT_ALIVE_ERR;
-                } else if (copyStatus.isTimeout()) {
-                    ErrorReport.reportTimeoutException(
-                            ErrorCode.ERR_TIMEOUT, "Query", jobSpec.getQueryOptions().query_timeout,
-                            String.format("please increase the '%s' session variable and retry",
-                                    SessionVariable.QUERY_TIMEOUT));
-                }
-                throw new StarRocksException(ec, errMsg);
-            }
-        }
+        dealStatusToTryRetry(copyStatus);
 
         if (resultBatch.isEos()) {
             this.returnedAllResults = true;

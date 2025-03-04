@@ -15,13 +15,18 @@
 package com.starrocks.lake.snapshot;
 
 import com.starrocks.common.StarRocksException;
+import com.starrocks.fs.hdfs.HdfsFsManager;
+import com.starrocks.persist.Storage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.Collections;
+import java.util.Map;
 import java.util.Optional;
 
 public class RestoreClusterSnapshotMgrTest {
@@ -44,8 +49,26 @@ public class RestoreClusterSnapshotMgrTest {
 
     @Test
     public void testNormal() throws Exception {
-        RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot2.yaml",
+        new MockUp<Storage>() {
+            @Mock
+            public long getImageJournalId() {
+                return 10L;
+            }
+        };
+
+        new MockUp<HdfsFsManager>() {
+            @Mock
+            public void copyToLocal(String srcPath, String destPath, Map<String, String> properties) {
+                return;
+            } // IOException
+        };
+
+        RestoreClusterSnapshotMgr.init("src/test/resources/conf/cluster_snapshot.yaml",
                 new String[] { "-cluster_snapshot" });
+        Assert.assertTrue(RestoreClusterSnapshotMgr.getRestoredSnapshotInfo().getSnapshotName()
+                .equals("automated_cluster_snapshot_1704038400000"));
+        Assert.assertTrue(RestoreClusterSnapshotMgr.getRestoredSnapshotInfo().getFeJournalId() == 10L);
+        Assert.assertTrue(RestoreClusterSnapshotMgr.getRestoredSnapshotInfo().getStarMgrJournalId() == 10L);
         Assert.assertTrue(RestoreClusterSnapshotMgr.isRestoring());
 
         for (ClusterSnapshotConfig.StorageVolume sv : RestoreClusterSnapshotMgr.getConfig().getStorageVolumes()) {

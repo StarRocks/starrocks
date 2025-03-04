@@ -843,6 +843,21 @@ public class Config extends ConfigBase {
     @ConfField
     public static int brpc_idle_wait_max_time = 10000;
 
+    @ConfField(mutable = true)
+    public static int brpc_send_plan_fragment_timeout_ms = 60000;
+
+    @ConfField
+    public static boolean brpc_reuse_addr = true;
+
+    @ConfField
+    public static int brpc_min_evictable_idle_time_ms = 120000;
+
+    @ConfField
+    public static boolean brpc_short_connection = false;
+
+    @ConfField
+    public static boolean brpc_inner_reuse_pool = true;
+
     /**
      * FE mysql server port
      */
@@ -1830,7 +1845,7 @@ public class Config extends ConfigBase {
      * its authentication info is stored in SR metadata.
      * <p>
      * For more information about security integration, you can refer to
-     * {@link SecurityIntegration}
+     * {@link com.starrocks.authentication.SecurityIntegration}
      */
     @ConfField(mutable = true)
     public static String[] authentication_chain = {AUTHENTICATION_CHAIN_MECHANISM_NATIVE};
@@ -2129,6 +2144,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "If full analyze predicate columns instead of sample all columns")
     public static boolean statistic_auto_collect_use_full_predicate_column_for_sample = true;
+
+    @ConfField(mutable = true, comment = "max columns size of full analyze predicate columns instead of sample all columns")
+    public static int statistic_auto_collect_max_predicate_column_size_on_sample_strategy = 16;
 
     /**
      * Max row count in statistics collect per query
@@ -2892,6 +2910,10 @@ public class Config extends ConfigBase {
                     "Only takes effect for tables in clusters with run_mode=shared_data.\n")
     public static long lake_autovacuum_stale_partition_threshold = 12;
 
+    @ConfField(mutable = true, comment = 
+            "Determine whether a vacuum operation needs to be initiated based on the vacuum version.\n")
+    public static boolean lake_autovacuum_detect_vaccumed_version = true;
+
     @ConfField(mutable = true, comment =
             "Whether enable throttling ingestion speed when compaction score exceeds the threshold.\n" +
                     "Only takes effect for tables in clusters with run_mode=shared_data.")
@@ -3471,7 +3493,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static long automated_cluster_snapshot_interval_seconds = 600;
 
-    @ConfField(mutable = false)
+    @ConfField(mutable = true)
     public static int max_historical_automated_cluster_snapshot_jobs = 100;
 
     /**
@@ -3507,4 +3529,11 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true)
     public static int max_show_proc_transactions_entry = 2000;
+
+    /**
+     *  max partition meta count will be returned when BE/CN call GetPartitionsMeta
+     *  if one table's partition count exceeds this, it will return all partitions for this table
+     */
+    @ConfField(mutable = true)
+    public static int max_get_partitions_meta_result_count = 100000;
 }

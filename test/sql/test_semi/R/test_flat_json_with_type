@@ -10,7 +10,7 @@ DISTRIBUTED BY HASH(`v1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
 "in_memory" = "false",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "fast_schema_evolution" = "true",
 "compression" = "LZ4"
@@ -1023,7 +1023,7 @@ DISTRIBUTED BY HASH(`v1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
 "in_memory" = "false",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "fast_schema_evolution" = "true",
 "compression" = "LZ4"
@@ -2036,7 +2036,7 @@ DISTRIBUTED BY HASH(`v1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
 "in_memory" = "false",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "fast_schema_evolution" = "true",
 "compression" = "LZ4"

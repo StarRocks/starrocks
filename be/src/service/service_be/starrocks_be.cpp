@@ -57,104 +57,6 @@ DECLARE_bool(socket_keepalive);
 
 namespace starrocks {
 
-Status init_datacache(GlobalEnv* global_env, const std::vector<StorePath>& storage_paths) {
-    // When configured old `block_cache` configurations, use the old items for compatibility.
-    if (config::block_cache_enable) {
-        config::datacache_enable = true;
-        config::datacache_mem_size = std::to_string(config::block_cache_mem_size);
-        config::datacache_disk_size = std::to_string(config::block_cache_disk_size);
-        config::datacache_block_size = config::block_cache_block_size;
-        config::datacache_max_concurrent_inserts = config::block_cache_max_concurrent_inserts;
-        config::datacache_checksum_enable = config::block_cache_checksum_enable;
-        config::datacache_direct_io_enable = config::block_cache_direct_io_enable;
-        config::datacache_engine = config::block_cache_engine;
-        LOG(WARNING) << "The configuration items prefixed with `block_cache_` will be deprecated soon"
-                     << ", you'd better use the configuration items prefixed `datacache` instead!";
-    }
-
-#if !defined(WITH_STARCACHE)
-    if (config::datacache_enable) {
-        LOG(WARNING) << "No valid engines supported, skip initializing datacache module";
-        config::datacache_enable = false;
-    }
-#endif
-
-    if (config::datacache_enable) {
-        BlockCache* cache = BlockCache::instance();
-
-        CacheOptions cache_options;
-        int64_t mem_limit = MemInfo::physical_mem();
-        if (global_env->process_mem_tracker()->has_limit()) {
-            mem_limit = global_env->process_mem_tracker()->limit();
-        }
-        RETURN_IF_ERROR(DataCacheUtils::parse_conf_datacache_mem_size(config::datacache_mem_size, mem_limit,
-                                                                      &cache_options.mem_space_size));
-
-        size_t total_quota_bytes = 0;
-        for (auto& root_path : storage_paths) {
-            // Because we have unified the datacache between datalake and starlet, we also need to unify the
-            // cache path and quota.
-            // To reuse the old cache data in `starlet_cache` directory, we try to rename it to the new `datacache`
-            // directory if it exists. To avoid the risk of cross disk renaming of a large amount of cached data,
-            // we do not automatically rename it when the source and destination directories are on different disks.
-            // In this case, users should manually remount the directories and restart them.
-            std::string datacache_path = root_path.path + "/datacache";
-            std::string starlet_cache_path = root_path.path + "/starlet_cache/star_cache";
-#ifdef USE_STAROS
-            if (config::datacache_unified_instance_enable) {
-                RETURN_IF_ERROR(DataCacheUtils::change_disk_path(starlet_cache_path, datacache_path));
-            }
-#endif
-            // Create it if not exist
-            Status st = FileSystem::Default()->create_dir_if_missing(datacache_path);
-            if (!st.ok()) {
-                LOG(ERROR) << "Fail to create datacache directory: " << datacache_path << ", reason: " << st.message();
-                return Status::InternalError("Fail to create datacache directory");
-            }
-
-            int64_t disk_size =
-                    DataCacheUtils::parse_conf_datacache_disk_size(datacache_path, config::datacache_disk_size, -1);
-#ifdef USE_STAROS
-            // If the `datacache_disk_size` is manually set a positive value, we will use the maximum cache quota between
-            // dataleke and starlet cache as the quota of the unified cache. Otherwise, the cache quota will remain zero
-            // and then automatically adjusted based on the current avalible disk space.
-            if (config::datacache_unified_instance_enable && (!config::datacache_auto_adjust_enable || disk_size > 0)) {
-                int64_t starlet_cache_size = DataCacheUtils::parse_conf_datacache_disk_size(
-                        datacache_path, fmt::format("{}%", config::starlet_star_cache_disk_size_percent), -1);
-                disk_size = std::max(disk_size, starlet_cache_size);
-            }
-#endif
-            cache_options.disk_spaces.push_back({.path = datacache_path, .size = static_cast<size_t>(disk_size)});
-            total_quota_bytes += disk_size;
-        }
-
-        if (cache_options.disk_spaces.empty() || total_quota_bytes != 0) {
-            config::datacache_auto_adjust_enable = false;
-        }
-
-        // Adjust the default engine based on build switches.
-        if (config::datacache_engine == "") {
-#if defined(WITH_STARCACHE)
-            config::datacache_engine = "starcache";
-#endif
-        }
-        cache_options.block_size = config::datacache_block_size;
-        cache_options.max_flying_memory_mb = config::datacache_max_flying_memory_mb;
-        cache_options.max_concurrent_inserts = config::datacache_max_concurrent_inserts;
-        cache_options.enable_checksum = config::datacache_checksum_enable;
-        cache_options.enable_direct_io = config::datacache_direct_io_enable;
-        cache_options.enable_tiered_cache = config::datacache_tiered_cache_enable;
-        cache_options.skip_read_factor = config::datacache_skip_read_factor;
-        cache_options.scheduler_threads_per_cpu = config::datacache_scheduler_threads_per_cpu;
-        cache_options.enable_datacache_persistence = config::datacache_persistence_enable;
-        cache_options.inline_item_count_limit = config::datacache_inline_item_count_limit;
-        cache_options.engine = config::datacache_engine;
-        cache_options.eviction_policy = config::datacache_eviction_policy;
-        return cache->init(cache_options);
-    }
-    return Status::OK();
-}
-
 StorageEngine* init_storage_engine(GlobalEnv* global_env, std::vector<StorePath> paths, bool as_cn) {
     // Init and open storage engine.
     EngineOptions options;
@@ -204,6 +106,10 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     auto* storage_engine = init_storage_engine(global_env, paths, as_cn);
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine init successfully";
 
+    auto* cache_env = CacheEnv::GetInstance();
+    EXIT_IF_ERROR(cache_env->init(paths));
+    LOG(INFO) << process_name << " start step " << start_step++ << ": cache env init successfully";
+
     auto* exec_env = ExecEnv::GetInstance();
     EXIT_IF_ERROR(exec_env->init(paths, as_cn));
     LOG(INFO) << process_name << " start step " << start_step++ << ": exec engine init successfully";
@@ -213,18 +119,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     EXIT_IF_ERROR(storage_engine->start_bg_threads());
     LOG(INFO) << process_name << " start step " << start_step++ << ": storage engine start bg threads successfully";
 
-    if (!init_datacache(global_env, paths).ok()) {
-        LOG(ERROR) << "Fail to init datacache";
-        exit(1);
-    }
-    if (config::datacache_enable) {
-        LOG(INFO) << process_name << " start step " << start_step++ << ": datacache init successfully";
-    } else {
-        LOG(INFO) << process_name << " starts by skipping the datacache initialization";
-    }
-
 #ifdef USE_STAROS
-    BlockCache* block_cache = BlockCache::instance();
+    auto* block_cache = cache_env->block_cache();
     if (config::datacache_unified_instance_enable && block_cache->is_initialized()) {
         init_staros_worker(block_cache->starcache_instance());
     } else {
@@ -297,7 +193,8 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " start step " << start_step++ << ": start brpc server successfully";
 
     // Start HTTP server
-    auto http_server = std::make_unique<HttpServiceBE>(exec_env, config::be_http_port, config::be_http_num_workers);
+    auto http_server =
+            std::make_unique<HttpServiceBE>(cache_env, exec_env, config::be_http_port, config::be_http_num_workers);
     if (auto status = http_server->start(); !status.ok()) {
         LOG(ERROR) << process_name << " http server did not start correctly, exiting: " << status.message();
         shutdown_logging();
@@ -376,13 +273,6 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": staros worker exit successfully";
 #endif
 
-#if defined(WITH_STARCACHE)
-    if (config::datacache_enable) {
-        (void)BlockCache::instance()->shutdown();
-        LOG(INFO) << process_name << " exit step " << exit_step++ << ": datacache shutdown successfully";
-    }
-#endif
-
     if (config::enable_poco_client_for_aws_sdk) {
         starrocks::poco::HTTPSessionPools::instance().shutdown();
         LOG(INFO) << process_name << " exit step " << exit_step++ << ": poco connection pool shutdown successfully";
@@ -404,6 +294,9 @@ void start_be(const std::vector<StorePath>& paths, bool as_cn) {
     LOG(INFO) << process_name << " exit step " << exit_step++ << ": exec env destroy successfully";
 
     delete storage_engine;
+
+    cache_env->destroy();
+    LOG(ERROR) << process_name << " exit step " << exit_step++ << ": cache env destroy successfully";
 
     // Unbind with MemTracker
     tls_mem_tracker = nullptr;

@@ -279,6 +279,8 @@ public:
     METRIC_DEFINE_INT_COUNTER(delta_column_group_get_non_pk_total, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(delta_column_group_get_non_pk_hit_cache, MetricUnit::REQUESTS);
     METRIC_DEFINE_INT_COUNTER(primary_key_table_error_state_total, MetricUnit::REQUESTS);
+    METRIC_DEFINE_INT_COUNTER(primary_key_wait_apply_done_duration_ms, MetricUnit::MILLISECONDS);
+    METRIC_DEFINE_INT_COUNTER(primary_key_wait_apply_done_total, MetricUnit::REQUESTS);
 
     // Gauges
     METRIC_DEFINE_INT_GAUGE(memory_pool_bytes_total, MetricUnit::BYTES);
@@ -409,7 +411,7 @@ public:
     pipeline::PipelineExecutorMetrics* get_pipeline_executor_metrics() { return &pipeline_executor_metrics; }
 
 private:
-    // Don't allow constrctor
+    // Don't allow constructor
     StarRocksMetrics();
 
     void _update();

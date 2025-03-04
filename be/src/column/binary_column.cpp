@@ -139,6 +139,11 @@ StatusOr<ColumnPtr> BinaryColumnBase<T>::replicate(const Buffer<uint32_t>& offse
         auto bytes_size = _offsets[i + 1] - _offsets[i];
         total_size += bytes_size * (offsets[i + 1] - offsets[i]);
     }
+
+    if (total_size >= Column::MAX_CAPACITY_LIMIT) {
+        return Status::InternalError("replicated column size will exceed the limit");
+    }
+
     dest_bytes.resize(total_size);
     dest_offsets.resize(dest_offsets.size() + offsets.back());
 
@@ -150,13 +155,6 @@ StatusOr<ColumnPtr> BinaryColumnBase<T>::replicate(const Buffer<uint32_t>& offse
             pos += bytes_size;
             dest_offsets[j + 1] = pos;
         }
-    }
-
-    auto ret = dest->upgrade_if_overflow();
-    if (!ret.ok()) {
-        return ret.status();
-    } else if (ret.value() != nullptr) {
-        return ret.value();
     }
 
     return dest;
@@ -620,6 +618,26 @@ void BinaryColumnBase<T>::fnv_hash(uint32_t* hashes, uint32_t from, uint32_t to)
                                        static_cast<uint32_t>(_offsets[i + 1] - _offsets[i]), hashes[i]);
     }
 }
+template <typename T>
+void BinaryColumnBase<T>::fnv_hash_with_selection(uint32_t* hashes, uint8_t* selection, uint16_t from,
+                                                  uint16_t to) const {
+    for (uint32_t i = from; i < to; ++i) {
+        if (!selection[i]) {
+            continue;
+        }
+        hashes[i] = HashUtil::fnv_hash(_bytes.data() + _offsets[i],
+                                       static_cast<uint32_t>(_offsets[i + 1] - _offsets[i]), hashes[i]);
+    }
+}
+
+template <typename T>
+void BinaryColumnBase<T>::fnv_hash_selective(uint32_t* hashes, uint16_t* sel, uint16_t sel_size) const {
+    for (uint16_t i = 0; i < sel_size; i++) {
+        uint16_t idx = sel[i];
+        hashes[idx] = HashUtil::fnv_hash(_bytes.data() + _offsets[idx],
+                                         static_cast<uint32_t>(_offsets[idx + 1] - _offsets[idx]), hashes[idx]);
+    }
+}
 
 template <typename T>
 void BinaryColumnBase<T>::crc32_hash(uint32_t* hashes, uint32_t from, uint32_t to) const {
@@ -627,6 +645,27 @@ void BinaryColumnBase<T>::crc32_hash(uint32_t* hashes, uint32_t from, uint32_t t
     for (uint32_t i = from; i < to && !_bytes.empty(); ++i) {
         hashes[i] = HashUtil::zlib_crc_hash(_bytes.data() + _offsets[i],
                                             static_cast<uint32_t>(_offsets[i + 1] - _offsets[i]), hashes[i]);
+    }
+}
+
+template <typename T>
+void BinaryColumnBase<T>::crc32_hash_with_selection(uint32_t* hashes, uint8_t* selection, uint16_t from,
+                                                    uint16_t to) const {
+    for (uint32_t i = from; i < to && !_bytes.empty(); ++i) {
+        if (!selection[i]) {
+            continue;
+        }
+        hashes[i] = HashUtil::zlib_crc_hash(_bytes.data() + _offsets[i],
+                                            static_cast<uint32_t>(_offsets[i + 1] - _offsets[i]), hashes[i]);
+    }
+}
+
+template <typename T>
+void BinaryColumnBase<T>::crc32_hash_selective(uint32_t* hashes, uint16_t* sel, uint16_t sel_size) const {
+    for (uint16_t i = 0; i < sel_size; i++) {
+        uint16_t idx = sel[i];
+        hashes[idx] = HashUtil::zlib_crc_hash(_bytes.data() + _offsets[idx],
+                                              static_cast<uint32_t>(_offsets[idx + 1] - _offsets[idx]), hashes[idx]);
     }
 }
 
@@ -700,8 +739,10 @@ std::string BinaryColumnBase<T>::raw_item_value(size_t idx) const {
     return s;
 }
 
+// find first overflow point in offsets[start,end)
+// return the first overflow point or end if not found
 size_t find_first_overflow_point(const BinaryColumnBase<uint32_t>::Offsets& offsets, size_t start, size_t end) {
-    for (size_t i = start; i < end; i++) {
+    for (size_t i = start; i < end - 1; i++) {
         if (offsets[i] > offsets[i + 1]) {
             return i + 1;
         }

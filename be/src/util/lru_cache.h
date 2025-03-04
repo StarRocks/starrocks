@@ -280,6 +280,7 @@ public:
     uint64_t get_hit_count() const;
     size_t get_usage() const;
     size_t get_capacity() const;
+    static size_t key_handle_size(const CacheKey& key) { return sizeof(LRUHandle) - 1 + key.size(); }
 
 private:
     void _lru_remove(LRUHandle* e);

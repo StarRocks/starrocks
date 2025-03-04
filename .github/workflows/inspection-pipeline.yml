@@ -410,7 +410,7 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: always() && needs.test_filter.outputs.CENTOS_RELEASE_TAR_PATH != '' && needs.info.outputs.ALL_LINUX == 'true'
+    if: always() && needs.test_filter.outputs.CENTOS_RELEASE_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
@@ -427,7 +427,7 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: always() && needs.test_filter.outputs.CENTOS_ASAN_TAR_PATH != '' && needs.info.outputs.ALL_LINUX == 'true'
+    if: always() && needs.test_filter.outputs.CENTOS_ASAN_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}
@@ -463,7 +463,7 @@ jobs:
       - info
       - test_filter
     secrets: inherit
-    if: always() && needs.test_filter.outputs.UBUNTU_ASAN_TAR_PATH != '' && needs.info.outputs.ALL_LINUX == 'true'
+    if: always() && needs.test_filter.outputs.UBUNTU_ASAN_TAR_PATH != '' && (needs.info.outputs.ALL_LINUX == 'true' || needs.test_filter.outputs.IS_SELF_BUILD == 'false')
     with:
       BRANCH: ${{ needs.info.outputs.BRANCH }}
       COMMIT_ID: ${{ needs.info.outputs.PR_NUMBER }}

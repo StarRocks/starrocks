@@ -3,3 +3,93 @@ CREATE TABLE orders_new (     ts INT NOT NULL,     id BIGINT NOT NULL,     city 
 insert into orders_new values('20200201',1,'cd');
 insert into orders_new values('20200101',1,'cd');
 explain select * from orders_new where ts=20200101;
+
+-- name: test_range_prune
+CREATE TABLE ts (
+	ts INT NOT NULL,
+        id BIGINT NOT NULL,
+	city STRING NOT NULL )
+PARTITION BY date_trunc('month', str_to_date(CAST(ts as STRING),'%Y%m%d'));
+insert into ts values('20200201',1,'cd');
+insert into ts values('20200101',1,'cd');
+insert into ts values('20200301',1,'cd');
+insert into ts values('20200401',1,'cd');
+explain select * from ts where ts>20200201;
+
+CREATE TABLE o (
+    ts BIGINT NOT NULL,
+    id BIGINT NOT NULL,
+    city STRING NOT NULL
+)
+PARTITION BY from_unixtime(ts,'%Y%m%d');
+insert into o values(1727224687,1,'cd');
+insert into o values(1737234687,1,'cd');
+insert into o values(1747244687,1,'cd');
+insert into o values(1757254687,1,'cd');
+explain select * from o where ts>1737234687;
+
+CREATE TABLE t (
+	ts INT NOT NULL,
+        id BIGINT NOT NULL,
+	city STRING NOT NULL )
+PARTITION BY id, date_trunc('month', str_to_date(CAST(ts as STRING),'%Y%m%d'));
+insert into t values('20200201',1,'cd');
+insert into t values('20200101',1,'cd');
+insert into t values('20200301',1,'cd');
+insert into t values('20200401',1,'cd');
+insert into t values('20200201',2,'cd');
+insert into t values('20200101',2,'cd');
+insert into t values('20200301',3,'cd');
+insert into t values('20200401',3,'cd');
+explain select * from t where ts>20200201;
+explain select * from t where id>1;
+explain select * from t where id>1 and ts>20200201;
+
+-- name: test_prune_value_function
+CREATE TABLE o (
+    ts BIGINT NOT NULL,
+    id BIGINT NOT NULL,
+    city STRING NOT NULL
+)
+PARTITION BY from_unixtime(ts,'%Y%m%d');
+insert into o values(unix_timestamp(),1,'cd');
+insert into o values(unix_timestamp()+1000000,1,'cd');
+insert into o values(unix_timestamp()-1000000,1,'cd');
+explain select * from o where ts>unix_timestamp();
+
+-- name: test_prune_cast
+CREATE TABLE o (
+    ts STRING NOT NULL,
+    id BIGINT NOT NULL,
+    city STRING NOT NULL
+)
+PARTITION BY from_unixtime(cast(ts as INT) + 3600);
+insert into o values(unix_timestamp(),1,'cd');
+insert into o values(unix_timestamp()+1000000,1,'cd');
+insert into o values(unix_timestamp()-1000000,1,'cd');
+explain select * from o where ts>cast(unix_timestamp() as STRING);
+explain select * from o where ts>'1740108713';
+
+-- name: test_prune_convert_tz
+CREATE TABLE ts (
+	ts DATETIME NOT NULL,
+        id BIGINT NOT NULL,
+	city STRING NOT NULL )
+PARTITION BY date_trunc('hour', convert_tz(ts, 'Asia/Shanghai', 'America/Los_Angeles'));
+insert into ts values('2020-01-01 00:00:00',1,'cd');
+insert into ts values('2020-02-01 00:00:00',1,'cd');
+insert into ts values('2020-03-01 00:00:00',1,'cd');
+insert into ts values('2020-04-01 00:00:00',1,'cd');
+explain select * from ts where ts > '2020-03-01 00:00:00';
+
+-- name: test_prune_if
+CREATE TABLE ts (
+        dt STRING NOT NULL,
+        id BIGINT NOT NULL,
+	city STRING NOT NULL )
+PARTITION BY date_trunc('month', if(length(dt) = 6, str2date(dt, '%y%m%d'), str2date(dt, '%Y%m%d')));
+insert into ts values('20200201',1,'cd');
+insert into ts values('20200101',1,'cd');
+insert into ts values('200301',1,'cd');
+insert into ts values('20200401',1,'cd');
+explain select * from ts where dt>20200201;

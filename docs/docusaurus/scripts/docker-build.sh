@@ -8,5 +8,6 @@ docker run --rm --interactive --tty \
 	--volume $DOCS_DIR/en:/app/docusaurus/docs \
 	--volume "$DOCS_DIR/docusaurus/i18n:/app/docusaurus/i18n" \
 	--volume "$DOCS_DIR/zh:/app/docusaurus/i18n/zh/docusaurus-plugin-content-docs/current" \
+	--volume "$DOCS_DIR/ja:/app/docusaurus/i18n/ja/docusaurus-plugin-content-docs/current" \
 	-p 3000:3000 \
 	docs-build /app/docusaurus/scripts/build-and-serve.sh

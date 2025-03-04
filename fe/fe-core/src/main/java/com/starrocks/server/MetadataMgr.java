@@ -32,6 +32,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalCatalogTableBasicInfo;
 import com.starrocks.catalog.IcebergTable;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -66,6 +67,7 @@ import com.starrocks.connector.metadata.MetadataTableType;
 import com.starrocks.connector.statistics.ConnectorTableColumnStats;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.AlterViewStmt;
 import com.starrocks.sql.ast.CleanTemporaryTableStmt;
 import com.starrocks.sql.ast.CreateTableLikeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -405,6 +407,15 @@ public class MetadataMgr {
         }
     }
 
+    public void alterView(AlterViewStmt stmt) throws StarRocksException {
+        String catalogName = stmt.getCatalog();
+        Optional<ConnectorMetadata> connectorMetadata = getOptionalMetadata(catalogName);
+
+        if (connectorMetadata.isPresent()) {
+            connectorMetadata.get().alterView(stmt);
+        }
+    }
+
     public void dropTable(String catalogName, String dbName, String tblName) {
         TableName tableName = new TableName(catalogName, dbName, tblName);
         DropTableStmt dropTableStmt = new DropTableStmt(false, tableName, false);
@@ -601,6 +612,10 @@ public class MetadataMgr {
      * Use this method if you are absolutely sure, otherwise use MetadataMgr#getTable.
      */
     public BasicTable getBasicTable(String catalogName, String dbName, String tblName) {
+        if (catalogName == null) {
+            return getTable(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, dbName, tblName);
+        }
+
         if (CatalogMgr.isInternalCatalog(catalogName)) {
             return getTable(catalogName, dbName, tblName);
         }

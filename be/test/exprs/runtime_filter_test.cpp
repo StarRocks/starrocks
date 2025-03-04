@@ -335,6 +335,13 @@ TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilter) {
     chunk.filter(selection);
     // 0 17 34 ... 187
     EXPECT_EQ(chunk.num_rows(), 12);
+
+    auto null_literal = ColumnHelper::create_const_null_column(4096);
+    selection.assign(null_literal->size(), 0);
+    rf->evaluate(null_literal.get(), &ctx);
+    for (auto v : selection) {
+        ASSERT_EQ(1, v);
+    }
 }
 
 TEST_F(RuntimeBloomFilterTest, TestJoinRuntimeFilterSlice) {
@@ -990,12 +997,15 @@ void test_pipeline_level_helper(TRuntimeFilterBuildJoinMode::type join_mode, con
     auto part_by_func_gen = [=](bool is_reduce) -> auto {
         return [is_reduce, layout, num_rows, num_partitions](BinaryColumn* column, std::vector<uint32_t>& hash_values,
                                                              std::vector<size_t>& num_rows_per_partitions) {
+            hash_values.resize(num_rows);
             if (is_reduce) {
-                dispatch_layout<WithModuloArg<ReduceOp>::HashValueCompute>(true, layout, std::vector<Column*>{column},
-                                                                           num_rows, num_partitions, hash_values);
+                dispatch_layout<WithModuloArg<ReduceOp, FullScanIterator>::HashValueCompute>(
+                        true, layout, std::vector<const Column*>{column}, num_partitions,
+                        FullScanIterator(hash_values, num_rows));
             } else {
-                dispatch_layout<WithModuloArg<ModuloOp>::HashValueCompute>(true, layout, std::vector<Column*>{column},
-                                                                           num_rows, num_partitions, hash_values);
+                dispatch_layout<WithModuloArg<ModuloOp, FullScanIterator>::HashValueCompute>(
+                        true, layout, std::vector<const Column*>{column}, num_partitions,
+                        FullScanIterator(hash_values, num_rows));
             }
             for (auto v : hash_values) {
                 if (v != BUCKET_ABSENT) {
@@ -1121,7 +1131,7 @@ void TestMultiColumnsOnRuntimeFilter(TRuntimeFilterBuildJoinMode::type join_mode
     running_ctx.selection.assign(num_rows, 2);
     running_ctx.use_merged_selection = false;
     running_ctx.compatibility = true;
-    std::vector<Column*> column_ptrs;
+    std::vector<const Column*> column_ptrs;
     for (auto& column : columns) {
         column_ptrs.push_back(column.get());
     }

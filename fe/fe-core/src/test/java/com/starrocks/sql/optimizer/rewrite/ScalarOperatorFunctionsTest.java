@@ -1322,22 +1322,42 @@ public class ScalarOperatorFunctionsTest {
 
     @Test
     public void concat_ws_with_null() {
-        ConstantOperator[] argWithNull = {ConstantOperator.createVarchar("star"),
-                ConstantOperator.createNull(Type.VARCHAR),
-                ConstantOperator.createVarchar("cks")};
-        ConstantOperator result =
-                ScalarOperatorFunctions.concat_ws(ConstantOperator.createVarchar("ro"), argWithNull);
-        assertEquals(Type.VARCHAR, result.getType());
-        assertEquals("starrocks", result.getVarchar());
+        {
+            ConstantOperator[] argWithNull = {ConstantOperator.createVarchar("star"),
+                    ConstantOperator.createNull(Type.VARCHAR),
+                    ConstantOperator.createVarchar("cks")};
+            ConstantOperator result =
+                    ScalarOperatorFunctions.concat_ws(ConstantOperator.createVarchar("ro"), argWithNull);
+            assertEquals(Type.VARCHAR, result.getType());
+            assertEquals("starrocks", result.getVarchar());
+        }
+        {
+            ConstantOperator[] argWithNull = {ConstantOperator.createVarchar("1"),
+                    ConstantOperator.createNull(Type.VARCHAR)};
+            ConstantOperator result =
+                    ScalarOperatorFunctions.concat_ws(ConstantOperator.createVarchar(","), argWithNull);
+            assertEquals(Type.VARCHAR, result.getType());
+            assertEquals("1", result.getVarchar());
+        }
+        {
+            ConstantOperator[] argWithNull = {ConstantOperator.createVarchar("1"),
+                    ConstantOperator.createNull(Type.VARCHAR),
+                    ConstantOperator.createNull(Type.VARCHAR)};
+            ConstantOperator result =
+                    ScalarOperatorFunctions.concat_ws(ConstantOperator.createVarchar(","), argWithNull);
+            assertEquals(Type.VARCHAR, result.getType());
+            assertEquals("1", result.getVarchar());
+        }
+        {
+            ConstantOperator result = ScalarOperatorFunctions.concat_ws(ConstantOperator.createVarchar(","),
+                    ConstantOperator.createNull(Type.VARCHAR));
+            assertEquals("", result.getVarchar());
 
-        result = ScalarOperatorFunctions.concat_ws(ConstantOperator.createVarchar(","),
-                ConstantOperator.createNull(Type.VARCHAR));
-        assertEquals("", result.getVarchar());
-
-        ConstantOperator[] argWithoutNull = {ConstantOperator.createVarchar("star"),
-                ConstantOperator.createVarchar("cks")};
-        result = ScalarOperatorFunctions.concat_ws(ConstantOperator.createNull(Type.VARCHAR), argWithoutNull);
-        assertTrue(result.isNull());
+            ConstantOperator[] argWithoutNull = {ConstantOperator.createVarchar("star"),
+                    ConstantOperator.createVarchar("cks")};
+            result = ScalarOperatorFunctions.concat_ws(ConstantOperator.createNull(Type.VARCHAR), argWithoutNull);
+            assertTrue(result.isNull());
+        }
     }
 
     @Test
@@ -1373,6 +1393,8 @@ public class ScalarOperatorFunctionsTest {
         LocalDateTime expected = Instant.ofEpochMilli(ctx.getStartTime() / 1000 * 1000)
                 .atZone(TimeUtils.getTimeZone().toZoneId()).toLocalDateTime();
         assertEquals(expected, ScalarOperatorFunctions.now().getDatetime());
+        double expectedTime = expected.getHour() * 3600D + expected.getMinute() * 60D + expected.getSecond();
+        assertEquals(expectedTime, ScalarOperatorFunctions.curTime().getTime(), 0.1);
     }
 
     @Test

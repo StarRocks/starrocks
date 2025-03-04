@@ -469,6 +469,10 @@ import com.starrocks.sql.ast.feedback.AddPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ClearPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.DelPlanAdvisorStmt;
 import com.starrocks.sql.ast.feedback.ShowPlanAdvisorStmt;
+import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
+import com.starrocks.sql.ast.group.DropGroupProviderStmt;
+import com.starrocks.sql.ast.group.ShowCreateGroupProviderStmt;
+import com.starrocks.sql.ast.group.ShowGroupProvidersStmt;
 import com.starrocks.sql.ast.integration.AlterSecurityIntegrationStatement;
 import com.starrocks.sql.ast.integration.CreateSecurityIntegrationStatement;
 import com.starrocks.sql.ast.integration.DropSecurityIntegrationStatement;
@@ -1659,6 +1663,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
         }
 
         boolean isSecurity = false;
+        Map<String, String> properties = new HashMap<>();
         if (context.SECURITY() != null) {
             if (context.NONE() != null) {
                 isSecurity = false;
@@ -1666,12 +1671,21 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 isSecurity = true;
             }
 
-            return new AlterViewStmt(targetTableName, isSecurity, null, createPos(context));
+            return new AlterViewStmt(targetTableName, isSecurity, AlterViewStmt.AlterDialectType.NONE, properties,
+                    null, createPos(context));
+        } else if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                properties.put(property.getKey(), property.getValue());
+            }
+            return new AlterViewStmt(targetTableName, isSecurity, AlterViewStmt.AlterDialectType.NONE, properties,
+                    null, createPos(context));
         } else {
+            AlterViewStmt.AlterDialectType alterDialectType = context.ADD() != null ? AlterViewStmt.AlterDialectType.ADD :
+                    context.MODIFY() != null ? AlterViewStmt.AlterDialectType.MODIFY : AlterViewStmt.AlterDialectType.NONE;
             QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
-            AlterClause alterClause = new AlterViewClause(colWithComments, queryStatement, createPos(context));
-
-            return new AlterViewStmt(targetTableName, isSecurity, alterClause, createPos(context));
+            AlterViewClause alterClause = new AlterViewClause(colWithComments, queryStatement, createPos(context));
+            return new AlterViewStmt(targetTableName, isSecurity, alterDialectType, properties, alterClause, createPos(context));
         }
     }
 
@@ -1958,6 +1972,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.comment() == null ? null : ((StringLiteral) visit(context.comment().string())).getStringValue();
         QueryStatement queryStatement = (QueryStatement) visit(context.queryStatement());
         int queryStartIndex = context.queryStatement().start.getStartIndex();
+        int queryStopIndex = context.queryStatement().stop.getStopIndex() + 1;
 
         RefreshSchemeClause refreshSchemeDesc = null;
         Map<String, String> properties = new HashMap<>();
@@ -2063,7 +2078,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
                 context.indexDesc() == null ? null : getIndexDefs(context.indexDesc()),
                 comment,
                 refreshSchemeDesc,
-                partitionByExprs, distributionDesc, sortKeys, properties, queryStatement, queryStartIndex,
+                partitionByExprs, distributionDesc, sortKeys, properties, queryStatement, queryStartIndex, queryStopIndex,
                 currentDBName,
                 createPos(context));
     }
@@ -2072,17 +2087,25 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowMaterializedViewsStatement(
             StarRocksParser.ShowMaterializedViewsStatementContext context) {
         String database = null;
+        String catalog = null;
         NodePosition pos = createPos(context);
         if (context.qualifiedName() != null) {
-            database = getQualifiedName(context.qualifiedName()).toString();
+            QualifiedName qualifiedName = getQualifiedName(context.qualifiedName());
+            List<String> parts = qualifiedName.getParts();
+            if (parts.size() == 2) {
+                catalog = qualifiedName.getParts().get(0);
+                database = qualifiedName.getParts().get(1);
+            } else if (parts.size() == 1) {
+                database = qualifiedName.getParts().get(0);
+            }
         }
         if (context.pattern != null) {
             StringLiteral stringLiteral = (StringLiteral) visit(context.pattern);
-            return new ShowMaterializedViewsStmt(database, stringLiteral.getValue(), null, pos);
+            return new ShowMaterializedViewsStmt(catalog, database, stringLiteral.getValue(), null, pos);
         } else if (context.expression() != null) {
-            return new ShowMaterializedViewsStmt(database, null, (Expr) visit(context.expression()), pos);
+            return new ShowMaterializedViewsStmt(catalog, database, null, (Expr) visit(context.expression()), pos);
         } else {
-            return new ShowMaterializedViewsStmt(database, null, null, pos);
+            return new ShowMaterializedViewsStmt(catalog, database, null, null, pos);
         }
     }
 
@@ -6675,6 +6698,41 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
     public ParseNode visitShowSecurityIntegrationStatement(
             StarRocksParser.ShowSecurityIntegrationStatementContext context) {
         return new ShowSecurityIntegrationStatement(createPos(context));
+    }
+
+    // ---------------------------------------- Group Provider Statement --------------------------------------
+
+    @Override
+    public ParseNode visitCreateGroupProviderStatement(StarRocksParser.CreateGroupProviderStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        Map<String, String> propertyMap = new HashMap<>();
+        if (context.properties() != null) {
+            List<Property> propertyList = visit(context.properties().property(), Property.class);
+            for (Property property : propertyList) {
+                propertyMap.put(property.getKey(), property.getValue());
+            }
+        }
+        return new CreateGroupProviderStmt(name, propertyMap, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitDropGroupProviderStatement(
+            StarRocksParser.DropGroupProviderStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        return new DropGroupProviderStmt(name, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowCreateGroupProviderStatement(
+            StarRocksParser.ShowCreateGroupProviderStatementContext context) {
+        String name = ((Identifier) visit(context.identifier())).getValue();
+        return new ShowCreateGroupProviderStmt(name, createPos(context));
+    }
+
+    @Override
+    public ParseNode visitShowGroupProvidersStatement(
+            StarRocksParser.ShowGroupProvidersStatementContext context) {
+        return new ShowGroupProvidersStmt(createPos(context));
     }
 
     // ------------------------------------------- Expression ----------------------------------------------------------

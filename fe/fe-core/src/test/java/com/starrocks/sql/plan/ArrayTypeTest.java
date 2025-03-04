@@ -714,6 +714,13 @@ public class ArrayTypeTest extends PlanTestBase {
         assertCContains(plan, "array_slice[([5: d_2, ARRAY<DECIMAL64(4,3)>, true], 1, 3); " +
                 "args: INVALID_TYPE,BIGINT,BIGINT; result: ARRAY<DECIMAL64(4,3)>;");
 
+        sql = "select array_contains([null], null), array_position([null], null)";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  |  output columns:\n" +
+                "  |  2 <-> array_contains[([NULL], NULL); " +
+                "args: INVALID_TYPE,BOOLEAN; result: BOOLEAN; args nullable: true; result nullable: true]\n" +
+                "  |  3 <-> array_position[([NULL], NULL); " +
+                "args: INVALID_TYPE,BOOLEAN; result: INT; args nullable: true; result nullable: true]");
     }
 
     @Test
@@ -755,5 +762,12 @@ public class ArrayTypeTest extends PlanTestBase {
         assertContains(plan, "3:Project\n" +
                 "  |  <slot 4> : 4: dense_rank()\n" +
                 "  |  <slot 6> : array_filter(3: v3, array_map(<slot 5> -> array_contains(3: v3, <slot 5>), 3: v3))");
+
+        sql =
+                "explain costs SELECT array_filter( s_1, " +
+                        "x -> array_length(array_filter(d_1, y -> y > 0)) > 0 ) AS filtered_activity_name," +
+                        " array_length(d_1) AS col_double_length FROM adec;";
+        plan = getCostExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath: [/d_1/OFFSET]");
     }
 }
