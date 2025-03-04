@@ -121,7 +121,8 @@ public class LoadLoadingTaskTest {
 
         Database database = new Database(10000L, "test");
         OlapTable olapTable = new OlapTable(10001L, "tbl", null, KeysType.AGG_KEYS, null, null);
-        LoadLoadingTask loadLoadingTask = new LoadLoadingTask.Builder().setDb(database).setTable(olapTable).build();
+        LoadLoadingTask loadLoadingTask =
+                new LoadLoadingTask.Builder().setDb(database).setTable(olapTable).setContext(ConnectContext.build()).build();
 
         // database not exist
         boolean exceptionThrown = false;
