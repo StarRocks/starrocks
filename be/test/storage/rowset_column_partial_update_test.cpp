@@ -1237,7 +1237,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_compaction) {
     int64_t version = 1;
     commit_rowsets(tablet, rowsets, version);
     // check data
-    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
+    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
         return (int16_t)(k1 % 100 + 1) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
     }));
 
@@ -1251,7 +1251,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_compaction) {
     auto st = tablet->rowset_commit(++version, partial_rowset, 10000);
     ASSERT_TRUE(st.ok()) << st.to_string();
     // check data
-    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
+    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
         return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
     }));
     // compaction with rowset 0 - 9
@@ -1261,7 +1261,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_compaction) {
     }
     ASSERT_TRUE(tablet->updates()->compaction(_compaction_mem_tracker.get(), input_rowset_ids).ok());
     // check data
-    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
+    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
         return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
     }));
 
@@ -1287,7 +1287,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_compaction_conflict_ch
     int64_t version = 1;
     commit_rowsets(tablet, rowsets, version);
     // check data
-    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
+    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
         return (int16_t)(k1 % 100 + 1) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
     }));
 
@@ -1301,7 +1301,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_compaction_conflict_ch
     auto st = tablet->rowset_commit(++version, partial_rowset, 10000);
     ASSERT_TRUE(st.ok()) << st.to_string();
     // check data
-    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
+    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
         return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
     }));
 
@@ -1324,7 +1324,7 @@ TEST_P(RowsetColumnPartialUpdateTest, partial_update_with_compaction_conflict_ch
     }
     ASSERT_FALSE(tablet->updates()->compaction(_compaction_mem_tracker.get(), input_rowset_ids).ok());
     // check data
-    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2, int32_t v3) {
+    ASSERT_TRUE(check_tablet(tablet, version, N, [](int64_t k1, int64_t v1, int32_t v2) {
         return (int16_t)(k1 % 100 + 3) == v1 && (int32_t)(k1 % 1000 + 2) == v2;
     }));
 
