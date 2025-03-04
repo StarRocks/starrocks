@@ -53,7 +53,6 @@ Status StarCacheModule::lookup(const std::string& key, ObjectCacheHandlePtr* han
     starcache::ObjectHandle* obj_hdl = new starcache::ObjectHandle;
     // Skip checking options temporarily because there is no valid members in `ObjectCacheReadOptions` now.
     Status st = to_status(_cache->get_object(key, obj_hdl, nullptr));
-    LOG(ERROR) << "LOOKUP: " << st;
     if (!st.ok()) {
         delete obj_hdl;
     } else if (handle) {
