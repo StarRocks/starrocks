@@ -26,7 +26,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalLimitOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
@@ -180,7 +179,6 @@ public class OrToUnionAllJoinRule extends TransformationRule {
 
         Map<Integer, List<BinaryPredicateOperator>> cumulativePredicateMap =
                 createCumulativePredicateMap(binaryPredicateList, context);
-
         for (int j = 0; j < cumulativePredicateMap.size(); j++) {
             List<BinaryPredicateOperator> branchPredicates = cumulativePredicateMap.get(j);
             int branchSize = branchPredicates.size();
@@ -194,13 +192,6 @@ public class OrToUnionAllJoinRule extends TransformationRule {
             }
         }
 
-        LogicalLimitOperator limitOp = getLimitOperator(input);
-        long limit = 0;
-        if (limitOp != null) {
-            limit = limitOp.getLimit();
-        }
-        boolean hasLimit = limit > 0;
-
         List<LogicalJoinOperator> joinBranchList = new ArrayList<>();
         for (int i = 0; i < cumulativePredicateMap.size(); i++) {
             List<BinaryPredicateOperator> branchPredicates = cumulativePredicateMap.get(i);
@@ -209,11 +200,6 @@ public class OrToUnionAllJoinRule extends TransformationRule {
                 BinaryPredicateOperator predicate0 = branchPredicates.get(0);
                 LogicalJoinOperator.Builder builder =
                         new LogicalJoinOperator.Builder().withOperator(joinOp).setOnPredicate(predicate0);
-
-                if (hasLimit) {
-                    builder.setLimit(limit);
-                }
-
                 branchJoin = builder.build();
             } else {
                 List<ScalarOperator> scalarOps = new ArrayList<>(branchPredicates);
@@ -223,11 +209,6 @@ public class OrToUnionAllJoinRule extends TransformationRule {
                         .withOperator(joinOp)
                         .setOnPredicate(combinedPredicate)
                         .setOriginalOnPredicate(lastPredicate);
-
-                if (hasLimit) {
-                    builder.setLimit(limit);
-                }
-
                 branchJoin = builder.build();
             }
             joinBranchList.add(branchJoin);
@@ -255,12 +236,11 @@ public class OrToUnionAllJoinRule extends TransformationRule {
                 new LogicalUnionOperator.Builder().isUnionAll(true).setProjection(joinOp.getProjection())
                         .setChildOutputColumns(childOutputColumns).setOutputColumnRefOp(outputColumns);
 
-        if (hasLimit) {
-            builder.setLimit(limit);
+        if (joinOp.hasLimit()) {
+            builder.setLimit(joinOp.getLimit());
         }
 
         LogicalUnionOperator unionOp = builder.build();
-
         OptExpression result = OptExpression.create(unionOp, unionChildren);
 
         return Lists.newArrayList(result);
@@ -347,12 +327,5 @@ public class OrToUnionAllJoinRule extends TransformationRule {
                     predicates.get(i));
         }
         return result;
-    }
-
-    private LogicalLimitOperator getLimitOperator(OptExpression expr) {
-        if (expr.getOp().getOpType() == OperatorType.LOGICAL_LIMIT) {
-            return (LogicalLimitOperator) expr.getOp();
-        }
-        return null;
     }
 }
