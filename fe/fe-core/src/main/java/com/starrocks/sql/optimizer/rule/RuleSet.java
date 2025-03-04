@@ -326,6 +326,7 @@ public class RuleSet {
                 PushDownPredicateScanRule.DELTALAKE_SCAN,
                 PushDownPredicateScanRule.FILE_SCAN,
                 PushDownPredicateScanRule.PAIMON_SCAN,
+                PushDownPredicateScanRule.ODPS_SCAN,
                 PushDownPredicateScanRule.ICEBERG_METADATA_SCAN,
                 PushDownPredicateScanRule.ICEBERG_EQUALITY_DELETE_SCAN,
                 PushDownPredicateScanRule.KUDU_SCAN,
