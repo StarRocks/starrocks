@@ -42,6 +42,10 @@ public:
 
         // handle nullable column
         const size_t num_rows = col->size();
+        if (col->only_null()) {
+            return ColumnHelper::create_const_null_column(num_rows);
+        }
+
         NullColumnPtr union_null_column = NullColumn::create(num_rows, false);
 
         for (size_t i = 0; i < _used_subfield_names.size(); i++) {
