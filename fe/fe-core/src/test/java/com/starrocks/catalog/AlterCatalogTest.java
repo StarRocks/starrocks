@@ -64,15 +64,7 @@ public class AlterCatalogTest {
 
         try {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                    "alter catalog hive0 set (\"ranger.plugin.hive.service.name2\"  =  \"hive_catalog_2\");",
-                    connectContext), connectContext);
-            Assert.fail();
-        } catch (AnalysisException e) {
-        }
-
-        try {
-            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                    "alter catalog hive0 set (\"hive.metastore.type\"  =  \"glue\");",
+                    "alter catalog hive0 set (\"type\"  =  \"hudi\");",
                     connectContext), connectContext);
             Assert.fail();
         } catch (AnalysisException e) {

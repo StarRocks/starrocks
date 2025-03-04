@@ -282,30 +282,7 @@ public class CatalogMgr {
             return;
         }
 
-        if (needRecreateCatalog(catalog, alterProperties)) {
-            // recreate catalog
-            reCreatCatalog(catalog, alterProperties, isReplay);
-        } else {
-            String catalogName = catalog.getName();
-            String serviceName = alterProperties.get("ranger.plugin.hive.service.name");
-
-            if (Strings.isNullOrEmpty(serviceName)) {
-                if (Config.access_control.equals("ranger")) {
-                    Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
-                } else {
-                    Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
-                }
-            } else {
-                Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
-            }
-
-            catalog.getConfig().putAll(alterProperties);
-        }
-    }
-
-    private boolean needRecreateCatalog(Catalog catalog, Map<String, String> properties) {
-        boolean containsRanger = properties.containsKey("ranger.plugin.hive.service.name");
-        return !containsRanger || properties.size() != 1;
+        reCreatCatalog(catalog, alterProperties, isReplay);
     }
 
     // TODO @caneGuy we should put internal catalog into catalogmgr

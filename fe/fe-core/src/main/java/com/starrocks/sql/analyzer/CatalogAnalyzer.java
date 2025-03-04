@@ -18,7 +18,6 @@ import com.google.common.base.Strings;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterCatalogStmt;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.ast.CreateCatalogStmt;
