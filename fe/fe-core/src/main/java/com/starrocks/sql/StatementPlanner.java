@@ -152,6 +152,7 @@ public class StatementPlanner {
             } else if (stmt instanceof InsertStmt) {
                 ExecPlan plan = planInsertStmt(plannerMetaLocker, (InsertStmt) stmt, session);
                 setExplainToQueryDetail(plan, stmt, session, ResourceGroupClassifier.QueryType.INSERT);
+                return plan;
             } else if (stmt instanceof UpdateStmt) {
                 return new UpdatePlanner().plan((UpdateStmt) stmt, session);
             } else if (stmt instanceof DeleteStmt) {
