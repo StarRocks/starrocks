@@ -434,18 +434,8 @@ public class OlapTable extends Table {
         olapTable.dbName = this.dbName;
     }
 
-    public void addDoubleWritePartition(String sourcePartitionName, String tempPartitionName) {
-        Partition temp = tempPartitions.getPartition(tempPartitionName);
-        if (temp != null) {
-            Partition p = getPartition(sourcePartitionName);
-            if (p != null) {
-                doubleWritePartitions.put(p.getId(), temp.getId());
-            } else {
-                LOG.warn("partition {} does not exist", sourcePartitionName);
-            }
-        } else {
-            LOG.warn("partition {} does not exist", tempPartitionName);
-        }
+    public void addDoubleWritePartition(long sourcePartitionId, long tempPartitionId) {
+        doubleWritePartitions.put(sourcePartitionId, tempPartitionId);
     }
 
     public void clearDoubleWritePartition() {
