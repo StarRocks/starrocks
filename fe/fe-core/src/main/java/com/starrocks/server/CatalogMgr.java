@@ -64,6 +64,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -160,6 +161,56 @@ public class CatalogMgr {
         }
     }
 
+    private void reCreatCatalog(Catalog catalog, Map<String, String> alterProperties, boolean isReplay) throws DdlException {
+        String catalogName = catalog.getName();
+        String type = catalog.getType();
+        CatalogConnector newConnector = null;
+
+        writeLock();
+        try {
+            Map<String, String> newProperties = new HashMap<>(catalog.getConfig().size() + alterProperties.size());
+            newProperties.putAll(catalog.getConfig());
+            newProperties.putAll(alterProperties);
+
+            LOG.info("Recreate catalog [{}] with properties [{}]", catalogName, newProperties);
+
+            newConnector = connectorMgr.createHiddenConnector(
+                    new ConnectorContext(catalogName, type, newProperties), isReplay);
+            if (null == newConnector) {
+                throw new DdlException("create hidden connector failed");
+            }
+
+            // drop old connector
+            connectorMgr.removeConnector(catalogName);
+
+            // replace old connector with new connector
+            connectorMgr.addConnector(catalogName, newConnector);
+
+            String serviceName = newProperties.get("ranger.plugin.hive.service.name");
+            if (serviceName == null || serviceName.isEmpty()) {
+                if (Config.access_control.equals("ranger")) {
+                    Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
+                } else {
+                    Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
+                }
+            } else {
+                Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
+            }
+
+            catalog.getConfig().putAll(alterProperties);
+        } catch (Exception e) {
+            LOG.error("Recreate catalog failed. catalog [{}] ", catalogName, e);
+
+            if (newConnector != null) {
+                newConnector.shutdown();
+            }
+
+            throw e;
+        } finally {
+            writeUnLock();
+        }
+    }
+
     public void dropCatalogForRestore(Catalog catalog, boolean isReplay) {
         if (!isReplay && catalogExists(catalog.getName())) {
             DropCatalogStmt stmt = new DropCatalogStmt(catalog.getName());
@@ -193,7 +244,7 @@ public class CatalogMgr {
         }
     }
 
-    public void alterCatalog(AlterCatalogStmt stmt) {
+    public void alterCatalog(AlterCatalogStmt stmt) throws DdlException {
         String catalogName = stmt.getCatalogName();
         writeLock();
         try {
@@ -204,23 +255,7 @@ public class CatalogMgr {
 
             if (stmt.getAlterClause() instanceof ModifyTablePropertiesClause) {
                 Map<String, String> properties = ((ModifyTablePropertiesClause) stmt.getAlterClause()).getProperties();
-                String serviceName = properties.get("ranger.plugin.hive.service.name");
-
-                if (Strings.isNullOrEmpty(serviceName)) {
-                    if (Config.access_control.equals("ranger")) {
-                        Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
-                    } else {
-                        Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
-                    }
-                } else {
-                    Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
-                }
-
-                catalog.getConfig().putAll(properties);
-                if (serviceName == null && !properties.isEmpty()) {
-                    LOG.info("Altering catalog properties (excluding `ranger.plugin.hive.service.name`) " +
-                            "requires restarting all FE nodes to take effect");
-                }
+                alterCatalog(catalog, properties, false);
 
                 AlterCatalogLog alterCatalogLog = new AlterCatalogLog(catalogName, properties);
                 GlobalStateMgr.getCurrentState().getEditLog().logAlterCatalog(alterCatalogLog);
@@ -228,6 +263,52 @@ public class CatalogMgr {
         } finally {
             writeUnLock();
         }
+    }
+
+    private void alterCatalog(Catalog catalog, Map<String, String> properties, boolean isReplay) throws DdlException {
+        Map<String, String> alterProperties = new HashMap<>(properties.size());
+        Map<String, String> oldProperties = catalog.getConfig();
+
+        for (String confName : properties.keySet()) {
+            String oldVal = oldProperties.get(confName);
+            String newVal = properties.get(confName);
+            if (!oldProperties.containsKey(confName) || !Objects.equals(oldVal, newVal)) {
+                alterProperties.put(confName, newVal);
+            }
+        }
+
+        if (alterProperties.isEmpty()) {
+            return;
+        }
+
+        if (needRecreateCatalog(catalog, alterProperties)) {
+            // recreate catalog
+            reCreatCatalog(catalog, alterProperties, isReplay);
+        } else {
+            String catalogName = catalog.getName();
+            String serviceName = alterProperties.get("ranger.plugin.hive.service.name");
+
+            if (Strings.isNullOrEmpty(serviceName)) {
+                if (Config.access_control.equals("ranger")) {
+                    Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
+                } else {
+                    Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
+                }
+            } else {
+                Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
+            }
+
+            catalog.getConfig().putAll(alterProperties);
+        }
+    }
+
+    private boolean needRecreateCatalog(Catalog catalog, Map<String, String> properties) {
+        if ("hive".equals(catalog.getType()) || "hudi".equals(catalog.getType())) {
+            boolean containsRanger = properties.containsKey("ranger.plugin.hive.service.name");
+            return !containsRanger || properties.size() != 1;
+        }
+
+        return false;
     }
 
     // TODO @caneGuy we should put internal catalog into catalogmgr
@@ -352,24 +433,14 @@ public class CatalogMgr {
         }
     }
 
-    public void replayAlterCatalog(AlterCatalogLog log) {
+    public void replayAlterCatalog(AlterCatalogLog log) throws DdlException {
         writeLock();
         try {
             String catalogName = log.getCatalogName();
             Map<String, String> properties = log.getProperties();
-            String serviceName = properties.get("ranger.plugin.hive.service.name");
-            if (Strings.isNullOrEmpty(serviceName)) {
-                if (Config.access_control.equals("ranger")) {
-                    Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
-                } else {
-                    Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
-                }
-            } else {
-                Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
-            }
-
             Catalog catalog = catalogs.get(catalogName);
-            catalog.getConfig().putAll(properties);
+
+            alterCatalog(catalog, properties, true);
         } finally {
             writeUnLock();
         }
