@@ -33,6 +33,12 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
+<<<<<<< HEAD
+=======
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
+import com.starrocks.common.util.concurrent.lock.LockType;
+import com.starrocks.common.util.concurrent.lock.Locker;
+>>>>>>> dd1fe9231e ([BugFix] Fix insert overwrite job ConcurrentModificationException issue (#56417))
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
@@ -288,18 +294,38 @@ public class InsertOverwriteJobRunner {
             }
         }
 
+<<<<<<< HEAD
         try {
             addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable, partitionValues);
+=======
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        String targetDb = insertStmt.getTableName().getDb();
+        Database db = state.getLocalMetastore().getDb(targetDb);
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()),
+                LockType.READ)) {
+            addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable, partitionValues, false, null);
+>>>>>>> dd1fe9231e ([BugFix] Fix insert overwrite job ConcurrentModificationException issue (#56417))
         } catch (AnalysisException ex) {
             LOG.warn(ex);
             throw new RuntimeException(ex);
         }
+<<<<<<< HEAD
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
         String targetDb = insertStmt.getTableName().getDb();
         Database db = state.getDb(targetDb);
         List<Long> sourcePartitionIds = job.getSourcePartitionIds();
         try {
             state.addPartitions(db, olapTable.getName(), addPartitionClause);
+=======
+        List<Long> sourcePartitionIds = job.getSourcePartitionIds();
+        try {
+            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()),
+                    LockType.READ)) {
+                AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
+                analyzer.analyze(context, addPartitionClause);
+            }
+            state.getLocalMetastore().addPartitions(context, db, olapTable.getName(), addPartitionClause);
+>>>>>>> dd1fe9231e ([BugFix] Fix insert overwrite job ConcurrentModificationException issue (#56417))
         } catch (Exception ex) {
             LOG.warn(ex);
             throw new RuntimeException(ex);
