@@ -37,7 +37,6 @@ public class AnalyzeState {
     /**
      * Structure used to build QueryBlock
      */
-    private List<String> outputAlias;
     private List<Expr> outputExpressions;
     private Scope outputScope;
     private boolean isDistinct = false;
@@ -240,13 +239,5 @@ public class AnalyzeState {
 
     public List<Expr> getColumnNotInGroupBy() {
         return columnNotInGroupBy;
-    }
-
-    public List<String> getOutputAlias() {
-        return outputAlias;
-    }
-
-    public void setOutputAlias(List<String> outputAlias) {
-        this.outputAlias = outputAlias;
     }
 }

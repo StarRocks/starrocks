@@ -202,7 +202,7 @@ public class AstToSQLBuilder {
         protected List<String> visitSelectItemList(SelectRelation stmt) {
             if (CollectionUtils.isNotEmpty(stmt.getOutputExpression())) {
                 List<String> selectListString = new ArrayList<>();
-                List<String> columnNameList = stmt.getOutputAlias();
+                List<String> columnNameList = stmt.getColumnOutputNames();
                 for (int i = 0; i < stmt.getOutputExpression().size(); ++i) {
                     Expr expr = stmt.getOutputExpression().get(i);
                     String columnName = columnNameList.get(i);
