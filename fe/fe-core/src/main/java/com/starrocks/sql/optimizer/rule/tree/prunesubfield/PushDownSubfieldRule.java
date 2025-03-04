@@ -390,6 +390,10 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                 // add child's output expression column
                 for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.pushDownExprRefs.entrySet()) {
                     ColumnRefOperator key = entry.getKey();
+                    if (alreadyExistsColumnRefs.contains(key)) {
+                        continue;
+                    }
+
                     ColumnRefOperator newChildOutputRef = factory.create(key, key.getType(), key.isNullable());
                     newChild.add(newChildOutputRef);
                     childContext.put(newChildOutputRef, rewriter.rewrite(entry.getValue()));
