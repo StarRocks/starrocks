@@ -232,6 +232,7 @@ public class LoadLoadingTask extends LoadTask {
     }
 
     private void executeOnce() throws Exception {
+        context.setThreadLocalInfo();
         checkMeta();
 
         // New one query id,
