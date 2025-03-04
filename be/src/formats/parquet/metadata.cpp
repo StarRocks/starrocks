@@ -457,7 +457,7 @@ StatusOr<FileMetaDataPtr> FileMetaDataParser::get_file_metadata() {
             auto file_metadata = *(static_cast<const FileMetaDataPtr*>(_cache->value(cache_handle)));
             _scanner_ctx->stats->footer_cache_read_count += 1;
             _cache->release(cache_handle);
-            return st;
+            return file_metadata;
         }
     }
 
