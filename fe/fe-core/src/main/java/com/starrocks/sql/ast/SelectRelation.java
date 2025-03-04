@@ -41,6 +41,12 @@ public class SelectRelation extends QueryRelation {
      */
     private List<Expr> outputExpr;
 
+    /**
+     * outputAlias is different with output field name, use for construct sql
+     * e.g. select k+1, k+1 is the output name, but the alias is null
+     */
+    private List<String> outputAlias;
+
     private Expr predicate;
 
     /**
@@ -151,6 +157,7 @@ public class SelectRelation extends QueryRelation {
         this.orderByAnalytic = analyzeState.getOrderByAnalytic();
 
         this.columnReferences = analyzeState.getColumnReferences();
+        this.outputAlias = analyzeState.getOutputAlias();
 
         this.setScope(analyzeState.getOutputScope());
     }
@@ -296,5 +303,9 @@ public class SelectRelation extends QueryRelation {
     @Override
     public List<Expr> getOutputExpression() {
         return outputExpr;
+    }
+
+    public List<String> getOutputAlias() {
+        return outputAlias;
     }
 }
