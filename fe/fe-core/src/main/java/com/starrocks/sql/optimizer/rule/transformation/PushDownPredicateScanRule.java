@@ -38,6 +38,7 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class PushDownPredicateScanRule extends TransformationRule {
+<<<<<<< HEAD
     public static final PushDownPredicateScanRule OLAP_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_OLAP_SCAN);
     public static final PushDownPredicateScanRule HIVE_SCAN =
@@ -54,6 +55,27 @@ public class PushDownPredicateScanRule extends TransformationRule {
             new PushDownPredicateScanRule(OperatorType.LOGICAL_PAIMON_SCAN);
     public static final PushDownPredicateScanRule ICEBERG_METADATA_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_ICEBERG_METADATA_SCAN);
+=======
+    private static final ImmutableSet<OperatorType> SUPPORT = ImmutableSet.of(
+            OperatorType.LOGICAL_OLAP_SCAN,
+            OperatorType.LOGICAL_HIVE_SCAN,
+            OperatorType.LOGICAL_ICEBERG_SCAN,
+            OperatorType.LOGICAL_HUDI_SCAN,
+            OperatorType.LOGICAL_DELTALAKE_SCAN,
+            OperatorType.LOGICAL_FILE_SCAN,
+            OperatorType.LOGICAL_PAIMON_SCAN,
+            OperatorType.LOGICAL_ODPS_SCAN,
+            OperatorType.LOGICAL_ICEBERG_METADATA_SCAN,
+            OperatorType.LOGICAL_ICEBERG_EQUALITY_DELETE_SCAN,
+            OperatorType.LOGICAL_KUDU_SCAN,
+            OperatorType.LOGICAL_SCHEMA_SCAN,
+            OperatorType.LOGICAL_ES_SCAN,
+            OperatorType.LOGICAL_META_SCAN,
+            OperatorType.LOGICAL_BINLOG_SCAN,
+            OperatorType.LOGICAL_VIEW_SCAN,
+            OperatorType.LOGICAL_TABLE_FUNCTION_TABLE_SCAN
+    );
+>>>>>>> f67163925 ([BugFix] Fix some odps bug (#55802))
 
     public static final PushDownPredicateScanRule ICEBERG_EQUALITY_DELETE_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_ICEBERG_EQUALITY_DELETE_SCAN);
