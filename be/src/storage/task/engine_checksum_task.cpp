@@ -57,6 +57,7 @@ Status EngineChecksumTask::execute() {
 }
 
 Status EngineChecksumTask::_compute_checksum() {
+    int64_t begin_us = butil::gettimeofday_us();
     LOG(INFO) << "begin to process compute checksum."
               << "tablet_id=" << _tablet_id << ", version=" << _version;
 
@@ -93,9 +94,22 @@ Status EngineChecksumTask::_compute_checksum() {
         return st;
     }
 
+    // Calculate the chunk size based on the memory limit of the current thread.
+    int64_t chunk_rows_limit = 0;
+    // Estimate the average row size of the tablet
+    int64_t average_row_size = tablet->get_average_row_size();
+    if (average_row_size != 0 && _mem_tracker->parent()->has_limit()) {
+        // Limit the chunk size to avoid memory overflow
+        chunk_rows_limit = _mem_tracker->parent()->limit() / average_row_size /
+                           std::max(1, config::check_consistency_worker_count);
+    } else {
+        // no limitation for empty tablet
+        chunk_rows_limit = config::vector_chunk_size;
+    }
+
     TabletReaderParams reader_params;
     reader_params.reader_type = READER_CHECKSUM;
-    reader_params.chunk_size = config::vector_chunk_size;
+    reader_params.chunk_size = std::min((int64_t)config::vector_chunk_size, chunk_rows_limit + 1);
 
     st = reader.open(reader_params);
     if (!st.ok()) {
@@ -136,7 +150,8 @@ Status EngineChecksumTask::_compute_checksum() {
         return st;
     }
 
-    LOG(INFO) << "success to finish compute checksum. checksum=" << checksum;
+    LOG(INFO) << "success to finish compute checksum. checksum=" << checksum << ", tablet_id=" << _tablet_id
+              << ", version=" << _version << " , cost_time=" << (butil::gettimeofday_us() - begin_us) << "us";
     *_checksum = checksum;
     return Status::OK();
 }
