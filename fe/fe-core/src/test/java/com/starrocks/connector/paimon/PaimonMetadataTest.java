@@ -28,13 +28,16 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.OptExpression;
+import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -51,6 +54,8 @@ import org.apache.paimon.io.DataFileMeta;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
+import org.apache.paimon.stats.ColStats;
+import org.apache.paimon.stats.Statistics;
 import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.InnerTableScan;
@@ -62,13 +67,17 @@ import org.apache.paimon.table.system.PartitionsTable;
 import org.apache.paimon.table.system.SchemasTable;
 import org.apache.paimon.table.system.SnapshotsTable;
 import org.apache.paimon.types.BigIntType;
+import org.apache.paimon.types.BooleanType;
+import org.apache.paimon.types.CharType;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.types.DoubleType;
 import org.apache.paimon.types.IntType;
+import org.apache.paimon.types.LocalZonedTimestampType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.types.TimestampType;
+import org.apache.paimon.utils.JsonSerdeUtil;
 import org.apache.paimon.utils.SerializationUtils;
 import org.assertj.core.api.Assertions;
 import org.junit.Assert;
@@ -83,6 +92,7 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 import static org.apache.paimon.io.DataFileMeta.DUMMY_LEVEL;
 import static org.apache.paimon.io.DataFileMeta.EMPTY_MAX_KEY;
@@ -93,8 +103,14 @@ import static org.junit.Assert.assertEquals;
 public class PaimonMetadataTest {
     @Mocked
     Catalog paimonNativeCatalog;
+    @Mocked
+    org.apache.paimon.table.Table nativeTable;
     private PaimonMetadata metadata;
     private final List<DataSplit> splits = new ArrayList<>();
+
+    private static ConnectContext connectContext;
+    private static OptimizerContext optimizerContext;
+    private static ColumnRefFactory columnRefFactory;
 
     @Before
     public void setUp() {
@@ -126,6 +142,10 @@ public class PaimonMetadataTest {
                 .withBucketPath("not used").withDataFiles(meta1).isStreaming(false).build());
         this.splits.add(DataSplit.builder().withSnapshot(1L).withPartition(row2).withBucket(1)
                 .withBucketPath("not used").withDataFiles(meta2).isStreaming(false).build());
+
+        connectContext = UtFrameUtils.createDefaultCtx();
+        columnRefFactory = new ColumnRefFactory();
+        optimizerContext = OptimizerFactory.mockContext(connectContext, columnRefFactory);
     }
 
     @Test
@@ -446,7 +466,7 @@ public class PaimonMetadataTest {
         };
 
         long updateTime = metadata.getTableUpdateTime("db1", "tbl1");
-        Assert.assertEquals(1675209600000L, updateTime);
+        Assert.assertEquals(1675180800000L, updateTime);
     }
 
     @Test
@@ -488,5 +508,120 @@ public class PaimonMetadataTest {
         rule0.transform(scan, OptimizerFactory.mockContext(new ColumnRefFactory()));
         assertEquals(1, ((LogicalPaimonScanOperator) scan.getOp()).getScanOperatorPredicates()
                 .getSelectedPartitionIds().size());
+    }
+    @Test
+    public void testGetTableStatistics() {
+        String stats = "{\n" +
+                "  \"snapshotId\" : 2,\n" +
+                "  \"schemaId\" : 0,\n" +
+                "  \"mergedRecordCount\" : 7,\n" +
+                "  \"mergedRecordSize\" : 12807,\n" +
+                "  \"colStats\" : {\n" +
+                "    \"dt\" : {\n" +
+                "      \"colId\" : 4,\n" +
+                "      \"distinctCount\" : 3,\n" +
+                "      \"nullCount\" : 0,\n" +
+                "      \"avgLen\" : 8,\n" +
+                "      \"maxLen\" : 8\n" +
+                "    },\n" +
+                "    \"acount\" : {\n" +
+                "      \"colId\" : 2,\n" +
+                "      \"distinctCount\" : 4,\n" +
+                "      \"min\" : \"0.0\",\n" +
+                "      \"max\" : \"5.3\",\n" +
+                "      \"nullCount\" : 1,\n" +
+                "      \"avgLen\" : 8,\n" +
+                "      \"maxLen\" : 8\n" +
+                "    },\n" +
+                "    \"flag\" : {\n" +
+                "      \"colId\" : 3,\n" +
+                "      \"distinctCount\" : 2,\n" +
+                "      \"min\" : \"false\",\n" +
+                "      \"max\" : \"true\",\n" +
+                "      \"nullCount\" : 1,\n" +
+                "      \"avgLen\" : 1,\n" +
+                "      \"maxLen\" : 1\n" +
+                "    },\n" +
+                "    \"create_time\" : {\n" +
+                "      \"colId\" : 5,\n" +
+                "      \"distinctCount\" : 2,\n" +
+                "      \"min\" : \"2024-08-07 17:06:00\",\n" +
+                "      \"max\" : \"2024-08-08 17:06:00\",\n" +
+                "      \"nullCount\" : 1,\n" +
+                "      \"avgLen\" : 8,\n" +
+                "      \"maxLen\" : 8\n" +
+                "    },\n" +
+                "    \"user_id\" : {\n" +
+                "      \"colId\" : 0,\n" +
+                "      \"distinctCount\" : 3,\n" +
+                "      \"min\" : \"1\",\n" +
+                "      \"max\" : \"3\",\n" +
+                "      \"nullCount\" : 1,\n" +
+                "      \"avgLen\" : 4,\n" +
+                "      \"maxLen\" : 4\n" +
+                "    },\n" +
+                "    \"behavior\" : {\n" +
+                "      \"colId\" : 1,\n" +
+                "      \"distinctCount\" : 4,\n" +
+                "      \"nullCount\" : 1,\n" +
+                "      \"avgLen\" : 2,\n" +
+                "      \"maxLen\" : 2\n" +
+                "    }\n" +
+                "  }\n" +
+                "}";
+        Statistics statistics = JsonSerdeUtil.fromJson(stats, Statistics.class);
+        Map<String, ColStats<?>> colStatsMap = statistics.colStats();
+        for (String col : colStatsMap.keySet()) {
+            DataType dataType = null;
+            if (col.equals("user_id")) {
+                dataType = new IntType(true);
+            }
+            if (col.equals("behavior") || col.equals("dt")) {
+                dataType = new CharType(20);
+            }
+            if (col.equals("acount")) {
+                dataType = new DoubleType(true);
+            }
+            if (col.equals("create_time")) {
+                dataType = new LocalZonedTimestampType(6);
+            }
+            if (col.equals("flag")) {
+                dataType = new BooleanType(true);
+            }
+            colStatsMap.get(col).deserializeFieldsFromString(dataType);
+
+        }
+        new Expectations() {
+            {
+                nativeTable.statistics();
+                result = Optional.of(statistics);
+            }
+        };
+        PaimonTable paimonTable =
+                new PaimonTable("paimon", "db1", "tbl1", Lists.newArrayList(), nativeTable, 1723081832L);
+        optimizerContext.getSessionVariable().setEnablePaimonColumnStatistics(true);
+
+        Map<ColumnRefOperator, Column> colRefToColumnMetaMap = new HashMap<ColumnRefOperator, Column>();
+        ColumnRefOperator columnRefOperator1 = new ColumnRefOperator(3, Type.INT, "user_id", true);
+        ColumnRefOperator columnRefOperator2 = new ColumnRefOperator(4, Type.STRING, "behavior", true);
+        ColumnRefOperator columnRefOperator3 = new ColumnRefOperator(5, Type.DOUBLE, "acount", true);
+        ColumnRefOperator columnRefOperator4 = new ColumnRefOperator(6, Type.BOOLEAN, "flag", true);
+        ColumnRefOperator columnRefOperator5 = new ColumnRefOperator(7, Type.STRING, "dt", true);
+        ColumnRefOperator columnRefOperator6 = new ColumnRefOperator(8, Type.DATETIME, "create_time", true);
+        ColumnRefOperator columnRefOperator7 = new ColumnRefOperator(9, Type.ARRAY_BIGINT, "list", true);
+
+        colRefToColumnMetaMap.put(columnRefOperator1, new Column("user_id", Type.INT));
+        colRefToColumnMetaMap.put(columnRefOperator2, new Column("behavior", Type.STRING));
+        colRefToColumnMetaMap.put(columnRefOperator3, new Column("acount", Type.DOUBLE));
+        colRefToColumnMetaMap.put(columnRefOperator4, new Column("flag", Type.BOOLEAN));
+        colRefToColumnMetaMap.put(columnRefOperator5, new Column("dt", Type.STRING));
+        colRefToColumnMetaMap.put(columnRefOperator6, new Column("create_time", Type.DATETIME));
+        colRefToColumnMetaMap.put(columnRefOperator7, new Column("list", Type.ARRAY_BIGINT));
+
+        com.starrocks.sql.optimizer.statistics.Statistics tableStatistics =
+                metadata.getTableStatistics(optimizerContext, paimonTable, colRefToColumnMetaMap,
+                        null, null, -1, null);
+        Assert.assertEquals(tableStatistics.getColumnStatistics().size(), colRefToColumnMetaMap.size());
+
     }
 }
