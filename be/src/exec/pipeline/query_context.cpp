@@ -381,8 +381,8 @@ QueryContext* QueryContextManager::get_or_register(const TUniqueId& query_id) {
             // lookup query context for the second chance in sc_map
             if (sc_it != sc_map.end()) {
                 auto ctx = std::move(sc_it->second);
-                RETURN_NULL_IF_CTX_CANCELLED(ctx);
                 sc_map.erase(sc_it);
+                RETURN_NULL_IF_CTX_CANCELLED(ctx);
                 auto* raw_ctx_ptr = ctx.get();
                 context_map.emplace(query_id, std::move(ctx));
                 return raw_ctx_ptr;
