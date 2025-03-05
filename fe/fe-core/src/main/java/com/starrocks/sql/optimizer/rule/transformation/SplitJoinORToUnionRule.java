@@ -24,7 +24,10 @@ import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.AggType;
+import com.starrocks.sql.optimizer.operator.ColumnOutputInfo;
 import com.starrocks.sql.optimizer.operator.OperatorType;
+import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
@@ -34,9 +37,11 @@ import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.OptExpressionDuplicator;
+import com.starrocks.sql.optimizer.transformer.QueryTransformer;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -106,15 +111,15 @@ import java.util.stream.Collectors;
  *
  */
 
-public class OrToUnionAllJoinRule extends TransformationRule {
+public class SplitJoinORToUnionRule extends TransformationRule {
 
-    private static final OrToUnionAllJoinRule INSTANCE = new OrToUnionAllJoinRule();
+    private static final SplitJoinORToUnionRule INSTANCE = new SplitJoinORToUnionRule();
 
-    private OrToUnionAllJoinRule() {
+    private SplitJoinORToUnionRule() {
         super(RuleType.TF_OR_TO_UNION_ALL_JOIN, Pattern.create(OperatorType.LOGICAL_JOIN));
     }
 
-    public static OrToUnionAllJoinRule getInstance() {
+    public static SplitJoinORToUnionRule getInstance() {
         return INSTANCE;
     }
 
@@ -144,6 +149,12 @@ public class OrToUnionAllJoinRule extends TransformationRule {
             return false;
         }
 
+        for (OptExpression child : input.getInputs()) {
+            if (containsUnsupportedOperators(child)) {
+                return false;
+            }
+        }
+
         List<ScalarOperator> disjunctivePredicates = Utils.extractDisjunctive(predicate);
         if (disjunctivePredicates.isEmpty()) {
             return false;
@@ -161,24 +172,6 @@ public class OrToUnionAllJoinRule extends TransformationRule {
 
         if (equalPredicates.size() != disjunctivePredicates.size()) {
             return false;
-        }
-
-        for (BinaryPredicateOperator predOp : equalPredicates) {
-            if (predOp.getBinaryType() != BinaryType.EQ) {
-                return false;
-            }
-
-            if (predOp.isNullable()) {
-                return false;
-            }
-
-            ScalarOperator left = predOp.getChild(0);
-            ScalarOperator right = predOp.getChild(1);
-
-            if ((left instanceof ColumnRefOperator && left.isNullable()) ||
-                    (right instanceof ColumnRefOperator && right.isNullable())) {
-                return false;
-            }
         }
 
         return true;
@@ -199,33 +192,42 @@ public class OrToUnionAllJoinRule extends TransformationRule {
             return Lists.newArrayList(input);
         }
 
-        Map<Integer, List<BinaryPredicateOperator>> cumulativePredicateMap =
+        Map<Integer, List<ScalarOperator>> cumulativePredicateMap =
                 createCumulativePredicateMap(binaryPredicateList, context);
+
         for (int j = 0; j < cumulativePredicateMap.size(); j++) {
-            List<BinaryPredicateOperator> branchPredicates = cumulativePredicateMap.get(j);
+            List<ScalarOperator> branchPredicates = cumulativePredicateMap.get(j);
             int branchSize = branchPredicates.size();
             if (branchSize > 1) {
                 for (int k = 0; k < branchSize - 1; k++) {
-                    BinaryPredicateOperator eqPredicate = branchPredicates.get(k);
-                    BinaryPredicateOperator nePredicate =
-                            new BinaryPredicateOperator(BinaryType.NE, eqPredicate.getChildren());
-                    branchPredicates.set(k, nePredicate);
+                    ScalarOperator predicate = branchPredicates.get(k);
+                    if (predicate instanceof BinaryPredicateOperator eqPredicate) {
+                        BinaryPredicateOperator nePredicate =
+                                new BinaryPredicateOperator(BinaryType.NE, eqPredicate.getChildren());
+
+                        ScalarOperator leftChild = new IsNullPredicateOperator(eqPredicate.getChild(0));
+                        ScalarOperator rightChild = new IsNullPredicateOperator(eqPredicate.getChild(1));
+
+                        List<ScalarOperator> orConditions = Lists.newArrayList(nePredicate, leftChild, rightChild);
+                        ScalarOperator orPredicate = buildOrPredicate(orConditions);
+
+                        branchPredicates.set(k, orPredicate);
+                    }
                 }
             }
         }
 
         List<LogicalJoinOperator> joinBranchList = new ArrayList<>();
         for (int i = 0; i < cumulativePredicateMap.size(); i++) {
-            List<BinaryPredicateOperator> branchPredicates = cumulativePredicateMap.get(i);
+            List<ScalarOperator> branchPredicates = cumulativePredicateMap.get(i);
             LogicalJoinOperator branchJoin;
             if (branchPredicates.size() == 1) {
-                BinaryPredicateOperator predicate0 = branchPredicates.get(0);
+                ScalarOperator predicate0 = branchPredicates.get(0);
                 LogicalJoinOperator.Builder builder =
                         new LogicalJoinOperator.Builder().withOperator(joinOp).setOnPredicate(predicate0);
                 branchJoin = builder.build();
             } else {
-                List<ScalarOperator> scalarOps = new ArrayList<>(branchPredicates);
-                ScalarOperator combinedPredicate = buildAndPredicate(scalarOps);
+                ScalarOperator combinedPredicate = buildAndPredicate(branchPredicates);
                 ScalarOperator lastPredicate = branchPredicates.get(branchPredicates.size() - 1);
                 LogicalJoinOperator.Builder builder = new LogicalJoinOperator.Builder()
                         .withOperator(joinOp)
@@ -237,25 +239,36 @@ public class OrToUnionAllJoinRule extends TransformationRule {
         }
 
         List<OptExpression> unionChildren = new ArrayList<>();
-        List<ColumnRefOperator> outputColumns;
-        if (joinOp.getProjection() != null) {
-            outputColumns = joinOp.getProjection().getOutputColumns();
-        } else {
-            outputColumns = new ArrayList<>();
-            for (OptExpression child : input.getInputs()) {
-                ColumnRefSet childColumns = child.getOutputColumns();
-                childColumns.getColumnRefOperators(context.getColumnRefFactory()).forEach(outputColumns::add);
-            }
-        }
-
+        List<ColumnRefOperator> outputColumns = new ArrayList<>();
+        boolean isFirst = true;
         List<List<ColumnRefOperator>> childOutputColumns = new ArrayList<>();
         for (LogicalJoinOperator branchJoin : joinBranchList) {
-            unionChildren.add(OptExpression.create(branchJoin, input.getInputs()));
-            childOutputColumns.add(outputColumns);
+            if (isFirst) {
+                OptExpression branchOpt = OptExpression.create(branchJoin, input.getInputs());
+                unionChildren.add(branchOpt);
+                outputColumns = context.getColumnRefFactory().getColumnRefs(input.getOutputColumns()).stream().toList();
+                childOutputColumns.add(outputColumns);
+                isFirst = false;
+                continue;
+            }
+
+            OptExpression branchOpt = OptExpression.create(branchJoin, input.getInputs());
+            OptExpressionDuplicator duplicator =
+                    new OptExpressionDuplicator(context.getColumnRefFactory(), context);
+            branchOpt = duplicator.duplicate(branchOpt);
+            List<ColumnOutputInfo> outputInfo = input.getRowOutputInfo().getColumnOutputInfo();
+
+            List<ColumnRefOperator> newOutputColumns = new ArrayList<>();
+            for (ColumnOutputInfo colInfo : outputInfo) {
+                newOutputColumns.add(duplicator.getColumnMapping().get(colInfo.getColumnRef()));
+            }
+
+            unionChildren.add(branchOpt);
+            childOutputColumns.add(newOutputColumns);
         }
 
         LogicalUnionOperator.Builder builder =
-                new LogicalUnionOperator.Builder().isUnionAll(true).setProjection(joinOp.getProjection())
+                new LogicalUnionOperator.Builder().isUnionAll(true)
                         .setChildOutputColumns(childOutputColumns).setOutputColumnRefOp(outputColumns);
 
         if (joinOp.hasLimit()) {
@@ -263,13 +276,52 @@ public class OrToUnionAllJoinRule extends TransformationRule {
         }
 
         LogicalUnionOperator unionOp = builder.build();
-        OptExpression unionExpr = OptExpression.create(unionOp, unionChildren);
-
-        OptExpressionDuplicator finalDuplicator =
-                new OptExpressionDuplicator(context.getColumnRefFactory(), context);
-        OptExpression result = finalDuplicator.duplicate(unionExpr);
+        OptExpression result = OptExpression.create(unionOp, unionChildren);
 
         return Lists.newArrayList(result);
+    }
+
+    private boolean containsUnsupportedOperators(OptExpression expr) {
+        if (expr == null) {
+            return false;
+        }
+
+        if (expr.getOp().getOpType() == OperatorType.LOGICAL_LIMIT) {
+            return true;
+        }
+
+        if (expr.getOp() instanceof LogicalJoinOperator joinOp) {
+            JoinOperator joinType = joinOp.getJoinType();
+            if (joinType == JoinOperator.LEFT_OUTER_JOIN ||
+                    joinType == JoinOperator.RIGHT_OUTER_JOIN ||
+                    joinType == JoinOperator.FULL_OUTER_JOIN) {
+                return true;
+            }
+        }
+
+        if (expr.getOp() instanceof LogicalAggregationOperator aggOp) {
+            AggType type = aggOp.getType();
+            if (type.name().contains("GROUPING_SETS") ||
+                    type.name().contains("CUBE") ||
+                    type.name().contains("ROLLUP")) {
+                return true;
+            }
+
+            for (CallOperator call : aggOp.getAggregations().values()) {
+                if (call.getFnName().equalsIgnoreCase(QueryTransformer.GROUPING) ||
+                        call.getFnName().equalsIgnoreCase(QueryTransformer.GROUPING_ID)) {
+                    return true;
+                }
+            }
+        }
+
+        for (OptExpression child : expr.getInputs()) {
+            if (containsUnsupportedOperators(child)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private boolean containsNonDeterministicFunction(OptExpression expr) {
@@ -316,26 +368,43 @@ public class OrToUnionAllJoinRule extends TransformationRule {
         return false;
     }
 
-    private Map<Integer, List<BinaryPredicateOperator>> createCumulativePredicateMap(
+    private Map<Integer, List<ScalarOperator>> createCumulativePredicateMap(
             List<BinaryPredicateOperator> binaryPredicateList, OptimizerContext context) {
 
-        Map<Integer, List<BinaryPredicateOperator>> cumulativePredicateMap = new HashMap<>();
+        Map<Integer, List<ScalarOperator>> cumulativePredicateMap = new HashMap<>();
         ColumnRefFactory columnRefFactory = context.getColumnRefFactory();
 
         for (int i = 0; i < binaryPredicateList.size(); i++) {
-            List<BinaryPredicateOperator> currentBranchPredicates = new ArrayList<>();
+            List<ScalarOperator> currentBranchPredicates = new ArrayList<>();
             for (int j = 0; j <= i; j++) {
                 BinaryPredicateOperator originalPredicate = binaryPredicateList.get(j);
 
                 OptExpressionDuplicator duplicator = new OptExpressionDuplicator(columnRefFactory, context);
                 ScalarOperator rewrittenPredicate = duplicator.rewriteAfterDuplicate(originalPredicate);
 
-                currentBranchPredicates.add((BinaryPredicateOperator) rewrittenPredicate);
+                currentBranchPredicates.add(rewrittenPredicate);
             }
             cumulativePredicateMap.put(i, currentBranchPredicates);
         }
 
         return cumulativePredicateMap;
+    }
+
+    private ScalarOperator buildOrPredicate(List<ScalarOperator> predicates) {
+        if (predicates == null || predicates.isEmpty()) {
+            return ConstantOperator.createBoolean(false);
+        }
+        if (predicates.size() == 1) {
+            return predicates.get(0);
+        }
+        ScalarOperator result =
+                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, predicates.get(0),
+                        predicates.get(1));
+        for (int i = 2; i < predicates.size(); i++) {
+            result = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, result,
+                    predicates.get(i));
+        }
+        return result;
     }
 
     private ScalarOperator buildAndPredicate(List<ScalarOperator> predicates) {

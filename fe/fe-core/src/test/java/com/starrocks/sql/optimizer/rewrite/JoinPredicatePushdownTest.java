@@ -22,63 +22,41 @@ public class JoinPredicatePushdownTest extends PlanTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
-        String dbName = "test";
-        starRocksAssert.withDatabase(dbName).useDatabase(dbName);
-        starRocksAssert.withTable("CREATE TABLE `tn0` (\n" +
-                "  `v1` bigint NOT NULL COMMENT \"\",\n" +
-                "  `v2` bigint NOT NULL COMMENT \"\",\n" +
-                "  `v3` bigint NOT NULL\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`v1`, `v2`, v3)\n" +
-                "DISTRIBUTED BY HASH(`v1`) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
-        starRocksAssert.withTable("CREATE TABLE `tn1` (\n" +
-                "  `v4` bigint NOT NULL COMMENT \"\",\n" +
-                "  `v5` bigint NOT NULL COMMENT \"\",\n" +
-                "  `v6` bigint NOT NULL\n" +
-                ") ENGINE=OLAP\n" +
-                "DUPLICATE KEY(`v4`, `v5`, v6)\n" +
-                "DISTRIBUTED BY HASH(`v4`) BUCKETS 3\n" +
-                "PROPERTIES (\n" +
-                "\"replication_num\" = \"1\",\n" +
-                "\"in_memory\" = \"false\"\n" +
-                ");");
     }
 
     @Test
-    public void testOrToUnionAllJoinRule() throws Exception {
+    public void testSplitJoinORToUnionRule() throws Exception {
         connectContext.getSessionVariable().setEnabledRewriteOrToUnionAllJoin(true);
-        String sql = "select v1, v2, v3 from tn0 join tn1 where tn0.v1= tn1.v4 or tn0.v2 = tn1.v5 limit 100";
+        String sql = "select v1, v2, v3 from t0 join t1 where t0.v1= t1.v4 or t0.v2 = t1.v5 limit 100";
         String plan = getFragmentPlan(sql);
         PlanTestBase.assertContains(plan, "4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 1: v1 = 4: v4");
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  limit: 100");
         PlanTestBase.assertContains(plan, "10:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 2: v2 = 5: v5\n" +
-                "  |  other join predicates: 1: v1 != 4: v4");
-        sql = "select * from tn0 join tn1 where tn0.v1= tn1.v4 or tn0.v2 = tn1.v5 or tn0.v3 = tn1.v6";
+                "  |  equal join conjunct: 8: v2 = 11: v5\n" +
+                "  |  other join predicates: ((7: v1 != 10: v4) OR (7: v1 IS NULL)) OR (10: v4 IS NULL)\n" +
+                "  |  limit: 100");
+        sql = "select * from t0 join t1 where t0.v1= t1.v4 or t0.v2 = t1.v5 or t0.v3 = t1.v6";
         plan = getFragmentPlan(sql);
         PlanTestBase.assertContains(plan, "14:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 3: v3 = 6: v6\n" +
-                "  |  other join predicates: 1: v1 != 4: v4, 2: v2 != 5: v5");
+                "  |  equal join conjunct: 15: v3 = 18: v6\n" +
+                "  |  other join predicates: ((13: v1 != 16: v4) OR (13: v1 IS NULL)) OR (16: v4 IS NULL), ((14: v2 != 17: v5) OR (14: v2 IS NULL)) OR (17: v5 IS NULL)");
         PlanTestBase.assertContains(plan, "9:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 2: v2 = 5: v5\n" +
-                "  |  other join predicates: 1: v1 != 4: v4");
+                "  |  equal join conjunct: 8: v2 = 11: v5\n" +
+                "  |  other join predicates: ((7: v1 != 10: v4) OR (7: v1 IS NULL)) OR (10: v4 IS NULL)");
         PlanTestBase.assertContains(plan, "4:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 1: v1 = 4: v4");
-        sql = "select rand(), *  from tn0 join tn1 where tn0.v1= tn1.v4 or tn0.v2 = tn1.v5 or tn0.v3 = tn1.v6";
+        sql = "select rand(), *  from t0 join t1 where t0.v1= t1.v4 or t0.v2 = t1.v5 or t0.v3 = t1.v6";
         plan = getFragmentPlan(sql);
         PlanTestBase.assertContains(plan,
                 "other join predicates: ((1: v1 = 4: v4) OR (2: v2 = 5: v5)) OR (3: v3 = 6: v6)");
