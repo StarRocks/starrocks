@@ -448,18 +448,25 @@ class DecimalDistinctAggregateFunction
 struct DictMergeState : DistinctAggregateStateV2<TYPE_VARCHAR, SumResultLT<TYPE_VARCHAR>> {
     DictMergeState() = default;
 
+    void update_over_limit() { over_limit = set.size() > dict_threshold; }
+
     bool over_limit = false;
+    int dict_threshold = 255;
 };
 
 class DictMergeAggregateFunction final
         : public AggregateFunctionBatchHelper<DictMergeState, DictMergeAggregateFunction> {
 public:
-    static constexpr int DICT_DECODE_MAX_SIZE = 256;
-    static constexpr int FAKE_DICT_SIZE = DICT_DECODE_MAX_SIZE + 1;
+    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
+        AggregateFunctionBatchHelper::create(ctx, ptr);
+        if (ctx->get_num_constant_columns() > 1) {
+            this->data(ptr).dict_threshold = ctx->get_constant_column(1)->get(0).get_int32();
+        }
+    }
 
-    DictMergeState fake_dict_state(FunctionContext* ctx) const {
+    DictMergeState fake_dict_state(FunctionContext* ctx, int dict_threshold) const {
         DictMergeState fake_state;
-        for (int i = 0; i < FAKE_DICT_SIZE; ++i) {
+        for (int i = 0; i < dict_threshold + 1; ++i) {
             fake_state.update(ctx->mem_pool(), std::to_string(i));
         }
         return fake_state;
@@ -470,13 +477,15 @@ public:
         auto& agg_state = this->data(state);
         MemPool* mem_pool = ctx->mem_pool();
 
-        // if dict size greater than DICT_DECODE_MAX_SIZE. we return a FAKE dictionary
-        if (agg_state.over_limit) {
+        // if dict size greater than threshold. we return a FAKE dictionary
+        if (agg_state.over_limit || columns[0]->is_null(row_num)) {
             return;
         }
 
-        if (columns[0]->is_array()) {
-            const auto* array_column = down_cast<const ArrayColumn*>(columns[0]);
+        auto* data_column = ColumnHelper::get_data_column(columns[0]);
+
+        if (data_column->is_array()) {
+            const auto* array_column = down_cast<const ArrayColumn*>(data_column);
             const auto* column = array_column->elements_column().get();
             const auto& off = array_column->offsets().get_data();
             const auto* binary_column = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column));
@@ -486,72 +495,36 @@ public:
                 }
             }
         } else {
-            const auto& binary_column = down_cast<const BinaryColumn&>(*columns[0]);
+            const auto& binary_column = down_cast<const BinaryColumn&>(*data_column);
             agg_state.update(mem_pool, binary_column.get_slice(row_num));
         }
 
-        agg_state.over_limit = agg_state.set.size() > DICT_DECODE_MAX_SIZE;
-    }
-
-    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
-                                   AggDataPtr __restrict state) const override {
-        auto& agg_state = this->data(state);
-        MemPool* mem_pool = ctx->mem_pool();
-
-        // if dict size greater than DICT_DECODE_MAX_SIZE. we return a FAKE dictionary
-        if (agg_state.over_limit) {
-            return;
-        }
-
-        const Column* column = nullptr;
-
-        if (columns[0]->is_array()) {
-            const auto* array_column = down_cast<const ArrayColumn*>(columns[0]);
-            column = array_column->elements_column().get();
-        } else {
-            column = columns[0];
-        }
-
-        if (column->is_nullable()) {
-            const auto& null_column = down_cast<const NullableColumn&>(*column);
-            const auto& null_data = null_column.immutable_null_column_data();
-            const auto& binary_column = down_cast<const BinaryColumn&>(null_column.data_column_ref());
-
-            for (size_t i = 0; i < binary_column.size(); ++i) {
-                if (!null_data[i]) {
-                    agg_state.update(mem_pool, binary_column.get_slice(i));
-                }
-            }
-            agg_state.over_limit = agg_state.set.size() > DICT_DECODE_MAX_SIZE;
-        } else {
-            const auto& binary_column = down_cast<const BinaryColumn&>(*column);
-            for (size_t i = 0; i < binary_column.size(); ++i) {
-                agg_state.update(mem_pool, binary_column.get_slice(i));
-            }
-            agg_state.over_limit = agg_state.set.size() > DICT_DECODE_MAX_SIZE;
-        }
+        agg_state.update_over_limit();
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         auto& agg_state = this->data(state);
 
-        if (agg_state.over_limit) {
+        if (agg_state.over_limit || column->is_null(row_num)) {
             return;
         }
 
-        const auto* input_column = down_cast<const BinaryColumn*>(column);
+        const auto* input_column = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column));
         Slice slice = input_column->get_slice(row_num);
 
         this->data(state).deserialize_and_merge(ctx->mem_pool(), (const uint8_t*)slice.data, slice.size);
 
-        agg_state.over_limit = agg_state.set.size() > DICT_DECODE_MAX_SIZE;
+        agg_state.update_over_limit();
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto& agg_state = this->data(state);
 
         auto serialize = [=](const DictMergeState& dict_state) {
-            auto* column = down_cast<BinaryColumn*>(to);
+            auto* column = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(to));
+            if (to->is_nullable()) {
+                down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
+            }
             size_t old_size = column->get_bytes().size();
             size_t new_size = old_size + dict_state.serialize_size();
             column->get_bytes().resize(new_size);
@@ -560,7 +533,7 @@ public:
         };
 
         if (agg_state.over_limit) {
-            serialize(fake_dict_state(ctx));
+            serialize(fake_dict_state(ctx, agg_state.dict_threshold));
         } else {
             serialize(this->data(state));
         }
@@ -582,7 +555,10 @@ public:
             std::vector<int32_t> dict_ids;
             dict_ids.resize(agg_state.set.size());
 
-            auto* binary_column = down_cast<BinaryColumn*>(to);
+            auto* binary_column = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(to));
+            if (to->is_nullable()) {
+                down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
+            }
 
             // set dict_ids as [1...n]
             for (int i = 0; i < dict_ids.size(); ++i) {
@@ -619,7 +595,7 @@ public:
         };
 
         if (agg_state.over_limit) {
-            finalize(fake_dict_state(ctx), to);
+            finalize(fake_dict_state(ctx, agg_state.dict_threshold), to);
         } else {
             finalize(agg_state, to);
         }
