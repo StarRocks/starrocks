@@ -534,7 +534,7 @@ public class KafkaRoutineLoadJobTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getFullName(), tableNameString);
+                database.getTable(tableNameString);
                 minTimes = 0;
                 result = table;
                 database.getId();
