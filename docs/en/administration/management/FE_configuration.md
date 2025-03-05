@@ -1803,7 +1803,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Int
 - Unit: Second
 - Is mutable: Yes
-- Description: The interval at which the Scheduler thread schedules to query-trigger tasks. We changed `connector_table_query_trigger_analyze_schedule_interval` to this which takes charge of all background tasks. The background tasks are `ANALYZE` in v3.4.x，and in versions after 3.4, the collection task of low-cardinality columns' dictionary is added.  
+- Description: The interval at which the Scheduler thread schedules the query-trigger background tasks. This item is to replace `connector_table_query_trigger_analyze_schedule_interval` introduced in v3.4.0. Here, the background tasks refer `ANALYZE` tasks in v3.4，and the collection task of low-cardinality columns' dictionary in versions later than v3.4.  
 - Introduced in: v3.4.2
 
 ##### connector_table_query_trigger_analyze_small_table_rows
