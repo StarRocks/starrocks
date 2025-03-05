@@ -3223,8 +3223,11 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
                                           int priority, boolean mergeRedundant, boolean isManual, boolean isSync)
             throws DdlException, MetaNotFoundException {
         MaterializedView materializedView = getMaterializedViewToRefresh(dbName, mvName);
+        String mvTaskName = TaskBuilder.getMvTaskName(materializedView.getId());
+        TaskManager taskManager = GlobalStateMgr.getCurrentState().getTaskManager();
+        Task task = taskManager.getTask(mvTaskName);
 
-        HashMap<String, String> taskRunProperties = new HashMap<>();
+        HashMap<String, String> taskRunProperties = new HashMap<>(task.getProperties());
         if (partitionDesc != null) {
             if (!partitionDesc.getFirst().isEmpty()) {
                 PartitionRangeDesc range = partitionDesc.left();

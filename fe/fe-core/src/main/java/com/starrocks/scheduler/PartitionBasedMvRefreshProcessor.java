@@ -705,6 +705,10 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (mvContext.getStatus() != null) {
             newProperties.put(TaskRun.START_TASK_RUN_ID, mvContext.getStatus().getStartTaskRunId());
         }
+        // warehouse
+        if (properties.containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE)) {
+            newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
+        }
         updateTaskRunStatus(status -> {
             MVTaskRunExtraMessage extraMessage = status.getMvTaskRunExtraMessage();
             extraMessage.setNextPartitionStart(mvContext.getNextPartitionStart());
