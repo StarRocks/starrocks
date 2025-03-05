@@ -888,6 +888,83 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
+    public void testCreatePaimonAnalyzeJob() {
+        ExternalAnalyzeJob analyzeJob = new ExternalAnalyzeJob("paimon0", "pmn_db1",
+                "partitioned_table", null, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+        // do not have stats meta, need to collect
+        List<StatisticsCollectJob> statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(1, statsJobs.size());
+
+
+        // test collect statistics time after table update time
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+                ExternalBasicStatsMeta externalBasicStatsMeta =
+                        new ExternalBasicStatsMeta("paimon0", "pmn_db1", "partitioned_table", null,
+                                StatsConstants.AnalyzeType.FULL, LocalDateTime.now().plusHours(20), Maps.newHashMap());
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("pk", null,  LocalDateTime.now().plusHours(20)));
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("d", null,  LocalDateTime.now().plusHours(20)));
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("pt", null,  LocalDateTime.now().plusHours(20)));
+
+                metaMap.put(new AnalyzeMgr.StatsMetaKey("paimon0", "pmn_db1", "partitioned_table"), externalBasicStatsMeta);
+                return metaMap;
+            }
+        };
+        statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(0, statsJobs.size());
+
+        // test collect statistics time before table update time
+        LocalDateTime statsUpdateTime = LocalDateTime.now().minusHours(2);
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+                metaMap.put(new AnalyzeMgr.StatsMetaKey("paimon0", "pmn_db1", "partitioned_table"),
+                        new ExternalBasicStatsMeta("paimon0", "pmn_db1", "partitioned_table", null,
+                                StatsConstants.AnalyzeType.FULL,
+                                statsUpdateTime, Maps.newHashMap()));
+                return metaMap;
+            }
+        };
+        statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(1, statsJobs.size());
+    }
+
+    @Test
+    public void testCreatePaimonAnalyzeJobWithUnpartitioned() {
+        ExternalAnalyzeJob analyzeJob = new ExternalAnalyzeJob("paimon0", "pmn_db1",
+                "unpartitioned_table", null, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                ExternalBasicStatsMeta externalBasicStatsMeta =
+                        new ExternalBasicStatsMeta("paimon0", "pmn_db1", "unpartitioned_table", null,
+                                StatsConstants.AnalyzeType.FULL, LocalDateTime.now().plusHours(20), Maps.newHashMap());
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("pk", null,  LocalDateTime.now().plusHours(20)));
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("d", null,  LocalDateTime.now().plusHours(20)));
+                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+                metaMap.put(new AnalyzeMgr.StatsMetaKey("paimon0", "pmn_db1", "unpartitioned_table"),
+                        externalBasicStatsMeta);
+                return metaMap;
+            }
+        };
+        List<StatisticsCollectJob> statsJobs =
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(0, statsJobs.size());
+    }
+
+    @Test
     public void testFullStatisticsBuildCollectSQLList() {
         OlapTable t0p = (OlapTable) connectContext.getGlobalStateMgr()
                 .getLocalMetastore().getDb("test").getTable("t0_stats_partition");
@@ -1209,6 +1286,53 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         expectedException.expectMessage("Do not supported analyze iceberg table" +
                 " t0_date_month_identity_evolution with partition evolution");
         collectJob.buildCollectSQLList(1);
+    }
+
+    @Test
+    public void testExternalPaimonFullStatisticsBuildCollectSQL() {
+        // test partition
+        Database database =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getDb("paimon0", "pmn_db1");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable("paimon0", "pmn_db1",
+                        "partitioned_table");
+        ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("paimon0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("pk", "d", "pt"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        List<List<String>> lists = collectJob.buildCollectSQLList(1);
+        Assert.assertEquals(30, lists.size());
+
+        //test partition is null
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("paimon0",
+                        database,
+                        table, Lists.newArrayList("pt=null"),
+                        Lists.newArrayList("pk", "d", "pt"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        lists = collectJob.buildCollectSQLList(1);
+        Assert.assertEquals(3, lists.size());
+
+        //test unpartitioned table
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("paimon0", "pmn_db1",
+                "unpartitioned_table");
+        //test partition is null
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("paimon0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("pk", "d"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        lists = collectJob.buildCollectSQLList(1);
+        Assert.assertEquals(2, lists.size());
     }
 
     @Test
