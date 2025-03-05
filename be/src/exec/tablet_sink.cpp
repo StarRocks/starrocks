@@ -770,7 +770,7 @@ Status OlapTableSink::_fill_auto_increment_id(Chunk* chunk) {
     }
     _has_auto_increment = true;
 
-    auto& slot = _output_tuple_desc->slots()[_auto_increment_slot_id];
+    auto& slot = _output_tuple_desc->get_slot_by_id(_auto_increment_slot_id);
     RETURN_IF_ERROR(_fill_auto_increment_id_internal(chunk, slot, _schema->table_id()));
 
     return Status::OK();
