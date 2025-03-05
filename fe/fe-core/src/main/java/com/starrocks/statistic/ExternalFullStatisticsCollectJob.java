@@ -35,6 +35,7 @@ import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.iceberg.IcebergApiConverter;
 import com.starrocks.connector.iceberg.IcebergPartitionTransform;
 import com.starrocks.connector.iceberg.IcebergPartitionUtils;
+import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
@@ -152,6 +153,8 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
         String nullValue;
         if (table.isIcebergTable()) {
             nullValue = IcebergApiConverter.PARTITION_NULL_VALUE;
+        } else if (table.isPaimonTable()) {
+            nullValue = PaimonMetadata.PAIMON_PARTITION_NULL_VALUE;
         } else {
             nullValue = HiveMetaClient.PARTITION_NULL_VALUE;
         }

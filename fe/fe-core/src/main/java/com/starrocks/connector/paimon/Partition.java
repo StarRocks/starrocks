@@ -17,6 +17,8 @@ package com.starrocks.connector.paimon;
 
 import com.starrocks.connector.PartitionInfo;
 
+import java.util.concurrent.TimeUnit;
+
 public class Partition implements PartitionInfo {
 
     private final String partitionName;
@@ -29,6 +31,11 @@ public class Partition implements PartitionInfo {
 
     public String getPartitionName() {
         return partitionName;
+    }
+
+    @Override
+    public TimeUnit getModifiedTimeUnit() {
+        return TimeUnit.MILLISECONDS;
     }
 
     @Override
