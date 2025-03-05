@@ -56,7 +56,7 @@ You must have [Docker Engine](https://docs.docker.com/engine/install/) (17.06.0 
 
 ### Procedures
 
-From v3.1.14, v3.2.10, and v3.3.3, StarRocks provides Docker images in the `starrocks/{Component}-{OS}:{Version}` format, where `Component` indicates the component the image (including `fe`, `be`, and `cn`), `OS` indicates the operating system (including `centos` and `ubuntu`), and `Version` is the version number (for example, `3.3.3`). Docker will automatically identify your CPU architecture and pull the corresponding image. Make sure that you have chosen the correct version of the image.
+From v3.1.14, v3.2.10, and v3.3.3, StarRocks provides Docker images in the `starrocks/artifacts-{OS}:{Version}` format, where `OS` indicates the operating system (including `centos7` and `ubuntu`), and `Version` is the version number (for example, `3.3.3`). Docker will automatically identify your CPU architecture and pull the corresponding image. Make sure that you have chosen the correct version of the image.
 
 :::note
 
@@ -64,22 +64,21 @@ In versions earlier than v3.1.14, v3.2.10, and v3.3.3, StarRocks provides Docker
 
 :::
 
-1. Download a StarRocks Docker image from [StarRocks Docker Hub](https://hub.docker.com/r/starrocks/artifacts-ubuntu/tags). You can choose a specific version based on the tag of the image.
+1. Download a StarRocks Docker image from [StarRocks Docker Hub](https://hub.docker.com/u/starrocks?page=1&search=artifacts). You can choose a specific version based on the tag of the image.
 
    ```Bash
-   # Replace <component> with the component you want to download, for example, fe,
-   # replace <version> with the version of StarRocks you want to download, for example, 3.3.3,
-   # and replace <OS> with centos or ubuntu.
-   docker pull starrocks/<Component>-<OS>:<version>
+   # Replace <OS> with centos7 or ubuntu,
+   # and replace <version> with the version of StarRocks you want to download, for example, 3.3.3.
+   # e.g. docker pull starrocks/artifacts-centos7:3.3.3 or docker pull starrocks/artifacts-ubuntu:3.3.3
+   docker pull starrocks/artifacts-<OS>:<version>
    ```
 
 2. Copy the StarRocks deployment files from the Docker image to your host machine by running the following command:
 
    ```Bash
-   # Replace <component> with the component you want to download, for example, fe,
-   # replace <version> with the version of StarRocks you want to download, for example, 3.3.3,
-   # and replace <OS> with centos or ubuntu.
-   docker run --rm starrocks/<Component>-<OS>:<version> \
+   # Replace <OS> with centos7 or ubuntu,
+   # and replace <version> with the version of StarRocks you want to download, for example, 3.3.3.
+   docker run --rm starrocks/artifacts-<OS>:<version> \
        tar -cf - -C /release . | tar -xvf -
    ```
 

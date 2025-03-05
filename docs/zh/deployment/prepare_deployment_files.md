@@ -56,7 +56,7 @@ displayed_sidebar: docs
 
 ### 步骤
 
-从 v3.1.14、v3.2.10 和 v3.3.3 版本开始，StarRocks 提供的 Docker 镜像命名格式为 `starrocks/{Component}-{OS}:{Version}`，其中 `Component` 表示镜像的组件（包括 `fe`、`be`和 `cn`），`OS` 表示操作系统（包括 `centos` 和 `ubuntu`），`Version` 表示版本号（例如 `3.3.3`）。Docker 将自动识别您的 CPU 架构并拉取相应的镜像。请确保您选择了正确版本的镜像。
+从 v3.1.14、v3.2.10 和 v3.3.3 版本开始，StarRocks 提供的 Docker 镜像命名格式为 `starrocks/artifacts-{OS}:{Version}`，其中 `OS` 表示操作系统（包括 `centos7` 和 `ubuntu`），`Version` 表示版本号（例如 `3.3.3`）。Docker 将自动识别您的 CPU 架构并拉取相应的镜像。请确保您选择了正确版本的镜像。
 
 :::note
 
@@ -64,22 +64,21 @@ displayed_sidebar: docs
 
 :::
 
-1. 从 [StarRocks Docker Hub](https://hub.docker.com/r/starrocks/artifacts-ubuntu/tags) 下载 StarRocks Docker 镜像。 您可以根据 Tag 选择特定版本的镜像。
+1. 从 [StarRocks Docker Hub](https://hub.docker.com/u/starrocks?page=1&search=artifacts) 下载 StarRocks Docker 镜像。 您可以根据 Tag 选择特定版本的镜像。
 
    ```Bash
-   # 将 <component> 替换为您需要下载组建，例如 fe，
-   # 将 <version> 替换为您想要下载的 StarRocks 版本，例如 3.3.3，
-   # 并将 <OS> 替换为 centos 或 ubuntu。
-   docker pull starrocks/<Component>-<OS>:<version>
+   # 将 <OS> 替换为 centos7 或 ubuntu，
+   # 并将 <version> 替换为您想要下载的 StarRocks 版本，例如 3.3.3。
+   # 例如 docker pull starrocks/artifacts-centos7:3.3.3 或 docker pull starrocks/artifacts-ubuntu:3.3.3
+   docker pull starrocks/artifacts-<OS>:<version>
    ```
 
 2. 运行以下命令将 StarRocks 部署文件从 Docker 镜像复制到您的主机：
 
    ```Bash
-   # 将 <component> 替换为您需要下载组建，例如 fe，
-   # 将 <version> 替换为您想要下载的 StarRocks 版本，例如 3.3.3，
-   # 并将 <OS> 替换为 centos 或 ubuntu。
-   docker run --rm starrocks/<Component>-<OS>:<version> \
+   # 将 <OS> 替换为 centos7 或 ubuntu，
+   # 并将 <version> 替换为您想要下载的 StarRocks 版本，例如 3.3.3。
+   docker run --rm starrocks/artifacts-<OS>:<version> \
        tar -cf - -C /release . | tar -xvf -
    ```
 
