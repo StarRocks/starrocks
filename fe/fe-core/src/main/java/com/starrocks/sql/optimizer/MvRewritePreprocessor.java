@@ -41,9 +41,9 @@ import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RandomDistributionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
-import com.starrocks.common.Pair;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.DebugUtil;
@@ -525,37 +525,43 @@ public class MvRewritePreprocessor {
 
     /**
      * Check if the MV is eligible for query rewrite
-     *
+     * NOTE: This method can be time-costing if mv's defined plan is not in the plan cache and is complex,
+     * so it's better to use it with force=false.
      * @param force build the MV plan even if it's not in the plan cache
      */
-    public static Pair<Boolean, String> isMVValidToRewriteQuery(ConnectContext connectContext,
-                                                                MaterializedView mv,
-                                                                boolean force,
-                                                                Set<Table> queryTables) {
+    public static MVPlanValidationResult isMVValidToRewriteQuery(ConnectContext connectContext,
+                                                                 MaterializedView mv,
+                                                                 boolean force,
+                                                                 Set<Table> queryTables,
+                                                                 boolean isNoPlanAsInvalid) {
         if (!mv.isActive())  {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "is not active");
-            return Pair.create(false, "MV is not active");
+            return MVPlanValidationResult.invalid("MV is not active");
         }
         if (!mv.isEnableRewrite()) {
             String message = PropertyAnalyzer.PROPERTY_MV_ENABLE_QUERY_REWRITE + "=" +
                     mv.getTableProperty().getMvQueryRewriteSwitch();
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
-            return Pair.create(false, message);
+            return MVPlanValidationResult.invalid(message);
         }
         // if mv is a subset of query tables, it can be used for rewrite.
         if (CollectionUtils.isNotEmpty(queryTables) &&
                 !canMVRewriteIfMVHasExtraTables(connectContext, mv, queryTables)) {
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), "MV contains extra tables besides FK-PK");
-            return Pair.create(false, "MV contains extra tables besides FK-PK");
+            return MVPlanValidationResult.invalid("MV contains extra tables besides FK-PK");
         }
         SessionVariable sessionVariable  = connectContext == null ? SessionVariable.DEFAULT_SESSION_VARIABLE
                 : connectContext.getSessionVariable();
         // if mv is in plan cache(avoid building plan), check whether it's valid
-        List<MvPlanContext> planContexts = force ?
+        final List<MvPlanContext> planContexts = force ?
                 CachingMvPlanContextBuilder.getInstance()
                         .getOrLoadPlanContext(sessionVariable, mv) :
                 CachingMvPlanContextBuilder.getInstance()
                         .getPlanContextIfPresent(sessionVariable, mv);
+        // if mv is not in plan cache, we cannot determine whether it's valid
+        if (isNoPlanAsInvalid && CollectionUtils.isEmpty(planContexts)) {
+            return MVPlanValidationResult.unknown("MV plan is not in cache, valid check is unknown");
+        }
         if (CollectionUtils.isNotEmpty(planContexts) &&
                 planContexts.stream().noneMatch(MvPlanContext::isValidMvPlan)) {
             logMVPrepare(connectContext, "MV {} has no valid plan from {} plan contexts",
@@ -564,9 +570,9 @@ public class MvRewritePreprocessor {
                     .map(MvPlanContext::getInvalidReason)
                     .collect(Collectors.joining(";"));
             OptimizerTraceUtil.logMVRewriteFailReason(mv.getName(), message);
-            return Pair.create(false, "no valid plan: " + message);
+            return MVPlanValidationResult.invalid("no valid plan: " + message);
         }
-        return Pair.create(true, null);
+        return MVPlanValidationResult.valid();
     }
 
     private Set<MaterializedView> chooseBestRelatedMVsByCorrelations(Set<Table> queryTables,
@@ -604,7 +610,7 @@ public class MvRewritePreprocessor {
                                                       OptExpression queryOptExpression) {
         // choose all valid mvs and filter mvs that cannot be rewritten for the query
         Set<MaterializedView> validMVs = relatedMVs.stream()
-                .filter(mv -> isMVValidToRewriteQuery(connectContext, mv, false, queryTables).first)
+                .filter(mv -> isMVValidToRewriteQuery(connectContext, mv, false, queryTables, false).isValid())
                 .collect(Collectors.toSet());
         logMVPrepare(connectContext, "Choose {}/{} valid mvs after checking valid",
                 validMVs.size(), relatedMVs.size());
