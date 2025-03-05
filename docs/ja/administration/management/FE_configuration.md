@@ -1182,7 +1182,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - タイプ: Int
 - 単位: 秒
 - 変更可能: はい
-- 説明: スケジューラースレッドがクエリトリガータスクをスケジュールする間隔。私たちは`connector_table_query_trigger_analyze_schedule_interval`をこのパラメータに変更しました。このパラメータはすべてのバックグラウンドタスクを担当しています。バージョン 3.4 では、バックグラウンドタスクは`ANALYZE`で、バージョン 3.4 以降では、低基数字典収集タスクが追加されました。
+- 説明: Scheduler スレッドがクエリトリガーのバックグラウンドタスクをスケジュールする間隔。この項目は v3.4.0 で導入された `connector_table_query_trigger_analyze_schedule_interval` を置き換えるものである。ここで、バックグラウンドタスクとは、v3.4 では `ANALYZE` タスク、v3.4 より後のバージョンでは低カーディナリティ列の辞書のコレクションタスクを指す。
 - 導入バージョン: v3.4.2
 
 ##### connector_table_query_trigger_analyze_small_table_rows
