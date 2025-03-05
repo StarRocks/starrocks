@@ -347,6 +347,53 @@ mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
 
 </TabItem>
 
+<TabItem value="JDBC" label="JDBC">
+
+
+##### JDBC
+
+If you choose JDBC as the metastore of your data source, configure `MetastoreParams` as follows:
+
+
+```SQL
+"iceberg.catalog.type" = "jdbc",
+"iceberg.catalog.uri" = "<jdbc_uri>",
+"iceberg.catalog.warehouse" = "<warehouse_location>"
+```
+
+The following table describes the parameter you need to configure in `MetastoreParams`.
+
+##### iceberg.catalog.type
+
+Required: Yes
+Description: The type of metastore that you use for your Iceberg cluster. Set the value to `jdbc`.
+
+##### iceberg.catalog.uri
+
+Required: Yes
+Description: The URI of your DB. Format: `jdbc:[mysql\|postgresql]://<DB_IP_address>:<DB_PORT>/<DB_NAME>`.
+
+
+###### iceberg.catalog.warehouse
+
+Required: Yes
+Description: The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` .
+
+
+##### iceberg.catalog.jdbc.user
+
+Required: No
+Description: The username for the DB .
+
+
+##### iceberg.catalog.jdbc.password
+
+Required: No
+Description: The password for the DB .
+
+</TabItem>
+
+
 </Tabs>
 
 ---
