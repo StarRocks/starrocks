@@ -64,7 +64,7 @@ In versions earlier than v3.1.14, v3.2.10, and v3.3.3, StarRocks provides Docker
 
 :::
 
-1. Download a StarRocks Docker image from [StarRocks Docker Hub](https://hub.docker.com/r/starrocks/artifacts-ubuntu/tags). You can choose a specific version based on the tag of the image.
+1. Download a StarRocks Docker image from [StarRocks Docker Hub](https://hub.docker.com/u/starrocks?page=1&search=artifacts). You can choose a specific version based on the tag of the image.
 
    ```Bash
    # Replace <OS> with centos7 or ubuntu,
