@@ -33,12 +33,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
-<<<<<<< HEAD
-=======
-import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
->>>>>>> dd1fe9231e ([BugFix] Fix insert overwrite job ConcurrentModificationException issue (#56417))
 import com.starrocks.persist.InsertOverwriteStateChangeInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryState;
