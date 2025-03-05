@@ -199,6 +199,8 @@ public:
 
     Status create_schema_file(int64_t tablet_id, const TabletSchemaPB& schema_pb);
 
+    int64_t get_average_row_size_from_latest_metadata(int64_t tablet_id);
+
     void stop();
 
 private:
