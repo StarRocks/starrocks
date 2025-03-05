@@ -228,7 +228,8 @@ int64_t TabletManager::get_average_row_size_from_latest_metadata(int64_t tablet_
         if (rowset_count++ >= 10) {
             break;
         }
-        total_size += rowset.data_size();
+        // `data_size()` is compressed, so multiply by 3 to get uncompressed size
+        total_size += rowset.data_size() * 3;
         total_rows += rowset.num_rows();
     }
     TEST_SYNC_POINT_CALLBACK("TabletManager::get_average_row_size_from_latest_metadata", &total_size);
