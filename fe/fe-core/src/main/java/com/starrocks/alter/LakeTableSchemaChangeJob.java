@@ -383,7 +383,7 @@ public class LakeTableSchemaChangeJob extends LakeTableSchemaChangeJobBase {
                             .setShortKeyColumnCount(shadowShortKeyColumnCount)
                             .setSortKeyIndexes(originIndexId == baseIndexId ? sortKeyIdxes : null)
                             .setSortKeyUniqueIds(originIndexId == baseIndexId ? sortKeyUniqueIds : null)
-                            .setIndexes(indexes)
+                            .setIndexes(OlapTable.getIndexesBySchema(indexes, shadowSchema))
                             .setBloomFilterColumnNames(bfColumns)
                             .setBloomFilterFpp(bfFpp)
                             .setStorageType(TStorageType.COLUMN)
