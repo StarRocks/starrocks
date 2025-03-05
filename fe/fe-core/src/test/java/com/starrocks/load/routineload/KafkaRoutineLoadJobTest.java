@@ -517,7 +517,7 @@ public class KafkaRoutineLoadJobTest {
     @Test
     public void testCreateStmtWithPauseOnFatalParseError(@Mocked GlobalStateMgr globalStateMgr,
                                                             @Injectable Database database,
-                                                            @Injectable OlapTable table) throws StarRocksException {
+                                                            @Injectable OlapTable table) throws UserException {
         CreateRoutineLoadStmt createRoutineLoadStmt = initCreateRoutineLoadStmt();
         RoutineLoadDesc routineLoadDesc =
                 new RoutineLoadDesc(columnSeparator, null, null, null, partitionNames);
@@ -553,7 +553,7 @@ public class KafkaRoutineLoadJobTest {
             @Mock
             public List<Integer> getAllKafkaPartitions(String brokerList, String topic,
                                                        ImmutableMap<String, String> properties) throws
-                    StarRocksException {
+                    UserException {
                 return Lists.newArrayList(1, 2, 3);
             }
         };
