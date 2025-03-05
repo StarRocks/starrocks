@@ -294,38 +294,28 @@ public class InsertOverwriteJobRunner {
             }
         }
 
-<<<<<<< HEAD
-        try {
-            addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable, partitionValues);
-=======
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
         String targetDb = insertStmt.getTableName().getDb();
         Database db = state.getLocalMetastore().getDb(targetDb);
-        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()),
-                LockType.READ)) {
-            addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable, partitionValues, false, null);
->>>>>>> dd1fe9231e ([BugFix] Fix insert overwrite job ConcurrentModificationException issue (#56417))
+        db.readLock();
+        try {
+            addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable, partitionValues);
         } catch (AnalysisException ex) {
             LOG.warn(ex);
             throw new RuntimeException(ex);
+        } finally {
+            db.readUnlock();
         }
-<<<<<<< HEAD
-        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
-        String targetDb = insertStmt.getTableName().getDb();
-        Database db = state.getDb(targetDb);
         List<Long> sourcePartitionIds = job.getSourcePartitionIds();
         try {
-            state.addPartitions(db, olapTable.getName(), addPartitionClause);
-=======
-        List<Long> sourcePartitionIds = job.getSourcePartitionIds();
-        try {
-            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()),
-                    LockType.READ)) {
+            db.readLock();
+            try {
                 AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
                 analyzer.analyze(context, addPartitionClause);
+            } finally {
+                db.readUnlock();
             }
-            state.getLocalMetastore().addPartitions(context, db, olapTable.getName(), addPartitionClause);
->>>>>>> dd1fe9231e ([BugFix] Fix insert overwrite job ConcurrentModificationException issue (#56417))
+            state.addPartitions(db, olapTable.getName(), addPartitionClause);
         } catch (Exception ex) {
             LOG.warn(ex);
             throw new RuntimeException(ex);
