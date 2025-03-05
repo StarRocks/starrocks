@@ -106,7 +106,7 @@ using FileMetaDataPtr = std::shared_ptr<FileMetaData>;
 // 2. if DataCache is enabled, retrieve FileMetaData from DataCache. Otherwise, parse FileMetaData normally
 class FileMetaDataParser {
 public:
-    FileMetaDataParser(RandomAccessFile* file, const HdfsScannerContext* scanner_context, BlockCache* cache,
+    FileMetaDataParser(RandomAccessFile* file, const HdfsScannerContext* scanner_context, ObjectCache* cache,
                        const DataCacheOptions* datacache_options, uint64_t file_size)
             : _file(file),
               _scanner_ctx(scanner_context),
@@ -122,7 +122,7 @@ private:
     static std::string _build_metacache_key(const std::string& filename, int64_t modification_time, uint64_t file_size);
     RandomAccessFile* _file = nullptr;
     const HdfsScannerContext* _scanner_ctx = nullptr;
-    BlockCache* _cache = nullptr;
+    ObjectCache* _cache = nullptr;
     const DataCacheOptions* _datacache_options = nullptr;
     uint64_t _file_size = 0;
 

@@ -22,6 +22,10 @@
 #include "common/status.h"
 #include "util/lru_cache.h"
 
+#ifdef WITH_STARCACHE
+#include "starcache/star_cache.h"
+#endif
+
 namespace starrocks {
 
 class ObjectCache {
@@ -32,9 +36,14 @@ public:
     // Init the object cache instance with options.
     Status init(const ObjectCacheOptions& options);
 
+#ifdef WITH_STARCACHE
+    // Init the object cache instance with an exist block cache module.
+    Status init(const std::shared_ptr<starcache::StarCache>& star_cache);
+#endif
+
     // Insert object to cache, the `ptr` is the object pointer.
     // size: the size of the value.
-    // charge: the actual memory size mallocated for this value.
+    // charge: the actual memory size allocated for this value.
     Status insert(const std::string& key, void* value, size_t size, size_t charge, ObjectCacheDeleter deleter,
                   ObjectCacheHandlePtr* handle, ObjectCacheWriteOptions* options = nullptr);
 
@@ -59,7 +68,7 @@ public:
     Slice value_slice(ObjectCacheHandlePtr handle);
 
     // Adjust the cache quota by delta bytes.
-    // If the new capcity is less than `min_capacity`, skip adjusting it.
+    // If the new capacity is less than `min_capacity`, skip adjusting it.
     Status adjust_capacity(int64_t delta, size_t min_capacity);
 
     // Set the cache capacity to a target value.
