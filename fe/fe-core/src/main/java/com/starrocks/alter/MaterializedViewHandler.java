@@ -67,9 +67,12 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.BatchDropInfo;
 import com.starrocks.persist.DropInfo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.AddRollupClause;
 import com.starrocks.sql.ast.AlterClause;
@@ -80,6 +83,7 @@ import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.MVColumnItem;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -351,6 +355,17 @@ public class MaterializedViewHandler extends AlterHandler {
                     "mv colocate optimization.", olapTable.getName()));
         }
 
+        long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
+        if (RunMode.isSharedDataMode()) {
+            // check warehouse
+            warehouseId = ConnectContext.get().getCurrentWarehouseId();
+            List<Long> computeNodeIs = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
+            if (computeNodeIs.isEmpty()) {
+                Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+                throw new DdlException("no available compute nodes in warehouse " + warehouse.getName());
+            }
+        }
+
         AlterJobV2Builder mvJobBuilder = olapTable.rollUp();
         try {
             AlterJobV2 mvJob = mvJobBuilder
@@ -367,7 +382,9 @@ public class MaterializedViewHandler extends AlterHandler {
                     .withOriginStmt(origStmt)
                     .withViewDefineSql(viewDefineSql)
                     .withMvKeysType(mvKeysType)
-                    .withIsColocateMv(isColocateMv).build();
+                    .withIsColocateMv(isColocateMv)
+                    .withWarehouse(warehouseId)
+                    .build();
 
             LOG.info("finished to create materialized view job: {}", mvJob.getJobId());
             return mvJob;
