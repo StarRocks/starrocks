@@ -312,8 +312,13 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                     AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
                             RollupJobV2.analyzeAndCreateRollupJobV2Params(tbl, rollupSchema, whereClause, db.getFullName());
 
-                    ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                            .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) rollupTablet);
+                    ComputeNode computeNode = null;
+                    try {
+                        computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                                .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) rollupTablet);
+                    } catch (ErrorReportException e) {
+                        // computeNode is null
+                    }
                     if (computeNode == null) {
                         //todo: fix the error message.
                         throw new AlterCancelException("No alive compute node");
