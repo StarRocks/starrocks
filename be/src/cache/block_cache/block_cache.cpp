@@ -124,7 +124,7 @@ Status BlockCache::read_object(const CacheKey& cache_key, DataCacheHandle* handl
     return _kv_cache->read_object(cache_key, handle, options);
 }
 
-bool BlockCache::exist(const starcache::CacheKey& cache_key, off_t offset, size_t size) const {
+bool BlockCache::exist(const CacheKey& cache_key, off_t offset, size_t size) const {
     if (size == 0) {
         return true;
     }

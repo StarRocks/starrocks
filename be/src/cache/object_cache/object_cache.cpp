@@ -21,6 +21,10 @@
 #include "common/statusor.h"
 #include "runtime/exec_env.h"
 
+#ifdef WITH_STARCACHE
+#include "cache/object_cache/starcache_module.h"
+#endif
+
 namespace starrocks {
 
 ObjectCache::~ObjectCache() {
@@ -40,10 +44,22 @@ Status ObjectCache::init(const ObjectCacheOptions& options) {
         LOG(ERROR) << "Unsupported cache module";
         return Status::NotSupported("unsupported block cache engine");
     }
-    RETURN_IF_ERROR(_cache_module->init());
     _initialized.store(true, std::memory_order_release);
     return Status::OK();
 }
+
+#ifdef WITH_STARCACHE
+Status ObjectCache::init(const std::shared_ptr<starcache::StarCache>& star_cache) {
+    if (_initialized.load(std::memory_order_acquire)) {
+        LOG(WARNING) << "fail to initialize because it has already been initialized before";
+        return Status::AlreadyExist("already initialized");
+    }
+    _cache_module = std::make_shared<StarCacheModule>(star_cache);
+    _initialized.store(true, std::memory_order_release);
+    LOG(INFO) << "init object cache with an exist block cache module";
+    return Status::OK();
+}
+#endif
 
 Status ObjectCache::insert(const std::string& key, void* value, size_t size, size_t charge, ObjectCacheDeleter deleter,
                            ObjectCacheHandlePtr* handle, ObjectCacheWriteOptions* options) {
