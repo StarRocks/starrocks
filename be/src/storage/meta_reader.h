@@ -45,6 +45,7 @@ struct MetaReaderParams {
 
     const std::map<int32_t, std::string>* id_to_names = nullptr;
     const DescriptorTbl* desc_tbl = nullptr;
+    int32_t low_card_threshold;
 
     int chunk_size = config::vector_chunk_size;
 
@@ -58,6 +59,7 @@ struct SegmentMetaCollecterParams {
     std::vector<LogicalType> field_type;
     bool use_page_cache;
     TabletSchemaCSPtr tablet_schema;
+    int32_t low_cardinality_threshold;
 };
 
 // MetaReader will implements

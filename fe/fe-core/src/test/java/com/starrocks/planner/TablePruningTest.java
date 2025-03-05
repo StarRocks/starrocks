@@ -954,7 +954,7 @@ public class TablePruningTest extends TablePruningTestBase {
         String sql = "select\n" +
                 "  cast(101 as int),\n" +
                 "  cast(1 as bigint),\n" +
-                "  dict_merge(`c_city`) as _dict_merge_ \n" +
+                "  dict_merge(`c_city`, 255) as _dict_merge_ \n" +
                 "from customer[_META_]\n";
         ctx.getSessionVariable().setEnableCboTablePrune(true);
         ctx.getSessionVariable().setEnableRboTablePrune(true);

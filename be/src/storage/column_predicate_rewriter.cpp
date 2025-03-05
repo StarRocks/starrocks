@@ -512,7 +512,7 @@ StatusOr<ColumnPredicatePtr> GlobalDictPredicatesRewriter::_rewrite_predicate(co
     RETURN_IF_ERROR(pred->evaluate(binary_column.get(), selection.data(), 0, dict_rows));
 
     std::vector<uint8_t> code_mapping;
-    code_mapping.resize(DICT_DECODE_MAX_SIZE + 1);
+    code_mapping.resize(dict_rows + 1);
     for (size_t i = 0; i < codes.size(); ++i) {
         code_mapping[codes[i]] = selection[i];
     }

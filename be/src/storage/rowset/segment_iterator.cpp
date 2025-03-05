@@ -1785,7 +1785,8 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             ColumnIterator* iter = nullptr;
             if (use_global_dict_code) {
                 iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid].get(),
-                                                        _column_decoders[cid].code_convert_data());
+                                                        _column_decoders[cid].code_convert_data(),
+                                                        _column_decoders[cid].dict_convert_size());
             } else {
                 iter = new DictCodeColumnIterator(cid, _column_iterators[cid].get());
             }
@@ -1930,7 +1931,8 @@ Status SegmentIterator::_init_global_dict_decoder() {
         const ColumnId cid = f->id();
         if (_can_using_global_dict(f)) {
             auto iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid].get(),
-                                                         _column_decoders[cid].code_convert_data());
+                                                         _column_decoders[cid].code_convert_data(),
+                                                         _column_decoders[cid].dict_convert_size());
             _obj_pool.add(iter);
             _column_decoders[cid].set_iterator(iter);
         }

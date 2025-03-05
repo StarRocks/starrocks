@@ -28,6 +28,7 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.statistics.CacheDictManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TExplainLevel;
@@ -168,6 +169,7 @@ public class MetaScanNode extends ScanNode {
         }
         msg.meta_scan_node = new TMetaScanNode();
         msg.meta_scan_node.setId_to_names(columnIdToNames);
+        msg.meta_scan_node.setLow_cardinality_threshold(CacheDictManager.LOW_CARDINALITY_THRESHOLD);
         List<TColumn> columnsDesc = Lists.newArrayList();
         for (Column column : tableSchema) {
             TColumn tColumn = column.toThrift();
