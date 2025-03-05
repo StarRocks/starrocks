@@ -17,14 +17,22 @@ package com.starrocks.lake.vacuum;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
+import com.starrocks.catalog.MaterializedIndex;
+import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
+import com.starrocks.catalog.TabletInvertedIndex;
+import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.lake.LakeTablet;
+<<<<<<< HEAD
 import com.starrocks.lake.Utils;
+=======
+import com.starrocks.proto.TabletInfoPB;
+>>>>>>> 63001bec0a ([Enhancement] Use min_version of tablet to avoid vacuum throwing file not found exception (#56244))
 import com.starrocks.proto.VacuumRequest;
 import com.starrocks.proto.VacuumResponse;
 import com.starrocks.rpc.BrpcProxy;
@@ -120,16 +128,18 @@ public class AutovacuumDaemon extends FrontendDaemon {
     }
 
     private void vacuumPartitionImpl(Database db, OlapTable table, PhysicalPartition partition) {
-        List<Tablet> tablets;
+        List<Tablet> tablets = new ArrayList<>();
         long visibleVersion;
         long minRetainVersion;
         long startTime = System.currentTimeMillis();
         long minActiveTxnId = computeMinActiveTxnId(db, table);
-        Map<ComputeNode, List<Long>> nodeToTablets = new HashMap<>();
+        Map<ComputeNode, List<TabletInfoPB>> nodeToTablets = new HashMap<>();
 
         db.readLock();
         try {
-            tablets = partition.getBaseIndex().getTablets();
+            for (MaterializedIndex index : partition.getMaterializedIndices(IndexExtState.VISIBLE)) {
+                tablets.addAll(index.getTablets());
+            }
             visibleVersion = partition.getVisibleVersion();
             minRetainVersion = partition.getMinRetainVersion();
             if (minRetainVersion <= 0) {
@@ -139,12 +149,23 @@ public class AutovacuumDaemon extends FrontendDaemon {
             db.readUnlock();
         }
 
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Warehouse warehouse = warehouseManager.getBackgroundWarehouse();
         for (Tablet tablet : tablets) {
+<<<<<<< HEAD
             ComputeNode node = Utils.chooseNode((LakeTablet) tablet);
+=======
+            LakeTablet lakeTablet = (LakeTablet) tablet;
+            ComputeNode node = warehouseManager.getComputeNodeAssignedToTablet(warehouse.getId(), lakeTablet);
+
+>>>>>>> 63001bec0a ([Enhancement] Use min_version of tablet to avoid vacuum throwing file not found exception (#56244))
             if (node == null) {
                 return;
             }
-            nodeToTablets.computeIfAbsent(node, k -> Lists.newArrayList()).add(tablet.getId());
+            TabletInfoPB tabletInfo = new TabletInfoPB();
+            tabletInfo.setTabletId(tablet.getId());
+            tabletInfo.setMinVersion(lakeTablet.getMinVersion());
+            nodeToTablets.computeIfAbsent(node, k -> Lists.newArrayList()).add(tabletInfo);
         }
 
         boolean hasError = false;
@@ -152,10 +173,11 @@ public class AutovacuumDaemon extends FrontendDaemon {
         long vacuumedFileSize = 0;
         boolean needDeleteTxnLog = true;
         List<Future<VacuumResponse>> responseFutures = Lists.newArrayListWithCapacity(nodeToTablets.size());
-        for (Map.Entry<ComputeNode, List<Long>> entry : nodeToTablets.entrySet()) {
+        for (Map.Entry<ComputeNode, List<TabletInfoPB>> entry : nodeToTablets.entrySet()) {
             ComputeNode node = entry.getKey();
             VacuumRequest vacuumRequest = new VacuumRequest();
-            vacuumRequest.tabletIds = entry.getValue();
+            // vacuumRequest.tabletIds is deprecated, use tabletInfos instead.
+            vacuumRequest.tabletInfos = entry.getValue();
             vacuumRequest.minRetainVersion = minRetainVersion;
             vacuumRequest.graceTimestamp =
                     startTime / MILLISECONDS_PER_SECOND - Config.lake_autovacuum_grace_period_minutes * 60;
@@ -185,6 +207,27 @@ public class AutovacuumDaemon extends FrontendDaemon {
                 } else {
                     vacuumedFiles += response.vacuumedFiles;
                     vacuumedFileSize += response.vacuumedFileSize;
+<<<<<<< HEAD
+=======
+                    vacuumedVersion = Math.min(vacuumedVersion, response.vacuumedVersion);
+
+                    if (response.tabletInfos != null) {
+                        TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
+                        for (TabletInfoPB tabletInfo : response.tabletInfos) {
+                            TabletMeta tabletMeta = invertedIndex.getTabletMeta(tabletInfo.tabletId);
+                            if (tabletMeta != null) {
+                                MaterializedIndex index = partition.getIndex(tabletMeta.getIndexId());
+                                if (index != null) {
+                                    Tablet tablet = index.getTablet(tabletInfo.tabletId);
+                                    if (tablet != null) {
+                                        LakeTablet lakeTablet = (LakeTablet) tablet;
+                                        lakeTablet.setMinVersion(tabletInfo.minVersion);
+                                    }
+                                }
+                            }
+                        }
+                    }
+>>>>>>> 63001bec0a ([Enhancement] Use min_version of tablet to avoid vacuum throwing file not found exception (#56244))
                 }
             } catch (InterruptedException e) {
                 LOG.warn("thread interrupted");

@@ -63,6 +63,13 @@ public class LakeTablet extends Tablet {
     @SerializedName(value = JSON_KEY_DATA_SIZE_UPDATE_TIME)
     private volatile long dataSizeUpdateTime = 0L;
 
+<<<<<<< HEAD
+=======
+    private volatile long minVersion = 0L;
+
+    public long rebuildPindexVersion = 0L;
+
+>>>>>>> 63001bec0a ([Enhancement] Use min_version of tablet to avoid vacuum throwing file not found exception (#56244))
     public LakeTablet(long id) {
         super(id);
     }
@@ -87,6 +94,14 @@ public class LakeTablet extends Tablet {
 
     public long getDataSizeUpdateTime() {
         return dataSizeUpdateTime;
+    }
+
+    public long getMinVersion() {
+        return minVersion;
+    }
+
+    public void setMinVersion(long minVersion) {
+        this.minVersion = minVersion;
     }
 
     // version is not used
