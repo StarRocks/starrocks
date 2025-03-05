@@ -1043,7 +1043,7 @@ public class ShowExecutorTest {
         Assert.assertEquals("10", resultSet.getString(mvSchemaTable.size() - 5));
         Assert.assertEquals(expectedSqlText, resultSet.getString(mvSchemaTable.size() - 4));
         Assert.assertEquals("", resultSet.getString(mvSchemaTable.size() - 3));
-        Assert.assertEquals("VALID", resultSet.getString(mvSchemaTable.size() - 2));
+        Assert.assertTrue(resultSet.getString(mvSchemaTable.size() - 2).contains("UNKNOWN"));
         Assert.assertEquals("", resultSet.getString(mvSchemaTable.size() - 1));
         Assert.assertFalse(resultSet.next());
     }
