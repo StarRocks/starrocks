@@ -58,6 +58,8 @@ public class LakeTablet extends Tablet {
     @SerializedName(value = JSON_KEY_DATA_SIZE_UPDATE_TIME)
     private volatile long dataSizeUpdateTime = 0L;
 
+    private volatile long minVersion = 0L;
+
     public long rebuildPindexVersion = 0L;
 
     public LakeTablet(long id) {
@@ -84,6 +86,14 @@ public class LakeTablet extends Tablet {
 
     public long getDataSizeUpdateTime() {
         return dataSizeUpdateTime;
+    }
+
+    public long getMinVersion() {
+        return minVersion;
+    }
+
+    public void setMinVersion(long minVersion) {
+        this.minVersion = minVersion;
     }
 
     // version is not used
