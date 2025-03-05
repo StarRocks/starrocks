@@ -50,15 +50,13 @@ public abstract class Warehouse implements Writable {
         return comment;
     }
 
-<<<<<<< HEAD
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
     }
-=======
+
     public abstract long getResumeTime();
->>>>>>> 883aadfe33 ([BugFix] Fix Warehouse Idle Check bug when switching warehouse (#56552))
 
     public abstract Long getAnyWorkerGroupId();
 
