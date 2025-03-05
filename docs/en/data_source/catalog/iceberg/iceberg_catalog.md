@@ -394,6 +394,22 @@ Description: The password for the DB .
 </TabItem>
 
 
+The following example creates an Iceberg catalog named iceberg_jdbc as metastore:
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_jdbc
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "jdbc",
+    "iceberg.catalog.warehouse" = "hdfs:///jdbc_iceberg/warehouse/ ",
+    "iceberg.catalog.uri" = "jdbc:mysql://ip:port/db_name",
+    "iceberg.catalog.jdbc.user" = "username",
+    "iceberg.catalog.jdbc.password" = "password"
+);
+```
+
+
 </Tabs>
 
 ---
