@@ -1244,21 +1244,6 @@ public class StmtExecutor {
             return;
         }
 
-<<<<<<< HEAD
-        // Generate a query plan for query detail
-        // Explaining internal table is very quick, we prefer to use EXPLAIN COSTS
-        // But explaining external table is expensive, may need to access lots of metadata, so have to use EXPLAIN
-        if (context.getQueryDetail() != null) {
-            StatementBase.ExplainLevel level = AnalyzerUtils.hasExternalTables(parsedStmt) ?
-                    StatementBase.ExplainLevel.defaultValue() :
-                    StatementBase.ExplainLevel.parse(Config.query_detail_explain_level);
-            context.getQueryDetail().setExplain(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT,
-                    level));
-        }
-
-        StatementBase queryStmt = parsedStmt;
-=======
->>>>>>> 86df592a20 ([BugFix] Fix ConcurrentModification issue for buildExplain to query detail  (#56557))
         List<PlanFragment> fragments = execPlan.getFragments();
         List<ScanNode> scanNodes = execPlan.getScanNodes();
         TDescriptorTable descTable = execPlan.getDescTbl().toThrift();
