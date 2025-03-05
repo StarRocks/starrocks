@@ -352,7 +352,8 @@ public class SchemaChangeJobV2 extends AlterJobV2 {
                             .setStorageType(tbl.getStorageType())
                             .setBloomFilterColumnNames(bfColumns)
                             .setBloomFilterFpp(bfFpp)
-                            .setIndexes(OlapTable.getIndexesBySchema(indexes, shadowSchema))
+                            .setIndexes(originIndexId == baseIndexId ?
+                                        indexes : OlapTable.getIndexesBySchema(indexes, shadowSchema))
                             .setSortKeyIndexes(originIndexId == baseIndexId ? sortKeyIdxes : null)
                             .setSortKeyUniqueIds(originIndexId == baseIndexId ? sortKeyUniqueIds : null)
                             .addColumns(shadowSchema)
