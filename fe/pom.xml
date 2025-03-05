@@ -63,6 +63,8 @@ under the License.
         <kafka-clients.version>3.4.0</kafka-clients.version>
         <io.netty.version>4.1.118.Final</io.netty.version>
         <aws-v2-sdk.version>2.30.31</aws-v2-sdk.version>
+        <avro.version>1.11.3</avro.version>
+        <dnsjava.version>3.6.3</dnsjava.version>
     </properties>
 
     <profiles>
@@ -522,11 +524,16 @@ under the License.
                 <version>0.8.13</version>
             </dependency>
 
-            <!-- https://mvnrepository.com/artifact/dnsjava/dnsjava -->
             <dependency>
                 <groupId>dnsjava</groupId>
                 <artifactId>dnsjava</artifactId>
-                <version>3.6.3</version>
+                <version>${dnsjava.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.avro</groupId>
+                <artifactId>avro</artifactId>
+                <version>${avro.version}</version>
             </dependency>
 
             <!-- spark -->
@@ -706,6 +713,16 @@ under the License.
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-client-runtime</artifactId>
                 <version>${hadoop.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>dnsjava</groupId>
+                        <artifactId>dnsjava</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.avro</groupId>
+                        <artifactId>avro</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aws -->
@@ -713,6 +730,16 @@ under the License.
                 <groupId>org.apache.hadoop</groupId>
                 <artifactId>hadoop-aws</artifactId>
                 <version>${hadoop.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>software.amazon.awssdk</groupId>
+                        <artifactId>bundle</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.apache.hadoop</groupId>
+                        <artifactId>hadoop-common</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aliyun -->
