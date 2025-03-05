@@ -72,6 +72,10 @@ AggregateFunctionPtr AggregateFactory::MakePercentileApproxAggregateFunction() {
     return std::make_shared<PercentileApproxAggregateFunction>();
 }
 
+AggregateFunctionPtr AggregateFactory::MakePercentileApproxWeightedAggregateFunction() {
+    return std::make_shared<PercentileApproxWeightedAggregateFunction>();
+}
+
 AggregateFunctionPtr AggregateFactory::MakePercentileUnionAggregateFunction() {
     return std::make_shared<PercentileUnionAggregateFunction>();
 }

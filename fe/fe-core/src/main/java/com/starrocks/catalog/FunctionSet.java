@@ -265,6 +265,7 @@ public class FunctionSet {
     public static final String MIN_BY_V2 = "min_by_v2";
     public static final String MIN = "min";
     public static final String PERCENTILE_APPROX = "percentile_approx";
+    public static final String PERCENTILE_APPROX_WEIGHTED = "percentile_approx_weighted";
     public static final String PERCENTILE_CONT = "percentile_cont";
     public static final String PERCENTILE_DISC = "percentile_disc";
     public static final String LC_PERCENTILE_DISC = "percentile_disc_lc";
@@ -1545,6 +1546,14 @@ public class FunctionSet {
                 false, false, false));
         addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX,
                 Lists.newArrayList(Type.DOUBLE, Type.DOUBLE, Type.DOUBLE), Type.DOUBLE, Type.VARBINARY,
+                false, false, false));
+        // percentile_approx_weighted
+        addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX_WEIGHTED,
+                Lists.newArrayList(Type.DOUBLE, Type.BIGINT, Type.DOUBLE), Type.DOUBLE, Type.VARBINARY,
+                false, false, false));
+        // percentile_approx_weighted
+        addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX_WEIGHTED,
+                Lists.newArrayList(Type.DOUBLE, Type.BIGINT, Type.DOUBLE, Type.DOUBLE), Type.DOUBLE, Type.VARBINARY,
                 false, false, false));
 
         addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_UNION,

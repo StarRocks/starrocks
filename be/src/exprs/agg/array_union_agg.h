@@ -105,7 +105,7 @@ struct ArrayUnionAggAggregateState {
 };
 
 template <LogicalType LT, bool is_distinct, typename MyHashSet = std::set<int>>
-class ArrayUnionAggAggregateFunction
+class ArrayUnionAggAggregateFunction final
         : public AggregateFunctionBatchHelper<ArrayUnionAggAggregateState<LT, is_distinct, MyHashSet>,
                                               ArrayUnionAggAggregateFunction<LT, is_distinct, MyHashSet>> {
 public:
