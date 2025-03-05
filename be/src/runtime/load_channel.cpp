@@ -116,7 +116,6 @@ void LoadChannel::open(const LoadChannelOpenRequest& open_request) {
     int64_t start_time_ns = MonotonicNanos();
     COUNTER_UPDATE(_open_request_count, 1);
     COUNTER_UPDATE(_open_request_pending_timer, (start_time_ns - open_request.receive_rpc_time_ns));
-    brpc::Controller* cntl = open_request.cntl;
     const PTabletWriterOpenRequest& request = *open_request.request;
     PTabletWriterOpenResult* response = open_request.response;
     _span->AddEvent("open_index", {{"index_id", request.index_id()}});
