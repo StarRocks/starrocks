@@ -42,6 +42,11 @@ public class AutoCloseableLockerTest {
             Assert.assertTrue(lockManager.isOwner(1, new Locker(), LockType.WRITE));
         }
         Assert.assertFalse(lockManager.isOwner(1, new Locker(), LockType.WRITE));
+
+        try (AutoCloseableLock ignore = new AutoCloseableLock(db.getId(), Lists.newArrayList(1L), LockType.WRITE)) {
+            Assert.assertTrue(lockManager.isOwner(1, new Locker(), LockType.WRITE));
+        }
+        Assert.assertFalse(lockManager.isOwner(1, new Locker(), LockType.WRITE));
     }
 
     @Test
