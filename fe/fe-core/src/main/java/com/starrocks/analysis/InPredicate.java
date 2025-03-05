@@ -117,9 +117,9 @@ public class InPredicate extends Predicate {
         return isNotIn;
     }
 
-    public boolean isLiteralChildren() {
+    public boolean isConstantValues() {
         for (int i = 1; i < children.size(); ++i) {
-            if (!(children.get(i) instanceof LiteralExpr)) {
+            if (!(children.get(i).isConstant())) {
                 return false;
             }
         }

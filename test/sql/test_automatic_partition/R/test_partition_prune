@@ -152,7 +152,7 @@ explain select * from o where ts>cast(unix_timestamp() as STRING);
 -- !result
 explain select * from o where ts>'1740108713';
 -- result:
-[REGEX].*partitions=2/3.*
+[REGEX].*partitions=3/3.*
 -- !result
 
 -- name: test_prune_convert_tz

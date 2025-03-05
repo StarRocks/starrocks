@@ -101,7 +101,7 @@ public class BetweenPredicate extends Predicate {
             return false;
         }
         BetweenPredicate that = (BetweenPredicate) obj;
-        return super.equals(that) && isNotBetween == that.isNotBetween;
+        return super.equalsWithoutChild(that) && isNotBetween == that.isNotBetween;
     }
 
     @Override

@@ -110,7 +110,7 @@ public class ExistsPredicate extends Predicate {
 
         ExistsPredicate that = (ExistsPredicate) obj;
 
-        return super.equals(that) && notExists == that.notExists;
+        return super.equalsWithoutChild(that) && notExists == that.notExists;
     }
 
     @Override

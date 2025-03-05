@@ -209,7 +209,7 @@ public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
     }
 
     @Override
-    public Boolean visitSubquery(SubqueryRelation relation, Void context) {
+    public Boolean visitSubqueryRelation(SubqueryRelation relation, Void context) {
         QueryStatement queryStatement = relation.getQueryStatement();
         return visit(queryStatement);
     }
