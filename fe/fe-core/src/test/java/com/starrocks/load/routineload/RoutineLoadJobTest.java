@@ -767,7 +767,7 @@ public class RoutineLoadJobTest {
     @Test
     public void testPauseOnFatalParseError(@Mocked GlobalStateMgr globalStateMgr, @Injectable TransactionState transactionState,
                                                        @Injectable RoutineLoadTaskInfo routineLoadTaskInfo)
-            throws StarRocksException {
+            throws UserException {
         long txnId = 1L;
         new Expectations() {
             {
