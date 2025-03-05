@@ -7,11 +7,15 @@ const scrollToBottom = require('scroll-to-bottomjs');
 const PDFDocument = require('pdfkit');
 
 function coverPage() {
-    // Create a document
-    const doc = new PDFDocument({size: 'A4'});
 
-    doc.pipe(fs.createWriteStream('0000.pdf'));
-    
+  // Create a document
+  const doc = new PDFDocument({ size: 'A4', margin: 50 });
+
+  // Pipe its output somewhere, like to a file or HTTP response
+  // See below for browser usage
+  doc.pipe(fs.createWriteStream('0000.pdf'));
+
+  // Add an image, constrain it to a given size, and center it vertically and horizontally
     doc.image(process.env.COVER_IMAGE, {
             fit: [200, 200],
             align: 'center',
@@ -24,10 +28,10 @@ function coverPage() {
           // position text over 70 and down 150
         .text(process.env.COVER_TITLE, 70, 300)
         .fontSize(11)
-        .text(process.env.COPYRIGHT, 70, 650);
-    
-    // Finalize PDF file
-    doc.end();
+        .text(process.env.COPYRIGHT, 70, 750);
+
+  // Finalize PDF file
+  doc.end();
 
 }
 
@@ -88,10 +92,10 @@ async function requestPage(url) {
     path: fileName,
     format: 'A4',
     margin: {
-      top: '0.5in',
-      bottom: '0.5in',
-      left: '0.5in',
-      right: '0.5in',
+      top: '30',
+      bottom: '30',
+      left: '30',
+      right: '30',
     },
   });
 

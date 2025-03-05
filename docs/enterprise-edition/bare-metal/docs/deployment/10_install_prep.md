@@ -136,12 +136,12 @@ sudo chown celerdata /data
 The default ports used by CelerData Manager and StarRocks Enterprise Edition are:
 
 ### Common (all servers)
-| <div style={{width: '200px'}}>Port name</div> | <div style={{width: '60px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
+| <div style={{width: '200px'}}>Port name</div> | <div style={{width: '68px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
 |-----------|--------------|-------------------------|-------------|
 | SSH | 22 | All `<-->` All | Management processes communicate via SSH |
 
 ### BE and CN instances
-| <div style={{width: '200px'}}>Port name</div> | <div style={{width: '60px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
+| <div style={{width: '200px'}}>Port name</div> | <div style={{width: '68px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
 |-----------|--------------|-------------------------|-------------|
 | be_port | 9060 | FE `-->` BE/CN | Port of thrift server on BE/CN, receiving requests from FE |
 | webserver_port | 8040 | BE/CN `<-->` BE/CN | Port of http server on BE/CN |
@@ -150,7 +150,7 @@ The default ports used by CelerData Manager and StarRocks Enterprise Edition are
 | starlet_port | 9070 | FE `-->` BE | Port for BE/CN heartbeat service in storage and calculation separation mode | (In the integrated storage and computing mode, BE also needs to open this port.) |
 
 ### FE instances
-| <div style={{width: '200px'}}>Port name</div> | <div style={{width: '60px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
+| <div style={{width: '200px'}}>Port name</div> | <div style={{width: '68px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
 |-----------|--------------|-------------------------|-------------|
 | http_port | 8030 | FE `<-->` FE | Port of http server on FE | User `<-->` FE |
 | rpc_port | 9020 | BE `-->` FE | Thrift server port on FE | FE `<-->` FE |
@@ -159,23 +159,23 @@ The default ports used by CelerData Manager and StarRocks Enterprise Edition are
 | cloud_native_meta_port | 6090 | FE `<-->` BE | Cloud Native metadata service listening port in storage and calculation separation mode | FE `<-->` FE |
 
 ### Broker instances
-| <div style={{width: '200px'}}>Port name</div> | <div style={{width: '60px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
+| <div style={{width: '200px'}}>Port name</div> | <div style={{width: '68px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
 |-----------|--------------|-------------------------|-------------|
 | broker_rpc_port | 8000 | FE `-->` Broker | Thrift server on Broker for receiving requests | | BE `-->` Broker |
 
 ### Manager
-| <div style={{width: '200px'}}>Port name</div> | <div style={{width: '60px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
+| <div style={{width: '200px'}}>Port name</div> | <div style={{width: '68px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
 |-----------|--------------|-------------------------|-------------|
 | admin_console_port | 19321 | Manager external | Nginx does port forwarding for external web ports |
 
 ### Agent service
-| <div style={{width: '200px'}}>Port name</div> | <div style={{width: '60px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
+| <div style={{width: '200px'}}>Port name</div> | <div style={{width: '68px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
 |-----------|--------------|-------------------------|-------------|
 | supervisor_http_port | 19320 | Internal | Supervisor management process | Center Service | 19319 | Supervisor management process |
 | agent_port | 19323 | Agent `-->` Center | Agent and Center Service communicate, and users report monitoring information |
 
 ### Center service
-| <div style={{width: '200px'}}>Port name</div> | <div style={{width: '60px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
+| <div style={{width: '200px'}}>Port name</div> | <div style={{width: '68px'}}>Default</div> | <div style={{width: '125px'}}>Direction</div> | Explanation | 
 |-----------|--------------|-------------------------|-------------|
 | center_rpc_port | 19322 | Web `-->` Center | Communication ports for Web and Center Services |
 
