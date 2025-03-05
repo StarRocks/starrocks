@@ -338,6 +338,7 @@ Status CacheEnv::init(const std::vector<StorePath>& store_paths) {
     _store_paths = store_paths;
 
     RETURN_IF_ERROR(_init_datacache());
+    RETURN_IF_ERROR(_init_starcache_based_object_cache());
     RETURN_IF_ERROR(_init_lru_base_object_cache());
     RETURN_IF_ERROR(_init_page_cache());
 
@@ -351,8 +352,21 @@ void CacheEnv::destroy() {
     _lru_based_object_cache.reset();
     LOG(INFO) << "lru based object cache shutdown successfully";
 
+    _starcache_based_object_cache.reset();
+    LOG(INFO) << "starcache based object cache shutdown successfully";
+
     _block_cache.reset();
     LOG(INFO) << "datacache shutdown successfully";
+}
+
+Status CacheEnv::_init_starcache_based_object_cache() {
+#ifdef WITH_STARCACHE
+    if (_block_cache != nullptr && _block_cache->is_initialized()) {
+        _starcache_based_object_cache = std::make_shared<ObjectCache>();
+        RETURN_IF_ERROR(_starcache_based_object_cache->init(_block_cache->starcache_instance()));
+    }
+#endif
+    return Status::OK();
 }
 
 Status CacheEnv::_init_lru_base_object_cache() {

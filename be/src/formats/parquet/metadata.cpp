@@ -447,15 +447,17 @@ StatusOr<FileMetaDataPtr> FileMetaDataParser::get_file_metadata() {
         return file_metadata_ptr;
     }
 
-    DataCacheHandle cache_handle;
+    ObjectCacheHandle* cache_handle = nullptr;
     std::string metacache_key =
             _build_metacache_key(_file->filename(), _datacache_options->modification_time, _file_size);
     {
         SCOPED_RAW_TIMER(&_scanner_ctx->stats->footer_cache_read_ns);
-        Status st = _cache->read_object(metacache_key, &cache_handle);
+        Status st = _cache->lookup(metacache_key, &cache_handle);
         if (st.ok()) {
+            auto file_metadata = *(static_cast<const FileMetaDataPtr*>(_cache->value(cache_handle)));
             _scanner_ctx->stats->footer_cache_read_count += 1;
-            return *(static_cast<const FileMetaDataPtr*>(cache_handle.ptr()));
+            _cache->release(cache_handle);
+            return file_metadata;
         }
     }
 
@@ -464,22 +466,24 @@ StatusOr<FileMetaDataPtr> FileMetaDataParser::get_file_metadata() {
     RETURN_IF_ERROR(_parse_footer(&file_metadata, &file_metadata_size));
     if (file_metadata_size > 0) {
         // cache does not understand shared ptr at all.
-        // so we have to new a object to hold this shared ptr.
+        // so we have to new an object to hold this shared ptr.
         FileMetaDataPtr* capture = new FileMetaDataPtr(file_metadata);
         Status st = Status::InternalError("write footer cache failed");
-        DeferOp op([&st, this, capture, file_metadata_size]() {
+        DeferOp op([&st, this, capture, file_metadata_size, &cache_handle]() {
             if (st.ok()) {
                 _scanner_ctx->stats->footer_cache_write_bytes += file_metadata_size;
                 _scanner_ctx->stats->footer_cache_write_count += 1;
+                _cache->release(cache_handle);
             } else {
                 _scanner_ctx->stats->footer_cache_write_fail_count += 1;
                 delete capture;
             }
         });
-        auto deleter = [capture]() { delete capture; };
-        WriteCacheOptions options;
+        auto deleter = [](const CacheKey& key, void* value) { delete (FileMetaDataPtr*)value; };
+        ObjectCacheWriteOptions options;
         options.evict_probability = _datacache_options->datacache_evict_probability;
-        st = _cache->write_object(metacache_key, capture, file_metadata_size, deleter, &cache_handle, &options);
+        st = _cache->insert(metacache_key, capture, file_metadata_size, file_metadata_size, deleter, &cache_handle,
+                            &options);
     } else {
         LOG(ERROR) << "Parsing unexpected parquet file metadata size";
     }

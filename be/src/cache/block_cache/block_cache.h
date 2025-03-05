@@ -60,7 +60,7 @@ public:
     // function, the corresponding pointer will never be freed by the cache system.
     Status read_object(const CacheKey& cache_key, DataCacheHandle* handle, ReadCacheOptions* options = nullptr);
 
-    bool exist(const starcache::CacheKey& cache_key, off_t offset, size_t size) const;
+    bool exist(const CacheKey& cache_key, off_t offset, size_t size) const;
 
     // Remove data from cache. The offset and size must be aligned by block size
     Status remove(const CacheKey& cache_key, off_t offset, size_t size);
@@ -94,7 +94,9 @@ public:
 
     DataCacheEngineType engine_type();
 
+#ifdef WITH_STARCACHE
     std::shared_ptr<starcache::StarCache> starcache_instance() { return _kv_cache->starcache_instance(); }
+#endif
 
     static const size_t MAX_BLOCK_SIZE;
 
