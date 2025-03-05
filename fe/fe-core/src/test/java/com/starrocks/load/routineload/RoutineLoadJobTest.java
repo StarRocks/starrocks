@@ -324,7 +324,6 @@ public class RoutineLoadJobTest {
             Assert.assertEquals("{\"0\":\"12345\"}", loadJobInfo.getLatest_source_position());
             //The displayed value is the actual value - 1
             Assert.assertEquals("{\"0\":\"1233\"}", loadJobInfo.getProgress());
-			
         }
 
         {
@@ -377,7 +376,6 @@ public class RoutineLoadJobTest {
             loadJobInfo = routineLoadJob.toThrift();
             Assert.assertEquals("RUNNING", loadJobInfo.getState());
             Assert.assertEquals("", loadJobInfo.getReasons_of_state_changed());
-			
         }
     }
 
