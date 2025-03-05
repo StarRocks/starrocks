@@ -33,7 +33,7 @@
         <hikaricp.version>3.4.5</hikaricp.version>
         <compiler-plugin.version>3.8.1</compiler-plugin.version>
         <java-extensions.home>${basedir}</java-extensions.home>
-        <aws-v2-sdk.version>2.23.19</aws-v2-sdk.version>
+        <aws-v2-sdk.version>2.30.31</aws-v2-sdk.version>
         <hadoop.version>3.4.0</hadoop.version>
         <iceberg.version>1.6.0</iceberg.version>
         <log4j2.version>2.23.1</log4j2.version>
@@ -70,6 +70,18 @@
             </dependency>
             <!-- java utils -->
 
+            <dependency>
+                <groupId>dnsjava</groupId>
+                <artifactId>dnsjava</artifactId>
+                <version>3.6.3</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-handler</artifactId>
+                <version>4.1.118.Final</version>
+            </dependency>
+
             <!-- hadoop -->
             <dependency>
                 <groupId>org.apache.hadoop</groupId>
@@ -83,6 +95,14 @@
                     <exclusion>
                         <groupId>org.apache.avro</groupId>
                         <artifactId>avro</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>dnsjava</groupId>
+                        <artifactId>dnsjava</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>io.netty</groupId>
+                        <artifactId>netty-handler</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
