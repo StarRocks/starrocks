@@ -537,7 +537,7 @@ class DecimalDistinctAggregateFunction
 struct DictMergeState : DistinctAggregateStateV2<TYPE_VARCHAR, SumResultLT<TYPE_VARCHAR>> {
     DictMergeState() = default;
 
-    void update_over_limit() { over_limit = set.size() > dict_threshold; }
+    void update_over_limit() { over_limit = set.distinct_size > dict_threshold; }
 
     bool over_limit = false;
     int dict_threshold = 255;
