@@ -406,6 +406,7 @@ PROPERTIES
 );
 ```
 
+</TabItem>
 
 </Tabs>
 
