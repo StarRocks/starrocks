@@ -183,7 +183,7 @@ public class WarehouseManager implements Writable {
                     .getShardInfo(tablet.getShardId(), workerGroupId);
 
             Long nodeId;
-            Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
+            List<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getAllNodeIdsByShard(shardInfo, true);
             if (!ids.isEmpty()) {
                 nodeId = ids.iterator().next();
@@ -205,7 +205,7 @@ public class WarehouseManager implements Writable {
                     .getShardInfo(tablet.getShardId(), workerGroupId);
 
             Long nodeId;
-            Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
+            List<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getAllNodeIdsByShard(shardInfo, true);
             if (!ids.isEmpty()) {
                 nodeId = ids.iterator().next();
@@ -218,7 +218,7 @@ public class WarehouseManager implements Writable {
         }
     }
 
-    public Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+    public List<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
         try {
             long workerGroupId = selectWorkerGroupInternal(warehouseId).orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
             ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
