@@ -308,7 +308,7 @@ public class InsertOverwriteJobRunner {
         GlobalStateMgr state = GlobalStateMgr.getCurrentState();
         String targetDb = insertStmt.getTableName().getDb();
         Database db = state.getLocalMetastore().getDb(targetDb);
-        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()),
+        try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(olapTable.getId()),
                 LockType.READ)) {
             addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable, partitionValues);
         } catch (AnalysisException ex) {
@@ -317,7 +317,7 @@ public class InsertOverwriteJobRunner {
         }
         List<Long> sourcePartitionIds = job.getSourcePartitionIds();
         try {
-            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(olapTable.getId()),
+            try (AutoCloseableLock ignore = new AutoCloseableLock(new Locker(), db, Lists.newArrayList(olapTable.getId()),
                     LockType.READ)) {
                 AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
                 analyzer.analyze(context, addPartitionClause);
