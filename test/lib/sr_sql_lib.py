@@ -1789,6 +1789,24 @@ class StarrocksSQLApiLib(object):
             count += 1
         tools.assert_true(load_finished)
 
+    def check_routine_load_state(self, job_name, expect_state, expect_msg_key_words, timeout_sec):
+        times = 0
+        state = ""
+        msg = ""
+        while times < timeout_sec:
+            res = self.show_routine_load(job_name)
+            log.info("show routine load for %s" % job_name)
+            log.info(res)
+            tools.assert_true(res["status"])
+            state = res["result"][0][7]
+            msg = res["result"][0][19]
+            if (expect_state == state) and (expect_msg_key_words in msg):
+                break
+            time.sleep(2)
+            times += 2
+        tools.assert_equal(expect_state, state, "check routine load state error, timeout %s" % timeout_sec)
+        tools.assert_true(expect_msg_key_words in msg, "check routine load msg error, timeout %s" % timeout_sec)
+
     def check_index_progress(self):
         load_finished = False
         count = 0
@@ -1869,9 +1887,9 @@ class StarrocksSQLApiLib(object):
 
         def is_all_finished2():
             sql = f"""select STATE from information_schema.task_runs a
-                join information_schema.materialized_views b 
-                on a.task_name=b.task_name 
-                where b.table_name='{mv_name}' 
+                join information_schema.materialized_views b
+                on a.task_name=b.task_name
+                where b.table_name='{mv_name}'
                     and a.`database`='{current_db}'
             """
             self_print(sql)
@@ -1885,10 +1903,10 @@ class StarrocksSQLApiLib(object):
             return True
 
         def is_all_finished3():
-            show_sql = f"""select STATE from information_schema.task_runs a 
-                join information_schema.materialized_views b 
-                on a.task_name=b.task_name 
-                where b.table_name='{mv_name}' 
+            show_sql = f"""select STATE from information_schema.task_runs a
+                join information_schema.materialized_views b
+                on a.task_name=b.task_name
+                where b.table_name='{mv_name}'
                     and a.`database`='{current_db}'"""
             print(show_sql)
             res = self.execute_sql(show_sql, True)
@@ -1929,7 +1947,7 @@ class StarrocksSQLApiLib(object):
         tools.assert_equal(True, is_all_ok, "wait async materialized view finish error")
 
     def wait_mv_refresh_count(self, db_name, mv_name, expect_count):
-        show_sql = """select count(*) from information_schema.materialized_views 
+        show_sql = """select count(*) from information_schema.materialized_views
             join information_schema.task_runs using(task_name)
             where table_schema='{}' and table_name='{}' and (state = 'SUCCESS' or state = 'MERGED')
         """.format(
@@ -1957,8 +1975,8 @@ class StarrocksSQLApiLib(object):
         wait pipe load finish
         """
         state = ""
-        show_sql = """select state, load_status, last_error 
-            from information_schema.pipes 
+        show_sql = """select state, load_status, last_error
+            from information_schema.pipes
             where database_name='{}' and pipe_name='{}'
         """.format(
             db_name, pipe_name
@@ -2014,7 +2032,7 @@ class StarrocksSQLApiLib(object):
             if plan.find(expect) > 0:
                 return True
         return False
-    
+
     def print_hit_materialized_views(self, query) -> str:
         """
         print all mv_names hit in query
@@ -2483,8 +2501,8 @@ out.append("${{dictMgr.NO_DICT_STRING_COLUMNS.contains(cid)}}")
             with profile as (
                 select unnest as line from (values(1))t(v) join unnest(split(get_query_profile(last_query_id()), "\n"))
             )
-            select regexp_extract(line, ".*- SegmentsReadCount: (?:.*\\()?(\\d+)\\)?", 1) as value 
-            from profile 
+            select regexp_extract(line, ".*- SegmentsReadCount: (?:.*\\()?(\\d+)\\)?", 1) as value
+            from profile
             where line like "%- SegmentsReadCount%"
         """
 
