@@ -65,6 +65,7 @@ public class LakeTableRollupBuilder extends AlterJobV2Builder {
                 baseIndexId, rollupIndexId, baseIndexName, rollupIndexName, mvSchemaVersion,
                 rollupColumns, whereClause, baseSchemaHash, mvSchemaHash,
                 rollupKeysType, rollupShortKeyColumnCount, origStmt, viewDefineSql, isColocateMVIndex);
+        mvJob.setWarehouseId(warehouseId);
 
         for (Partition partition : olapTable.getPartitions()) {
             long partitionId = partition.getId();

@@ -34,6 +34,7 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.ErrorReportException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
@@ -193,8 +194,13 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                 Map<Long, Long> tabletIdMap = this.physicalPartitionIdToBaseRollupTabletIdMap.get(partitionId);
                 for (Tablet rollupTablet : rollupIndex.getTablets()) {
                     long rollupTabletId = rollupTablet.getId();
-                    ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                            .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) rollupTablet);
+                    ComputeNode computeNode = null;
+                    try {
+                        computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                                .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) rollupTablet);
+                    } catch (ErrorReportException e) {
+                        // computeNode is null
+                    }
                     if (computeNode == null) {
                         //todo: fix the error message.
                         throw new AlterCancelException("No alive backend");
@@ -306,8 +312,13 @@ public class LakeRollupJob extends LakeTableSchemaChangeJobBase {
                     AlterReplicaTask.RollupJobV2Params rollupJobV2Params =
                             RollupJobV2.analyzeAndCreateRollupJobV2Params(tbl, rollupSchema, whereClause, db.getFullName());
 
-                    ComputeNode computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                            .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) rollupTablet);
+                    ComputeNode computeNode = null;
+                    try {
+                        computeNode = GlobalStateMgr.getCurrentState().getWarehouseMgr()
+                                .getComputeNodeAssignedToTablet(warehouseId, (LakeTablet) rollupTablet);
+                    } catch (ErrorReportException e) {
+                        // computeNode is null
+                    }
                     if (computeNode == null) {
                         //todo: fix the error message.
                         throw new AlterCancelException("No alive compute node");
