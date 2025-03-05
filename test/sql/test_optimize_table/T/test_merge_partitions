@@ -1,0 +1,9 @@
+-- name: test_merge_partitions
+create table t(k date) partition by date_trunc('day', k) distributed by hash(k);
+insert into t values('2020-01-01'),('2020-02-01'),('2020-02-02');
+select * from t;
+show partitions from t;
+alter table t partition by date_trunc('month',k);
+function: wait_optimize_table_finish()
+show partitions from t;
+select * from t;

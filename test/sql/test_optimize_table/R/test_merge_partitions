@@ -1,0 +1,37 @@
+-- name: test_merge_partitions
+create table t(k date) partition by date_trunc('day', k) distributed by hash(k);
+-- result:
+-- !result
+insert into t values('2020-01-01'),('2020-02-01'),('2020-02-02');
+-- result:
+-- !result
+select * from t;
+-- result:
+2020-01-01
+2020-02-02
+2020-02-01
+-- !result
+show partitions from t;
+-- result:
+[REGEX].*p20200101.*
+.*p20200201.*
+.*p20200202.*
+-- !result
+alter table t partition by date_trunc('month',k);
+-- result:
+-- !result
+function: wait_optimize_table_finish()
+-- result:
+None
+-- !result
+show partitions from t;
+-- result:
+[REGEX].*p202001.*
+.*p202002.*
+-- !result
+select * from t;
+-- result:
+2020-01-01
+2020-02-01
+2020-02-02
+-- !result

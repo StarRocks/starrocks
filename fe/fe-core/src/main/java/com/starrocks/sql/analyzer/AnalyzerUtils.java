@@ -49,8 +49,6 @@ import com.starrocks.authorization.ObjectType;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
-import com.starrocks.catalog.Column;
-import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
 import com.starrocks.catalog.Function;
@@ -89,6 +87,7 @@ import com.starrocks.sql.ast.CTERelation;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.DeleteStmt;
 import com.starrocks.sql.ast.DistributionDesc;
+import com.starrocks.sql.ast.ExpressionPartitionDesc;
 import com.starrocks.sql.ast.FieldReference;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
@@ -1326,18 +1325,10 @@ public class AnalyzerUtils {
         }
     }
 
-    public static PartitionMeasure checkAndGetPartitionMeasure(
-            Map<ColumnId, Column> idToColumn,
-            ExpressionRangePartitionInfo expressionRangePartitionInfo)
+    public static PartitionMeasure checkAndGetPartitionMeasure(Expr expr)
             throws AnalysisException {
         long interval = 1;
         String granularity;
-        List<Expr> partitionExprs = expressionRangePartitionInfo.getPartitionExprs(idToColumn);
-
-        if (partitionExprs.size() != 1) {
-            throw new AnalysisException("automatic partition only support one expression partitionExpr.");
-        }
-        Expr expr = partitionExprs.get(0);
         if (!(expr instanceof FunctionCallExpr)) {
             throw new AnalysisException("automatic partition only support FunctionCallExpr");
         }
@@ -1378,16 +1369,38 @@ public class AnalyzerUtils {
     }
 
     public static AddPartitionClause getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
+                                                                              PartitionDesc partitionDesc,
+                                                                              List<List<String>> partitionValues,
+                                                                              boolean isTemp,
+                                                                              String partitionNamePrefix)
+            throws AnalysisException {
+        if (partitionDesc instanceof ExpressionPartitionDesc) {
+            ExpressionPartitionDesc expressionPartitionDesc = (ExpressionPartitionDesc) partitionDesc;
+            PartitionMeasure measure = checkAndGetPartitionMeasure(expressionPartitionDesc.getExpr());
+            PartitionInfo partitionInfo = olapTable.getPartitionInfo();
+            return getAddPartitionClauseForRangePartition(olapTable, partitionValues, isTemp, partitionNamePrefix, measure,
+                    (ExpressionRangePartitionInfo) partitionInfo);
+        } else {
+            throw new AnalysisException("Unsupported partition type " + partitionDesc.getType());
+        }
+    }
+
+    public static AddPartitionClause getAddPartitionClauseFromPartitionValues(OlapTable olapTable,
                                                                               List<List<String>> partitionValues,
                                                                               boolean isTemp,
                                                                               String partitionNamePrefix)
             throws AnalysisException {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         if (partitionInfo instanceof ExpressionRangePartitionInfo) {
-            PartitionMeasure measure = checkAndGetPartitionMeasure(olapTable.getIdToColumn(),
-                    (ExpressionRangePartitionInfo) partitionInfo);
+            ExpressionRangePartitionInfo expressionRangePartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+            List<Expr> partitionExprs = expressionRangePartitionInfo.getPartitionExprs(olapTable.getIdToColumn());
+            if (partitionExprs.size() != 1) {
+                throw new AnalysisException("automatic partition only support one expression partitionExpr.");
+            }
+            Expr expr = partitionExprs.get(0);
+            PartitionMeasure measure = checkAndGetPartitionMeasure(expr);
             return getAddPartitionClauseForRangePartition(olapTable, partitionValues, isTemp, partitionNamePrefix, measure,
-                    (ExpressionRangePartitionInfo) partitionInfo);
+                    expressionRangePartitionInfo);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             Short replicationNum = olapTable.getTableProperty().getReplicationNum();
             DistributionDesc distributionDesc = olapTable.getDefaultDistributionInfo()
@@ -1570,6 +1583,7 @@ public class AnalyzerUtils {
                     partitionColNames.add(partitionName);
                 }
             } catch (AnalysisException e) {
+                LOG.warn("failed to analyse partition value", e);
                 throw new AnalysisException(String.format("failed to analyse partition value:%s", partitionValue));
             }
         }
