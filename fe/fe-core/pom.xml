@@ -672,11 +672,6 @@ under the License.
             <artifactId>hadoop-client-runtime</artifactId>
         </dependency>
 
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>bundle</artifactId>
-        </dependency>
-
         <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aws -->
         <dependency>
             <groupId>org.apache.hadoop</groupId>
@@ -687,18 +682,6 @@ under the License.
         <dependency>
             <groupId>org.apache.hadoop</groupId>
             <artifactId>hadoop-aliyun</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>org.jdom</groupId>
-                    <artifactId>jdom2</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <!--Fix CVF from hadoop-aliyun-->
-        <dependency>
-            <groupId>org.jdom</groupId>
-            <artifactId>jdom2</artifactId>
-            <version>2.0.6.1</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.qcloud.cos/hadoop-cos -->
