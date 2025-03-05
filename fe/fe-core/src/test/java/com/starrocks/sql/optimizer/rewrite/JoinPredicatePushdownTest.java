@@ -46,7 +46,8 @@ public class JoinPredicatePushdownTest extends PlanTestBase {
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 15: v3 = 18: v6\n" +
-                "  |  other join predicates: ((13: v1 != 16: v4) OR (13: v1 IS NULL)) OR (16: v4 IS NULL), ((14: v2 != 17: v5) OR (14: v2 IS NULL)) OR (17: v5 IS NULL)");
+                "  |  other join predicates: ((13: v1 != 16: v4) OR (13: v1 IS NULL)) " +
+                "OR (16: v4 IS NULL), ((14: v2 != 17: v5) OR (14: v2 IS NULL)) OR (17: v5 IS NULL)");
         PlanTestBase.assertContains(plan, "9:HASH JOIN\n" +
                 "  |  join op: INNER JOIN (BROADCAST)\n" +
                 "  |  colocate: false, reason: \n" +
