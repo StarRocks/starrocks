@@ -46,7 +46,7 @@ public abstract class Warehouse implements Writable {
         return comment;
     }
 
-
+    public abstract long getResumeTime();
 
     public abstract Long getAnyWorkerGroupId();
 
