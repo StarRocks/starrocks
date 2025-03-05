@@ -22,7 +22,6 @@ import com.starrocks.analysis.LimitElement;
 import com.starrocks.analysis.OrderByElement;
 import com.starrocks.common.IdGenerator;
 import com.starrocks.sql.ast.Relation;
-import com.starrocks.sql.ast.SelectRelation;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -100,19 +99,6 @@ public class AnalyzeState {
 
     public Map<Expr, FieldId> getColumnReferences() {
         return columnReferences;
-    }
-
-    public SelectRelation build() {
-        SelectRelation selectRelation = new SelectRelation(
-                outputExpressions, isDistinct,
-                orderScope, orderSourceExpressions,
-                relation, predicate, limit,
-                groupBy, aggregate, groupingSetsList, groupingFunctionCallExprs,
-                orderBy, having,
-                outputAnalytic, orderByAnalytic,
-                columnReferences);
-        selectRelation.setScope(new Scope(RelationId.of(selectRelation), outputScope.getRelationFields()));
-        return selectRelation;
     }
 
     public Scope getOrderScope() {
