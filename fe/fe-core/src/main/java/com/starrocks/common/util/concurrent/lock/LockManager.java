@@ -410,7 +410,6 @@ public class LockManager {
             readerInfo.addProperty("name", waiter.getLocker().getThreadName());
             readerInfo.addProperty("type", waiter.getLockType().toString());
             readerInfo.addProperty("waitTime", nowMs - locker.getLockRequestTimeMs());
-            readerInfo.add("stack", LogUtil.getStackTraceToJsonArray(locker.getLockerThread(), 1));
             waiterArray.add(readerInfo);
         }
         ownerInfo.add("waiter", waiterArray);
