@@ -675,7 +675,6 @@ under the License.
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>bundle</artifactId>
-            <version>${aws-v2-sdk.version}</version>
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/org.apache.hadoop/hadoop-aws -->
@@ -840,7 +839,6 @@ under the License.
             <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-bundle</artifactId>
             <version>${paimon.version}</version>
-<!--            <scope>provided</scope>-->
         </dependency>
 
         <dependency>
