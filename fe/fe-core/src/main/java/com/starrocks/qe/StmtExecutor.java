@@ -1270,24 +1270,13 @@ public class StmtExecutor {
         } else if (isSchedulerExplain) {
             // Do nothing.
         } else if (parsedStmt.isExplain()) {
-            String explainString = buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT,
+            String explainString = buildExplainString(execPlan, parsedStmt, context, ResourceGroupClassifier.QueryType.SELECT,
                     parsedStmt.getExplainLevel());
             if (executeInFe) {
                 explainString = "EXECUTE IN FE\n" + explainString;
             }
             handleExplainStmt(explainString);
             return;
-        }
-
-        // Generate a query plan for query detail
-        // Explaining internal table is very quick, we prefer to use EXPLAIN COSTS
-        // But explaining external table is expensive, may need to access lots of metadata, so have to use EXPLAIN
-        if (context.getQueryDetail() != null) {
-            StatementBase.ExplainLevel level = AnalyzerUtils.hasExternalTables(parsedStmt) ?
-                    StatementBase.ExplainLevel.defaultValue() :
-                    StatementBase.ExplainLevel.parse(Config.query_detail_explain_level);
-            context.getQueryDetail().setExplain(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.SELECT,
-                    level));
         }
 
         List<PlanFragment> fragments = execPlan.getFragments();
@@ -1980,8 +1969,9 @@ public class StmtExecutor {
         context.getState().setEof();
     }
 
-    private String buildExplainString(ExecPlan execPlan, ResourceGroupClassifier.QueryType queryType,
-                                      StatementBase.ExplainLevel explainLevel) {
+    public static String buildExplainString(ExecPlan execPlan, StatementBase parsedStmt, ConnectContext context,
+                                            ResourceGroupClassifier.QueryType queryType,
+                                            StatementBase.ExplainLevel explainLevel) {
         String explainString = "";
         if (parsedStmt.getExplainLevel() == StatementBase.ExplainLevel.VERBOSE) {
             TWorkGroup resourceGroup = CoordinatorPreprocessor.prepareResourceGroup(context, queryType);
@@ -2289,17 +2279,9 @@ public class StmtExecutor {
         } else if (isSchedulerExplain) {
             // Do nothing.
         } else if (stmt.isExplain()) {
-            handleExplainStmt(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT,
+            handleExplainStmt(buildExplainString(execPlan, parsedStmt, context, ResourceGroupClassifier.QueryType.INSERT,
                     parsedStmt.getExplainLevel()));
             return;
-        }
-
-        if (context.getQueryDetail() != null) {
-            StatementBase.ExplainLevel level = AnalyzerUtils.hasExternalTables(parsedStmt) ?
-                    StatementBase.ExplainLevel.defaultValue() :
-                    StatementBase.ExplainLevel.parse(Config.query_detail_explain_level);
-            context.getQueryDetail().setExplain(buildExplainString(execPlan, ResourceGroupClassifier.QueryType.INSERT,
-                    level));
         }
 
         // special handling for delete of non-primary key table, using old handler
