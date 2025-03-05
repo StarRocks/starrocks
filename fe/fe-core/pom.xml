@@ -1019,6 +1019,10 @@ under the License.
             <version>2.3.2</version>
         </dependency>
 
+        <dependency>
+            <groupId>software.amazon.awssdk</groupId>
+            <artifactId>bundle</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
