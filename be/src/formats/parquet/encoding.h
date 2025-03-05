@@ -74,7 +74,8 @@ public:
     // For history reason, decoder don't known how many elements encoded in one page.
     // Caller must assure that no out-of-bounds access.
     // It will return ERROR if caller wants to read out-of-bound data.
-    virtual Status next_batch(size_t count, ColumnContentType content_type, Column* dst) = 0;
+    virtual Status next_batch(size_t count, ColumnContentType content_type, Column* dst,
+                              const FilterData* filter = nullptr) = 0;
 
     virtual Status skip(size_t values_to_skip) = 0;
 
