@@ -64,7 +64,7 @@ displayed_sidebar: docs
 
 :::
 
-1. 从 [StarRocks Docker Hub](https://hub.docker.com/r/starrocks/artifacts-ubuntu/tags) 下载 StarRocks Docker 镜像。 您可以根据 Tag 选择特定版本的镜像。
+1. 从 [StarRocks Docker Hub](https://hub.docker.com/u/starrocks?page=1&search=artifacts) 下载 StarRocks Docker 镜像。 您可以根据 Tag 选择特定版本的镜像。
 
    ```Bash
    # 将 <OS> 替换为 centos7 或 ubuntu，
