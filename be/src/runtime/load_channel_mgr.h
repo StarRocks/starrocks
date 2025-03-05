@@ -95,6 +95,12 @@ public:
 
     ThreadPool* async_rpc_pool() { return _async_rpc_pool.get(); }
 
+    std::shared_ptr<LoadChannel> TEST_get_load_channel(UniqueId load_id) {
+        std::lock_guard l(_lock);
+        auto it = _load_channels.find(load_id);
+        return it != _load_channels.end() ? it->second : nullptr;
+    }
+
 private:
     static void* load_channel_clean_bg_worker(void* arg);
 
