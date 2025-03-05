@@ -71,13 +71,13 @@ public class MysqlHandshakePacket extends MysqlPacket {
             .build();
 
     // connection id used in KILL statement.
-    private int connectionId;
-    private byte[] authPluginData;
-    private boolean supportSSL;
+    private final int connectionId;
+    private final byte[] authPluginData;
+    private final boolean supportSSL;
 
     public MysqlHandshakePacket(int connectionId, boolean supportSSL) {
         this.connectionId = connectionId;
-        authPluginData = MysqlPassword.createRandomString(SCRAMBLE_LENGTH);
+        this.authPluginData = MysqlPassword.createRandomString(SCRAMBLE_LENGTH);
         this.supportSSL = supportSSL;
     }
 
@@ -127,7 +127,7 @@ public class MysqlHandshakePacket extends MysqlPacket {
     }
 
     public static boolean checkAuthPluginSameAsStarRocks(String pluginName) {
-        return SUPPORTED_PLUGINS.containsKey(pluginName) && SUPPORTED_PLUGINS.get(pluginName);
+        return SUPPORTED_PLUGINS.containsKey(pluginName) && Boolean.TRUE.equals(SUPPORTED_PLUGINS.get(pluginName));
     }
 
     // If the auth default plugin in client is different from StarRocks
