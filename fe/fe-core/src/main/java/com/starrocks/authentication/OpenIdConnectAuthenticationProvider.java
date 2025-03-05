@@ -58,12 +58,9 @@ public class OpenIdConnectAuthenticationProvider implements AuthenticationProvid
             ByteBuffer authBuffer = ByteBuffer.wrap(authResponse);
             //1 Byte for capability mysql client
             MysqlProto.readInt1(authBuffer);
-            byte[] openIdConnect = MysqlProto.readLenEncodedString(authBuffer);
-
-            JWKSet jwkSet;
-
-            jwkSet = GlobalStateMgr.getCurrentState().getJwkMgr().getJwkSet(jwksUrl);
-            OpenIdConnectVerifier.verify(new String(openIdConnect), user, jwkSet, principalFiled, requireIssuer, requireAudience);
+            byte[] idToken = MysqlProto.readLenEncodedString(authBuffer);
+            JWKSet jwkSet = GlobalStateMgr.getCurrentState().getJwkMgr().getJwkSet(jwksUrl);
+            OpenIdConnectVerifier.verify(new String(idToken), user, jwkSet, principalFiled, requireIssuer, requireAudience);
         } catch (Exception e) {
             throw new AuthenticationException(e.getMessage());
         }

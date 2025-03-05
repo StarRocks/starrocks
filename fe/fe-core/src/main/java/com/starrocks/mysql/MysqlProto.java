@@ -37,12 +37,16 @@ package com.starrocks.mysql;
 import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.OIDCSecurityIntegration;
+import com.starrocks.authentication.OpenIdConnectAuthenticationProvider;
+import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
+import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
-import com.starrocks.common.Pair;
 import com.starrocks.mysql.ssl.SSLContextLoader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -125,17 +129,15 @@ public class MysqlProto {
             return new NegotiateResult(authPacket, NegotiateState.NOT_SUPPORTED_AUTH_MODE);
         }
 
-        // So, User use mysql client or ODBC Driver after 8.0.4 have problem to connect to StarRocks
-        // with password.
-        // So StarRocks support the Protocol::AuthSwitchRequest to tell client to keep the default password plugin
-        // which StarRocks is using now.
-        Pair<Boolean, String> switchPair = shouldSwitchAuthPlugin(authPacket, context);
+        // StarRocks support the Protocol::AuthSwitchRequest to tell client which auth plugin is using
+        String user = authPacket.getUser();
         String authPluginName = authPacket.getPluginName();
-        if (switchPair.first) {
+        String switchAuthPlugin = switchAuthPlugin(user, authPluginName, context);
+        if (switchAuthPlugin != null && !switchAuthPlugin.equals(authPluginName)) {
             // 1. clear the serializer
             serializer.reset();
             // 2. build the auth switch request and send to the client
-            if (switchPair.second.equals(MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT)) {
+            if (switchAuthPlugin.equals(MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT)) {
                 if (GlobalStateMgr.getCurrentState().getAuthenticationMgr().isSupportKerberosAuth()) {
                     try {
                         handshakePacket.buildKrb5AuthRequest(serializer, context.getRemoteIP(), authPacket.getUser());
@@ -150,9 +152,9 @@ public class MysqlProto {
                     return new NegotiateResult(authPacket, NegotiateState.KERBEROS_PLUGIN_NOT_LOADED);
                 }
             } else {
-                handshakePacket.buildAuthSwitchRequest(serializer, switchPair.second);
+                handshakePacket.buildAuthSwitchRequest(serializer, switchAuthPlugin);
             }
-            authPluginName = switchPair.second;
+            authPluginName = switchAuthPlugin;
             channel.sendAndFlush(serializer.toByteBuffer());
             // Server receive auth switch response packet from client.
             ByteBuffer authSwitchResponse = channel.fetchOnePacket();
@@ -195,43 +197,68 @@ public class MysqlProto {
         return new NegotiateResult(authPacket, NegotiateState.OK);
     }
 
-    private static Pair<Boolean, String> shouldSwitchAuthPlugin(MysqlAuthPacket authPacket, ConnectContext context) {
-        // Older version mysql client does not send auth plugin info, like 5.1 version.
-        // So we check if auth plugin name is null and treat as mysql_native_password if is null.
-        String authPluginName = authPacket.getPluginName();
-        if (authPluginName == null) {
-            return Pair.create(false, null);
-        }
-
-        // kerberos
-        if (authPluginName.equals(MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT)) {
-            return Pair.create(true, MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT);
-        }
-
-        // To compatible for mariadb client.
-        // mysql_clear_password cannot be specified in mariadb client, so if the user is a ldap user, switch to mysql_clear_password plugin.
-        if (!authPluginName.equals(MysqlHandshakePacket.CLEAR_PASSWORD_PLUGIN_NAME)
-                && isLDAPUser(authPacket.getUser(), context)) {
-            return Pair.create(true, MysqlHandshakePacket.CLEAR_PASSWORD_PLUGIN_NAME);
-        }
-
-        // Starting with MySQL 8.0.4, MySQL changed the default authentication plugin for MySQL client
-        // from mysql_native_password to caching_sha2_password.
-        // ref: https://mysqlserverteam.com/mysql-8-0-4-new-default-authentication-plugin-caching_sha2_password/
-        // But caching_sha2_password is not supported in starrocks. So switch to mysql_native_password.
-        if (!MysqlHandshakePacket.checkAuthPluginSameAsStarRocks(authPluginName)) {
-            return Pair.create(true, MysqlHandshakePacket.NATIVE_AUTH_PLUGIN_NAME);
-        }
-
-        return Pair.create(false, null);
-    }
-
-    private static boolean isLDAPUser(String user, ConnectContext context) {
+    private static String switchAuthPlugin(String user, String authPluginName, ConnectContext context) {
         Map.Entry<UserIdentity, UserAuthenticationInfo> localUser = context.getGlobalStateMgr().getAuthenticationMgr()
                 .getBestMatchedUserIdentity(user, context.getMysqlChannel().getRemoteIp());
-        // If the user can not be found in local, and there is more than 1 auth type in authentication_chain.
-        // It is speculated that the user may be a ldap user.
-        return localUser == null && Config.authentication_chain.length > 1;
+        if (localUser != null) {
+            // Older version mysql client does not send auth plugin info, like 5.1 version.
+            if (authPluginName == null) {
+                return null;
+            }
+
+            // kerberos
+            if (authPluginName.equals(MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT)) {
+                return MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT;
+            }
+
+            UserAuthenticationInfo authInfo = localUser.getValue();
+            if (authInfo.getAuthPlugin().equalsIgnoreCase(OpenIdConnectAuthenticationProvider.PLUGIN_NAME)) {
+                return MysqlHandshakePacket.AUTHENTICATION_OPENID_CONNECT_CLIENT;
+            }
+
+            // Starting with MySQL 8.0.4, MySQL changed the default authentication plugin for MySQL client
+            // from mysql_native_password to caching_sha2_password.
+            // ref: https://mysqlserverteam.com/mysql-8-0-4-new-default-authentication-plugin-caching_sha2_password/
+            // But caching_sha2_password is not supported in starrocks. So switch to mysql_native_password.
+            if (!MysqlHandshakePacket.checkAuthPluginSameAsStarRocks(authPluginName)) {
+                return MysqlHandshakePacket.NATIVE_AUTH_PLUGIN_NAME;
+            }
+
+            return null;
+        } else {
+            String[] authChain = Config.authentication_chain;
+
+            AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+            String securityType = null;
+            for (String authMechanism : authChain) {
+                if (authMechanism.equals(ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
+                    continue;
+                }
+
+                SecurityIntegration securityIntegration = authenticationMgr.getSecurityIntegration(authMechanism);
+                if (securityIntegration == null) {
+                    continue;
+                }
+
+                if (securityType == null) {
+                    securityType = securityIntegration.getType();
+                } else if (!securityType.equalsIgnoreCase(securityIntegration.getType())) {
+                    // There are multiple different types of security integration,
+                    // abandon switch authPlugin and use the type specified by the client.
+                    return null;
+                }
+            }
+
+            if (securityType == null) {
+                return null;
+            }
+
+            if (securityType.equalsIgnoreCase(OIDCSecurityIntegration.TYPE)) {
+                return MysqlHandshakePacket.AUTHENTICATION_OPENID_CONNECT_CLIENT;
+            }
+        }
+
+        return null;
     }
 
     private static MysqlAuthPacket readAuthPacket(ConnectContext context) throws IOException {
