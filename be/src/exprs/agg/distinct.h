@@ -235,9 +235,7 @@ struct AdaptiveSliceHashSet {
     std::shared_ptr<SliceTwoLevelHashSetWithAggStateAllocator> two_level_set;
     int64_t distinct_size = 0;
 
-    HashOnSliceWithHash hash_function() const {
-        return HashOnSliceWithHash();
-    }
+    HashOnSliceWithHash hash_function() const { return HashOnSliceWithHash(); }
 };
 
 template <LogicalType LT, LogicalType SumLT>
