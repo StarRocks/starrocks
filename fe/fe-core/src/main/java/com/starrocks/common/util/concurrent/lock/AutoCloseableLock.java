@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package com.starrocks.common.util.concurrent.lock;
 
 import com.starrocks.catalog.Database;
@@ -23,6 +24,16 @@ public class AutoCloseableLock implements AutoCloseable {
     private final Database database;
     private final List<Long> tableList;
     private final LockType lockType;
+
+
+    public AutoCloseableLock(Database database, List<Long> tableList, LockType lockType) {
+        this.locker = new Locker();
+        this.database = database;
+        this.tableList = new ArrayList<>(tableList);
+        this.lockType = lockType;
+
+        locker.lockTablesWithIntensiveDbLock(database, tableList, lockType);
+    }
 
     public AutoCloseableLock(Locker locker, Database database, List<Long> tableList, LockType lockType) {
         this.locker = locker;
