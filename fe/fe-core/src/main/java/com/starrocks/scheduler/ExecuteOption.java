@@ -43,8 +43,8 @@ public class ExecuteOption {
     @SerializedName("isReplay")
     private boolean isReplay = false;
 
-    public ExecuteOption(boolean isMergeRedundant) {
-        this.isMergeRedundant = isMergeRedundant;
+    public ExecuteOption(Task task) {
+        this(Constants.TaskRunPriority.LOWEST.value(), task.getSource().isMergeable(), task.getProperties());
     }
 
     public ExecuteOption(int priority, boolean isMergeRedundant, Map<String, String> taskRunProperties) {

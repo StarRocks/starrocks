@@ -294,7 +294,7 @@ public class TaskManager implements MemoryTrackable {
         if (task == null) {
             return new SubmitResult(null, SubmitResult.SubmitStatus.FAILED);
         }
-        ExecuteOption option = new ExecuteOption(task.getSource().isMergeable());
+        ExecuteOption option = new ExecuteOption(task);
         option.setManual(true);
         return executeTask(taskName, option);
     }
@@ -312,7 +312,7 @@ public class TaskManager implements MemoryTrackable {
     }
 
     public SubmitResult executeTaskSync(Task task) {
-        return executeTaskSync(task, new ExecuteOption(task.getSource().isMergeable()));
+        return executeTaskSync(task, new ExecuteOption(task));
     }
 
     public SubmitResult executeTaskSync(Task task, ExecuteOption option) {
@@ -697,7 +697,7 @@ public class TaskManager implements MemoryTrackable {
                     LOG.warn("fail to obtain task name {} because task is null", taskName);
                     return;
                 }
-                ExecuteOption executeOption = new ExecuteOption(task.getSource().isMergeable());
+                ExecuteOption executeOption = new ExecuteOption(task);
                 executeOption.setReplay(true);
                 TaskRun taskRun = TaskRunBuilder
                         .newBuilder(task)
