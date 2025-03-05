@@ -72,4 +72,9 @@ public class DefaultWarehouse extends Warehouse {
     public ProcResult fetchResult() {
         return new BaseProcResult();
     }
+
+    @Override
+    public long getResumeTime() {
+        return -1L;
+    }
 }
