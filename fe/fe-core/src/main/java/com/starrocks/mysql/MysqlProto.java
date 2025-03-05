@@ -35,6 +35,8 @@
 package com.starrocks.mysql;
 
 import com.google.common.base.Strings;
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -236,8 +238,10 @@ public class MysqlProto {
         byte[] randomString =
                 Objects.equals(authPluginName, MysqlHandshakePacket.CLEAR_PASSWORD_PLUGIN_NAME) ?
                         null : handshakePacket.getAuthPluginData();
-        // check authenticate
-        if (!authenticate(context, authPacket.getAuthResponse(), randomString, authPacket.getUser())) {
+        try {
+            AuthenticationHandler.authenticate(context, authPacket.getUser(), context.getMysqlChannel().getRemoteIp(),
+                    authPacket.getAuthResponse(), randomString);
+        } catch (AuthenticationException e) {
             sendResponsePacket(context);
             return new NegotiateResult(authPacket, NegotiateState.AUTHENTICATION_FAILED);
         }
@@ -331,8 +335,11 @@ public class MysqlProto {
         String previousQualifiedUser = context.getQualifiedUser();
         String previousResourceGroup = context.getSessionVariable().getResourceGroup();
         // do authenticate again
-        if (!authenticate(context, changeUserPacket.getAuthResponse(), context.getAuthDataSalt(),
-                changeUserPacket.getUser())) {
+
+        try {
+            AuthenticationHandler.authenticate(context, changeUserPacket.getUser(), context.getMysqlChannel().getRemoteIp(),
+                    changeUserPacket.getAuthResponse(), context.getAuthDataSalt());
+        } catch (AuthenticationException e) {
             LOG.warn("Command `Change user` failed, from [{}] to [{}]. ", previousQualifiedUser,
                     changeUserPacket.getUser());
             sendResponsePacket(context);
@@ -451,21 +458,6 @@ public class MysqlProto {
         return buf;
     }
 
-    public static class NegotiateResult {
-        private final MysqlAuthPacket authPacket;
-        private final NegotiateState state;
-
-        public NegotiateResult(MysqlAuthPacket authPacket, NegotiateState state) {
-            this.authPacket = authPacket;
-            this.state = state;
-        }
-
-        public MysqlAuthPacket getAuthPacket() {
-            return authPacket;
-        }
-
-        public NegotiateState getState() {
-            return state;
-        }
+    public record NegotiateResult(MysqlAuthPacket authPacket, NegotiateState state) {
     }
 }

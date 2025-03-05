@@ -14,7 +14,9 @@
 
 package com.starrocks.service.arrow.flight.sql.auth;
 
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationHandler;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.service.arrow.flight.sql.session.ArrowFlightSqlTokenManager;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.arrow.flight.CallHeaders;
@@ -22,6 +24,8 @@ import org.apache.arrow.flight.CallStatus;
 import org.apache.arrow.flight.auth2.Auth2Constants;
 import org.apache.arrow.flight.auth2.BasicCallHeaderAuthenticator;
 import org.apache.arrow.flight.auth2.CallHeaderAuthenticator;
+
+import java.nio.charset.StandardCharsets;
 
 public class ArrowFlightSqlCredentialValidator implements BasicCallHeaderAuthenticator.CredentialValidator {
 
@@ -33,10 +37,11 @@ public class ArrowFlightSqlCredentialValidator implements BasicCallHeaderAuthent
 
     @Override
     public CallHeaderAuthenticator.AuthResult validate(String username, String password) throws Exception {
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        UserIdentity currentUser =
-                globalStateMgr.getAuthenticationMgr().checkPlainPassword(username, "0.0.0.0", password);
-        if (currentUser == null) {
+        UserIdentity currentUser;
+        try {
+            currentUser = AuthenticationHandler.authenticate(new ConnectContext(), username, "0.0.0.0",
+                    password.getBytes(StandardCharsets.UTF_8), null);
+        } catch (AuthenticationException e) {
             throw CallStatus.UNAUTHENTICATED.withDescription("Access denied for " + username).toRuntimeException();
         }
 

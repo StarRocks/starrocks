@@ -35,8 +35,7 @@ public class AuthenticationProviderFactory {
                             Config.oidc_required_audience))
                     .build();
 
-    private AuthenticationProviderFactory() {
-    }
+    private AuthenticationProviderFactory() {}
 
     public static AuthenticationProvider create(String plugin) throws AuthenticationException {
         if (!PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.containsKey(plugin)) {

@@ -1143,7 +1143,6 @@ under the License.
             <groupId>org.apache.arrow</groupId>
             <artifactId>arrow-jdbc</artifactId>
         </dependency>
-
     </dependencies>
 
     <build>
