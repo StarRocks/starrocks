@@ -103,6 +103,10 @@ public class PartitionsProcDir implements ProcDirInterface {
         this.createTitleNames();
     }
 
+    public PartitionsProcDir(PartitionType partitionType) {
+        this.partitionType = partitionType;
+    }
+
     private void createTitleNames() {
         if (table.isCloudNativeTableOrMaterializedView()) {
             ImmutableList.Builder<String> builder = new ImmutableList.Builder<String>()
