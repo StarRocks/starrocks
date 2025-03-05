@@ -74,6 +74,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 import java.util.zip.Adler32;
 
@@ -124,6 +125,10 @@ public class Database extends MetaObject implements Writable {
 
     // For external database location like hdfs://name_node:9000/user/hive/warehouse/test.db/
     private String location;
+
+    // not realtime usedQuota value to make a fast check for database data and replica quota
+    public volatile AtomicLong usedDataQuotaBytes = new AtomicLong(0);
+    public volatile AtomicLong usedReplicaQuotaBytes = new AtomicLong(0);
 
     public Database() {
         this(0, null);
@@ -211,25 +216,6 @@ public class Database extends MetaObject implements Writable {
 
     public long getReplicaQuota() {
         return replicaQuotaSize;
-    }
-
-    public long getUsedDataQuotaWithLock() {
-        long usedDataQuota = 0;
-        Locker locker = new Locker();
-        locker.lockDatabase(this, LockType.READ);
-        try {
-            for (Table table : this.idToTable.values()) {
-                if (!table.isOlapTableOrMaterializedView()) {
-                    continue;
-                }
-
-                OlapTable olapTable = (OlapTable) table;
-                usedDataQuota = usedDataQuota + olapTable.getDataSize();
-            }
-            return usedDataQuota;
-        } finally {
-            locker.unLockDatabase(this, LockType.READ);
-        }
     }
 
     public boolean registerTableUnlocked(Table table) {

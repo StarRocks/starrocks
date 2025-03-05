@@ -23,6 +23,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
@@ -30,8 +31,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.persist.ImageWriter;
@@ -203,18 +202,7 @@ public class StreamLoadMgr implements MemoryTrackable {
         return streamLoadTask;
     }
 
-    private Table checkMeta(Database db, String tableName) throws UserException {
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            return unprotectedCheckMeta(db, tableName);
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
-        }
-    }
-
-    private Table unprotectedCheckMeta(Database db, String tblName)
-            throws UserException {
+    private Table checkMeta(Database db, String tblName) throws AnalysisException, DdlException {
         if (tblName == null) {
             throw new AnalysisException("Table name must be specified when calling /begin/transaction/ first time");
         }
