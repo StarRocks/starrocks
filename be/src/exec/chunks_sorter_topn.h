@@ -48,7 +48,11 @@ public:
         if (limit <= 65536) {
             return 64;
         }
-        return std::max<size_t>(256, limit / 4096);
+        return 256;
+    }
+
+    static constexpr size_t max_buffered_chunks(size_t rows_to_sort) {
+        return std::max<size_t>(tunning_buffered_chunks(rows_to_sort), rows_to_sort / 4069);
     }
 
     /**
@@ -164,6 +168,7 @@ private:
     const size_t _max_buffered_rows;
     const size_t _max_buffered_bytes;
     const size_t _max_buffered_chunks;
+    size_t _init_buffered_chunks;
     RawChunks _raw_chunks;
     bool _init_merged_segment;
     MergedRuns _merged_runs;
@@ -171,6 +176,24 @@ private:
     const size_t _limit;
     const size_t _offset;
     const TTopNType::type _topn_type;
+
+    int _highest_nozero_pos(size_t val) {
+        if (val == 0) {
+            return 0;
+        }
+        return (sizeof(size_t) * 8) - __builtin_clzll(val) - 1;
+    }
+
+    void _adjust_chunks_capacity(bool inc) {
+        if (inc) {
+            size_t shift = (_highest_nozero_pos(_max_buffered_chunks) - _highest_nozero_pos(_init_buffered_chunks)) / 4;
+            shift = std::max<size_t>(shift, 1);
+            _buffered_chunks_capacity = _buffered_chunks_capacity << shift;
+            _buffered_chunks_capacity = std::min(_buffered_chunks_capacity, _max_buffered_chunks);
+        }
+    }
+
+    size_t _buffered_chunks_capacity;
 
     std::vector<RuntimeFilter*> _runtime_filter;
 
