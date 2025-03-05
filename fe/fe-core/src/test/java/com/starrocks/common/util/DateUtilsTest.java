@@ -39,6 +39,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 
 public class DateUtilsTest {
@@ -88,4 +89,16 @@ public class DateUtilsTest {
             Assert.fail();
         }
     }
+
+    @Test
+    public void testProbeFormat() {
+        try {
+            String datetime = "20250225112345";
+            DateTimeFormatter dateTimeFormatter = DateUtils.probeFormat(datetime);
+            Assert.assertEquals(dateTimeFormatter, DateUtils.DATE_TIME_S_FORMATTER_UNIX);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
 }
