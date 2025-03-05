@@ -128,6 +128,11 @@ public class LocalWarehouse extends Warehouse {
         return cluster;
     }
 
+    @Override
+    public long getResumeTime() {
+        return resumedTime;
+    }
+
     public void dropSelf() throws DdlException {
         deleteWorkerFromStarMgr();
         dropNodeFromSystem();

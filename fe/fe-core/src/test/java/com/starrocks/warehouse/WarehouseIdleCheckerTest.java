@@ -15,6 +15,8 @@
 package com.starrocks.warehouse;
 
 import com.starrocks.common.Config;
+import com.starrocks.epack.warehouse.LocalWarehouse;
+import com.starrocks.epack.warehouse.WarehouseProperty;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import org.junit.Assert;
@@ -26,9 +28,9 @@ public class WarehouseIdleCheckerTest {
     public void getStatus() {
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
         warehouseManager.initDefaultWarehouse();
+        LocalWarehouse warehouse = new LocalWarehouse(1L, "test", 2, new WarehouseProperty(), "");
 
-        warehouseManager.addWarehouse(new DefaultWarehouse(1, "w1"));
-        warehouseManager.addWarehouse(new DefaultWarehouse(2, "w2"));
+        warehouseManager.addWarehouse(warehouse);
 
         WarehouseIdleChecker.increaseRunningSQL(1L);
 
@@ -36,7 +38,7 @@ public class WarehouseIdleCheckerTest {
 
         IdleStatus idleStatus = GlobalStateMgr.getCurrentState().getWarehouseIdleChecker().getIdleStatus();
         Assert.assertFalse(idleStatus.isClusterIdle);
-        Assert.assertEquals(3, idleStatus.warehouses.size());
+        Assert.assertEquals(2, idleStatus.warehouses.size());
         for (int i = 0; i < idleStatus.warehouses.size(); i++) {
             IdleStatus.WarehouseStatus status = idleStatus.warehouses.get(i);
             if (status.id == 1L) {
@@ -45,5 +47,33 @@ public class WarehouseIdleCheckerTest {
                 Assert.assertTrue(status.isIdle);
             }
         }
+    }
+
+    @Test
+    public void testGetStatusResume() throws Exception {
+        Config.warehouse_idle_check_enable = true;
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        warehouseManager.initDefaultWarehouse();
+        LocalWarehouse warehouse = new LocalWarehouse(1L, "test", 2, new WarehouseProperty(), "");
+        warehouseManager.addWarehouse(warehouse);
+
+        long now = System.currentTimeMillis();
+        IdleStatus idleStatus1 = GlobalStateMgr.getCurrentState().getWarehouseIdleChecker().getIdleStatus();
+        Assert.assertTrue(idleStatus1.isClusterIdle);
+        IdleStatus.WarehouseStatus warehouseStatus1 = idleStatus1.warehouses.stream()
+                .filter(w -> w.id == 1).findAny().get();
+        Assert.assertTrue(warehouseStatus1.isIdle);
+        Assert.assertTrue(warehouseStatus1.idleTime >= now);
+
+        final long sleepTimeMs = 2000L;
+        Thread.sleep(sleepTimeMs);
+        warehouse.resumeSelf();
+
+        IdleStatus idleStatus2 = GlobalStateMgr.getCurrentState().getWarehouseIdleChecker().getIdleStatus();
+        Assert.assertTrue(idleStatus2.isClusterIdle);
+        IdleStatus.WarehouseStatus warehouseStatus2 = idleStatus2.warehouses.stream()
+                .filter(w -> w.id == 1).findAny().get();
+        Assert.assertTrue(warehouseStatus2.isIdle);
+        Assert.assertTrue(warehouseStatus2.idleTime >= warehouseStatus1.idleTime + sleepTimeMs);
     }
 }
