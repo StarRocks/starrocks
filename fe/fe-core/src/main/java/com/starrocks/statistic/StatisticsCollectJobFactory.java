@@ -370,7 +370,6 @@ public class StatisticsCollectJobFactory {
                 updatedPartitions == null ? null : Lists.newArrayList(updatedPartitions),
                 columnNames, columnTypes, StatsConstants.AnalyzeType.FULL, job.getScheduleType(), Maps.newHashMap()));
     }
-
     private static void createExternalSampleStatsJob(List<StatisticsCollectJob> allTableJobMap,
                                                      LocalDateTime statisticsUpdateTime,
                                                      ExternalAnalyzeJob job, Database db, Table table,
