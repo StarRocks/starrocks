@@ -43,7 +43,7 @@ do
 done
 ```
 
-## Slow surge of heap memory usage
+## Slow increase of heap memory usage
 
 From v3.3.7 onwards, StarRocks supports printing Memory Usage Tracker logs for tracking memory leak issues. Memory Usage Tracker will regularly record the memory usage of each module.
 
