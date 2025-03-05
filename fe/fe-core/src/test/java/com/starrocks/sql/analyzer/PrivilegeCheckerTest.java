@@ -3603,7 +3603,7 @@ public class PrivilegeCheckerTest {
                 result = null;
                 minTimes = 0;
 
-                starOSAgent.createWorkerGroup(anyString, 1 /* replicaNumber */);
+                starOSAgent.createWorkerGroup(anyString, 1 /* replicaNumber */, null);
                 result = -1L;
                 minTimes = 0;
             }

@@ -43,14 +43,31 @@ public class WarehouseProperty {
     private static final Logger LOG = LogManager.getLogger(WarehouseProperty.class);
 
     public static final String PROPERTY_COMPUTE_REPLICA = "compute_replica";
+    public static final String PROPERTY_REPLICATION_TYPE = "replication_type";
 
     public static final int DEFAULT_REPLICA_NUMBER = 1;
 
     @SerializedName(value = "compute_replica")
     private int computeReplica = DEFAULT_REPLICA_NUMBER;
 
+    public enum ReplicationType {
+        NONE,
+        SYNC,
+        ASYNC,
+    }
+
+    @SerializedName(value = "replication_type")
+    private ReplicationType replicationType = ReplicationType.NONE;
+
     public WarehouseProperty() {
         this.computeReplica = DEFAULT_REPLICA_NUMBER;
+        this.replicationType = ReplicationType.NONE;
+    }
+
+    // deep copy
+    public WarehouseProperty(WarehouseProperty that) {
+        this.computeReplica = that.computeReplica;
+        this.replicationType = that.replicationType;
     }
 
     public void setComputeReplica(int computeReplica) {
@@ -59,6 +76,14 @@ public class WarehouseProperty {
 
     public int getComputeReplica() {
         return computeReplica;
+    }
+
+    public void setReplicationType(ReplicationType type) {
+        this.replicationType = type;
+    }
+
+    public ReplicationType getReplicationType() {
+        return replicationType;
     }
 
     public String toString() {

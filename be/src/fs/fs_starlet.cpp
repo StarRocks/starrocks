@@ -350,11 +350,11 @@ public:
     StatusOr<std::unique_ptr<WritableFile>> new_writable_file(const WritableFileOptions& opts,
                                                               const std::string& path) override {
         ASSIGN_OR_RETURN(auto pair, parse_starlet_uri(path));
-        auto fs_st = get_shard_filesystem(pair.second);
+        staros::starlet::fslib::WriteOptions fslib_opts;
+        auto fs_st = get_shard_filesystem(pair.second, &fslib_opts.replication_options);
         if (!fs_st.ok()) {
             return to_status(fs_st.status());
         }
-        staros::starlet::fslib::WriteOptions fslib_opts;
         fslib_opts.create_missing_parent = true;
         fslib_opts.skip_fill_local_cache = opts.skip_fill_local_cache;
         auto file_st = (*fs_st)->create(pair.first, fslib_opts);
@@ -584,8 +584,16 @@ public:
     }
 
 private:
-    absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> get_shard_filesystem(int64_t shard_id) {
-        return g_worker->get_shard_filesystem(shard_id, _conf);
+    absl::StatusOr<std::shared_ptr<staros::starlet::fslib::FileSystem>> get_shard_filesystem(
+            int64_t shard_id, staros::starlet::fslib::ReplicationOptions* replication_options = nullptr) {
+        auto handle_or = g_worker->get_shard_filesystem(shard_id, _conf);
+        if (!handle_or.ok()) {
+            return handle_or.status();
+        }
+        if (replication_options) {
+            *replication_options = g_worker->get_replication_options(shard_id, (*handle_or).replicas);
+        }
+        return (*handle_or).file_system;
     }
 
 private:

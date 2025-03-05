@@ -28,6 +28,7 @@
 #include "fslib/configuration.h"
 #include "fslib/file_system.h"
 #include "starcache/star_cache.h"
+#include "worker.pb.h"
 
 namespace starrocks {
 
@@ -37,6 +38,11 @@ class CacheKey;
 // TODO: find a better place to put this function
 // Convert absl::Status to starrocks::Status
 Status to_status(const absl::Status& absl_status);
+
+struct FileSystemHandle {
+    std::shared_ptr<staros::starlet::fslib::FileSystem> file_system;
+    std::vector<staros::ReplicaInfoLite> replicas;
+};
 
 class StarOSWorker : public staros::starlet::Worker {
 public:
@@ -68,7 +74,7 @@ public:
     std::vector<ShardInfo> shards() const override;
 
     // `conf`: a k-v map, provides additional information about the filesystem configuration
-    absl::StatusOr<std::shared_ptr<FileSystem>> get_shard_filesystem(ShardId id, const Configuration& conf);
+    absl::StatusOr<FileSystemHandle> get_shard_filesystem(ShardId id, const Configuration& conf);
 
     // retrieve shard info from the worker. Unlike `get_shard_info`, if the shard info is not there in local cache,
     // the worker will try to fetch it back from starmgr.
@@ -78,6 +84,10 @@ public:
     void register_add_shard_listener(add_shard_listener listener) { _add_shard_listener = std::move(listener); }
 
     void set_fs_cache_capacity(int32_t capacity);
+
+    // get shard replica's worker address
+    staros::starlet::fslib::ReplicationOptions get_replication_options(
+            int64_t shard_id, const std::vector<staros::ReplicaInfoLite>& replicas);
 
 private:
     struct ShardInfoDetails {
@@ -116,9 +126,9 @@ private:
     }
     uint64_t get_table_id(const ShardInfo& shared_info);
 
-    absl::StatusOr<std::shared_ptr<FileSystem>> build_filesystem_on_demand(ShardId id, const Configuration& conf);
-    absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<FileSystem>>>
-    build_filesystem_from_shard_info(const ShardInfo& info, const Configuration& conf);
+    absl::StatusOr<FileSystemHandle> build_filesystem_on_demand(ShardId id, const Configuration& conf);
+    absl::StatusOr<std::pair<std::shared_ptr<std::string>, FileSystemHandle>> build_filesystem_from_shard_info(
+            const ShardInfo& info, const Configuration& conf);
     absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<FileSystem>>> new_shared_filesystem(
             std::string_view scheme, const Configuration& conf);
     absl::Status invalidate_fs(const ShardInfo& shard);

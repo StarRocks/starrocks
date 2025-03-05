@@ -208,8 +208,30 @@ absl::Status StarOSWorker::update_worker_info(const staros::starlet::WorkerInfo&
     return absl::OkStatus();
 }
 
-absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_filesystem(ShardId id,
-                                                                                      const Configuration& conf) {
+staros::starlet::fslib::ReplicationOptions StarOSWorker::get_replication_options(
+        int64_t shard_id, const std::vector<staros::ReplicaInfoLite>& replicas) {
+    staros::starlet::fslib::ReplicationOptions replication_options;
+    if (!replicas.empty()) {
+        replication_options.service_id = service_id();
+        replication_options.shard_id = shard_id;
+        for (auto& replica : replicas) {
+            if (replica.worker_id() == worker_id()) {
+                continue;
+            }
+            auto replication_info = g_starlet->get_worker_replication_info(replica.worker_id());
+            if (replication_info.ok()) {
+                replication_options.replication_type = (*replication_info).replication_type;
+                replication_options.replicas.push_back((*replication_info).ip_port);
+            } else {
+                LOG_EVERY_N(INFO, 1000) << "get shard " << shard_id << " replica info failed, "
+                                        << replication_info.status();
+            }
+        }
+    }
+    return replication_options;
+}
+
+absl::StatusOr<FileSystemHandle> StarOSWorker::get_shard_filesystem(ShardId id, const Configuration& conf) {
     ShardInfo shard_info;
     { // shared_lock, check if the filesystem already created
         std::shared_lock l(_mtx);
@@ -222,8 +244,12 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
 
         auto fs = lookup_fs_cache(it->second.fs_cache_key);
         if (fs != nullptr) {
-            return fs;
+            FileSystemHandle handle;
+            handle.file_system = fs;
+            handle.replicas = it->second.shard_info.replicas;
+            return handle;
         }
+
         shard_info = it->second.shard_info;
     }
 
@@ -243,7 +269,10 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::get_shard_files
 
         auto fs = lookup_fs_cache(shard_iter->second.fs_cache_key);
         if (fs != nullptr) {
-            return fs;
+            FileSystemHandle handle;
+            handle.file_system = fs;
+            handle.replicas = shard_iter->second.shard_info.replicas;
+            return handle;
         }
 
         shard_iter->second.fs_cache_key = std::move(fs_or->first);
@@ -265,8 +294,7 @@ absl::StatusOr<staros::starlet::ShardInfo> StarOSWorker::_fetch_shard_info_from_
     return g_starlet->get_shard_info(id);
 }
 
-absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesystem_on_demand(ShardId id,
-                                                                                            const Configuration& conf) {
+absl::StatusOr<FileSystemHandle> StarOSWorker::build_filesystem_on_demand(ShardId id, const Configuration& conf) {
     auto info_or = _fetch_shard_info_from_remote(id);
     if (!info_or.ok()) {
         return info_or.status();
@@ -280,7 +308,7 @@ absl::StatusOr<std::shared_ptr<fslib::FileSystem>> StarOSWorker::build_filesyste
     return fs_or->second;
 }
 
-absl::StatusOr<std::pair<std::shared_ptr<std::string>, std::shared_ptr<fslib::FileSystem>>>
+absl::StatusOr<std::pair<std::shared_ptr<std::string>, FileSystemHandle>>
 StarOSWorker::build_filesystem_from_shard_info(const ShardInfo& info, const Configuration& conf) {
     auto localconf = build_conf_from_shard_info(info);
     if (!localconf.ok()) {
@@ -295,7 +323,14 @@ StarOSWorker::build_filesystem_from_shard_info(const ShardInfo& info, const Conf
         // set environ variable to cachefs directory
         setenv(fslib::kFslibCacheDir.c_str(), config::starlet_cache_dir.c_str(), 0 /*overwrite*/);
     }
-    return new_shared_filesystem(*scheme, *localconf);
+    auto file_system = new_shared_filesystem(*scheme, *localconf);
+    if (!file_system.ok()) {
+        return file_system.status();
+    }
+    FileSystemHandle handle;
+    handle.file_system = (*file_system).second;
+    handle.replicas = info.replicas;
+    return std::make_pair(std::move(file_system->first), handle);
 }
 
 bool StarOSWorker::need_enable_cache(const ShardInfo& info) {

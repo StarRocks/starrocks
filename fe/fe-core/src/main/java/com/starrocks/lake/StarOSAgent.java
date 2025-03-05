@@ -759,6 +759,18 @@ public class StarOSAgent {
         }
     }
 
+    private ReplicationType convertStringToReplicationType(String replicationTypeStr) throws DdlException {
+        if (replicationTypeStr == null || replicationTypeStr.equalsIgnoreCase("NONE")) {
+            return ReplicationType.NO_REPLICATION;
+        } else if (replicationTypeStr.equalsIgnoreCase("SYNC")) {
+            return ReplicationType.SYNC;
+        } else if (replicationTypeStr.equalsIgnoreCase("ASYNC")) {
+            return ReplicationType.ASYNC;
+        } else {
+            throw new DdlException("Unknown replication type " + replicationTypeStr);
+        }
+    }
+
     public long createWorkerGroup(String size, int replicaNumber, String replicationTypeStr) throws DdlException {
         prepare();
 
@@ -768,16 +780,7 @@ public class StarOSAgent {
         String owner = "Starrocks";
         WorkerGroupDetailInfo result = null;
         try {
-            ReplicationType replicationType = ReplicationType.NO_REPLICATION;
-            if (replicationTypeStr == null || replicationTypeStr.equalsIgnoreCase("NONE")) {
-                replicationType = ReplicationType.NO_REPLICATION;
-            } else if (replicationTypeStr.equalsIgnoreCase("SYNC")) {
-                replicationType = ReplicationType.SYNC;
-            } else if (replicationTypeStr.equalsIgnoreCase("ASYNC")) {
-                replicationType = ReplicationType.ASYNC;
-            } else {
-                throw new DdlException("Unknown replication type " + replicationTypeStr);
-            }
+            ReplicationType replicationType = convertStringToReplicationType(replicationTypeStr);
             result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(),
                     Collections.emptyMap(), replicaNumber, replicationType);
         } catch (StarClientException e) {
@@ -791,16 +794,7 @@ public class StarOSAgent {
             throws DdlException {
         prepare();
         try {
-            ReplicationType replicationType = ReplicationType.NO_REPLICATION;
-            if (replicationTypeStr == null || replicationTypeStr.equalsIgnoreCase("NONE")) {
-                replicationType = ReplicationType.NO_REPLICATION;
-            } else if (replicationTypeStr.equalsIgnoreCase("SYNC")) {
-                replicationType = ReplicationType.SYNC;
-            } else if (replicationTypeStr.equalsIgnoreCase("ASYNC")) {
-                replicationType = ReplicationType.ASYNC;
-            } else {
-                throw new DdlException("Unknown replication type " + replicationTypeStr);
-            }
+            ReplicationType replicationType = convertStringToReplicationType(replicationTypeStr);
             client.updateWorkerGroup(serviceId, workerGroupId, null, null, replicaNumber, replicationType);
         } catch (StarClientException e) {
             LOG.warn("Failed to update worker group. error: {}", e.getMessage());

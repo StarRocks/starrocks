@@ -193,6 +193,19 @@ public class WarehouseManagerEPack extends WarehouseManager {
         return warehouse.getAnyAvailableCluster().getNextComputeNodeHostId();
     }
 
+    private WarehouseProperty.ReplicationType convertStringToReplicationType(String replicationType)
+            throws DdlException {
+        if (replicationType.equalsIgnoreCase(WarehouseProperty.ReplicationType.SYNC.toString())) {
+            return WarehouseProperty.ReplicationType.SYNC;
+        } else if (replicationType.equalsIgnoreCase(WarehouseProperty.ReplicationType.ASYNC.toString())) {
+            return WarehouseProperty.ReplicationType.ASYNC;
+        } else if (replicationType.equalsIgnoreCase(WarehouseProperty.ReplicationType.NONE.toString())) {
+            return WarehouseProperty.ReplicationType.NONE;
+        } else {
+            throw new DdlException("warehouse replication type can only be SYNC or ASYNC or NONE");
+        }
+    }
+
     @Override
     public void createWarehouse(CreateWarehouseStmt stmt) throws DdlException {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
@@ -222,6 +235,10 @@ public class WarehouseManagerEPack extends WarehouseManager {
                             Config.lake_warehouse_max_compute_replica);
                 }
                 warehouseProperty.setComputeReplica(computeReplica);
+
+                String replicationType = properties.getOrDefault(WarehouseProperty.PROPERTY_REPLICATION_TYPE,
+                        WarehouseProperty.ReplicationType.NONE.toString());
+                warehouseProperty.setReplicationType(convertStringToReplicationType(replicationType));
             }
 
             long id = GlobalStateMgr.getCurrentState().getNextId();
@@ -232,7 +249,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
             for (Cluster cluster : wh.getClusters().values()) {
                 try {
                     StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
-                    cluster.setWorkerGroupId(starOSAgent.createWorkerGroup("x0", warehouseProperty.getComputeReplica(), null));
+                    cluster.setWorkerGroupId(starOSAgent.createWorkerGroup("x0", warehouseProperty.getComputeReplica(),
+                                             warehouseProperty.getReplicationType().toString()));
                 } catch (DdlException e) {
                     LOG.warn(e);
                     throw new DdlException("create warehouse " + wh.getName() + " failed, reason: " + e);
@@ -363,7 +381,8 @@ public class WarehouseManagerEPack extends WarehouseManager {
             if (properties == null || properties.isEmpty()) {
                 return;
             }
-            WarehouseProperty warehouseProperty = new WarehouseProperty();
+            LocalWarehouse warehouse = (LocalWarehouse) nameToWh.get(warehouseName);
+            WarehouseProperty warehouseProperty = new WarehouseProperty(warehouse.getProperty());
             if (properties.get(WarehouseProperty.PROPERTY_COMPUTE_REPLICA) != null) {
                 int computeReplica = Integer.parseInt(properties.get(WarehouseProperty.PROPERTY_COMPUTE_REPLICA));
                 if (computeReplica <= 0) {
@@ -374,25 +393,26 @@ public class WarehouseManagerEPack extends WarehouseManager {
                             Config.lake_warehouse_max_compute_replica);
                 }
                 warehouseProperty.setComputeReplica(computeReplica);
-
-                LocalWarehouse warehouse = (LocalWarehouse) nameToWh.get(warehouseName);
-                // TODO: operation below is not atomic
-                StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
-                for (Cluster cluster : warehouse.getClusters().values()) {
-                    try {
-                        starOSAgent.updateWorkerGroup(cluster.getWorkerGroupId(), warehouseProperty.getComputeReplica(),
-                                null);
-                    } catch (DdlException e) {
-                        LOG.warn(e);
-                        throw new DdlException("alter warehouse " + warehouse.getName() + " failed, reason: " + e);
-                    }
-                }
-                warehouse.setProperty(warehouseProperty);
-                EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-                editLog.logEdit(OperationType.OP_ALTER_WAREHOUSE, warehouse);
-            } else {
-                throw new DdlException("unsupported warehouse property");
             }
+            if (properties.get(WarehouseProperty.PROPERTY_REPLICATION_TYPE) != null) {
+                String replicationType = properties.get(WarehouseProperty.PROPERTY_REPLICATION_TYPE);
+                warehouseProperty.setReplicationType(convertStringToReplicationType(replicationType));
+            }
+
+            // TODO: operation below is not atomic
+            StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+            for (Cluster cluster : warehouse.getClusters().values()) {
+                try {
+                    starOSAgent.updateWorkerGroup(cluster.getWorkerGroupId(), warehouseProperty.getComputeReplica(),
+                            warehouseProperty.getReplicationType().toString());
+                } catch (DdlException e) {
+                    LOG.warn(e);
+                    throw new DdlException("alter warehouse " + warehouse.getName() + " failed, reason: " + e);
+                }
+            }
+            warehouse.setProperty(warehouseProperty);
+            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+            editLog.logEdit(OperationType.OP_ALTER_WAREHOUSE, warehouse);
         }
     }
 

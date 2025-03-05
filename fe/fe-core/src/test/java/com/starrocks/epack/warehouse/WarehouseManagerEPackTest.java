@@ -104,11 +104,21 @@ public class WarehouseManagerEPackTest {
                 return editLog;
             }
         };
-        Map<String, String> m = new HashMap<>();
-        m.put("compute_replica", "3");
-        AlterWarehouseStmt alterStmt = new AlterWarehouseStmt("default_warehouse", m);
-        WarehouseManagerEPack mgr = new WarehouseManagerEPack();
-        mgr.initDefaultWarehouse();
-        mgr.alterWarehouse(alterStmt);
+        {
+            Map<String, String> m = new HashMap<>();
+            m.put("compute_replica", "3");
+            AlterWarehouseStmt alterStmt = new AlterWarehouseStmt("default_warehouse", m);
+            WarehouseManagerEPack mgr = new WarehouseManagerEPack();
+            mgr.initDefaultWarehouse();
+            mgr.alterWarehouse(alterStmt);
+        }
+        {
+            Map<String, String> m = new HashMap<>();
+            m.put("replication_type", "ASYNC");
+            AlterWarehouseStmt alterStmt = new AlterWarehouseStmt("default_warehouse", m);
+            WarehouseManagerEPack mgr = new WarehouseManagerEPack();
+            mgr.initDefaultWarehouse();
+            mgr.alterWarehouse(alterStmt);
+        }
     }
 }

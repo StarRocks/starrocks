@@ -48,7 +48,7 @@ public class StarOSAgentEpack extends StarOSAgent {
         WorkerGroupDetailInfo result = null;
         try {
             result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(),
-                    Collections.emptyMap(), replicaNumber, ReplicationType.NO_REPLICATION);
+                    Collections.emptyMap(), replicaNumber, ReplicationType.NO_SET);
         } catch (StarClientException e) {
             LOG.warn("Failed to create worker group. error: {}", e.getMessage());
             throw new DdlException("Failed to create worker group. error: " + e.getMessage());
