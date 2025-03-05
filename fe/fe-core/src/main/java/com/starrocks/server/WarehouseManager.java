@@ -277,6 +277,17 @@ public class WarehouseManager implements Writable {
         return workerGroupId;
     }
 
+    public long getWarehouseResumeTime(long warehouseId) {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            Warehouse warehouse = idToWh.get(warehouseId);
+            if (warehouse == null) {
+                return -1;
+            } else {
+                return warehouse.getResumeTime();
+            }
+        }
+    }
+
     private Optional<Long> selectWorkerGroupInternal(long warehouseId) {
         Warehouse warehouse = getWarehouse(warehouseId);
         List<Long> ids = warehouse.getWorkerGroupIds();

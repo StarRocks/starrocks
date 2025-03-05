@@ -76,7 +76,16 @@ public class WarehouseIdleChecker extends FrontendDaemon {
             if (runningJobCnt == 0
                     && lastFinishedJobTime <
                         System.currentTimeMillis() - Config.warehouse_idle_check_interval_seconds * 2000) {
-                warehouseIdleTime.putIfAbsent(wId, System.currentTimeMillis());
+                long resumeTime = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseResumeTime(wId);
+                warehouseIdleTime.compute(wId, (k, v) -> {
+                    // If this is the first time to become idle, set idleTime to now.
+                    // If resumed during an idle period, change idleTime to resumeTime.
+                    if (v == null) {
+                        return System.currentTimeMillis();
+                    } else {
+                        return v < resumeTime ? resumeTime : v;
+                    }
+                });
                 LOG.info("warehouse: {} is idle, idle start time: {}",
                         wId, TimeUtils.longToTimeString(warehouseIdleTime.get(wId)));
             } else {
