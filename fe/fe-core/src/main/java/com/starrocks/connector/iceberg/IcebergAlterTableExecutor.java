@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.iceberg;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.analysis.ColumnPosition;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Type;
@@ -625,7 +626,8 @@ public class IcebergAlterTableExecutor extends ConnectorAlterTableExecutor {
     }
 
     // TODO:implement deleteFiles in FsUtils
-    private void deleteFiles(FileSystem fs, List<Path> files) {
+    @VisibleForTesting
+    public static void deleteFiles(FileSystem fs, List<Path> files) {
         files.forEach(file -> {
             try {
                 fs.delete(file, false);
