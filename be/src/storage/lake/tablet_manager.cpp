@@ -214,6 +214,28 @@ StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {
     return tablet;
 }
 
+int64_t TabletManager::get_average_row_size_from_latest_metadata(int64_t tablet_id) {
+    auto metadata = get_latest_cached_tablet_metadata(tablet_id);
+    if (metadata == nullptr) {
+        return 0;
+    }
+    // calc avg row size by rowsets
+    int64_t total_size = 0;
+    int64_t total_rows = 0;
+    // Pick 10 rowsets is enough
+    int rowset_count = 0;
+    for (const auto& rowset : metadata->rowsets()) {
+        if (rowset_count++ >= 10) {
+            break;
+        }
+        // `data_size()` is compressed, so multiply by 3 to get uncompressed size
+        total_size += rowset.data_size() * 3;
+        total_rows += rowset.num_rows();
+    }
+    TEST_SYNC_POINT_CALLBACK("TabletManager::get_average_row_size_from_latest_metadata", &total_size);
+    return total_rows == 0 ? 0 : total_size / total_rows;
+}
+
 Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location) {
     TEST_ERROR_POINT("TabletManager::put_tablet_metadata");
     // write metadata file
