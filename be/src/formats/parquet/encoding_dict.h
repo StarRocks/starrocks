@@ -115,7 +115,7 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
         FixedLengthColumn<T>* data_column /* = nullptr */;
         if (dst->is_nullable()) {
             auto nullable_column = down_cast<NullableColumn*>(dst);
@@ -251,7 +251,7 @@ public:
         return Status::OK();
     }
 
-    Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
         switch (content_type) {
         case DICT_CODE: {
             FixedLengthColumn<int32_t>* data_column;
