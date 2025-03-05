@@ -328,8 +328,18 @@ public enum ErrorCode {
                     "you can set '%s' property to a greater value through ALTER ROUTINE LOAD and RESUME the job"),
     ERR_ROUTINE_LOAD_OFFSET_INVALID(5607, new byte[] {'0', '2', '0', '0', '0'},
             "Consume offset: %d is greater than the latest offset: %d in kafka partition: %d. " +
+<<<<<<< HEAD
             "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job"),
     ERR_INSERT_COLUMN_NAME_MISMATCH(5608, new byte[] {'4', '2', '6', '0', '1'}, "%s column: %s has no matching %s column"),
+=======
+                    "You can modify 'kafka_offsets' property through ALTER ROUTINE LOAD and RESUME the job"),
+    ERR_INSERT_COLUMN_NAME_MISMATCH(5608, new byte[] {'4', '2', '6', '0', '1'},
+            "%s column: %s has no matching %s column"),
+    ERR_FAILED_WHEN_INSERT(5609, new byte[] {'2', '2', '0', '0', '0'}, "Failed when executing INSERT : '%s'"),
+    ERR_LOAD_HAS_FILTERED_DATA(5610, new byte[] {'2', '2', '0', '0', '0'}, "Insert has filtered data : %s"),
+    ERR_LOAD_DATA_PARSE_ERROR(5611, new byte[] {'2', '2', '0', '0', '0'},
+            "%s. Check the 'TrackingSQL' field for detailed information."),
+>>>>>>> b6c7c0914 ([Enhancement] Support to pause routine load job on json parse error (#56062))
 
     /**
      * 5700 - 5799: Partition
