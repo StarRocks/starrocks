@@ -391,9 +391,6 @@ Description: The username for the DB .
 Required: No
 Description: The password for the DB .
 
-</TabItem>
-
-
 The following example creates an Iceberg catalog named iceberg_jdbc as metastore:
 
 ```SQL
