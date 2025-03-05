@@ -302,13 +302,6 @@ public class InsertOverwriteJobRunner {
         }
         List<Long> sourcePartitionIds = job.getSourcePartitionIds();
         try {
-            db.readLock();
-            try {
-                AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(olapTable);
-                analyzer.analyze(context, addPartitionClause);
-            } finally {
-                db.readUnlock();
-            }
             state.addPartitions(db, olapTable.getName(), addPartitionClause);
         } catch (Exception ex) {
             LOG.warn(ex);
