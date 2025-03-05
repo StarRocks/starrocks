@@ -67,6 +67,7 @@
             <groupId>org.apache.paimon</groupId>
             <artifactId>paimon-bundle</artifactId>
             <version>${paimon.version}</version>
+<!--            <scope>provided</scope>-->
         </dependency>
 
         <dependency>
@@ -100,6 +101,7 @@
                         <configuration>
                             <outputDirectory>${project.build.directory}/paimon-reader-lib</outputDirectory>
                             <overWriteIfNewer>true</overWriteIfNewer>
+<!--                            <excludeScope>provided</excludeScope>-->
                         </configuration>
                     </execution>
                 </executions>

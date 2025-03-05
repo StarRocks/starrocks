@@ -33,7 +33,7 @@
         <hikaricp.version>3.4.5</hikaricp.version>
         <compiler-plugin.version>3.8.1</compiler-plugin.version>
         <java-extensions.home>${basedir}</java-extensions.home>
-        <aws-v2-sdk.version>2.23.19</aws-v2-sdk.version>
+        <aws-v2-sdk.version>2.30.31</aws-v2-sdk.version>
         <hadoop.version>3.4.0</hadoop.version>
         <iceberg.version>1.7.1</iceberg.version>
         <log4j2.version>2.23.1</log4j2.version>
@@ -100,6 +100,13 @@
                         <!-- exclude io.netty, use our provided netty version to address CVE issue -->
                         <groupId>io.netty</groupId>
                         <artifactId>netty-transport-native-epoll</artifactId>
+                    </exclusion>
+                        <groupId>dnsjava</groupId>
+                        <artifactId>dnsjava</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>io.netty</groupId>
+                        <artifactId>netty-handler</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>

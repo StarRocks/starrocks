@@ -58,10 +58,11 @@ under the License.
         <sonar.organization>starrocks</sonar.organization>
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
         <odps.version>0.48.7-public</odps.version>
-        <kudu.version>1.17.0</kudu.version>
+        <kudu.version>1.17.1</kudu.version>
         <hikaricp.version>3.4.5</hikaricp.version>
         <kafka-clients.version>3.4.0</kafka-clients.version>
         <io.netty.version>4.1.118.Final</io.netty.version>
+        <aws-v2-sdk.version>2.30.31</aws-v2-sdk.version>
     </properties>
 
     <profiles>
@@ -218,6 +219,12 @@ under the License.
                 <groupId>org.apache.kudu</groupId>
                 <artifactId>kudu-client</artifactId>
                 <version>${kudu.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>io.netty</groupId>
+                        <artifactId>netty-handler</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/com.github.seancfoley/ipaddress -->
@@ -515,6 +522,13 @@ under the License.
                 <version>0.8.13</version>
             </dependency>
 
+            <!-- https://mvnrepository.com/artifact/dnsjava/dnsjava -->
+            <dependency>
+                <groupId>dnsjava</groupId>
+                <artifactId>dnsjava</artifactId>
+                <version>3.6.3</version>
+            </dependency>
+
             <!-- spark -->
             <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-core_2.12 -->
             <dependency>
@@ -801,8 +815,8 @@ under the License.
                 <artifactId>clickhouse-jdbc</artifactId>
                 <version>0.4.6</version>
             </dependency>
-			
-			<!-- https://mvnrepository.com/artifact/com.oracle.database.jdbc/ojdbc10 -->
+
+            <!-- https://mvnrepository.com/artifact/com.oracle.database.jdbc/ojdbc10 -->
             <dependency>
                 <groupId>com.oracle.database.jdbc</groupId>
                 <artifactId>ojdbc10</artifactId>
@@ -849,6 +863,13 @@ under the License.
                 <groupId>io.airlift</groupId>
                 <artifactId>concurrent</artifactId>
                 <version>202</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/io.airlift/aircompressor -->
+            <dependency>
+                <groupId>io.airlift</groupId>
+                <artifactId>aircompressor</artifactId>
+                <version>0.27</version>
             </dependency>
 
             <dependency>
