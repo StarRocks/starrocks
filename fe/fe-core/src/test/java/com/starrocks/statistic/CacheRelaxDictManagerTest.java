@@ -152,17 +152,18 @@ public class CacheRelaxDictManagerTest {
                 "tpch", "part");
         String tableUUID = table.getUUID();
         ConnectorTableColumnKey key = new ConnectorTableColumnKey(tableUUID, "p_mfgr");
+        int size = Config.low_cardinality_threshold / 2;
         new MockUp<StmtExecutor>() {
             @Mock
             public Pair<List<TResultBatch>, Status> executeStmtWithExecPlan(ConnectContext context, ExecPlan plan)
                     throws TException {
-                return new Pair<>(List.of(generateDictResult(100)), new Status(TStatusCode.OK, "ok"));
+                return new Pair<>(List.of(generateDictResult(size)), new Status(TStatusCode.OK, "ok"));
             }
         };
         CompletableFuture<Optional<ColumnDict>> future = dictStatistics.get(key);
         Optional<ColumnDict> optionalColumnDict = future.get();
         Assert.assertFalse(optionalColumnDict.isEmpty());
-        Assert.assertEquals(100, optionalColumnDict.get().getDictSize());
+        Assert.assertEquals(size, optionalColumnDict.get().getDictSize());
         Thread.sleep(2000);
         Assert.assertTrue(dictStatistics.get(key).get().isPresent());
     }
@@ -180,7 +181,8 @@ public class CacheRelaxDictManagerTest {
             @Mock
             public Pair<List<TResultBatch>, Status> executeStmtWithExecPlan(ConnectContext context, ExecPlan plan)
                     throws TException {
-                return new Pair<>(List.of(generateDictResult(1000)), new Status(TStatusCode.OK, "ok"));
+                int size = Config.low_cardinality_threshold + 2;
+                return new Pair<>(List.of(generateDictResult(size)), new Status(TStatusCode.OK, "ok"));
             }
         };
         CompletableFuture<Optional<ColumnDict>> future = dictStatistics.get(key);
@@ -212,11 +214,12 @@ public class CacheRelaxDictManagerTest {
         IRelaxDictManager manager = IRelaxDictManager.getInstance();
         manager.removeGlobalDict(tableUUID, columnName);
         Assert.assertTrue(manager.hasGlobalDict(tableUUID, columnName));
+        int size = Config.low_cardinality_threshold / 2;
         new MockUp<StmtExecutor>() {
             @Mock
             public Pair<List<TResultBatch>, Status> executeStmtWithExecPlan(ConnectContext context, ExecPlan plan)
                     throws TException {
-                return new Pair<>(List.of(generateDictResult(100)), new Status(TStatusCode.OK, "ok"));
+                return new Pair<>(List.of(generateDictResult(size)), new Status(TStatusCode.OK, "ok"));
             }
         };
         int retry = 5;
@@ -227,8 +230,8 @@ public class CacheRelaxDictManagerTest {
         }
         if (manager.getGlobalDict(tableUUID, columnName).isPresent()) {
             ColumnDict columnDict = manager.getGlobalDict(tableUUID, columnName).get();
-            Assert.assertEquals(100, columnDict.getDictSize());
-            TResultBatch resultBatch = generateDictResult(101);
+            Assert.assertEquals(size, columnDict.getDictSize());
+            TResultBatch resultBatch = generateDictResult(size + 1);
 
             TDeserializer deserializer = new TDeserializer(new TCompactProtocol.Factory());
             ByteBuffer buffer = resultBatch.rows.get(0);
@@ -240,12 +243,12 @@ public class CacheRelaxDictManagerTest {
             manager.updateGlobalDict(tableUUID, columnName, Optional.of(sd));
             Optional<ColumnDict> optional = manager.getGlobalDict(tableUUID, columnName);
             Assert.assertTrue(optional.isPresent());
-            Assert.assertEquals(101, optional.get().getDictSize());
+            Assert.assertEquals(size + 1, optional.get().getDictSize());
             TStatisticData nullDict = new TStatisticData();
             manager.updateGlobalDict(tableUUID, columnName, Optional.of(nullDict));
             optional = manager.getGlobalDict(tableUUID, columnName);
             Assert.assertTrue(optional.isPresent());
-            Assert.assertEquals(101, optional.get().getDictSize());
+            Assert.assertEquals(size + 1, optional.get().getDictSize());
             Assert.assertEquals(1,
                     ((CacheRelaxDictManager) manager).estimateCount().get("ExternalTableColumnDict").intValue());
             Assert.assertEquals(1, ((CacheRelaxDictManager) manager).getSamples().get(0).first.size());

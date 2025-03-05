@@ -49,7 +49,7 @@ select count(*) from tpch_customer_null where c_mktsegment is not null;
 -- result:
 24
 -- !result
-select dict_merge(c_mktsegment) from tpch_customer_null;
+select dict_merge(c_mktsegment, 255) from tpch_customer_null;
 -- result:
 {"2":{"lst":["str",4,"QVVUT01PQklMRQ","QlVJTERJTkc","RlVSTklUVVJF","TUFDSElORVJZ"]},"3":{"lst":["i32",4,1,2,3,4]}}
 -- !result

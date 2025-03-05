@@ -171,7 +171,7 @@ StatusOr<ColumnReaderPtr> ColumnReaderFactory::create(ColumnReaderPtr ori_reader
         }
         if (raw_reader->column_all_pages_dict_encoded()) {
             return std::make_unique<LowCardColumnReader>(*raw_reader, dict, slot_id);
-        } else if (num_rows <= DICT_DECODE_MAX_SIZE) {
+        } else if (num_rows <= dict->size()) {
             return std::make_unique<LowRowsColumnReader>(*raw_reader, dict, slot_id);
         } else {
             return Status::GlobalDictNotMatch(
