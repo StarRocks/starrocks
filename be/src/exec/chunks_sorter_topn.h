@@ -78,7 +78,7 @@ public:
 
     size_t get_output_rows() const override;
 
-    int64_t mem_usage() const override { return _raw_chunks.mem_usage() + _merged_runs.mem_usage(); }
+    int64_t mem_usage() const override { return _raw_chunks.mem_usage + _merged_runs.mem_usage(); }
 
     void setup_runtime(RuntimeState* state, RuntimeProfile* profile, MemTracker* parent_mem_tracker) override;
 
@@ -151,18 +151,14 @@ private:
     struct RawChunks {
         std::vector<ChunkPtr> chunks;
         size_t size_of_rows = 0;
+        size_t mem_usage = 0;
 
-        int64_t mem_usage() const {
-            int64_t usage = 0;
-            for (auto& chunk : chunks) {
-                usage += chunk->memory_usage();
-            }
-            return usage;
-        }
+        void update_mem_usage(size_t delta) { mem_usage += delta; }
 
         void clear() {
             chunks.clear();
             size_of_rows = 0;
+            mem_usage = 0;
         }
     };
     const size_t _max_buffered_rows;

@@ -88,6 +88,7 @@ Status ChunksSorterTopn::update(RuntimeState* state, const ChunkPtr& chunk) {
     }
     auto& raw_chunks = _raw_chunks.chunks;
     size_t chunk_number = raw_chunks.size();
+    size_t prev_chunk_memusage = 0;
     if (chunk_number <= 0) {
         raw_chunks.push_back(chunk);
         chunk_number++;
@@ -95,16 +96,18 @@ Status ChunksSorterTopn::update(RuntimeState* state, const ChunkPtr& chunk) {
         raw_chunks.push_back(chunk);
         chunk_number++;
     } else {
+        prev_chunk_memusage = raw_chunks[chunk_number - 1]->memory_usage();
         // Old planner will not remove duplicated sort column.
         // columns in chunk may have same column ptr
         // append_safe will check size of all columns in dest chunk
         // to ensure same column will not apppend repeatedly.
         raw_chunks[chunk_number - 1]->append_safe(*chunk);
     }
+    _raw_chunks.update_mem_usage(raw_chunks[chunk_number - 1]->memory_usage() - prev_chunk_memusage);
     _raw_chunks.size_of_rows += chunk->num_rows();
 
     // Avoid TOPN from using too much memory.
-    bool exceed_mem_limit = _raw_chunks.mem_usage() > _max_buffered_bytes;
+    bool exceed_mem_limit = _raw_chunks.mem_usage > _max_buffered_bytes;
     if (exceed_mem_limit) {
         return _sort_chunks(state);
     }
@@ -116,7 +119,7 @@ Status ChunksSorterTopn::update(RuntimeState* state, const ChunkPtr& chunk) {
     }
 
     // We have accumulated rows_to_sort rows to build merged runs.
-    if (_merged_runs.num_rows() <= rows_to_sort) {
+    if (_merged_runs.num_rows() < rows_to_sort) {
         return _sort_chunks(state);
     }
 
