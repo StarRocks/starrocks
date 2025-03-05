@@ -440,7 +440,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_READ_ICEBERG_EQUALITY_DELETE_WITH_PARTITION_EVOLUTION =
             "enable_read_iceberg_equality_delete_with_partition_evolution";
     public static final String ENABLE_DELTA_LAKE_COLUMN_STATISTICS = "enable_delta_lake_column_statistics";
+
     public static final String ENABLE_QUERY_TRIGGER_ANALYZE = "enable_query_trigger_analyze";
+
+    public static final String ENABLE_PAIMON_COLUMN_STATISTICS = "enable_paimon_column_statistics";
 
     public static final String PLAN_MODE = "plan_mode";
 
@@ -2270,6 +2273,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = ENABLE_QUERY_TRIGGER_ANALYZE)
     private boolean enableQueryTriggerAnalyze = true;
 
+    @VarAttr(name = ENABLE_PAIMON_COLUMN_STATISTICS)
+    private boolean enablePaimonColumnStatistics = false;
+
     @VarAttr(name = PLAN_MODE)
     private String planMode = PlanMode.AUTO.modeName();
 
@@ -2393,6 +2399,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.enableReadIcebergEqDeleteWithPartitionEvolution = enableReadIcebergEqDeleteWithPartitionEvolution;
     }
 
+    public boolean enablePaimonColumnStatistics() {
+        return enablePaimonColumnStatistics;
+    }
+
     public void setEnableDeltaLakeColumnStatistics(boolean enableDeltaLakeColumnStatistics) {
         this.enableDeltaLakeColumnStatistics = enableDeltaLakeColumnStatistics;
     }
@@ -2474,6 +2484,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             return Optional.empty();
         }
         return Optional.of(followerForwardMode.equalsIgnoreCase(FollowerQueryForwardMode.LEADER.toString()));
+    }
+
+    public void setEnablePaimonColumnStatistics(boolean enablePaimonColumnStatistics) {
+        this.enablePaimonColumnStatistics = enablePaimonColumnStatistics;
     }
 
     @VarAttr(name = ENABLE_PIPELINE_LEVEL_SHUFFLE, flag = VariableMgr.INVISIBLE)
