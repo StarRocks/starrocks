@@ -748,6 +748,9 @@ public:
             }
             return new_size;
         } else {
+            if (sel != dst_sel) {
+                memcpy(dst_sel, sel, sel_size * sizeof(uint16_t));
+            }
             return sel_size;
         }
     }
@@ -1358,6 +1361,9 @@ private:
                         new_size += _rf_test_data<multi_partition>(data[idx], multi_partition ? hash_values[idx] : 0);
                     }
                 } else {
+                    if (sel != dst_sel) {
+                        memcpy(dst_sel, sel, sel_size * sizeof(uint16_t));
+                    }
                     new_size = sel_size;
                 }
             }
@@ -1370,6 +1376,9 @@ private:
                     new_size += _rf_test_data<multi_partition>(data[idx], multi_partition ? hash_values[idx] : 0);
                 }
             } else {
+                if (sel != dst_sel) {
+                    memcpy(dst_sel, sel, sel_size * sizeof(uint16_t));
+                }
                 new_size = sel_size;
             }
         }
