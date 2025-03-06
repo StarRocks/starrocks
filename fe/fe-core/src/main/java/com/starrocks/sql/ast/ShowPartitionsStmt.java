@@ -49,6 +49,7 @@ public class ShowPartitionsStmt extends ShowStmt {
             .add(FILTER_REPLICATION_NUM)
             .add(FILTER_LAST_CONSISTENCY_CHECK_TIME).build();
 
+    private TableName tbl;
     private String dbName;
     private final String tableName;
     private final Expr whereClause;
@@ -69,6 +70,7 @@ public class ShowPartitionsStmt extends ShowStmt {
     public ShowPartitionsStmt(TableName tableName, Expr whereClause, List<OrderByElement> orderByElements,
                               LimitElement limitElement, boolean isTempPartition, NodePosition pos) {
         super(pos);
+        this.tbl = tableName;
         this.dbName = tableName.getDb();
         this.tableName = tableName.getTbl();
         this.whereClause = whereClause;
@@ -111,6 +113,10 @@ public class ShowPartitionsStmt extends ShowStmt {
             builder.addColumn(new Column(col, ScalarType.createVarchar(30)));
         }
         return builder.build();
+    }
+
+    public TableName getTbl() {
+        return tbl;
     }
 
     public String getDbName() {

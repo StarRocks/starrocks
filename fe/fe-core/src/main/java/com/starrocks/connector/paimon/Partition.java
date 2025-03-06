@@ -24,9 +24,18 @@ public class Partition implements PartitionInfo {
     private final String partitionName;
     private final long lastUpdateTime;
 
-    public Partition(String name, long lastUpdateTime) {
+    private final Long recordCount;
+    private final Long fileSizeInBytes;
+    private final Long fileCount;
+
+    public Partition(String name, long lastUpdateTime, Long recordCount,
+                     Long fileSizeInBytes, Long fileCount) {
         this.partitionName = name;
         this.lastUpdateTime = lastUpdateTime;
+        this.recordCount = recordCount;
+        this.fileSizeInBytes = fileSizeInBytes;
+        this.fileCount = fileCount;
+
     }
 
     public String getPartitionName() {
@@ -43,11 +52,26 @@ public class Partition implements PartitionInfo {
         return lastUpdateTime;
     }
 
+    public Long getRecordCount() {
+        return recordCount;
+    }
+
+    public Long getFileSizeInBytes() {
+        return fileSizeInBytes;
+    }
+
+    public Long getFileCount() {
+        return fileCount;
+    }
+
     @Override
     public String toString() {
         return "PaimonPartitionInfo{" +
                 "partitionName='" + partitionName + '\'' +
                 ", lastUpdateTime=" + lastUpdateTime +
+                ", recordCount=" + recordCount +
+                ", fileSizeInBytes=" + fileSizeInBytes +
+                ", fileCount=" + fileCount +
                 '}';
     }
 }

@@ -100,8 +100,8 @@ public class PaimonMetadata implements ConnectorMetadata {
     private final Map<Identifier, Table> tables = new ConcurrentHashMap<>();
     private final Map<String, Database> databases = new ConcurrentHashMap<>();
     private final Map<PredicateSearchKey, PaimonSplitsInfo> paimonSplits = new ConcurrentHashMap<>();
-    private final Map<String, Long> partitionInfos = new ConcurrentHashMap<>();
     private final ConnectorProperties properties;
+    private final Map<String, Partition> partitionInfos = new ConcurrentHashMap<>();
 
     public PaimonMetadata(String catalogName, HdfsEnvironment hdfsEnvironment, Catalog paimonNativeCatalog,
                           ConnectorProperties properties) {
@@ -157,35 +157,21 @@ public class PaimonMetadata implements ConnectorMetadata {
             RowType partitionTableRowType = table.rowType();
             DataType lastUpdateTimeType = partitionTableRowType.getTypeAt(partitionTableRowType
                     .getFieldIndex("last_update_time"));
-            int[] projected = new int[] {0, 4};
+            int[] projected = new int[] {0, 1, 2, 3, 4};
             RecordReader<InternalRow> recordReader = table.newReadBuilder().withProjection(projected)
                     .newRead().createReader(table.newScan().plan());
             iterator = new RecordReaderIterator<>(recordReader);
             while (iterator.hasNext()) {
                 InternalRow rowData = iterator.next();
-                String partition = rowData.getString(0).toString();
-                org.apache.paimon.data.Timestamp lastUpdateTime = rowData.getTimestamp(1,
+                String partitionStr = rowData.getString(0).toString();
+                org.apache.paimon.data.Timestamp lastUpdateTime = rowData.getTimestamp(4,
                         DataTypeChecks.getPrecision(lastUpdateTimeType));
-                String[] partitionValues = partition.replace("[", "").replace("]", "")
+                String[] partitionValues = partitionStr.replace("[", "").replace("]", "")
                         .split(",");
-                if (partitionValues.length != partitionColumnNames.size()) {
-                    String errorMsg = String.format("The length of partitionValues %s is not equal to " +
-                            "the partitionColumnNames %s.", partitionValues.length, partitionColumnNames.size());
-                    throw new IllegalArgumentException(errorMsg);
-                }
-                StringBuilder sb = new StringBuilder();
-                for (int i = 0; i < partitionValues.length; i++) {
-                    String column = partitionColumnNames.get(i);
-                    String value = partitionValues[i].trim();
-                    if (partitionColumnTypes.get(i) instanceof DateType) {
-                        value = DateTimeUtils.formatDate(Integer.parseInt(value));
-                    }
-                    sb.append(column).append("=").append(value);
-                    sb.append("/");
-                }
-                sb.deleteCharAt(sb.length() - 1);
-                String partitionName = sb.toString();
-                this.partitionInfos.put(partitionName, lastUpdateTime.getMillisecond());
+                Partition partition =
+                        getPartition(rowData.getLong(1), rowData.getLong(2), rowData.getLong(3),
+                                partitionColumnNames, partitionColumnTypes, partitionValues, lastUpdateTime);
+                this.partitionInfos.put(partition.getPartitionName(), partition);
             }
         } catch (Exception e) {
             LOG.error("Failed to update partition info of paimon table {}.{}.", databaseName, tableName, e);
@@ -200,8 +186,38 @@ public class PaimonMetadata implements ConnectorMetadata {
         }
     }
 
+    private Partition getPartition(Long recordCount,
+                                   Long fileSizeInBytes,
+                                   Long fileCount,
+                                   List<String> partitionColumnNames,
+                                   List<DataType> partitionColumnTypes,
+                                   String[] partitionValues,
+                                   org.apache.paimon.data.Timestamp lastUpdateTime) {
+        if (partitionValues.length != partitionColumnNames.size()) {
+            String errorMsg = String.format("The length of partitionValues %s is not equal to " +
+                    "the partitionColumnNames %s.", partitionValues.length, partitionColumnNames.size());
+            throw new IllegalArgumentException(errorMsg);
+        }
 
-    private Long convertToSystemDefaultTime(Timestamp lastUpdateTime) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < partitionValues.length; i++) {
+            String column = partitionColumnNames.get(i);
+            String value = partitionValues[i].trim();
+            if (partitionColumnTypes.get(i) instanceof DateType) {
+                value = DateTimeUtils.formatDate(Integer.parseInt(value));
+            }
+            sb.append(column).append("=").append(value);
+            sb.append("/");
+        }
+        sb.deleteCharAt(sb.length() - 1);
+        String partitionName = sb.toString();
+
+        return new Partition(partitionName, convertToSystemDefaultTime(lastUpdateTime),
+                recordCount, fileSizeInBytes, fileCount);
+
+    }
+
+    private Long convertToSystemDefaultTime(org.apache.paimon.data.Timestamp lastUpdateTime) {
         LocalDateTime localDateTime = lastUpdateTime.toLocalDateTime();
         ZoneId zoneId = ZoneId.systemDefault();
         ZonedDateTime zonedDateTime = localDateTime.atZone(zoneId);
@@ -563,7 +579,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                 InternalRow rowData = iterator.next();
                 org.apache.paimon.data.Timestamp commitTime = rowData
                         .getTimestamp(0, DataTypeChecks.getPrecision(commitTimeType));
-                if (commitTime.getMillisecond() > lastCommitTime) {
+                if (convertToSystemDefaultTime(commitTime) > lastCommitTime) {
                     lastCommitTime = convertToSystemDefaultTime(commitTime);
                 }
             }
@@ -589,8 +605,10 @@ public class PaimonMetadata implements ConnectorMetadata {
         PaimonTable paimonTable = (PaimonTable) table;
         List<PartitionInfo> result = new ArrayList<>();
         if (table.isUnPartitioned()) {
+
             result.add(new Partition(paimonTable.getCatalogTableName(),
-                    this.getTableUpdateTime(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName())));
+                    this.getTableUpdateTime(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName()), null,
+                    null, null));
             return result;
         }
         for (String partitionName : partitionNames) {
@@ -598,7 +616,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                 this.updatePartitionInfo(paimonTable.getCatalogDBName(), paimonTable.getCatalogTableName());
             }
             if (this.partitionInfos.get(partitionName) != null) {
-                result.add(new Partition(partitionName, this.partitionInfos.get(partitionName)));
+                result.add(this.partitionInfos.get(partitionName));
             } else {
                 LOG.warn("Cannot find the paimon partition info: {}", partitionName);
             }

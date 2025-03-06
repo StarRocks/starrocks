@@ -267,13 +267,19 @@ public class PaimonMetadataTest {
                         new DataField(4, "last_update_time", DataTypes.TIMESTAMP_MILLIS())
                 ));
 
-        GenericRow row1 = new GenericRow(2);
+        GenericRow row1 = new GenericRow(5);
         row1.setField(0, BinaryString.fromString("[2020, 1]"));
-        row1.setField(1, Timestamp.fromLocalDateTime(LocalDateTime.of(2023, 1, 1, 0, 0, 0, 0)));
+        row1.setField(1, 100L);
+        row1.setField(2, 1L);
+        row1.setField(3, 1L);
+        row1.setField(4, Timestamp.fromLocalDateTime(LocalDateTime.of(2023, 1, 1, 0, 0, 0, 0)));
 
-        GenericRow row2 = new GenericRow(2);
+        GenericRow row2 = new GenericRow(5);
         row2.setField(0, BinaryString.fromString("[2020, 2]"));
-        row2.setField(1, Timestamp.fromLocalDateTime(LocalDateTime.of(2023, 2, 1, 0, 0, 0, 0)));
+        row2.setField(1, 100L);
+        row2.setField(2, 1L);
+        row2.setField(3, 1L);
+        row2.setField(4, Timestamp.fromLocalDateTime(LocalDateTime.of(2023, 2, 1, 0, 0, 0, 0)));
         new MockUp<RecordReaderIterator>() {
             private int callCount;
             private final GenericRow[] elements = {row1, row2};
