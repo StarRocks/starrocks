@@ -225,7 +225,9 @@ size_t ChunksSorterTopn::get_output_rows() const {
 }
 
 Status ChunksSorterTopn::_sort_chunks(RuntimeState* state) {
-    COUNTER_UPDATE(_sort_cnt, 1);
+    if (_sort_cnt) {
+        COUNTER_UPDATE(_sort_cnt, 1);
+    }
     // Chunks for this batch.
     DataSegments segments;
 
