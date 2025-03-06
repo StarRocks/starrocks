@@ -273,7 +273,7 @@ GROUP BY
 
 ### Align multiple partition columns
 
-From v3.4.1 onwards, asynchronous materialized views support multi-column partition expressions. You can specify multiple partition columns for the materialized view, and one-to-one map them to the partition columns of the base tables. This enables Lakehouse integration and enhances the reuse of existing StarRocks internal table capabilities, providing a better Lakehouse solution:
+From v3.5.0 onwards, asynchronous materialized views support multi-column partition expressions. You can specify multiple partition columns for the materialized view, and one-to-one map them to the partition columns of the base tables. This enables Lakehouse integration and enhances the reuse of existing StarRocks internal table capabilities, providing a better Lakehouse solution:
 
 - **Simplified user experience**: Simplifies the process of transferring data from Data Lake to StarRocks.
 - **Accelerated query performance**: Reuses native table capabilities such as Colocate Group, Bitmap Index, Bloom Filter Index, Sort Key, and global dictionaries when creating materialized views. Queries directly referencing the base table will benefit from transparent query acceleration through automatic rewrite.
