@@ -1596,17 +1596,7 @@ public class AstToStringBuilder {
             sb.append(")");
             addTableComment(sb, view);
 
-<<<<<<< HEAD
-            sb.append(" AS ").append(view.getInlineViewDef()).append(";");
-=======
-            if (view.isSecurity()) {
-                sb.append(" SECURITY INVOKER");
-            } else {
-                sb.append(" SECURITY NONE");
-            }
-
             sb.append(" AS ").append(view.getInlineViewDefWithoutCredential()).append(";");
->>>>>>> bf0fd0fbec ([BugFix] Fix files() view lost credential (#56606))
             createTableStmt.add(sb.toString());
             return;
         }
