@@ -37,7 +37,11 @@ package com.starrocks.load.routineload;
 import com.starrocks.common.InternalErrorCode;
 
 public class ErrorReason {
+    // InternalErrorCode will be removed in the future. Use ErrorCode.code instead
+    @Deprecated
     private InternalErrorCode code;
+    // The code from ErrorCode.code
+    int errorCode;
     private String msg;
 
     public ErrorReason(InternalErrorCode errCode, String msg) {
@@ -45,8 +49,18 @@ public class ErrorReason {
         this.msg = msg;
     }
 
+    public ErrorReason(int errCode, String msg) {
+        this.errorCode = errCode;
+        this.msg = msg;
+    }
+
+    @Deprecated
     public InternalErrorCode getCode() {
         return code;
+    }
+
+    public int getErrorCode() {
+        return errorCode;
     }
 
     public void setCode(InternalErrorCode code) {
@@ -63,6 +77,10 @@ public class ErrorReason {
 
     @Override
     public String toString() {
-        return "ErrorReason{" + code + ", msg='" + msg + '\'' + '}';
+        return "ErrorReason{" + getErrorCodeString() + ", msg='" + msg + '\'' + '}';
+    }
+
+    private String getErrorCodeString() {
+        return code != null ? code.toString() : "errCode = " + errorCode;
     }
 }
