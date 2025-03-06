@@ -43,8 +43,11 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 public class LakeTableHelper {
     private static final Logger LOG = LogManager.getLogger(LakeTableHelper.class);
@@ -157,7 +160,27 @@ public class LakeTableHelper {
                 ret = false;
             }
         }
+        if (ret) {
+            // try to remove shard group meta (shards meta included)
+            deleteShardGroupMeta(partition);
+        }
         return ret;
+    }
+
+    static void deleteShardGroupMeta(Partition partition)  {
+        // use Set to avoid duplicate shard group id
+        Set<Long> needRemoveShardGroupIdSet = new HashSet<>();
+        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+        Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
+        for (PhysicalPartition subPartition : subPartitions) {
+            long shardGroupId = subPartition.getShardGroupId();
+            needRemoveShardGroupIdSet.add(shardGroupId);
+        }
+        LOG.debug("Try to delete shard group related to partition {}, group ids: {}",
+                partition.getId(), needRemoveShardGroupIdSet);
+        for (Long shardGroupId : needRemoveShardGroupIdSet) {
+            starOSAgent.deleteShardGroup(List.of(shardGroupId));
+        }
     }
 
     public static boolean isSharedPartitionDirectory(PhysicalPartition physicalPartition, long warehouseId)
