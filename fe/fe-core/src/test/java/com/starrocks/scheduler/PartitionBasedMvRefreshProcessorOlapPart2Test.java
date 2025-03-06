@@ -47,6 +47,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_WAREHOUSE;
 import static com.starrocks.scheduler.TaskRun.MV_ID;
 import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
 
@@ -478,9 +479,9 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                                 MvTaskRunContext mvTaskRunContext = processor.getMvContext();
                                 Assert.assertEquals(70, mvTaskRunContext.getExecuteOption().getPriority());
                                 Map<String, String> properties = mvTaskRunContext.getProperties();
-                                System.out.println(properties);
-                                Assert.assertEquals(1, properties.size());
+                                Assert.assertEquals(2, properties.size());
                                 Assert.assertTrue(properties.containsKey(MV_ID));
+                                Assert.assertTrue(properties.containsKey(PROPERTIES_WAREHOUSE));
                                 // Ensure that table properties are not passed to the task run
                                 Assert.assertFalse(properties.containsKey(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM));
 
