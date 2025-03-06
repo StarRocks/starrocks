@@ -242,7 +242,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
         return Status::NotSupported(strings::Substitute("should have eq predicates on all pk columns current: $0 < $1",
                                                         num_pk_eq_predicates, tablet_schema->num_key_columns()));
     }
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column));
     PrimaryKeyEncoder::encode(*tablet_schema->schema(), *keys, 0, keys->num_rows(), pk_column.get());
 

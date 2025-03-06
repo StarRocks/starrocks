@@ -101,7 +101,7 @@ Status BloomFilterIndexIterator::read_bloom_filter(rowid_t ordinal, std::unique_
     RETURN_IF_ERROR(_bloom_filter_iter->next_batch(&num_read, column.get()));
     DCHECK(num_to_read == num_read);
 
-    ColumnViewer<TYPE_VARCHAR> viewer(column);
+    ColumnViewer<TYPE_VARCHAR> viewer(std::move(column));
     auto value = viewer.value(0);
     // construct bloom filter
     RETURN_IF_ERROR(BloomFilter::create(_reader->_algorithm, bf));

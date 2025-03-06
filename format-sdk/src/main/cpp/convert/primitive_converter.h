@@ -68,7 +68,7 @@ public:
         }
     };
 
-    arrow::Status toSrColumn(const std::shared_ptr<arrow::Array> array, std::shared_ptr<Column>& column) override {
+    arrow::Status toSrColumn(const std::shared_ptr<arrow::Array> array, ColumnPtr& column) override {
         if (!column->is_nullable() && array->null_count() > 0) {
             return arrow::Status::Invalid("Column ", column->get_name(),
                                           " is non-nullable, but there are some null data in array.");

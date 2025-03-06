@@ -622,9 +622,9 @@ Status HashJoinNode::_evaluate_build_keys(const ChunkPtr& chunk) {
         const TypeDescriptor& data_type = ctx->root()->type();
         ASSIGN_OR_RETURN(ColumnPtr key_column, ctx->evaluate(chunk.get()));
         if (key_column->only_null()) {
-            ColumnPtr column = ColumnHelper::create_column(data_type, true);
+            MutableColumnPtr column = ColumnHelper::create_column(data_type, true);
             column->append_nulls(num_rows);
-            _key_columns.emplace_back(column);
+            _key_columns.emplace_back(std::move(column));
         } else if (key_column->is_constant()) {
             auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(key_column);
             const_column->data_column()->assign(num_rows, 0);
@@ -678,8 +678,8 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
                                     _pre_left_input_chunk = std::move(_cur_left_input_chunk);
                                 } else {
                                     // TODO: copy the small chunk to big chunk
-                                    Columns& dest_columns = _pre_left_input_chunk->columns();
-                                    Columns& src_columns = _cur_left_input_chunk->columns();
+                                    auto& dest_columns = _pre_left_input_chunk->columns();
+                                    auto& src_columns = _cur_left_input_chunk->columns();
                                     size_t num_rows = _cur_left_input_chunk->num_rows();
                                     // copy the new read chunk to the reserved
                                     for (size_t i = 0; i < dest_columns.size(); i++) {
@@ -701,9 +701,9 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
                     for (auto& probe_expr_ctx : _probe_expr_ctxs) {
                         ASSIGN_OR_RETURN(ColumnPtr column_ptr, probe_expr_ctx->evaluate(_probing_chunk.get()));
                         if (column_ptr->is_nullable() && column_ptr->is_constant()) {
-                            ColumnPtr column = ColumnHelper::create_column(probe_expr_ctx->root()->type(), true);
+                            MutableColumnPtr column = ColumnHelper::create_column(probe_expr_ctx->root()->type(), true);
                             column->append_nulls(_probing_chunk->num_rows());
-                            _key_columns.emplace_back(column);
+                            _key_columns.emplace_back(std::move(column));
                         } else if (column_ptr->is_constant()) {
                             auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(column_ptr);
                             const_column->data_column()->assign(_probing_chunk->num_rows(), 0);

@@ -76,10 +76,10 @@ public:
             }
 
             result.emplace_back(unnested_array_elements);
-            return std::make_pair(result, copy_count_column);
+            return std::make_pair(std::move(result), std::move(copy_count_column));
         } else {
             result.emplace_back(col_array->elements_column());
-            return std::make_pair(result, col_array->offsets_column());
+            return std::make_pair(std::move(result), col_array->offsets_column());
         }
     }
 

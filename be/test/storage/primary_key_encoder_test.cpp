@@ -45,7 +45,7 @@ static unique_ptr<Schema> create_key_schema(const vector<LogicalType>& types) {
 
 TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
     auto sc = create_key_schema({TYPE_INT});
-    unique_ptr<Column> dest;
+    MutableColumnPtr dest;
     PrimaryKeyEncoder::create_column(*sc, &dest);
     const int n = 1000;
     auto pchunk = ChunkHelper::new_chunk(*sc, n);
@@ -66,7 +66,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt32) {
 
 TEST(PrimaryKeyEncoderTest, testEncodeInt128) {
     auto sc = create_key_schema({TYPE_LARGEINT});
-    unique_ptr<Column> dest;
+    MutableColumnPtr dest;
     PrimaryKeyEncoder::create_column(*sc, &dest);
     const int n = 1000;
     auto pchunk = ChunkHelper::new_chunk(*sc, n);
@@ -91,7 +91,7 @@ TEST(PrimaryKeyEncoderTest, testEncodeInt128) {
 
 TEST(PrimaryKeyEncoderTest, testEncodeComposite) {
     auto sc = create_key_schema({TYPE_INT, TYPE_VARCHAR, TYPE_SMALLINT, TYPE_BOOLEAN});
-    unique_ptr<Column> dest;
+    MutableColumnPtr dest;
     PrimaryKeyEncoder::create_column(*sc, &dest);
     const int n = 1;
     auto pchunk = ChunkHelper::new_chunk(*sc, n);

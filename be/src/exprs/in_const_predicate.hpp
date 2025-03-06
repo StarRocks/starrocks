@@ -222,7 +222,7 @@ public:
         }
 
         if (lhs->is_constant()) {
-            return ConstColumn::create(result, size);
+            return ConstColumn::create(std::move(result), size);
         }
         return result;
     }
@@ -238,7 +238,7 @@ public:
 
         uint8_t* null_data = builder.null_column()->get_data().data();
         memset(null_data, 0x0, size);
-        uint8_t* output = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(builder.data_column())->get_data().data();
+        uint8_t* output = ColumnHelper::cast_to_raw<TYPE_BOOLEAN>(builder.data_column().get())->get_data().data();
 
         auto update_row = [&](int row) {
             if (viewer.is_null(row)) {
@@ -426,7 +426,7 @@ private:
 
     in_const_pred_detail::LHashSetType<Type> _hash_set;
     // Ensure the string memory don't early free
-    std::vector<ColumnPtr> _string_values;
+    Columns _string_values;
 };
 
 class VectorizedInConstPredicateGeneric final : public Predicate {
@@ -497,7 +497,7 @@ public:
         if (all_const) {
             dest_size = 1;
         }
-        BooleanColumn::Ptr res = BooleanColumn::create(dest_size, _is_not_in);
+        BooleanColumn::MutablePtr res = BooleanColumn::create(dest_size, _is_not_in);
         NullColumnPtr res_null = NullColumn::create(dest_size, DATUM_NULL);
         auto& res_data = res->get_data();
         auto& res_null_data = res_null->get_data();
@@ -531,7 +531,7 @@ public:
             if (res_null_data[0]) { // return only_null column
                 return ColumnHelper::create_const_null_column(size);
             } else {
-                return ConstColumn::create(res, size);
+                return ConstColumn::create(std::move(res), size);
             }
         } else {
             if (SIMD::count_nonzero(res_null_data) > 0) {

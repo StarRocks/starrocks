@@ -460,7 +460,7 @@ public:
     }
 
     static const uint8_t* deserialize(const uint8_t* buff, StructColumn* column, const int encode_level) {
-        for (const auto& field : column->fields_column()) {
+        for (auto& field : column->fields_column()) {
             buff = serde::ColumnArraySerde::deserialize(buff, field.get(), false, encode_level);
         }
         return buff;

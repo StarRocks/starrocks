@@ -47,8 +47,8 @@ Columns prepare_vector_vector(DecimalTestCaseArray const& test_cases, int lhs_pr
     lhs_column->resize(num_rows);
     rhs_column->resize(num_rows);
 
-    auto lhs_data = &ColumnHelper::cast_to_raw<LhsType>(lhs_column)->get_data().front();
-    auto rhs_data = &ColumnHelper::cast_to_raw<RhsType>(rhs_column)->get_data().front();
+    auto lhs_data = &ColumnHelper::cast_to_raw<LhsType>(lhs_column.get())->get_data().front();
+    auto rhs_data = &ColumnHelper::cast_to_raw<RhsType>(rhs_column.get())->get_data().front();
 
     // front filling
     for (auto i = 0; i < front_fill_size; ++i) {
@@ -72,8 +72,8 @@ Columns prepare_vector_vector(DecimalTestCaseArray const& test_cases, int lhs_pr
     }
     // std::cout << "lhs_column=" << lhs_column->debug_string() << std::endl;
     // std::cout << "rhs_column=" << rhs_column->debug_string() << std::endl;
-    columns.push_back(lhs_column);
-    columns.push_back(rhs_column);
+    columns.push_back(std::move(lhs_column));
+    columns.push_back(std::move(rhs_column));
     return columns;
 }
 
@@ -105,8 +105,8 @@ Columns prepare_const_vector(const DecimalTestCase& test_case, int lhs_precision
     lhs_column->resize(num_rows);
     rhs_column->resize(num_rows);
 
-    auto lhs_data = &ColumnHelper::cast_to_raw<LhsType>(lhs_column)->get_data().front();
-    auto rhs_data = &ColumnHelper::cast_to_raw<RhsType>(rhs_column)->get_data().front();
+    auto lhs_data = &ColumnHelper::cast_to_raw<LhsType>(lhs_column.get())->get_data().front();
+    auto rhs_data = &ColumnHelper::cast_to_raw<RhsType>(rhs_column.get())->get_data().front();
     DecimalV3Cast::from_string<LhsCppType>(&lhs_data[0], lhs_precision, lhs_scale, lhs_datum.c_str(), lhs_datum.size());
 
     // front filling
@@ -121,8 +121,8 @@ Columns prepare_const_vector(const DecimalTestCase& test_case, int lhs_precision
         rhs_data[i] = RhsCppType(0);
     }
     lhs_column->resize(1);
-    columns.push_back(ConstColumn::create(lhs_column, num_rows));
-    columns.push_back(rhs_column);
+    columns.push_back(ConstColumn::create(std::move(lhs_column), num_rows));
+    columns.emplace_back(std::move(rhs_column));
     return columns;
 }
 
@@ -221,11 +221,11 @@ Columns prepare_const_const(const DecimalTestCase& test_case, int lhs_precision,
     auto rhs_column = RhsColumnType::create(rhs_precision, rhs_scale);
     lhs_column->resize(1);
     rhs_column->resize(1);
-    auto lhs_data = &ColumnHelper::cast_to_raw<LhsType>(lhs_column)->get_data().front();
-    auto rhs_data = &ColumnHelper::cast_to_raw<RhsType>(rhs_column)->get_data().front();
+    auto lhs_data = &ColumnHelper::cast_to_raw<LhsType>(lhs_column.get())->get_data().front();
+    auto rhs_data = &ColumnHelper::cast_to_raw<RhsType>(rhs_column.get())->get_data().front();
     DecimalV3Cast::from_string<LhsCppType>(&lhs_data[0], lhs_precision, lhs_scale, lhs_datum.c_str(), lhs_datum.size());
     DecimalV3Cast::from_string<RhsCppType>(&rhs_data[0], rhs_precision, rhs_scale, rhs_datum.c_str(), rhs_datum.size());
-    return Columns{ConstColumn::create(lhs_column, 1), ConstColumn::create(rhs_column, 1)};
+    return Columns{ConstColumn::create(std::move(lhs_column), 1), ConstColumn::create(std::move(rhs_column), 1)};
 }
 
 template <LogicalType Type>
@@ -286,7 +286,7 @@ void test_decimal_binary_functions(DecimalTestCaseArray const& test_cases, Colum
         auto nullable_column = down_cast<NullableColumn*>(result.get());
         decimal_column = (ColumnType*)ColumnHelper::get_data_column(nullable_column);
     } else {
-        decimal_column = ColumnHelper::cast_to_raw<ResultType>(result);
+        decimal_column = ColumnHelper::cast_to_raw<ResultType>(result.get());
     }
     ASSERT_EQ(result_precision, decimal_column->precision());
     ASSERT_EQ(result_scale, decimal_column->scale());
@@ -347,7 +347,7 @@ void test_decimal_binary_functions_with_nullable_columns(DecimalTestCaseArray co
         auto nullable_column = down_cast<NullableColumn*>(result.get());
         decimal_column = (ColumnType*)ColumnHelper::get_data_column(nullable_column);
     } else {
-        decimal_column = ColumnHelper::cast_to_raw<ResultType>(result);
+        decimal_column = ColumnHelper::cast_to_raw<ResultType>(result.get());
     }
     ASSERT_EQ(result_precision, decimal_column->precision());
     ASSERT_EQ(result_scale, decimal_column->scale());
@@ -556,14 +556,14 @@ void test_overflow_report_error(const std::string& lv, const std::string& rv, in
     auto rhs_column = RhsColumnType::create(rhs_precision, rhs_scale);
     lhs_column->resize(1);
     rhs_column->resize(1);
-    auto lhs_data = &ColumnHelper::cast_to_raw<LhsType>(lhs_column)->get_data().front();
-    auto rhs_data = &ColumnHelper::cast_to_raw<RhsType>(rhs_column)->get_data().front();
+    auto lhs_data = &ColumnHelper::cast_to_raw<LhsType>(lhs_column.get())->get_data().front();
+    auto rhs_data = &ColumnHelper::cast_to_raw<RhsType>(rhs_column.get())->get_data().front();
 
     DecimalV3Cast::from_string<LhsCppType>(&lhs_data[0], lhs_precision, lhs_scale, lv.c_str(), lv.size());
     DecimalV3Cast::from_string<RhsCppType>(&rhs_data[0], rhs_precision, rhs_scale, rv.c_str(), rv.size());
 
     using ColumnWiseOp = VectorizedStrictDecimalBinaryFunction<Op, OverflowMode::REPORT_ERROR>;
-    ColumnWiseOp::template evaluate<LhsType, RhsType, ResultType>(lhs_column, rhs_column);
+    ColumnWiseOp::template evaluate<LhsType, RhsType, ResultType>(std::move(lhs_column), std::move(rhs_column));
 }
 
 TEST_F(DecimalBinaryFunctionTest, test_decimal128p30s20_add_decimal128p38s28_eq_decimal128p38s28) {

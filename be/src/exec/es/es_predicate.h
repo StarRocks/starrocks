@@ -39,6 +39,7 @@
 #include <vector>
 
 #include "cctz/time_zone.h"
+#include "column/column.h"
 #include "column/vectorized_fwd.h"
 #include "gen_cpp/Exprs_types.h"
 #include "gen_cpp/Opcodes_types.h"

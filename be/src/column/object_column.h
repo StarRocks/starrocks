@@ -29,8 +29,8 @@
 namespace starrocks {
 
 template <typename T>
-class ObjectColumn : public ColumnFactory<Column, ObjectColumn<T>> {
-    friend class ColumnFactory<Column, ObjectColumn>;
+class ObjectColumn : public CowFactory<ColumnFactory<Column, ObjectColumn<T>>, ObjectColumn<T>> {
+    friend class CowFactory<ColumnFactory<Column, ObjectColumn>, ObjectColumn>;
 
 public:
     using ValueType = T;
@@ -116,11 +116,11 @@ public:
 
     void update_rows(const Column& src, const uint32_t* indexes) override;
 
-    uint32_t serialize(size_t idx, uint8_t* pos) override;
-    uint32_t serialize_default(uint8_t* pos) override;
+    uint32_t serialize(size_t idx, uint8_t* pos) const override;
+    uint32_t serialize_default(uint8_t* pos) const override;
 
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                         uint32_t max_one_row_size) override;
+                         uint32_t max_one_row_size) const override;
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
@@ -130,11 +130,9 @@ public:
 
     uint32_t serialize_size(size_t idx) const override;
 
-    MutableColumnPtr clone_empty() const override { return this->create_mutable(); }
+    MutableColumnPtr clone_empty() const override { return this->create(); }
 
     MutableColumnPtr clone() const override;
-
-    ColumnPtr clone_shared() const override;
 
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 

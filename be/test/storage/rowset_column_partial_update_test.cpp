@@ -825,7 +825,7 @@ TEST_P(RowsetColumnPartialUpdateTest, test_get_column_values) {
             rowids_by_rssid[9].push_back(rowid);
         }
         auto read_column_schema = ChunkHelper::convert_schema(tablet->tablet_schema(), column_ids);
-        vector<std::unique_ptr<Column>> columns(column_ids.size());
+        vector<MutableColumnPtr> columns(column_ids.size());
         for (int colid = 0; colid < column_ids.size(); colid++) {
             auto column = ChunkHelper::column_from_field(*read_column_schema.field(colid).get());
             columns[colid] = column->clone_empty();

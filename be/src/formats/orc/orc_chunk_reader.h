@@ -126,7 +126,7 @@ public:
     Status lazy_seek_to(uint64_t rowInStripe);
     void lazy_filter_on_cvb(Filter* filter);
     StatusOr<ChunkPtr> get_lazy_chunk();
-    StatusOr<ColumnPtr> get_row_delete_filter(const SkipRowsContextPtr& skip_rows_ctx);
+    StatusOr<MutableColumnPtr> get_row_delete_filter(const SkipRowsContextPtr& skip_rows_ctx);
     size_t get_row_delete_number(const SkipRowsContextPtr& skip_rows_ctx);
 
     bool is_implicit_castable(TypeDescriptor& starrocks_type, const TypeDescriptor& orc_type);

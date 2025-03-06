@@ -110,7 +110,7 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
     jit_columns.reserve(_children.size() + 1);
     Columns args;
     args.reserve(_children.size() + 1);
-    auto unfold_ptr = [&](const ColumnPtr& column) {
+    auto unfold_ptr = [&jit_columns](const ColumnPtr& column) {
         DCHECK(!column->is_constant());
         auto [un_col, un_col_null] = ColumnHelper::unpack_nullable_column(column);
         auto data_col_ptr = reinterpret_cast<const int8_t*>(un_col->raw_data());
@@ -164,7 +164,7 @@ StatusOr<ColumnPtr> JITExpr::evaluate_checked(starrocks::ExprContext* context, C
         backup_args.emplace_back(column);
     }
 
-    unfold_ptr(result_column);
+    unfold_ptr(result_column->as_mutable_ptr());
     // inputs are not empty.
     _jit_function(num_rows, jit_columns.data());
     //TODO: _jit_function return has_null

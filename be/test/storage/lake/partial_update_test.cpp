@@ -139,9 +139,9 @@ public:
             }
             auto c2 = Int32Column::create();
             c2->append_numbers(v2.data(), v2.size() * sizeof(int));
-            return Chunk({c0, c1, c2}, _slot_cid_map);
+            return Chunk({std::move(c0), std::move(c1), std::move(c2)}, _slot_cid_map);
         } else {
-            return Chunk({c0, c1}, _slot_cid_map);
+            return Chunk({std::move(c0), std::move(c1)}, _slot_cid_map);
         }
     }
 
@@ -1182,7 +1182,7 @@ public:
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-        return Chunk({c0, c1}, _slot_cid_map);
+        return Chunk({std::move(c0), std::move(c1)}, _slot_cid_map);
     }
 
 protected:

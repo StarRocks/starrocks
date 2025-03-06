@@ -64,11 +64,6 @@ class DecimalV3Column;
 template <typename T>
 class BinaryColumnBase;
 
-using ColumnPtr = std::shared_ptr<Column>;
-using MutableColumnPtr = std::unique_ptr<Column>;
-using Columns = std::vector<ColumnPtr>;
-using MutableColumns = std::vector<MutableColumnPtr>;
-
 using Int8Column = FixedLengthColumn<int8_t>;
 using UInt8Column = FixedLengthColumn<uint8_t>;
 using BooleanColumn = UInt8Column;

@@ -169,11 +169,11 @@ Status MapColumnWriter::init() {
 
 Status MapColumnWriter::append(const Column& column) {
     const MapColumn* map_column = nullptr;
-    NullColumn* null_column = nullptr;
+    const NullColumn* null_column = nullptr;
     if (is_nullable()) {
         const auto& nullable_column = down_cast<const NullableColumn&>(column);
-        map_column = down_cast<MapColumn*>(nullable_column.data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column.null_column().get());
+        map_column = down_cast<const MapColumn*>(nullable_column.data_column().get());
+        null_column = down_cast<const NullColumn*>(nullable_column.null_column().get());
     } else {
         map_column = down_cast<const MapColumn*>(&column);
     }

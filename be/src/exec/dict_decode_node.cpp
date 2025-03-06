@@ -148,7 +148,7 @@ Status DictDecodeNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos)
 
     Columns decode_columns(_encode_column_cids.size());
     for (size_t i = 0; i < _encode_column_cids.size(); i++) {
-        const ColumnPtr& encode_column = (*chunk)->get_column_by_slot_id(_encode_column_cids[i]);
+        ColumnPtr& encode_column = (*chunk)->get_column_by_slot_id(_encode_column_cids[i]);
         TypeDescriptor desc;
         desc.type = TYPE_VARCHAR;
 

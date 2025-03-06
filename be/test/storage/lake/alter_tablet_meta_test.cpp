@@ -98,7 +98,7 @@ TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index) {
     auto c1 = Int32Column::create();
     c0->append_numbers(k0.data(), k0.size() * sizeof(int));
     c1->append_numbers(v0.data(), v0.size() * sizeof(int));
-    Chunk chunk0({c0, c1}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
     auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
@@ -506,7 +506,7 @@ TEST_F(AlterTabletMetaTest, test_alter_persistent_index_type) {
         auto c1 = Int32Column::create();
         c0->append_numbers(k0.data(), k0.size() * sizeof(int));
         c1->append_numbers(v0.data(), v0.size() * sizeof(int));
-        Chunk chunk0({c0, c1}, _schema);
+        Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
         auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
         ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
         std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;

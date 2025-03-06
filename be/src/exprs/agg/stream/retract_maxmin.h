@@ -254,7 +254,7 @@ public:
         sync_col->append(is_sync);
     }
 
-    void output_detail(FunctionContext* ctx, ConstAggDataPtr __restrict state, const Columns& to,
+    void output_detail(FunctionContext* ctx, ConstAggDataPtr __restrict state, Columns& to,
                        Column* count) const override {
         if constexpr (lt_is_string<LT>) {
             DCHECK((*to[0]).is_binary());

@@ -129,13 +129,13 @@ TEST_F(VectorizedCaseExprTest, whenArrayMapCase) {
     array0->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
     array0->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
     array0->append_datum(DatumArray{Datum(), Datum((int32_t)12)});          // [NULL, 12]
-    auto array_expr0 = MockExpr(type_arr_int, array0);
+    auto array_expr0 = MockExpr(type_arr_int, std::move(array0));
 
     auto array1 = ColumnHelper::create_column(type_arr_int, false);
     array1->append_datum(DatumArray{Datum((int32_t)11), Datum((int32_t)41)}); // [11,41]
     array1->append_datum(DatumArray{Datum(), Datum()});                       // [NULL, NULL]
     array1->append_datum(DatumArray{Datum(), Datum((int32_t)1)});             // [NULL, 1]
-    auto array_expr1 = MockExpr(type_arr_int, array1);
+    auto array_expr1 = MockExpr(type_arr_int, std::move(array1));
 
     TypeDescriptor type_map_int_int = map_type(TYPE_INT, TYPE_INT);
     expr->set_type(type_map_int_int);
@@ -156,7 +156,7 @@ TEST_F(VectorizedCaseExprTest, whenArrayMapCase) {
         // {} empty
         map_column_not_nullable->append_datum(DatumMap());
     }
-    auto map_expr = MockExpr(type_map_int_int, map_column_not_nullable);
+    auto map_expr = MockExpr(type_map_int_int, map_column_not_nullable->clone());
 
     expr->_children.push_back(&array_expr0); // case
     expr->_children.push_back(&array_expr1); // when1

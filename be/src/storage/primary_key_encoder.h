@@ -49,15 +49,15 @@ public:
     //   schema: schema of the table
     //   pcolumn: output column
     //   large_column: some usage may fill the column with more than uint32_max elements, set true to support this
-    static Status create_column(const Schema& schema, std::unique_ptr<Column>* pcolumn, bool large_column = false);
+    static Status create_column(const Schema& schema, MutableColumnPtr* pcolumn, bool large_column = false);
 
     // create suitable column to hold encoded key
     //   schema: schema of the table
     //   pcolumn: output column
     //   key_idxes: indexes of columns for encoding
     //   large_column: some usage may fill the column with more than uint32_max elements, set true to support this
-    static Status create_column(const Schema& schema, std::unique_ptr<Column>* pcolumn,
-                                const std::vector<ColumnId>& key_idxes, bool large_column = false);
+    static Status create_column(const Schema& schema, MutableColumnPtr* pcolumn, const std::vector<ColumnId>& key_idxes,
+                                bool large_column = false);
 
     static void encode(const Schema& schema, const Chunk& chunk, size_t offset, size_t len, Column* dest);
 

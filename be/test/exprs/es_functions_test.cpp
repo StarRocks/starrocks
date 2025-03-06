@@ -41,8 +41,8 @@ TEST_F(EsFunctionsTest, matchTest) {
         auto var2_col = ColumnHelper::create_const_column<TYPE_VARCHAR>(Slice("STRING2"), 1);
 
         Columns columns;
-        columns.emplace_back(var1_col);
-        columns.emplace_back(var2_col);
+        columns.emplace_back(std::move(var1_col));
+        columns.emplace_back(std::move(var2_col));
 
         ColumnPtr result = ESFunctions::match(ctx, columns).value();
 

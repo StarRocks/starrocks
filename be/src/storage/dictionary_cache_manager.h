@@ -362,11 +362,11 @@ public:
     ~DictionaryCacheUtil();
 
     // using primary key encoding function
-    static std::unique_ptr<Column> encode_columns(const Schema& schema, const Chunk* chunk,
-                                                  const DictionaryCacheEncoderType& encoder_type = PK_ENCODE) {
+    static MutableColumnPtr encode_columns(const Schema& schema, const Chunk* chunk,
+                                           const DictionaryCacheEncoderType& encoder_type = PK_ENCODE) {
         switch (encoder_type) {
         case PK_ENCODE: {
-            std::unique_ptr<Column> encoded_columns;
+            MutableColumnPtr encoded_columns;
             if (!PrimaryKeyEncoder::create_column(schema, &encoded_columns).ok()) {
                 std::stringstream ss;
                 ss << "create column for primary key encoder failed";

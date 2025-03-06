@@ -97,7 +97,7 @@ public:
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
         c2->append_numbers(v2.data(), v2.size() * sizeof(int));
 
-        return Chunk({c0, c1, c2}, _schema);
+        return Chunk({std::move(c0), std::move(c1), std::move(c2)}, _schema);
     }
 
     int64_t check(int64_t version, std::function<bool(int c0, int c1, int c2)> check_fn) {

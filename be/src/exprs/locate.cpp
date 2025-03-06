@@ -102,7 +102,7 @@ ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const 
             }
         }
         if (res_null != nullptr) {
-            return NullableColumn::create(res, res_null);
+            return NullableColumn::create(std::move(res), std::move(res_null));
         } else {
             return res;
         }
@@ -147,7 +147,7 @@ ColumnPtr haystack_vector_and_needle_const(const ColumnPtr& haystack_ptr, const 
     }
 
     if (res_null != nullptr) {
-        return NullableColumn::create(res, res_null);
+        return NullableColumn::create(std::move(res), std::move(res_null));
     } else {
         return res;
     }

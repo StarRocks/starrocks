@@ -273,7 +273,7 @@ bool StructColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decode
     return _child_readers[sub_field]->try_to_use_dict_filter(ctx, is_decode_needed, slotId, sub_field_path, layer + 1);
 }
 
-Status StructColumnReader::filter_dict_column(const ColumnPtr& column, Filter* filter,
+Status StructColumnReader::filter_dict_column(ColumnPtr& column, Filter* filter,
                                               const std::vector<std::string>& sub_field_path, const size_t& layer) {
     const std::string& sub_field = sub_field_path[layer];
     StructColumn* struct_column = nullptr;

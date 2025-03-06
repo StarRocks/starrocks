@@ -344,8 +344,8 @@ public:
         auto* dst_column = down_cast<BinaryColumn*>((*dst).get());
 
         if (src[0]->is_nullable()) {
-            auto* src_nullable_column = down_cast<NullableColumn*>(src[0].get());
-            auto* src_column = down_cast<InputColumnType*>(src_nullable_column->data_column().get());
+            auto* src_nullable_column = down_cast<const NullableColumn*>(src[0].get());
+            auto* src_column = down_cast<const InputColumnType*>(src_nullable_column->data_column().get());
 
             ApproxTopKState<LT> state;
             for (size_t i = 0; i < src_nullable_column->size(); ++i) {
@@ -358,7 +358,7 @@ public:
                 serialize_state(state, dst_column);
             }
         } else {
-            auto* src_column = down_cast<InputColumnType*>(src[0].get());
+            auto* src_column = down_cast<const InputColumnType*>(src[0].get());
 
             ApproxTopKState<LT> state;
             for (auto& value : src_column->get_data()) {

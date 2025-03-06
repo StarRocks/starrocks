@@ -162,7 +162,7 @@ public:
                                           size_t min_length = 0) {
         using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
         using PoissonInt = std::poisson_distribution<std::mt19937::result_type>;
-        ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
+        MutableColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
 
         std::random_device dev;
         std::mt19937 rng(dev());

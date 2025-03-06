@@ -44,9 +44,9 @@ TEST(DecimalV3ColumnTest, test_crc32_hash_decimal128p27s9) {
     std::vector<uint32_t> hash0(num_rows, 0);
     col0->crc32_hash(&hash0.front(), 0, num_rows);
 
-    auto col1 = DecimalColumn::create();
-    auto& data0 = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(col0)->get_data();
-    auto& data1 = ColumnHelper::cast_to_raw<TYPE_DECIMALV2>(col1)->get_data();
+    DecimalColumn::Ptr col1 = DecimalColumn::create();
+    auto& data0 = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(col0.get())->get_data();
+    auto& data1 = ColumnHelper::cast_to_raw<TYPE_DECIMALV2>(col1.get())->get_data();
     std::swap((DecimalColumn::Container&)data0, data1);
     std::vector<uint32_t> hash1(num_rows, 0);
     col1->crc32_hash(&hash1.front(), 0, num_rows);
@@ -62,9 +62,9 @@ TEST(DecimalV3ColumnTest, test_crc32_hash_decimal128p27s10) {
     std::vector<uint32_t> hash0(num_rows, 0);
     col0->crc32_hash(&hash0.front(), 0, num_rows);
 
-    auto col1 = Int128Column::create();
-    auto& data0 = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(col0)->get_data();
-    auto& data1 = ColumnHelper::cast_to_raw<TYPE_LARGEINT>(col1)->get_data();
+    Int128Column::Ptr col1 = Int128Column::create();
+    auto& data0 = ColumnHelper::cast_to_raw<TYPE_DECIMAL128>(col0.get())->get_data();
+    auto& data1 = ColumnHelper::cast_to_raw<TYPE_LARGEINT>(col1.get())->get_data();
     std::swap(data0, data1);
     std::vector<uint32_t> hash1(num_rows, 0);
     col1->crc32_hash(&hash1.front(), 0, num_rows);
@@ -80,9 +80,9 @@ TEST(DecimalV3ColumnTest, test_crc32_hash_decimal64p15s6) {
     std::vector<uint32_t> hash0(17, 0);
     col0->crc32_hash(&hash0.front(), 0, num_rows);
 
-    auto col1 = Int64Column::create();
-    auto& data0 = ColumnHelper::cast_to_raw<TYPE_DECIMAL64>(col0)->get_data();
-    auto& data1 = ColumnHelper::cast_to_raw<TYPE_BIGINT>(col1)->get_data();
+    Int64Column::Ptr col1 = Int64Column::create();
+    auto& data0 = ColumnHelper::cast_to_raw<TYPE_DECIMAL64>(col0.get())->get_data();
+    auto& data1 = ColumnHelper::cast_to_raw<TYPE_BIGINT>(col1.get())->get_data();
     std::swap(data0, data1);
     std::vector<uint32_t> hash1(17, 0);
     col1->crc32_hash(&hash1.front(), 0, num_rows);

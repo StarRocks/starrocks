@@ -75,11 +75,11 @@ ColumnPtr create_column(RunTimeCppType<Type> value, size_t front_fill_size, size
         auto data_column = RunTimeColumnType<Type>::create(std::forward<Args>(args)...);
         data_column->reserve(1);
         data_column->append_datum(Datum(value));
-        column = ConstColumn::create(data_column, rows_num);
+        column = ConstColumn::create(std::move(data_column), rows_num);
     } else if constexpr (ColumnPackedType::NULLABLE == PackedType) {
         auto data_column = RunTimeColumnType<Type>::create(std::forward<Args>(args)...);
         auto nulls = NullColumn::create();
-        column = NullableColumn::create(data_column, nulls);
+        column = NullableColumn::create(std::move(data_column), std::move(nulls));
         column->reserve(rows_num);
         column->append_nulls(front_fill_size);
         column->append_datum(Datum(value));

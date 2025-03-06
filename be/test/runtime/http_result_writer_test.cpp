@@ -34,7 +34,7 @@ static ChunkPtr create_chunk(SchemaPtr schema, int col0value, int col1value) {
     auto c1 = Int32Column::create();
     c0->append_numbers(c0v.data(), c0v.size() * sizeof(int));
     c1->append_numbers(c1v.data(), c1v.size() * sizeof(int));
-    auto chunk = std::shared_ptr<Chunk>(new Chunk({c0, c1}, schema));
+    auto chunk = std::shared_ptr<Chunk>(new Chunk({std::move(c0), std::move(c1)}, schema));
     chunk->set_slot_id_to_index(0, 0);
     chunk->set_slot_id_to_index(1, 1);
     return chunk;
@@ -94,7 +94,7 @@ TEST(HttpResultWriterTest, BasicJsonFormat) {
         std::vector<int> c0v{10};
         auto c0 = Int32Column::create();
         c0->append_numbers(c0v.data(), c0v.size() * sizeof(int));
-        auto chunk = std::shared_ptr<Chunk>(new Chunk({c0, c0}, schema));
+        auto chunk = std::shared_ptr<Chunk>(new Chunk({c0->clone(), c0->clone()}, schema));
         chunk->set_slot_id_to_index(0, 0);
         chunk->set_slot_id_to_index(1, 1);
         auto result = writer.process_chunk(chunk.get());

@@ -33,17 +33,19 @@ namespace starrocks {
 ///             - null_column: (0, 0, 0, 0, 1, 0)
 ///             - data_column: (1, 2, 3, 4, <default>, 6)
 ///         - offsets_column: (0, 0, 3, 6)
-class ArrayColumn final : public ColumnFactory<Column, ArrayColumn> {
-    friend class ColumnFactory<Column, ArrayColumn>;
+class ArrayColumn final : public CowFactory<ColumnFactory<Column, ArrayColumn>, ArrayColumn> {
+    friend class CowFactory<ColumnFactory<Column, ArrayColumn>, ArrayColumn>;
+    using Base = CowFactory<ColumnFactory<Column, ArrayColumn>, ArrayColumn>;
 
 public:
     using ValueType = void;
+    using OffsetColumn = UInt32Column;
+    using OffsetColumnPtr = UInt32Column::Ptr;
 
-    ArrayColumn(ColumnPtr elements, UInt32Column::Ptr offsets);
+    ArrayColumn(MutableColumnPtr&& elements, MutableColumnPtr&& offsets);
 
     ArrayColumn(const ArrayColumn& rhs)
-            : _elements(rhs._elements->clone_shared()),
-              _offsets(std::static_pointer_cast<UInt32Column>(rhs._offsets->clone_shared())) {}
+            : _elements(rhs._elements->clone()), _offsets(OffsetColumn::static_pointer_cast(rhs._offsets->clone())) {}
 
     ArrayColumn(ArrayColumn&& rhs) noexcept : _elements(std::move(rhs._elements)), _offsets(std::move(rhs._offsets)) {}
 
@@ -57,6 +59,16 @@ public:
         ArrayColumn tmp(std::move(rhs));
         this->swap_column(tmp);
         return *this;
+    }
+
+    static Ptr create(const ColumnPtr& elements, const ColumnPtr& offsets) {
+        return ArrayColumn::create(elements->as_mutable_ptr(), offsets->as_mutable_ptr());
+    }
+    static Ptr create(const ArrayColumn& rhs) { return Base::create(rhs); }
+
+    template <typename... Args>
+    requires(IsMutableColumns<Args...>::value) static MutablePtr create(Args&&... args) {
+        return Base::create(std::forward<Args>(args)...);
     }
 
     ~ArrayColumn() override = default;
@@ -113,12 +125,12 @@ public:
 
     uint32_t max_one_element_serialize_size() const override;
 
-    uint32_t serialize(size_t idx, uint8_t* pos) override;
+    uint32_t serialize(size_t idx, uint8_t* pos) const override;
 
-    uint32_t serialize_default(uint8_t* pos) override;
+    uint32_t serialize_default(uint8_t* pos) const override;
 
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                         uint32_t max_one_row_size) override;
+                         uint32_t max_one_row_size) const override;
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
@@ -168,12 +180,14 @@ public:
     void reset_column() override;
 
     const Column& elements() const { return *_elements; }
+    Column& elements() { return *_elements; }
     ColumnPtr& elements_column() { return _elements; }
-    ColumnPtr elements_column() const { return _elements; }
+    const ColumnPtr& elements_column() const { return _elements; }
 
-    const UInt32Column& offsets() const { return *_offsets; }
-    UInt32Column::Ptr& offsets_column() { return _offsets; }
-    UInt32Column::Ptr offsets_column() const { return _offsets; }
+    OffsetColumn& offsets() { return *_offsets; }
+    const OffsetColumn& offsets() const { return *_offsets; }
+    const OffsetColumnPtr& offsets_column() const { return _offsets; }
+    OffsetColumnPtr& offsets_column() { return _offsets; }
 
     bool is_nullable() const override { return false; }
 
@@ -203,6 +217,13 @@ public:
     // v1 and v2 must be one of ArrayColumn or Const(ArrayColumn)
     template <bool IgnoreNull>
     static bool is_all_array_lengths_equal(const ColumnPtr& v1, const ColumnPtr& v2, const NullColumnPtr& null_data);
+
+    void mutate_each_subcolumn() override {
+        // elements
+        _elements = (std::move(*_elements)).mutate();
+        // offsets
+        _offsets = OffsetColumn::static_pointer_cast((std::move(*_offsets)).mutate());
+    }
 
 private:
     template <bool ConstV1, bool ConstV2, bool IgnoreNull>

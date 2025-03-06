@@ -79,7 +79,7 @@ Status FlatJsonColumnWriter::append(const Column& column) {
     return Status::OK();
 }
 
-Status FlatJsonColumnWriter::_flat_column(std::vector<ColumnPtr>& json_datas) {
+Status FlatJsonColumnWriter::_flat_column(Columns& json_datas) {
     // all json datas must full json
     JsonPathDeriver deriver;
     std::vector<const Column*> vc;
@@ -115,13 +115,13 @@ Status FlatJsonColumnWriter::_flat_column(std::vector<ColumnPtr>& json_datas) {
                 nulls->append_value_multiple_times(&IS_NULL, json_data->size());
             } else if (json_data->is_nullable()) {
                 auto* nullable_column = down_cast<const NullableColumn*>(json_data);
-                auto* nl = down_cast<NullColumn*>(nullable_column->null_column().get());
+                auto* nl = down_cast<const NullColumn*>(nullable_column->null_column().get());
                 nulls->append(*nl, 0, nl->size());
             } else {
                 nulls->append_value_multiple_times(&NOT_NULL, json_data->size());
             }
 
-            _flat_columns.insert(_flat_columns.begin(), nulls);
+            _flat_columns.insert(_flat_columns.begin(), std::move(nulls));
         }
         RETURN_IF_ERROR(_write_flat_column());
         _flat_columns.clear();

@@ -375,7 +375,7 @@ PARALLEL_TEST(PrimaryIndexTest, test_composite_key) {
         pk_col1->append(i * 2);
     }
 
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     PrimaryKeyEncoder::create_column(*schema, &pk_column);
     PrimaryKeyEncoder::encode(*schema, *chunk, 0, chunk->num_rows(), pk_column.get());
 

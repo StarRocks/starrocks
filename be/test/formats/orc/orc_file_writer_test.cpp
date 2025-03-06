@@ -159,25 +159,25 @@ TEST_F(OrcFileWriterTest, TestWriteIntergersNullable) {
         std::vector<int8_t> int8_nums{INT8_MIN, INT8_MAX, 0, 1};
         auto count = col0->append_numbers(int8_nums.data(), size(int8_nums) * sizeof(int8_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col0, chunk->num_columns());
+        chunk->append_column(std::move(col0), chunk->num_columns());
 
         auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_SMALLINT), true);
         std::vector<int16_t> int16_nums{INT16_MIN, INT16_MAX, 0, 1};
         count = col1->append_numbers(int16_nums.data(), size(int16_nums) * sizeof(int16_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col1, chunk->num_columns());
+        chunk->append_column(std::move(col1), chunk->num_columns());
 
         auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
         std::vector<int32_t> int32_nums{INT32_MIN, INT32_MAX, 0, 1};
         count = col2->append_numbers(int32_nums.data(), size(int32_nums) * sizeof(int32_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col2, chunk->num_columns());
+        chunk->append_column(std::move(col2), chunk->num_columns());
 
         auto col3 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
         std::vector<int64_t> int64_nums{INT64_MIN, INT64_MAX, 0, 1};
         count = col3->append_numbers(int64_nums.data(), size(int64_nums) * sizeof(int64_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col3, chunk->num_columns());
+        chunk->append_column(std::move(col3), chunk->num_columns());
     }
 
     // write chunk
@@ -218,25 +218,25 @@ TEST_F(OrcFileWriterTest, TestWriteIntergersNotNull) {
         std::vector<int8_t> int8_nums{INT8_MIN, INT8_MAX, 0, 1};
         auto count = col0->append_numbers(int8_nums.data(), size(int8_nums) * sizeof(int8_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col0, chunk->num_columns());
+        chunk->append_column(std::move(col0), chunk->num_columns());
 
         auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_SMALLINT), false);
         std::vector<int16_t> int16_nums{INT16_MIN, INT16_MAX, 0, 1};
         count = col1->append_numbers(int16_nums.data(), size(int16_nums) * sizeof(int16_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col1, chunk->num_columns());
+        chunk->append_column(std::move(col1), chunk->num_columns());
 
         auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), false);
         std::vector<int32_t> int32_nums{INT32_MIN, INT32_MAX, 0, 1};
         count = col2->append_numbers(int32_nums.data(), size(int32_nums) * sizeof(int32_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col2, chunk->num_columns());
+        chunk->append_column(std::move(col2), chunk->num_columns());
 
         auto col3 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), false);
         std::vector<int64_t> int64_nums{INT64_MIN, INT64_MAX, 0, 1};
         count = col3->append_numbers(int64_nums.data(), size(int64_nums) * sizeof(int64_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col3, chunk->num_columns());
+        chunk->append_column(std::move(col3), chunk->num_columns());
     }
 
     // write chunk
@@ -275,8 +275,8 @@ TEST_F(OrcFileWriterTest, TestWriteFloat) {
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
     }
 
     // write chunk
@@ -315,8 +315,8 @@ TEST_F(OrcFileWriterTest, TestWriteDouble) {
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
     }
 
     // write chunk
@@ -354,8 +354,8 @@ TEST_F(OrcFileWriterTest, TestWriteBooleanNullable) {
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
     }
 
     // write chunk
@@ -391,7 +391,7 @@ TEST_F(OrcFileWriterTest, TestWriteBooleanNotNull) {
         auto data_column = BooleanColumn::create();
         std::vector<uint8_t> values = {0, 1, 1, 0};
         data_column->append_numbers(values.data(), values.size() * sizeof(uint8_t));
-        chunk->append_column(data_column, chunk->num_columns());
+        chunk->append_column(std::move(data_column), chunk->num_columns());
     }
 
     // write chunk
@@ -435,8 +435,8 @@ TEST_F(OrcFileWriterTest, TestWriteStringsNullable) {
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
 
         auto data_column2 = BinaryColumn::create();
         data_column2->append("hello");
@@ -447,8 +447,8 @@ TEST_F(OrcFileWriterTest, TestWriteStringsNullable) {
         auto null_column2 = UInt8Column::create();
         std::vector<uint8_t> nulls2 = {0, 0, 1, 1};
         null_column2->append_numbers(nulls2.data(), nulls2.size());
-        auto nullable_column2 = NullableColumn::create(data_column2, null_column2);
-        chunk->append_column(nullable_column2, chunk->num_columns());
+        auto nullable_column2 = NullableColumn::create(std::move(data_column2), std::move(null_column2));
+        chunk->append_column(std::move(nullable_column2), chunk->num_columns());
     }
 
     // write chunk
@@ -489,7 +489,7 @@ TEST_F(OrcFileWriterTest, TestWriteStringsNotNull) {
         data_column->append("starrocks");
         data_column->append("lakehouse");
 
-        chunk->append_column(data_column, chunk->num_columns());
+        chunk->append_column(std::move(data_column), chunk->num_columns());
 
         auto data_column2 = BinaryColumn::create();
         data_column2->append("hello");
@@ -497,7 +497,7 @@ TEST_F(OrcFileWriterTest, TestWriteStringsNotNull) {
         data_column2->append("abc");
         data_column2->append("def");
 
-        chunk->append_column(data_column2, chunk->num_columns());
+        chunk->append_column(std::move(data_column2), chunk->num_columns());
     }
 
     // write chunk
@@ -538,19 +538,19 @@ TEST_F(OrcFileWriterTest, TestWriteDecimal) {
         std::vector<int32_t> int32_nums{INT32_MIN, INT32_MAX, 0, 1};
         auto count = col0->append_numbers(int32_nums.data(), size(int32_nums) * sizeof(int32_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col0, chunk->num_columns());
+        chunk->append_column(std::move(col0), chunk->num_columns());
 
         auto col1 = ColumnHelper::create_column(type_descs[1], true);
         std::vector<int64_t> int64_nums{INT64_MIN, INT64_MAX, 0, 1};
         count = col1->append_numbers(int64_nums.data(), size(int64_nums) * sizeof(int64_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col1, chunk->num_columns());
+        chunk->append_column(std::move(col1), chunk->num_columns());
 
         auto col2 = ColumnHelper::create_column(type_descs[2], true);
         std::vector<int128_t> int128_nums{INT64_MIN, INT64_MAX, 0, 1};
         count = col2->append_numbers(int128_nums.data(), size(int128_nums) * sizeof(int128_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col2, chunk->num_columns());
+        chunk->append_column(std::move(col2), chunk->num_columns());
     }
 
     // write chunk
@@ -591,19 +591,19 @@ TEST_F(OrcFileWriterTest, TestWriteDecimalNotNull) {
         std::vector<int32_t> int32_nums{INT32_MIN, INT32_MAX, 0, 1};
         auto count = col1->append_numbers(int32_nums.data(), size(int32_nums) * sizeof(int32_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col1, chunk->num_columns());
+        chunk->append_column(std::move(col1), chunk->num_columns());
 
         auto col2 = ColumnHelper::create_column(type_descs[1], false);
         std::vector<int64_t> int64_nums{INT64_MIN, INT64_MAX, 0, 1};
         count = col2->append_numbers(int64_nums.data(), size(int64_nums) * sizeof(int64_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col2, chunk->num_columns());
+        chunk->append_column(std::move(col2), chunk->num_columns());
 
         auto col3 = ColumnHelper::create_column(type_descs[2], false);
         std::vector<int128_t> int128_nums{INT64_MIN, INT64_MAX, 0, 1};
         count = col3->append_numbers(int128_nums.data(), size(int128_nums) * sizeof(int128_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col3, chunk->num_columns());
+        chunk->append_column(std::move(col3), chunk->num_columns());
     }
 
     // write chunk
@@ -652,8 +652,8 @@ TEST_F(OrcFileWriterTest, TestWriteDate) {
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
     }
 
     // write chunk
@@ -699,7 +699,7 @@ TEST_F(OrcFileWriterTest, TestWriteDateNotNull) {
             data_column->append_default();
         }
 
-        chunk->append_column(data_column, chunk->num_columns());
+        chunk->append_column(std::move(data_column), chunk->num_columns());
     }
 
     // write chunk
@@ -749,8 +749,8 @@ TEST_F(OrcFileWriterTest, TestAllocatedBytes) {
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
     }
 
     // write chunk
@@ -802,8 +802,8 @@ TEST_F(OrcFileWriterTest, TestWriteTimestamp) {
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
     }
 
     // write chunk
@@ -850,7 +850,7 @@ TEST_F(OrcFileWriterTest, TestWriteTimestampNotNull) {
             data_column->append_default();
         }
 
-        chunk->append_column(data_column, chunk->num_columns());
+        chunk->append_column(std::move(data_column), chunk->num_columns());
     }
 
     // write chunk
@@ -1064,7 +1064,7 @@ TEST_F(OrcFileWriterTest, TestOrcPatchedBaseWrongBaseWidth) {
         std::vector<int64_t> intValues = {12, -5400, -5400, 12,    -5400, 12, 12,    -5400, -5400, 24363720,  -2654,
                                           12, -5400, 12,    -5400, -5400, 12, -5400, 12,    12,    -14000000, 4};
         intColumn->append_numbers(intValues.data(), intValues.size() * sizeof(int64_t));
-        chunk->append_column(intColumn, chunk->num_columns());
+        chunk->append_column(std::move(intColumn), chunk->num_columns());
     }
 
     ASSERT_OK(writer->write(chunk.get()));

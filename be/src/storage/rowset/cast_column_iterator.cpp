@@ -32,7 +32,7 @@ CastColumnIterator::CastColumnIterator(std::unique_ptr<ColumnIterator> source_it
     auto slot_desc = SlotDescriptor(slot_id, "", source_type);
     auto column_ref = _obj_pool->add(new ColumnRef(&slot_desc));
     CHECK(column != nullptr) << "source type=" << source_type;
-    _source_chunk.append_column(column, slot_id);
+    _source_chunk.append_column(std::move(column), slot_id);
     _cast_expr = VectorizedCastExprFactory::from_type(source_type, target_type, column_ref, _obj_pool.get(), false);
     CHECK(_cast_expr != nullptr) << "Fail to create cast expr for source type=" << source_type
                                  << " target type=" << target_type;

@@ -103,7 +103,7 @@ TEST_F(LocalPkIndexManagerTest, test_gc) {
     c0->append_numbers(k0.data(), k0.size() * sizeof(int));
     c1->append_numbers(v0.data(), v0.size() * sizeof(int));
 
-    Chunk chunk0({c0, c1}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
     auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
 
     int64_t txn_id = next_id();
@@ -187,7 +187,7 @@ TEST_F(LocalPkIndexManagerTest, test_gc_while_index_dir_changed) {
     c0->append_numbers(k0.data(), k0.size() * sizeof(int));
     c1->append_numbers(v0.data(), v0.size() * sizeof(int));
 
-    Chunk chunk0({c0, c1}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
     auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
 
     int64_t txn_id = next_id();
@@ -290,7 +290,7 @@ TEST_F(LocalPkIndexManagerTest, test_evict) {
     c0->append_numbers(k0.data(), k0.size() * sizeof(int));
     c1->append_numbers(v0.data(), v0.size() * sizeof(int));
 
-    Chunk chunk0({c0, c1}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
     auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
 
     int64_t txn_id = next_id();
@@ -374,7 +374,7 @@ TEST_F(LocalPkIndexManagerTest, test_major_compaction) {
     c0->append_numbers(k0.data(), k0.size() * sizeof(int));
     c1->append_numbers(v0.data(), v0.size() * sizeof(int));
 
-    Chunk chunk0({c0, c1}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
     auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
 
     int64_t txn_id = next_id();
@@ -465,7 +465,7 @@ TEST_F(LocalPkIndexManagerTest, test_major_compaction_with_unload) {
     c0->append_numbers(k0.data(), k0.size() * sizeof(int));
     c1->append_numbers(v0.data(), v0.size() * sizeof(int));
 
-    Chunk chunk0({c0, c1}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
     auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
 
     int64_t txn_id = next_id();

@@ -998,7 +998,7 @@ TEST_F(RowsetTest, SegmentRewriterAutoIncrementTest) {
     std::shared_ptr<TabletSchema> tablet_schema = TabletSchemaHelper::create_tablet_schema(
             {create_int_key_pb(1), create_int_key_pb(2), create_int_value_pb(3), create_int_value_pb(4)});
     std::vector<uint32_t> read_column_ids{2, 3};
-    std::vector<std::unique_ptr<Column>> write_columns(read_column_ids.size());
+    std::vector<MutableColumnPtr> write_columns(read_column_ids.size());
     for (auto i = 0; i < read_column_ids.size(); ++i) {
         const auto read_column_id = read_column_ids[i];
         auto tablet_column = tablet_schema->column(read_column_id);
@@ -1011,7 +1011,7 @@ TEST_F(RowsetTest, SegmentRewriterAutoIncrementTest) {
 
     AutoIncrementPartialUpdateState auto_increment_partial_update_state;
     auto_increment_partial_update_state.init(rowset.get(), partial_tablet_schema, 2, 0);
-    auto_increment_partial_update_state.write_column.reset(write_columns[0].release());
+    auto_increment_partial_update_state.write_column.reset(std::move(write_columns[0]));
     write_columns.erase(write_columns.begin());
     auto dst_file_name = Rowset::segment_temp_file_path(rowset->rowset_path(), rowset->rowset_id(), 0);
 

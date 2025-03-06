@@ -506,7 +506,7 @@ Status Analytor::_evaluate_const_columns(int i) {
         // Only agg fn has this context.
         return Status::OK();
     }
-    std::vector<ColumnPtr> const_columns;
+    Columns const_columns;
     const_columns.reserve(_agg_expr_ctxs[i].size());
     for (auto& j : _agg_expr_ctxs[i]) {
         ASSIGN_OR_RETURN(auto col, j->root()->evaluate_const(j));

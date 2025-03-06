@@ -101,7 +101,7 @@ private:
 
 private:
     // create a new empty local dict column
-    ColumnPtr _new_local_dict_col(Column* src);
+    MutableColumnPtr _new_local_dict_col(Column* src);
     // swap null column between src and dst column
     void _swap_null_columns(Column* src, Column* dst);
 

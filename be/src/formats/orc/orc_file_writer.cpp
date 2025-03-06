@@ -244,19 +244,19 @@ Status ORCFileWriter::_write_column(orc::ColumnVectorBatch& orc_column, ColumnPt
     }
 }
 
-inline uint8_t* get_raw_null_column(const ColumnPtr& col) {
+inline const uint8_t* get_raw_null_column(const ColumnPtr& col) {
     if (!col->has_null()) {
         return nullptr;
     }
-    auto& null_column = down_cast<NullableColumn*>(col.get())->null_column();
+    auto& null_column = down_cast<const NullableColumn*>(col.get())->null_column();
     auto* raw_column = null_column->get_data().data();
     return raw_column;
 }
 
 template <LogicalType lt>
-inline RunTimeCppType<lt>* get_raw_data_column(const ColumnPtr& col) {
+inline const RunTimeCppType<lt>* get_raw_data_column(const ColumnPtr& col) {
     auto* data_column = ColumnHelper::get_data_column(col.get());
-    auto* raw_column = down_cast<RunTimeColumnType<lt>*>(data_column)->get_data().data();
+    auto* raw_column = down_cast<const RunTimeColumnType<lt>*>(data_column)->get_data().data();
     return raw_column;
 }
 
@@ -267,8 +267,8 @@ Status ORCFileWriter::_write_number(orc::ColumnVectorBatch& orc_column, ColumnPt
     orc_column.resize(column_size);
     orc_column.numElements = column_size;
 
-    auto* null_col = get_raw_null_column(column);
-    auto* data_col = get_raw_data_column<Type>(column);
+    const auto* null_col = get_raw_null_column(column);
+    const auto* data_col = get_raw_data_column<Type>(column);
 
     _populate_orc_notnull(orc_column, null_col, column_size);
 
@@ -311,8 +311,8 @@ Status ORCFileWriter::_write_decimal32or64or128(orc::ColumnVectorBatch& orc_colu
     decimal_orc_column.precision = precision;
     decimal_orc_column.scale = scale;
 
-    auto* null_col = get_raw_null_column(column);
-    auto* data_col = get_raw_data_column<DecimalType>(column);
+    const auto* null_col = get_raw_null_column(column);
+    const auto* data_col = get_raw_data_column<DecimalType>(column);
 
     _populate_orc_notnull(orc_column, null_col, column_size);
 
@@ -338,8 +338,8 @@ Status ORCFileWriter::_write_date(orc::ColumnVectorBatch& orc_column, ColumnPtr&
     orc_column.resize(column_size);
     orc_column.numElements = column_size;
 
-    auto* null_col = get_raw_null_column(column);
-    auto* data_col = get_raw_data_column<TYPE_DATE>(column);
+    const auto* null_col = get_raw_null_column(column);
+    const auto* data_col = get_raw_data_column<TYPE_DATE>(column);
 
     _populate_orc_notnull(orc_column, null_col, column_size);
 
@@ -357,8 +357,8 @@ Status ORCFileWriter::_write_datetime(orc::ColumnVectorBatch& orc_column, Column
     orc_column.resize(column_size);
     orc_column.numElements = column_size;
 
-    auto* null_col = get_raw_null_column(column);
-    auto* data_col = get_raw_data_column<TYPE_DATETIME>(column);
+    const auto* null_col = get_raw_null_column(column);
+    const auto* data_col = get_raw_data_column<TYPE_DATETIME>(column);
 
     _populate_orc_notnull(orc_column, null_col, column_size);
 
@@ -462,7 +462,7 @@ StatusOr<std::unique_ptr<orc::Type>> ORCFileWriter::_make_schema_node(const Type
     }
 }
 
-void ORCFileWriter::_populate_orc_notnull(orc::ColumnVectorBatch& orc_column, uint8_t* null_column,
+void ORCFileWriter::_populate_orc_notnull(orc::ColumnVectorBatch& orc_column, const uint8_t* null_column,
                                           size_t column_size) {
     orc_column.notNull.resize(column_size);
     if (null_column != nullptr) {

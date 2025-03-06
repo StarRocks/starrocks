@@ -77,7 +77,7 @@ protected:
         if (is_nullable) {
             auto null_col = NullColumn::create();
             null_col->append("NULL" == json);
-            return NullableColumn::create(json_col, null_col);
+            return NullableColumn::create(std::move(json_col), std::move(null_col));
         }
         return json_col;
     }
@@ -102,7 +102,7 @@ protected:
         if (is_nullable) {
             auto null_col = NullColumn::create();
             null_col->append("NULL" == json);
-            return NullableColumn::create(json_col, null_col);
+            return NullableColumn::create(std::move(json_col), std::move(null_col));
         }
         return json_col;
     }
@@ -131,7 +131,7 @@ protected:
         json_col->set_flat_columns(deriver.flat_paths(), deriver.flat_types(), flattener.mutable_result());
 
         if (is_nullable) {
-            return NullableColumn::create(json_col, null_col);
+            return NullableColumn::create(std::move(json_col), std::move(null_col));
         }
         return json_col;
     }

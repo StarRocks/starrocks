@@ -199,7 +199,7 @@ arrow::Result<std::shared_ptr<arrow::Buffer>> ColumnConverter::convert_null_bitm
     return null_bitmap;
 }
 
-std::shared_ptr<Column> ColumnConverter::get_data_column(const std::shared_ptr<Column>& column) {
+ColumnPtr ColumnConverter::get_data_column(const ColumnPtr& column) {
     if (column->is_nullable()) {
         auto* nullable_column = down_cast<const NullableColumn*>(column.get());
         return nullable_column->data_column();
