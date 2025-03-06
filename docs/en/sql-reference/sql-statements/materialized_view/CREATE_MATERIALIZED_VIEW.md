@@ -242,7 +242,7 @@ Valid values:
   - `str2date` function: The function used to transform string type partitions of the base table into date types. `PARTITION BY str2date(dt, "%Y%m%d")` means that the `dt` column is a STRING date type whose date format is `"%Y%m%d"`. The `str2date` function supports a lot of date formats, you can refer to [str2date](../../sql-functions/date-time-functions/str2date.md) for more information. Supported from v3.1.4.
   - `time_slice` function: From v3.1 onwards, you can further use these functions to convert the given time into the beginning or end of a time interval based on the specified time granularity, for example, `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))` where time_slice must have a finer granularity than date_trunc. You can use them to specify a GROUP BY column with a finer granularity than that of the partitioning key, for example, `GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`.
 
-From v3.4.1 onwards, asynchronous materialized views support multi-column partition expressions. You can specify multiple partition columns for the materialized view, and one-to-one map them to the partition columns of the base tables.
+From v3.5.0 onwards, asynchronous materialized views support multi-column partition expressions. You can specify multiple partition columns for the materialized view, and one-to-one map them to the partition columns of the base tables.
 
 **Notes for multi-column partition expressions**:
 
@@ -305,7 +305,7 @@ Properties of the asynchronous materialized view. You can modify the properties 
     - If `mv_rewrite_staleness_second` is not specified, the materialized view can be used for query rewrite only when its data is consistent with the data in all base tables.
     - If `mv_rewrite_staleness_second` is specified, the materialized view can be used for query rewrite when its last refresh is within the staleness time interval.
   - `loose`: Enable automatic query rewrite directly, and no consistency check is required.
-  - `force_mv`: From v3.4.1 onwards, StarRocks materialized views support Common Partition Expression TTL. The `force_mv` semantic is specifically designed for this scenario. When this semantic is enabled:
+  - `force_mv`: From v3.5.0 onwards, StarRocks materialized views support Common Partition Expression TTL. The `force_mv` semantic is specifically designed for this scenario. When this semantic is enabled:
     - If the materialized view does not have the `partition_retention_condition` property, it will always force the use of the materialized view for query rewrite, regardless of whether the base table has been updated.
     - If the materialized view has the `partition_retention_condition` property:
       - For partitions within the TTL range, query rewrite based on the materialized view is always available, regardless of whether the base table has been updated.
@@ -332,7 +332,7 @@ Properties of the asynchronous materialized view. You can modify the properties 
   - `true`: Queries directly against the materialized view will be rewritten and returned with the most updated data, which is consistent with the result of the materialized view definition query. Please note that when the materialized view is inactive or does not support transparent query rewrite, these queries will be executed as the materialized view definition query.
   - `transparent_or_error`: Queries directly against the materialized view will be rewritten whenever they are eligible. If the materialized view is inactive or does not support transparent query rewrite, these queries will be returned with an error.
   - `transparent_or_default` Queries directly against the materialized view will be rewritten whenever they are eligible. If the materialized view is inactive or does not support transparent query rewrite, these queries will be returned with the existing data in the materialized view.
-- `partition_retention_condition`: From v3.4.1 onwards, StarRocks materialized views support Common Partition Expression TTL. This property is the expression that declares the partitions to be retained dynamically. Partitions that do not meet the condition in the expression will be dropped regularly. Example: `'partition_retention_condition' = 'dt >= CURRENT_DATE() - INTERVAL 3 MONTH'`.
+- `partition_retention_condition`: From v3.5.0 onwards, StarRocks materialized views support Common Partition Expression TTL. This property is the expression that declares the partitions to be retained dynamically. Partitions that do not meet the condition in the expression will be dropped regularly. Example: `'partition_retention_condition' = 'dt >= CURRENT_DATE() - INTERVAL 3 MONTH'`.
   - The expression can only contain partition columns and constants. Non-partition columns are not supported.
   - Common Partition Expression applies to List partitions and Range partitions differently:
     - For materialized views with List partitions, StarRocks supports deleting partitions filtered by the Common Partition Expression.
