@@ -120,7 +120,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
                     .getShardInfo(tablet.getShardId(), warehouse.getAnyAvailableCluster().getWorkerGroupId());
 
             Long nodeId;
-            Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
+            List<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getAllNodeIdsByShard(shardInfo, true);
             if (!ids.isEmpty()) {
                 nodeId = ids.iterator().next();
@@ -142,7 +142,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
                     .getShardInfo(tablet.getShardId(), warehouse.getAnyAvailableCluster().getWorkerGroupId());
 
             Long nodeId;
-            Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
+            List<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
                     .getAllNodeIdsByShard(shardInfo, true);
             if (!ids.isEmpty()) {
                 nodeId = ids.iterator().next();
@@ -156,7 +156,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
     }
 
     @Override
-    public Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+    public List<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
         LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseId);
         checkWarehouseState(warehouse);
         try {
