@@ -1216,7 +1216,10 @@ public class ReportHandler extends Daemon implements MemoryTrackable {
                                             .addColumns(indexMeta.getSchema())
                                             .setBloomFilterColumnNames(bfColumns)
                                             .setBloomFilterFpp(bfFpp)
-                                            .setIndexes(olapTable.getCopiedIndexes())
+                                            .setIndexes(indexId == olapTable.getBaseIndexId() ?
+                                                        olapTable.getCopiedIndexes() :
+                                                        OlapTable.getIndexesBySchema(
+                                                        olapTable.getCopiedIndexes(), indexMeta.getSchema()))
                                             .setSortKeyIndexes(indexMeta.getSortKeyIdxes())
                                             .setSortKeyUniqueIds(indexMeta.getSortKeyUniqueIds())
                                             .build().toTabletSchema();
