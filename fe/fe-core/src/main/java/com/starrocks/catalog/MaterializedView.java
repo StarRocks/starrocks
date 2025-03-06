@@ -38,6 +38,7 @@ import com.starrocks.backup.mv.MvBackupInfo;
 import com.starrocks.backup.mv.MvBaseTableBackupInfo;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.MaterializedViewExceptions;
@@ -1743,12 +1744,17 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * Return the status and reason about query rewrite
      */
     public String getQueryRewriteStatus() {
-        Pair<Boolean, String> status =
-                MvRewritePreprocessor.isMVValidToRewriteQuery(ConnectContext.get(), this, true, Sets.newHashSet());
-        if (status.first) {
-            return "VALID";
+        // since check mv valid to rewrite query is a heavy operation, we only check it when it's in the plan cache.
+        final MVPlanValidationResult result = MvRewritePreprocessor.isMVValidToRewriteQuery(ConnectContext.get(),
+                this, false, Sets.newHashSet(), true);
+        switch (result.getStatus()) {
+            case VALID:
+                return "VALID";
+            case INVALID:
+                return "INVALID: " + result.getReason();
+            default:
+                return "UNKNOWN: " + result.getReason();
         }
-        return "INVALID: " + status.second;
     }
 
     @Override
