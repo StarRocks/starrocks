@@ -862,11 +862,6 @@ public class GlobalTransactionMgr implements MemoryTrackable {
         }
     }
 
-    public void updateDatabaseUsedQuotaData(long dbId, long usedQuotaDataBytes) throws AnalysisException {
-        DatabaseTransactionMgr dbTransactionMgr = getDatabaseTransactionMgr(dbId);
-        dbTransactionMgr.updateDatabaseUsedQuotaData(usedQuotaDataBytes);
-    }
-
     public void saveTransactionStateV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         int txnNum = getTransactionNum();
         final int cnt = 2 + txnNum;
