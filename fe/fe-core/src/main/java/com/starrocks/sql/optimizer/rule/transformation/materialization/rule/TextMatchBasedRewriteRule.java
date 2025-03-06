@@ -25,6 +25,7 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvPlanContext;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.Table;
+import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
@@ -257,6 +258,11 @@ public class TextMatchBasedRewriteRule extends Rule {
                 if (CollectionUtils.isEmpty(partitionNamesToRefresh)) {
                     mvCompensatePlan = OptExpression.create(mvScanOperator);
                 } else {
+                    // if mv's query rewrite consistency mode is FORCE_MV, then do not compensate it because its
+                    // partition compensation is not exactly by union rewrite, see {@class PartitionRetentionTableCompensation}.
+                    if (mvUpdateInfo.getQueryRewriteConsistencyMode() == TableProperty.QueryRewriteConsistencyMode.FORCE_MV) {
+                        return null;
+                    }
                     logMVRewrite(context, this, "Partitioned MV {} is outdated which " +
                                     "contains some partitions to be refreshed: {}, compensate it with union rewrite",
                             mv.getName(), partitionNamesToRefresh);
