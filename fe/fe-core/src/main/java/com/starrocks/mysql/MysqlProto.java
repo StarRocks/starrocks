@@ -64,6 +64,8 @@ import java.util.Set;
 public class MysqlProto {
     private static final Logger LOG = LogManager.getLogger(MysqlProto.class);
 
+    private static final String LOCALHOST = "127.0.0.1";
+
     // send response packet(OK/EOF/ERR).
     // before call this function, should set information in state of ConnectContext
     public static void sendResponsePacket(ConnectContext context) throws IOException {
@@ -118,6 +120,15 @@ public class MysqlProto {
             authPacket = readAuthPacket(context);
             if (authPacket == null) {
                 return new NegotiateResult(null, NegotiateState.READ_SSL_AUTH_PKG_FAILED);
+            }
+        } else if (Config.ssl_force_secure_transport) {
+            if (!isRemoteIPLocalhost(context.getRemoteIP())) {
+                LOG.warn("Connections using insecure transport are prohibited");
+                ErrorReport.report(ErrorCode.ERR_SECURE_TRANSPORT_REQUIRED);
+                sendResponsePacket(context);
+                return new NegotiateResult(null, NegotiateState.INSECURE_TRANSPORT_PROHIBITED);
+            } else {
+                LOG.info("Connection made from a localhost, no secure transport enforced");
             }
         }
 
@@ -419,6 +430,14 @@ public class MysqlProto {
         // skip null byte.
         buffer.get();
         return buf;
+    }
+
+    public static boolean isRemoteIPLocalhost(String remoteIP) {
+        if (remoteIP == null) {
+            return false;
+        }
+        //Using "String.contains" here because the remote IP address starts with a forward slash, like “/127.0.0.1”.
+        return remoteIP.contains(LOCALHOST);
     }
 
     public record NegotiateResult(MysqlAuthPacket authPacket, NegotiateState state) {
