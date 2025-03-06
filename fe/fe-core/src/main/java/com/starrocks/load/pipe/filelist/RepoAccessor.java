@@ -16,6 +16,7 @@ package com.starrocks.load.pipe.filelist;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.load.pipe.PipeFileRecord;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.thrift.TResultBatch;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -41,7 +42,7 @@ public class RepoAccessor {
 
     public List<PipeFileRecord> listAllFiles() {
         try {
-            List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(
+            List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(
                     FileListTableRepo.SELECT_FILES);
             return PipeFileRecord.fromResultBatch(batch);
         } catch (Exception e) {
@@ -54,7 +55,7 @@ public class RepoAccessor {
         List<PipeFileRecord> res = null;
         try {
             String sql = buildListFileByState(pipeId, state, limit);
-            List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
+            List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
             res = PipeFileRecord.fromResultBatch(batch);
         } catch (Exception e) {
             LOG.error("listUnloadedFiles failed", e);
@@ -67,7 +68,7 @@ public class RepoAccessor {
         PipeFileRecord res = null;
         try {
             String sql = buildListFileByPath(pipeId, path);
-            List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
+            List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
             if (CollectionUtils.isEmpty(batch)) {
                 throw new IllegalArgumentException("file not found: " + path);
             } else if (batch.size() > 1) {
@@ -84,7 +85,7 @@ public class RepoAccessor {
     public List<PipeFileRecord> selectStagedFiles(List<PipeFileRecord> records) {
         try {
             String sql = buildSelectStagedFiles(records);
-            List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
+            List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
             return PipeFileRecord.fromResultBatch(batch);
         } catch (Exception e) {
             LOG.error("selectStagedFiles failed", e);
@@ -95,7 +96,7 @@ public class RepoAccessor {
     public void addFiles(List<PipeFileRecord> records) {
         try {
             String sql = buildSqlAddFiles(records);
-            RepoExecutor.getInstance().executeDML(sql);
+            SimpleExecutor.getRepoExecutor().executeDML(sql);
             LOG.info("addFiles into repo: {}", records);
             return;
         } catch (Exception e) {
@@ -126,7 +127,7 @@ public class RepoAccessor {
                     Preconditions.checkState(false, "not supported");
                     break;
             }
-            RepoExecutor.getInstance().executeDML(sql);
+            SimpleExecutor.getRepoExecutor().executeDML(sql);
             LOG.info("update files state to {}: {}", state, records);
         } catch (Exception e) {
             LOG.error("update files state failed: {}", records, e);
@@ -137,7 +138,7 @@ public class RepoAccessor {
     public void deleteByPipe(long pipeId) {
         try {
             String sql = String.format(FileListTableRepo.DELETE_BY_PIPE, pipeId);
-            RepoExecutor.getInstance().executeDML(sql);
+            SimpleExecutor.getRepoExecutor().executeDML(sql);
             LOG.info("delete pipe files {}", pipeId);
         } catch (Exception e) {
             LOG.error("delete file of pipe {} failed", pipeId, e);
