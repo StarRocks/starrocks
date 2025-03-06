@@ -1348,6 +1348,12 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_persistent_index_with_rows_
     test_horizontal_compaction_with_rows_mapper(true);
 }
 
+TEST_F(TabletUpdatesTest, horizontal_compaction_with_random_pick) {
+    config::enable_random_compaction_strategy = true;
+    test_horizontal_compaction(true);
+    config::enable_random_compaction_strategy = false;
+}
+
 TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key) {
     auto orig = config::vertical_compaction_max_columns_per_group;
     config::vertical_compaction_max_columns_per_group = 5;
