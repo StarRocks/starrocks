@@ -479,12 +479,8 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                                 MvTaskRunContext mvTaskRunContext = processor.getMvContext();
                                 Assert.assertEquals(70, mvTaskRunContext.getExecuteOption().getPriority());
                                 Map<String, String> properties = mvTaskRunContext.getProperties();
-<<<<<<< HEAD
-                                System.out.println(properties);
                                 Assert.assertEquals(1, properties.size());
-=======
                                 Assert.assertEquals(2, properties.size());
->>>>>>> 0961a1c3e4 ([BugFix] Fix mv refresh with warehouse (#56558))
                                 Assert.assertTrue(properties.containsKey(MV_ID));
                                 Assert.assertTrue(properties.containsKey(PROPERTIES_WAREHOUSE));
                                 // Ensure that table properties are not passed to the task run
