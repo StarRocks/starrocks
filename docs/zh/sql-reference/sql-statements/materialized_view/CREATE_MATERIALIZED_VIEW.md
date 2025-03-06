@@ -238,7 +238,7 @@ AS
   - `str2date` 函数：用于将基表的字符串类型分区键转化为物化视图的分区键所需的日期类型。`PARTITION BY str2date(dt, "%Y%m%d")` 表示 `dt` 列是一个 STRING 类型日期，其日期格式为 `"%Y%m%d"`。`str2date` 函数支持多种日期格式。更多信息，参考[str2date](../../sql-functions/date-time-functions/str2date.md)。自 v3.1.4 起支持。
   - `time_slice` 函数：从 v3.1 开始，您可以进一步使用 time_slice 函数根据指定的时间粒度周期，将给定的时间转化到其所在的时间粒度周期的起始或结束时刻，例如 `PARTITION BY date_trunc("MONTH", time_slice(dt, INTERVAL 7 DAY))`，其中 time_slice 的时间粒度必须比 `date_trunc` 的时间粒度更细。你可以使用它们来指定一个比分区键更细时间粒度的 GROUP BY 列，例如，`GROUP BY time_slice(dt, INTERVAL 1 MINUTE) PARTITION BY date_trunc('DAY', ts)`。
 
-自 v3.4.1 起，异步物化视图支持多列分区表达式。您可以为物化视图指定多个分区列，一一映射基表的分区列。
+自 v3.5.0 起，异步物化视图支持多列分区表达式。您可以为物化视图指定多个分区列，一一映射基表的分区列。
 
 **多列分区表达式相关说明**:
 
@@ -300,7 +300,7 @@ AS
     - 如果未指定 `mv_rewrite_staleness_second`，则只有当物化视图的数据与所有基表中的数据一致时，才可以将其用于查询改写。
     - 如果指定了 `mv_rewrite_staleness_second`，则只有在其最后刷新在 staleness 时间间隔内时，才可以将物化视图用于查询改写。
   - `loose`：直接启用自动查询改写，无需进行一致性检查。
-  - `force_mv`：从 v3.4.1 开始，StarRocks 物化视图支持通用分区表达式（Common Partition Expression）TTL。`force_mv` 语义即专门为该场景设计。当启用该语义时：
+  - `force_mv`：从 v3.5.0 开始，StarRocks 物化视图支持通用分区表达式（Common Partition Expression）TTL。`force_mv` 语义即专门为该场景设计。当启用该语义时：
     - 如果物化视图未定义 `partition_retention_condition` 属性，则无论基表是否有更新，都强制使用进行改写。
     - 如果物化视图定义了 `partition_retention_condition` 属性:
       - 对于 TTL 范围内的分区，无论基表是否有更新，都保证改写可用。
@@ -327,7 +327,7 @@ AS
   - `true`：直接针对物化视图的查询将被改写，并返回最新数据，结果与物化视图定义查询的一致。请注意，当物化视图处于失效（Inactive）状态或不支持透明查询改写时，这些查询将路由至物化视图定义查询执行。
   - `transparent_or_error`：直接针对物化视图的查询将在符合条件时可以被改写。如果物化视图处于失效（Inactive）状态或不支持透明查询改写，将返回错误。
   - `transparent_or_default`：直接针对物化视图的查询将在符合条件时可以被改写。如果物化视图处于失效（Inactive）状态或不支持透明查询改写，将返回物化视图中现有的数据。
-- `partition_retention_condition`：从 v3.4.1 开始，StarRocks 物化视图支持通用分区表达式（Common Partition Expression）TTL。该属性用于声明动态保留分区的表达式。不符合表达式中条件的分区将被定期删除。示例：`"partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH"`。
+- `partition_retention_condition`：从 v3.5.0 开始，StarRocks 物化视图支持通用分区表达式（Common Partition Expression）TTL。该属性用于声明动态保留分区的表达式。不符合表达式中条件的分区将被定期删除。示例：`"partition_retention_condition" = "dt >= CURRENT_DATE() - INTERVAL 3 MONTH"`。
   - 表达式只能包含分区列和常量。不支持非分区列。
   - 通用分区表达式式处理 List 分区和 Range 分区的方式不同：
     - 对于 List 分区物化视图，StarRocks 支持通过通用分区表达式过滤删除分区。
