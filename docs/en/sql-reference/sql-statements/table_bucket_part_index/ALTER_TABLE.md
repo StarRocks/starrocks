@@ -772,9 +772,10 @@ ALTER TABLE [<db_name>.]<tbl_name>
 SWAP WITH <tbl_name>;
 ```
 
-NOTE:
-- UK/FK constraints between OLAP tables will be validated during Swap to ensure that the constraints of the two tables being swapped are consistent. If they are inconsistent, an automatic error will be triggered; otherwise UK/FK constraints will also be automatically swapped.
-- Related Materialized views (MVs) that depend on the Swap tables will be automatically set to inactive, and related materialized views' UK/FK constraints will be removed and no longer be available.
+:::note
+- Unique Key and Foreign Key constraints between OLAP tables will be validated during Swap to ensure that the constraints of the two tables being swapped are consistent. An error will be returned if inconsistencies are detected, an automatic error will be triggered. If no consistencies are detected, Unique Key and Foreign Key constraints will be automatically swapped.
+- Materialized views that are depended on the tables being swapped will be automatically set to inactive, and their UK/FK constraints will be removed and no longer available.
+:::
 
 ### Manual compaction (from 3.1)
 
