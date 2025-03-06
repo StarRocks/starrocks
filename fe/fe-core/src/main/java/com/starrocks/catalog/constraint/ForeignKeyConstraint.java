@@ -142,6 +142,8 @@ public class ForeignKeyConstraint extends Constraint {
         }
     }
 
+    // TODO: refactor this to use db/table name rather than id to identify foreign key constraints, so that we can
+    // support child/parent table's swap or schema change.
     // for olap table, the format is: (column1, column2) REFERENCES default_catalog.dbid.tableid(column1', column2')
     // for materialized view, the format is: catalog1.dbName1.tableName1(column1, column2) REFERENCES
     // catalog2.dbName2.tableName2(column1', column2')
@@ -315,32 +317,8 @@ public class ForeignKeyConstraint extends Constraint {
         // parentTableInfo: how to know which other tables that ref for this table?
         GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
         Set<TableWithFKConstraint> refConstraints = globalConstraintManager.getRefConstraints(table);
-        if (!CollectionUtils.isEmpty(refConstraints)) {
-            for (TableWithFKConstraint tableWithFKConstraint : refConstraints) {
-                Table childTable = tableWithFKConstraint.getChildTable();
-                if (childTable == null) {
-                    continue;
-                }
-                List<ForeignKeyConstraint> fks = childTable.getForeignKeyConstraints();
-                if (!CollectionUtils.isEmpty(fks)) {
-                    // refresh child table's foreign key constraints
-                    List<ForeignKeyConstraint> newFKConstraints = Lists.newArrayList();
-                    boolean isChanged = false;
-                    for (ForeignKeyConstraint fk : fks) {
-                        if (fk.parentTableInfo != null) {
-                            fk.parentTableInfo.onTableRename(table, oldTableName);
-                            isChanged = true;
-                        }
-                        newFKConstraints.add(fk);
-                    }
-                    if (isChanged) {
-                        LOG.info("refresh child table's foreign key constraints, parent table, child table: {}, " +
-                                "newFKConstraints: {}", table.getName(), childTable.getName(), newFKConstraints);
-                        childTable.setForeignKeyConstraints(newFKConstraints);
-                    }
-                }
-            }
-        }
+        // if this table is other table's parent table, need to change the parent table name in the foreign key constraint
+        onParentTableChanged(refConstraints, table, oldTableName);
 
         // childTableInfo
         if (childTableInfo != null) {
@@ -348,5 +326,36 @@ public class ForeignKeyConstraint extends Constraint {
         }
 
         // columnRefPairs: no needs to change after table rename
+    }
+
+    public static void onParentTableChanged(Set<TableWithFKConstraint> refConstraints,
+                                            Table newParentTable, String oldTableName) {
+        if (CollectionUtils.isEmpty(refConstraints)) {
+            return;
+        }
+        for (TableWithFKConstraint tableWithFKConstraint : refConstraints) {
+            Table childTable = tableWithFKConstraint.getChildTable();
+            if (childTable == null) {
+                continue;
+            }
+            List<ForeignKeyConstraint> fks = childTable.getForeignKeyConstraints();
+            if (!CollectionUtils.isEmpty(fks)) {
+                // refresh child table's foreign key constraints
+                List<ForeignKeyConstraint> newFKConstraints = Lists.newArrayList();
+                boolean isChanged = false;
+                for (ForeignKeyConstraint fk : fks) {
+                    if (fk.parentTableInfo != null) {
+                        fk.parentTableInfo.onTableRename(newParentTable, oldTableName);
+                        isChanged = true;
+                    }
+                    newFKConstraints.add(fk);
+                }
+                if (isChanged) {
+                    LOG.info("refresh child table's foreign key constraints, parent table, child table: {}, " +
+                            "newFKConstraints: {}", newParentTable.getName(), childTable.getName(), newFKConstraints);
+                    childTable.setForeignKeyConstraints(newFKConstraints);
+                }
+            }
+        }
     }
 }
