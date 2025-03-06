@@ -14,6 +14,8 @@
 
 #include "util/internal_service_recoverable_stub.h"
 
+#include <utility>
+
 #include "common/config.h"
 
 namespace starrocks {
@@ -22,7 +24,7 @@ class RecoverableClosure : public ::google::protobuf::Closure {
 public:
     RecoverableClosure(std::shared_ptr<starrocks::PInternalService_RecoverableStub> stub,
                        ::google::protobuf::RpcController* controller, ::google::protobuf::Closure* done)
-            : _stub(stub), _controller(controller), _done(done) {}
+            : _stub(std::move(std::move(stub))), _controller(controller), _done(done) {}
 
     void Run() override {
         auto* cntl = static_cast<brpc::Controller*>(_controller);
@@ -45,15 +47,20 @@ private:
 PInternalService_RecoverableStub::PInternalService_RecoverableStub(const butil::EndPoint& endpoint)
         : _endpoint(endpoint) {}
 
-PInternalService_RecoverableStub::~PInternalService_RecoverableStub() {}
+PInternalService_RecoverableStub::~PInternalService_RecoverableStub() = default;
 
-Status PInternalService_RecoverableStub::reset_channel() {
+Status PInternalService_RecoverableStub::reset_channel(const std::string& protocol) {
     std::lock_guard<std::mutex> l(_mutex);
     brpc::ChannelOptions options;
     options.connect_timeout_ms = config::rpc_connect_timeout_ms;
+    if (protocol == "http") {
+        options.protocol = protocol;
+    } else {
+        // http does not support these.
+        options.connection_type = config::brpc_connection_type;
+        options.connection_group = std::to_string(_connection_group++);
+    }
     options.max_retry = 3;
-    options.connection_type = config::brpc_connection_type;
-    options.connection_group = std::to_string(_connection_group++);
     std::unique_ptr<brpc::Channel> channel(new brpc::Channel());
     if (channel->Init(_endpoint, &options)) {
         LOG(WARNING) << "Fail to init channel " << _endpoint;

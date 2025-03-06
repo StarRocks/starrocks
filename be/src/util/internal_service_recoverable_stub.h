@@ -29,7 +29,7 @@ public:
     PInternalService_RecoverableStub(const butil::EndPoint& endpoint);
     ~PInternalService_RecoverableStub();
 
-    Status reset_channel();
+    Status reset_channel(const std::string& protocol = "");
 
 #ifdef BE_TEST
     PInternalService_Stub* stub() { return _stub.get(); }
