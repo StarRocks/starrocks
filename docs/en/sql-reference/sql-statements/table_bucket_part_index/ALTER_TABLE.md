@@ -760,7 +760,7 @@ Currently, StarRocks supports modifying the following table properties:
 
 :::note
 
-- In most cases, you are only allowed to modify one property at a time. You can only modify multiple properties at a time only if these properties have the same prefix, such as `dynamic_partition.` or `binlog.`.
+- In most cases, you are only allowed to modify one property at a time. You can only modify multiple properties at a time only if these properties have the same prefix. Currently, only `dynamic_partition.` and `binlog.` are supported.
 - You can also modify the properties by merging into the above operation on column. See the [following examples](#examples).
 
 :::
