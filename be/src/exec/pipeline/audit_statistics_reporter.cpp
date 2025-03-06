@@ -67,6 +67,7 @@ Status AuditStatisticsReporter::report_audit_statistics(const TReportAuditStatis
                 }
                 coord->reportAuditStatistics(res, params);
             } else {
+                (void)coord.reopen(config::thrift_rpc_timeout_ms);
                 std::stringstream msg;
                 msg << "ReportExecStatus() to " << fe_addr << " failed:\n" << e.what();
                 LOG(WARNING) << msg.str();
