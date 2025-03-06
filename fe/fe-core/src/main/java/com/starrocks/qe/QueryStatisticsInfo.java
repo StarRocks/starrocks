@@ -339,9 +339,6 @@ public class QueryStatisticsInfo {
                         .collect(Collectors.toList());
         for (QueryStatisticsItem item : sorted) {
             final CurrentQueryInfoProvider.QueryStatistics statistics = statisticsMap.get(item.getQueryId());
-            if (statistics == null) {
-                continue;
-            }
 
             QueryStatisticsInfo info = new QueryStatisticsInfo()
                     .withQueryStartTime(item.getQueryStartTime())
@@ -350,15 +347,17 @@ public class QueryStatisticsInfo {
                     .withConnId(item.getConnId())
                     .withDb(item.getDb())
                     .withUser(item.getUser())
-                    .withScanBytes(statistics.getScanBytes())
-                    .withScanRows(statistics.getScanRows())
-                    .withMemUsageBytes(statistics.getMemUsageBytes())
-                    .withSpillBytes(statistics.getSpillBytes())
-                    .withCpuCostNs(statistics.getCpuCostNs())
                     .withExecTime(item.getQueryExecTime())
                     .withWareHouseName(item.getWarehouseName())
                     .withCustomQueryId(item.getCustomQueryId())
                     .withResourceGroupName(item.getResourceGroupName());
+            if (statistics != null) {
+                info.withScanBytes(statistics.getScanBytes())
+                        .withScanRows(statistics.getScanRows())
+                        .withMemUsageBytes(statistics.getMemUsageBytes())
+                        .withSpillBytes(statistics.getSpillBytes())
+                        .withCpuCostNs(statistics.getCpuCostNs());
+            }
             sortedRowData.add(info);
         }
 

@@ -62,6 +62,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 /**
  * Provide running query's statistics.
@@ -87,8 +88,10 @@ public class CurrentQueryInfoProvider {
                     brpcNetAddress = SystemInfoService.toBrpcHost(instanceInfo.getAddress());
                     brpcAddresses.put(instanceInfo.getAddress(), brpcNetAddress);
                 } catch (Exception e) {
-                    LOG.warn(e.getMessage(), e);
-                    throw new AnalysisException(e.getMessage());
+                    LOG.warn("collectQueryStatistics failed to find BE [{}:{}] [QueryID={}]",
+                            instanceInfo.getAddress().getHostname(), instanceInfo.getAddress().getPort(),
+                            DebugUtil.printId(item.getExecutionId()), e);
+                    continue;
                 }
             }
             Request request = requests.get(brpcNetAddress);
@@ -127,15 +130,17 @@ public class CurrentQueryInfoProvider {
                 LOG.warn("Thread interrupted! ", e);
                 Thread.currentThread().interrupt();
             } catch (ExecutionException | TimeoutException e) {
-                LOG.warn("fail to receive result ", e);
-                throw new AnalysisException(e.getMessage());
+                String strQueryIds = pair.first.getQueryIds().stream()
+                        .map(DebugUtil::printId).
+                        collect(Collectors.joining(","));
+                LOG.warn("collectQueryStatistics failed to receive result from BE [{}:{}] [QueryID={}]",
+                        pair.first.address.getHostname(), pair.first.address.getPort(), strQueryIds, e);
             }
         }
         return statisticsMap;
     }
 
-    private Map<String, QueryStatistics> collectQueryStatistics(Collection<QueryStatisticsItem> items)
-            throws AnalysisException {
+    private Map<String, QueryStatistics> collectQueryStatistics(Collection<QueryStatisticsItem> items) {
         final Map<TNetworkAddress, Request> requests = Maps.newHashMap();
         final Map<TNetworkAddress, TNetworkAddress> brpcAddresses = Maps.newHashMap();
         for (QueryStatisticsItem item : items) {
@@ -146,8 +151,10 @@ public class CurrentQueryInfoProvider {
                         brpcNetAddress = SystemInfoService.toBrpcHost(instanceInfo.getAddress());
                         brpcAddresses.put(instanceInfo.getAddress(), brpcNetAddress);
                     } catch (Exception e) {
-                        LOG.warn(e.getMessage(), e);
-                        throw new AnalysisException(e.getMessage());
+                        LOG.warn("collectQueryStatistics failed to find BE [{}:{}] [QueryID={}]",
+                                instanceInfo.getAddress().getHostname(), instanceInfo.getAddress().getPort(),
+                                DebugUtil.printId(item.getExecutionId()), e);
+                        continue;
                     }
                 }
                 Request request = requests.get(brpcNetAddress);
@@ -162,7 +169,7 @@ public class CurrentQueryInfoProvider {
     }
 
     private List<Pair<Request, Future<PCollectQueryStatisticsResult>>> sendCollectQueryRequest(
-            Map<TNetworkAddress, Request> requests) throws AnalysisException {
+            Map<TNetworkAddress, Request> requests) {
         final List<Pair<Request, Future<PCollectQueryStatisticsResult>>> futures = Lists.newArrayList();
         for (TNetworkAddress address : requests.keySet()) {
             final Request request = requests.get(address);
@@ -178,14 +185,18 @@ public class CurrentQueryInfoProvider {
                 futures.add(Pair.create(
                         request, BackendServiceClient.getInstance().collectQueryStatisticsAsync(address, pbRequest)));
             } catch (RpcException e) {
-                throw new AnalysisException("Sending collect query statistics request fails.");
+                String strQueryIds = request.getQueryIds().stream()
+                        .map(DebugUtil::printId).
+                        collect(Collectors.joining(","));
+                LOG.warn("collectQueryStatistics failed to send request to BE [{}:{}] [QueryIDs={}]",
+                        address.getHostname(), address.getPort(), strQueryIds, e);
             }
         }
         return futures;
     }
 
     private Map<String, QueryStatistics> handleCollectQueryResponse(
-            List<Pair<Request, Future<PCollectQueryStatisticsResult>>> futures) throws AnalysisException {
+            List<Pair<Request, Future<PCollectQueryStatisticsResult>>> futures) {
         Map<String, QueryStatistics> statisticsMap = Maps.newHashMap();
         for (Pair<Request, Future<PCollectQueryStatisticsResult>> pair : futures) {
             try {
@@ -211,8 +222,11 @@ public class CurrentQueryInfoProvider {
                 LOG.warn("Thread interrupt! ", e);
                 Thread.currentThread().interrupt();
             } catch (ExecutionException | TimeoutException e) {
-                LOG.warn("fail to receive result", e);
-                throw new AnalysisException(e.getMessage());
+                String strQueryIds = pair.first.getQueryIds().stream()
+                        .map(DebugUtil::printId).
+                        collect(Collectors.joining(","));
+                LOG.warn("collectQueryStatistics failed to receive result from BE [{}:{}] [QueryID={}]",
+                        pair.first.address.getHostname(), pair.first.address.getPort(), strQueryIds, e);
             }
         }
         return statisticsMap;
