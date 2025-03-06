@@ -17,6 +17,7 @@ package com.starrocks.authentication;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.ErrorCode;
+import com.starrocks.epack.authentication.AuthenticationMgrEPack;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
@@ -35,7 +36,8 @@ public class AuthenticationHandler {
             throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, "", usePasswd);
         }
 
-        AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+        AuthenticationMgrEPack authenticationMgr =
+                (AuthenticationMgrEPack) GlobalStateMgr.getCurrentState().getAuthenticationMgr();
 
         UserIdentity authenticatedUser = null;
         if (Config.enable_auth_check) {
@@ -58,6 +60,12 @@ public class AuthenticationHandler {
                                     AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin());
                             provider.authenticate(user, remoteHost, authResponse, randomString, matchedUserIdentity.getValue());
                             authenticatedUser = matchedUserIdentity.getKey();
+
+                            if (authenticatedUser != null) {
+                                if (authenticationMgr.checkUserPasswordExpired(authenticatedUser)) {
+                                    context.setPasswordExpired(true);
+                                }
+                            }
                         } catch (AuthenticationException e) {
                             LOG.debug("failed to authenticate for native, user: {}@{}, error: {}",
                                     user, remoteHost, e.getMessage());
