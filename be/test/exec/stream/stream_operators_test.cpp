@@ -55,7 +55,7 @@ StatusOr<ChunkPtr> GeneratorStreamSourceOperator::pull_chunk(starrocks::RuntimeS
             VLOG_ROW << "Append col:" << idx << ", row:" << _param.start;
             column->append(_param.start % _param.ndv_count);
         }
-        chunk->append_column(column, SlotId(idx));
+        chunk->append_column(std::move(column), SlotId(idx));
     }
 
     // ops

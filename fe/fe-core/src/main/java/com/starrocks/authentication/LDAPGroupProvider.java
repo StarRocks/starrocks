@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.Hashtable;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -101,13 +102,13 @@ public class LDAPGroupProvider extends GroupProvider {
                     matchUserAndUpdateGroups(groups, attributes, userNameExtractInterface, userIdentity);
                 }
             } else if (getLdapGroupDn() != null) {
-                String ldapGroupDNList = getLdapGroupDn();
-                String[] ldapGroupDNs = ldapGroupDNList.split(";");
-                for (String ldapGroupDN : ldapGroupDNs) {
+                for (String ldapGroupDN : getLdapGroupDn()) {
                     Attributes attributes = ctx.getAttributes(ldapGroupDN,
                             new String[] {getLdapGroupIdentifierAttr(), getLDAPGroupMemberAttr()});
                     matchUserAndUpdateGroups(groups, attributes, userNameExtractInterface, userIdentity);
                 }
+            } else {
+                LOG.warn("Neither ldap_group_filter nor ldap_group_dn exists");
             }
         } catch (Exception e) {
             //Do not affect the normal login process at this time. If an error occurs, an empty group will be returned.
@@ -177,11 +178,11 @@ public class LDAPGroupProvider extends GroupProvider {
     private boolean isMatchUser(Attributes attributes, UserNameExtractInterface userNameExtractInterface, String user)
             throws NamingException {
         Attribute memberAttribute = attributes.get(getLDAPGroupMemberAttr());
-        if (memberAttribute != null) {
+        if (memberAttribute == null) {
             return false;
         }
 
-        NamingEnumeration<?> e = attributes.getAll();
+        NamingEnumeration<?> e = memberAttribute.getAll();
         while (e.hasMore()) {
             String memberDN = (String) e.next();
             String extractUserName = userNameExtractInterface.extract(memberDN);
@@ -257,11 +258,15 @@ public class LDAPGroupProvider extends GroupProvider {
     }
 
     public String getLdapGroupFilter() {
-        return properties.getOrDefault(LDAP_GROUP_FILTER, "");
+        return properties.get(LDAP_GROUP_FILTER);
     }
 
-    public String getLdapGroupDn() {
-        return properties.get(LDAP_GROUP_DN);
+    public List<String> getLdapGroupDn() {
+        if (properties.get(LDAP_GROUP_DN) == null) {
+            return null;
+        } else {
+            return List.of(properties.get(LDAP_GROUP_DN).split(";\\s*"));
+        }
     }
 
     public String getLdapGroupIdentifierAttr() {

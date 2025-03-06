@@ -27,7 +27,7 @@ namespace starrocks {
 Status PrimaryKeyCompactionConflictResolver::execute() {
     Schema pkey_schema = generate_pkey_schema();
 
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true));
 
     // init rows mapper iter

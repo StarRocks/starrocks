@@ -254,7 +254,9 @@ public enum ErrorCode {
                     ErrorCode.ERR_ACCESS_DENIED_HINT_MSG_FORMAT),
     ERR_ACCESS_DENIED_FOR_EXTERNAL_ACCESS_CONTROLLER(5204, new byte[] {'4', '2', '0', '0', '0'},
             "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation."),
-    ERR_GROUP_ACCESS_DENY(5205, new byte[] {'4', '2', '0', '0', '0'},
+    ERR_SECURE_TRANSPORT_REQUIRED(5205, new byte[] {'H', 'Y', '0', '0', '0'},
+            "Connections using insecure transport are prohibited"),
+    ERR_GROUP_ACCESS_DENY(5206, new byte[] {'4', '2', '0', '0', '0'},
             "Group Access Denied"),
 
     /**

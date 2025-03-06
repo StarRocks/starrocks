@@ -22,15 +22,15 @@ namespace starrocks {
 
 using NullData = FixedLengthColumn<uint8_t>::Container;
 using NullColumn = FixedLengthColumn<uint8_t>;
-using NullColumnPtr = FixedLengthColumn<uint8_t>::Ptr;
+using NullColumnPtr = NullColumn::Ptr;
 using NullColumns = std::vector<NullColumnPtr>;
 
 using NullValueType = NullColumn::ValueType;
 static constexpr NullValueType DATUM_NULL = NullValueType(1);
 static constexpr NullValueType DATUM_NOT_NULL = NullValueType(0);
 
-class NullableColumn : public ColumnFactory<Column, NullableColumn> {
-    friend class ColumnFactory<Column, NullableColumn>;
+class NullableColumn : public CowFactory<ColumnFactory<Column, NullableColumn>, NullableColumn> {
+    friend class CowFactory<ColumnFactory<Column, NullableColumn>, NullableColumn>;
 
 public:
     using ValueType = void;
@@ -40,16 +40,14 @@ public:
             return column;
         }
         auto null = NullColumn::create(column->size(), 0);
-        return NullableColumn::create(std::move(column), std::move(null));
+        return NullableColumn::create(column->as_mutable_ptr(), null->as_mutable_ptr());
     }
     NullableColumn() = default;
 
     NullableColumn(MutableColumnPtr&& data_column, MutableColumnPtr&& null_column);
-    NullableColumn(ColumnPtr data_column, NullColumnPtr null_column);
-
     NullableColumn(const NullableColumn& rhs)
-            : _data_column(rhs._data_column->clone_shared()),
-              _null_column(std::static_pointer_cast<NullColumn>(rhs._null_column->clone_shared())),
+            : _data_column(rhs._data_column->clone()),
+              _null_column(NullColumn::static_pointer_cast(rhs._null_column->clone())),
               _has_null(rhs._has_null) {}
 
     NullableColumn(NullableColumn&& rhs) noexcept
@@ -67,6 +65,16 @@ public:
         NullableColumn tmp(std::move(rhs));
         this->swap_column(tmp);
         return *this;
+    }
+
+    using Base = CowFactory<ColumnFactory<Column, NullableColumn>, NullableColumn>;
+    static Ptr create(const ColumnPtr& data_column, const ColumnPtr& null_column) {
+        return NullableColumn::create(data_column->as_mutable_ptr(), null_column->as_mutable_ptr());
+    }
+
+    template <typename... Args, typename = std::enable_if_t<IsMutableColumns<Args...>::value>>
+    static MutablePtr create(Args&&... args) {
+        return Base::create(std::forward<Args>(args)...);
     }
 
     ~NullableColumn() override = default;
@@ -179,30 +187,30 @@ public:
         return sizeof(bool) + _data_column->max_one_element_serialize_size();
     }
 
-    uint32_t serialize(size_t idx, uint8_t* pos) override;
+    uint32_t serialize(size_t idx, uint8_t* pos) const override;
 
-    uint32_t serialize_default(uint8_t* pos) override;
+    uint32_t serialize_default(uint8_t* pos) const override;
 
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                         uint32_t max_one_row_size) override;
+                         uint32_t max_one_row_size) const override;
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override {
-        if (_null_column->get_data()[idx]) {
+        if (immutable_null_column_data()[idx]) {
             return sizeof(uint8_t);
         }
         return sizeof(uint8_t) + _data_column->serialize_size(idx);
     }
 
     MutableColumnPtr clone_empty() const override {
-        return create_mutable(_data_column->clone_empty(), _null_column->clone_empty());
+        return create(_data_column->clone_empty(), _null_column->clone_empty());
     }
 
     size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, size_t start,
-                                       size_t count) override;
+                                       size_t count) const override;
 
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
@@ -223,29 +231,35 @@ public:
 
     std::string get_name() const override { return "nullable-" + _data_column->get_name(); }
 
+    const ColumnPtr& data_column() const { return _data_column; }
+    ColumnPtr& data_column() { return _data_column; }
+    MutableColumnPtr data_column_mutable_ptr() { return _data_column->as_mutable_ptr(); }
+
+    const NullColumnPtr& null_column() const { return _null_column; }
+    NullColumnPtr& null_column() { return _null_column; }
+    NullColumn::MutablePtr null_column_mutable_ptr() {
+        return NullColumn::static_pointer_cast(_null_column->as_mutable_ptr());
+    }
+
+    const Column& data_column_ref() const { return *_data_column; }
+    Column& data_column_ref() { return *_data_column; }
+    NullColumn& null_column_ref() { return *_null_column; }
+    const NullColumn& null_column_ref() const { return *_null_column; }
+
     NullData& null_column_data() { return _null_column->get_data(); }
+    const NullData& null_column_data() const { return _null_column->get_data(); }
     const NullData& immutable_null_column_data() const { return _null_column->get_data(); }
 
     Column* mutable_data_column() { return _data_column.get(); }
-
-    NullColumn* mutable_null_column() { return _null_column.get(); }
-
+    // TODO(COW): remove const_cast
+    NullColumn* mutable_null_column() const { return const_cast<NullColumn*>(_null_column.get()); }
     const NullColumn* immutable_null_column() const { return _null_column.get(); }
-
-    const Column& data_column_ref() const { return *_data_column; }
-
-    const ColumnPtr& data_column() const { return _data_column; }
-
-    ColumnPtr& data_column() { return _data_column; }
-
-    const NullColumn& null_column_ref() const { return *_null_column; }
-    const NullColumnPtr& null_column() const { return _null_column; }
 
     size_t null_count() const;
     size_t null_count(size_t offset, size_t count) const;
 
     Datum get(size_t n) const override {
-        if (_has_null && _null_column->get_data()[n]) {
+        if (_has_null && (immutable_null_column_data()[n])) {
             return {};
         } else {
             return _data_column->get(n);
@@ -282,7 +296,7 @@ public:
 
     void swap_by_data_column(ColumnPtr& src) {
         reset_column();
-        _data_column.swap(src);
+        _data_column = std::move(src);
         null_column_data().insert(null_column_data().end(), _data_column->size(), 0);
         update_has_null();
     }
@@ -303,7 +317,7 @@ public:
     std::string debug_item(size_t idx) const override {
         DCHECK_EQ(_null_column->size(), _data_column->size());
         std::stringstream ss;
-        if (_null_column->get_data()[idx]) {
+        if (immutable_null_column_data()[idx]) {
             ss << "NULL";
         } else {
             ss << _data_column->debug_item(idx);
@@ -332,6 +346,13 @@ public:
     }
 
     void check_or_die() const override;
+
+    void mutate_each_subcolumn() override {
+        // data
+        _data_column = (std::move(*_data_column)).mutate();
+        // _null_column
+        _null_column = NullColumn::static_pointer_cast((std::move(*_null_column)).mutate());
+    }
 
 protected:
     ColumnPtr _data_column;

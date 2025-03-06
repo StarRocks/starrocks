@@ -245,7 +245,7 @@ Status StreamAggregator::_output_result_changes_with_retract(size_t chunk_size, 
     DCHECK_LE(_agg_functions.size(), prev_result->num_columns());
 
     // 3. generate result chunks
-    Int8ColumnPtr ops = Int8Column::create();
+    Int8Column::MutablePtr ops = Int8Column::create();
     ChunkPtr result_chunk = final_result_chunk->clone_empty();
     size_t j = 0;
     for (size_t i = 0; i < chunk_size; i++) {
@@ -271,7 +271,7 @@ Status StreamAggregator::_output_result_changes_with_retract(size_t chunk_size, 
         }
     }
     DCHECK_EQ(prev_result->num_rows(), j);
-    *result_chunk_with_ops = StreamChunkConverter::make_stream_chunk(result_chunk, ops);
+    *result_chunk_with_ops = StreamChunkConverter::make_stream_chunk(result_chunk, std::move(ops));
     return Status::OK();
 }
 
@@ -283,7 +283,7 @@ Status StreamAggregator::_output_result_changes_without_retract(size_t chunk_siz
             _agg_group_state->output_results(chunk_size, group_by_columns, _tmp_agg_states, agg_result_columns));
 
     // op col
-    Int8ColumnPtr ops = Int8Column::create();
+    Int8Column::MutablePtr ops = Int8Column::create();
     ops->append_value_multiple_times(&INSERT_OP, chunk_size);
 
     auto final_result_chunk = _build_output_chunk(group_by_columns, agg_result_columns, false);

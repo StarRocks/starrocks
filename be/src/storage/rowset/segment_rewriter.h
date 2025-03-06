@@ -28,19 +28,17 @@ public:
     // then append write_column to dest file
     static Status rewrite_partial_update(const FileInfo& src, FileInfo* dest,
                                          const std::shared_ptr<const TabletSchema>& tschema,
-                                         std::vector<uint32_t>& column_ids,
-                                         std::vector<std::unique_ptr<Column>>& columns, uint32_t segment_id,
-                                         const FooterPointerPB& partial_rowset_footer);
+                                         std::vector<uint32_t>& column_ids, MutableColumns& columns,
+                                         uint32_t segment_id, const FooterPointerPB& partial_rowset_footer);
     static Status rewrite_auto_increment(const std::string& src_path, const std::string& dest_path,
                                          const TabletSchemaCSPtr& tschema,
                                          AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
-                                         std::vector<uint32_t>& column_ids,
-                                         std::vector<std::unique_ptr<Column>>* columns);
+                                         std::vector<uint32_t>& column_ids, MutableColumns* columns);
     static Status rewrite_auto_increment_lake(
             const FileInfo& src, FileInfo* dest, const TabletSchemaCSPtr& tschema,
             starrocks::lake::AutoIncrementPartialUpdateState& auto_increment_partial_update_state,
-            const std::vector<uint32_t>& unmodified_column_ids,
-            std::vector<std::unique_ptr<Column>>* unmodified_column_data, const starrocks::lake::Tablet* tablet);
+            const std::vector<uint32_t>& unmodified_column_ids, MutableColumns* unmodified_column_data,
+            const starrocks::lake::Tablet* tablet);
 };
 
 } // namespace starrocks

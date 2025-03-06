@@ -770,7 +770,7 @@ Status OlapTableSink::_fill_auto_increment_id(Chunk* chunk) {
     }
     _has_auto_increment = true;
 
-    auto& slot = _output_tuple_desc->slots()[_auto_increment_slot_id];
+    SlotDescriptor* slot = _output_tuple_desc->get_slot_by_id(_auto_increment_slot_id);
     RETURN_IF_ERROR(_fill_auto_increment_id_internal(chunk, slot, _schema->table_id()));
 
     return Status::OK();
@@ -788,8 +788,8 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
         return Status::OK();
     }
 
-    ColumnPtr& data_col = std::dynamic_pointer_cast<NullableColumn>(col)->data_column();
-    Filter filter(std::dynamic_pointer_cast<NullableColumn>(col)->immutable_null_column_data());
+    ColumnPtr& data_col = NullableColumn::dynamic_pointer_cast(col)->data_column();
+    Filter filter(NullableColumn::dynamic_pointer_cast(col)->immutable_null_column_data());
 
     Filter init_filter(chunk->num_rows(), 0);
 
@@ -817,7 +817,7 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
     // Here we just set 0 value in this case.
     uint32 del_rows = SIMD::count_nonzero(init_filter);
     if (del_rows != 0) {
-        RETURN_IF_ERROR((std::dynamic_pointer_cast<Int64Column>(data_col))
+        RETURN_IF_ERROR((Int64Column::dynamic_pointer_cast(data_col))
                                 ->fill_range(std::vector<int64_t>(del_rows, 0), init_filter));
     }
 
@@ -837,7 +837,7 @@ Status OlapTableSink::_fill_auto_increment_id_internal(Chunk* chunk, SlotDescrip
             // it will be allocate in DeltaWriter.
             ids.assign(null_rows, 0);
         }
-        RETURN_IF_ERROR((std::dynamic_pointer_cast<Int64Column>(data_col))->fill_range(ids, filter));
+        RETURN_IF_ERROR((Int64Column::dynamic_pointer_cast(data_col))->fill_range(ids, filter));
         break;
     }
     default:
@@ -974,7 +974,7 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
     size_t num_rows = chunk->num_rows();
     for (int i = 0; i < _output_tuple_desc->slots().size(); ++i) {
         SlotDescriptor* desc = _output_tuple_desc->slots()[i];
-        const ColumnPtr& column_ptr = chunk->get_column_by_slot_id(desc->id());
+        ColumnPtr& column_ptr = chunk->get_column_by_slot_id(desc->id());
 
         // change validation selection value back to OK/FAILED
         // because in previous run, some validation selection value could
@@ -1015,7 +1015,8 @@ void OlapTableSink::_validate_data(RuntimeState* state, Chunk* chunk) {
         // Validate column nullable info
         // Column nullable info need to respect slot nullable info
         if (desc->is_nullable() && !column_ptr->is_nullable()) {
-            ColumnPtr new_column = NullableColumn::create(column_ptr, NullColumn::create(num_rows, 0));
+            MutableColumnPtr new_column =
+                    NullableColumn::create(std::move(column_ptr)->as_mutable_ptr(), NullColumn::create(num_rows, 0));
             chunk->update_column(std::move(new_column), desc->id());
             // Auto increment column is not nullable but use NullableColumn to implement. We should skip the check for it.
         } else if (!desc->is_nullable() && column_ptr->is_nullable() &&
@@ -1163,10 +1164,11 @@ void OlapTableSink::_padding_char_column(Chunk* chunk) {
 
             if (desc->is_nullable()) {
                 auto* nullable_column = down_cast<NullableColumn*>(column);
-                ColumnPtr new_column = NullableColumn::create(new_binary, nullable_column->null_column());
-                chunk->update_column(new_column, desc->id());
+                MutableColumnPtr new_column =
+                        NullableColumn::create(std::move(new_binary), nullable_column->null_column()->as_mutable_ptr());
+                chunk->update_column(std::move(new_column), desc->id());
             } else {
-                chunk->update_column(new_binary, desc->id());
+                chunk->update_column(std::move(new_binary), desc->id());
             }
         }
     }

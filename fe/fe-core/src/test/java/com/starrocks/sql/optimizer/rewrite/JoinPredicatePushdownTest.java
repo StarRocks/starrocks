@@ -25,6 +25,45 @@ public class JoinPredicatePushdownTest extends PlanTestBase {
     }
 
     @Test
+    public void testSplitJoinORToUnionRule() throws Exception {
+        connectContext.getSessionVariable().setEnabledRewriteOrToUnionAllJoin(true);
+        String sql = "select v1, v2, v3 from t0 join t1 where t0.v1= t1.v4 or t0.v2 = t1.v5 limit 100";
+        String plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4\n" +
+                "  |  limit: 100");
+        PlanTestBase.assertContains(plan, "10:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 8: v2 = 11: v5\n" +
+                "  |  other join predicates: ((7: v1 != 10: v4) OR (7: v1 IS NULL)) OR (10: v4 IS NULL)\n" +
+                "  |  limit: 100");
+        sql = "select * from t0 join t1 where t0.v1= t1.v4 or t0.v2 = t1.v5 or t0.v3 = t1.v6";
+        plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan, "14:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 15: v3 = 18: v6\n" +
+                "  |  other join predicates: ((13: v1 != 16: v4) OR (13: v1 IS NULL)) " +
+                "OR (16: v4 IS NULL), ((14: v2 != 17: v5) OR (14: v2 IS NULL)) OR (17: v5 IS NULL)");
+        PlanTestBase.assertContains(plan, "9:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 8: v2 = 11: v5\n" +
+                "  |  other join predicates: ((7: v1 != 10: v4) OR (7: v1 IS NULL)) OR (10: v4 IS NULL)");
+        PlanTestBase.assertContains(plan, "4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  colocate: false, reason: \n" +
+                "  |  equal join conjunct: 1: v1 = 4: v4");
+        sql = "select rand(), *  from t0 join t1 where t0.v1= t1.v4 or t0.v2 = t1.v5 or t0.v3 = t1.v6";
+        plan = getFragmentPlan(sql);
+        PlanTestBase.assertContains(plan,
+                "other join predicates: ((1: v1 = 4: v4) OR (2: v2 = 5: v5)) OR (3: v3 = 6: v6)");
+    }
+
+    @Test
     public void testJoinPushdownCTE() throws Exception {
         // enable cte reuse to trigger calling PUSH_DOWN_PREDICATE rule set twice
         connectContext.getSessionVariable().setCboCteReuse(true);

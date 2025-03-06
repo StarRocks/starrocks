@@ -20,11 +20,13 @@ set(EXEC_FILES
         ./column/timestamp_value_test.cpp
         ./common/cow_test.cpp
         ./column/schema_test.cpp
+        ./column/column_cow_test.cpp
         ./common/config_test.cpp
         ./common/process_exit_test.cpp
         ./common/status_test.cpp
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
+        ./common/cow_test.cpp
         ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp

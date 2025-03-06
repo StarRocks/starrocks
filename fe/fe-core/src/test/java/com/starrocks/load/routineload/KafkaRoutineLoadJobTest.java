@@ -571,4 +571,51 @@ public class KafkaRoutineLoadJobTest {
             Assert.assertTrue(kafkaRoutineLoadJob.isPauseOnFatalParseError());
         }
     }
+
+    @Test
+    public void testGetSourceLagString() {
+        RoutineLoadJob job = new KafkaRoutineLoadJob(1L, "routine_load", 1L, 1L, "127.0.0.1:9020", "topic1");
+        // check empty value
+        String progressJsonStr = null;
+        String sourceLagString = job.getSourceLagString(progressJsonStr);
+        Assert.assertTrue(sourceLagString.contains("null"));
+
+        progressJsonStr = "{\"0\":\"100\"}";
+        Map<Integer, Long> latestPartitionOffsets = null;
+        Deencapsulation.setField(job, "latestPartitionOffsets", latestPartitionOffsets);
+        sourceLagString = job.getSourceLagString(progressJsonStr);
+        Assert.assertTrue(sourceLagString.contains("null"));
+
+        progressJsonStr = "{\"0\":null}";
+        latestPartitionOffsets = Maps.newHashMap();
+        latestPartitionOffsets.put(0, 200L);
+        Deencapsulation.setField(job, "latestPartitionOffsets", latestPartitionOffsets);
+        sourceLagString = job.getSourceLagString(progressJsonStr);
+        Assert.assertTrue(sourceLagString.contains("{}"));
+
+        progressJsonStr = "{\"0\":\"" + KafkaProgress.OFFSET_ZERO + "\"}";
+        sourceLagString = job.getSourceLagString(progressJsonStr);
+        Assert.assertTrue(sourceLagString.contains("{}"));
+
+        progressJsonStr = "{\"0\":\"XXX\"}";
+        sourceLagString = job.getSourceLagString(progressJsonStr);
+        Assert.assertTrue(sourceLagString.contains("{}"));
+
+        progressJsonStr = "{\"0\":\"100\"}";
+        latestPartitionOffsets = Maps.newHashMap();
+        latestPartitionOffsets.put(0, 200L);
+        Deencapsulation.setField(job, "latestPartitionOffsets", latestPartitionOffsets);
+        sourceLagString = job.getSourceLagString(progressJsonStr);
+        Assert.assertTrue(sourceLagString.contains("\"0\":\"100\""));
+
+        //check  progress > latestPartitionOffsets
+        progressJsonStr = "{\"0\":\"200\"}";
+        latestPartitionOffsets.put(0, 100L);
+        Deencapsulation.setField(job, "latestPartitionOffsets", latestPartitionOffsets);
+        sourceLagString = job.getSourceLagString(progressJsonStr);
+        Assert.assertTrue(sourceLagString.contains("\"0\":\"0\""));
+
+    }
+
+
 }

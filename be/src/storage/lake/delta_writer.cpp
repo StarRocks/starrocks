@@ -233,6 +233,9 @@ private:
     // End of data ingestion
     bool _eos = false;
     DeltaWriterStat _stats;
+
+    // Used in partial update to limit too much rows which will cause OOM.
+    size_t _max_buffer_rows = std::numeric_limits<size_t>::max();
 };
 
 bool DeltaWriterImpl::is_immutable() const {
@@ -297,6 +300,22 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         if (_write_schema->num_columns() < _tablet_schema->num_columns()) {
             DCHECK_EQ(_write_column_ids.size(), _write_schema->num_columns());
         }
+
+        if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && is_partial_update() &&
+            _partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE &&
+            _partial_update_mode != PartialUpdateMode::COLUMN_UPSERT_MODE) {
+            // calucate max buffer rows for partial update (row mode).
+            int64_t avg_row_size = _tablet_manager->get_average_row_size_from_latest_metadata(_tablet_id);
+            if (avg_row_size <= 0) {
+                // If tablet is a new created tablet and has no historical data, average_row_size is 0
+                // And we use schema size as average row size. If there are complex type(i.e. BITMAP/ARRAY) or varchar,
+                // we will consider it as 16 bytes.
+                avg_row_size = _tablet_schema->estimate_row_size(16);
+            }
+            if (avg_row_size > 0) {
+                _max_buffer_rows = _max_buffer_size / avg_row_size;
+            }
+        }
     }
     return Status::OK();
 }
@@ -310,6 +329,7 @@ inline Status DeltaWriterImpl::reset_memtable() {
         _mem_table = std::make_unique<MemTable>(_tablet_id, &_write_schema_for_mem_table, _mem_table_sink.get(),
                                                 _max_buffer_size, _mem_tracker);
     }
+    _mem_table->set_write_buffer_row(_max_buffer_rows);
     return Status::OK();
 }
 
@@ -651,14 +671,14 @@ Status DeltaWriterImpl::fill_auto_increment_id(const Chunk& chunk) {
         pk_columns.push_back((uint32_t)i);
     }
     Schema pkey_schema = ChunkHelper::convert_schema(_write_schema, pk_columns);
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
     auto col = pk_column->clone();
 
     PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), col.get());
-    std::vector<std::unique_ptr<Column>> upserts;
+    MutableColumns upserts;
     upserts.resize(1);
     upserts[0] = std::move(col);
 
@@ -702,7 +722,7 @@ Status DeltaWriterImpl::fill_auto_increment_id(const Chunk& chunk) {
         const TabletColumn& tablet_column = _write_schema->column(i);
         if (tablet_column.is_auto_increment()) {
             auto& column = chunk.get_column_by_index(i);
-            RETURN_IF_ERROR((std::dynamic_pointer_cast<Int64Column>(column))->fill_range(ids, filter));
+            RETURN_IF_ERROR((Int64Column::dynamic_pointer_cast(column))->fill_range(ids, filter));
             break;
         }
     }

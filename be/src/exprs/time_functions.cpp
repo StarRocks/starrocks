@@ -91,7 +91,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
             null_result[i] = nulls[i] | (!values[i].is_valid_non_strict());
         }
 
-        return NullableColumn::create(v->data_column(), null_column);
+        return NullableColumn::create(v->data_column(), std::move(null_column));
     } else {
         auto null_column = NullColumn::create();
         null_column->resize(v1->size());
@@ -103,7 +103,7 @@ ColumnPtr date_valid(const ColumnPtr& v1) {
             nulls[i] = (!values[i].is_valid_non_strict());
         }
 
-        return NullableColumn::create(v1, null_column);
+        return NullableColumn::create(v1, std::move(null_column));
     }
 }
 
@@ -1467,7 +1467,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_64(FunctionContext* context, 
     int64_t value = context->state()->timestamp_ms() / 1000;
     auto result = Int64Column::create();
     result->append(value);
-    return ConstColumn::create(result, 1);
+    return ConstColumn::create(std::move(result), 1);
 }
 
 StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_32(FunctionContext* context, const Columns& columns) {
@@ -1475,7 +1475,7 @@ StatusOr<ColumnPtr> TimeFunctions::to_unix_for_now_32(FunctionContext* context, 
     int64_t value = context->state()->timestamp_ms() / 1000;
     auto result = Int32Column::create();
     result->append(value);
-    return ConstColumn::create(result, 1);
+    return ConstColumn::create(std::move(result), 1);
 }
 
 /*

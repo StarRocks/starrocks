@@ -532,8 +532,10 @@ public class StmtExecutor {
             httpResultSender = new HttpResultSender((HttpConnectContext) context);
         }
 
-        if (shouldMarkIdleCheck(parsedStmt)) {
-            WarehouseIdleChecker.increaseRunningSQL(context.getCurrentWarehouseId());
+        final boolean shouldMarkIdleCheck = shouldMarkIdleCheck(parsedStmt);
+        final long originWarehouseId = context.getCurrentWarehouseId();
+        if (shouldMarkIdleCheck) {
+            WarehouseIdleChecker.increaseRunningSQL(originWarehouseId);
         }
         try {
             context.getState().setIsQuery(parsedStmt instanceof QueryStatement);
@@ -692,50 +694,52 @@ public class StmtExecutor {
                         }
                     } finally {
                         boolean isAsync = false;
-                        if (needRetry) {
-                            // If the runtime profile is enabled, then we need to clean up the profile record related
-                            // to this failed execution.
-                            String queryId = DebugUtil.printId(context.getExecutionId());
-                            ProfileManager.getInstance().removeProfile(queryId);
-                        } else {
-                            // Release all resources after the query finish as soon as possible, as query profile is
-                            // asynchronous which can be delayed a long time.
-                            if (coord != null) {
-                                coord.onReleaseSlots();
-                            }
+                        try {
+                            if (needRetry) {
+                                // If the runtime profile is enabled, then we need to clean up the profile record related
+                                // to this failed execution.
+                                String queryId = DebugUtil.printId(context.getExecutionId());
+                                ProfileManager.getInstance().removeProfile(queryId);
+                            } else {
+                                // Release all resources after the query finish as soon as possible, as query profile is
+                                // asynchronous which can be delayed a long time.
+                                if (coord != null) {
+                                    coord.onReleaseSlots();
+                                }
 
-                            if (context instanceof ArrowFlightSqlConnectContext) {
-                                isAsync = true;
-                                tryProcessProfileAsync(execPlan, i);
-                            } else if (context.isProfileEnabled()) {
-                                isAsync = tryProcessProfileAsync(execPlan, i);
-                                if (parsedStmt.isExplain() &&
-                                        StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
-                                    if (coord != null && coord.isShortCircuit()) {
-                                        throw new StarRocksException(
-                                                "short circuit point query doesn't suppot explain analyze stmt, " +
-                                                        "you can set it off by using  set enable_short_circuit=false");
+                                if (context instanceof ArrowFlightSqlConnectContext) {
+                                    isAsync = true;
+                                    tryProcessProfileAsync(execPlan, i);
+                                } else if (context.isProfileEnabled()) {
+                                    isAsync = tryProcessProfileAsync(execPlan, i);
+                                    if (parsedStmt.isExplain() &&
+                                            StatementBase.ExplainLevel.ANALYZE.equals(parsedStmt.getExplainLevel())) {
+                                        if (coord != null && coord.isShortCircuit()) {
+                                            throw new StarRocksException(
+                                                    "short circuit point query doesn't suppot explain analyze stmt, " +
+                                                            "you can set it off by using  set enable_short_circuit=false");
+                                        }
+                                        handleExplainStmt(ExplainAnalyzer.analyze(
+                                                ProfilingExecPlan.buildFrom(execPlan), profile, null,
+                                                context.getSessionVariable().getColorExplainOutput()));
                                     }
-                                    handleExplainStmt(ExplainAnalyzer.analyze(
-                                            ProfilingExecPlan.buildFrom(execPlan), profile, null,
-                                            context.getSessionVariable().getColorExplainOutput()));
                                 }
                             }
-                        }
 
-                        if (context.getState().isError()) {
-                            RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
-                            Tracers.toRuntimeProfile(plannerProfile);
-                            LOG.warn("Query {} failed. Planner profile : {}",
-                                    context.getQueryId().toString(), plannerProfile);
-                        }
-
-                        if (isAsync) {
-                            QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(),
-                                    System.currentTimeMillis() +
-                                            context.getSessionVariable().getProfileTimeout() * 1000L);
-                        } else {
-                            QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+                            if (context.getState().isError()) {
+                                RuntimeProfile plannerProfile = new RuntimeProfile("Planner");
+                                Tracers.toRuntimeProfile(plannerProfile);
+                                LOG.warn("Query {} failed. Planner profile : {}",
+                                        context.getQueryId().toString(), plannerProfile);
+                            }
+                        } finally {
+                            if (isAsync) {
+                                QeProcessorImpl.INSTANCE.monitorQuery(context.getExecutionId(),
+                                        System.currentTimeMillis() +
+                                                context.getSessionVariable().getProfileTimeout() * 1000L);
+                            } else {
+                                QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
+                            }
                         }
                     }
                 }
@@ -848,8 +852,8 @@ public class StmtExecutor {
             // restore session variable in connect context
             context.setSessionVariable(sessionVariableBackup);
 
-            if (shouldMarkIdleCheck(parsedStmt)) {
-                WarehouseIdleChecker.decreaseRunningSQL(context.getCurrentWarehouseId());
+            if (shouldMarkIdleCheck) {
+                WarehouseIdleChecker.decreaseRunningSQL(originWarehouseId);
             }
 
             recordExecStatsIntoContext();

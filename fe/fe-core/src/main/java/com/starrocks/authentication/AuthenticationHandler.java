@@ -41,7 +41,7 @@ public class AuthenticationHandler {
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
 
         UserIdentity authenticatedUser = null;
-        String groupProviderName = null;
+        List<String> groupProviderName = null;
         List<String> authenticatedGroupList = null;
 
         if (Config.enable_auth_check) {
@@ -65,7 +65,7 @@ public class AuthenticationHandler {
                             provider.authenticate(user, remoteHost, authResponse, randomString, matchedUserIdentity.getValue());
                             authenticatedUser = matchedUserIdentity.getKey();
 
-                            groupProviderName = Config.group_provider;
+                            groupProviderName = List.of(Config.group_provider);
                             authenticatedGroupList = List.of(Config.authenticated_group_list);
                         } catch (AuthenticationException e) {
                             LOG.debug("failed to authenticate for native, user: {}@{}, error: {}",
@@ -87,7 +87,7 @@ public class AuthenticationHandler {
 
                         groupProviderName = securityIntegration.getGroupProviderName();
                         if (groupProviderName == null) {
-                            groupProviderName = Config.group_provider;
+                            groupProviderName = List.of(Config.group_provider);
                         }
 
                         authenticatedGroupList = securityIntegration.getAuthenticatedGroupList();
@@ -105,7 +105,7 @@ public class AuthenticationHandler {
                 throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePasswd);
             } else {
                 authenticatedUser = matchedUserIdentity.getKey();
-                groupProviderName = Config.group_provider;
+                groupProviderName = List.of(Config.group_provider);
                 authenticatedGroupList = List.of(Config.authenticated_group_list);
             }
         }
@@ -135,12 +135,18 @@ public class AuthenticationHandler {
         return authenticatedUser;
     }
 
-    public static Set<String> getGroups(UserIdentity userIdentity, String groupProviderName) {
+    public static Set<String> getGroups(UserIdentity userIdentity, List<String> groupProviderList) {
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-        GroupProvider groupProvider = authenticationMgr.getGroupProvider(groupProviderName);
-        if (groupProvider == null) {
-            return new HashSet<>();
+
+        HashSet<String> groups = new HashSet<>();
+        for (String groupProviderName : groupProviderList) {
+            GroupProvider groupProvider = authenticationMgr.getGroupProvider(groupProviderName);
+            if (groupProvider == null) {
+                continue;
+            }
+            groups.addAll(groupProvider.getGroup(userIdentity));
         }
-        return groupProvider.getGroup(userIdentity);
+
+        return groups;
     }
 }

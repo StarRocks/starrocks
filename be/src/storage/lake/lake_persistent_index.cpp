@@ -559,7 +559,7 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
 Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version) {
     TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_del_cost_us");
     // Build pk column struct from schema
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
     // Iterate all del files and insert into index.
     for (int del_idx = 0; del_idx < rowset->metadata().del_files_size(); ++del_idx) {
@@ -689,7 +689,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     const uint64_t rebuild_rss_rowid_point = sstables.empty() ? 0 : sstables.rbegin()->max_rss_rowid();
     const uint32_t rebuild_rss_id = rebuild_rss_rowid_point >> 32;
     OlapReaderStatistics stats;
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     if (pk_columns.size() > 1) {
         // more than one key column
         if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {

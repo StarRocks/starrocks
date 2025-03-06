@@ -62,7 +62,7 @@ Status CompactionState::_load_segments(Rowset* rowset, const TabletSchemaCSPtr& 
 
     Schema pkey_schema = ChunkHelper::convert_schema(tablet_schema, pk_columns);
 
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column, true));
 
     if (_segment_iters.empty()) {

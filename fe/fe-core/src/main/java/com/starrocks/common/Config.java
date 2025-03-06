@@ -3066,6 +3066,12 @@ public class Config extends ConfigBase {
     public static String ssl_truststore_password = "";
 
     /**
+     * Allow only secure transport from clients
+     **/
+    @ConfField
+    public static boolean ssl_force_secure_transport = false;
+
+    /**
      * ignore check db status when show proc '/catalog/catalog_name'
      */
     @ConfField(mutable = true)
@@ -3525,7 +3531,7 @@ public class Config extends ConfigBase {
     public static String[] authenticated_group_list = {};
 
     @ConfField(mutable = false)
-    public static String group_provider = "unix";
+    public static String[] group_provider = {};
 
     @ConfField(mutable = true)
     public static boolean transaction_state_print_partition_info = true;

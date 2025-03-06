@@ -70,7 +70,7 @@ public:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        return std::make_shared<Chunk>(Columns{c0, c1}, _schema);
+        return std::make_shared<Chunk>(Columns{std::move(c0), std::move(c1)}, _schema);
     }
 
 protected:

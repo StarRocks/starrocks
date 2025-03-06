@@ -127,7 +127,7 @@ protected:
         auto read_chunk = std::make_shared<Chunk>();
         for (auto type_desc : type_descs) {
             auto col = ColumnHelper::create_column(type_desc, true);
-            read_chunk->append_column(col, read_chunk->num_columns());
+            read_chunk->append_column(std::move(col), read_chunk->num_columns());
         }
 
         file_reader->get_next(&read_chunk);
@@ -154,25 +154,25 @@ TEST_F(FileWriterTest, TestWriteIntegralTypes) {
         std::vector<int8_t> int8_nums{INT8_MIN, INT8_MAX, 0, 1};
         auto count = col0->append_numbers(int8_nums.data(), size(int8_nums) * sizeof(int8_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col0, chunk->num_columns());
+        chunk->append_column(std::move(col0), chunk->num_columns());
 
         auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_SMALLINT), true);
         std::vector<int16_t> int16_nums{INT16_MIN, INT16_MAX, 0, 1};
         count = col1->append_numbers(int16_nums.data(), size(int16_nums) * sizeof(int16_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col1, chunk->num_columns());
+        chunk->append_column(std::move(col1), chunk->num_columns());
 
         auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
         std::vector<int32_t> int32_nums{INT32_MIN, INT32_MAX, 0, 1};
         count = col2->append_numbers(int32_nums.data(), size(int32_nums) * sizeof(int32_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col2, chunk->num_columns());
+        chunk->append_column(std::move(col2), chunk->num_columns());
 
         auto col3 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
         std::vector<int64_t> int64_nums{INT64_MIN, INT64_MAX, 0, 1};
         count = col3->append_numbers(int64_nums.data(), size(int64_nums) * sizeof(int64_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col3, chunk->num_columns());
+        chunk->append_column(std::move(col3), chunk->num_columns());
     }
 
     // write chunk
@@ -200,19 +200,19 @@ TEST_F(FileWriterTest, TestWriteDecimal) {
         std::vector<int32_t> int32_nums{-999999, 999999, 0, 1};
         auto count = col0->append_numbers(int32_nums.data(), size(int32_nums) * sizeof(int32_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col0, chunk->num_columns());
+        chunk->append_column(std::move(col0), chunk->num_columns());
 
         auto col1 = ColumnHelper::create_column(type_descs[1], true);
         std::vector<int64_t> int64_nums{-999999999999, 999999999999, 0, 1};
         count = col1->append_numbers(int64_nums.data(), size(int64_nums) * sizeof(int64_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col1, chunk->num_columns());
+        chunk->append_column(std::move(col1), chunk->num_columns());
 
         auto col2 = ColumnHelper::create_column(type_descs[2], true);
         std::vector<int128_t> int128_nums{-999999999999, 999999999999, 0, 1};
         count = col2->append_numbers(int128_nums.data(), size(int128_nums) * sizeof(int128_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col2, chunk->num_columns());
+        chunk->append_column(std::move(col2), chunk->num_columns());
     }
 
     // write chunk
@@ -239,8 +239,8 @@ TEST_F(FileWriterTest, TestWriteBoolean) {
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
     }
 
     // write chunk
@@ -268,8 +268,8 @@ TEST_F(FileWriterTest, TestWriteFloat) {
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
     }
 
     // write chunk
@@ -297,8 +297,8 @@ TEST_F(FileWriterTest, TestWriteDouble) {
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
     }
 
     // write chunk
@@ -335,8 +335,8 @@ TEST_F(FileWriterTest, TestWriteDate) {
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
     }
 
     // write chunk
@@ -374,8 +374,8 @@ TEST_F(FileWriterTest, TestWriteDatetime) {
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {0, 0, 0, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
     }
 
     // write chunk
@@ -406,8 +406,8 @@ TEST_F(FileWriterTest, TestWriteVarchar) {
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
     }
 
     // write chunk
@@ -439,19 +439,19 @@ TEST_F(FileWriterTest, TestWriteArray) {
         auto elements_null_col = UInt8Column::create();
         std::vector<uint8_t> nulls{0, 0, 1, 0};
         elements_null_col->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
-        auto elements_col = NullableColumn::create(elements_data_col, elements_null_col);
+        auto elements_col = NullableColumn::create(std::move(elements_data_col), std::move(elements_null_col));
 
         auto offsets_col = UInt32Column::create();
         std::vector<uint32_t> offsets{0, 1, 1, 1, 4};
         offsets_col->append_numbers(offsets.data(), sizeof(uint32_t) * offsets.size());
-        auto array_col = ArrayColumn::create(elements_col, offsets_col);
+        auto array_col = ArrayColumn::create(std::move(elements_col), std::move(offsets_col));
 
         std::vector<uint8_t> _nulls{0, 1, 0, 0};
         auto null_col = UInt8Column::create();
         null_col->append_numbers(_nulls.data(), sizeof(uint8_t) * _nulls.size());
-        auto nullable_col = NullableColumn::create(array_col, null_col);
+        auto nullable_col = NullableColumn::create(std::move(array_col), std::move(null_col));
 
-        chunk->append_column(nullable_col, chunk->num_columns());
+        chunk->append_column(std::move(nullable_col), chunk->num_columns());
     }
 
     // write chunk
@@ -486,29 +486,29 @@ TEST_F(FileWriterTest, TestWriteStruct) {
         data_col_a->append_numbers(nums_a.data(), sizeof(int16_t) * nums_a.size());
         auto null_col_a = UInt8Column::create();
         null_col_a->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
-        auto nullable_col_a = NullableColumn::create(data_col_a, null_col_a);
+        auto nullable_col_a = NullableColumn::create(std::move(data_col_a), std::move(null_col_a));
 
         auto data_col_b = Int32Column::create();
         std::vector<int32_t> nums_b{1, 2, -99, 3};
         data_col_b->append_numbers(nums_b.data(), sizeof(int32_t) * nums_b.size());
         auto null_col_b = UInt8Column::create();
         null_col_b->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
-        auto nullable_col_b = NullableColumn::create(data_col_b, null_col_b);
+        auto nullable_col_b = NullableColumn::create(std::move(data_col_b), std::move(null_col_b));
 
         auto data_col_c = Int64Column::create();
         std::vector<int64_t> nums_c{1, 2, -99, 3};
         data_col_c->append_numbers(nums_c.data(), sizeof(int64_t) * nums_c.size());
         auto null_col_c = UInt8Column::create();
         null_col_c->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
-        auto nullable_col_c = NullableColumn::create(data_col_c, null_col_c);
+        auto nullable_col_c = NullableColumn::create(std::move(data_col_c), std::move(null_col_c));
 
-        Columns fields{nullable_col_a, nullable_col_b, nullable_col_c};
-        auto struct_column = StructColumn::create(fields, type_int_struct.field_names);
+        Columns fields{std::move(nullable_col_a), std::move(nullable_col_b), std::move(nullable_col_c)};
+        auto struct_column = StructColumn::create(std::move(fields), std::move(type_int_struct.field_names));
         auto null_column = UInt8Column::create();
         null_column->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
-        auto nullable_col = NullableColumn::create(struct_column, null_column);
+        auto nullable_col = NullableColumn::create(std::move(struct_column), std::move(null_column));
 
-        chunk->append_column(nullable_col, chunk->num_columns());
+        chunk->append_column(std::move(nullable_col), chunk->num_columns());
     }
 
     // write chunk
@@ -542,7 +542,7 @@ TEST_F(FileWriterTest, TestWriteMap) {
         auto key_null_col = UInt8Column::create();
         std::vector<uint8_t> key_nulls{0, 0, 0, 0};
         key_null_col->append_numbers(key_nulls.data(), sizeof(uint8_t) * key_nulls.size());
-        auto key_col = NullableColumn::create(key_data_col, key_null_col);
+        auto key_col = NullableColumn::create(std::move(key_data_col), std::move(key_null_col));
 
         auto value_data_col = Int32Column::create();
         std::vector<int32_t> value_nums{1, 2, -99, 4};
@@ -550,19 +550,19 @@ TEST_F(FileWriterTest, TestWriteMap) {
         auto value_null_col = UInt8Column::create();
         std::vector<uint8_t> value_nulls{0, 0, 1, 0};
         value_null_col->append_numbers(value_nulls.data(), sizeof(uint8_t) * value_nulls.size());
-        auto value_col = NullableColumn::create(value_data_col, value_null_col);
+        auto value_col = NullableColumn::create(std::move(value_data_col), std::move(value_null_col));
 
         auto offsets_col = UInt32Column::create();
         std::vector<uint32_t> offsets{0, 1, 1, 1, 4};
         offsets_col->append_numbers(offsets.data(), sizeof(uint32_t) * offsets.size());
-        auto map_col = MapColumn::create(key_col, value_col, offsets_col);
+        auto map_col = MapColumn::create(std::move(key_col), std::move(value_col), std::move(offsets_col));
 
         std::vector<uint8_t> _nulls{0, 1, 0, 0};
         auto null_col = UInt8Column::create();
         null_col->append_numbers(_nulls.data(), sizeof(uint8_t) * _nulls.size());
-        auto nullable_col = NullableColumn::create(map_col, null_col);
+        auto nullable_col = NullableColumn::create(std::move(map_col), std::move(null_col));
 
-        chunk->append_column(nullable_col, chunk->num_columns());
+        chunk->append_column(std::move(nullable_col), chunk->num_columns());
     }
 
     // write chunk
@@ -596,30 +596,30 @@ TEST_F(FileWriterTest, TestWriteNestedArray) {
         auto int_null_col = UInt8Column::create();
         std::vector<uint8_t> nulls{0, 0, 1, 0, 0, 0, 0};
         int_null_col->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
-        auto int_col = NullableColumn::create(int_data_col, int_null_col);
+        auto int_col = NullableColumn::create(std::move(int_data_col), std::move(int_null_col));
 
         auto offsets_col = UInt32Column::create();
         std::vector<uint32_t> offsets{0, 1, 1, 1, 4, 6, 7};
         offsets_col->append_numbers(offsets.data(), sizeof(uint32_t) * offsets.size());
-        auto array_data_col = ArrayColumn::create(int_col, offsets_col);
+        auto array_data_col = ArrayColumn::create(std::move(int_col), std::move(offsets_col));
 
         std::vector<uint8_t> _nulls{0, 1, 0, 0, 0, 0};
         auto array_null_col = UInt8Column::create();
         array_null_col->append_numbers(_nulls.data(), sizeof(uint8_t) * _nulls.size());
-        auto array_col = NullableColumn::create(array_data_col, array_null_col);
+        auto array_col = NullableColumn::create(std::move(array_data_col), std::move(array_null_col));
 
         auto array_array_offsets_col = UInt32Column::create();
         std::vector<uint32_t> array_array_offsets{0, 4, 6, 6};
         array_array_offsets_col->append_numbers(array_array_offsets.data(),
                                                 sizeof(uint32_t) * array_array_offsets.size());
-        auto array_array_data_col = ArrayColumn::create(array_col, array_array_offsets_col);
+        auto array_array_data_col = ArrayColumn::create(std::move(array_col), std::move(array_array_offsets_col));
 
         std::vector<uint8_t> outer_nulls{0, 0, 1};
         auto array_array_null_col = UInt8Column::create();
         array_array_null_col->append_numbers(outer_nulls.data(), sizeof(uint8_t) * outer_nulls.size());
-        auto array_array_col = NullableColumn::create(array_array_data_col, array_array_null_col);
+        auto array_array_col = NullableColumn::create(std::move(array_array_data_col), std::move(array_array_null_col));
 
-        chunk->append_column(array_array_col, chunk->num_columns());
+        chunk->append_column(std::move(array_array_col), chunk->num_columns());
     }
 
     // write chunk
@@ -650,8 +650,8 @@ TEST_F(FileWriterTest, TestWriteVarbinary) {
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
     }
 
     // write chunk

@@ -66,8 +66,8 @@ public abstract class SecurityIntegration {
 
     public abstract void checkProperty() throws SemanticException;
 
-    public String getGroupProviderName() {
-        return propertyMap.get(SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER);
+    public List<String> getGroupProviderName() {
+        return List.of(propertyMap.get(SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER).split(",\\s*"));
     }
 
     public List<String> getAuthenticatedGroupList() {
@@ -75,7 +75,7 @@ public abstract class SecurityIntegration {
         if (property == null) {
             return List.of();
         } else {
-            return List.of(property.split(","));
+            return List.of(property.split(",\\s*"));
         }
     }
 }

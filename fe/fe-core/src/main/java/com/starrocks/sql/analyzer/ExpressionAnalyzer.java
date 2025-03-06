@@ -1305,13 +1305,12 @@ public class ExpressionAnalyzer {
                 case FunctionSet.FIELD: {
                     if (node.getChildren().size() < 2) {
                         throw new SemanticException("Incorrect parameter count in" +
-                               " the call to native function 'field'");
+                                " the call to native function 'field'");
                     }
                     break;
                 }
             }
         }
-
 
         @Override
         public Void visitGroupingFunctionCall(GroupingFunctionCallExpr node, Scope scope) {
@@ -1461,6 +1460,14 @@ public class ExpressionAnalyzer {
                 } else {
                     node.setStrValue(Joiner.on(", ").join(roleName));
                 }
+            } else if (funcType.equalsIgnoreCase(FunctionSet.CURRENT_GROUP)) {
+                node.setType(Type.VARCHAR);
+                Set<String> groupName = session.getGroups();
+                if (groupName.isEmpty()) {
+                    node.setStrValue("NONE");
+                } else {
+                    node.setStrValue(Joiner.on(", ").join(groupName));
+                }
             } else if (funcType.equalsIgnoreCase(FunctionSet.CONNECTION_ID)) {
                 node.setType(Type.BIGINT);
                 node.setIntValue(session.getConnectionId());
@@ -1592,7 +1599,7 @@ public class ExpressionAnalyzer {
                 nullIfNotFoundIdx = params.size() - 1;
             } else {
                 throw new SemanticException(String.format("dict_mapping function param size should be %d - %d",
-                    keyColumns.size() + 1, keyColumns.size() + 3));
+                        keyColumns.size() + 1, keyColumns.size() + 3));
             }
 
             String valueField;
@@ -1656,7 +1663,7 @@ public class ExpressionAnalyzer {
                         List<String> actualTypeNames = actualTypes.stream().map(Type::canonicalName).collect(Collectors.toList());
                         throw new SemanticException(
                                 String.format("dict_mapping function params not match expected,\nExpect: %s\nActual: %s",
-                                    String.join(", ", expectTypeNames), String.join(", ", actualTypeNames)));
+                                        String.join(", ", expectTypeNames), String.join(", ", actualTypeNames)));
                     }
 
                     Expr castExpr = new CastExpr(expectedType, actual);
@@ -1731,19 +1738,19 @@ public class ExpressionAnalyzer {
             int paramDictionaryKeysSize = params.size() - 1;
             if (!(paramDictionaryKeysSize == dictionaryKeysSize || paramDictionaryKeysSize == dictionaryKeysSize + 1)) {
                 throw new SemanticException("dictionary: " + dictionaryName + " has expected keys size: " +
-                                            Integer.toString(dictionaryKeysSize) + " keys: " +
-                                            "[" + String.join(", ", dictionaryKeys) + "]" +
-                                            " plus null_if_not_exist flag(optional)" +
-                                            " but param given: " + Integer.toString(paramDictionaryKeysSize));
+                        Integer.toString(dictionaryKeysSize) + " keys: " +
+                        "[" + String.join(", ", dictionaryKeys) + "]" +
+                        " plus null_if_not_exist flag(optional)" +
+                        " but param given: " + Integer.toString(paramDictionaryKeysSize));
             }
 
             if (paramDictionaryKeysSize == dictionaryKeysSize + 1 && !(params.get(params.size() - 1) instanceof BoolLiteral)) {
                 throw new SemanticException("dictionary: " + dictionaryName + " has invalid parameter for `null_if_not_exist` "
-                                            + "invalid parameter: " + params.get(params.size() - 1).toString());
+                        + "invalid parameter: " + params.get(params.size() - 1).toString());
             }
 
             Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
-                                    dictionary.getCatalogName(), dictionary.getDbName(), dictionary.getQueryableObject());
+                    dictionary.getCatalogName(), dictionary.getDbName(), dictionary.getQueryableObject());
             if (table == null) {
                 throw new SemanticException("dict table %s is not found", table.getName());
             }
@@ -1787,7 +1794,7 @@ public class ExpressionAnalyzer {
             }
 
             boolean nullIfNotExist = (paramDictionaryKeysSize == dictionaryKeysSize + 1) ?
-                                     ((BoolLiteral) params.get(params.size() - 1)).getValue() : false;
+                    ((BoolLiteral) params.get(params.size() - 1)).getValue() : false;
             node.setNullIfNotExist(nullIfNotExist);
             node.setDictionaryId(dictionary.getDictionaryId());
             node.setDictionaryTxnId(GlobalStateMgr.getCurrentState().getDictionaryMgr().

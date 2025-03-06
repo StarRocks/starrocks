@@ -29,11 +29,11 @@ public:
     Status finish() override;
 
 private:
-    Status _compact_columns(std::vector<ColumnPtr>& json_datas);
+    Status _compact_columns(Columns& json_datas);
 
-    Status _merge_columns(std::vector<ColumnPtr>& json_datas);
+    Status _merge_columns(Columns& json_datas);
 
-    Status _flatten_columns(std::vector<ColumnPtr>& json_datas);
+    Status _flatten_columns(Columns& json_datas);
 };
 
 class JsonColumnCompactor final : public ColumnWriter {
@@ -65,7 +65,7 @@ public:
     uint64_t total_mem_footprint() const override { return _json_writer->total_mem_footprint(); }
 
 private:
-    void _flat_column(std::vector<ColumnPtr>& json_datas);
+    void _flat_column(Columns& json_datas);
 
 private:
     ColumnMetaPB* _json_meta;

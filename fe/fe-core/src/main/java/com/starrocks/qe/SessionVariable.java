@@ -859,6 +859,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_SCAN_PREDICATE_EXPR_REUSE = "enable_scan_predicate_expr_reuse";
 
+
+    public static final String ENABLE_REWRITE_OR_TO_UNION_ALL_JOIN = "enable_rewrite_or_to_union_all_join";
+
+    public static final String MAX_OR_TO_UNION_ALL_JOIN_PREDICATES = "max_or_to_union_all_join_predicates";
+
     // 0 for disable, 1 for too many data; 2 for force
     public static final String TOPN_FILTER_BACK_PRESSURE_MODE = "topn_filter_back_pressure_mode";
     public static final String BACK_PRESSURE_MAX_ROUNDS = "back_pressure_back_rounds";
@@ -2530,6 +2535,12 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_REWRITE_UNNEST_BITMAP_TO_ARRAY)
     private boolean enableRewriteUnnestBitmapToArray = true;
+
+    @VarAttr(name = ENABLE_REWRITE_OR_TO_UNION_ALL_JOIN)
+    private boolean enabledRewriteOrToUnionAllJoin = false;
+
+    @VarAttr(name = MAX_OR_TO_UNION_ALL_JOIN_PREDICATES)
+    private int maxOrToUnionAllPredicates = 3;
 
     public int getExprChildrenLimit() {
         return exprChildrenLimit;
@@ -4604,6 +4615,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         return enableRewriteUnnestBitmapToArray;
     }
 
+    public boolean isEnabledRewriteOrToUnionAllJoin() {
+        return enabledRewriteOrToUnionAllJoin;
+    }
+
+    public void setEnabledRewriteOrToUnionAllJoin(boolean enabledRewriteOrToUnionAllJoin) {
+        this.enabledRewriteOrToUnionAllJoin = enabledRewriteOrToUnionAllJoin;
+    }
+
+    public int getMaxOrToUnionAllPredicates() {
+        return maxOrToUnionAllPredicates;
+    }
+
+    public void setMaxOrToUnionAllPredicates(int maxOrToUnionAllPredicates) {
+        this.maxOrToUnionAllPredicates = maxOrToUnionAllPredicates;
+    }
+  
     public int getTopnFilterBackPressureMode() {
         return topnFilterBackPressureMode;
     }

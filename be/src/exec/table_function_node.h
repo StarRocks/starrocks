@@ -36,7 +36,7 @@ public:
     Status reset(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    Status build_chunk(ChunkPtr* chunk, const std::vector<ColumnPtr>& output_columns);
+    Status build_chunk(ChunkPtr* chunk, const Columns& output_columns);
 
     Status get_next_input_chunk(RuntimeState* state, bool* eos);
 

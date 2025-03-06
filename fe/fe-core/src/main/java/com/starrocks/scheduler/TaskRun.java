@@ -46,6 +46,8 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
+import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_WAREHOUSE;
+
 public class TaskRun implements Comparable<TaskRun> {
 
     private static final Logger LOG = LogManager.getLogger(TaskRun.class);
@@ -59,7 +61,7 @@ public class TaskRun implements Comparable<TaskRun> {
     public static final String START_TASK_RUN_ID = "START_TASK_RUN_ID";
     // All properties that can be set in TaskRun
     public static final Set<String> TASK_RUN_PROPERTIES = ImmutableSet.of(
-            MV_ID, PARTITION_START, PARTITION_END, FORCE, START_TASK_RUN_ID, PARTITION_VALUES);
+            MV_ID, PARTITION_START, PARTITION_END, FORCE, START_TASK_RUN_ID, PARTITION_VALUES, PROPERTIES_WAREHOUSE);
 
     public static final int INVALID_TASK_PROGRESS = -1;
 
@@ -194,18 +196,14 @@ public class TaskRun implements Comparable<TaskRun> {
 
             Warehouse w = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(
                     materializedView.getWarehouseId());
-            newProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, w.getName());
+            newProperties.put(PROPERTIES_WAREHOUSE, w.getName());
+
+            // set current warehouse
+            ctx.setCurrentWarehouse(w.getName());
         } catch (Exception e) {
             LOG.warn("refresh task properties failed:", e);
         }
         return newProperties;
-    }
-
-    private void handleWarehouseProperty() {
-        String warehouseId = properties.remove(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID);
-        if (warehouseId != null) {
-            runCtx.setCurrentWarehouseId(Long.parseLong(warehouseId));
-        }
     }
 
     @VisibleForTesting
@@ -252,17 +250,21 @@ public class TaskRun implements Comparable<TaskRun> {
         Map<String, String> newProperties = refreshTaskProperties(runCtx);
         properties.putAll(newProperties);
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
-        if (properties != null) {
-            handleWarehouseProperty();
-            for (String key : properties.keySet()) {
-                try {
-                    runCtx.modifySystemVariable(new SystemVariable(key, new StringLiteral(properties.get(key))), true);
-                } catch (DdlException e) {
-                    // not session variable
-                    taskRunContextProperties.put(key, properties.get(key));
-                }
+        for (String key : properties.keySet()) {
+            try {
+                runCtx.modifySystemVariable(new SystemVariable(key, new StringLiteral(properties.get(key))), true);
+            } catch (DdlException e) {
+                // not session variable
+                taskRunContextProperties.put(key, properties.get(key));
             }
         }
+        // set warehouse
+        String currentWarehouse = properties.get(PropertyAnalyzer.PROPERTIES_WAREHOUSE);
+        if (currentWarehouse != null) {
+            runCtx.setCurrentWarehouse(currentWarehouse);
+            taskRunContextProperties.put(PropertyAnalyzer.PROPERTIES_WAREHOUSE, currentWarehouse);
+        }
+
         LOG.info("[QueryId:{}] [ThreadLocal QueryId: {}] start to execute task run, task_id:{}, " +
                         "taskRunContextProperties:{}", runCtx.getQueryId(),
                 ConnectContext.get() == null ? "" : ConnectContext.get().getQueryId(), taskId, taskRunContextProperties);

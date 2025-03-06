@@ -139,9 +139,9 @@ public:
             }
             auto c2 = Int32Column::create();
             c2->append_numbers(v2.data(), v2.size() * sizeof(int));
-            return Chunk({c0, c1, c2}, _slot_cid_map);
+            return Chunk({std::move(c0), std::move(c1), std::move(c2)}, _slot_cid_map);
         } else {
-            return Chunk({c0, c1}, _slot_cid_map);
+            return Chunk({std::move(c0), std::move(c1)}, _slot_cid_map);
         }
     }
 
@@ -1182,7 +1182,7 @@ public:
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-        return Chunk({c0, c1}, _slot_cid_map);
+        return Chunk({std::move(c0), std::move(c1)}, _slot_cid_map);
     }
 
 protected:
@@ -1457,6 +1457,102 @@ TEST_P(LakePartialUpdateTest, test_partial_update_retry_check_file_exist) {
     _tablet_mgr->prune_metacache();
     ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id));
     ASSERT_EQ(kChunkSize, check(version + 1, [](int c0, int c1, int c2) { return (c0 * 5 == c1) && (c0 * 4 == c2); }));
+}
+
+TEST_P(LakePartialUpdateTest, test_max_buffer_rows) {
+    if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        GTEST_SKIP() << "this case only for partial update row mode";
+        return;
+    }
+    auto chunk0 = generate_data(kChunkSize, 0, false, 3);
+    auto chunk1 = generate_data(kChunkSize, 0, true, 3);
+    auto indexes = std::vector<uint32_t>(kChunkSize);
+    for (int i = 0; i < kChunkSize; i++) {
+        indexes[i] = i;
+    }
+
+    auto version = 1;
+    auto tablet_id = _tablet_metadata->id();
+    // normal write
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() > 0);
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+    }
+    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+    ASSIGN_OR_ABORT(auto new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
+
+    // partial update, and make it generate two segment files in one rowset
+    // Caused by max buffer rows.
+
+    SyncPoint::GetInstance()->SetCallBack("TabletManager::get_average_row_size_from_latest_metadata",
+                                          [](void* arg) { *(int64_t*)arg = 1000000000; });
+    SyncPoint::GetInstance()->EnableProcessing();
+
+    DeferOp defer([]() {
+        SyncPoint::GetInstance()->ClearCallBack("TabletManager::get_average_row_size_from_latest_metadata");
+        SyncPoint::GetInstance()->DisableProcessing();
+    });
+    for (int i = 0; i < 3; i++) {
+        auto txn_id = next_id();
+        ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
+                                                   .set_tablet_manager(_tablet_mgr.get())
+                                                   .set_tablet_id(tablet_id)
+                                                   .set_txn_id(txn_id)
+                                                   .set_partition_id(_partition_id)
+                                                   .set_mem_tracker(_mem_tracker.get())
+                                                   .set_schema_id(_tablet_schema->id())
+                                                   .set_slot_descriptors(&_slot_pointers)
+                                                   .set_partial_update_mode(GetParam().partial_update_mode)
+                                                   .build());
+        ASSERT_OK(delta_writer->open());
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->write(chunk1, indexes.data(), indexes.size()));
+        ASSERT_OK(delta_writer->finish_with_txnlog());
+        delta_writer->close();
+        // Publish version
+        ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
+        version++;
+        ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+        if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
+            if (i == 0) {
+                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 2);
+            } else {
+                // move old .cols into orphan files.
+                EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 3);
+            }
+        } else {
+            EXPECT_EQ(new_tablet_metadata->orphan_files_size(), 2);
+        }
+    }
+    ASSERT_EQ(kChunkSize, check(version, [](int c0, int c1, int c2) { return (c0 * 3 == c1) && (c0 * 4 == c2); }));
+    ASSIGN_OR_ABORT(new_tablet_metadata, _tablet_mgr->get_tablet_metadata(tablet_id, version));
+    if (GetParam().partial_update_mode == PartialUpdateMode::COLUMN_UPDATE_MODE) {
+        EXPECT_EQ(new_tablet_metadata->rowsets_size(), 3);
+    } else {
+        EXPECT_EQ(new_tablet_metadata->rowsets_size(), 6);
+        // check segment size in last metadata
+        EXPECT_EQ(new_tablet_metadata->rowsets(5).segments_size(), 2);
+    }
+    EXPECT_TRUE(_update_mgr->update_state_mem_tracker()->consumption() == 0);
+    if (GetParam().enable_persistent_index && GetParam().persistent_index_type == PersistentIndexTypePB::LOCAL) {
+        check_local_persistent_index_meta(tablet_id, version);
+    }
 }
 
 namespace {
