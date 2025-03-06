@@ -78,7 +78,7 @@ public:
 
         // We need to clone a new subfield column
         if (_copy_flag) {
-            return NullableColumn::create(col->clone(), std::move(union_null_column));
+            return NullableColumn::create(Column::mutate(std::move(col)), std::move(union_null_column));
         } else {
             return NullableColumn::create(std::move(col), std::move(union_null_column));
         }
