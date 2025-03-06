@@ -1,0 +1,22 @@
+-- name: test_meta_scan_agg
+
+create table t0 (
+    c0 DATE,
+    c1 INT,
+    c2 BIGINT
+) DUPLICATE key (c0) DISTRIBUTED BY HASH(c0) BUCKETS 3 PROPERTIES('replication_num' = '1');
+
+insert into t0 values ('2024-01-01', 1, 1), ('2024-01-02', 2, 2), ('2024-01-03', 3, 3), ('2024-01-04', 4, 4), ('2024-01-05', 5, 5);
+
+set enable_rewrite_simple_agg_to_meta_scan=true;
+set enable_exchange_pass_through=false;
+select count() from t0;
+select count(c0) from t0;
+select count(c1) from t0;
+select count(c2) from t0;
+select min(c0),max(c0),min(c1),max(c1),min(c2),max(c2) from t0;
+
+select count(c0) from t0[_META_];
+select count(c1) from t0[_META_];
+select count(c2) from t0[_META_];
+select min(c0),max(c0),min(c1),max(c1),min(c2),max(c2) from t0[_META_];
