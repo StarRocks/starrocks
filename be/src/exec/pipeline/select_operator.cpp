@@ -64,12 +64,11 @@ StatusOr<ChunkPtr> SelectOperator::pull_chunk(RuntimeState* state) {
                 _pre_output_chunk = std::move(_curr_chunk);
                 return output_chunk;
             } else {
-                Columns& dest_columns = _pre_output_chunk->columns();
-                Columns& src_columns = _curr_chunk->columns();
                 size_t num_rows = cur_size;
                 // copy the new read chunk to the reserved
-                for (size_t i = 0; i < dest_columns.size(); i++) {
-                    dest_columns[i]->append(*src_columns[i], 0, num_rows);
+                for (const auto& [slot_id, _] : _curr_chunk->get_slot_id_to_index_map()) {
+                    _pre_output_chunk->get_column_by_slot_id(slot_id)->append(
+                            *_curr_chunk->get_column_by_slot_id(slot_id), 0, num_rows);
                 }
                 _curr_chunk = nullptr;
             }
