@@ -108,7 +108,7 @@ protected:
             auto col = ColumnTestHelper::build_column<T>(cols[i]);
             chunk_ptr->append_column(std::move(col), i);
         }
-        Int8ColumnPtr ops_col = Int8Column::create();
+        Int8Column::MutablePtr ops_col = Int8Column::create();
         ops_col->append_numbers(ops.data(), ops.size() * sizeof(int8_t));
         return StreamChunkConverter::make_stream_chunk(std::move(chunk_ptr), std::move(ops_col));
     }

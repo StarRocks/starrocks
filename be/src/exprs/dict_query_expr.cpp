@@ -38,7 +38,7 @@ StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk*
         columns[i] = _children[i]->evaluate(context, ptr);
     }
 
-    ColumnPtr res;
+    MutableColumnPtr res;
     for (auto& column : columns) {
         if (column->is_constant()) {
             column = ColumnHelper::unpack_and_duplicate_const_column(size, column);
@@ -78,7 +78,7 @@ StatusOr<ColumnPtr> DictQueryExpr::evaluate_checked(ExprContext* context, Chunk*
     res = value_chunk->get_column_by_index(0)->clone_empty();
     if (!res->is_nullable()) {
         auto null_column = UInt8Column::create(0, 0);
-        res = NullableColumn::create(res, null_column);
+        res = NullableColumn::create(std::move(res), std::move(null_column));
     }
 
     int res_idx = 0;

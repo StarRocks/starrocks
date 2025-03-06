@@ -1430,7 +1430,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
             auto& upserts = state.upserts();
             if (upserts[i] != nullptr) {
                 // used for auto increment delete-partial update conflict
-                std::unique_ptr<Column> delete_pks = nullptr;
+                MutableColumnPtr delete_pks = nullptr;
                 // apply partial rowset segment
                 st = state.apply(&_tablet, apply_tschema, rowset.get(), rowset_id, i, latest_applied_version, index,
                                  delete_pks, &full_row_size);
@@ -1512,7 +1512,7 @@ Status TabletUpdates::_apply_normal_rowset_commit(const EditVersionInfo& version
                 auto& upserts = state.upserts();
                 if (upserts[loaded_upsert] != nullptr) {
                     // used for auto increment delete-partial update conflict
-                    std::unique_ptr<Column> delete_pks = nullptr;
+                    MutableColumnPtr delete_pks = nullptr;
                     // apply partial rowset segment
                     st = state.apply(&_tablet, apply_tschema, rowset.get(), rowset_id, loaded_upsert,
                                      latest_applied_version, index, delete_pks, &full_row_size);
@@ -1903,7 +1903,7 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
 }
 
 Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t condition_column, int64_t read_version,
-                                 const std::vector<ColumnUniquePtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
+                                 const std::vector<MutableColumnPtr>& upserts, PrimaryIndex& index, int64_t tablet_id,
                                  DeletesMap* new_deletes, const TabletSchemaCSPtr& tablet_schema) {
     TEST_SYNC_POINT_CALLBACK("TabletUpdates::_do_update", &rowset_id);
     RETURN_IF_ERROR(breakpoint_check());
@@ -1920,7 +1920,7 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
             size_t num_default = 0;
             vector<uint32_t> idxes;
             RowsetUpdateState::plan_read_by_rssid(old_rowids, &num_default, &old_rowids_by_rssid, &idxes);
-            std::vector<std::unique_ptr<Column>> old_columns(1);
+            MutableColumns old_columns(1);
             auto old_unordered_column =
                     ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             old_columns[0] = old_unordered_column->clone_empty();
@@ -1935,7 +1935,7 @@ Status TabletUpdates::_do_update(uint32_t rowset_id, int32_t upsert_idx, int32_t
                 rowids.push_back(j);
             }
             new_rowids_by_rssid[rowset_id + upsert_idx] = rowids;
-            std::vector<std::unique_ptr<Column>> new_columns(1);
+            MutableColumns new_columns(1);
             auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
             new_columns[0] = new_column->clone_empty();
             RETURN_IF_ERROR(get_column_values(read_column_ids, read_version, false, new_rowids_by_rssid, &new_columns,
@@ -5279,7 +5279,7 @@ static StatusOr<std::unique_ptr<ColumnIterator>> new_dcg_column_iterator(GetDelt
 
 Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids, int64_t read_version,
                                         bool with_default, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                                        vector<std::unique_ptr<Column>>* columns, void* state,
+                                        vector<MutableColumnPtr>* columns, void* state,
                                         const TabletSchemaCSPtr& read_tablet_schema,
                                         const std::map<string, string>* column_to_expr_value) {
     std::vector<uint32_t> unique_column_ids;
@@ -5328,11 +5328,11 @@ Status TabletUpdates::get_column_values(const std::vector<uint32_t>& column_ids,
             }
         }
     }
-    std::unique_ptr<BinaryColumn> full_row_column;
+    BinaryColumn::MutablePtr full_row_column;
     // if we are getting multiple(>2) columns, and full row column is available,
     // get values from full row column as an optimization
     if (_tablet.is_column_with_row_store() && column_ids.size() > 2) {
-        full_row_column = std::make_unique<BinaryColumn>();
+        full_row_column = BinaryColumn::create();
     }
     std::shared_ptr<FileSystem> fs;
     for (const auto& [rssid, rowids] : rowids_by_rssid) {

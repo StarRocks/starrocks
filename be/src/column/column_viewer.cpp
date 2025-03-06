@@ -35,8 +35,9 @@ ColumnViewer<Type>::ColumnViewer(const ColumnPtr& column)
         : _not_const_mask(not_const_mask(column)), _null_mask(null_mask(column)) {
     if (column->only_null()) {
         _null_column = GlobalVariables::GetInstance()->one_size_null_column();
-        _column = RunTimeColumnType<Type>::create();
-        _column->append_default();
+        auto column = RunTimeColumnType<Type>::create();
+        column->append_default();
+        _column = std::move(column);
     } else if (column->is_constant()) {
         auto v = ColumnHelper::as_raw_column<ConstColumn>(column);
         _column = ColumnHelper::cast_to<Type>(v->data_column());

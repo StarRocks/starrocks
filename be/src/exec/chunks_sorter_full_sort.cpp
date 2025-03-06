@@ -185,7 +185,7 @@ void ChunksSorterFullSort::_assign_ordinals_tmpl() {
         for (T offset = 0; offset < num_rows; ++offset) {
             ordinal_data[offset] = static_cast<T>((chunk_idx << _offset_in_chunk_bits) | offset);
         }
-        partial_sort_chunk->append_column(ordinal_column, Chunk::SORT_ORDINAL_COLUMN_SLOT_ID);
+        partial_sort_chunk->append_column(std::move(ordinal_column), Chunk::SORT_ORDINAL_COLUMN_SLOT_ID);
         ++chunk_idx;
     }
 }

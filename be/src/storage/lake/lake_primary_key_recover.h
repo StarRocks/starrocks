@@ -63,7 +63,7 @@ private:
     MetaFileBuilder* _builder;
     Tablet* _tablet;
     MutableTabletMetadataPtr _metadata;
-    std::unique_ptr<Column> _pk_column;
+    MutableColumnPtr _pk_column;
 };
 
 } // namespace lake

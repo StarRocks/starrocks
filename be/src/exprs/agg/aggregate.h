@@ -331,7 +331,7 @@ public:
     //  columns[0] is the aggregate function column(`k`);
     //  columns[1] is the count column(`v`);
     // Column `count` is output to indicate how many detail rows each key has.
-    virtual void output_detail(FunctionContext* ctx, ConstAggDataPtr __restrict state, const Columns& tos,
+    virtual void output_detail(FunctionContext* ctx, ConstAggDataPtr __restrict state, Columns& tos,
                                Column* count) const {
         throw std::runtime_error("output_detail function in aggregate is not supported for now.");
     }

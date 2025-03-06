@@ -317,8 +317,8 @@ Status ParquetScanner::new_column(const arrow::DataType* arrow_type, const SlotD
 }
 
 Status ParquetScanner::convert_array_to_column(ConvertFuncTree* conv_func, size_t num_elements,
-                                               const arrow::Array* array, const ColumnPtr& column,
-                                               size_t batch_start_idx, size_t chunk_start_idx, Filter* chunk_filter,
+                                               const arrow::Array* array, ColumnPtr& column, size_t batch_start_idx,
+                                               size_t chunk_start_idx, Filter* chunk_filter,
                                                ArrowConvertContext* conv_ctx) {
     // for timestamp type, state->timezone which is specified by user. convert function
     // obtains timezone from array. thus timezone in array should be rectified to

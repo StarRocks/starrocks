@@ -37,7 +37,7 @@ StatusOr<ColumnPtr> ArrayViewColumn::replicate(const Buffer<uint32_t>& offsets) 
         new_offsets->append_value_multiple_times(*_offsets, i, repeat_times);
         new_lengths->append_value_multiple_times(*_lengths, i, repeat_times);
     }
-    return ArrayViewColumn::create(_elements, new_offsets, new_lengths);
+    return ArrayViewColumn::create(_elements, std::move(new_offsets), std::move(new_lengths));
 }
 
 void ArrayViewColumn::assign(size_t n, size_t idx) {
@@ -52,7 +52,7 @@ void ArrayViewColumn::append(const Column& src, size_t offset, size_t count) {
     const auto& src_offsets = array_view_column.offsets();
     const auto& src_lengths = array_view_column.lengths();
 
-    if (_elements == array_view_column._elements) {
+    if (_elements.get() == array_view_column._elements.get()) {
         // if these two array view column share the same elements, just append offset and lengths
         _offsets->append(src_offsets, offset, count);
         _lengths->append(src_lengths, offset, count);
@@ -91,20 +91,20 @@ uint32_t ArrayViewColumn::max_one_element_serialize_size() const {
     return 0;
 }
 
-uint32_t ArrayViewColumn::serialize(size_t idx, uint8_t* pos) {
+uint32_t ArrayViewColumn::serialize(size_t idx, uint8_t* pos) const {
     DCHECK(false) << "ArrayViewColumn::serialize() is not supported";
     throw std::runtime_error("ArrayViewColumn::serialize() is not supported");
     return 0;
 }
 
-uint32_t ArrayViewColumn::serialize_default(uint8_t* pos) {
+uint32_t ArrayViewColumn::serialize_default(uint8_t* pos) const {
     DCHECK(false) << "ArrayViewColumn::serialize_default() is not supported";
     throw std::runtime_error("ArrayViewColumn::serialize_default() is not supported");
     return 0;
 }
 
 void ArrayViewColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                                      uint32_t max_one_row_size) {
+                                      uint32_t max_one_row_size) const {
     DCHECK(false) << "ArrayViewColumn::serialize_batch() is not supported";
     throw std::runtime_error("ArrayViewColumn::serialize_batch() is not supported");
 }
@@ -231,7 +231,7 @@ void ArrayViewColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool
 size_t ArrayViewColumn::get_element_null_count(size_t idx) const {
     size_t offset = _offsets->get_data()[idx];
     size_t length = _lengths->get_data()[idx];
-    auto nullable_column = down_cast<NullableColumn*>(_elements.get());
+    auto nullable_column = down_cast<const NullableColumn*>(_elements.get());
     return nullable_column->null_count(offset, length);
 }
 
@@ -277,14 +277,14 @@ std::string ArrayViewColumn::debug_string() const {
 }
 
 MutableColumnPtr ArrayViewColumn::clone_empty() const {
-    return create_mutable(_elements, UInt32Column::create(), UInt32Column::create());
+    return create(_elements, UInt32Column::create(), UInt32Column::create());
 }
 
 void ArrayViewColumn::swap_column(Column& rhs) {
     auto& array_view_column = down_cast<ArrayViewColumn&>(rhs);
-    _offsets->swap_column(*array_view_column.offsets_column());
-    _lengths->swap_column(*array_view_column.lengths_column());
-    _elements->swap_column(*array_view_column.elements_column());
+    _offsets->swap_column(*array_view_column._offsets);
+    _lengths->swap_column(*array_view_column._lengths);
+    _elements->swap_column(*array_view_column._elements);
 }
 
 void ArrayViewColumn::reset_column() {
@@ -346,8 +346,9 @@ ColumnPtr ArrayViewColumn::from_array_column(const ColumnPtr& column) {
             view_offsets->append(offset);
             view_lengths->append(length);
         }
-        auto ret = NullableColumn::create(ArrayViewColumn::create(view_elements, view_offsets, view_lengths),
-                                          nullable_column->null_column());
+        auto ret = NullableColumn::create(
+                ArrayViewColumn::create(std::move(view_elements), std::move(view_offsets), std::move(view_lengths)),
+                nullable_column->null_column()->as_mutable_ptr());
         ret->check_or_die();
         return ret;
     }
@@ -362,7 +363,7 @@ ColumnPtr ArrayViewColumn::from_array_column(const ColumnPtr& column) {
         view_offsets->append(offset);
         view_lengths->append(length);
     }
-    return ArrayViewColumn::create(view_elements, view_offsets, view_lengths);
+    return ArrayViewColumn::create(std::move(view_elements), std::move(view_offsets), std::move(view_lengths));
 }
 
 ColumnPtr ArrayViewColumn::to_array_column(const ColumnPtr& column) {
@@ -375,7 +376,8 @@ ColumnPtr ArrayViewColumn::to_array_column(const ColumnPtr& column) {
         DCHECK(nullable_column != nullptr);
         auto array_view_column = down_cast<const ArrayViewColumn*>(nullable_column->data_column().get());
         auto array_column = array_view_column->to_array_column();
-        return NullableColumn::create(std::move(array_column), nullable_column->null_column());
+        return NullableColumn::create(std::move(array_column)->as_mutable_ptr(),
+                                      nullable_column->null_column()->as_mutable_ptr());
     }
     auto array_view_column = down_cast<const ArrayViewColumn*>(column.get());
     return array_view_column->to_array_column();

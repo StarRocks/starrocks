@@ -47,8 +47,8 @@ public:
 
 private:
     template <bool all_const_input, bool independent_lambda_expr>
-    StatusOr<ColumnPtr> evaluate_lambda_expr(ExprContext* context, Chunk* chunk,
-                                             const std::vector<ColumnPtr>& arguments, const NullColumnPtr& null_column);
+    StatusOr<ColumnPtr> evaluate_lambda_expr(ExprContext* context, Chunk* chunk, const Columns& arguments,
+                                             const NullColumnPtr& null_column);
 
     // use map to make sure the order of execution
     std::map<SlotId, Expr*> _outer_common_exprs;

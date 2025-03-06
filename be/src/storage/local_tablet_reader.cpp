@@ -114,7 +114,7 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
     for (size_t i = 0; i < tablet_schema->num_key_columns(); i++) {
         pk_columns.push_back((uint32_t)i);
     }
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column));
     PrimaryKeyEncoder::encode(*tablet_schema->schema(), keys, 0, keys.num_rows(), pk_column.get());
 
@@ -147,7 +147,7 @@ Status LocalTabletReader::multi_get(const Chunk& keys, const std::vector<uint32_
     for (const auto& p : value_column_ids_by_order_with_orig_idx) {
         value_column_ids_by_order.push_back(p.first);
     }
-    std::vector<std::unique_ptr<Column>> read_columns(value_column_ids_by_order.size());
+    MutableColumns read_columns(value_column_ids_by_order.size());
     for (uint32_t i = 0; i < read_columns.size(); ++i) {
         read_columns[i] = ChunkHelper::column_from_field(*read_column_schema.field(i).get())->clone_empty();
     }
