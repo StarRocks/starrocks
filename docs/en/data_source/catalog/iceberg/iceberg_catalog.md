@@ -349,11 +349,9 @@ mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
 
 <TabItem value="JDBC" label="JDBC">
 
-
 ##### JDBC
 
 If you choose JDBC as the metastore of your data source, configure `MetastoreParams` as follows:
-
 
 ```SQL
 "iceberg.catalog.type" = "jdbc",
@@ -366,32 +364,35 @@ The following table describes the parameter you need to configure in `MetastoreP
 ##### iceberg.catalog.type
 
 Required: Yes
+
 Description: The type of metastore that you use for your Iceberg cluster. Set the value to `jdbc`.
 
 ##### iceberg.catalog.uri
 
 Required: Yes
-Description: The URI of your DB. Format: `jdbc:[mysql\|postgresql]://<DB_IP_address>:<DB_PORT>/<DB_NAME>`.
+
+Description: The URI of your database. Format: `jdbc:[mysql\|postgresql]://<DB_IP_address>:<DB_PORT>/<DB_NAME>`.
 
 
 ###### iceberg.catalog.warehouse
 
 Required: Yes
-Description: The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` .
 
+Description: The warehouse location or identifier of the Iceberg catalog. Example: `s3://my_bucket/warehouse_location` .
 
 ##### iceberg.catalog.jdbc.user
 
 Required: No
-Description: The username for the DB .
 
+Description: The username for the database.
 
 ##### iceberg.catalog.jdbc.password
 
 Required: No
-Description: The password for the DB .
 
-The following example creates an Iceberg catalog named iceberg_jdbc as metastore:
+Description: The password for the database.
+
+The following example creates an Iceberg catalog named `iceberg_jdbc` and uses JDBC as metastore:
 
 ```SQL
 CREATE EXTERNAL CATALOG iceberg_jdbc
