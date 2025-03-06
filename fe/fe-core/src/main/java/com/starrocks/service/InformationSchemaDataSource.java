@@ -38,6 +38,7 @@ import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Config;
 import com.starrocks.common.PatternMatcher;
 import com.starrocks.common.proc.PartitionsProcDir;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.DataCacheInfo;
@@ -45,6 +46,7 @@ import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
@@ -424,6 +426,10 @@ public class InformationSchemaDataSource {
         }
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        connectContext.setThreadLocalInfo();
 
         for (String dbName : result.authorizedDbs) {
             Database db = metadataMgr.getDb(catalogName, dbName);
