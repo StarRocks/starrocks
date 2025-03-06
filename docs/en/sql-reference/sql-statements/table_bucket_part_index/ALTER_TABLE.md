@@ -774,7 +774,7 @@ SWAP WITH <tbl_name>;
 
 :::note
 - Unique Key and Foreign Key constraints between OLAP tables will be validated during Swap to ensure that the constraints of the two tables being swapped are consistent. An error will be returned if inconsistencies are detected. If no consistencies are detected, Unique Key and Foreign Key constraints will be automatically swapped.
-- Materialized views that are depended on the tables being swapped will be automatically set to inactive, and their UK/FK constraints will be removed and no longer available.
+- Materialized views that are depended on the tables being swapped will be automatically set to inactive, and their Unique Key and Foreign Key constraints will be removed and no longer available.
 :::
 
 ### Manual compaction (from 3.1)
