@@ -772,6 +772,10 @@ ALTER TABLE [<db_name>.]<tbl_name>
 SWAP WITH <tbl_name>;
 ```
 
+NOTE:
+- UK/FK constraints between OLAP tables will be validated during Swap to ensure that the constraints of the two tables being swapped are consistent. If they are inconsistent, an automatic error will be triggered; otherwise UK/FK constraints will also be automatically swapped.
+- Related Materialized views (MVs) that depend on the Swap tables will be automatically set to inactive, and related materialized views' UK/FK constraints will be removed and no longer be available.
+
 ### Manual compaction (from 3.1)
 
 StarRocks uses a compaction mechanism to merge different versions of loaded data. This feature can combine small files into large files, which effectively improves query performance.
