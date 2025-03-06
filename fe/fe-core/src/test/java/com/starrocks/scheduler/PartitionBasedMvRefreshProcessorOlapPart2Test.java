@@ -479,7 +479,6 @@ public class PartitionBasedMvRefreshProcessorOlapPart2Test extends MVRefreshTest
                                 MvTaskRunContext mvTaskRunContext = processor.getMvContext();
                                 Assert.assertEquals(70, mvTaskRunContext.getExecuteOption().getPriority());
                                 Map<String, String> properties = mvTaskRunContext.getProperties();
-                                Assert.assertEquals(1, properties.size());
                                 Assert.assertEquals(2, properties.size());
                                 Assert.assertTrue(properties.containsKey(MV_ID));
                                 Assert.assertTrue(properties.containsKey(PROPERTIES_WAREHOUSE));
