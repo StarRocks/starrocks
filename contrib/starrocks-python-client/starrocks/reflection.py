@@ -570,7 +570,7 @@ class StarRocksTableDefinitionParser(object):
             r"(?:NULL|'(?:''|[^'])*'|[\-\w\.\(\)]+"
             r"(?: +ON UPDATE [\-\w\.\(\)]+)?)"
             r"))?"
-            r"(?: +(?:GENERATED ALWAYS)? ?AS +(?P<generated>\("
+            r"(?: +(?:GENERATED ALWAYS)? ?AS +(?P<generated>"
             r".*\))? ?(?P<persistence>VIRTUAL|STORED)?)?"
             r"(?: +(?P<autoincr>AUTO_INCREMENT))?"
             r"(?: +COMMENT +\"(?P<comment>(?:\"\"|[^\"])*)\")?"
@@ -666,7 +666,7 @@ class StarRocksTableDefinitionParser(object):
         self._re_engine = _re_compile(r"ENGINE%s" r"(?P<val>\w+)\s*" % (self._optional_equals))
         self._re_key_desc = _re_compile(r"(?P<key_type>[A-Z]+)\s*KEY\s*\((?P<columns>.+?)\)\s*")
         self._re_comment = _re_compile(r'COMMENT(?:\s*(?:=\s*)|\s+)"(?P<val>(?:[^"\\]|\\.)*?)"(?!")\s*')
-        self._re_partition = _re_compile(r"(?:.*)?PARTITION(?:.*)")
+        self._re_partition = _re_compile(r"(?:.*)?PARTITION BY (?P<partition>.*)\b(?:DISTRIBUTED|ORDER|PROPERTIRS|BROKER)\b")
 
         self._re_distribution = _re_compile(r"DISTRIBUTED BY (?P<val>.*)")
         # self._re_roll_up_index = _re_compile(r"undefined")
