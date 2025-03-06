@@ -202,20 +202,9 @@ private:
     int64_t _last_write_ts = 0;
 
     const std::map<string, string>* _column_to_expr_value = nullptr;
-<<<<<<< HEAD
-=======
-
-    PUniqueId _load_id;
-    RuntimeProfile* _profile = nullptr;
-    // Used for maintain spill block for bulk load.
-    std::unique_ptr<LoadSpillBlockManager> _load_spill_block_mgr;
-    // End of data ingestion
-    bool _eos = false;
-    DeltaWriterStat _stats;
 
     // Used in partial update to limit too much rows which will cause OOM.
     size_t _max_buffer_rows = std::numeric_limits<size_t>::max();
->>>>>>> 469a45830 ([Enhancement] add memtable's max buffer rows limitation for cloud native pk table (#56220))
 };
 
 bool DeltaWriterImpl::is_immutable() const {
