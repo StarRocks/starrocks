@@ -62,7 +62,7 @@ public class SPMTPCDSUseTest extends TPCDSPlanTestBase {
     @AfterAll
     public static void afterAll() {
         afterClass();
-        connectContext.getGlobalStateMgr().getSqlPlanManager().dropAllBaselinePlans();
+        connectContext.getSqlPlanStorage().dropAllBaselinePlans();
         connectContext.getSessionVariable().setEnableSPMRewrite(false);
     }
 

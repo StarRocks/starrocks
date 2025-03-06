@@ -95,6 +95,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.spm.BaselinePlan;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.AnalyzeJob;
@@ -1158,6 +1159,16 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayDropGroupProvider(groupProviderLog.getName());
                     break;
                 }
+                case OperationType.OP_CREATE_SPM_BASELINE_LOG: {
+                    BaselinePlan bp = (BaselinePlan) journal.data();
+                    globalStateMgr.getSqlPlanStorage().replayBaselinePlan(bp, true);
+                    break;
+                }
+                case OperationType.OP_DROP_SPM_BASELINE_LOG: {
+                    BaselinePlan bp = (BaselinePlan) journal.data();
+                    globalStateMgr.getSqlPlanStorage().replayBaselinePlan(bp, false);
+                    break;
+                }
                 default: {
                     if (Config.metadata_ignore_unknown_operation_type) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -2031,5 +2042,13 @@ public class EditLog {
 
     public void logClusterSnapshotLog(ClusterSnapshotLog info) {
         logEdit(OperationType.OP_CLUSTER_SNAPSHOT_LOG, info);
+    }
+
+    public void logCreateSPMBaseline(BaselinePlan info) {
+        logEdit(OperationType.OP_CREATE_SPM_BASELINE_LOG, info);
+    }
+
+    public void logDropSPMBaseline(BaselinePlan info) {
+        logEdit(OperationType.OP_DROP_SPM_BASELINE_LOG, info);
     }
 }

@@ -23,22 +23,29 @@ import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
 
 import java.time.format.DateTimeFormatter;
 import java.util.List;
+import java.util.stream.Stream;
 
 public class SPMStmtExecutor {
     public static void execute(ConnectContext context, CreateBaselinePlanStmt stmt) {
         SPMPlanBuilder builder = new SPMPlanBuilder(context, stmt);
         BaselinePlan plan = builder.execute();
-        context.getGlobalStateMgr().getSqlPlanManager().storeBaselinePlan(plan);
+        if (stmt.isGlobal()) {
+            context.getGlobalStateMgr().getSqlPlanStorage().storeBaselinePlan(plan);
+        } else {
+            context.getSqlPlanStorage().storeBaselinePlan(plan);
+        }
     }
 
     public static void execute(ConnectContext context, DropBaselinePlanStmt stmt) {
-        context.getGlobalStateMgr().getSqlPlanManager().dropBaselinePlan(stmt.getBaseLineId());
+        context.getGlobalStateMgr().getSqlPlanStorage().dropBaselinePlan(stmt.getBaseLineId());
     }
 
     public static ShowResultSet execute(ConnectContext context, ShowBaselinePlanStmt stmt) {
-        List<BaselinePlan> baselines = context.getGlobalStateMgr().getSqlPlanManager().getAllBaselines();
+        List<BaselinePlan> baselines1 = context.getSqlPlanStorage().getAllBaselines();
+        List<BaselinePlan> baselines2 = context.getGlobalStateMgr().getSqlPlanStorage().getAllBaselines();
         List<List<String>> rows = Lists.newArrayList();
-        for (BaselinePlan baseline : baselines) {
+
+        Stream.concat(baselines1.stream(), baselines2.stream()).forEach(baseline -> {
             List<String> row = Lists.newArrayList();
             row.add(String.valueOf(baseline.getId()));
             row.add(baseline.isGlobal() ? "Y" : "N");
@@ -49,7 +56,7 @@ public class SPMStmtExecutor {
             row.add(String.valueOf(baseline.getCosts()));
             row.add(baseline.getUpdateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
             rows.add(row);
-        }
+        });
         return new ShowResultSet(stmt.getMetaData(), rows);
     }
 }

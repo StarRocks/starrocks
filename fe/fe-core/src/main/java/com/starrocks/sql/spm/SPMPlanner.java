@@ -15,6 +15,7 @@
 package com.starrocks.sql.spm;
 
 import com.google.common.base.Preconditions;
+import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.analysis.ArithmeticExpr;
 import com.starrocks.analysis.Expr;
@@ -76,8 +77,9 @@ public class SPMPlanner {
             SPMAst2SQLBuilder builder = new SPMAst2SQLBuilder(false, true);
             String digest = builder.build((QueryStatement) query);
             long hash = builder.buildHash();
-            SQLPlanManager spm = GlobalStateMgr.getCurrentState().getSqlPlanManager();
-            List<BaselinePlan> plans = spm.findBaselinePlan(digest, hash);
+            List<BaselinePlan> plans = Lists.newArrayList();
+            plans.addAll(session.getSqlPlanStorage().findBaselinePlan(digest, hash));
+            plans.addAll(GlobalStateMgr.getCurrentState().getSqlPlanStorage().findBaselinePlan(digest, hash));
 
             Optional<BaselinePlan> base;
             try (Timer ignored2 = Tracers.watchScope("bindPlan")) {

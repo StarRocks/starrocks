@@ -1268,17 +1268,13 @@ public class DDLStmtExecutor {
         @Override
         public ShowResultSet visitCreateBaselinePlanStatement(CreateBaselinePlanStmt statement,
                                                               ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                SPMStmtExecutor.execute(context, statement);
-            });
+            ErrorReport.wrapWithRuntimeException(() -> SPMStmtExecutor.execute(context, statement));
             return null;
         }
 
         @Override
         public ShowResultSet visitDropBaselinePlanStatement(DropBaselinePlanStmt statement, ConnectContext context) {
-            ErrorReport.wrapWithRuntimeException(() -> {
-                SPMStmtExecutor.execute(context, statement);
-            });
+            ErrorReport.wrapWithRuntimeException(() -> SPMStmtExecutor.execute(context, statement));
             return null;
         }
     }
