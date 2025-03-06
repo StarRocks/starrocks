@@ -2045,9 +2045,9 @@ struct UTF8StringCaseToggleFunction {
 public:
     template <LogicalType Type, LogicalType ResultType>
     static ColumnPtr evaluate(const ColumnPtr& v1) {
-        auto* src = down_cast<BinaryColumn*>(v1.get());
-        Bytes& src_bytes = src->get_bytes();
-        Offsets& src_offsets = src->get_offset();
+        const auto* src = down_cast<const BinaryColumn*>(v1.get());
+        const Bytes& src_bytes = src->get_bytes();
+        const Offsets& src_offsets = src->get_offset();
         auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
         auto& dst_offsets = dst->get_offset();
         auto& dst_bytes = dst->get_bytes();
