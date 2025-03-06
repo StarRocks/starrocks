@@ -561,10 +561,13 @@ public class StmtExecutor {
                             throw e;
                         }
                     } finally {
-                        if (!needRetry && context.isProfileEnabled()) {
-                            writeProfile(beginTimeInNanoSecond);
+                        try {
+                            if (!needRetry && context.isProfileEnabled()) {
+                                writeProfile(beginTimeInNanoSecond);
+                            }
+                        } finally {
+                            QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                         }
-                        QeProcessorImpl.INSTANCE.unregisterQuery(context.getExecutionId());
                     }
                 }
             } else if (parsedStmt instanceof SetStmt) {
@@ -1670,8 +1673,8 @@ public class StmtExecutor {
                         transactionId,
                         TabletCommitInfo.fromThrift(coord.getCommitInfos()),
                         TabletFailInfo.fromThrift(coord.getFailInfos()),
-                        Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() : 
-                                            context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
+                        Config.enable_sync_publish ? jobDeadLineMs - System.currentTimeMillis() :
+                                context.getSessionVariable().getTransactionVisibleWaitTimeout() * 1000,
                         new InsertTxnCommitAttachment(loadedRows))) {
                     txnStatus = TransactionStatus.VISIBLE;
                     MetricRepo.COUNTER_LOAD_FINISHED.increase(1L);
