@@ -200,6 +200,9 @@ private:
     int64_t _last_write_ts = 0;
 
     const std::map<string, string>* _column_to_expr_value = nullptr;
+
+    // Used in partial update to limit too much rows which will cause OOM.
+    size_t _max_buffer_rows = std::numeric_limits<size_t>::max();
 };
 
 bool DeltaWriterImpl::is_immutable() const {
@@ -245,6 +248,22 @@ Status DeltaWriterImpl::build_schema_and_writer() {
         if (_write_schema->num_columns() < _tablet_schema->num_columns()) {
             DCHECK_EQ(_write_column_ids.size(), _write_schema->num_columns());
         }
+
+        if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && is_partial_update() &&
+            _partial_update_mode != PartialUpdateMode::COLUMN_UPDATE_MODE &&
+            _partial_update_mode != PartialUpdateMode::COLUMN_UPSERT_MODE) {
+            // calucate max buffer rows for partial update (row mode).
+            int64_t avg_row_size = _tablet_manager->get_average_row_size_from_latest_metadata(_tablet_id);
+            if (avg_row_size <= 0) {
+                // If tablet is a new created tablet and has no historical data, average_row_size is 0
+                // And we use schema size as average row size. If there are complex type(i.e. BITMAP/ARRAY) or varchar,
+                // we will consider it as 16 bytes.
+                avg_row_size = _tablet_schema->estimate_row_size(16);
+            }
+            if (avg_row_size > 0) {
+                _max_buffer_rows = _max_buffer_size / avg_row_size;
+            }
+        }
     }
     return Status::OK();
 }
@@ -258,6 +277,7 @@ inline Status DeltaWriterImpl::reset_memtable() {
         _mem_table = std::make_unique<MemTable>(_tablet_id, &_write_schema_for_mem_table, _mem_table_sink.get(),
                                                 _max_buffer_size, _mem_tracker);
     }
+    _mem_table->set_write_buffer_row(_max_buffer_rows);
     return Status::OK();
 }
 
