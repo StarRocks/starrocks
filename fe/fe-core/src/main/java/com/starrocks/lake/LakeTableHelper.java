@@ -29,6 +29,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
+import com.starrocks.common.DdlException;
 import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.rpc.BrpcProxy;
@@ -43,6 +44,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Optional;
 
@@ -155,9 +158,31 @@ public class LakeTableHelper {
             }
             if (!removeShardRootDirectory(shardInfo)) {
                 ret = false;
+            } else {
+                // remote partition dir has been removed, try to remove shard meta from star manager
+                deletePartitionShardsFromStarMgr(partition);
+                ret = true;
             }
         }
         return ret;
+    }
+
+    static void deletePartitionShardsFromStarMgr(Partition partition)  {
+        StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+        Collection<PhysicalPartition> subPartitions = partition.getSubPartitions();
+        for (PhysicalPartition subPartition : subPartitions) {
+            long shardGroupId = subPartition.getShardGroupId();
+            List<Long> shardsToDelete = null;
+            try {
+                shardsToDelete = starOSAgent.listShard(shardGroupId);
+                starOSAgent.deleteShards(new HashSet<>(shardsToDelete));
+                LOG.info("All shards info related to this sub partition {} has been deleted, partitionId: {}",
+                        subPartition.getId(), partition.getId());
+            } catch (DdlException e) {
+                // ignore handling of failure when delete shards, hope the `StarMgrMetaSyncer` do the final cleanup
+                LOG.warn("Delete shards of partition {} failed", subPartition.getId());
+            }
+        }
     }
 
     public static boolean isSharedPartitionDirectory(PhysicalPartition physicalPartition, long warehouseId)
