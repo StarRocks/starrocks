@@ -608,6 +608,8 @@ struct TRoutineLoadJobInfo {
     17: optional string error_log_urls
     18: optional string tracking_sql
     19: optional string other_msg
+    20: optional string latest_source_position
+    21: optional string offset_lag
 }
 
 struct TGetRoutineLoadJobsResult {
