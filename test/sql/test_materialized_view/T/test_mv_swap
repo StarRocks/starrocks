@@ -1,4 +1,4 @@
--- name: test_mv_swap @sequential
+-- name: test_mv_swap 
 
 admin set frontend config('enable_mv_automatic_active_check'='false');
 
@@ -51,18 +51,18 @@ AS SELECT sum_sum_pv + 1 FROM mv_on_mv_1;
 [UC]REFRESH MATERIALIZED VIEW mv_on_mv_2 with sync mode;
 -- swap intermediate MV
 ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
-SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
-SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1' and TABLE_SCHEMA='db_${uuid0}';
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2' and TABLE_SCHEMA='db_${uuid0}';
 ALTER MATERIALIZED VIEW mv_on_mv_1 ACTIVE;
 ALTER MATERIALIZED VIEW mv_on_mv_2 ACTIVE;
-SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
-SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1' and TABLE_SCHEMA='db_${uuid0}';
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2' and TABLE_SCHEMA='db_${uuid0}';
 -- swap back
 ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
 ALTER MATERIALIZED VIEW mv_on_mv_1 ACTIVE;
 ALTER MATERIALIZED VIEW mv_on_mv_2 ACTIVE;
-SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
-SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1' and TABLE_SCHEMA='db_${uuid0}';
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2' and TABLE_SCHEMA='db_${uuid0}';
 
 -- swap base table
 CREATE MATERIALIZED VIEW mv_on_table_1 REFRESH ASYNC 
@@ -71,9 +71,9 @@ AS SELECT ss.event_day, sum(ss.pv) as ss_sum_pv, sum(jj.pv) as jj_sum_pv
     GROUP BY ss.event_day;
 [UC]REFRESH MATERIALIZED VIEW mv_on_table_1 with sync mode ;
 ALTER TABLE ss SWAP WITH jj;
-SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_table_1';
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_table_1' and TABLE_SCHEMA='db_${uuid0}';
 ALTER MATERIALIZED VIEW mv_on_table_1 ACTIVE;
-SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_table_1';
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_table_1' and TABLE_SCHEMA='db_${uuid0}';
 
 [UC]drop database db_${uuid0} force;
 

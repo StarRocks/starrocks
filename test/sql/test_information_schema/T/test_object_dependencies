@@ -50,6 +50,7 @@ drop table t1;
 select object_name, object_catalog, object_type, ref_object_name, ref_object_catalog, ref_object_type 
 from sys.object_dependencies where object_database = 'db_${uuid0}' and object_name = 'mv1';
 alter table t2 rename t1;
+alter materialized view mv1 active;
 refresh materialized view mv1 with sync mode;
 select object_name, object_catalog, object_type, ref_object_name, ref_object_catalog, ref_object_type 
 from sys.object_dependencies where object_database = 'db_${uuid0}' and object_name = 'mv1';
