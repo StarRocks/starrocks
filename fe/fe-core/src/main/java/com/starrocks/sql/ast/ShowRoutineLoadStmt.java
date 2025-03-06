@@ -89,6 +89,7 @@ public class ShowRoutineLoadStmt extends ShowStmt {
             builder.add("Warehouse");
         }
         builder.add("LatestSourcePosition");
+        builder.add("OffsetLag");
         TITLE_NAMES = builder.build();
     }
     private final LabelName labelName;
