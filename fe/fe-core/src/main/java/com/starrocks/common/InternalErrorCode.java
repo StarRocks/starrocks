@@ -38,7 +38,9 @@ public enum InternalErrorCode {
     TOO_MANY_FAILURE_ROWS_ERR(102),
     CREATE_TASKS_ERR(103),
     TASKS_ABORT_ERR(104),
-    SLOW_RUNNING_ERR(105);
+    SLOW_RUNNING_ERR(105),
+    ICEBERG_CATALOG_ERROR(106),
+    ICEBERG_REST_CATALOG_ERROR(107);
 
     private long errCode;
 
