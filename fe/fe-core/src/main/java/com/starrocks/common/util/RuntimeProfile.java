@@ -226,6 +226,12 @@ public class RuntimeProfile {
                 Counter srcCounter = srcProfile.counterMap.get(name).first;
                 Counter newCounter = addCounter(name, srcCounter.getType(), srcCounter.getStrategy(), parentName);
                 newCounter.setValue(srcCounter.getValue());
+                if (srcCounter.getMinValue().isPresent()) {
+                    newCounter.setMinValue(srcCounter.getMinValue().get());
+                }
+                if (srcCounter.getMaxValue().isPresent()) {
+                    newCounter.setMaxValue(srcCounter.getMaxValue().get());
+                }
             }
 
             Set<String> childNames = srcProfile.childCounterMap.get(name);
@@ -296,6 +302,12 @@ public class RuntimeProfile {
                                 addCounter(topName, tcounter.type, tcounter.strategy, parentName);
                         counter.setValue(tcounter.value);
                         counter.setStrategy(tcounter.strategy);
+                        if (tcounter.isSetMin_value()) {
+                            counter.setMinValue(tcounter.getMin_value());
+                        }
+                        if (tcounter.isSetMax_value()) {
+                            counter.setMaxValue(tcounter.getMax_value());
+                        }
                         tCounterMap.remove(topName);
                     } else if (pair != null && tcounter != null) {
                         if (pair.first.getType() != tcounter.type) {
@@ -619,6 +631,8 @@ public class RuntimeProfile {
             tCounter.setValue(counter.getValue());
             tCounter.setType(counter.getType());
             tCounter.setStrategy(counter.getStrategy());
+            counter.getMinValue().ifPresent(tCounter::setMin_value);
+            counter.getMaxValue().ifPresent(tCounter::setMax_value);
             node.addToCounters(tCounter);
         }
 
@@ -767,7 +781,7 @@ public class RuntimeProfile {
                     }
                     if (counter.getMaxValue().isPresent()) {
                         alreadyMerged = true;
-                        maxValue = Math.max(counter.getMinValue().get(), maxValue);
+                        maxValue = Math.max(counter.getMaxValue().get(), maxValue);
                     } else {
                         // TODO: keep compatible with older version backend, can be removed in next version
                         Counter maxCounter = profile.getCounter(MERGED_INFO_PREFIX_MAX + name);
