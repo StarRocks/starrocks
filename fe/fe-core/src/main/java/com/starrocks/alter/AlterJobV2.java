@@ -49,7 +49,6 @@ import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.persist.LakeTableAsyncFastSchemaChangeJobInfo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -146,18 +145,26 @@ public abstract class AlterJobV2 implements Writable {
         this.span = TraceManager.startNoopSpan();
     }
 
-    AlterJobV2(LakeTableAsyncFastSchemaChangeJobInfo jobInfo) {
-        this.type = jobInfo.getType();
-        this.jobId = jobInfo.getJobId();
-        this.jobState = jobInfo.getJobState();
-        this.dbId = jobInfo.getDbId();
-        this.tableId = jobInfo.getTableId();
-        this.tableName = jobInfo.getTableName();
-        this.errMsg = jobInfo.getErrMsg();
-        this.createTimeMs = jobInfo.getCreateTimeMs();
-        this.finishedTimeMs = jobInfo.getFinishedTimeMs();
-        this.timeoutMs = jobInfo.getTimeoutMs();
-        this.warehouseId = jobInfo.getWarehouseId();
+    AlterJobV2(AlterJobV2 other, boolean forSerialization) {
+        this.jobId = other.getJobId();
+        this.type = other.getType();
+        this.dbId = other.getDbId();
+        this.tableId = other.getTableId();
+        this.tableName = other.getTableName();
+        this.timeoutMs = other.getTimeoutMs();
+
+        this.createTimeMs = forSerialization ? other.getCreateTimeMs() : System.currentTimeMillis();
+        this.jobState = forSerialization ? other.getJobState() : JobState.PENDING;
+
+        if (forSerialization) {
+            this.errMsg = other.getErrMsg();
+            this.finishedTimeMs = other.getFinishedTimeMs();
+            this.warehouseId = other.getWarehouseId();
+        } else {
+            this.span = TraceManager.startSpan(this.type.toString().toLowerCase());
+            span.setAttribute("jobId", this.jobId);
+            span.setAttribute("tabletName", this.tableName);
+        }
     }
 
     public long getJobId() {

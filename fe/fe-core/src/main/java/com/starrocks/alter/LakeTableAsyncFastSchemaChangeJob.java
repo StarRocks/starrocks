@@ -27,7 +27,6 @@ import com.starrocks.catalog.SchemaInfo;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.LakeTable;
-import com.starrocks.persist.LakeTableAsyncFastSchemaChangeJobInfo;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.task.TabletMetadataUpdateAgentTask;
@@ -67,21 +66,21 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         super(JobType.SCHEMA_CHANGE);
     }
 
-    public LakeTableAsyncFastSchemaChangeJob(LakeTableAsyncFastSchemaChangeJobInfo jobInfo) {
-        super(jobInfo);
-    }
-
     LakeTableAsyncFastSchemaChangeJob(long jobId, long dbId, long tableId, String tableName, long timeoutMs) {
         super(jobId, JobType.SCHEMA_CHANGE, dbId, tableId, tableName, timeoutMs);
         schemaInfos = new ArrayList<>();
     }
 
-    LakeTableAsyncFastSchemaChangeJob(LakeTableAsyncFastSchemaChangeJob other) {
-        this(other.getJobId(), other.getDbId(), other.getTableId(), other.getTableName(), other.getTimeoutMs());
-        for (IndexSchemaInfo indexSchemaInfo : other.schemaInfos) {
-            setIndexTabletSchema(indexSchemaInfo.indexId, indexSchemaInfo.indexName, indexSchemaInfo.schemaInfo);
+    // 'forSerialization' means reducing data writing after the first log
+    LakeTableAsyncFastSchemaChangeJob(LakeTableAsyncFastSchemaChangeJob other, boolean forSerialization) {
+        super(other, forSerialization);
+        if (!forSerialization) {
+            schemaInfos = new ArrayList<>();
+            for (IndexSchemaInfo indexSchemaInfo : other.schemaInfos) {
+                setIndexTabletSchema(indexSchemaInfo.indexId, indexSchemaInfo.indexName, indexSchemaInfo.schemaInfo);
+            }
+            partitionsWithSchemaFile.addAll(other.partitionsWithSchemaFile);
         }
-        partitionsWithSchemaFile.addAll(other.partitionsWithSchemaFile);
     }
 
     public void setIndexTabletSchema(long indexId, String indexName, SchemaInfo schemaInfo) {

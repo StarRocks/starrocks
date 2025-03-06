@@ -37,7 +37,6 @@ import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
 import com.starrocks.mv.MVRepairHandler.PartitionRepairInfo;
-import com.starrocks.persist.LakeTableAsyncFastSchemaChangeJobInfo;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.proto.TxnTypePB;
 import com.starrocks.server.GlobalStateMgr;
@@ -83,12 +82,14 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         super(jobId, jobType, dbId, tableId, tableName, timeoutMs);
     }
 
-    LakeTableAlterMetaJobBase(LakeTableAsyncFastSchemaChangeJobInfo jobInfo) {
-        super(jobInfo);
-        this.watershedTxnId = jobInfo.getWatershedTxnId();
-        this.watershedGtid = jobInfo.getWatershedGtid();
-        this.physicalPartitionIndexMap = jobInfo.getPhysicalPartitionIndexMap();
-        this.commitVersionMap = jobInfo.getCommitVersionMap();
+    LakeTableAlterMetaJobBase(LakeTableAlterMetaJobBase other, boolean forSerialization) {
+        super(other, forSerialization);
+        if (forSerialization) {
+            this.watershedTxnId = other.getWatershedTxnId();
+            this.watershedGtid = other.getWatershedGtid();
+            this.physicalPartitionIndexMap = other.getPartitionIndexMap();
+            this.commitVersionMap = other.getCommitVersionMap();
+        }
     }
 
     @Override
@@ -432,14 +433,11 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         return watershedGtid;
     }
 
-    protected void logAlterJob() {
+    void logAlterJob() {
         if (this instanceof LakeTableAsyncFastSchemaChangeJob) {
-            LakeTableAsyncFastSchemaChangeJobInfo info = new LakeTableAsyncFastSchemaChangeJobInfo(this.getWatershedTxnId(),
-                    this.getWatershedGtid(), this.getPartitionIndexMap(), this.getCommitVersionMap(), this.getType(),
-                    this.getJobId(), this.getJobState(), this.getDbId(), this.getTableId(), this.getTableName(),
-                    this.getErrMsg(), this.getCreateTimeMs(), this.getFinishedTimeMs(), this.getTimeoutMs(),
-                    this.getWarehouseId());
-            GlobalStateMgr.getCurrentState().getEditLog().logLakeTableAsyncFastSchemaChangeJobBriefly(info);
+            LakeTableAsyncFastSchemaChangeJob copyJob = new LakeTableAsyncFastSchemaChangeJob(
+                    (LakeTableAsyncFastSchemaChangeJob) this, true);
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(copyJob);
         } else {
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         }
@@ -543,12 +541,10 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
     }
 
-    // for test
     public Table<Long, Long, MaterializedIndex> getPartitionIndexMap() {
         return physicalPartitionIndexMap;
     }
 
-    // for test
     public Map<Long, Long> getCommitVersionMap() {
         return commitVersionMap;
     }

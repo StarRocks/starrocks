@@ -183,7 +183,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         long initNextVersion = partition.getDefaultPhysicalPartition().getNextVersion();
         Assert.assertEquals(initVisibleVersion + 1, initNextVersion);
 
-        LakeTableAsyncFastSchemaChangeJob replaySourceJob = new LakeTableAsyncFastSchemaChangeJob(job);
+        LakeTableAsyncFastSchemaChangeJob replaySourceJob = new LakeTableAsyncFastSchemaChangeJob(job, false);
         Assert.assertEquals(AlterJobV2.JobState.PENDING, replaySourceJob.getJobState());
         job.replay(replaySourceJob);
         Assert.assertEquals(OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState());
