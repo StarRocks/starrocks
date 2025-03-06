@@ -104,7 +104,9 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -323,9 +325,9 @@ public class BackupHandlerTest {
         }
 
         // handleFinishedSnapshotTask
-        BackupJob backupJob = (BackupJob) handler.getJob(CatalogMocker.TEST_DB_ID);
+        BackupJob backupJob = (BackupJob) handler.getJob(Collections.singletonList(CatalogMocker.TEST_TBL_ID));
         SnapshotTask snapshotTask = new SnapshotTask(null, 0, 0, backupJob.getJobId(), CatalogMocker.TEST_DB_ID,
-                0, 0, 0, 0, 0, 0, 1, false);
+                CatalogMocker.TEST_TBL_ID, 0, 0, 0, 0, 0, 1, false);
         TFinishTaskRequest request = new TFinishTaskRequest();
         List<String> snapshotFiles = Lists.newArrayList();
         request.setSnapshot_files(snapshotFiles);
@@ -336,7 +338,7 @@ public class BackupHandlerTest {
         // handleFinishedSnapshotUploadTask
         Map<String, String> srcToDestPath = Maps.newHashMap();
         UploadTask uploadTask = new UploadTask(null, 0, 0, backupJob.getJobId(), CatalogMocker.TEST_DB_ID,
-                srcToDestPath, null, null);
+                CatalogMocker.TEST_TBL_ID, srcToDestPath, null, null);
         request = new TFinishTaskRequest();
         Map<Long, List<String>> tabletFiles = Maps.newHashMap();
         request.setTablet_files(tabletFiles);
@@ -382,9 +384,9 @@ public class BackupHandlerTest {
         }
 
         // handleFinishedSnapshotTask
-        BackupJob backupJob1 = (BackupJob) handler.getJob(CatalogMocker.TEST_DB_ID);
+        BackupJob backupJob1 = (BackupJob) handler.getJob(Collections.singletonList(CatalogMocker.TEST_TBL3_ID));
         SnapshotTask snapshotTask1 = new SnapshotTask(null, 0, 0, backupJob1.getJobId(), CatalogMocker.TEST_DB_ID,
-                0, 0, 0, 0, 0, 0, 1, false);
+                CatalogMocker.TEST_TBL3_ID, 0, 0, 0, 0, 0, 1, false);
         TFinishTaskRequest request1 = new TFinishTaskRequest();
         List<String> snapshotFiles1 = Lists.newArrayList();
         request1.setSnapshot_files(snapshotFiles1);
@@ -395,7 +397,7 @@ public class BackupHandlerTest {
         // handleFinishedSnapshotUploadTask
         Map<String, String> srcToDestPath1 = Maps.newHashMap();
         UploadTask uploadTask1 = new UploadTask(null, 0, 0, backupJob1.getJobId(), CatalogMocker.TEST_DB_ID,
-                srcToDestPath1, null, null);
+                CatalogMocker.TEST_TBL3_ID, srcToDestPath1, null, null);
         request1 = new TFinishTaskRequest();
         Map<Long, List<String>> tabletFiles1 = Maps.newHashMap();
         request1.setTablet_files(tabletFiles1);
@@ -449,9 +451,9 @@ public class BackupHandlerTest {
         }
 
         // handleFinishedSnapshotTask
-        RestoreJob restoreJob = (RestoreJob) handler.getJob(CatalogMocker.TEST_DB_ID);
+        RestoreJob restoreJob = (RestoreJob) handler.getJob(Collections.singletonList(CatalogMocker.TEST_TBL_ID));
         snapshotTask = new SnapshotTask(null, 0, 0, restoreJob.getJobId(), CatalogMocker.TEST_DB_ID,
-                0, 0, 0, 0, 0, 0, 1, true);
+                CatalogMocker.TEST_TBL_ID, 0, 0, 0, 0, 0, 1, true);
         request = new TFinishTaskRequest();
         request.setSnapshot_path("./snapshot/path");
         request.setTask_status(new TStatus(TStatusCode.OK));
@@ -459,7 +461,7 @@ public class BackupHandlerTest {
 
         // handleDownloadSnapshotTask
         DownloadTask downloadTask = new DownloadTask(null, 0, 0, restoreJob.getJobId(), CatalogMocker.TEST_DB_ID,
-                srcToDestPath, null, null);
+                CatalogMocker.TEST_TBL_ID, srcToDestPath, null, null);
         request = new TFinishTaskRequest();
         List<Long> downloadedTabletIds = Lists.newArrayList();
         request.setDownloaded_tablet_ids(downloadedTabletIds);
@@ -467,8 +469,8 @@ public class BackupHandlerTest {
         handler.handleDownloadSnapshotTask(downloadTask, request);
 
         // handleDirMoveTask
-        DirMoveTask dirMoveTask = new DirMoveTask(null, 0, 0, restoreJob.getJobId(), CatalogMocker.TEST_DB_ID, 0, 0, 0,
-                0, "", 0, true);
+        DirMoveTask dirMoveTask = new DirMoveTask(null, 0, 0, restoreJob.getJobId(),
+                CatalogMocker.TEST_DB_ID, CatalogMocker.TEST_TBL_ID, 0, 0, 0, "", 0, true);
         request = new TFinishTaskRequest();
         request.setTask_status(new TStatus(TStatusCode.OK));
         handler.handleDirMoveTask(dirMoveTask, request);
@@ -527,9 +529,9 @@ public class BackupHandlerTest {
         }
 
         // handleFinishedSnapshotTask
-        RestoreJob restoreJob1 = (RestoreJob) handler.getJob(CatalogMocker.TEST_DB_ID);
+        RestoreJob restoreJob1 = (RestoreJob) handler.getJob(Collections.singletonList(CatalogMocker.TEST_TBL_ID));
         snapshotTask1 = new SnapshotTask(null, 0, 0, restoreJob1.getJobId(), CatalogMocker.TEST_DB_ID,
-                0, 0, 0, 0, 0, 0, 1, true);
+                CatalogMocker.TEST_TBL_ID, 0, 0, 0, 0, 0, 1, true);
         request1 = new TFinishTaskRequest();
         request1.setSnapshot_path("./snapshot/path1");
         request1.setTask_status(new TStatus(TStatusCode.OK));
@@ -537,7 +539,7 @@ public class BackupHandlerTest {
 
         // handleDownloadSnapshotTask
         DownloadTask downloadTask1 = new DownloadTask(null, 0, 0, restoreJob1.getJobId(), CatalogMocker.TEST_DB_ID,
-                srcToDestPath1, null, null);
+                CatalogMocker.TEST_TBL_ID, srcToDestPath1, null, null);
         request1 = new TFinishTaskRequest();
         List<Long> downloadedTabletIds1 = Lists.newArrayList();
         request1.setDownloaded_tablet_ids(downloadedTabletIds1);
@@ -631,41 +633,53 @@ public class BackupHandlerTest {
 
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         handler = new BackupHandler(globalStateMgr);
-        Assert.assertEquals(0, handler.dbIdToBackupOrRestoreJob.size());
+        Assert.assertEquals(0, handler.tableIdToBackupOrRestoreJob.size());
         long now = System.currentTimeMillis();
 
         // 1. create 3 jobs
         // running jobs, won't expire
-        BackupJob runningJob = new BackupJob("running_job", 1, "test_db", new ArrayList<>(), 10000, globalStateMgr, 1);
-        handler.dbIdToBackupOrRestoreJob.put(runningJob.getDbId(), runningJob);
+        BackupJob runningJob = new BackupJob("running_job", 1, "test_db", new ArrayList<>() {{
+                add(1L);
+            }}, new ArrayList<>(), 10000, globalStateMgr, 1);
+        handler.tableIdToBackupOrRestoreJob.put(new HashSet<>() {{
+                add(1L);
+            }}, runningJob);
         // just finished job, won't expire
-        BackupJob goodJob = new BackupJob("good_job", 2, "test_db", new ArrayList<>(), 10000, globalStateMgr, 1);
+        BackupJob goodJob = new BackupJob("good_job", 2, "test_db", new ArrayList<>() {{
+                add(2L);
+            }}, new ArrayList<>(), 10000, globalStateMgr, 1);
         goodJob.finishedTime = now;
         goodJob.state = BackupJob.BackupJobState.FINISHED;
-        handler.dbIdToBackupOrRestoreJob.put(goodJob.getDbId(), goodJob);
+        handler.tableIdToBackupOrRestoreJob.put(new HashSet<>() {{
+                add(2L);
+            }}, goodJob);
         // expired job
-        BackupJob badJob = new BackupJob("bad_job", 3, "test_db", new ArrayList<>(), 10000, globalStateMgr, 1);
+        BackupJob badJob = new BackupJob("bad_job", 3, "test_db", new ArrayList<>() {{
+                add(3L);
+            }}, new ArrayList<>(), 10000, globalStateMgr, 1);
         badJob.finishedTime = now - (Config.history_job_keep_max_second + 10) * 1000;
         badJob.state = BackupJob.BackupJobState.FINISHED;
-        handler.dbIdToBackupOrRestoreJob.put(badJob.getDbId(), badJob);
-        Assert.assertEquals(3, handler.dbIdToBackupOrRestoreJob.size());
+        handler.tableIdToBackupOrRestoreJob.put(new HashSet<>() {{
+                add(3L);
+            }}, badJob);
+        Assert.assertEquals(3, handler.tableIdToBackupOrRestoreJob.size());
 
         // 2. save image & reload
         UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
         handler.write(pseudoImage.getDataOutputStream());
         BackupHandler reloadHandler = BackupHandler.read(pseudoImage.getDataInputStream());
         // discard expired job
-        Assert.assertEquals(2, reloadHandler.dbIdToBackupOrRestoreJob.size());
-        Assert.assertNotNull(reloadHandler.getJob(1));
-        Assert.assertNotNull(reloadHandler.getJob(2));
-        Assert.assertNull(reloadHandler.getJob(3));
+        Assert.assertEquals(2, reloadHandler.tableIdToBackupOrRestoreJob.size());
+        Assert.assertNotNull(reloadHandler.getJob(Collections.singletonList(1L)));
+        Assert.assertNotNull(reloadHandler.getJob(Collections.singletonList(2L)));
+        Assert.assertNull(reloadHandler.getJob(Collections.singletonList(3L)));
 
         // 3. clean expire
         handler.removeOldJobs();
-        Assert.assertEquals(2, handler.dbIdToBackupOrRestoreJob.size());
-        Assert.assertNotNull(handler.getJob(1));
-        Assert.assertNotNull(handler.getJob(2));
-        Assert.assertNull(handler.getJob(3));
+        Assert.assertEquals(2, handler.tableIdToBackupOrRestoreJob.size());
+        Assert.assertNotNull(reloadHandler.getJob(Collections.singletonList(1L)));
+        Assert.assertNotNull(reloadHandler.getJob(Collections.singletonList(2L)));
+        Assert.assertNull(reloadHandler.getJob(Collections.singletonList(3L)));
 
         UtFrameUtils.tearDownForPersisTest();
     }
@@ -675,8 +689,12 @@ public class BackupHandlerTest {
         UtFrameUtils.setUpForPersistTest();
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         handler = new BackupHandler(globalStateMgr);
-        BackupJob runningJob = new BackupJob("running_job", 1, "test_db", new ArrayList<>(), 10000, globalStateMgr, 1);
-        handler.dbIdToBackupOrRestoreJob.put(runningJob.getDbId(), runningJob);
+        BackupJob runningJob = new BackupJob("running_job", 1, "test_db", new ArrayList<>() {{
+                add(1L);
+            }}, new ArrayList<>(), 10000, globalStateMgr, 1);
+        handler.tableIdToBackupOrRestoreJob.put(new HashSet<>() {{
+                add(1L);
+            }}, runningJob);
 
         UtFrameUtils.PseudoImage pseudoImage = new UtFrameUtils.PseudoImage();
         handler.saveBackupHandlerV2(pseudoImage.getImageWriter());
@@ -685,7 +703,7 @@ public class BackupHandlerTest {
         followerHandler.loadBackupHandlerV2(reader);
         reader.close();
 
-        Assert.assertEquals(1, followerHandler.dbIdToBackupOrRestoreJob.size());
+        Assert.assertEquals(1, followerHandler.tableIdToBackupOrRestoreJob.size());
 
         UtFrameUtils.tearDownForPersisTest();
     }

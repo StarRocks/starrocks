@@ -63,6 +63,7 @@ import java.io.IOException;
 import java.nio.file.FileVisitOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
@@ -219,7 +220,10 @@ public class BackupJobMaterializedViewTest {
         tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.MATERIALIZED_VIEW_NAME), null));
         tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, UnitTestUtil.TABLE_NAME), null));
 
-        job = new BackupJob(MV_LABEL, dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
+        job = new BackupJob(MV_LABEL, dbId, UnitTestUtil.DB_NAME, new ArrayList<>() {{
+                add(tblId);
+                add(tblId + 1);
+            }}, tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
         new Expectations(job) {
             {
                 job.validateLocalFile(anyString);
@@ -429,8 +433,8 @@ public class BackupJobMaterializedViewTest {
         tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, "unknown_tbl"), null));
         tableRefs.add(new TableRef(new TableName(UnitTestUtil.DB_NAME, "unknown_mv"), null));
 
-        job = new BackupJob("mv_label_abnormal", dbId, UnitTestUtil.DB_NAME, tableRefs, 13600 * 1000,
-                    globalStateMgr, repo.getId());
+        job = new BackupJob("mv_label_abnormal", dbId, UnitTestUtil.DB_NAME, new ArrayList<>(),
+                    tableRefs, 13600 * 1000, globalStateMgr, repo.getId());
         job.run();
         Assert.assertEquals(Status.ErrCode.NOT_FOUND, job.getStatus().getErrCode());
         Assert.assertEquals(BackupJobState.CANCELLED, job.getState());

@@ -168,9 +168,9 @@ public class BackupJob extends AbstractJob {
         super(JobType.BACKUP);
     }
 
-    public BackupJob(String label, long dbId, String dbName, List<TableRef> tableRefs, long timeoutMs,
+    public BackupJob(String label, long dbId, String dbName, List<Long> tableIds, List<TableRef> tableRefs, long timeoutMs,
                      GlobalStateMgr globalStateMgr, long repoId) {
-        super(JobType.BACKUP, label, dbId, dbName, timeoutMs, globalStateMgr, repoId);
+        super(JobType.BACKUP, label, dbId, tableIds, dbName, timeoutMs, globalStateMgr, repoId);
         this.tableRefs = tableRefs;
         this.state = BackupJobState.PENDING;
     }
@@ -617,19 +617,21 @@ public class BackupJob extends AbstractJob {
         for (int batch = 0; batch < batchNum; batch++) {
             Map<String, String> srcToDest = Maps.newHashMap();
             int currentBatchTaskNum = (batch == batchNum - 1) ? totalNum - index : taskNumPerBatch;
+            long currentTableId = -1;
             for (int j = 0; j < currentBatchTaskNum; j++) {
                 SnapshotInfo info = infos.get(index++);
                 String src = info.getTabletPath();
                 String dest = repo.getRepoTabletPathBySnapshotInfo(label, info);
                 srcToDest.put(src, dest);
+                currentTableId = info.getTblId();
             }
             long signature = globalStateMgr.getNextId();
             UploadTask task;
             if (repo.getStorage().hasBroker()) {
-                task = new UploadTask(null, beId, signature, jobId, dbId, srcToDest,
+                task = new UploadTask(null, beId, signature, jobId, dbId, currentTableId, srcToDest,
                         brokers.get(0), repo.getStorage().getProperties());
             } else {
-                task = new UploadTask(null, beId, signature, jobId, dbId, srcToDest,
+                task = new UploadTask(null, beId, signature, jobId, dbId, currentTableId, srcToDest,
                         null, repo.getStorage().getProperties(), hdfsProperties);
             }
             batchTask.addTask(task);

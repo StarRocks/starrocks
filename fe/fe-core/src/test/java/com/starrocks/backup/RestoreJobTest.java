@@ -89,6 +89,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -182,9 +183,10 @@ public class RestoreJobTest {
                 expectedRestoreTbl.getBaseSchema(), KeysType.DUP_KEYS, expectedRestoreTbl.getPartitionInfo(),
                 expectedRestoreTbl.getDefaultDistributionInfo());
 
-        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                jobInfo, false, 3, 100000,
-                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(), new ArrayList<>() {{
+                add(expectedRestoreTbl.getId());
+            }}, jobInfo, false, 3, 100000, globalStateMgr, repo.getId(), backupMeta,
+                new MvRestoreContext());
 
         new MockUp<OlapTable>() {
             @Mock
@@ -368,9 +370,10 @@ public class RestoreJobTest {
         List<Table> tbls = Lists.newArrayList();
         tbls.add(expectedRestoreTbl);
         backupMeta = new BackupMeta(tbls);
-        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                jobInfo, false, 3, 100000,
-                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(), new ArrayList<>() {{
+                add(expectedRestoreTbl.getId());
+            }}, jobInfo, false, 3, 100000, globalStateMgr, repo.getId(), backupMeta,
+                new MvRestoreContext());
         job.setRepo(repo);
         // pending
         job.run();
@@ -545,8 +548,9 @@ public class RestoreJobTest {
         List<Table> tbls = Lists.newArrayList();
         tbls.add(expectedRestoreTbl);
         backupMeta = new BackupMeta(tbls);
-        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                jobInfo, false, 3, 100000,
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(), new ArrayList<>() {{
+                add(expectedRestoreTbl.getId());
+            }}, jobInfo, false, 3, 100000,
                 globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
         job.setRepo(repo);
         // pending
@@ -716,9 +720,10 @@ public class RestoreJobTest {
         List<Table> tbls = Lists.newArrayList();
         tbls.add(expectedRestoreTbl);
         backupMeta = new BackupMeta(tbls);
-        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                jobInfo, false, 3, 100000,
-                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(), new ArrayList<>() {{
+                add(expectedRestoreTbl.getId());
+            }}, jobInfo, false, 3, 100000, globalStateMgr, repo.getId(),
+                backupMeta, new MvRestoreContext());
         job.setRepo(repo);
         // pending
         job.run();
@@ -903,9 +908,10 @@ public class RestoreJobTest {
         backupMeta = new BackupMeta(tbls);
 
         db.dropTable(restoredView.getName());
-        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                jobInfo, false, 3, 100000,
-                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(), new ArrayList<>() {{
+                add(restoredView.getId());
+            }}, jobInfo, false, 3, 100000, globalStateMgr, repo.getId(),
+                backupMeta, new MvRestoreContext());
         job.setRepo(repo);
         Assert.assertEquals(RestoreJobState.PENDING, job.getState());
         {
@@ -941,9 +947,10 @@ public class RestoreJobTest {
         Assert.assertEquals(RestoreJobState.FINISHED, job.getState());
 
         // restore when the view already existed
-        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                jobInfo, false, 3, 100000,
-                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(), new ArrayList<>() {{
+                add(1L);
+            }}, jobInfo, false, 3, 100000, globalStateMgr, repo.getId(),
+                backupMeta, new MvRestoreContext());
         job.setRepo(repo);
         Assert.assertEquals(RestoreJobState.PENDING, job.getState());
 

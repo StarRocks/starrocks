@@ -77,6 +77,7 @@ import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -260,9 +261,10 @@ public class RestoreJobPrimaryKeyTest {
         List<Table> tbls = Lists.newArrayList();
         tbls.add(expectedRestoreTbl);
         backupMeta = new BackupMeta(tbls);
-        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
-                jobInfo, false, 3, 100000,
-                globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(), new ArrayList<>() {{
+                add(expectedRestoreTbl.getId());
+            }}, jobInfo, false, 3, 100000, globalStateMgr, repo.getId(), backupMeta,
+                new MvRestoreContext());
     }
 
     @Ignore

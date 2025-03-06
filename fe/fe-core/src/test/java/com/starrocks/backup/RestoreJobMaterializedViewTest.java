@@ -88,6 +88,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
 import static com.starrocks.common.util.UnitTestUtil.DB_NAME;
@@ -374,6 +375,7 @@ public class RestoreJobMaterializedViewTest {
         }
 
         RestoreJob job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
+                tbls.stream().map(Table::getId).collect(Collectors.toList()),
                 jobInfo, false, 3, 100000,
                 globalStateMgr, repo.getId(), backupMeta, mvRestoreContext);
         job.setRepo(repo);

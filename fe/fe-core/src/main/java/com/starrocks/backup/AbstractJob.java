@@ -47,6 +47,8 @@ import com.starrocks.server.GlobalStateMgr;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 
 /*
@@ -98,6 +100,9 @@ public abstract class AbstractJob implements Writable {
     @SerializedName(value = "timeoutMs")
     protected long timeoutMs;
 
+    @SerializedName(value = "tableId")
+    protected List<Long> tableIds = new ArrayList<>();
+
     // task signature -> <finished num / total num>
     protected Map<Long, Pair<Integer, Integer>> taskProgress = Maps.newConcurrentMap();
 
@@ -111,7 +116,7 @@ public abstract class AbstractJob implements Writable {
         this.type = type;
     }
 
-    protected AbstractJob(JobType type, String label, long dbId, String dbName,
+    protected AbstractJob(JobType type, String label, long dbId, List<Long> tableIds, String dbName,
                           long timeoutMs, GlobalStateMgr globalStateMgr, long repoId) {
         this.type = type;
         this.label = label;
@@ -121,6 +126,7 @@ public abstract class AbstractJob implements Writable {
         this.timeoutMs = timeoutMs;
         this.globalStateMgr = globalStateMgr;
         this.repoId = repoId;
+        this.tableIds.addAll(tableIds);
     }
 
     public JobType getType() {
@@ -137,6 +143,10 @@ public abstract class AbstractJob implements Writable {
 
     public long getDbId() {
         return dbId;
+    }
+
+    public List<Long> getTableIdSet() {
+        return tableIds;
     }
 
     public String getDbName() {
@@ -220,6 +230,11 @@ public abstract class AbstractJob implements Writable {
         out.writeLong(dbId);
         Text.writeString(out, dbName);
 
+        out.writeInt(tableIds.size());
+        for (long tblId : tableIds) {
+            out.writeLong(tblId);
+        }
+
         out.writeLong(createTime);
         out.writeLong(finishedTime);
         out.writeLong(timeoutMs);
@@ -255,6 +270,11 @@ public abstract class AbstractJob implements Writable {
         dbId = in.readLong();
         dbName = Text.readString(in);
 
+        int tblIdSize = in.readInt();
+        for (int i = 0; i < tblIdSize; ++i) {
+            tableIds.add(in.readLong());
+        }
+
         createTime = in.readLong();
         finishedTime = in.readLong();
         timeoutMs = in.readLong();
@@ -273,7 +293,8 @@ public abstract class AbstractJob implements Writable {
     public String toString() {
         StringBuilder sb = new StringBuilder(type.name());
         sb.append(" repo id: ").append(repoId).append(", label: ").append(label);
-        sb.append(", job id: ").append(jobId).append(", db id: ").append(dbId).append(", db name: ").append(dbName);
+        sb.append(", job id: ").append(jobId).append(", db id: ").append(dbId).append(", tbl id: ").append(tableIds);
+        sb.append(", db name: ").append(dbName);
         sb.append(", status: ").append(status);
         sb.append(", timeout: ").append(timeoutMs);
         return sb.toString();

@@ -36,19 +36,19 @@ public class UploadTask extends AgentTask {
     private Map<String, String> brokerProperties;
     private THdfsProperties hdfsProperties;
 
-    public UploadTask(TResourceInfo resourceInfo, long backendId, long signature, long jobId, Long dbId,
+    public UploadTask(TResourceInfo resourceInfo, long backendId, long signature, long jobId, Long dbId, Long tableId,
                       Map<String, String> srcToDestPath, FsBroker broker, Map<String, String> brokerProperties) {
-        super(resourceInfo, backendId, TTaskType.UPLOAD, dbId, -1, -1, -1, -1, signature);
+        super(resourceInfo, backendId, TTaskType.UPLOAD, dbId, tableId, -1, -1, signature);
         this.jobId = jobId;
         this.srcToDestPath = srcToDestPath;
         this.broker = broker;
         this.brokerProperties = brokerProperties;
     }
 
-    public UploadTask(TResourceInfo resourceInfo, long backendId, long signature, long jobId, Long dbId,
+    public UploadTask(TResourceInfo resourceInfo, long backendId, long signature, long jobId, Long dbId, Long tableId,
                       Map<String, String> srcToDestPath, FsBroker broker, Map<String, String> brokerProperties, 
                       THdfsProperties hdfsProperties) {
-        super(resourceInfo, backendId, TTaskType.UPLOAD, dbId, -1, -1, -1, -1, signature);
+        super(resourceInfo, backendId, TTaskType.UPLOAD, dbId, tableId, -1, -1, signature);
         this.jobId = jobId;
         this.srcToDestPath = srcToDestPath;
         this.broker = broker;

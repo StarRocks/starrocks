@@ -35,19 +35,19 @@ public class DownloadTask extends AgentTask {
     private Map<String, String> brokerProperties;
     private THdfsProperties hdfsProperties;
 
-    public DownloadTask(TResourceInfo resourceInfo, long backendId, long signature, long jobId, long dbId,
+    public DownloadTask(TResourceInfo resourceInfo, long backendId, long signature, long jobId, long dbId, long tableId,
                         Map<String, String> srcToDestPath, FsBroker brokerAddr, Map<String, String> brokerProperties) {
-        super(resourceInfo, backendId, TTaskType.DOWNLOAD, dbId, -1, -1, -1, -1, signature);
+        super(resourceInfo, backendId, TTaskType.DOWNLOAD, dbId, tableId, -1, -1, signature);
         this.jobId = jobId;
         this.srcToDestPath = srcToDestPath;
         this.brokerAddr = brokerAddr;
         this.brokerProperties = brokerProperties;
     }
 
-    public DownloadTask(TResourceInfo resourceInfo, long backendId, long signature, long jobId, long dbId,
+    public DownloadTask(TResourceInfo resourceInfo, long backendId, long signature, long jobId, long dbId, long tableId,
                         Map<String, String> srcToDestPath, FsBroker brokerAddr, Map<String, String> brokerProperties,
                         THdfsProperties hdfsProperties) {
-        super(resourceInfo, backendId, TTaskType.DOWNLOAD, dbId, -1, -1, -1, -1, signature);
+        super(resourceInfo, backendId, TTaskType.DOWNLOAD, dbId, tableId, -1, -1, signature);
         this.jobId = jobId;
         this.srcToDestPath = srcToDestPath;
         this.brokerAddr = brokerAddr;

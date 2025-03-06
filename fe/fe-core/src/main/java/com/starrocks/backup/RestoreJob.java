@@ -68,6 +68,7 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MetaObject;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.Partition;
@@ -207,11 +208,11 @@ public class RestoreJob extends AbstractJob {
         super(JobType.RESTORE);
     }
 
-    public RestoreJob(String label, String backupTs, long dbId, String dbName, BackupJobInfo jobInfo,
-                      boolean allowLoad, int restoreReplicationNum, long timeoutMs,
+    public RestoreJob(String label, String backupTs, long dbId, String dbName, List<Long> tableIds,
+                      BackupJobInfo jobInfo, boolean allowLoad, int restoreReplicationNum, long timeoutMs,
                       GlobalStateMgr globalStateMgr, long repoId, BackupMeta backupMeta,
                       MvRestoreContext mvRestoreContext) {
-        super(JobType.RESTORE, label, dbId, dbName, timeoutMs, globalStateMgr, repoId);
+        super(JobType.RESTORE, label, dbId, tableIds, dbName, timeoutMs, globalStateMgr, repoId);
         this.backupTimestamp = backupTs;
         this.jobInfo = jobInfo;
         this.allowLoad = allowLoad;
@@ -1427,6 +1428,7 @@ public class RestoreJob extends AbstractJob {
         for (int batch = 0; batch < batchNum; batch++) {
             Map<String, String> srcToDest = Maps.newHashMap();
             int currentBatchTaskNum = (batch == batchNum - 1) ? totalNum - index : taskNumPerBatch;
+            long currentTableId = -1;
             for (int j = 0; j < currentBatchTaskNum; j++) {
                 SnapshotInfo info = beSnapshotInfos.get(index++);
                 Table tbl = globalStateMgr.getLocalMetastore().getTable(db.getId(), info.getTblId());
@@ -1436,6 +1438,8 @@ public class RestoreJob extends AbstractJob {
                     return;
                 }
                 OlapTable olapTbl = (OlapTable) tbl;
+
+                currentTableId = olapTbl.getId();
 
                 PhysicalPartition part = olapTbl.getPhysicalPartition(info.getPartitionId());
                 if (part == null) {
@@ -1498,10 +1502,10 @@ public class RestoreJob extends AbstractJob {
             long signature = globalStateMgr.getNextId();
             DownloadTask task;
             if (repo.getStorage().hasBroker()) {
-                task = new DownloadTask(null, beId, signature, jobId, dbId,
+                task = new DownloadTask(null, beId, signature, jobId, dbId, currentTableId,
                         srcToDest, brokerAddrs.get(0), repo.getStorage().getProperties());
             } else {
-                task = new DownloadTask(null, beId, signature, jobId, dbId,
+                task = new DownloadTask(null, beId, signature, jobId, dbId, currentTableId,
                         srcToDest, null, repo.getStorage().getProperties(), hdfsProperties);
             }
             batchTask.addTask(task);
@@ -1970,6 +1974,69 @@ public class RestoreJob extends AbstractJob {
             for (Map.Entry<Long, SnapshotInfo> entry : map.entrySet()) {
                 out.writeLong(entry.getKey());
                 entry.getValue().write(out);
+            }
+        }
+    }
+
+    @Override
+    public void readFields(DataInput in) throws IOException {
+        super.readFields(in);
+
+        this.backupTimestamp = Text.readString(in);
+        BackupJobInfo jobInfo = new BackupJobInfo();
+        jobInfo.readFields(in);
+        this.allowLoad = in.readBoolean();
+
+        this.state = RestoreJobState.valueOf(Text.readString(in));
+
+        if (in.readBoolean()) {
+            this.backupMeta = BackupMeta.read(in);
+        }
+
+        RestoreFileMapping mapping = new RestoreFileMapping();
+        mapping.readFields(in);
+        this.fileMapping = mapping;
+
+        this.metaPreparedTime = in.readLong();
+        this.snapshotFinishedTime = in.readLong();
+        this.downloadFinishedTime = in.readLong();
+
+        this.restoreReplicationNum = in.readInt();
+
+        int size = in.readInt();
+        for (int i = 0; i < size; ++i) {
+            // not for read partition, just to skip read
+            Text.readString(in);
+            MetaObject partitionObj = new MetaObject();
+            partitionObj.readFields(in);
+        }
+
+        size = in.readInt();
+        for (int i = 0; i < size; ++i) {
+            // not for read table, just to skip read
+            Text.readString(in);
+        }
+
+        size = in.readInt();
+        for (int i = 0; i < size; ++i) {
+            long tblId = in.readLong();
+            int entrySize = in.readInt();
+            for (int j = 0; j < entrySize; ++j) {
+                long partId = in.readLong();
+                long version = in.readLong();
+                this.restoredVersionInfo.put(tblId, partId, version);
+            }
+        }
+
+        size = in.readInt();
+        for (int i = 0; i < size; ++i) {
+            long tabletId = in.readLong();
+            int entrySize = in.readInt();
+            for (int j = 0; j < entrySize; j++) {
+                long backendId = in.readLong();
+                SnapshotInfo info = new SnapshotInfo();
+                info.readFields(in);
+                this.snapshotInfos.put(tabletId, backendId, info);
             }
         }
     }

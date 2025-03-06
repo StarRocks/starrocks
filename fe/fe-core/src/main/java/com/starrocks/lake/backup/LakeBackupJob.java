@@ -72,9 +72,9 @@ public class LakeBackupJob extends BackupJob {
     public LakeBackupJob() {
     }
 
-    public LakeBackupJob(String label, long dbId, String dbName, List<TableRef> tableRefs, long timeoutMs,
+    public LakeBackupJob(String label, long dbId, String dbName, List<Long> tableIds, List<TableRef> tableRefs, long timeoutMs,
                          GlobalStateMgr globalStateMgr, long repoId) {
-        super(label, dbId, dbName, tableRefs, timeoutMs, globalStateMgr, repoId);
+        super(label, dbId, dbName, tableIds, tableRefs, timeoutMs, globalStateMgr, repoId);
         this.type = JobType.LAKE_BACKUP;
     }
 

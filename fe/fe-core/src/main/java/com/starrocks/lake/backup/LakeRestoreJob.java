@@ -82,11 +82,11 @@ public class LakeRestoreJob extends RestoreJob {
     public LakeRestoreJob() {
     }
 
-    public LakeRestoreJob(String label, String backupTs, long dbId, String dbName, BackupJobInfo jobInfo,
+    public LakeRestoreJob(String label, String backupTs, long dbId, String dbName, List<Long> tableIds, BackupJobInfo jobInfo,
                           boolean allowLoad, int restoreReplicationNum, long timeoutMs,
                           GlobalStateMgr globalStateMgr, long repoId, BackupMeta backupMeta,
                           MvRestoreContext mvRestoreContext) {
-        super(label, backupTs, dbId, dbName, jobInfo, allowLoad, restoreReplicationNum, timeoutMs,
+        super(label, backupTs, dbId, dbName, tableIds, jobInfo, allowLoad, restoreReplicationNum, timeoutMs,
                 globalStateMgr, repoId, backupMeta, mvRestoreContext);
         this.type = JobType.LAKE_RESTORE;
     }

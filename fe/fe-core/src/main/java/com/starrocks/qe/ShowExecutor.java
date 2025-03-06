@@ -1842,31 +1842,37 @@ public class ShowExecutor {
             }
 
             for (Database db : dbs) {
-                AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
-                if (jobI == null || !(jobI instanceof BackupJob)) {
-                    // show next db
+                List<AbstractJob> jobIs = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
+                if (jobIs == null) {
+                    // current db has no backup/restore job
                     continue;
                 }
-
-                BackupJob backupJob = (BackupJob) jobI;
-
-                // check privilege
-                List<TableRef> tableRefs = backupJob.getTableRef();
-                AtomicBoolean privilegeDeny = new AtomicBoolean(false);
-                tableRefs.forEach(tableRef -> {
-                    TableName tableName = tableRef.getName();
-                    try {
-                        Authorizer.checkTableAction(context, tableName.getDb(), tableName.getTbl(), PrivilegeType.EXPORT);
-                    } catch (AccessDeniedException e) {
-                        privilegeDeny.set(true);
+                for (AbstractJob jobI : jobIs) {
+                    if (jobI == null || !(jobI instanceof BackupJob)) {
+                        // show next db
+                        continue;
                     }
-                });
-                if (privilegeDeny.get()) {
-                    return new ShowResultSet(statement.getMetaData(), EMPTY_SET);
-                }
 
-                List<String> info = backupJob.getInfo();
-                infos.add(info);
+                    BackupJob backupJob = (BackupJob) jobI;
+
+                    // check privilege
+                    List<TableRef> tableRefs = backupJob.getTableRef();
+                    AtomicBoolean privilegeDeny = new AtomicBoolean(false);
+                    tableRefs.forEach(tableRef -> {
+                        TableName tableName = tableRef.getName();
+                        try {
+                            Authorizer.checkTableAction(context, tableName.getDb(), tableName.getTbl(), PrivilegeType.EXPORT);
+                        } catch (AccessDeniedException e) {
+                            privilegeDeny.set(true);
+                        }
+                    });
+                    if (privilegeDeny.get()) {
+                        return new ShowResultSet(statement.getMetaData(), EMPTY_SET);
+                    }
+
+                    List<String> info = backupJob.getInfo();
+                    infos.add(info);
+                }
             }
 
             // backup info for external catalog
@@ -1896,15 +1902,21 @@ public class ShowExecutor {
             }
 
             for (Database db : dbs) {
-                AbstractJob jobI = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
-                if (jobI == null || !(jobI instanceof RestoreJob)) {
-                    // show next db
+                List<AbstractJob> jobIs = GlobalStateMgr.getCurrentState().getBackupHandler().getJob(db.getId());
+                if (jobIs == null) {
+                    // current db has no backup/restore job
                     continue;
                 }
+                for (AbstractJob jobI : jobIs) {
+                    if (jobI == null || !(jobI instanceof RestoreJob)) {
+                        // show next db
+                        continue;
+                    }
 
-                RestoreJob restoreJob = (RestoreJob) jobI;
-                List<String> info = restoreJob.getInfo();
-                infos.add(info);
+                    RestoreJob restoreJob = (RestoreJob) jobI;
+                    List<String> info = restoreJob.getInfo();
+                    infos.add(info);
+                }
             }
 
             // restore info for external catalog

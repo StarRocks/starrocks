@@ -99,7 +99,9 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -114,7 +116,7 @@ import static com.starrocks.scheduler.MVActiveChecker.MV_BACKUP_INACTIVE_REASON;
 public class BackupHandler extends FrontendDaemon implements Writable, MemoryTrackable {
 
     private static final Logger LOG = LogManager.getLogger(BackupHandler.class);
-    
+
     private static final long FAKE_DB_ID = -1;
 
     public static final int SIGNATURE_VERSION = 1;
@@ -134,7 +136,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     // Use ConcurrentMap to get rid of locks.
     // Backup/Restore job for external catalog using -1 to identify the job in dbIdToBackupOrRestoreJob
     // which means that only one external catalog backup/restore job can be run in entire cluster
-    protected Map<Long, AbstractJob> dbIdToBackupOrRestoreJob = Maps.newConcurrentMap();
+    protected Map<Set<Long>, AbstractJob> tableIdToBackupOrRestoreJob = Maps.newConcurrentMap();
 
     protected MvRestoreContext mvRestoreContext = new MvRestoreContext();
 
@@ -144,6 +146,8 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     private boolean isInit = false;
 
     private GlobalStateMgr globalStateMgr;
+
+    private List<Long> tableIds = new ArrayList<>();
 
     public BackupHandler() {
         // for persist
@@ -201,8 +205,25 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         return true;
     }
 
-    public AbstractJob getJob(long dbId) {
-        return dbIdToBackupOrRestoreJob.get(dbId);
+    public List<AbstractJob> getJob(long dbId) {
+        List<AbstractJob> jobList = Lists.newArrayList();
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
+        if (db == null) {
+            return null;
+        }
+        tableIdToBackupOrRestoreJob.forEach((key, value) -> {
+            for (Long tableId : key) {
+                if (db.getTable(tableId) != null) {
+                    jobList.add(value);
+                    break;
+                }
+            }
+        });
+        return jobList.isEmpty() ? null : jobList;
+    }
+
+    public AbstractJob getJob(List<Long> tableIds) {
+        return tableIdToBackupOrRestoreJob.get(new HashSet<>(tableIds));
     }
 
     @Override
@@ -213,7 +234,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             }
         }
 
-        for (AbstractJob job : dbIdToBackupOrRestoreJob.values()) {
+        for (AbstractJob job : tableIdToBackupOrRestoreJob.values()) {
             job.setGlobalStateMgr(globalStateMgr);
             job.run();
         }
@@ -248,7 +269,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
                 ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR, "Repository does not exist");
             }
 
-            for (AbstractJob job : dbIdToBackupOrRestoreJob.values()) {
+            for (AbstractJob job : tableIdToBackupOrRestoreJob.values()) {
                 if (!job.isDone() && job.getRepoId() == repo.getId()) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
                             "Backup or restore job is running on this repository."
@@ -314,7 +335,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
                 // if target dbName if null, use dbName in snapshot
                 dbName = jobInfo.dbName;
             }
-    
+
             db = globalStateMgr.getLocalMetastore().getDb(dbName);
             if (db == null) {
                 if (stmt instanceof RestoreStmt) {
@@ -341,13 +362,23 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         tryLock();
         try {
             // Check if there is backup or restore job running on this database
-            AbstractJob currentJob = dbIdToBackupOrRestoreJob.get(stmt.containsExternalCatalog() ? FAKE_DB_ID : db.getId());
-            if (currentJob != null && currentJob.getDbId() == FAKE_DB_ID && !currentJob.isDone()) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
-                        "Can only run one backup or restore job of external catalog");
-            } else if (currentJob != null && !currentJob.isDone()) {
-                ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
-                        "Can only run one backup or restore job of a database at same time");
+            AbstractJob currentJob = null;
+            List<TableRef> backupTables = stmt.getTableRefs();
+            if (stmt.containsExternalCatalog()) {
+                tableIds.add(FAKE_DB_ID);
+            } else {
+                for (TableRef ref : backupTables) {
+                    long tableId = db.getTable(ref.getName().getTbl()).getId();
+                    currentJob = findJobByTableId(tableId);
+                    if (currentJob != null && currentJob.getDbId() == FAKE_DB_ID && !currentJob.isDone()) {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                                "Can only run one backup or restore job of one table in external catalog");
+                    } else if (currentJob != null && !currentJob.isDone()) {
+                        ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                                "Can only run one backup or restore job of one table at same time");
+                    }
+                    tableIds.add(tableId);
+                }
             }
 
             if (stmt instanceof BackupStmt) {
@@ -356,6 +387,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
                 restore(repository, db, (RestoreStmt) stmt, jobInfo);
             }
         } finally {
+            tableIds.clear();
             seqlock.unlock();
         }
     }
@@ -446,7 +478,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             curBackupMeta = new BackupMeta(backupTbls);
         } finally {
             if (!stmt.containsExternalCatalog()) {
-                locker.unLockDatabase(db.getId(), LockType.READ);   
+                locker.unLockDatabase(db.getId(), LockType.READ);
             }
         }
 
@@ -488,7 +520,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         long dbId = stmt.containsExternalCatalog() ? FAKE_DB_ID : db.getId();
         String dbName = stmt.containsExternalCatalog() ? "" : db.getOriginName();
 
-        BackupJob backupJob = new BackupJob(stmt.getLabel(), dbId, dbName, tblRefs,
+        BackupJob backupJob = new BackupJob(stmt.getLabel(), dbId, dbName, tableIds, tblRefs,
                 stmt.getTimeoutMs(), globalStateMgr, repository.getId());
         List<Function> allFunctions = Lists.newArrayList();
         for (FunctionRef fnRef : stmt.getFnRefs()) {
@@ -501,9 +533,9 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         globalStateMgr.getEditLog().logBackupJob(backupJob);
 
         // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
-        dbIdToBackupOrRestoreJob.put(dbId, backupJob);
+        tableIdToBackupOrRestoreJob.put(new HashSet<>(tableIds), backupJob);
 
-        LOG.info("finished to submit backup job: {}", backupJob);
+        LOG.info("finished to submit backup job: {}, backup tables: {}", backupJob, tableIds);
     }
 
     private void restore(Repository repository, Database db, RestoreStmt stmt, BackupJobInfo jobInfo) throws DdlException {
@@ -549,12 +581,12 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         String dbName = stmt.containsExternalCatalog() ? "" : db.getOriginName();
 
         restoreJob = new RestoreJob(stmt.getLabel(), stmt.getBackupTimestamp(),
-                dbId, dbName, jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
+                dbId, dbName, tableIds, jobInfo, stmt.allowLoad(), stmt.getReplicationNum(),
                 stmt.getTimeoutMs(), globalStateMgr, repository.getId(), backupMeta, mvRestoreContext);
         globalStateMgr.getEditLog().logRestoreJob(restoreJob);
 
         // must put to dbIdToBackupOrRestoreJob after edit log, otherwise the state of job may be changed.
-        dbIdToBackupOrRestoreJob.put(dbId, restoreJob);
+        tableIdToBackupOrRestoreJob.put(new HashSet<>(tableIds), restoreJob);
 
         LOG.info("finished to submit restore job: {}", restoreJob);
     }
@@ -592,7 +624,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             if (catalogRef.getAlias() != null && !catalogRef.getAlias().isEmpty()) {
                 if (catalogRef.getAlias().equalsIgnoreCase(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME)) {
                     ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
-                                "Do not support set alias as default catalog for external catalog restore");   
+                                "Do not support set alias as default catalog for external catalog restore");
                 }
                 hitCatalog.get().setName(catalogRef.getAlias());
             }
@@ -698,38 +730,62 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         jobInfo.retainTables(allTbls);
     }
 
-    public AbstractJob getAbstractJob(boolean isExternalCatalog, String dbName) throws DdlException {
-        return isExternalCatalog ? dbIdToBackupOrRestoreJob.get(FAKE_DB_ID) : getAbstractJobByDbName(dbName);
+    public List<AbstractJob> getAbstractJob(boolean isExternalCatalog, String dbName) throws DdlException {
+        return isExternalCatalog ? Collections.singletonList(tableIdToBackupOrRestoreJob.get(new HashSet<>() {{
+                add(FAKE_DB_ID);
+            }})) : getAbstractJobByDbName(dbName);
     }
 
-    public AbstractJob getAbstractJobByDbName(String dbName) throws DdlException {
+    public List<AbstractJob> getAbstractJobByDbName(String dbName) throws DdlException {
+        List<AbstractJob> jobList = Lists.newArrayList();
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
-        return dbIdToBackupOrRestoreJob.get(db.getId());
+
+        tableIdToBackupOrRestoreJob.forEach((key, value) -> {
+            for (Long tableId : key) {
+                if (db.getTable(tableId) != null) {
+                    jobList.add(value);
+                    break;
+                }
+            }
+        });
+
+        return jobList;
     }
 
     public void cancel(CancelBackupStmt stmt) throws DdlException {
-        AbstractJob job = null;
-        job = getAbstractJob(stmt.isExternalCatalog(), stmt.getDbName());
-        if (job == null || (job instanceof BackupJob && stmt.isRestore())
-                || (job instanceof RestoreJob && !stmt.isRestore())) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR, "No "
-                    + (stmt.isRestore() ? "restore" : "backup" + " job")
-                    + " is currently running");
-        }
+        List<AbstractJob> jobs = getAbstractJob(stmt.isExternalCatalog(), stmt.getDbName());
+        for (AbstractJob job : jobs) {
+            if (job == null) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR, "No "
+                        + (stmt.isRestore() ? "restore" : "backup" + " job")
+                        + " is currently running");
+            }
 
-        Status status = job.cancel();
-        if (!status.ok()) {
-            ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR, "Failed to cancel job: " + status.getErrMsg());
-        }
+            if ((stmt.isRestore() && job instanceof BackupJob) || (!stmt.isRestore() && job instanceof RestoreJob)) {
+                // Skip type mismatched job
+                continue;
+            }
 
-        LOG.info("finished to cancel {} job: {}", (stmt.isRestore() ? "restore" : "backup"), job);
+            if (job.isDone() || job.isCancelled()) {
+                // Skip finished or cancelled job
+                continue;
+            }
+
+            Status status = job.cancel();
+            if (!status.ok()) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR, "Failed to cancel job: " + status.getErrMsg());
+            }
+
+            LOG.info("finished to cancel {} job: {}", (stmt.isRestore() ? "restore" : "backup"), job);
+        }
     }
 
     public boolean handleFinishedSnapshotTask(SnapshotTask task, TFinishTaskRequest request) {
-        AbstractJob job = dbIdToBackupOrRestoreJob.get(task.getDbId());
+        AbstractJob job = null;
+        job = findJobByTableId(task.getTableId());
         if (job == null) {
             LOG.warn("failed to find backup or restore job for task: {}", task);
             // return true to remove this task from AgentTaskQueue
@@ -754,9 +810,10 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     }
 
     public boolean handleFinishedSnapshotUploadTask(UploadTask task, TFinishTaskRequest request) {
-        AbstractJob job = dbIdToBackupOrRestoreJob.get(task.getDbId());
+        AbstractJob job = null;
+        job = findJobByTableId(task.getTableId());
         if (job == null || (job instanceof RestoreJob)) {
-            LOG.info("invalid upload task: {}, no backup job is found. db id: {}", task, task.getDbId());
+            LOG.info("invalid upload task: {}, no backup job is found. db id: {}", task, task.getTableId());
             return false;
         }
         BackupJob restoreJob = (BackupJob) job;
@@ -769,7 +826,8 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     }
 
     public boolean handleDownloadSnapshotTask(DownloadTask task, TFinishTaskRequest request) {
-        AbstractJob job = dbIdToBackupOrRestoreJob.get(task.getDbId());
+        AbstractJob job = null;
+        job = findJobByTableId(task.getTableId());
         if (job == null || !(job instanceof RestoreJob)) {
             LOG.warn("failed to find restore job for task: {}", task);
             // return true to remove this task from AgentTaskQueue
@@ -780,7 +838,8 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     }
 
     public boolean handleDirMoveTask(DirMoveTask task, TFinishTaskRequest request) {
-        AbstractJob job = dbIdToBackupOrRestoreJob.get(task.getDbId());
+        AbstractJob job = null;
+        job = findJobByTableId(task.getTableId());
         if (job == null || !(job instanceof RestoreJob)) {
             LOG.warn("failed to find restore job for task: {}", task);
             // return true to remove this task from AgentTaskQueue
@@ -792,7 +851,8 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
 
     public void replayAddJob(AbstractJob job) {
         if (job.isCancelled()) {
-            AbstractJob existingJob = dbIdToBackupOrRestoreJob.get(job.getDbId());
+            AbstractJob existingJob = null;
+            existingJob = tableIdToBackupOrRestoreJob.get(new HashSet<>(job.getTableIdSet()));
             if (existingJob == null || existingJob.isDone()) {
                 LOG.error("invalid existing job: {}. current replay job is: {}",
                         existingJob, job);
@@ -801,7 +861,8 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             existingJob.setGlobalStateMgr(globalStateMgr);
             existingJob.replayCancel();
         } else if (!job.isPending()) {
-            AbstractJob existingJob = dbIdToBackupOrRestoreJob.get(job.getDbId());
+            AbstractJob existingJob = null;
+            existingJob = tableIdToBackupOrRestoreJob.get(new HashSet<>(job.getTableIdSet()));
             if (existingJob == null || existingJob.isDone()) {
                 LOG.error("invalid existing job: {}. current replay job is: {}",
                         existingJob, job);
@@ -816,12 +877,12 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
             LOG.warn("skip expired job {}", job);
             return;
         }
-        dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
+        tableIdToBackupOrRestoreJob.put(new HashSet<>(job.getTableIdSet()), job);
         mvRestoreContext.addIntoMvBaseTableBackupInfo(job);
     }
 
     public boolean report(TTaskType type, long jobId, long taskId, int finishedNum, int totalNum) {
-        for (AbstractJob job : dbIdToBackupOrRestoreJob.values()) {
+        for (AbstractJob job : tableIdToBackupOrRestoreJob.values()) {
             if (job.getType() == JobType.BACKUP) {
                 if (!job.isDone() && job.getJobId() == jobId && type == TTaskType.UPLOAD) {
                     job.taskProgress.put(taskId, Pair.create(finishedNum, totalNum));
@@ -847,8 +908,8 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     public void write(DataOutput out) throws IOException {
         repoMgr.write(out);
 
-        out.writeInt(dbIdToBackupOrRestoreJob.size());
-        for (AbstractJob job : dbIdToBackupOrRestoreJob.values()) {
+        out.writeInt(tableIdToBackupOrRestoreJob.size());
+        for (AbstractJob job : tableIdToBackupOrRestoreJob.values()) {
             job.write(out);
         }
     }
@@ -864,18 +925,18 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
                 LOG.warn("skip expired job {}", job);
                 continue;
             }
-            dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
+            tableIdToBackupOrRestoreJob.put(new HashSet<>(job.getTableIdSet()), job);
             mvRestoreContext.addIntoMvBaseTableBackupInfo(job);
         }
-        LOG.info("finished replay {} backup/store jobs from image", dbIdToBackupOrRestoreJob.size());
+        LOG.info("finished replay {} backup/store jobs from image", tableIdToBackupOrRestoreJob.size());
     }
 
     public void saveBackupHandlerV2(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         SRMetaBlockWriter writer = imageWriter.getBlockWriter(
-                SRMetaBlockID.BACKUP_MGR, 2 + dbIdToBackupOrRestoreJob.size());
+                SRMetaBlockID.BACKUP_MGR, 2 + tableIdToBackupOrRestoreJob.size());
         writer.writeJson(this);
-        writer.writeInt(dbIdToBackupOrRestoreJob.size());
-        for (AbstractJob job : dbIdToBackupOrRestoreJob.values()) {
+        writer.writeInt(tableIdToBackupOrRestoreJob.size());
+        for (AbstractJob job : tableIdToBackupOrRestoreJob.values()) {
             writer.writeJson(job);
         }
         writer.close();
@@ -891,7 +952,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
                 LOG.warn("skip expired job {}", job);
                 return;
             }
-            dbIdToBackupOrRestoreJob.put(job.getDbId(), job);
+            tableIdToBackupOrRestoreJob.put(new HashSet<>(job.getTableIdSet()), job);
             mvRestoreContext.addIntoMvBaseTableBackupInfo(job);
         });
     }
@@ -908,7 +969,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         tryLock();
         try {
             long currentTimeMs = System.currentTimeMillis();
-            Iterator<Map.Entry<Long, AbstractJob>> iterator = dbIdToBackupOrRestoreJob.entrySet().iterator();
+            Iterator<Map.Entry<Set<Long>, AbstractJob>> iterator = tableIdToBackupOrRestoreJob.entrySet().iterator();
             while (iterator.hasNext()) {
                 AbstractJob job = iterator.next().getValue();
                 if (isJobExpired(job, currentTimeMs)) {
@@ -926,17 +987,28 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
 
     @Override
     public Map<String, Long> estimateCount() {
-        return ImmutableMap.of("BackupOrRestoreJob", (long) dbIdToBackupOrRestoreJob.size());
+        return ImmutableMap.of("BackupOrRestoreJob", (long) tableIdToBackupOrRestoreJob.size());
     }
 
     @Override
     public List<Pair<List<Object>, Long>> getSamples() {
-        List<Object> jobSamples = new ArrayList<>(dbIdToBackupOrRestoreJob.values());
-        return Lists.newArrayList(Pair.create(jobSamples, (long) dbIdToBackupOrRestoreJob.size()));
+        List<Object> jobSamples = new ArrayList<>(tableIdToBackupOrRestoreJob.values());
+        return Lists.newArrayList(Pair.create(jobSamples, (long) tableIdToBackupOrRestoreJob.size()));
+    }
+
+    private AbstractJob findJobByTableId(long tableId) {
+        for (Map.Entry<Set<Long>, AbstractJob> entry : tableIdToBackupOrRestoreJob.entrySet()) {
+            for (long id : entry.getKey()) {
+                if (tableId == id) {
+                    return entry.getValue();
+                }
+            }
+        }
+        return null;
     }
 
     public Map<Long, Long> getRunningBackupRestoreCount() {
-        long count = dbIdToBackupOrRestoreJob.values().stream().filter(job -> !job.isDone()).count();
+        long count = tableIdToBackupOrRestoreJob.values().stream().filter(job -> !job.isDone()).count();
         Map<Long, Long> result = new HashMap<>();
         result.put(WarehouseManager.DEFAULT_WAREHOUSE_ID, count);
         return result;

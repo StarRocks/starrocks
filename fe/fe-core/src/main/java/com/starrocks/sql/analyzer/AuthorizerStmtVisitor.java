@@ -2193,31 +2193,34 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
                     PrivilegeType.REPOSITORY.name(), ObjectType.SYSTEM.name(), null);
         }
-        AbstractJob job = null;
+        List<AbstractJob> jobs = null;
         try {
-            job = GlobalStateMgr.getCurrentState().getBackupHandler().getAbstractJob(statement.isExternalCatalog(),
-                                                                                     statement.getDbName());
+            jobs = GlobalStateMgr.getCurrentState().getBackupHandler().getAbstractJob(statement.isExternalCatalog(),
+                                                                                             statement.getDbName());
         } catch (DdlException e) {
             ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, statement.getDbName());
         }
-        if (null == job) {
+        if (jobs.isEmpty()) {
             return null;
         }
-        if (job instanceof BackupJob) {
-            BackupJob backupJob = (BackupJob) job;
-            List<TableRef> tableRefs = backupJob.getTableRef();
-            tableRefs.forEach(tableRef -> {
-                TableName tableName = tableRef.getName();
-                try {
-                    Authorizer.checkTableAction(context, tableName,
-                            PrivilegeType.EXPORT);
-                } catch (AccessDeniedException e) {
-                    AccessDeniedException.reportAccessDenied(
-                            tableName.getCatalog(),
-                            context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                            PrivilegeType.EXPORT.name(), ObjectType.TABLE.name(), tableName.getTbl());
-                }
-            });
+
+        for (AbstractJob job : jobs) {
+            if (job instanceof BackupJob) {
+                BackupJob backupJob = (BackupJob) job;
+                List<TableRef> tableRefs = backupJob.getTableRef();
+                tableRefs.forEach(tableRef -> {
+                    TableName tableName = tableRef.getName();
+                    try {
+                        Authorizer.checkTableAction(context, tableName,
+                                PrivilegeType.EXPORT);
+                    } catch (AccessDeniedException e) {
+                        AccessDeniedException.reportAccessDenied(
+                                tableName.getCatalog(),
+                                context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                                PrivilegeType.EXPORT.name(), ObjectType.TABLE.name(), tableName.getTbl());
+                    }
+                });
+            }
         }
         return null;
     }
