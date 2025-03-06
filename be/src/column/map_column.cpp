@@ -40,8 +40,10 @@ void MapColumn::check_or_die() const {
     _values->check_or_die();
 }
 
-MapColumn::MapColumn(ColumnPtr keys, ColumnPtr values, UInt32Column::Ptr offsets)
-        : _keys(std::move(keys)), _values(std::move(values)), _offsets(std::move(offsets)) {
+MapColumn::MapColumn(MutableColumnPtr&& keys, MutableColumnPtr&& values, MutableColumnPtr&& offsets)
+        : _keys(std::move(keys)),
+          _values(std::move(values)),
+          _offsets(UInt32Column::static_pointer_cast(std::move(offsets))) {
     DCHECK(_keys->is_nullable());
     DCHECK(_values->is_nullable());
     if (_offsets->empty()) {
@@ -234,7 +236,7 @@ void MapColumn::remove_first_n_values(size_t count) {
     }
 }
 
-uint32_t MapColumn::serialize(size_t idx, uint8_t* pos) {
+uint32_t MapColumn::serialize(size_t idx, uint8_t* pos) const {
     DCHECK(!_keys->is_map());
     uint32_t offset = _offsets->get_data()[idx];
     uint32_t map_size = _offsets->get_data()[idx + 1] - offset;
@@ -262,7 +264,7 @@ uint32_t MapColumn::serialize(size_t idx, uint8_t* pos) {
     return static_cast<uint32_t>(ser_size);
 }
 
-uint32_t MapColumn::serialize_default(uint8_t* pos) {
+uint32_t MapColumn::serialize_default(uint8_t* pos) const {
     uint32_t map_size = 0;
     strings::memcpy_inlined(pos, &map_size, sizeof(map_size));
     return sizeof(map_size);
@@ -304,7 +306,7 @@ uint32_t MapColumn::serialize_size(size_t idx) const {
 }
 
 void MapColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                                uint32_t max_one_row_size) {
+                                uint32_t max_one_row_size) const {
     for (size_t i = 0; i < chunk_size; ++i) {
         slice_sizes[i] += serialize(i, dst + i * max_one_row_size + slice_sizes[i]);
     }
@@ -318,7 +320,7 @@ void MapColumn::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_s
 }
 
 MutableColumnPtr MapColumn::clone_empty() const {
-    return create_mutable(_keys->clone_empty(), _values->clone_empty(), UInt32Column::create());
+    return create(_keys->clone_empty(), _values->clone_empty(), UInt32Column::create());
 }
 
 size_t MapColumn::filter_range(const Filter& filter, size_t from, size_t to) {
@@ -567,8 +569,8 @@ void MapColumn::put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_bi
     const size_t map_size = _offsets->get_data()[idx + 1] - offset;
 
     buf->begin_push_bracket();
-    Column* keys = _keys.get();
-    Column* values = _values.get();
+    auto* keys = _keys.get();
+    auto* values = _values.get();
     if (map_size > 0) {
         keys->put_mysql_row_buffer(buf, offset);
         buf->separator(':');
@@ -619,9 +621,9 @@ size_t MapColumn::reference_memory_usage(size_t from, size_t size) const {
 
 void MapColumn::swap_column(Column& rhs) {
     auto& map_column = down_cast<MapColumn&>(rhs);
-    _offsets->swap_column(*map_column.offsets_column());
-    _keys->swap_column(*map_column.keys_column());
-    _values->swap_column(*map_column.values_column());
+    _offsets->swap_column(*map_column._offsets);
+    _keys->swap_column(*map_column._keys);
+    _values->swap_column(*map_column._values);
 }
 
 void MapColumn::reset_column() {
@@ -704,7 +706,7 @@ void MapColumn::remove_duplicated_keys(bool need_recursive) {
 
     bool has_duplicated_keys = false;
     size_t size = this->size();
-    UInt32Column::Ptr new_offsets = UInt32Column::create();
+    auto new_offsets = UInt32Column::create();
     new_offsets->reserve(size + 1);
     auto& offsets_vec = new_offsets->get_data();
     offsets_vec.push_back(0);
@@ -733,7 +735,7 @@ void MapColumn::remove_duplicated_keys(bool need_recursive) {
         auto new_keys_size = _keys->filter(filter);
         auto new_values_size = _values->filter(filter);
         DCHECK(new_keys_size == new_values_size);
-        _offsets.swap(new_offsets);
+        _offsets = std::move(new_offsets);
     }
 }
 

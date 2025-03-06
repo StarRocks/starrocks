@@ -249,12 +249,12 @@ int AdaptiveNullableColumn::compare_at(size_t left, size_t right, const Column& 
     return NullableColumn::compare_at(left, right, rhs, nan_direction_hint);
 }
 
-uint32_t AdaptiveNullableColumn::serialize(size_t idx, uint8_t* pos) {
+uint32_t AdaptiveNullableColumn::serialize(size_t idx, uint8_t* pos) const {
     materialized_nullable();
     return NullableColumn::serialize(idx, pos);
 }
 
-uint32_t AdaptiveNullableColumn::serialize_default(uint8_t* pos) {
+uint32_t AdaptiveNullableColumn::serialize_default(uint8_t* pos) const {
     materialized_nullable();
     bool null = true;
     strings::memcpy_inlined(pos, &null, sizeof(bool));
@@ -262,13 +262,13 @@ uint32_t AdaptiveNullableColumn::serialize_default(uint8_t* pos) {
 }
 
 size_t AdaptiveNullableColumn::serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval,
-                                                           size_t start, size_t count) {
+                                                           size_t start, size_t count) const {
     materialized_nullable();
     return NullableColumn::serialize_batch_at_interval(dst, byte_offset, byte_interval, start, count);
 }
 
 void AdaptiveNullableColumn::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                                             uint32_t max_one_row_size) {
+                                             uint32_t max_one_row_size) const {
     materialized_nullable();
     _data_column->serialize_batch_with_null_masks(dst, slice_sizes, chunk_size, max_one_row_size,
                                                   _null_column->get_data().data(), _has_null);

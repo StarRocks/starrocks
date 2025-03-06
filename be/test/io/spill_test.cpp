@@ -294,23 +294,6 @@ struct SpillerCaller {
     spill::Spiller* _spiller;
 };
 
-bool chunk_equals(const ChunkPtr& l, const ChunkPtr& r) {
-    if (l->columns() != r->columns() || l->num_columns() != r->num_columns() ||
-        l->get_slot_id_to_index_map() != r->get_slot_id_to_index_map()) {
-        return false;
-    }
-    size_t num_rows = l->num_rows();
-    auto& lcolumns = l->columns();
-    auto& rcolumns = r->columns();
-    for (size_t i = 0; i < lcolumns.size(); ++i) {
-        if (!lcolumns[i]->equals(num_rows, *rcolumns[i], num_rows)) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
 TEST_F(SpillTest, unsorted_process) {
     ObjectPool pool;
 

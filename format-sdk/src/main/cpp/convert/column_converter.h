@@ -47,7 +47,7 @@ public:
 public:
     ColumnConverter(const std::shared_ptr<arrow::DataType>& arrow_type, const std::shared_ptr<Field>& sr_field,
                     const arrow::MemoryPool* pool)
-            : _arrow_type(arrow_type), _sr_field(sr_field), _pool(pool) {};
+            : _arrow_type(arrow_type), _sr_field(sr_field), _pool(pool){};
 
     virtual ~ColumnConverter() = default;
 
@@ -56,12 +56,12 @@ public:
     /**
      * Convert arrow array to starrocks column.
      */
-    virtual arrow::Status toSrColumn(std::shared_ptr<arrow::Array> array, std::shared_ptr<Column>& column) = 0;
+    virtual arrow::Status toSrColumn(std::shared_ptr<arrow::Array> array, ColumnPtr& column) = 0;
 
 protected:
     arrow::Result<std::shared_ptr<arrow::Buffer> > convert_null_bitmap(const Buffer<uint8_t>& null_bytes);
 
-    static std::shared_ptr<Column> get_data_column(const std::shared_ptr<Column>& column);
+    static ColumnPtr get_data_column(const ColumnPtr& column);
 
 protected:
     const std::shared_ptr<arrow::DataType> _arrow_type;

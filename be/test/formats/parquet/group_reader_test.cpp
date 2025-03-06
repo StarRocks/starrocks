@@ -160,7 +160,7 @@ ChunkPtr GroupReaderTest::_create_chunk(GroupReaderParam* param) {
     ChunkPtr chunk = std::make_shared<Chunk>();
     for (auto& column : param->read_cols) {
         auto c = ColumnHelper::create_column(column.slot_type(), true);
-        chunk->append_column(c, column.slot_id());
+        chunk->append_column(std::move(c), column.slot_id());
     }
     return chunk;
 }

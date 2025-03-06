@@ -342,7 +342,9 @@ public:
         for (uint32_t i = 0; i < chunk_size; i++) {
             indexes[i] = i;
         }
-        return {std::make_shared<Chunk>(Columns{c0, c1, c2, c3}, _slot_cid_map), std::move(indexes)};
+        return {std::make_shared<Chunk>(Columns{std::move(c0), std::move(c1), std::move(c2), std::move(c3)},
+                                        _slot_cid_map),
+                std::move(indexes)};
     }
 
     std::pair<ChunkPtr, std::vector<uint32_t>> gen_partial_update_data() {
@@ -359,7 +361,7 @@ public:
         for (uint32_t i = 0; i < chunk_size; i++) {
             indexes[i] = i;
         }
-        return {std::make_shared<Chunk>(Columns{c0, c1}, _slot_cid_map), std::move(indexes)};
+        return {std::make_shared<Chunk>(Columns{std::move(c0), std::move(c1)}, _slot_cid_map), std::move(indexes)};
     }
 
     ChunkPtr read(int64_t tablet_id, int64_t version) {

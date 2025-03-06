@@ -218,7 +218,7 @@ private:
         }
 
         if (haystack_column->is_nullable()) {
-            return NullableColumn::create(res, res_null);
+            return NullableColumn::create(std::move(res), std::move(res_null));
         } else {
             return res;
         }

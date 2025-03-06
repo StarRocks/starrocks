@@ -3365,8 +3365,7 @@ Status PersistentIndex::_build_commit(TabletLoader* loader, PersistentIndexMetaP
     return status;
 }
 
-Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey_schema,
-                                        std::unique_ptr<Column> pk_column) {
+Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey_schema, MutableColumnPtr pk_column) {
     CHECK_MEM_LIMIT("PersistentIndex::_insert_rowsets");
     std::vector<uint32_t> rowids;
     TRY_CATCH_BAD_ALLOC(rowids.reserve(4096));
@@ -5272,7 +5271,7 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
     data->set_offset(0);
     data->set_size(0);
 
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     if (pkey_schema.num_fields() > 1) {
         RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
     }

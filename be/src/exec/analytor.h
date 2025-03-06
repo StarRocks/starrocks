@@ -289,7 +289,7 @@ private:
     std::vector<const AggregateFunction*> _agg_functions;
     std::vector<ManagedFunctionStatesPtr<Analytor>> _managed_fn_states;
     std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
-    std::vector<std::vector<ColumnPtr>> _agg_intput_columns;
+    std::vector<Columns> _agg_intput_columns;
     std::vector<FunctionTypes> _agg_fn_types;
 
     std::vector<ExprContext*> _partition_ctxs;

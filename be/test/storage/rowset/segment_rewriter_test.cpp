@@ -112,7 +112,7 @@ TEST_F(SegmentRewriterTest, rewrite_test) {
              create_int_value_pb(5)});
     std::string dst_file_name = kSegmentDir + "/rewrite_rowset";
     std::vector<uint32_t> read_column_ids{2, 4};
-    std::vector<std::unique_ptr<Column>> write_columns(read_column_ids.size());
+    std::vector<MutableColumnPtr> write_columns(read_column_ids.size());
     for (auto i = 0; i < read_column_ids.size(); ++i) {
         const auto read_column_id = read_column_ids[i];
         auto tablet_column = tablet_schema->column(read_column_id);

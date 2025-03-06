@@ -52,9 +52,9 @@ TEST_F(StringFunctionSubstrTest, substringNormalTest) {
         len->append(2);
     }
 
-    columns.emplace_back(str);
-    columns.emplace_back(pos);
-    columns.emplace_back(len);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pos));
+    columns.emplace_back(std::move(len));
 
     ColumnPtr result = StringFunctions::substring(ctx.get(), columns).value();
 
@@ -80,9 +80,9 @@ TEST_F(StringFunctionSubstrTest, substringChineseTest) {
         len->append(2);
     }
 
-    columns.emplace_back(str);
-    columns.emplace_back(pos);
-    columns.emplace_back(len);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pos));
+    columns.emplace_back(std::move(len));
 
     ColumnPtr result = StringFunctions::substring(ctx.get(), columns).value();
 
@@ -108,9 +108,9 @@ TEST_F(StringFunctionSubstrTest, substringleftTest) {
         len->append(2);
     }
 
-    columns.emplace_back(str);
-    columns.emplace_back(pos);
-    columns.emplace_back(len);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pos));
+    columns.emplace_back(std::move(len));
 
     ColumnPtr result = StringFunctions::substring(ctx.get(), columns).value();
 
@@ -139,7 +139,7 @@ TEST_F(StringFunctionSubstrTest, substrConstASCIITest) {
     auto state = std::make_unique<SubstrState>();
     ctx->set_function_state(FunctionContext::FRAGMENT_LOCAL, state.get());
     starrocks::Columns columns;
-    columns.emplace_back(str);
+    columns.emplace_back(std::move(str));
     for (auto& e : cases) {
         auto [offset, len, expect] = e;
         state->is_const = true;
@@ -187,7 +187,7 @@ TEST_F(StringFunctionSubstrTest, substrConstZhTest) {
     auto state = std::make_unique<SubstrState>();
     ctx->set_function_state(FunctionContext::FRAGMENT_LOCAL, state.get());
     starrocks::Columns columns;
-    columns.emplace_back(str);
+    columns.emplace_back(std::move(str));
     for (auto& e : cases) {
         auto [offset, len, expect] = e;
         state->is_const = true;
@@ -270,7 +270,7 @@ TEST_F(StringFunctionSubstrTest, substrConstUtf8Test) {
     auto state = std::make_unique<SubstrState>();
     ctx->set_function_state(FunctionContext::FRAGMENT_LOCAL, state.get());
     starrocks::Columns columns;
-    columns.emplace_back(str);
+    columns.emplace_back(std::move(str));
     for (auto& e : cases) {
         auto [offset, len, expect] = e;
         state->is_const = true;
@@ -296,9 +296,9 @@ TEST_F(StringFunctionSubstrTest, substringOverleftTest) {
         len->append(2);
     }
 
-    columns.emplace_back(str);
-    columns.emplace_back(pos);
-    columns.emplace_back(len);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pos));
+    columns.emplace_back(std::move(len));
 
     ColumnPtr result = StringFunctions::substring(ctx.get(), columns).value();
 
@@ -325,9 +325,9 @@ TEST_F(StringFunctionSubstrTest, substringConstTest) {
         str->append("test" + std::to_string(j));
     }
 
-    columns.emplace_back(str);
-    columns.emplace_back(ConstColumn::create(pos, 1));
-    columns.emplace_back(ConstColumn::create(len, 1));
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(ConstColumn::create(std::move(pos), 1));
+    columns.emplace_back(ConstColumn::create(std::move(len), 1));
 
     ColumnPtr result = StringFunctions::substring(ctx.get(), columns).value();
 
@@ -356,8 +356,8 @@ TEST_F(StringFunctionSubstrTest, substringNullTest) {
     }
 
     columns.emplace_back(b.build(false));
-    columns.emplace_back(ConstColumn::create(pos, 1));
-    columns.emplace_back(ConstColumn::create(len, 1));
+    columns.emplace_back(ConstColumn::create(std::move(pos), 1));
+    columns.emplace_back(ConstColumn::create(std::move(len), 1));
 
     ColumnPtr result = StringFunctions::substring(ctx.get(), columns).value();
 
@@ -387,8 +387,8 @@ TEST_F(StringFunctionSubstrTest, leftTest) {
         inx->append(j);
     }
 
-    columns.emplace_back(str);
-    columns.emplace_back(inx);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(inx));
 
     ColumnPtr result = StringFunctions::left(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
@@ -416,8 +416,8 @@ TEST_F(StringFunctionSubstrTest, rightTest) {
         inx->append(j);
     }
 
-    columns.emplace_back(str);
-    columns.emplace_back(inx);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(inx));
 
     ColumnPtr result = StringFunctions::right(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
@@ -439,8 +439,8 @@ static void test_left_and_right_not_const(
     // left_not_const and right_not_const
     std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context());
     Columns columns;
-    auto str_col = BinaryColumn::create();
-    auto len_col = Int32Column::create();
+    BinaryColumn::Ptr str_col = BinaryColumn::create();
+    Int32Column::Ptr len_col = Int32Column::create();
     for (auto& c : cases) {
         auto s = std::get<0>(c);
         auto len = std::get<1>(c);
@@ -568,8 +568,8 @@ static void test_left_and_right_const(
         Columns columns;
         auto len_col = Int32Column::create();
         len_col->append(len);
-        columns.push_back(str_col);
-        columns.push_back(ConstColumn::create(len_col, 1));
+        columns.emplace_back(std::move(str_col));
+        columns.push_back(ConstColumn::create(std::move(len_col), 1));
         auto substr_state = std::make_unique<SubstrState>();
         std::unique_ptr<FunctionContext> context(FunctionContext::create_test_context());
         context->set_function_state(FunctionContext::FRAGMENT_LOCAL, substr_state.get());
@@ -610,7 +610,7 @@ TEST_F(StringFunctionSubstrTest, leftAndRightConstASCIITest) {
             {-111, {"", "", ""}, {"", "", ""}},
             {INT_MIN, {"", "", ""}, {"", "", ""}},
     };
-    test_left_and_right_const(str_col, cases);
+    test_left_and_right_const(std::move(str_col), cases);
 }
 
 TEST_F(StringFunctionSubstrTest, leftAndRightConstUtf8Test) {
@@ -644,7 +644,7 @@ TEST_F(StringFunctionSubstrTest, leftAndRightConstUtf8Test) {
             {-111, {"", "", "", ""}, {"", "", "", ""}},
             {INT_MIN, {"", "", "", ""}, {"", "", "", ""}},
     };
-    test_left_and_right_const(str_col, cases);
+    test_left_and_right_const(std::move(str_col), cases);
 }
 
 static void test_substr_not_const(std::vector<std::tuple<std::string, int, int, std::string>>& cases) {
@@ -660,7 +660,7 @@ static void test_substr_not_const(std::vector<std::tuple<std::string, int, int, 
         off_col->append(std::get<1>(c));
         len_col->append(std::get<2>(c));
     }
-    Columns columns{str_col, off_col, len_col};
+    Columns columns{std::move(str_col), std::move(off_col), std::move(len_col)};
     auto result = StringFunctions::substring(context.get(), columns).value();
     auto* binary_result = down_cast<BinaryColumn*>(result.get());
     const auto size = cases.size();
@@ -674,7 +674,7 @@ static void test_substr_not_const(std::vector<std::tuple<std::string, int, int, 
 }
 
 TEST_F(StringFunctionSubstrTest, substrNotConstASCIITest) {
-    ColumnPtr str_col = BinaryColumn::create();
+    MutableColumnPtr str_col = BinaryColumn::create();
     std::string ascii_1_9 = "123456789";
     std::vector<std::tuple<std::string, int, int, std::string>> cases = {
             {"", 0, 1, ""},
@@ -750,7 +750,7 @@ TEST_F(StringFunctionSubstrTest, substrNotConstASCIITest) {
 }
 
 TEST_F(StringFunctionSubstrTest, substrNotConstUtf8Test) {
-    ColumnPtr str_col = BinaryColumn::create();
+    MutableColumnPtr str_col = BinaryColumn::create();
     std::string zh_1_9 = "壹贰叁肆伍陆柒捌玖";
     std::vector<std::tuple<std::string, int, int, std::string>> cases = {
             {"", 0, 1, ""},

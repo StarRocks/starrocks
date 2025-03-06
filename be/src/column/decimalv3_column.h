@@ -24,7 +24,12 @@
 namespace starrocks {
 
 template <typename T>
-class DecimalV3Column final : public ColumnFactory<FixedLengthColumnBase<T>, DecimalV3Column<DecimalType<T>>, Column> {
+class DecimalV3Column final
+        : public CowFactory<ColumnFactory<FixedLengthColumnBase<T>, DecimalV3Column<DecimalType<T>>>,
+                            DecimalV3Column<DecimalType<T>>, Column> {
+    friend class CowFactory<ColumnFactory<FixedLengthColumnBase<T>, DecimalV3Column<DecimalType<T>>>,
+                            DecimalV3Column<DecimalType<T>>, Column>;
+
 public:
     DecimalV3Column() = default;
     explicit DecimalV3Column(size_t num_rows);
@@ -41,7 +46,7 @@ public:
     int precision() const;
     int scale() const;
 
-    MutableColumnPtr clone_empty() const override;
+    MutableColumnPtr clone_empty() const override { return this->create(_precision, _scale); }
 
     void put_mysql_row_buffer(MysqlRowBuffer* buf, size_t idx, bool is_binary_protocol = false) const override;
     std::string debug_item(size_t idx) const override;

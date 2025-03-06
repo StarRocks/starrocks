@@ -298,7 +298,7 @@ Status BinlogDataSource::_mock_chunk_test(ChunkPtr* chunk) {
             VLOG_ROW << "Append col:" << idx << ", row:" << start;
             column->append(start % ndv_count);
         }
-        chunk_temp->append_column(column, SlotId(idx));
+        chunk_temp->append_column(std::move(column), SlotId(idx));
     }
 
     // ops

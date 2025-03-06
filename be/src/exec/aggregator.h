@@ -472,7 +472,7 @@ protected:
     // The expr used to evaluate agg input columns
     // one agg function could have multi input exprs
     std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
-    std::vector<std::vector<ColumnPtr>> _agg_input_columns;
+    std::vector<Columns> _agg_input_columns;
     //raw pointers in order to get multi-column values
     std::vector<std::vector<const Column*>> _agg_input_raw_columns;
     // The expr used to evaluate agg intermediate columns.
@@ -565,8 +565,8 @@ protected:
     Columns _create_agg_result_columns(size_t num_rows, bool use_intermediate);
     Columns _create_group_by_columns(size_t num_rows);
 
-    void _serialize_to_chunk(ConstAggDataPtr __restrict state, const Columns& agg_result_columns);
-    void _finalize_to_chunk(ConstAggDataPtr __restrict state, const Columns& agg_result_columns);
+    void _serialize_to_chunk(ConstAggDataPtr __restrict state, Columns& agg_result_columns);
+    void _finalize_to_chunk(ConstAggDataPtr __restrict state, Columns& agg_result_columns);
     void _destroy_state(AggDataPtr __restrict state);
 
     ChunkPtr _build_output_chunk(const Columns& group_by_columns, const Columns& agg_result_columns,

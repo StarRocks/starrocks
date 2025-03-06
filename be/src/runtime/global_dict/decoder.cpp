@@ -39,24 +39,24 @@ public:
 
     GlobalDictDecoderBase(Dict dict) : _dict(std::move(dict)) {}
 
-    Status decode_string(Column* in, Column* out) override;
+    Status decode_string(const Column* in, Column* out) override;
 
-    Status decode_array(Column* in, Column* out) override;
+    Status decode_array(const Column* in, Column* out) override;
 
 private:
     Dict _dict;
 };
 
 template <typename Dict>
-Status GlobalDictDecoderBase<Dict>::decode_array(Column* in, Column* out) {
+Status GlobalDictDecoderBase<Dict>::decode_array(const Column* in, Column* out) {
     DCHECK(in != nullptr);
     DCHECK(out != nullptr);
 
     TypeDescriptor stringType;
     stringType.type = TYPE_VARCHAR;
     if (in->is_constant()) {
-        auto* const_column = down_cast<ConstColumn*>(in);
-        auto* in_array = down_cast<ArrayColumn*>(const_column->data_column().get());
+        const auto* const_column = down_cast<const ConstColumn*>(in);
+        const auto* in_array = down_cast<const ArrayColumn*>(const_column->data_column().get());
         auto in_element = in_array->elements_column();
         auto in_offsets = in_array->offsets_column();
 
@@ -66,8 +66,8 @@ Status GlobalDictDecoderBase<Dict>::decode_array(Column* in, Column* out) {
         out_offsets->swap_column(*in_offsets);
         return decode_string(in_element.get(), out_element.get());
     } else if (in->is_nullable()) {
-        auto* in_nullable = down_cast<NullableColumn*>(in);
-        auto* in_array = down_cast<ArrayColumn*>(in_nullable->data_column().get());
+        const auto* in_nullable = down_cast<const NullableColumn*>(in);
+        const auto* in_array = down_cast<const ArrayColumn*>(in_nullable->data_column().get());
         auto in_null = in_nullable->null_column();
         auto in_element = in_array->elements_column();
         auto in_offsets = in_array->offsets_column();
@@ -82,7 +82,7 @@ Status GlobalDictDecoderBase<Dict>::decode_array(Column* in, Column* out) {
         out_nullable->set_has_null(in_nullable->has_null());
         return decode_string(in_element.get(), out_element.get());
     } else {
-        auto* in_array = down_cast<ArrayColumn*>(in);
+        const auto* in_array = down_cast<const ArrayColumn*>(in);
         auto in_element = in_array->elements_column();
         auto in_offsets = in_array->offsets_column();
 
@@ -97,7 +97,7 @@ Status GlobalDictDecoderBase<Dict>::decode_array(Column* in, Column* out) {
 }
 
 template <typename Dict>
-Status GlobalDictDecoderBase<Dict>::decode_string(Column* in, Column* out) {
+Status GlobalDictDecoderBase<Dict>::decode_string(const Column* in, Column* out) {
     DCHECK(in != nullptr);
     DCHECK(out != nullptr);
 
@@ -114,8 +114,8 @@ Status GlobalDictDecoderBase<Dict>::decode_string(Column* in, Column* out) {
     }
 
     if (!in->is_nullable()) {
-        auto res_column = down_cast<StringColumnType*>(out);
-        auto column = down_cast<DictColumnType*>(in);
+        auto* res_column = down_cast<StringColumnType*>(out);
+        const auto* column = down_cast<const DictColumnType*>(in);
         for (size_t i = 0; i < in->size(); i++) {
             DictCppType key = column->get_data()[i];
             auto iter = _dict.find(key);
@@ -127,12 +127,12 @@ Status GlobalDictDecoderBase<Dict>::decode_string(Column* in, Column* out) {
         return Status::OK();
     }
 
-    auto column = down_cast<NullableColumn*>(in);
-    auto res_column = down_cast<NullableColumn*>(out);
+    const auto* column = down_cast<const NullableColumn*>(in);
+    auto* res_column = down_cast<NullableColumn*>(out);
     res_column->null_column_data().resize(in->size());
 
-    auto res_data_column = down_cast<StringColumnType*>(res_column->data_column().get());
-    auto data_column = down_cast<DictColumnType*>(column->data_column().get());
+    auto* res_data_column = down_cast<StringColumnType*>(res_column->data_column().get());
+    const auto* data_column = down_cast<const DictColumnType*>(column->data_column().get());
 
     for (size_t i = 0; i < in->size(); i++) {
         if (column->null_column_data()[i] == 0) {

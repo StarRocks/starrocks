@@ -43,7 +43,7 @@ void test_money_format_decimal(TestArray const& test_cases, int precision, int s
         money_column->append(value);
     }
 
-    columns.emplace_back(money_column);
+    columns.emplace_back(std::move(money_column));
     ColumnPtr result = StringFunctions::money_format_decimal<Type>(ctx.get(), columns).value();
     auto v = ColumnHelper::as_raw_column<BinaryColumn>(result);
 

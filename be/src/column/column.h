@@ -22,6 +22,7 @@
 #include "column/column_visitor.h"
 #include "column/column_visitor_mutable.h"
 #include "column/vectorized_fwd.h"
+#include "common/cow.h"
 #include "common/statusor.h"
 #include "gutil/casts.h"
 #include "storage/delete_condition.h" // for DelCondSatisfied
@@ -37,8 +38,10 @@ struct TypeDescriptor;
 // Forward declaration
 class Datum;
 
-class Column {
+class Column : public Cow<Column> {
 public:
+    friend class Cow<Column>;
+
     // we use append fixed size to achieve faster memory copy.
     // We copy 350M rows, which total length is 2GB, max length is 15.
     // When size is 0, it means copy the string's actual size.
@@ -61,11 +64,6 @@ public:
     static const int EQUALS_FALSE = 0;
     static const int EQUALS_NULL = -1;
     static const int EQUALS_TRUE = 1;
-
-    // mutable operations cannot be applied to shared data when concurrent
-    using Ptr = std::shared_ptr<Column>;
-    // mutable means you could modify the data safely
-    using MutablePtr = std::unique_ptr<Column>;
 
     virtual ~Column() = default;
 
@@ -135,14 +133,14 @@ public:
     // Return null, if the column is not overflow.
     // Return the new larger column, if upgrade success
     // Current, only support upgrade BinaryColumn to LargeBinaryColumn
-    virtual StatusOr<ColumnPtr> upgrade_if_overflow() = 0;
+    virtual StatusOr<Ptr> upgrade_if_overflow() = 0;
 
     // Downgrade the column from large column to normal column.
     // Return internal error if downgrade failed.
     // Return null, if the column is already normal column, no need to downgrade.
     // Return the new normal column, if downgrade success
     // Current, only support downgrade LargeBinaryColumn to BinaryColumn
-    virtual StatusOr<ColumnPtr> downgrade() = 0;
+    virtual StatusOr<Ptr> downgrade() = 0;
 
     // Check if the column contains large column.
     // Current, only used to check if it contains LargeBinaryColumn or BinaryColumn
@@ -170,7 +168,7 @@ public:
     // for example: column(1,2)->replicate({0,2,5}) = column(1,1,2,2,2)
     // FixedLengthColumn, BinaryColumn and ConstColumn override this function for better performance.
     // TODO(fzh): optimize replicate() for ArrayColumn, ObjectColumn and others.
-    virtual StatusOr<ColumnPtr> replicate(const Buffer<uint32_t>& offsets) {
+    virtual StatusOr<Ptr> replicate(const Buffer<uint32_t>& offsets) {
         auto dest = this->clone_empty();
         auto dest_size = offsets.size() - 1;
         DCHECK(this->size() >= dest_size) << "The size of the source column is less when duplicating it.";
@@ -293,14 +291,14 @@ public:
     }
 
     // serialize one data,The memory must allocate firstly from mempool
-    virtual uint32_t serialize(size_t idx, uint8_t* pos) = 0;
+    virtual uint32_t serialize(size_t idx, uint8_t* pos) const = 0;
 
     // serialize default value of column
     // The behavior is consistent with append_default
-    virtual uint32_t serialize_default(uint8_t* pos) = 0;
+    virtual uint32_t serialize_default(uint8_t* pos) const = 0;
 
     virtual void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                                 uint32_t max_one_row_size) = 0;
+                                 uint32_t max_one_row_size) const = 0;
 
     // A dedicated serialization method used by HashJoin to combine multiple columns into a wide-key
     // column, and it's only implemented by numeric columns right now.
@@ -309,13 +307,14 @@ public:
     // (which should be fixed size) of this column if this column supports this method, otherwise
     // it returns 0.
     virtual size_t serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval, size_t start,
-                                               size_t count) {
+                                               size_t count) const {
         return 0;
     };
 
     // A dedicated serialization method used by NullableColumn to serialize data columns with null_masks.
     virtual void serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                                                 uint32_t max_one_row_size, uint8_t* null_masks, bool has_null);
+                                                 uint32_t max_one_row_size, const uint8_t* null_masks,
+                                                 bool has_null) const;
 
     virtual void deserialize_and_append_batch_nullable(Buffer<Slice>& srcs, size_t chunk_size,
                                                        Buffer<uint8_t>& is_nulls, bool& has_null) = 0;
@@ -332,9 +331,6 @@ public:
     virtual MutablePtr clone_empty() const = 0;
 
     virtual MutablePtr clone() const = 0;
-
-    // clone column
-    virtual Ptr clone_shared() const = 0;
 
     // REQUIRES: size of |filter| equals to the size of this column.
     // Removes elements that don't match the filter.
@@ -453,60 +449,59 @@ public:
     // current only used by adaptive_nullable_column
     virtual void materialized_nullable() const {}
 
+    // If the column contains subcolumns (such as Array, Nullable, etc), do callback on them.
+    // Shallow: doesn't do recursive calls; don't do call for itself.
+    virtual void mutate_each_subcolumn() {}
+
+    // mutate the column to mutable column, but doesn't reset the column
+    MutablePtr mutate() const&& {
+        MutablePtr res = try_mutate();
+        res->mutate_each_subcolumn();
+        return res;
+    }
+
+    // mutate the column to mutable column, and reset the column to nullptr
+    static MutablePtr mutate(Ptr ptr) {
+        MutablePtr res = ptr->try_mutate(); /// Now use_count is 2.
+        ptr.reset();                        /// Reset use_count to 1.
+        res->mutate_each_subcolumn();
+        return res;
+    }
+
 protected:
-    static StatusOr<ColumnPtr> downgrade_helper_func(ColumnPtr* col);
-    static StatusOr<ColumnPtr> upgrade_helper_func(ColumnPtr* col);
+    static StatusOr<Ptr> downgrade_helper_func(Ptr* col);
+    static StatusOr<Ptr> upgrade_helper_func(Ptr* col);
 
     DelCondSatisfied _delete_state = DEL_NOT_SATISFIED;
 };
 
-// AncestorBase is root class of inheritance hierarchy
-// if Derived class is the direct subclass of the root, then AncestorBase is just the Base class
-// if Derived class is the indirect subclass of the root, Base class is parent class, and
-// AncestorBase must be the root class. because Derived class need some type information from
-// AncestorBase to override the virtual method. e.g. clone and clone_shared method.
-template <typename Base, typename Derived, typename AncestorBase = Base>
+using ColumnPtr = Column::Ptr;
+using Columns = std::vector<ColumnPtr>;
+using MutableColumnPtr = Column::MutablePtr;
+using MutableColumns = std::vector<MutableColumnPtr>;
+
+template <typename... Args>
+struct IsMutableColumns;
+
+template <typename Arg, typename... Args>
+struct IsMutableColumns<Arg, Args...> {
+    static const bool value = std::is_assignable<MutableColumnPtr&&, Arg>::value && IsMutableColumns<Args...>::value;
+};
+
+template <>
+struct IsMutableColumns<> {
+    static const bool value = true;
+};
+
+template <typename Base, typename Derived>
 class ColumnFactory : public Base {
 private:
-    Derived* mutable_derived() { return down_cast<Derived*>(this); }
+    Derived* derived() { return down_cast<Derived*>(this); }
     const Derived* derived() const { return down_cast<const Derived*>(this); }
 
 public:
     template <typename... Args>
     ColumnFactory(Args&&... args) : Base(std::forward<Args>(args)...) {}
-    // mutable operations cannot be applied to shared data when concurrent
-    using Ptr = std::shared_ptr<Derived>;
-    // mutable means you could modify the data safely
-    using MutablePtr = std::unique_ptr<Derived>;
-    using AncestorBaseType = std::enable_if_t<std::is_base_of_v<AncestorBase, Base>, AncestorBase>;
-
-    template <typename... Args>
-    static Ptr create(Args&&... args) {
-        return std::make_shared<Derived>(std::forward<Args>(args)...);
-    }
-
-    template <typename... Args>
-    static MutablePtr create_mutable(Args&&... args) {
-        return std::make_unique<Derived>(std::forward<Args>(args)...);
-    }
-
-    template <typename T>
-    static Ptr create(std::initializer_list<T>&& arg) {
-        return std::make_shared<Derived>(std::move(arg));
-    }
-
-    template <typename T>
-    static MutablePtr create_mutable(std::initializer_list<T>&& arg) {
-        return std::make_unique<Derived>(std::move(arg));
-    }
-
-    typename AncestorBaseType::MutablePtr clone() const override {
-        return typename AncestorBase::MutablePtr(new Derived(*derived()));
-    }
-
-    typename AncestorBaseType::Ptr clone_shared() const override {
-        return typename AncestorBase::Ptr(new Derived(*derived()));
-    }
 
     Status accept(ColumnVisitor* visitor) const override { return visitor->visit(*static_cast<const Derived*>(this)); }
 
@@ -524,10 +519,10 @@ public:
             is_nulls.emplace_back(null);
 
             if (null == 0) {
-                srcs[i].data = (char*)mutable_derived()->deserialize_and_append((uint8_t*)srcs[i].data);
+                srcs[i].data = (char*)derived()->deserialize_and_append((uint8_t*)srcs[i].data);
             } else {
                 has_null = true;
-                mutable_derived()->append_default();
+                derived()->append_default();
             }
         }
     }

@@ -36,7 +36,7 @@ public:
     Status open(RuntimeState* state);
 
     Status process_chunk(size_t chunk_size, const Columns& group_by_columns, const Buffer<uint8_t>& keys_not_in_map,
-                         const StreamRowOp* ops, const std::vector<std::vector<ColumnPtr>>& agg_columns,
+                         const StreamRowOp* ops, const std::vector<Columns>& agg_columns,
                          std::vector<std::vector<const Column*>>& raw_columns,
                          const Buffer<AggDataPtr>& agg_group_state) const;
 

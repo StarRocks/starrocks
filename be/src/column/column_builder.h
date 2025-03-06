@@ -26,6 +26,7 @@ namespace starrocks {
 template <LogicalType Type>
 class ColumnBuilder {
 public:
+    using DataColumn = RunTimeColumnType<Type>;
     using DataColumnPtr = typename RunTimeColumnType<Type>::Ptr;
     using NullColumnPtr = NullColumn::Ptr;
     using DatumType = RunTimeCppType<Type>;
@@ -48,13 +49,17 @@ public:
         if constexpr (lt_is_decimal<Type>) {
             static constexpr auto max_precision = decimal_precision_limit<DatumType>;
             DCHECK(0 <= scale && scale <= precision && precision <= max_precision);
-            auto raw_column = ColumnHelper::cast_to_raw<Type>(_column);
+            auto raw_column = ColumnHelper::cast_to_raw<Type>(_column.get());
             raw_column->set_precision(precision);
             raw_column->set_scale(scale);
         }
     }
 
     ColumnBuilder(DataColumnPtr column, NullColumnPtr null_column, bool has_null)
+            : _column(std::move(column)), _null_column(std::move(null_column)), _has_null(has_null) {}
+
+    ColumnBuilder(typename DataColumn::MutablePtr&& column, typename NullColumn::MutablePtr&& null_column,
+                  bool has_null)
             : _column(std::move(column)), _null_column(std::move(null_column)), _has_null(has_null) {}
     //do nothing ctor, members are initialized by its offsprings.
     explicit ColumnBuilder(void*) {}
@@ -95,21 +100,23 @@ public:
         _column->append_default(count);
     }
 
-    ColumnPtr build(bool is_const) {
+    MutableColumnPtr build(bool is_const) {
         if (is_const && _has_null) {
             return ColumnHelper::create_const_null_column(_column->size());
         }
 
         if (is_const) {
-            return ConstColumn::create(_column, _column->size());
+            return ConstColumn::create(_column->as_mutable_ptr(), _column->size());
         } else if (_has_null) {
-            return NullableColumn::create(_column, _null_column);
+            return NullableColumn::create(_column->as_mutable_ptr(), _null_column->as_mutable_ptr());
         } else {
-            return _column;
+            return _column->as_mutable_ptr();
         }
     }
 
-    ColumnPtr build_nullable_column() { return NullableColumn::create(_column, _null_column); }
+    MutableColumnPtr build_nullable_column() {
+        return NullableColumn::create(_column->as_mutable_ptr(), _null_column->as_mutable_ptr());
+    }
 
     void reserve(size_t size) {
         _column->reserve(size);
@@ -126,8 +133,8 @@ public:
     void set_has_null(bool v) { _has_null = v; }
 
 protected:
-    DataColumnPtr _column;
-    NullColumnPtr _null_column;
+    typename DataColumn::Ptr _column;
+    NullColumn::Ptr _null_column;
     bool _has_null;
 };
 

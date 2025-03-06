@@ -23,8 +23,8 @@
 namespace starrocks {
 
 ColumnPtr create_int32_array_column(const std::vector<std::vector<int32_t>>& values) {
-    auto offsets = UInt32Column::create();
-    auto elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+    UInt32Column::Ptr offsets = UInt32Column::create();
+    NullableColumn::Ptr elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
     offsets->append(0);
     for (const auto& value : values) {
         for (auto v : value) {
@@ -54,8 +54,7 @@ PARALLEL_TEST(ArrayViewColumnTest, test_to_array) {
 
 PARALLEL_TEST(ArrayViewColumnTest, test_get_elements) {
     auto array_column = create_int32_array_column({{1}, {2, 3}});
-    auto array_view_column =
-            std::dynamic_pointer_cast<ArrayViewColumn>(ArrayViewColumn::from_array_column(array_column));
+    auto array_view_column = ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(array_column));
 
     ASSERT_EQ(array_view_column->get_element_size(0), 1);
     ASSERT_EQ(array_view_column->debug_item(0), "[1]");
@@ -69,13 +68,13 @@ PARALLEL_TEST(ArrayViewColumnTest, test_get_elements) {
 PARALLEL_TEST(ArrayViewColumnTest, test_append) {
     auto array_column_1 = create_int32_array_column({{}, {1}, {2, 3}});
     auto array_view_column_1 =
-            std::dynamic_pointer_cast<ArrayViewColumn>(ArrayViewColumn::from_array_column(array_column_1));
+            ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(array_column_1));
     auto array_view_column_3 =
-            std::dynamic_pointer_cast<ArrayViewColumn>(ArrayViewColumn::from_array_column(array_column_1));
+            ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(array_column_1));
 
     auto array_column_2 = create_int32_array_column({{}, {1}, {2, 3}});
     auto array_view_column_2 =
-            std::dynamic_pointer_cast<ArrayViewColumn>(ArrayViewColumn::from_array_column(array_column_2));
+            ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(array_column_2));
 
     std::vector<uint32_t> indexes{2, 1};
     // not support to append data from another array
@@ -96,11 +95,11 @@ PARALLEL_TEST(ArrayViewColumnTest, test_append) {
 PARALLEL_TEST(ArrayViewColumnTest, test_compare) {
     auto array_column_1 = create_int32_array_column({{}, {1}, {2, 3}});
     auto array_view_column_1 =
-            std::dynamic_pointer_cast<ArrayViewColumn>(ArrayViewColumn::from_array_column(array_column_1));
+            ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(array_column_1));
 
     auto array_column_2 = create_int32_array_column({{1}, {2, 3}, {4}});
     auto array_view_column_2 =
-            std::dynamic_pointer_cast<ArrayViewColumn>(ArrayViewColumn::from_array_column(array_column_2));
+            ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(array_column_2));
 
     std::vector<int> expected_compare_results = {-1, -1, -1, 0, -1, -1, 1, 0, -1};
     std::vector<int> expected_equal_results = {0, 0, 0, 1, 0, 0, 0, 1, 0};
@@ -128,8 +127,7 @@ PARALLEL_TEST(ArrayViewColumnTest, test_filter_range) {
     for (int32_t i = 0; i < total_rows; i++) {
         array_column->append_datum(DatumArray{i, i * 2});
     }
-    auto array_view_column =
-            std::dynamic_pointer_cast<ArrayViewColumn>(ArrayViewColumn::from_array_column(array_column));
+    auto array_view_column = ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(array_column));
     Filter filter(total_rows, 1);
     // filter nothing
     array_view_column->filter_range(filter, 0, total_rows);
@@ -174,11 +172,11 @@ PARALLEL_TEST(ArrayViewColumnTest, test_other_manipulations) {
     {
         // replicate
         auto array_view_column =
-                std::dynamic_pointer_cast<ArrayViewColumn>(ArrayViewColumn::from_array_column(array_column));
+                ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(array_column));
         Buffer<uint32_t> offsets{0, 2, 3, 6};
         auto column = array_view_column->replicate(offsets).value();
         ASSERT_TRUE(column->is_array_view());
-        auto result = std::dynamic_pointer_cast<ArrayViewColumn>(column);
+        auto result = ArrayViewColumn::dynamic_pointer_cast(column);
         ASSERT_EQ(result->size(), 6);
         // element column won't be changed
         ASSERT_EQ(result->elements().size(), 5);
@@ -194,7 +192,7 @@ PARALLEL_TEST(ArrayViewColumnTest, test_other_manipulations) {
     }
     {
         auto array_view_column =
-                std::dynamic_pointer_cast<ArrayViewColumn>(ArrayViewColumn::from_array_column(array_column));
+                ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(array_column));
         array_view_column->remove_first_n_values(1);
         ASSERT_EQ(array_view_column->size(), 2);
         // elements column won't be changed
@@ -216,7 +214,7 @@ PARALLEL_TEST(ArrayViewColumnTest, test_other_manipulations) {
     {
         // assign
         auto array_view_column =
-                std::dynamic_pointer_cast<ArrayViewColumn>(ArrayViewColumn::from_array_column(array_column));
+                ArrayViewColumn::dynamic_pointer_cast(ArrayViewColumn::from_array_column(array_column));
 
         array_view_column->assign(5, 0);
         ASSERT_EQ(array_view_column->size(), 5);

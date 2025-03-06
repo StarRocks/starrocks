@@ -42,7 +42,7 @@ TEST_F(UtilityFunctionsTest, versionTest) {
         auto var1_col = ColumnHelper::create_const_column<TYPE_INT>(2, 1);
 
         Columns columns;
-        columns.emplace_back(var1_col);
+        columns.emplace_back(std::move(var1_col));
 
         ColumnPtr result = UtilityFunctions::version(ctx, columns).value();
 
@@ -65,7 +65,7 @@ TEST_F(UtilityFunctionsTest, sleepTest) {
         auto var1_col = ColumnHelper::create_const_column<TYPE_INT>(1, 1);
 
         Columns columns;
-        columns.emplace_back(var1_col);
+        columns.emplace_back(std::move(var1_col));
 
         ColumnPtr result = UtilityFunctions::sleep(ctx, columns).value();
 
@@ -86,7 +86,7 @@ TEST_F(UtilityFunctionsTest, uuidTest) {
         auto var1_col = ColumnHelper::create_const_column<TYPE_INT>(column_size, column_size);
 
         Columns columns;
-        columns.emplace_back(var1_col);
+        columns.emplace_back(std::move(var1_col));
 
         ColumnPtr result = UtilityFunctions::uuid(ctx, columns).value();
 
@@ -111,7 +111,7 @@ TEST_F(UtilityFunctionsTest, uuidTest) {
         int32_t chunk_size = 4096;
         auto var1_col = ColumnHelper::create_const_column<TYPE_INT>(chunk_size, 1);
         Columns columns;
-        columns.emplace_back(var1_col);
+        columns.emplace_back(std::move(var1_col));
         ColumnPtr result = UtilityFunctions::uuid_numeric(ctx, columns).value();
         Int128Column* col = ColumnHelper::cast_to_raw<TYPE_LARGEINT>(result);
         std::set<int128_t> vals;

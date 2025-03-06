@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "column/column.h"
 #include "column/vectorized_fwd.h"
 #include "storage/aggregate_type.h"
 #include "storage/olap_common.h"
@@ -188,7 +189,7 @@ public:
 
     bool has_sub_fields() const { return _sub_fields != nullptr; }
 
-    ColumnPtr create_column() const;
+    MutableColumnPtr create_column() const;
 
     void set_uid(ColumnUID uid) { _uid = uid; }
     const ColumnUID& uid() const { return _uid; }

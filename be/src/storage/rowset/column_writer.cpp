@@ -854,7 +854,7 @@ inline void StringColumnWriter::speculate_column_and_set_encoding(const Column& 
     Status st;
     if (column.is_nullable()) {
         const auto& data_col = down_cast<const NullableColumn&>(column).data_column();
-        const auto& bin_col = down_cast<BinaryColumn&>(*data_col);
+        const auto& bin_col = down_cast<const BinaryColumn&>(*data_col);
         const auto detect_encoding = speculate_string_encoding(bin_col);
         st = _scalar_column_writer->set_encoding(detect_encoding);
     } else if (column.is_binary()) {
@@ -1019,7 +1019,7 @@ inline EncodingTypePB DictColumnWriter::speculate_encoding(const Column& column)
     const ColumnType* numerical_col;
     if (column.is_nullable()) {
         const auto& data_col = down_cast<const NullableColumn&>(column).data_column();
-        numerical_col = &down_cast<ColumnType&>(*data_col);
+        numerical_col = &down_cast<const ColumnType&>(*data_col);
     } else {
         numerical_col = &down_cast<const ColumnType&>(column);
     }

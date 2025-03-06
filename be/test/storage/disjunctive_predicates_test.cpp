@@ -49,7 +49,7 @@ TEST(DisjunctivePredicatesTest, TwoPredicateTest) {
     ContainerIniter<SegDataGenerator, RunTimeColumnType<TYPE0>::Container, chunk_size>::init(column0->get_data());
     ContainerIniter<SegDataGeneratorWithRange<4>, RunTimeColumnType<TYPE1>::Container, chunk_size>::init(
             column1->get_data());
-    Columns columns = {column0, column1};
+    Columns columns = {std::move(column0), std::move(column1)};
     Chunk::SlotHashMap hash_map;
     hash_map[0] = 0;
     hash_map[1] = 1;

@@ -84,7 +84,7 @@ public:
     Status erase_duplicate_row(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs,
                                BufferState* buffer_state);
 
-    void deserialize_to_columns(KeyVector& keys, const Columns& key_columns, size_t chunk_size);
+    void deserialize_to_columns(KeyVector& keys, Columns& key_columns, size_t chunk_size);
 
     int64_t mem_usage(BufferState* buffer_state);
 

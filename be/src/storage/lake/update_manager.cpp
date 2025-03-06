@@ -387,7 +387,7 @@ Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const S
 
 Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& params, uint32_t rowset_id,
                                                 int32_t upsert_idx, int32_t condition_column,
-                                                const ColumnUniquePtr& upsert, PrimaryIndex& index,
+                                                const MutableColumnPtr& upsert, PrimaryIndex& index,
                                                 DeletesMap* new_deletes) {
     RETURN_ERROR_IF_FALSE(condition_column >= 0);
     TRACE_COUNTER_SCOPE_LATENCY_US("do_update_latency_us");
@@ -403,7 +403,7 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
         size_t num_default = 0;
         vector<uint32_t> idxes;
         RowsetUpdateState::plan_read_by_rssid(old_rowids, &num_default, &old_rowids_by_rssid, &idxes);
-        std::vector<std::unique_ptr<Column>> old_columns(1);
+        MutableColumns old_columns(1);
         auto old_unordered_column =
                 ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         old_columns[0] = old_unordered_column->clone_empty();
@@ -418,7 +418,7 @@ Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& p
         }
         new_rowids_by_rssid[rowset_id + upsert_idx] = rowids;
         // only support condition update on single column
-        std::vector<std::unique_ptr<Column>> new_columns(1);
+        MutableColumns new_columns(1);
         auto new_column = ChunkHelper::column_from_field_type(tablet_column.type(), tablet_column.is_nullable());
         new_columns[0] = new_column->clone_empty();
         RETURN_IF_ERROR(get_column_values(params, read_column_ids, false, new_rowids_by_rssid, &new_columns));
@@ -486,7 +486,7 @@ Status UpdateManager::_handle_index_op(int64_t tablet_id, int64_t base_version, 
 }
 
 Status UpdateManager::get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version,
-                                              const std::vector<ColumnUniquePtr>& upserts,
+                                              const std::vector<MutableColumnPtr>& upserts,
                                               std::vector<std::vector<uint64_t>*>* rss_rowids, bool need_lock) {
     Status st;
     st.update(_handle_index_op(tablet_id, base_version, need_lock, [&](LakePrimaryIndex& index) {
@@ -500,7 +500,7 @@ Status UpdateManager::get_rowids_from_pkindex(int64_t tablet_id, int64_t base_ve
     return st;
 }
 
-Status UpdateManager::get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const ColumnUniquePtr& upsert,
+Status UpdateManager::get_rowids_from_pkindex(int64_t tablet_id, int64_t base_version, const MutableColumnPtr& upsert,
                                               std::vector<uint64_t>* rss_rowids, bool need_lock) {
     Status st;
     st.update(_handle_index_op(tablet_id, base_version, need_lock, [&](LakePrimaryIndex& index) {
@@ -512,7 +512,7 @@ Status UpdateManager::get_rowids_from_pkindex(int64_t tablet_id, int64_t base_ve
 
 Status UpdateManager::get_column_values(const RowsetUpdateStateParams& params, std::vector<uint32_t>& column_ids,
                                         bool with_default, std::map<uint32_t, std::vector<uint32_t>>& rowids_by_rssid,
-                                        vector<std::unique_ptr<Column>>* columns,
+                                        vector<MutableColumnPtr>* columns,
                                         const std::map<string, string>* column_to_expr_value,
                                         AutoIncrementPartialUpdateState* auto_increment_state) {
     TRACE_COUNTER_SCOPE_LATENCY_US("get_column_values_latency_us");

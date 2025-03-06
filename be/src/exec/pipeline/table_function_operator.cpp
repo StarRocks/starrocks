@@ -111,7 +111,7 @@ Status TableFunctionOperator::prepare(RuntimeState* state) {
 StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
     DCHECK(_input_chunk != nullptr);
     size_t max_chunk_size = state->chunk_size();
-    std::vector<ColumnPtr> output_columns;
+    Columns output_columns;
 
     if (_table_function_result.second == nullptr) {
         RETURN_IF_ERROR(_process_table_function(state));
@@ -158,7 +158,7 @@ Status TableFunctionOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
     return Status::OK();
 }
 
-ChunkPtr TableFunctionOperator::_build_chunk(const std::vector<ColumnPtr>& columns) {
+ChunkPtr TableFunctionOperator::_build_chunk(const Columns& columns) {
     ChunkPtr chunk = std::make_shared<Chunk>();
 
     for (size_t i = 0; i < _outer_slots.size(); ++i) {
@@ -199,7 +199,7 @@ Status TableFunctionOperator::reset_state(RuntimeState* state, const std::vector
     return Status::OK();
 }
 
-void TableFunctionOperator::_copy_result(const std::vector<ColumnPtr>& columns, uint32_t max_output_size) {
+void TableFunctionOperator::_copy_result(Columns& columns, uint32_t max_output_size) {
     DCHECK_LE(_next_output_row, _table_function_result.first[0]->size());
     DCHECK_LT(_next_output_row_offset, _table_function_result.second->size());
     uint32_t curr_output_size = columns[0]->size();

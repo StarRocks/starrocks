@@ -25,8 +25,8 @@
 namespace starrocks {
 
 template <typename T>
-class BinaryColumnBase final : public ColumnFactory<Column, BinaryColumnBase<T>> {
-    friend class ColumnFactory<Column, BinaryColumnBase<T>>;
+class BinaryColumnBase final : public CowFactory<ColumnFactory<Column, BinaryColumnBase<T>>, BinaryColumnBase<T>> {
+    friend class CowFactory<ColumnFactory<Column, BinaryColumnBase<T>>, BinaryColumnBase<T>>;
 
 public:
     using ValueType = Slice;
@@ -225,7 +225,7 @@ public:
 
     uint32_t max_one_element_serialize_size() const override;
 
-    ALWAYS_INLINE uint32_t serialize(size_t idx, uint8_t* pos) override {
+    ALWAYS_INLINE uint32_t serialize(size_t idx, uint8_t* pos) const override {
         // max size of one string is 2^32, so use uint32_t not T
         auto binary_size = static_cast<uint32_t>(_offsets[idx + 1] - _offsets[idx]);
         T offset = _offsets[idx];
@@ -236,13 +236,14 @@ public:
         return sizeof(uint32_t) + binary_size;
     }
 
-    uint32_t serialize_default(uint8_t* pos) override;
+    uint32_t serialize_default(uint8_t* pos) const override;
 
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                         uint32_t max_one_row_size) override;
+                         uint32_t max_one_row_size) const override;
 
     void serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                                         uint32_t max_one_row_size, uint8_t* null_masks, bool has_null) override;
+                                         uint32_t max_one_row_size, const uint8_t* null_masks,
+                                         bool has_null) const override;
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
 
@@ -256,7 +257,7 @@ public:
         return static_cast<uint32_t>(sizeof(uint32_t) + _offsets[idx + 1] - _offsets[idx]);
     }
 
-    MutableColumnPtr clone_empty() const override { return BinaryColumnBase<T>::create_mutable(); }
+    MutableColumnPtr clone_empty() const override { return BinaryColumnBase<T>::create(); }
 
     ColumnPtr cut(size_t start, size_t length) const;
     size_t filter_range(const Filter& filter, size_t start, size_t to) override;

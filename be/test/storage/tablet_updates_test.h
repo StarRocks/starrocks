@@ -59,7 +59,7 @@ enum PartialUpdateCloneCase {
 };
 
 template <class T>
-static void append_datum_func(std::shared_ptr<Column> col, T val) {
+static void append_datum_func(ColumnPtr& col, T val) {
     if (val == -1) {
         col->append_nulls(1);
     } else {

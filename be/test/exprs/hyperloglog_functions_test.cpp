@@ -56,7 +56,7 @@ TEST_F(HyperLogLogFunctionsTest, hllHashTest) {
         col1->append(Slice("test3"));
         col1->append(Slice("test1"));
 
-        columns.push_back(col1);
+        columns.emplace_back(std::move(col1));
 
         auto v = HyperloglogFunctions::hll_hash(ctx, columns).value();
 
@@ -102,7 +102,7 @@ TEST_F(HyperLogLogFunctionsTest, hllCardinalityTest) {
         col1->append(std::move(h3));
         col1->append(std::move(h4));
 
-        columns.push_back(col1);
+        columns.emplace_back(std::move(col1));
 
         auto v = HyperloglogFunctions::hll_cardinality(ctx, columns).value();
 
@@ -156,7 +156,7 @@ TEST_F(HyperLogLogFunctionsTest, hllCardinalityFromStringTest) {
 
         HyperLogLog t1;
 
-        columns.push_back(col1);
+        columns.emplace_back(std::move(col1));
 
         auto v = HyperloglogFunctions::hll_cardinality_from_string(ctx, columns).value();
 
@@ -209,11 +209,11 @@ TEST_F(HyperLogLogFunctionsTest, hllSerializeTest) {
         col1->append(std::move(h6));
 
         ColumnPtr v = nullptr;
-        v = HyperloglogFunctions::hll_cardinality(ctx, {col1}).value();
+        v = HyperloglogFunctions::hll_cardinality(ctx, {col1->clone()}).value();
         ASSERT_TRUE(v->is_numeric());
         auto expect = ColumnHelper::cast_to<TYPE_BIGINT>(v);
 
-        v = HyperloglogFunctions::hll_serialize(ctx, {col1}).value();
+        v = HyperloglogFunctions::hll_serialize(ctx, {std::move(col1)}).value();
         ASSERT_TRUE(v->is_binary());
         v = HyperloglogFunctions::hll_deserialize(ctx, {v}).value();
         ASSERT_TRUE(v->is_object());

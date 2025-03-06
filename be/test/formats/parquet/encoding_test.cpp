@@ -110,7 +110,7 @@ struct DecoderChecker {
     // read
     {
         auto data_column = starrocks::FixedLengthColumn<T>::create();
-        auto column = NullableColumn::create(data_column, NullColumn::create());
+        auto column = NullableColumn::create(std::move(data_column), NullColumn::create());
 
         decoder->set_data(encoded_data);
         auto st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
@@ -134,7 +134,7 @@ struct DecoderChecker {
         size_t remain_values = values.size() - values_to_skip;
 
         auto data_column = starrocks::FixedLengthColumn<T>::create();
-        auto column = NullableColumn::create(data_column, NullColumn::create());
+        auto column = NullableColumn::create(std::move(data_column), NullColumn::create());
 
         decoder->set_data(encoded_data);
         auto st = decoder->skip(values_to_skip);
@@ -240,7 +240,7 @@ struct DecoderChecker<Slice, is_dictionary> {
     // read
     {
         auto data_column = starrocks::BinaryColumn::create();
-        auto column = NullableColumn::create(data_column, NullColumn::create());
+        auto column = NullableColumn::create(std::move(data_column), NullColumn::create());
 
         decoder->set_data(encoded_data);
         auto st = decoder->next_batch(values.size(), ColumnContentType::VALUE, column.get());
@@ -264,7 +264,7 @@ struct DecoderChecker<Slice, is_dictionary> {
         size_t remain_values = values.size() - values_to_skip;
 
         auto data_column = starrocks::BinaryColumn::create();
-        auto column = NullableColumn::create(data_column, NullColumn::create());
+        auto column = NullableColumn::create(std::move(data_column), NullColumn::create());
 
         decoder->set_data(encoded_data);
         auto st = decoder->skip(values_to_skip);

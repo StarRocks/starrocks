@@ -60,7 +60,7 @@ public:
         DCHECK_EQ(TYPE_INT, type_desc.type);
         using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
 
-        ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
+        MutableColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
         auto expr = std::make_unique<ColumnRef>(type_desc, slot_index);
 
         std::random_device dev;
@@ -87,7 +87,7 @@ public:
                                                                           bool nullable) {
         using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
         using PoissonInt = std::poisson_distribution<std::mt19937::result_type>;
-        ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
+        MutableColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
         auto expr = std::make_unique<ColumnRef>(type_desc, slot_index);
 
         std::random_device dev;

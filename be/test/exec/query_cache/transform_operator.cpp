@@ -70,7 +70,7 @@ Status MapOperator::push_chunk(starrocks::RuntimeState* state, const ChunkPtr& c
         new_data[i] = _map_func(data[i]);
     }
     auto new_chunk = std::make_shared<Chunk>();
-    new_chunk->append_column(new_column, SlotId(1));
+    new_chunk->append_column(std::move(new_column), SlotId(1));
     _cur_chunk = std::move(new_chunk);
     return Status::OK();
 }
@@ -193,7 +193,7 @@ StatusOr<ChunkPtr> ReduceSourceOperator::pull_chunk(starrocks::RuntimeState* sta
     auto& data = dynamic_cast<DoubleColumn*>(column.get())->get_data();
     data.assign(num_rows, _reducer->result());
     auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(column, SlotId(1));
+    chunk->append_column(std::move(column), SlotId(1));
     if (_current_output_num_rows == _reducer->output_num_rows()) {
         _reducer->set_source_finished();
     }

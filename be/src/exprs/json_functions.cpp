@@ -458,8 +458,8 @@ StatusOr<ColumnPtr> JsonFunctions::json_query(FunctionContext* context, const Co
 template <LogicalType ResultType>
 StatusOr<ColumnPtr> JsonFunctions::_json_query_impl(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
-    auto* cc = ColumnHelper::get_data_column(columns[0].get());
-    JsonColumn* js = down_cast<JsonColumn*>(cc);
+    const auto* cc = ColumnHelper::get_data_column(columns[0].get());
+    const JsonColumn* js = down_cast<const JsonColumn*>(cc);
     if (js->is_flat_json()) {
         return _flat_json_query_impl<ResultType>(context, columns);
     }
@@ -468,7 +468,7 @@ StatusOr<ColumnPtr> JsonFunctions::_json_query_impl(FunctionContext* context, co
 
 template <LogicalType TargetType>
 static StatusOr<ColumnPtr> _extract_with_cast(FunctionContext* context, NativeJsonState* state, const std::string& path,
-                                              JsonColumn* json_column) {
+                                              const JsonColumn* json_column) {
     if (state->init_flat) {
         DCHECK_EQ(json_column->get_flat_field_type(state->flat_path), state->flat_column_type);
         if (state->is_partial_match) {
@@ -513,7 +513,7 @@ static StatusOr<ColumnPtr> _extract_with_cast(FunctionContext* context, NativeJs
 
 template <LogicalType TargetType>
 static StatusOr<ColumnPtr> _extract_with_hyper(NativeJsonState* state, const std::string& path,
-                                               JsonColumn* json_column) {
+                                               const JsonColumn* json_column) {
     if (!state->init_flat) {
         ASSIGN_OR_RETURN(auto flat_json_path, JsonPath::parse(path));
         std::call_once(state->init_flat_once, [&] {
@@ -569,7 +569,7 @@ static StatusOr<ColumnPtr> _extract_with_hyper(NativeJsonState* state, const std
     transform.init_read_task(json_column->flat_column_paths(), json_column->flat_column_types(),
                              json_column->has_remain());
 
-    RETURN_IF_ERROR(transform.trans(json_column->get_flat_fields()));
+    RETURN_IF_ERROR(transform.trans(json_column->get_flat_fields_ptrs()));
     auto res = transform.mutable_result();
     DCHECK_EQ(1, res.size());
     return res[0];
@@ -587,12 +587,12 @@ static StatusOr<ColumnPtr> _extract_from_flat_json(FunctionContext* context, con
         return Status::JsonFormatError("flat json required prepare status");
     }
 
-    JsonColumn* json_column;
+    const JsonColumn* json_column;
     if (columns[0]->is_nullable()) {
-        auto* nullable = down_cast<NullableColumn*>(columns[0].get());
-        json_column = down_cast<JsonColumn*>(nullable->data_column().get());
+        auto* nullable = down_cast<const NullableColumn*>(columns[0].get());
+        json_column = down_cast<const JsonColumn*>(nullable->data_column().get());
     } else {
-        json_column = down_cast<JsonColumn*>(columns[0].get());
+        json_column = down_cast<const JsonColumn*>(columns[0].get());
     }
 
     // flat json path must be constant
@@ -661,7 +661,7 @@ StatusOr<ColumnPtr> JsonFunctions::_flat_json_query_impl(FunctionContext* contex
             chunk.append_column(flat_column, 0);
             return state->cast_expr->evaluate_checked(nullptr, &chunk);
         }
-        return std::move(flat_column->clone());
+        return flat_column->clone();
     }
 }
 
@@ -702,8 +702,8 @@ StatusOr<ColumnPtr> JsonFunctions::_full_json_query_impl(FunctionContext* contex
 
 StatusOr<ColumnPtr> JsonFunctions::json_exists(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
-    auto* cc = ColumnHelper::get_data_column(columns[0].get());
-    JsonColumn* js = down_cast<JsonColumn*>(cc);
+    const auto* cc = ColumnHelper::get_data_column(columns[0].get());
+    const JsonColumn* js = down_cast<const JsonColumn*>(cc);
     if (js->is_flat_json()) {
         return _flat_json_exists(context, columns);
     }
@@ -889,8 +889,8 @@ StatusOr<ColumnPtr> JsonFunctions::json_object(FunctionContext* context, const C
 
 StatusOr<ColumnPtr> JsonFunctions::json_length(FunctionContext* context, const Columns& columns) {
     RETURN_IF_COLUMNS_ONLY_NULL(columns);
-    auto* cc = ColumnHelper::get_data_column(columns[0].get());
-    JsonColumn* js = down_cast<JsonColumn*>(cc);
+    const auto* cc = ColumnHelper::get_data_column(columns[0].get());
+    const JsonColumn* js = down_cast<const JsonColumn*>(cc);
     if (js->is_flat_json()) {
         return _flat_json_length(context, columns);
     }
@@ -1005,8 +1005,8 @@ StatusOr<ColumnPtr> JsonFunctions::json_keys(FunctionContext* context, const Col
         return _json_keys_without_path(context, columns);
     }
 
-    auto* cc = ColumnHelper::get_data_column(columns[0].get());
-    JsonColumn* js = down_cast<JsonColumn*>(cc);
+    const auto* cc = ColumnHelper::get_data_column(columns[0].get());
+    const JsonColumn* js = down_cast<const JsonColumn*>(cc);
     if (js->is_flat_json()) {
         return _flat_json_keys_with_path(context, columns);
     }

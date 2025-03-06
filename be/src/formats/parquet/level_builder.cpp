@@ -35,19 +35,19 @@
 
 namespace starrocks::parquet {
 
-inline uint8_t* get_raw_null_column(const ColumnPtr& col) {
+inline const uint8_t* get_raw_null_column(const ColumnPtr& col) {
     if (!col->has_null()) {
         return nullptr;
     }
-    auto& null_column = down_cast<NullableColumn*>(col.get())->null_column();
+    auto& null_column = down_cast<const NullableColumn*>(col.get())->null_column();
     auto* raw_column = null_column->get_data().data();
     return raw_column;
 }
 
 template <LogicalType lt>
-inline RunTimeCppType<lt>* get_raw_data_column(const ColumnPtr& col) {
+inline const RunTimeCppType<lt>* get_raw_data_column(const ColumnPtr& col) {
     auto* data_column = ColumnHelper::get_data_column(col.get());
-    auto* raw_column = down_cast<RunTimeColumnType<lt>*>(data_column)->get_data().data();
+    auto* raw_column = down_cast<const RunTimeColumnType<lt>*>(data_column)->get_data().data();
     return raw_column;
 }
 
@@ -194,8 +194,8 @@ template <LogicalType lt, ::parquet::Type::type pt>
 Status LevelBuilder::_write_int_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
                                              const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                              const CallbackFunction& write_leaf_callback) {
-    auto* data_col = get_raw_data_column<lt>(col);
-    auto* null_col = get_raw_null_column(col);
+    const auto* data_col = get_raw_data_column<lt>(col);
+    const auto* null_col = get_raw_null_column(col);
 
     // Use the rep_levels in the context from caller since node is primitive.
     auto& rep_levels = ctx._rep_levels;
@@ -212,7 +212,7 @@ Status LevelBuilder::_write_int_column_chunk(const LevelBuilderContext& ctx, con
                 .num_levels = ctx._num_levels,
                 .def_levels = def_levels ? def_levels->data() : nullptr,
                 .rep_levels = rep_levels ? rep_levels->data() : nullptr,
-                .values = reinterpret_cast<uint8_t*>(data_col),
+                .values = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(data_col)),
                 .null_bitset = null_bitset ? null_bitset->data() : nullptr,
         });
     } else {
@@ -433,7 +433,7 @@ Status LevelBuilder::_write_array_column_chunk(const LevelBuilderContext& ctx, c
     auto inner_node = mid_node->field(0);
 
     auto* null_col = get_raw_null_column(col);
-    auto* array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
+    auto* array_col = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
     const auto& elements = array_col->elements_column();
     const auto& offsets = array_col->offsets_column()->get_data();
 
@@ -512,7 +512,7 @@ Status LevelBuilder::_write_map_column_chunk(const LevelBuilderContext& ctx, con
     auto value_node = mid_node->field(1);
 
     auto* null_col = get_raw_null_column(col);
-    auto* map_col = down_cast<MapColumn*>(ColumnHelper::get_data_column(col.get()));
+    auto* map_col = down_cast<const MapColumn*>(ColumnHelper::get_data_column(col.get()));
     const auto& keys = map_col->keys_column();
     if (UNLIKELY(keys->has_null())) {
         return Status::NotSupported("Does not support to write map value of null key");
@@ -584,7 +584,7 @@ Status LevelBuilder::_write_struct_column_chunk(const LevelBuilderContext& ctx, 
 
     auto* null_col = get_raw_null_column(col);
     auto* data_col = ColumnHelper::get_data_column(col.get());
-    auto* struct_col = down_cast<StructColumn*>(data_col);
+    auto* struct_col = down_cast<const StructColumn*>(data_col);
 
     // Use the rep_levels in the context from caller since node is primitive.
     auto rep_levels = ctx._rep_levels;

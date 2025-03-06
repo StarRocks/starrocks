@@ -127,11 +127,11 @@ Status GlobalDictCodeColumnIterator::build_code_convert_map(ColumnIterator* file
     return Status::OK();
 }
 
-ColumnPtr GlobalDictCodeColumnIterator::_new_local_dict_col(Column* src) {
-    ColumnPtr res = std::make_unique<Int32Column>();
+MutableColumnPtr GlobalDictCodeColumnIterator::_new_local_dict_col(Column* src) {
+    MutableColumnPtr res = Int32Column::create();
     auto code_data = ColumnHelper::get_data_column(src);
     if (code_data->is_array()) {
-        res = ArrayColumn::create(NullableColumn::create(res, NullColumn::create()), UInt32Column::create());
+        res = ArrayColumn::create(NullableColumn::create(std::move(res), NullColumn::create()), UInt32Column::create());
     }
 
     if (src->is_nullable()) {
