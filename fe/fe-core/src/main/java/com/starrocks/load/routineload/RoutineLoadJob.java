@@ -610,6 +610,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
 
     protected abstract String getSourceProgressString();
 
+    protected abstract String getSourceLagString(String progressJsonStr);
+
     public double getMaxFilterRatio() {
         return maxFilterRatio;
     }
@@ -1473,7 +1475,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             row.add(dataSourcePropertiesJsonToString());
             row.add(customPropertiesJsonToString());
             row.add(getStatistic());
-            row.add(getProgress().toJsonString());
+            String progressJsonStr = getProgress().toJsonString();
+            row.add(progressJsonStr);
             row.add(getTimestampProgress().toJsonString());
             switch (state) {
                 case PAUSED:
@@ -1502,6 +1505,10 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             }
             row.add(otherMsg);
             row.add(getSourceProgressString());
+<<<<<<< HEAD
+=======
+            row.add(getSourceLagString(progressJsonStr));
+>>>>>>> cd3487f856 ([Enhancement]Add partition offset lag column in show routine load and information_schema.routine_load_jobs (#55559))
             return row;
         } finally {
             readUnlock();
@@ -1932,7 +1939,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
             info.setCustom_properties(customPropertiesJsonToString());
             info.setData_source_type(dataSourceType.name());
             info.setStatistic(getStatistic());
-            info.setProgress(getProgress().toJsonString());
+            String progressJsonStr = getProgress().toJsonString();
+            info.setProgress(progressJsonStr);
             switch (state) {
                 case PAUSED:
                     info.setReasons_of_state_changed(pauseReason == null ? "" : pauseReason.toString());
@@ -1950,6 +1958,8 @@ public abstract class RoutineLoadJob extends AbstractTxnStateChangeCallback impl
                 info.setTracking_sql("select tracking_log from information_schema.load_tracking_logs where job_id=" + id);
             }
             info.setOther_msg(otherMsg);
+            info.setLatest_source_position(getSourceProgressString());
+            info.setOffset_lag(getSourceLagString(progressJsonStr));
             return info;
         } finally {
             readUnlock();

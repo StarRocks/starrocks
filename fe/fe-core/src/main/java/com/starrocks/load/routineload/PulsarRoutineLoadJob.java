@@ -137,7 +137,17 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
     }
 
     @Override
+<<<<<<< HEAD
     public void prepare() throws UserException {
+=======
+    protected String getSourceLagString(String progressJsonStr) {
+        // empty implement.
+        return "";
+    }
+
+    @Override
+    public void prepare() throws StarRocksException {
+>>>>>>> cd3487f856 ([Enhancement]Add partition offset lag column in show routine load and information_schema.routine_load_jobs (#55559))
         super.prepare();
         // should reset converted properties each time the job being prepared.
         // because the file info can be changed anytime.

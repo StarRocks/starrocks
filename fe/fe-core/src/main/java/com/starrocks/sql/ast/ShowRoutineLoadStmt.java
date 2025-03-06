@@ -84,9 +84,21 @@ public class ShowRoutineLoadStmt extends ShowStmt {
                     .add("ReasonOfStateChanged")
                     .add("ErrorLogUrls")
                     .add("TrackingSQL")
+<<<<<<< HEAD
                     .add("OtherMsg")
                     .add("LatestSourcePosition")
                     .build();
+=======
+                    .add("OtherMsg");
+        if (RunMode.getCurrentRunMode() == RunMode.SHARED_DATA) {
+            builder.add("Warehouse");
+        }
+
+        builder.add("LatestSourcePosition");
+        builder.add("OffsetLag");
+        TITLE_NAMES = builder.build();
+    }
+>>>>>>> cd3487f856 ([Enhancement]Add partition offset lag column in show routine load and information_schema.routine_load_jobs (#55559))
 
     private final LabelName labelName;
     private boolean includeHistory = false;
