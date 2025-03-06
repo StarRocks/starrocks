@@ -348,6 +348,34 @@ public class OlapTable extends Table {
         this.tableProperty = null;
     }
 
+<<<<<<< HEAD
+=======
+    public static List<Index> getIndexesBySchema(List<Index> indexes, List<Column> schema) {
+        List<Index> hitIndexes = Lists.newArrayList();
+        Set<ColumnId> columnIdsSetForSchema =
+                            schema.stream().map(col -> col.getColumnId()).collect(Collectors.toSet());
+
+        for (Index index : indexes) {
+            Set<ColumnId> columnIdsSetForIndex = index.getColumns().stream().collect(Collectors.toSet());
+            if (columnIdsSetForSchema.containsAll​(columnIdsSetForIndex)) {
+                hitIndexes.add(index);
+            }
+        }
+        return hitIndexes;
+    }
+
+    @Override
+    public synchronized Optional<String> mayGetDatabaseName() {
+        return Optional.ofNullable(dbName);
+    }
+
+    public synchronized void maySetDatabaseName(String dbName) {
+        if (this.dbName == null) {
+            this.dbName = dbName;
+        }
+    }
+
+>>>>>>> 78d99c41e8 ([BugFix] Reset index information when creating tablet in rollup job (#56553))
     // Only Copy necessary metadata for query.
     // We don't do deep copy, because which is very expensive;
     public void copyOnlyForQuery(OlapTable olapTable) {
