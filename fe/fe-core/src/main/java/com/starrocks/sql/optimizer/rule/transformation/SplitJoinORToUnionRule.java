@@ -109,12 +109,12 @@ import java.util.stream.Collectors;
  *                                                                    /               \
  *                                          +------------------------+       +------------------------+
  *                                          |    CompoundPredicate   |       |    IsNullPredicate     |
- *                                          |           (OR)         |       |      (l.v1 IS NULL)    |
+ *                                          |           (OR)         |       |      (r.v1 IS NULL)    |
  *                                          +------------------------+       +------------------------+
  *                                             /                    \
  *                                +------------------------+    +------------------------+
  *                                | BinaryPredicateOperator|    |    IsNullPredicate     |
- *                                |     (l.k1 != r.v1)     |    |     (r.k1 IS NULL)     |
+ *                                |     (l.k1 != r.v1)     |    |     (l.k1 IS NULL)     |
  *                                +------------------------+    +------------------------+
  *
  *
