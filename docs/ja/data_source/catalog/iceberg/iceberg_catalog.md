@@ -345,6 +345,70 @@ mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
 
 </TabItem>
 
+<TabItem value="JDBC" label="JDBC">
+
+##### JDBC
+
+データソースのメタストアとして JDBC を選択した場合は、`MetastoreParams` を以下のように設定する：
+
+```SQL
+"iceberg.catalog.type" = "jdbc",
+"iceberg.catalog.uri" = "<jdbc_uri>",
+"iceberg.catalog.warehouse" = "<warehouse_location>"
+```
+
+以下に `MetastoreParams` で設定する必要のあるパラメータを示す。
+
+##### iceberg.catalog.type
+
+必須：はい
+
+説明：Icebergクラスタで使用するメタストアのタイプ。値を `jdbc` に設定します。
+
+##### iceberg.catalog.uri
+
+必須：はい
+
+説明：データベースのURI。フォーマット：`jdbc:[mysql\|postgresql]://<DB_IP_address>:<DB_PORT>/<DB_NAME>`。
+
+
+###### iceberg.catalog.warehouse
+
+必須：はい
+
+説明：Iceberg カタログの Warehouse の場所または識別子。例: `s3://my_bucket/warehouse_location`。
+
+
+##### iceberg.catalog.jdbc.user
+
+必須：いいえ
+
+説明：データベースのユーザー名。
+
+
+##### iceberg.catalog.jdbc.password
+
+必須：いいえ
+
+説明：データベースのパスワード。
+
+次の例では、メタストアとして `iceberg_jdbc` という名前の Iceberg カタログを作成します：
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_jdbc
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "jdbc",
+    "iceberg.catalog.warehouse" = "hdfs:///jdbc_iceberg/warehouse/ ",
+    "iceberg.catalog.uri" = "jdbc:mysql://ip:port/db_name",
+    "iceberg.catalog.jdbc.user" = "username",
+    "iceberg.catalog.jdbc.password" = "password"
+);
+```
+
+</TabItem>
+
 </Tabs>
 
 ---
