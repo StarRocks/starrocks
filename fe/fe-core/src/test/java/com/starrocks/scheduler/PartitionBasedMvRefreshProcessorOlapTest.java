@@ -2323,7 +2323,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                         Assert.assertEquals(extraMessage.getNextPartitionEnd(), "2022-03-01");
 
                                         Assert.assertTrue(extraMessage.getExecuteOption() != null);
-                                        Assert.assertFalse(extraMessage.getExecuteOption().isMergeRedundant());
+                                        Assert.assertTrue(extraMessage.getExecuteOption().isMergeRedundant());
                                         Assert.assertFalse(extraMessage.getExecuteOption().isReplay());
                                     }
 
@@ -2466,7 +2466,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                 Assert.assertEquals(extraMessage.getNextPartitionEnd(), "2022-03-01");
 
                                 Assert.assertTrue(extraMessage.getExecuteOption() != null);
-                                Assert.assertFalse(extraMessage.getExecuteOption().isMergeRedundant());
+                                Assert.assertTrue(extraMessage.getExecuteOption().isMergeRedundant());
                                 Assert.assertFalse(extraMessage.getExecuteOption().isReplay());
 
                                 Assert.assertTrue(taskRunStatus.isRefreshFinished());
