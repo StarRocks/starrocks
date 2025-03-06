@@ -21,7 +21,7 @@
 
 namespace starrocks {
 
-class IOStatEntry;
+struct IOStatEntry;
 
 class IOProfiler {
 public:
