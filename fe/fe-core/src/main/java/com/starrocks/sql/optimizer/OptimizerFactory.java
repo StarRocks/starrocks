@@ -56,6 +56,8 @@ public class OptimizerFactory {
     public static Optimizer create(OptimizerContext context) {
         if (context.getOptimizerOptions().isShortCircuit()) {
             return new ShortCircuitOptimizer(context);
+        } else if (context.getOptimizerOptions().isBaselinePlan()) {
+            return new SPMOptimizer(context);
         }
         return new QueryOptimizer(context);
     }
