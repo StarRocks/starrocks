@@ -42,6 +42,7 @@ import com.starrocks.analysis.TableName;
 import com.starrocks.common.UserException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzerUtils;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -130,6 +131,11 @@ public class View extends Table {
 
     public String getInlineViewDef() {
         return inlineViewDef;
+    }
+
+    // show create view that from files() need remove the credential
+    public String getInlineViewDefWithoutCredential() {
+        return AstToSQLBuilder.toSQL(getQueryStatement());
     }
 
     public long getSqlMode() {
