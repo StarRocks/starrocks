@@ -185,6 +185,17 @@ public class HintCollector extends StarRocksBaseVisitor<Void> {
         return null;
     }
 
+    @Override
+    public Void visitCreateBaselinePlanStatement(StarRocksParser.CreateBaselinePlanStatementContext ctx) {
+        // only collect plan hints
+        if (ctx.queryRelation().size() == 1) {
+            visit(ctx.queryRelation(0));
+        } else {
+            visit(ctx.queryRelation(1));
+        }
+        return null;
+    }
+
     private void extractHintToLeft(ParserRuleContext ctx) {
         Token semi = ctx.start;
         int i = semi.getTokenIndex();
