@@ -108,3 +108,55 @@ select count(*) from t0 where exception_test(c1) is null;
 -- run two times
 select count(*) from t0 where shared_exception_test(c1) is null;
 select count(*) from t0 where shared_exception_test(c1) is null;
+
+-- test array and map
+CREATE FUNCTION echo_array_string(array<string>)
+RETURNS array<string>
+PROPERTIES
+(
+  "symbol" = "EchoArray", 
+  "isolation"="shared",
+  "type" = "StarrocksJar", 
+  "file" = "${udf_url}/starrocks-jdbc/ArrayMap.jar"
+);
+
+CREATE FUNCTION echo_array_int(array<int>)
+RETURNS array<int>
+PROPERTIES
+(
+  "symbol" = "EchoArray", 
+  "isolation"="shared",
+  "type" = "StarrocksJar", 
+  "file" = "${udf_url}/starrocks-jdbc/ArrayMap.jar"
+);
+
+CREATE FUNCTION echo_map(map<int,string>)
+RETURNS map<int,string>
+PROPERTIES
+(
+  "symbol" = "EchoMap", 
+  "isolation"="shared",
+  "type" = "StarrocksJar", 
+  "file" = "${udf_url}/starrocks-jdbc/ArrayMap.jar"
+);
+
+CREATE TABLE `tlistarray` (
+  `c0` int(11) NULL COMMENT "",
+  `c1` array<int> NULL,
+  `c2` array<string> NULL COMMENT "",
+  `c3` map<string, int> NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`)
+COMMENT "OLAP"
+PROPERTIES (
+"replication_num" = "1"
+);
+
+select echo_array_int([1,2,3]);
+select echo_array_string([1,2,3]);
+select echo_map(map(1,2,3,4));
+
+insert into tlistarray values(1, [1,2,3], [1,2,3], map(1,2,3,4)), (2, [4,5], ["6", "7"], map(4,5,1,2)), (null,null,null,null);
+select c0,echo_array_int(c1) from tlistarray order by 1;
+select c0,echo_array_string(c2) from tlistarray order by 1;
+select c0,echo_map(c3) from tlistarray order by 1;
