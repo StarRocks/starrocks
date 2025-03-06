@@ -58,6 +58,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.thrift.TKafkaRLTaskProgress;
+import com.starrocks.thrift.TRoutineLoadJobInfo;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.utframe.UtFrameUtils;
 import com.starrocks.warehouse.DefaultWarehouse;
@@ -253,6 +254,9 @@ public class RoutineLoadJobTest {
             List<String> showInfo = routineLoadJob.getShowInfo();
             Assert.assertTrue(showInfo.stream().filter(entity -> !Strings.isNullOrEmpty(entity))
                     .anyMatch(entity -> entity.equals(errorReason.toString())));
+
+            TRoutineLoadJobInfo loadJobInfo = routineLoadJob.toThrift();
+            Assert.assertTrue(loadJobInfo.getReasons_of_state_changed().equals(errorReason.toString()));
         }
 
         {
@@ -267,6 +271,9 @@ public class RoutineLoadJobTest {
             List<String> showInfo = routineLoadJob.getShowInfo();
             Assert.assertTrue(showInfo.stream().filter(entity -> !Strings.isNullOrEmpty(entity))
                     .anyMatch(entity -> entity.equals(errorReason.toString())));
+
+            TRoutineLoadJobInfo loadJobInfo = routineLoadJob.toThrift();
+            Assert.assertTrue(loadJobInfo.getReasons_of_state_changed().equals(errorReason.toString()));
         }
     }
 
@@ -283,6 +290,9 @@ public class RoutineLoadJobTest {
             List<String> showInfo = routineLoadJob.getShowInfo();
             Assert.assertEquals(true, showInfo.stream().filter(entity -> !Strings.isNullOrEmpty(entity))
                     .anyMatch(entity -> entity.equals(errorReason.toString())));
+
+            TRoutineLoadJobInfo loadJobInfo = routineLoadJob.toThrift();
+            Assert.assertTrue(loadJobInfo.getReasons_of_state_changed().equals(errorReason.toString()));
         }
 
         {
@@ -306,6 +316,16 @@ public class RoutineLoadJobTest {
             //The displayed value is the actual value - 1
             Assert.assertEquals("{\"0\":\"1233\"}", showInfo.get(14));
             Assert.assertEquals("{\"0\":\"1701411708409\"}", showInfo.get(15));
+<<<<<<< HEAD
+=======
+            Assert.assertTrue(showInfo.get(10).contains("\"pause_on_fatal_parse_error\":\"true\""));
+
+            
+            TRoutineLoadJobInfo loadJobInfo = routineLoadJob.toThrift();
+            Assert.assertEquals("{\"0\":\"12345\"}", loadJobInfo.getLatest_source_position());
+            //The displayed value is the actual value - 1
+            Assert.assertEquals("{\"0\":\"1233\"}", loadJobInfo.getProgress());
+>>>>>>> cd3487f85 ([Enhancement]Add partition offset lag column in show routine load and information_schema.routine_load_jobs (#55559))
         }
 
         {
@@ -327,6 +347,10 @@ public class RoutineLoadJobTest {
             // The lag [xxx] of partition [0] exceeds Config.routine_load_unstable_threshold_second [3600]
             Assert.assertTrue(showInfo.get(16).contains(
                     "partition [0] exceeds Config.routine_load_unstable_threshold_second [3600]"));
+        
+            TRoutineLoadJobInfo loadJobInfo = routineLoadJob.toThrift();
+            Assert.assertEquals("RUNNING", loadJobInfo.getState());
+            Assert.assertEquals("", loadJobInfo.getReasons_of_state_changed());
 
             partitionOffsetTimestamps.put(Integer.valueOf(0), Long.valueOf(System.currentTimeMillis()));
             kafkaTimestampProgress = new KafkaProgress(partitionOffsetTimestamps);
@@ -337,11 +361,24 @@ public class RoutineLoadJobTest {
             Assert.assertEquals("RUNNING", showInfo.get(7));
             Assert.assertEquals("", showInfo.get(16));
 
+            loadJobInfo = routineLoadJob.toThrift();
+            Assert.assertEquals("RUNNING", loadJobInfo.getState());
+            Assert.assertEquals("", loadJobInfo.getReasons_of_state_changed());
+
             // The job is set stable.
             routineLoadJob.updateSubstateStable();
             showInfo = routineLoadJob.getShowInfo();
             Assert.assertEquals("RUNNING", showInfo.get(7));
             Assert.assertEquals("", showInfo.get(16));
+<<<<<<< HEAD
+=======
+            Assert.assertTrue(showInfo.get(10).contains("\"pause_on_fatal_parse_error\":\"false\""));
+
+
+            loadJobInfo = routineLoadJob.toThrift();
+            Assert.assertEquals("RUNNING", loadJobInfo.getState());
+            Assert.assertEquals("", loadJobInfo.getReasons_of_state_changed());
+>>>>>>> cd3487f85 ([Enhancement]Add partition offset lag column in show routine load and information_schema.routine_load_jobs (#55559))
         }
     }
 
@@ -369,7 +406,7 @@ public class RoutineLoadJobTest {
         KafkaRoutineLoadJob routineLoadJob = new KafkaRoutineLoadJob();
         routineLoadJob.setWarehouseId(0L);
         List<String> showInfo = routineLoadJob.getShowInfo();
-        Assert.assertEquals(22, showInfo.size());
+        Assert.assertEquals(23, showInfo.size());
         Assert.assertEquals("default_warehouse", showInfo.get(20));
 
         routineLoadJob.setWarehouseId(1L);
