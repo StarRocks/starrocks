@@ -555,7 +555,7 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
         }
         if (cancel_query_ctx) {
             // cancel query_id
-            query_ctx->cancel(Status::Cancelled(reason_string));
+            query_ctx->cancel(Status::Cancelled(reason_string), true);
         } else {
             // cancel fragment
             auto&& fragment_ctx = query_ctx->fragment_mgr()->get(tid);
