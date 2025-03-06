@@ -36,7 +36,6 @@ import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CompoundPredicateOperator;
-import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.RuleType;
@@ -68,8 +67,8 @@ import java.util.stream.Collectors;
  *   SELECT *
  *   FROM left_table l
  *   JOIN right_table r
- *     ON l.k1 = r.v2
- *   WHERE l.k1 != r.v1;
+ *   ON l.k1 = r.v2
+ *   WHERE l.k1 != r.v1 OR l.k1 IS NULL OR r.v1 IS NULL
  *
  *
  *                                  +------+
@@ -104,9 +103,19 @@ import java.util.stream.Collectors;
  *                            /                 +-------------------------+
  *                           /                      /                    \
  *       +-------------------------+   +------------------------+  +------------------------+
- *       | BinaryPredicateOperator |   | BinaryPredicateOperator|  | BinaryPredicateOperator|
- *       | (l.k1 = r.v1)           |   | (l.k1 = r.v2)          |  | (l.k1 != r.v1)         |
+ *       | BinaryPredicateOperator |   | BinaryPredicateOperator|  |    CompoundPredicate   |
+ *       | (l.k1 = r.v1)           |   | (l.k1 = r.v2)          |  |         (OR)           |
  *       +-------------------------+   +------------------------+  +------------------------+
+ *                                                                    /               \
+ *                                          +------------------------+       +------------------------+
+ *                                          |    CompoundPredicate   |       |    IsNullPredicate     |
+ *                                          |           (OR)         |       |      (l.k1 IS NULL)    |
+ *                                          +------------------------+       +------------------------+
+ *                                             /                    \
+ *                                +------------------------+    +------------------------+
+ *                                | BinaryPredicateOperator|    |    IsNullPredicate     |
+ *                                |     (l.k1 != r.v1)     |    |     (r.v1 IS NULL)     |
+ *                                +------------------------+    +------------------------+
  *
  *
  */
@@ -209,8 +218,8 @@ public class SplitJoinORToUnionRule extends TransformationRule {
                         ScalarOperator rightChild = new IsNullPredicateOperator(eqPredicate.getChild(1));
 
                         List<ScalarOperator> orConditions = Lists.newArrayList(nePredicate, leftChild, rightChild);
-                        ScalarOperator orPredicate = buildOrPredicate(orConditions);
-
+                        ScalarOperator orPredicate =
+                                Utils.createCompound(CompoundPredicateOperator.CompoundType.OR, orConditions);
                         branchPredicates.set(k, orPredicate);
                     }
                 }
@@ -227,12 +236,11 @@ public class SplitJoinORToUnionRule extends TransformationRule {
                         new LogicalJoinOperator.Builder().withOperator(joinOp).setOnPredicate(predicate0);
                 branchJoin = builder.build();
             } else {
-                ScalarOperator combinedPredicate = buildAndPredicate(branchPredicates);
-                ScalarOperator lastPredicate = branchPredicates.get(branchPredicates.size() - 1);
+                ScalarOperator combinedPredicate =
+                        Utils.createCompound(CompoundPredicateOperator.CompoundType.AND, branchPredicates);
                 LogicalJoinOperator.Builder builder = new LogicalJoinOperator.Builder()
                         .withOperator(joinOp)
-                        .setOnPredicate(combinedPredicate)
-                        .setOriginalOnPredicate(lastPredicate);
+                        .setOnPredicate(combinedPredicate);
                 branchJoin = builder.build();
             }
             joinBranchList.add(branchJoin);
@@ -292,9 +300,7 @@ public class SplitJoinORToUnionRule extends TransformationRule {
 
         if (expr.getOp() instanceof LogicalJoinOperator joinOp) {
             JoinOperator joinType = joinOp.getJoinType();
-            if (joinType == JoinOperator.LEFT_OUTER_JOIN ||
-                    joinType == JoinOperator.RIGHT_OUTER_JOIN ||
-                    joinType == JoinOperator.FULL_OUTER_JOIN) {
+            if (joinType.isOuterJoin()) {
                 return true;
             }
         }
@@ -388,39 +394,5 @@ public class SplitJoinORToUnionRule extends TransformationRule {
         }
 
         return cumulativePredicateMap;
-    }
-
-    private ScalarOperator buildOrPredicate(List<ScalarOperator> predicates) {
-        if (predicates == null || predicates.isEmpty()) {
-            return ConstantOperator.createBoolean(false);
-        }
-        if (predicates.size() == 1) {
-            return predicates.get(0);
-        }
-        ScalarOperator result =
-                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, predicates.get(0),
-                        predicates.get(1));
-        for (int i = 2; i < predicates.size(); i++) {
-            result = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.OR, result,
-                    predicates.get(i));
-        }
-        return result;
-    }
-
-    private ScalarOperator buildAndPredicate(List<ScalarOperator> predicates) {
-        if (predicates == null || predicates.isEmpty()) {
-            return ConstantOperator.createBoolean(true);
-        }
-        if (predicates.size() == 1) {
-            return predicates.get(0);
-        }
-        ScalarOperator result =
-                new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, predicates.get(0),
-                        predicates.get(1));
-        for (int i = 2; i < predicates.size(); i++) {
-            result = new CompoundPredicateOperator(CompoundPredicateOperator.CompoundType.AND, result,
-                    predicates.get(i));
-        }
-        return result;
     }
 }
