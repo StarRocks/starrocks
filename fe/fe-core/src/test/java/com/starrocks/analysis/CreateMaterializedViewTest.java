@@ -31,15 +31,10 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
->>>>>>> 7065d4100f ([BugFix] Fix MaterializedView's getQueryRewriteStatus cost too much time (#56547))
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.qe.ConnectContext;
