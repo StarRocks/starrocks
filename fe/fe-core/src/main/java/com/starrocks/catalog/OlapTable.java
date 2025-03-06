@@ -348,6 +348,20 @@ public class OlapTable extends Table {
         this.tableProperty = null;
     }
 
+    public static List<Index> getIndexesBySchema(List<Index> indexes, List<Column> schema) {
+        List<Index> hitIndexes = Lists.newArrayList();
+        Set<ColumnId> columnIdsSetForSchema =
+                            schema.stream().map(col -> col.getColumnId()).collect(Collectors.toSet());
+
+        for (Index index : indexes) {
+            Set<ColumnId> columnIdsSetForIndex = index.getColumns().stream().collect(Collectors.toSet());
+            if (columnIdsSetForSchema.containsAll​(columnIdsSetForIndex)) {
+                hitIndexes.add(index);
+            }
+        }
+        return hitIndexes;
+    }
+
     // Only Copy necessary metadata for query.
     // We don't do deep copy, because which is very expensive;
     public void copyOnlyForQuery(OlapTable olapTable) {
