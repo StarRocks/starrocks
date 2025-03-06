@@ -158,7 +158,7 @@ public class BasicStatsMeta implements Writable {
             Optional<Long> statistic = tableStatistics.getOrDefault(partition.getId(), Optional.empty());
             cachedTableRowCount += statistic.orElse(0L);
 
-            if (!StatisticUtils.isPartitionStatsHealthy(table, partition, this, statistic.orElse(0L))) {
+            if (!StatisticUtils.isPartitionStatsHealthy(partition, this, statistic.orElse(0L))) {
                 updatePartitionCount++;
             }
         }
