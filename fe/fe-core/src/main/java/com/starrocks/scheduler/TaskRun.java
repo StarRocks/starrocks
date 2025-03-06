@@ -246,28 +246,7 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setDefinition(task.getDefinition());
         taskRunContext.setPostRun(status.getPostRun());
 
-        runCtx = new ConnectContext(null);
-        if (parentRunCtx != null) {
-            runCtx.setParentConnectContext(parentRunCtx);
-        }
-        runCtx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-        runCtx.setCurrentCatalog(task.getCatalogName());
-        runCtx.setDatabase(task.getDbName());
-        runCtx.setQualifiedUser(status.getUser());
-        if (status.getUserIdentity() != null) {
-            runCtx.setCurrentUserIdentity(status.getUserIdentity());
-        } else {
-            runCtx.setCurrentUserIdentity(UserIdentity.createAnalyzedUserIdentWithIp(status.getUser(), "%"));
-        }
-        runCtx.setCurrentRoleIds(runCtx.getCurrentUserIdentity());
-        runCtx.getState().reset();
-        runCtx.setQueryId(UUID.fromString(status.getQueryId()));
-        runCtx.setIsLastStmt(true);
-
-        // NOTE: Ensure the thread local connect context is always the same with the newest ConnectContext.
-        // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
-        runCtx.setThreadLocalInfo();
-
+        runCtx = buildTaskRunConnectContext();
         Map<String, String> newProperties = refreshTaskProperties(runCtx);
         properties.putAll(newProperties);
         Map<String, String> taskRunContextProperties = Maps.newHashMap();
