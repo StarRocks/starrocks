@@ -74,6 +74,9 @@ import com.starrocks.sql.ast.pipe.DescPipeStmt;
 import com.starrocks.sql.ast.pipe.DropPipeStmt;
 import com.starrocks.sql.ast.pipe.PipeName;
 import com.starrocks.sql.ast.pipe.ShowPipeStmt;
+import com.starrocks.sql.ast.spm.CreateBaselinePlanStmt;
+import com.starrocks.sql.ast.spm.DropBaselinePlanStmt;
+import com.starrocks.sql.ast.spm.ShowBaselinePlanStmt;
 import com.starrocks.sql.ast.translate.TranslateStmt;
 import com.starrocks.sql.ast.txn.BeginStmt;
 import com.starrocks.sql.ast.txn.CommitStmt;
@@ -1602,17 +1605,17 @@ public interface AstVisitor<R, C> {
         return visitNode(node, context);
     }
 
-    // ------------------------------------------- BaselinePlan -------------------------------------------------------
-    //
-    //    default R visitCreateBaselinePlanStatement(CreateBaselinePlanStmt statement, C context) {
-    //        return visitDDLStatement(statement, context);
-    //    }
-    //
-    //    default R visitDropBaselinePlanStatement(DropBaselinePlanStmt statement, C context) {
-    //        return visitDDLStatement(statement, context);
-    //    }
-    //
-    //    default R visitShowBaselinePlanStatement(ShowBaselinePlanStmt statement, C context) {
-    //        return visitShowStatement(statement, context);
-    //    }
+    // -------------------------------------------BaselinePlan -------------------------------------------------------
+
+    default R visitCreateBaselinePlanStatement(CreateBaselinePlanStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitDropBaselinePlanStatement(DropBaselinePlanStmt statement, C context) {
+        return visitDDLStatement(statement, context);
+    }
+
+    default R visitShowBaselinePlanStatement(ShowBaselinePlanStmt statement, C context) {
+        return visitShowStatement(statement, context);
+    }
 }
