@@ -64,7 +64,7 @@ public class ConnectorHistogramColumnStatsCacheLoader implements
                 }
             } catch (RuntimeException e) {
                 LOG.error(e);
-                return Optional.empty();
+                throw new CompletionException(e);
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {

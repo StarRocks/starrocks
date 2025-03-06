@@ -72,10 +72,7 @@ public class PartitionStatsCacheLoader implements AsyncCacheLoader<ColumnStatsCa
                 return result;
             } catch (RuntimeException e) {
                 LOG.error(e);
-                for (ColumnStatsCacheKey key : cacheKey) {
-                    result.put(key, Optional.empty());
-                }
-                return result;
+                throw new CompletionException(e);
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {
