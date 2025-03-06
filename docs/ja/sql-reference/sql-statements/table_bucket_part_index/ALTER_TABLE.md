@@ -710,7 +710,7 @@ DROP INDEX index_name;
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-SET ("key" = "value",...)
+SET ("key" = "value")
 ```
 
 現在、StarRocksは次のテーブルプロパティの変更をサポートしています:
