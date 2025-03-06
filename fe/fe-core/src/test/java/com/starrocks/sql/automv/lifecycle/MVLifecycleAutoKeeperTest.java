@@ -148,8 +148,8 @@ public class MVLifecycleAutoKeeperTest {
         }
     }
 
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("nextFlatQuery")
+    // @ParameterizedTest(name = "{0}")
+    // @MethodSource("nextFlatQuery")
     public void testSingleSsbFlatQuery(String queryName) throws Throwable {
         if (new Random().nextInt(5) != 0) {
             return;

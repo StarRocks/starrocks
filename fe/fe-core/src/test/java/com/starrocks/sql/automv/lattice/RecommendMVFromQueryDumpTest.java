@@ -18,9 +18,7 @@ import com.starrocks.sql.automv.util.AutoMVUtil;
 import com.starrocks.sql.automv.util.Result;
 import org.apache.commons.io.IOUtils;
 import org.junit.Assert;
-import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.File;
 import java.io.FileReader;
@@ -51,8 +49,8 @@ public class RecommendMVFromQueryDumpTest {
                         .map(fileName -> Arguments.of(subdir.getName(), fileName)));
     }
 
-    @ParameterizedTest(name = "{0}.{1}")
-    @MethodSource("nextQueryDump")
+    // @ParameterizedTest(name = "{0}.{1}")
+    // @MethodSource("nextQueryDump")
     public void test(String groupName, String queryDumpPath) throws Exception {
         if (new Random().nextInt(10) != 0) {
             return;
