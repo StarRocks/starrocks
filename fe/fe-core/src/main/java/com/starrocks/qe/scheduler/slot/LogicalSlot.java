@@ -21,6 +21,8 @@ import com.starrocks.qe.GlobalVariable;
 import com.starrocks.thrift.TResourceLogicalSlot;
 import com.starrocks.thrift.TUniqueId;
 
+import java.util.Map;
+
 /**
  * A logical slot represents resources which is required by a query from the {@link SlotManager}.
  * <p> It contains multiple physical slots. A physical slot represents a part of resource from the cluster. There are a total of
@@ -204,6 +206,19 @@ public class LogicalSlot {
 
         boolean isTerminal() {
             return this == RELEASED || this == CANCELLED;
+        }
+
+        // Put RUNNING State at first
+        private static final Map<State, Integer> SORT_ORDER = Map.of(
+                ALLOCATED, 1,
+                REQUIRING, 2,
+                CREATED, 3,
+                CANCELLED, 4,
+                RELEASED, 5
+        );
+
+        public int getSortOrder() {
+            return SORT_ORDER.getOrDefault(this, SORT_ORDER.size());
         }
 
         public String toQueryStateString() {
