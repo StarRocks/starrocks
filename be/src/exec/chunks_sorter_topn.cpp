@@ -27,6 +27,7 @@
 #include "runtime/runtime_state.h"
 #include "types/logical_type_infra.h"
 #include "util/orlp/pdqsort.h"
+#include "util/runtime_profile.h"
 #include "util/stopwatch.hpp"
 
 namespace starrocks {
@@ -68,6 +69,8 @@ ChunksSorterTopn::ChunksSorterTopn(RuntimeState* state, const std::vector<ExprCo
           _topn_type(topn_type) {
     DCHECK_GT(_get_number_of_rows_to_sort(), 0) << "output rows can't be empty";
     DCHECK(_topn_type == TTopNType::ROW_NUMBER || _offset == 0);
+    _init_buffered_chunks = tunning_buffered_chunks(_get_number_of_rows_to_sort());
+    _buffered_chunks_capacity = _init_buffered_chunks;
     auto& raw_chunks = _raw_chunks.chunks;
     // avoid too large buffer chunks
     raw_chunks.reserve(std::min<size_t>(max_buffered_chunks, 256));
@@ -88,6 +91,7 @@ Status ChunksSorterTopn::update(RuntimeState* state, const ChunkPtr& chunk) {
     }
     auto& raw_chunks = _raw_chunks.chunks;
     size_t chunk_number = raw_chunks.size();
+    size_t prev_chunk_memusage = 0;
     if (chunk_number <= 0) {
         raw_chunks.push_back(chunk);
         chunk_number++;
@@ -95,36 +99,27 @@ Status ChunksSorterTopn::update(RuntimeState* state, const ChunkPtr& chunk) {
         raw_chunks.push_back(chunk);
         chunk_number++;
     } else {
+        prev_chunk_memusage = raw_chunks[chunk_number - 1]->memory_usage();
         // Old planner will not remove duplicated sort column.
         // columns in chunk may have same column ptr
         // append_safe will check size of all columns in dest chunk
         // to ensure same column will not apppend repeatedly.
         raw_chunks[chunk_number - 1]->append_safe(*chunk);
     }
+    _raw_chunks.update_mem_usage(raw_chunks[chunk_number - 1]->memory_usage() - prev_chunk_memusage);
     _raw_chunks.size_of_rows += chunk->num_rows();
 
     // Avoid TOPN from using too much memory.
-    bool exceed_mem_limit = _raw_chunks.mem_usage() > _max_buffered_bytes;
+    bool exceed_mem_limit = _raw_chunks.mem_usage > _max_buffered_bytes;
     if (exceed_mem_limit) {
         return _sort_chunks(state);
     }
 
-    // Try to accumulate more chunks.
-    size_t rows_to_sort = _get_number_of_rows_to_sort();
-    if (_merged_runs.num_rows() + _raw_chunks.size_of_rows < rows_to_sort) {
-        return Status::OK();
-    }
-
-    // We have accumulated rows_to_sort rows to build merged runs.
-    if (_merged_runs.num_rows() <= rows_to_sort) {
-        return _sort_chunks(state);
-    }
-
-    // When number of Chunks exceeds _limit or _max_buffered_chunks, run sort and then part of
+    // When number of Chunks exceeds _buffered_chunks_capacity or rows greater than _max_buffered_rows , run sort and then part of
     // cached chunks can be dropped, so it can reduce the memory usage.
     // TopN caches _limit or _max_buffered_chunks primitive chunks,
     // performs sorting once, and discards extra rows
-    if (chunk_number >= _max_buffered_chunks || _raw_chunks.size_of_rows > _max_buffered_rows) {
+    if (chunk_number >= _buffered_chunks_capacity || _raw_chunks.size_of_rows > _max_buffered_rows) {
         return _sort_chunks(state);
     }
 
@@ -230,6 +225,9 @@ size_t ChunksSorterTopn::get_output_rows() const {
 }
 
 Status ChunksSorterTopn::_sort_chunks(RuntimeState* state) {
+    if (_sort_cnt) {
+        COUNTER_UPDATE(_sort_cnt, 1);
+    }
     // Chunks for this batch.
     DataSegments segments;
 
@@ -571,6 +569,7 @@ Status ChunksSorterTopn::_merge_sort_common(MergedRuns* dst, DataSegments& segme
     }
 
     if (_merged_runs.num_chunks() > 1 || _merged_runs.mem_usage() > _max_buffered_bytes) {
+        _adjust_chunks_capacity(true);
         // merge to multi sorted chunks
         RETURN_IF_ERROR(merge_sorted_chunks(_sort_desc, _sort_exprs, _merged_runs, std::move(right_unique_chunk),
                                             rows_to_keep, dst));
@@ -585,16 +584,12 @@ Status ChunksSorterTopn::_merge_sort_common(MergedRuns* dst, DataSegments& segme
         // prepare right chunk
         ChunkPtr right_chunk = std::move(right_unique_chunk);
 
-        Permutation merged_perm;
-        merged_perm.reserve(left_chunk->num_rows() + right_chunk->num_rows());
+        const SortedRun left = {left_chunk, left_columns};
+        const SortedRun right = {right_chunk, right_columns};
+        bool intersected = !left.empty() && !right.empty() && !left.intersect(_sort_desc, right);
+        // adjust chunks capacity
+        _adjust_chunks_capacity(intersected);
 
-        RETURN_IF_ERROR(merge_sorted_chunks_two_way(_sort_desc, {left_chunk, left_columns},
-                                                    {right_chunk, right_columns}, &merged_perm));
-        CHECK_GE(merged_perm.size(), rows_to_keep);
-        merged_perm.resize(rows_to_keep);
-
-        // materialize into the dst runs
-        std::vector<ChunkPtr> chunks{left_chunk, right_chunk};
         ChunkUniquePtr big_chunk;
         if (dst->num_chunks() == 0) {
             big_chunk = segments[permutation_second[0].chunk_index].chunk->clone_empty(rows_to_keep);
@@ -602,7 +597,18 @@ Status ChunksSorterTopn::_merge_sort_common(MergedRuns* dst, DataSegments& segme
             big_chunk = std::move(dst->front().chunk);
             dst->pop_front();
         }
+
+        Permutation merged_perm;
+        merged_perm.reserve(left_chunk->num_rows() + right_chunk->num_rows());
+        RETURN_IF_ERROR(merge_sorted_chunks_two_way(_sort_desc, left, right, &merged_perm));
+        CHECK_GE(merged_perm.size(), rows_to_keep);
+        merged_perm.resize(rows_to_keep);
+
+        // materialize into the dst runs
+        std::vector<ChunkPtr> chunks{left_chunk, right_chunk};
+
         materialize_by_permutation(big_chunk.get(), chunks, merged_perm);
+
         RETURN_IF_ERROR(big_chunk->upgrade_if_overflow());
         ASSIGN_OR_RETURN(auto run, MergedRun::build(std::move(big_chunk), *_sort_exprs));
         dst->push_back(std::move(run));
