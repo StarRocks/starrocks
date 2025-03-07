@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.collect.ImmutableBiMap;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
@@ -39,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 
 import static com.starrocks.persist.gson.GsonUtils.GSON;
+import static com.starrocks.statistic.StatsConstants.INIT_SAMPLE_STATS_JOB;
 
 public class BasicStatsMetaTest extends PlanTestBase {
 
@@ -85,6 +87,11 @@ public class BasicStatsMetaTest extends PlanTestBase {
             basicStatsMeta.setUpdateRows(10000L);
             Assert.assertEquals(1.0, basicStatsMeta.getHealthy(), 0.01);
             basicStatsMeta.resetDeltaRows();
+            Assert.assertEquals(1.0, basicStatsMeta.getHealthy(), 0.01);
+
+            basicStatsMeta.setProperties(ImmutableBiMap.of(INIT_SAMPLE_STATS_JOB, "true"));
+            basicStatsMeta.increaseDeltaRows(5000L);
+            basicStatsMeta.setUpdateRows(10000L);
             Assert.assertEquals(1.0, basicStatsMeta.getHealthy(), 0.01);
         }
     }
