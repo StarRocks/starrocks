@@ -131,18 +131,7 @@ public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
     @Override
     public Boolean visitAlterStorageVolumeStatement(AlterStorageVolumeStmt statement, Void context) {
         Map<String, String> properties = statement.getProperties();
-<<<<<<< HEAD
-
-        if (properties.containsKey(CloudConfigurationConstants.AWS_S3_ACCESS_KEY) ||
-                properties.containsKey(CloudConfigurationConstants.AWS_S3_SECRET_KEY) ||
-                properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY) ||
-                properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SAS_TOKEN)) {
-            return true;
-        }
-        return false;
-=======
         return hasSecretInProperties(properties);
->>>>>>> c20bc05841 ([Enhancement] mask credentials in FILES (#56684))
     }
 
     @Override
