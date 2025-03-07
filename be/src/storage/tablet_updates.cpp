@@ -2897,7 +2897,7 @@ static std::string int_list_to_string(const std::vector<T>& l) {
 }
 
 Status TabletUpdates::compaction(MemTracker* mem_tracker) {
-    if (config::enable_random_compaction_strategy) {
+    if (config::chaos_test_enable_random_compaction_strategy) {
         // chaos engineering
         return compaction_random(mem_tracker);
     }

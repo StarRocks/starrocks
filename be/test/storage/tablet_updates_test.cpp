@@ -1349,9 +1349,9 @@ TEST_F(TabletUpdatesTest, horizontal_compaction_with_persistent_index_with_rows_
 }
 
 TEST_F(TabletUpdatesTest, horizontal_compaction_with_random_pick) {
-    config::enable_random_compaction_strategy = true;
+    config::chaos_test_enable_random_compaction_strategy = true;
     test_horizontal_compaction(true);
-    config::enable_random_compaction_strategy = false;
+    config::chaos_test_enable_random_compaction_strategy = false;
 }
 
 TEST_F(TabletUpdatesTest, horizontal_compaction_with_sort_key) {
