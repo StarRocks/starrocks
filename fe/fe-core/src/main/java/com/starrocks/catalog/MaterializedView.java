@@ -37,6 +37,7 @@ import com.starrocks.backup.mv.MvBackupInfo;
 import com.starrocks.backup.mv.MvBaseTableBackupInfo;
 import com.starrocks.backup.mv.MvRestoreContext;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.GlobalConstraintManager;
 import com.starrocks.catalog.mv.MVPlanValidationResult;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
@@ -997,10 +998,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             if (desiredActive && reloadActive) {
                 setActive();
             }
-<<<<<<< HEAD
-            analyzePartitionExprs();
-=======
->>>>>>> a5978c6a54 ([Enhancement] Fix some mv related noisy logs (#56672))
         } catch (Throwable e) {
             LOG.error("reload mv failed: {}", this, e);
             setInactiveAndReason("reload failed: " + e.getMessage());
