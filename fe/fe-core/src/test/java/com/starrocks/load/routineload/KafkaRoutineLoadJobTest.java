@@ -569,7 +569,7 @@ public class KafkaRoutineLoadJobTest {
         }
     }
 
-	@Test
+    @Test
     public void testGetSourceLagString() {
         RoutineLoadJob job = new KafkaRoutineLoadJob(1L, "routine_load", 1L, 1L, "127.0.0.1:9020", "topic1");
         // check empty value
