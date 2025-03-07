@@ -1469,16 +1469,5 @@ CONF_mInt32(json_parse_many_batch_size, "1000000");
 CONF_mBool(enable_dynamic_batch_size_for_json_parse_many, "true");
 CONF_mInt32(put_combined_txn_log_thread_pool_num_max, "64");
 CONF_mBool(enable_put_combinded_txn_log_parallel, "false");
-<<<<<<< HEAD
-=======
-// used to control whether the metrics/ interface collects table metrics
-CONF_mBool(enable_collect_table_metrics, "true");
-// some internal parameters are used to control the execution strategy of join runtime filter pushdown.
-// Do not modify them unless necessary.
-CONF_mInt64(rf_sample_rows, "1024");
-CONF_mInt64(rf_sample_ratio, "32");
-CONF_mInt64(rf_branchless_ratio, "8");
-
 CONF_mInt32(big_query_sec, "1");
->>>>>>> 46181ce241 ([Refactor] Add brief log (#56300))
 } // namespace starrocks::config
