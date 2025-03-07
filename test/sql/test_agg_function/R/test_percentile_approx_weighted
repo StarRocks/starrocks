@@ -133,7 +133,10 @@ select percentile_approx_weighted(c6, c1, 0.5) from t1;
 -- result:
 11111.0
 -- !result
-select percentile_approx_weighted(c6, c1, 0.9, 10000) from t1; 
+select percentile_approx_weighted(c6, c1, 0.9, 10000) from t1;
+-- result:
+11111.0
+-- !result
 select percentile_approx_weighted(c6, 1, 0.9) from t1;
 -- result:
 11111.0
@@ -166,6 +169,14 @@ select percentile_approx_weighted(c11[0], 1, 0.5) from t1;
 -- result:
 None
 -- !result
+select percentile_approx_weighted(c11[1], 1, 0.5) from t1;
+-- result:
+1.0
+-- !result
+select percentile_approx_weighted(c11[1], 1, 0.5) from t1;
+-- result:
+1.0
+-- !result
 select percentile_approx_weighted(c12[1], c1, 0.5) from t1;
 -- result:
 5.5
@@ -193,6 +204,14 @@ select percentile_approx_weighted(c13.a, 1, 0.5) from t1;
 select percentile_approx_weighted(c13.b, 1, 0.5) from t1;
 -- result:
 100.0
+-- !result
+with tt as (select @v1 as v1, c1, c2 from t1) select /*+ set_user_variable(@v1 = 0.5) */ percentile_approx_weighted(c2, c1, v1) from tt;
+-- result:
+35355.9765625
+-- !result
+with tt as (select @v1 as v1, @v2 as v2, c1, c2 from t1) select /*+ set_user_variable(@v1= 0.5, @v2 = 4096) */ percentile_approx_weighted(c2, c1, v1, v2 + 1) from tt;
+-- result:
+35355.9765625
 -- !result
 set pipeline_dop=1;
 -- result:
@@ -297,7 +316,10 @@ select percentile_approx_weighted(c6, c1, 0.5) from t1;
 -- result:
 11111.0
 -- !result
-select percentile_approx_weighted(c6, c1, 0.9, 10000) from t1; 
+select percentile_approx_weighted(c6, c1, 0.9, 10000) from t1;
+-- result:
+11111.0
+-- !result
 select percentile_approx_weighted(c6, 1, 0.9) from t1;
 -- result:
 11111.0
@@ -329,6 +351,14 @@ None
 select percentile_approx_weighted(c11[0], 1, 0.5) from t1;
 -- result:
 None
+-- !result
+select percentile_approx_weighted(c11[1], 1, 0.5) from t1;
+-- result:
+1.0
+-- !result
+select percentile_approx_weighted(c11[1], 1, 0.5) from t1;
+-- result:
+1.0
 -- !result
 select percentile_approx_weighted(c12[1], c1, 0.5) from t1;
 -- result:
