@@ -853,7 +853,9 @@ public class ShowExecutor {
             List<List<String>> rows = Lists.newArrayList();
 
             List<LogicalSlot> slots = GlobalStateMgr.getCurrentState().getSlotManager().getSlots();
-            slots.sort(Comparator.comparingLong(LogicalSlot::getStartTimeMs)
+            slots.sort(
+                    Comparator.<LogicalSlot>comparingInt(x -> x.getState().getSortOrder())
+                            .thenComparing(LogicalSlot::getStartTimeMs)
                     .thenComparingLong(LogicalSlot::getExpiredAllocatedTimeMs));
 
             for (LogicalSlot slot : slots) {

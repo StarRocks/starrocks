@@ -15,12 +15,15 @@
 package com.starrocks.qe.scheduler.slot;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.commons.compress.utils.Lists;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -38,6 +41,9 @@ import java.util.Map;
  * Each sub-queue has a different weight. See {@link WeightedRoundRobinQueue} for details.
  */
 public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
+
+    private static final Logger LOG = LogManager.getLogger(SlotSelectionStrategyV2.class);
+
     private static final long UPDATE_OPTIONS_INTERVAL_MS = 1000;
 
     /**
@@ -45,7 +51,7 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
      */
     private long lastUpdateOptionsTime = 0;
     private QueryQueueOptions opts = null;
-    private WeightedRoundRobinQueue requiringQueue = null;
+    private SlotScheduleAlgorithm requiringQueue = null;
 
     private final Map<TUniqueId, SlotContext> slotContexts = Maps.newHashMap();
 
@@ -144,6 +150,11 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
         return slotsToAllocate;
     }
 
+    @VisibleForTesting
+    protected QueryQueueOptions getCurrentOptions() {
+        return opts;
+    }
+
     private void updateOptionsPeriodically() {
         long now = System.currentTimeMillis();
         if (now - lastUpdateOptionsTime < UPDATE_OPTIONS_INTERVAL_MS) {
@@ -154,10 +165,29 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
         QueryQueueOptions newOpts = QueryQueueOptions.createFromEnv();
         if (!newOpts.equals(opts)) {
             opts = newOpts;
-            requiringQueue = new WeightedRoundRobinQueue(opts.v2().getTotalSlots(), opts.v2().getNumWorkers());
+
+            // Change the schedule algorithm, move pending slots to new queue
+            SlotScheduleAlgorithm newQueue = null;
+            if (opts.getPolicy().equals(QueryQueueOptions.SchedulePolicy.SWRR)) {
+                newQueue = new WeightedRoundRobinQueue(opts.v2().getTotalSlots(), opts.v2().getNumWorkers());
+            } else if (opts.getPolicy().equals(QueryQueueOptions.SchedulePolicy.SJF)) {
+                newQueue = new ShortJobFirstAlgo();
+            } else {
+                Preconditions.checkState(false, "unknown schedule policy: " + opts.getPolicy());
+            }
+            if (requiringQueue != null) {
+                while (!requiringQueue.isEmpty()) {
+                    newQueue.add(requiringQueue.poll());
+                }
+            }
+            requiringQueue = newQueue;
+
             slotContexts.values().stream()
                     .filter(slotContext -> slotContext.getSlot().getState() == LogicalSlot.State.REQUIRING)
                     .forEach(slotContext -> requiringQueue.add(slotContext));
+
+            LOG.info("updated SlotSelectionStrategy to {}", newOpts.toString());
+
         }
     }
 
@@ -179,15 +209,18 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
      *
      * <p> The rules to divide sub-queues are as follows:
      * <ul>
-     * <li> The minimum slots of {@code subQueues[i]} is {@code 2^(lastSubQueueLog2Bound-(NUM_SUB_QUEUES-1-i) )}, that is, the
-     * minimum slots of 0~7 sub-queues are 2^(b-7), 2^(b-6), 2^(b-5), 2^(b-4), 2^(b-3), 2^(b-2), 2^(b-1), 2^b, respectively.
+     * <li> The minimum slots of {@code subQueues[i]} is {@code 2^(lastSubQueueLog2Bound-(NUM_SUB_QUEUES-1-i) )},
+     * that is, the
+     * minimum slots of 0~7 sub-queues are 2^(b-7), 2^(b-6), 2^(b-5), 2^(b-4), 2^(b-3), 2^(b-2), 2^(b-1), 2^b,
+     * respectively.
      * where {@code b} denotes {@code lastSubQueueLog2Bound}.
-     * <li> The weight of {@code subQueues[i]} is {@code 2.5^(NUM_SUB_QUEUES-1-i)}, that is, the weights of 0~7 sub-queues
+     * <li> The weight of {@code subQueues[i]} is {@code 2.5^(NUM_SUB_QUEUES-1-i)}, that is, the weights of 0~7
+     * sub-queues
      * are 2.5^7, 2.5^6, 2.5^5, 2.5^4, 2.5^3, 2.5^2, 2.5^1, 2.5^0 respectively.
      * </ul>
      */
     @VisibleForTesting
-    static class WeightedRoundRobinQueue {
+    static class WeightedRoundRobinQueue implements SlotScheduleAlgorithm {
         private static final int NUM_SUB_QUEUES = 8;
 
         private final int lastSubQueueLog2Bound;
@@ -219,7 +252,8 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
                 m = MetricRepo.COUNTER_QUERY_QUEUE_CATEGORY_SLOT_STATE.getMetric(category);
                 m.increase(-m.getValue());  // Reset.
                 MetricRepo.GAUGE_QUERY_QUEUE_CATEGORY_WEIGHT.getMetric(category).setValue(curWeight);
-                MetricRepo.GAUGE_QUERY_QUEUE_CATEGORY_SLOT_MIN_SLOTS.getMetric(category).setValue(curMinSlots * numWorkers);
+                MetricRepo.GAUGE_QUERY_QUEUE_CATEGORY_SLOT_MIN_SLOTS.getMetric(category)
+                        .setValue(curMinSlots * numWorkers);
 
                 curWeight = (curWeight >>> 1) + (curWeight << 1); // curWeight*=2.5
                 curMinSlots = curMinSlots >>> 1;
@@ -253,7 +287,8 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
             subQueue.comeback();
 
             if (nextSlotToPeak != null) {
-                // If the previous peaked slot is in a lower priority sub-queue due to this higher priority sub-queue is empty,
+                // If the previous peaked slot is in a lower priority sub-queue due to this higher priority sub-queue
+                // is empty,
                 // peak the slot in this higher priority sub-queue instead.
                 SlotSubQueue prevPeakSubQueue = subQueues[nextSlotToPeak.getSubQueueIndex()];
                 if (prevPeakSubQueue.state + totalWeight < subQueue.state) {
@@ -372,10 +407,13 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
 
                 // The queue_s is in a higher priority than queue_i, until `state_i + weight_i >= state_s + weight_s`,
                 // that is `deltaState >= deltaWeight`.
-                // When peaking queue_s one time, state_s decreases `totalWeight - weight_s`, and state_i increases `weight_i`.
-                // Therefore, queue_i increases `weight_i + (totalWeight - weight_s)` = `totalWeight - deltaWeight` each time
+                // When peaking queue_s one time, state_s decreases `totalWeight - weight_s`, and state_i increases
+                // `weight_i`.
+                // Therefore, queue_i increases `weight_i + (totalWeight - weight_s)` = `totalWeight - deltaWeight`
+                // each time
                 // compared to queue_s.
-                // Thus, the times of peaking queue_s before queue_i is `deltaWeight - deltaState / (totalWeight - deltaWeight)`.
+                // Thus, the times of peaking queue_s before queue_i is `deltaWeight - deltaState / (totalWeight -
+                // deltaWeight)`.
                 int deltaWeight = selectQueue.weight - queue.weight;
                 int deltaState = queue.state - selectQueue.state;
                 int incrStatePerTime = totalWeight - deltaWeight;
@@ -424,7 +462,8 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
 
             public void incrState(int incr) {
                 this.state += incr;
-                MetricRepo.COUNTER_QUERY_QUEUE_CATEGORY_SLOT_STATE.getMetric(String.valueOf(queueIndex)).increase((long) incr);
+                MetricRepo.COUNTER_QUERY_QUEUE_CATEGORY_SLOT_STATE.getMetric(String.valueOf(queueIndex))
+                        .increase((long) incr);
             }
 
             public boolean isEmpty() {
@@ -458,9 +497,11 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
         private final LogicalSlot slot;
         private boolean allocatedAsSmallSlot = false;
         private int subQueueIndex = 0;
+        private long createTime;
 
         public SlotContext(LogicalSlot slot) {
             this.slot = slot;
+            this.createTime = System.currentTimeMillis();
         }
 
         public boolean isAllocatedAsSmallSlot() {
@@ -485,6 +526,15 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
 
         public void setSubQueueIndex(int subQueueIndex) {
             this.subQueueIndex = subQueueIndex;
+        }
+
+        public long getCreateTime() {
+            return createTime;
+        }
+
+        @VisibleForTesting
+        public void setCreateTime(long createTime) {
+            this.createTime = createTime;
         }
     }
 }
