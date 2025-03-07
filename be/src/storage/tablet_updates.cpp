@@ -2014,7 +2014,7 @@ Status TabletUpdates::_do_compaction(std::unique_ptr<CompactionInfo>* pinfo, con
         }
     }
 
-    auto cur_tablet_schema = CompactionUtils::rowset_with_max_schema_version(input_rowsets)->schema();
+    auto cur_tablet_schema = CompactionUtils::rowset_with_max_schema_version(all_rowsets)->schema();
     CompactionAlgorithm algorithm = CompactionUtils::choose_compaction_algorithm(
             cur_tablet_schema->num_columns(), config::vertical_compaction_max_columns_per_group, num_segments);
 
