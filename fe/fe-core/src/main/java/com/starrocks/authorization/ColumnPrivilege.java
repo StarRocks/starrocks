@@ -77,8 +77,7 @@ public class ColumnPrivilege {
 
             if (table instanceof SystemTable && ((SystemTable) table).requireOperatePrivilege()) {
                 try {
-                    Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                            PrivilegeType.OPERATE);
+                    Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
                 } catch (AccessDeniedException e) {
                     AccessDeniedException.reportAccessDenied(
                             InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -133,7 +132,7 @@ public class ColumnPrivilege {
                 Set<String> columns = scanColumns.getOrDefault(tableName, new HashSet<>());
                 for (String column : columns) {
                     try {
-                        Authorizer.checkColumnAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        Authorizer.checkColumnAction(context,
                                 tableName, column, PrivilegeType.SELECT);
                     } catch (AccessDeniedException e) {
                         AccessDeniedException.reportAccessDenied(
@@ -149,7 +148,7 @@ public class ColumnPrivilege {
                     try {
                         // for privilege checking, treat connector view as table
                         if (table.isConnectorView()) {
-                            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            Authorizer.checkTableAction(context,
                                     tableName, PrivilegeType.SELECT);
                         } else {
                             View view = (View) table;
@@ -164,16 +163,14 @@ public class ColumnPrivilege {
                                         Analyzer.analyze(queryStatement, context);
                                         Authorizer.check(queryStatement, context);
                                     } else if (basicTable.isMaterializedView()) {
-                                        Authorizer.checkMaterializedViewAction(context.getCurrentUserIdentity(),
-                                                context.getCurrentRoleIds(), t, PrivilegeType.SELECT);
+                                        Authorizer.checkMaterializedViewAction(context, t, PrivilegeType.SELECT);
                                     } else {
-                                        Authorizer.checkTableAction(context.getCurrentUserIdentity(),
-                                                context.getCurrentRoleIds(), t, PrivilegeType.SELECT);
+                                        Authorizer.checkTableAction(context, t, PrivilegeType.SELECT);
                                     }
                                 }
                             }
 
-                            Authorizer.checkViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            Authorizer.checkViewAction(context,
                                     tableName, PrivilegeType.SELECT);
                         }
                     } catch (AccessDeniedException e) {
@@ -184,7 +181,7 @@ public class ColumnPrivilege {
                     }
                 } else if (table.isMaterializedView()) {
                     try {
-                        Authorizer.checkMaterializedViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        Authorizer.checkMaterializedViewAction(context,
                                 tableName, PrivilegeType.SELECT);
                     } catch (AccessDeniedException e) {
                         AccessDeniedException.reportAccessDenied(
@@ -194,7 +191,7 @@ public class ColumnPrivilege {
                     }
                 } else {
                     try {
-                        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        Authorizer.checkTableAction(context,
                                 tableName.getCatalog(), tableName.getDb(), table.getName(), PrivilegeType.SELECT);
                     } catch (AccessDeniedException e) {
                         AccessDeniedException.reportAccessDenied(

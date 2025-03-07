@@ -93,8 +93,7 @@ public class ShowAnalyzeJobStmt extends ShowStmt {
                 // for jobs on entire instance or entire db, we just show it directly because there isn't a specified
                 // table to check privilege on.
                 try {
-                    Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
-                            context.getCurrentRoleIds(), db.getFullName(), table);
+                    Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
                 } catch (AccessDeniedException e) {
                     return null;
                 }

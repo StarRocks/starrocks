@@ -644,8 +644,7 @@ public class DataDescription implements ParseNode {
         }
 
         try {
-            Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(),
-                    ConnectContext.get().getCurrentRoleIds(), fullDbName, tableName, PrivilegeType.INSERT);
+            Authorizer.checkTableAction(ConnectContext.get(), fullDbName, tableName, PrivilegeType.INSERT);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     ConnectContext.get().getCurrentUserIdentity(),
@@ -655,8 +654,7 @@ public class DataDescription implements ParseNode {
 
         if (isLoadFromTable()) {
             try {
-                Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(),
-                        ConnectContext.get().getCurrentRoleIds(), fullDbName, srcTableName, PrivilegeType.SELECT);
+                Authorizer.checkTableAction(ConnectContext.get(), fullDbName, srcTableName, PrivilegeType.SELECT);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         ConnectContext.get().getCurrentUserIdentity(),
