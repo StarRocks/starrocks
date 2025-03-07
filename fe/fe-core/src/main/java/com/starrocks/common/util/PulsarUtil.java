@@ -19,7 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.proto.PPulsarBacklogBatchProxyRequest;
 import com.starrocks.proto.PPulsarBacklogProxyRequest;
 import com.starrocks.proto.PPulsarBacklogProxyResult;
@@ -52,19 +52,19 @@ public class PulsarUtil {
 
     public static List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription,
                                                       ImmutableMap<String, String> properties,
-                                                      long warehouseId) throws UserException {
+                                                      long warehouseId) throws StarRocksException {
         return PROXY_API.getAllPulsarPartitions(serviceUrl, topic, subscription, properties, warehouseId);
     }
 
     public static Map<String, Long> getBacklogNums(String serviceUrl, String topic, String subscription,
                                                    ImmutableMap<String, String> properties,
                                                    List<String> partitions,
-                                                   long warehouseId) throws UserException {
+                                                   long warehouseId) throws StarRocksException {
         return PROXY_API.getBacklogNums(serviceUrl, topic, subscription, properties, partitions, warehouseId);
     }
 
     public static List<PPulsarBacklogProxyResult> getBatchBacklogNums(List<PPulsarBacklogProxyRequest> requests)
-            throws UserException {
+            throws StarRocksException {
         return PROXY_API.getBatchBacklogNums(requests);
     }
 
@@ -92,7 +92,7 @@ public class PulsarUtil {
         public List<String> getAllPulsarPartitions(String serviceUrl, String topic, String subscription,
                                                    ImmutableMap<String, String> convertedCustomProperties,
                                                    long warehouseId)
-                throws UserException {
+                throws StarRocksException {
             // create request
             PPulsarMetaProxyRequest metaRequest = new PPulsarMetaProxyRequest();
             metaRequest.pulsarInfo = genPPulsarLoadInfo(serviceUrl, topic, subscription, convertedCustomProperties, warehouseId);
@@ -106,7 +106,7 @@ public class PulsarUtil {
         public Map<String, Long> getBacklogNums(String serviceUrl, String topic, String subscription,
                                                 ImmutableMap<String, String> properties, List<String> partitions,
                                                 long warehouseId)
-                throws UserException {
+                throws StarRocksException {
             // create request
             PPulsarBacklogProxyRequest backlogRequest = new PPulsarBacklogProxyRequest();
             backlogRequest.pulsarInfo = genPPulsarLoadInfo(serviceUrl, topic, subscription, properties, warehouseId);
@@ -127,7 +127,7 @@ public class PulsarUtil {
         }
 
         public List<PPulsarBacklogProxyResult> getBatchBacklogNums(List<PPulsarBacklogProxyRequest> requests)
-                throws UserException {
+                throws StarRocksException {
             // create request
             PPulsarProxyRequest pProxyRequest = new PPulsarProxyRequest();
             PPulsarBacklogBatchProxyRequest pPulsarBacklogBatchProxyRequest = new PPulsarBacklogBatchProxyRequest();
@@ -140,7 +140,7 @@ public class PulsarUtil {
             return result.pulsarBacklogBatchResult.results;
         }
 
-        private PPulsarProxyResult sendProxyRequest(PPulsarProxyRequest request) throws UserException {
+        private PPulsarProxyResult sendProxyRequest(PPulsarProxyRequest request) throws StarRocksException {
             TNetworkAddress address = new TNetworkAddress();
             try {
                 // TODO: need to refactor after be split into cn + dn
@@ -181,17 +181,17 @@ public class PulsarUtil {
                 TStatusCode code = TStatusCode.findByValue(result.status.statusCode);
                 if (code != TStatusCode.OK) {
                     LOG.warn("failed to send proxy request to " + address + " err " + result.status.errorMsgs);
-                    throw new UserException(
+                    throw new StarRocksException(
                             "failed to send proxy request to " + address + " err " + result.status.errorMsgs);
                 } else {
                     return result;
                 }
             } catch (InterruptedException ie) {
-                LOG.warn("got interrupted exception when sending proxy request to " + address);
+                LOG.warn("got interrupted exception when sending proxy request to " + address, ie);
                 Thread.currentThread().interrupt();
                 throw new LoadException("got interrupted exception when sending proxy request to " + address);
             } catch (Exception e) {
-                LOG.warn("failed to send proxy request to " + address + " err " + e.getMessage());
+                LOG.warn("failed to send proxy request to " + address, e);
                 throw new LoadException("failed to send proxy request to " + address + " err " + e.getMessage());
             }
         }

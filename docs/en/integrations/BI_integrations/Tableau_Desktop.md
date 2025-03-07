@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Tableau Desktop
@@ -8,7 +8,7 @@ Tableau Desktop supports querying and visualizing both internal data and externa
 
 Create a database in Tableau Desktop:
 
-![Tableau Desktop](../../assets/BI_tableau_1.png)
+![Tableau Desktop](../../_assets/BI_tableau_1.png)
 
 Take note of the following points:
 

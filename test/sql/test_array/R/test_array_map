@@ -58,3 +58,61 @@ order by
 3	["0","2","1"]	[1,1,1]
 4	["1","2"]	[1,1]
 -- !result
+INSERT INTO t1 (k1, c1)
+VALUES 
+(1, ARRAY_MAP(
+    x -> CAST(x AS STRING), 
+    ARRAY_GENERATE(1, 1000)
+)),
+(2, ARRAY_MAP(
+    x -> CAST(x AS STRING), 
+    ARRAY_GENERATE(1, 1000)
+)),
+(3, ARRAY_MAP(
+    x -> CAST(x AS STRING), 
+    ARRAY_GENERATE(1, 1000)
+)),
+(4, ARRAY_MAP(
+    x -> CAST(x AS STRING), 
+    ARRAY_GENERATE(1, 1000)
+)),
+(5, ARRAY_MAP(
+    x -> CAST(x AS STRING), 
+    ARRAY_GENERATE(1, 1000)
+));
+-- result:
+-- !result
+CREATE TABLE table1 (
+    id INT,
+    arr_largeint ARRAY<INT> NOT NULL
+)PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO table1 (id, arr_largeint) VALUES
+(1, [1, 2]),
+(2, [3, 4, 5]),
+(3, [6]);
+-- result:
+-- !result
+CREATE TABLE table2 (
+    id INT,
+    arr_str ARRAY<INT> NOT NULL
+) PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+INSERT INTO table2 (id, arr_str) VALUES
+(1, [1, 2, 3]),
+(2, [4, 5]),
+(3, [6, 7, 8, 9]);
+-- result:
+-- !result
+SELECT t1.id AS t1_id, t2.id AS t2_id, t1.arr_largeint
+FROM table1 t1
+LEFT JOIN[broadcast] table2 t2
+ON t1.id = t2.id
+AND array_length(array_map(x -> x + array_length(t2.arr_str), t1.arr_largeint)) >= 2;
+-- result:
+1	1	[1,2]
+2	2	[3,4,5]
+3	None	[6]
+-- !result

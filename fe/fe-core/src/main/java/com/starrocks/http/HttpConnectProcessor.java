@@ -33,7 +33,7 @@
 // under the License.
 package com.starrocks.http;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.mysql.MysqlCommand;
@@ -69,11 +69,10 @@ public class HttpConnectProcessor extends ConnectProcessor {
                 .setDb(ctx.getDatabase())
                 .setCatalog(ctx.getCurrentCatalog());
         Tracers.register(ctx);
+        Tracers.init(ctx, Tracers.Mode.TIMER, null);
 
         StatementBase parsedStmt = ((HttpConnectContext) ctx).getStatement();
         String sql = parsedStmt.getOrigStmt().originStmt;
-
-        addRunningQueryDetail(parsedStmt);
 
         executor = new StmtExecutor(ctx, parsedStmt);
         ctx.setExecutor(executor);
@@ -88,13 +87,14 @@ public class HttpConnectProcessor extends ConnectProcessor {
         }
 
         try {
+            executor.addRunningQueryDetail(parsedStmt);
             executor.execute();
         } catch (IOException e) {
             // Client failed.
             LOG.warn("Process one query failed because IOException: ", e);
             ctx.getState().setError("StarRocks process failed");
             ctx.getState().setErrType(QueryState.ErrType.IO_ERR);
-        } catch (UserException e) {
+        } catch (StarRocksException e) {
             LOG.warn("Process one query failed. SQL: " + sql + ", because.", e);
             ctx.getState().setError(e.getMessage());
             // set is as ANALYSIS_ERR so that it won't be treated as a query failure.
@@ -120,12 +120,11 @@ public class HttpConnectProcessor extends ConnectProcessor {
         // We may need to find some way to resolve this.
         if (executor != null) {
             auditAfterExec(sql, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+            executor.addFinishedQueryDetail();
         } else {
             // executor can be null if we encounter analysis error.
             auditAfterExec(sql, null, null);
         }
-
-        addFinishedQueryDetail();
     }
 
     @Override
@@ -138,7 +137,7 @@ public class HttpConnectProcessor extends ConnectProcessor {
         ctx.setCommand(MysqlCommand.COM_QUERY);
         ctx.setStartTime();
         ctx.setResourceGroup(null);
-        ctx.setErrorCode("");
+        ctx.resetErrorCode();
         this.handleQuery();
         ctx.setStartTime();
 

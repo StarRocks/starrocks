@@ -93,11 +93,10 @@ protected:
         tuple_desc_builder.build(&table_desc_builder);
 
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-        std::vector<bool> nullable_tuples = std::vector<bool>{nullable};
         DescriptorTbl* tbl = nullptr;
         DescriptorTbl::create(state, pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
-        RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+        RowDescriptor* row_desc = pool->add(new RowDescriptor(*tbl, row_tuples));
         *tuple_desc = row_desc->tuple_descriptors()[0];
         return;
     }
@@ -149,9 +148,9 @@ TEST_F(OrcFileWriterTest, TestWriteIntergersNullable) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -160,30 +159,30 @@ TEST_F(OrcFileWriterTest, TestWriteIntergersNullable) {
         std::vector<int8_t> int8_nums{INT8_MIN, INT8_MAX, 0, 1};
         auto count = col0->append_numbers(int8_nums.data(), size(int8_nums) * sizeof(int8_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col0, chunk->num_columns());
+        chunk->append_column(std::move(col0), chunk->num_columns());
 
         auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_SMALLINT), true);
         std::vector<int16_t> int16_nums{INT16_MIN, INT16_MAX, 0, 1};
         count = col1->append_numbers(int16_nums.data(), size(int16_nums) * sizeof(int16_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col1, chunk->num_columns());
+        chunk->append_column(std::move(col1), chunk->num_columns());
 
         auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), true);
         std::vector<int32_t> int32_nums{INT32_MIN, INT32_MAX, 0, 1};
         count = col2->append_numbers(int32_nums.data(), size(int32_nums) * sizeof(int32_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col2, chunk->num_columns());
+        chunk->append_column(std::move(col2), chunk->num_columns());
 
         auto col3 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), true);
         std::vector<int64_t> int64_nums{INT64_MIN, INT64_MAX, 0, 1};
         count = col3->append_numbers(int64_nums.data(), size(int64_nums) * sizeof(int64_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col3, chunk->num_columns());
+        chunk->append_column(std::move(col3), chunk->num_columns());
     }
 
     // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -208,9 +207,9 @@ TEST_F(OrcFileWriterTest, TestWriteIntergersNotNull) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -219,30 +218,30 @@ TEST_F(OrcFileWriterTest, TestWriteIntergersNotNull) {
         std::vector<int8_t> int8_nums{INT8_MIN, INT8_MAX, 0, 1};
         auto count = col0->append_numbers(int8_nums.data(), size(int8_nums) * sizeof(int8_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col0, chunk->num_columns());
+        chunk->append_column(std::move(col0), chunk->num_columns());
 
         auto col1 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_SMALLINT), false);
         std::vector<int16_t> int16_nums{INT16_MIN, INT16_MAX, 0, 1};
         count = col1->append_numbers(int16_nums.data(), size(int16_nums) * sizeof(int16_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col1, chunk->num_columns());
+        chunk->append_column(std::move(col1), chunk->num_columns());
 
         auto col2 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_INT), false);
         std::vector<int32_t> int32_nums{INT32_MIN, INT32_MAX, 0, 1};
         count = col2->append_numbers(int32_nums.data(), size(int32_nums) * sizeof(int32_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col2, chunk->num_columns());
+        chunk->append_column(std::move(col2), chunk->num_columns());
 
         auto col3 = ColumnHelper::create_column(TypeDescriptor::from_logical_type(TYPE_BIGINT), false);
         std::vector<int64_t> int64_nums{INT64_MIN, INT64_MAX, 0, 1};
         count = col3->append_numbers(int64_nums.data(), size(int64_nums) * sizeof(int64_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col3, chunk->num_columns());
+        chunk->append_column(std::move(col3), chunk->num_columns());
     }
 
     // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -262,9 +261,9 @@ TEST_F(OrcFileWriterTest, TestWriteFloat) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -276,13 +275,13 @@ TEST_F(OrcFileWriterTest, TestWriteFloat) {
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
     }
 
     // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -302,9 +301,9 @@ TEST_F(OrcFileWriterTest, TestWriteDouble) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -316,13 +315,13 @@ TEST_F(OrcFileWriterTest, TestWriteDouble) {
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
     }
 
     // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -342,9 +341,9 @@ TEST_F(OrcFileWriterTest, TestWriteBooleanNullable) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -355,13 +354,13 @@ TEST_F(OrcFileWriterTest, TestWriteBooleanNullable) {
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
     }
 
     // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -382,9 +381,9 @@ TEST_F(OrcFileWriterTest, TestWriteBooleanNotNull) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -392,12 +391,12 @@ TEST_F(OrcFileWriterTest, TestWriteBooleanNotNull) {
         auto data_column = BooleanColumn::create();
         std::vector<uint8_t> values = {0, 1, 1, 0};
         data_column->append_numbers(values.data(), values.size() * sizeof(uint8_t));
-        chunk->append_column(data_column, chunk->num_columns());
+        chunk->append_column(std::move(data_column), chunk->num_columns());
     }
 
     // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -420,9 +419,9 @@ TEST_F(OrcFileWriterTest, TestWriteStringsNullable) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -436,8 +435,8 @@ TEST_F(OrcFileWriterTest, TestWriteStringsNullable) {
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
 
         auto data_column2 = BinaryColumn::create();
         data_column2->append("hello");
@@ -448,13 +447,13 @@ TEST_F(OrcFileWriterTest, TestWriteStringsNullable) {
         auto null_column2 = UInt8Column::create();
         std::vector<uint8_t> nulls2 = {0, 0, 1, 1};
         null_column2->append_numbers(nulls2.data(), nulls2.size());
-        auto nullable_column2 = NullableColumn::create(data_column2, null_column2);
-        chunk->append_column(nullable_column2, chunk->num_columns());
+        auto nullable_column2 = NullableColumn::create(std::move(data_column2), std::move(null_column2));
+        chunk->append_column(std::move(nullable_column2), chunk->num_columns());
     }
 
     // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -477,9 +476,9 @@ TEST_F(OrcFileWriterTest, TestWriteStringsNotNull) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -490,7 +489,7 @@ TEST_F(OrcFileWriterTest, TestWriteStringsNotNull) {
         data_column->append("starrocks");
         data_column->append("lakehouse");
 
-        chunk->append_column(data_column, chunk->num_columns());
+        chunk->append_column(std::move(data_column), chunk->num_columns());
 
         auto data_column2 = BinaryColumn::create();
         data_column2->append("hello");
@@ -498,12 +497,12 @@ TEST_F(OrcFileWriterTest, TestWriteStringsNotNull) {
         data_column2->append("abc");
         data_column2->append("def");
 
-        chunk->append_column(data_column2, chunk->num_columns());
+        chunk->append_column(std::move(data_column2), chunk->num_columns());
     }
 
     // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -528,9 +527,9 @@ TEST_F(OrcFileWriterTest, TestWriteDecimal) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -539,24 +538,24 @@ TEST_F(OrcFileWriterTest, TestWriteDecimal) {
         std::vector<int32_t> int32_nums{INT32_MIN, INT32_MAX, 0, 1};
         auto count = col0->append_numbers(int32_nums.data(), size(int32_nums) * sizeof(int32_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col0, chunk->num_columns());
+        chunk->append_column(std::move(col0), chunk->num_columns());
 
         auto col1 = ColumnHelper::create_column(type_descs[1], true);
         std::vector<int64_t> int64_nums{INT64_MIN, INT64_MAX, 0, 1};
         count = col1->append_numbers(int64_nums.data(), size(int64_nums) * sizeof(int64_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col1, chunk->num_columns());
+        chunk->append_column(std::move(col1), chunk->num_columns());
 
         auto col2 = ColumnHelper::create_column(type_descs[2], true);
         std::vector<int128_t> int128_nums{INT64_MIN, INT64_MAX, 0, 1};
         count = col2->append_numbers(int128_nums.data(), size(int128_nums) * sizeof(int128_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col2, chunk->num_columns());
+        chunk->append_column(std::move(col2), chunk->num_columns());
     }
 
     // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -581,9 +580,9 @@ TEST_F(OrcFileWriterTest, TestWriteDecimalNotNull) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -592,24 +591,24 @@ TEST_F(OrcFileWriterTest, TestWriteDecimalNotNull) {
         std::vector<int32_t> int32_nums{INT32_MIN, INT32_MAX, 0, 1};
         auto count = col1->append_numbers(int32_nums.data(), size(int32_nums) * sizeof(int32_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col1, chunk->num_columns());
+        chunk->append_column(std::move(col1), chunk->num_columns());
 
         auto col2 = ColumnHelper::create_column(type_descs[1], false);
         std::vector<int64_t> int64_nums{INT64_MIN, INT64_MAX, 0, 1};
         count = col2->append_numbers(int64_nums.data(), size(int64_nums) * sizeof(int64_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col2, chunk->num_columns());
+        chunk->append_column(std::move(col2), chunk->num_columns());
 
         auto col3 = ColumnHelper::create_column(type_descs[2], false);
         std::vector<int128_t> int128_nums{INT64_MIN, INT64_MAX, 0, 1};
         count = col3->append_numbers(int128_nums.data(), size(int128_nums) * sizeof(int128_t));
         ASSERT_EQ(4, count);
-        chunk->append_column(col3, chunk->num_columns());
+        chunk->append_column(std::move(col3), chunk->num_columns());
     }
 
     // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -631,9 +630,9 @@ TEST_F(OrcFileWriterTest, TestWriteDate) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -653,13 +652,13 @@ TEST_F(OrcFileWriterTest, TestWriteDate) {
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
     }
 
     // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -681,9 +680,9 @@ TEST_F(OrcFileWriterTest, TestWriteDateNotNull) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -700,12 +699,12 @@ TEST_F(OrcFileWriterTest, TestWriteDateNotNull) {
             data_column->append_default();
         }
 
-        chunk->append_column(data_column, chunk->num_columns());
+        chunk->append_column(std::move(data_column), chunk->num_columns());
     }
 
     // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -717,7 +716,7 @@ TEST_F(OrcFileWriterTest, TestWriteDateNotNull) {
     assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
-TEST_F(OrcFileWriterTest, TestWriteTimestamp) {
+TEST_F(OrcFileWriterTest, TestAllocatedBytes) {
     ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
     auto type_datetime = TypeDescriptor::from_logical_type(TYPE_DATETIME);
     std::vector<TypeDescriptor> type_descs{type_datetime};
@@ -727,9 +726,9 @@ TEST_F(OrcFileWriterTest, TestWriteTimestamp) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -750,13 +749,66 @@ TEST_F(OrcFileWriterTest, TestWriteTimestamp) {
         auto null_column = UInt8Column::create();
         std::vector<uint8_t> nulls = {1, 0, 1, 0};
         null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
     }
 
     // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
+    ASSERT_OK(writer->write(chunk.get()));
+    ASSERT_TRUE(writer->get_allocated_bytes() > 0);
+    auto result = writer->commit();
+    ASSERT_TRUE(writer->get_allocated_bytes() == 0);
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 4);
+
+    // read chunk
+    ChunkPtr read_chunk;
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, true));
+
+    // verify correctness
+    assert_equal_chunk(chunk.get(), read_chunk.get());
+}
+
+TEST_F(OrcFileWriterTest, TestWriteTimestamp) {
+    ASSERT_OK(ignore_not_found(_fs->delete_file(_file_path)));
+    auto type_datetime = TypeDescriptor::from_logical_type(TYPE_DATETIME);
+    std::vector<TypeDescriptor> type_descs{type_datetime};
+
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
+    ASSERT_OK(writer->init());
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        // not-null column
+        auto data_column = TimestampColumn::create();
+        {
+            Datum datum;
+            datum.set_timestamp(TimestampValue::create(1999, 9, 9, 0, 0, 0));
+            data_column->append_datum(datum);
+            datum.set_timestamp(TimestampValue::create(1999, 9, 10, 1, 1, 1));
+            data_column->append_datum(datum);
+            datum.set_timestamp(TimestampValue::create(1999, 9, 11, 2, 2, 2));
+            data_column->append_datum(datum);
+            data_column->append_default();
+        }
+
+        auto null_column = UInt8Column::create();
+        std::vector<uint8_t> nulls = {1, 0, 1, 0};
+        null_column->append_numbers(nulls.data(), nulls.size());
+        auto nullable_column = NullableColumn::create(std::move(data_column), std::move(null_column));
+        chunk->append_column(std::move(nullable_column), chunk->num_columns());
+    }
+
+    // write chunk
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -778,9 +830,9 @@ TEST_F(OrcFileWriterTest, TestWriteTimestampNotNull) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
 
     auto chunk = std::make_shared<Chunk>();
@@ -798,12 +850,12 @@ TEST_F(OrcFileWriterTest, TestWriteTimestampNotNull) {
             data_column->append_default();
         }
 
-        chunk->append_column(data_column, chunk->num_columns());
+        chunk->append_column(std::move(data_column), chunk->num_columns());
     }
 
     // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
     ASSERT_OK(result.io_status);
     ASSERT_EQ(result.file_statistics.record_count, 4);
 
@@ -832,57 +884,10 @@ TEST_F(OrcFileWriterTest, TestWriteStructNullable) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
-    ASSERT_OK(writer->init());
-
-    auto chunk = std::make_shared<Chunk>();
-    {
-        std::vector<uint8_t> nulls{0, 0, 1, 0};
-
-        auto data_col_a = Int16Column::create();
-        std::vector<int16_t> nums_a{1, 2, -99, 3};
-        data_col_a->append_numbers(nums_a.data(), sizeof(int16_t) * nums_a.size());
-        auto null_col_a = UInt8Column::create();
-        null_col_a->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
-        auto nullable_col_a = NullableColumn::create(data_col_a, null_col_a);
-
-        auto data_col_b = Int32Column::create();
-        std::vector<int32_t> nums_b{1, 2, -99, 3};
-        data_col_b->append_numbers(nums_b.data(), sizeof(int32_t) * nums_b.size());
-        auto null_col_b = UInt8Column::create();
-        null_col_b->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
-        auto nullable_col_b = NullableColumn::create(data_col_b, null_col_b);
-
-        auto data_col_c = Int64Column::create();
-        std::vector<int64_t> nums_c{1, 2, -99, 3};
-        data_col_c->append_numbers(nums_c.data(), sizeof(int64_t) * nums_c.size());
-        auto null_col_c = UInt8Column::create();
-        null_col_c->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
-        auto nullable_col_c = NullableColumn::create(data_col_c, null_col_c);
-
-        Columns fields{nullable_col_a, nullable_col_b, nullable_col_c};
-        auto struct_column = StructColumn::create(fields, type_int_struct.field_names);
-        auto null_column = UInt8Column::create();
-        null_column->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
-        auto nullable_col = NullableColumn::create(struct_column, null_column);
-
-        chunk->append_column(nullable_col, chunk->num_columns());
-    }
-
-    // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
-    ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_statistics.record_count, 4);
-
-    // read chunk
-    ChunkPtr read_chunk;
-    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, true));
-
-    // verify correctness
-    assert_equal_chunk(chunk.get(), read_chunk.get());
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
+    ASSERT_ERROR(writer->init());
 }
 
 TEST_F(OrcFileWriterTest, TestWriteStructNotNull) {
@@ -902,57 +907,10 @@ TEST_F(OrcFileWriterTest, TestWriteStructNotNull) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
-    ASSERT_OK(writer->init());
-
-    auto chunk = std::make_shared<Chunk>();
-    {
-        std::vector<uint8_t> nulls{0, 0, 0, 0};
-
-        auto data_col_a = Int16Column::create();
-        std::vector<int16_t> nums_a{1, 2, -99, 3};
-        data_col_a->append_numbers(nums_a.data(), sizeof(int16_t) * nums_a.size());
-        auto null_col_a = UInt8Column::create();
-        null_col_a->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
-        auto nullable_col_a = NullableColumn::create(data_col_a, null_col_a);
-
-        auto data_col_b = Int32Column::create();
-        std::vector<int32_t> nums_b{1, 2, -99, 3};
-        data_col_b->append_numbers(nums_b.data(), sizeof(int32_t) * nums_b.size());
-        auto null_col_b = UInt8Column::create();
-        null_col_b->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
-        auto nullable_col_b = NullableColumn::create(data_col_b, null_col_b);
-
-        auto data_col_c = Int64Column::create();
-        std::vector<int64_t> nums_c{1, 2, -99, 3};
-        data_col_c->append_numbers(nums_c.data(), sizeof(int64_t) * nums_c.size());
-        auto null_col_c = UInt8Column::create();
-        null_col_c->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
-        auto nullable_col_c = NullableColumn::create(data_col_c, null_col_c);
-
-        Columns fields{nullable_col_a, nullable_col_b, nullable_col_c};
-        auto struct_column = StructColumn::create(fields, type_int_struct.field_names);
-        auto null_column = UInt8Column::create();
-        null_column->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
-        auto nullable_col = NullableColumn::create(struct_column, null_column);
-
-        chunk->append_column(nullable_col, chunk->num_columns());
-    }
-
-    // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
-    ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_statistics.record_count, 4);
-
-    // read chunk
-    ChunkPtr read_chunk;
-    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, true));
-
-    // verify correctness
-    assert_equal_chunk(chunk.get(), read_chunk.get());
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
+    ASSERT_ERROR(writer->init());
 }
 
 TEST_F(OrcFileWriterTest, TestWriteMapNullable) {
@@ -971,55 +929,10 @@ TEST_F(OrcFileWriterTest, TestWriteMapNullable) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
-    ASSERT_OK(writer->init());
-
-    // [1 -> 1], NULL, [], [2 -> 2, 3 -> NULL]
-    auto chunk = std::make_shared<Chunk>();
-    {
-        auto key_data_col = Int32Column::create();
-        std::vector<int32_t> key_nums{1, 2, 3, 4};
-        key_data_col->append_numbers(key_nums.data(), sizeof(int32_t) * key_nums.size());
-        auto key_null_col = UInt8Column::create();
-        std::vector<uint8_t> key_nulls{0, 0, 0, 0};
-        key_null_col->append_numbers(key_nulls.data(), sizeof(uint8_t) * key_nulls.size());
-        auto key_col = NullableColumn::create(key_data_col, key_null_col);
-
-        auto value_data_col = Int32Column::create();
-        std::vector<int32_t> value_nums{1, 2, -99, 4};
-        value_data_col->append_numbers(value_nums.data(), sizeof(int32_t) * value_nums.size());
-        auto value_null_col = UInt8Column::create();
-        std::vector<uint8_t> value_nulls{0, 0, 1, 0};
-        value_null_col->append_numbers(value_nulls.data(), sizeof(uint8_t) * value_nulls.size());
-        auto value_col = NullableColumn::create(value_data_col, value_null_col);
-
-        auto offsets_col = UInt32Column::create();
-        std::vector<uint32_t> offsets{0, 1, 1, 1, 4};
-        offsets_col->append_numbers(offsets.data(), sizeof(uint32_t) * offsets.size());
-        auto map_col = MapColumn::create(key_col, value_col, offsets_col);
-
-        std::vector<uint8_t> _nulls{0, 1, 0, 0};
-        auto null_col = UInt8Column::create();
-        null_col->append_numbers(_nulls.data(), sizeof(uint8_t) * _nulls.size());
-        auto nullable_col = NullableColumn::create(map_col, null_col);
-
-        chunk->append_column(nullable_col, chunk->num_columns());
-    }
-
-    // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
-    ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_statistics.record_count, 4);
-
-    // read chunk
-    ChunkPtr read_chunk;
-    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, true));
-
-    // verify correctness
-    assert_equal_chunk(chunk.get(), read_chunk.get());
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
+    ASSERT_ERROR(writer->init());
 }
 
 TEST_F(OrcFileWriterTest, TestWriteMapNotNull) {
@@ -1038,54 +951,10 @@ TEST_F(OrcFileWriterTest, TestWriteMapNotNull) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
-    ASSERT_OK(writer->init());
-
-    auto chunk = std::make_shared<Chunk>();
-    {
-        auto key_data_col = Int32Column::create();
-        std::vector<int32_t> key_nums{1, 2, 3, 4};
-        key_data_col->append_numbers(key_nums.data(), sizeof(int32_t) * key_nums.size());
-        auto key_null_col = UInt8Column::create();
-        std::vector<uint8_t> key_nulls{0, 0, 0, 0};
-        key_null_col->append_numbers(key_nulls.data(), sizeof(uint8_t) * key_nulls.size());
-        auto key_col = NullableColumn::create(key_data_col, key_null_col);
-
-        auto value_data_col = Int32Column::create();
-        std::vector<int32_t> value_nums{1, 2, -99, 4};
-        value_data_col->append_numbers(value_nums.data(), sizeof(int32_t) * value_nums.size());
-        auto value_null_col = UInt8Column::create();
-        std::vector<uint8_t> value_nulls{0, 0, 1, 0};
-        value_null_col->append_numbers(value_nulls.data(), sizeof(uint8_t) * value_nulls.size());
-        auto value_col = NullableColumn::create(value_data_col, value_null_col);
-
-        auto offsets_col = UInt32Column::create();
-        std::vector<uint32_t> offsets{0, 1, 1, 1, 4};
-        offsets_col->append_numbers(offsets.data(), sizeof(uint32_t) * offsets.size());
-        auto map_col = MapColumn::create(key_col, value_col, offsets_col);
-
-        std::vector<uint8_t> _nulls{0, 0, 0, 0};
-        auto null_col = UInt8Column::create();
-        null_col->append_numbers(_nulls.data(), sizeof(uint8_t) * _nulls.size());
-        auto nullable_col = NullableColumn::create(map_col, null_col);
-
-        chunk->append_column(nullable_col, chunk->num_columns());
-    }
-
-    // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
-    ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_statistics.record_count, 4);
-
-    // read chunk
-    ChunkPtr read_chunk;
-    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, true));
-
-    // verify correctness
-    assert_equal_chunk(chunk.get(), read_chunk.get());
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
+    ASSERT_ERROR(writer->init());
 }
 
 TEST_F(OrcFileWriterTest, TestWriteArrayNullable) {
@@ -1101,47 +970,10 @@ TEST_F(OrcFileWriterTest, TestWriteArrayNullable) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
-    ASSERT_OK(writer->init());
-
-    // [1], NULL, [], [2, NULL, 3]
-    auto chunk = std::make_shared<Chunk>();
-    {
-        auto elements_data_col = Int32Column::create();
-        std::vector<int32_t> nums{1, 2, -99, 3};
-        elements_data_col->append_numbers(nums.data(), sizeof(int32_t) * nums.size());
-        auto elements_null_col = UInt8Column::create();
-        std::vector<uint8_t> nulls{0, 0, 1, 0};
-        elements_null_col->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
-        auto elements_col = NullableColumn::create(elements_data_col, elements_null_col);
-
-        auto offsets_col = UInt32Column::create();
-        std::vector<uint32_t> offsets{0, 1, 1, 1, 4};
-        offsets_col->append_numbers(offsets.data(), sizeof(uint32_t) * offsets.size());
-        auto array_col = ArrayColumn::create(elements_col, offsets_col);
-
-        std::vector<uint8_t> _nulls{0, 1, 0, 0};
-        auto null_col = UInt8Column::create();
-        null_col->append_numbers(_nulls.data(), sizeof(uint8_t) * _nulls.size());
-        auto nullable_col = NullableColumn::create(array_col, null_col);
-
-        chunk->append_column(nullable_col, chunk->num_columns());
-    }
-
-    // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
-    ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_statistics.record_count, 4);
-
-    // read chunk
-    ChunkPtr read_chunk;
-    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, true));
-
-    // verify correctness
-    assert_equal_chunk(chunk.get(), read_chunk.get());
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
+    ASSERT_ERROR(writer->init());
 }
 
 TEST_F(OrcFileWriterTest, TestWriteArrayNotNull) {
@@ -1157,47 +989,10 @@ TEST_F(OrcFileWriterTest, TestWriteArrayNotNull) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
-    ASSERT_OK(writer->init());
-
-    // [1, 2]
-    auto chunk = std::make_shared<Chunk>();
-    {
-        auto elements_data_col = Int32Column::create();
-        std::vector<int32_t> nums{1, 2};
-        elements_data_col->append_numbers(nums.data(), sizeof(int32_t) * nums.size());
-        auto elements_null_col = UInt8Column::create();
-        std::vector<uint8_t> nulls{0, 0};
-        elements_null_col->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
-        auto elements_col = NullableColumn::create(elements_data_col, elements_null_col);
-
-        auto offsets_col = UInt32Column::create();
-        std::vector<uint32_t> offsets{0, 2};
-        offsets_col->append_numbers(offsets.data(), sizeof(uint32_t) * offsets.size());
-        auto array_col = ArrayColumn::create(elements_col, offsets_col);
-
-        std::vector<uint8_t> _nulls{0};
-        auto null_col = UInt8Column::create();
-        null_col->append_numbers(_nulls.data(), sizeof(uint8_t) * _nulls.size());
-        auto nullable_col = NullableColumn::create(array_col, null_col);
-
-        chunk->append_column(nullable_col, chunk->num_columns());
-    }
-
-    // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
-    ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_statistics.record_count, 1);
-
-    // read chunk
-    ChunkPtr read_chunk;
-    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, true));
-
-    // verify correctness
-    assert_equal_chunk(chunk.get(), read_chunk.get());
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
+    ASSERT_ERROR(writer->init());
 }
 
 TEST_F(OrcFileWriterTest, TestWriteNestedArray) {
@@ -1216,61 +1011,13 @@ TEST_F(OrcFileWriterTest, TestWriteNestedArray) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto writer = std::make_unique<formats::ORCFileWriter>(
-            _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, nullptr, nullptr);
-    ASSERT_OK(writer->init());
-
-    // [[1], NULL, [], [2, NULL, 3]], [[4, 5], [6]], NULL
-    auto chunk = std::make_shared<Chunk>();
-    {
-        auto int_data_col = Int32Column::create();
-        std::vector<int32_t> nums{1, 2, -99, 3, 4, 5, 6};
-        int_data_col->append_numbers(nums.data(), sizeof(int32_t) * nums.size());
-        auto int_null_col = UInt8Column::create();
-        std::vector<uint8_t> nulls{0, 0, 1, 0, 0, 0, 0};
-        int_null_col->append_numbers(nulls.data(), sizeof(uint8_t) * nulls.size());
-        auto int_col = NullableColumn::create(int_data_col, int_null_col);
-
-        auto offsets_col = UInt32Column::create();
-        std::vector<uint32_t> offsets{0, 1, 1, 1, 4, 6, 7};
-        offsets_col->append_numbers(offsets.data(), sizeof(uint32_t) * offsets.size());
-        auto array_data_col = ArrayColumn::create(int_col, offsets_col);
-
-        std::vector<uint8_t> _nulls{0, 1, 0, 0, 0, 0};
-        auto array_null_col = UInt8Column::create();
-        array_null_col->append_numbers(_nulls.data(), sizeof(uint8_t) * _nulls.size());
-        auto array_col = NullableColumn::create(array_data_col, array_null_col);
-
-        auto array_array_offsets_col = UInt32Column::create();
-        std::vector<uint32_t> array_array_offsets{0, 4, 6, 6};
-        array_array_offsets_col->append_numbers(array_array_offsets.data(),
-                                                sizeof(uint32_t) * array_array_offsets.size());
-        auto array_array_data_col = ArrayColumn::create(array_col, array_array_offsets_col);
-
-        std::vector<uint8_t> outer_nulls{0, 0, 1};
-        auto array_array_null_col = UInt8Column::create();
-        array_array_null_col->append_numbers(outer_nulls.data(), sizeof(uint8_t) * outer_nulls.size());
-        auto array_array_col = NullableColumn::create(array_array_data_col, array_array_null_col);
-
-        chunk->append_column(array_array_col, chunk->num_columns());
-    }
-
-    // write chunk
-    ASSERT_OK(writer->write(chunk).get());
-    auto result = writer->commit().get();
-    ASSERT_OK(result.io_status);
-    ASSERT_EQ(result.file_statistics.record_count, 3);
-
-    // read chunk
-    ChunkPtr read_chunk;
-    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, true));
-
-    // verify correctness
-    assert_equal_chunk(chunk.get(), read_chunk.get());
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
+    ASSERT_ERROR(writer->init());
 }
 
-TEST_F(OrcFileWriterTest, TestWriteWithExecutors) {
+TEST_F(OrcFileWriterTest, TestUnknownCompression) {
     auto type_bool = TypeDescriptor::from_logical_type(TYPE_BOOLEAN);
     std::vector<TypeDescriptor> type_descs{type_bool};
 
@@ -1279,31 +1026,10 @@ TEST_F(OrcFileWriterTest, TestWriteWithExecutors) {
     auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
     auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
     auto writer_options = std::make_shared<formats::ORCWriterOptions>();
-    auto executors = PriorityThreadPool("test", 1, 1);
     auto writer = std::make_unique<formats::ORCFileWriter>(
             _file_path, std::move(output_stream), column_names, type_descs, std::move(column_evaluators),
-            TCompressionType::NO_COMPRESSION, writer_options, []() {}, &executors, nullptr);
-    ASSERT_OK(writer->init());
-
-    auto chunk = std::make_shared<Chunk>();
-    {
-        auto data_column = BooleanColumn::create();
-        std::vector<uint8_t> values = {0, 1, 1, 0};
-        data_column->append_numbers(values.data(), values.size() * sizeof(uint8_t));
-        auto null_column = UInt8Column::create();
-        std::vector<uint8_t> nulls = {1, 0, 1, 0};
-        null_column->append_numbers(nulls.data(), nulls.size());
-        auto nullable_column = NullableColumn::create(data_column, null_column);
-        chunk->append_column(nullable_column, chunk->num_columns());
-    }
-
-    // write chunk twice
-    ASSERT_TRUE(writer->write(chunk).get().ok());
-    ASSERT_TRUE(writer->write(chunk).get().ok());
-    auto result = writer->commit().get();
-
-    ASSERT_TRUE(result.io_status.ok());
-    ASSERT_EQ(result.file_statistics.record_count, 8);
+            TCompressionType::UNKNOWN_COMPRESSION, writer_options, []() {});
+    ASSERT_ERROR(writer->init());
 }
 
 TEST_F(OrcFileWriterTest, TestFactory) {
@@ -1318,8 +1044,37 @@ TEST_F(OrcFileWriterTest, TestFactory) {
     ASSERT_OK(factory.init());
     auto maybe_writer = factory.create("/test.orc");
     ASSERT_OK(maybe_writer.status());
-    auto writer = maybe_writer.value();
+}
+
+TEST_F(OrcFileWriterTest, TestOrcPatchedBaseWrongBaseWidth) {
+    std::vector<TypeDescriptor> type_descs{TypeDescriptor::from_logical_type(TYPE_BIGINT)};
+    auto column_names = _make_type_names(type_descs);
+    auto output_file = _fs->new_writable_file(_file_path).value();
+    auto output_stream = std::make_unique<OrcOutputStream>(std::move(output_file));
+    auto column_evaluators = ColumnSlotIdEvaluator::from_types(type_descs);
+    auto writer_options = std::make_shared<formats::ORCWriterOptions>();
+    auto writer = std::make_unique<formats::ORCFileWriter>(_file_path, std::move(output_stream), column_names,
+                                                           type_descs, std::move(column_evaluators),
+                                                           TCompressionType::NO_COMPRESSION, writer_options, []() {});
     ASSERT_OK(writer->init());
+
+    auto chunk = std::make_shared<Chunk>();
+    {
+        auto intColumn = Int64Column::create();
+        std::vector<int64_t> intValues = {12, -5400, -5400, 12,    -5400, 12, 12,    -5400, -5400, 24363720,  -2654,
+                                          12, -5400, 12,    -5400, -5400, 12, -5400, 12,    12,    -14000000, 4};
+        intColumn->append_numbers(intValues.data(), intValues.size() * sizeof(int64_t));
+        chunk->append_column(std::move(intColumn), chunk->num_columns());
+    }
+
+    ASSERT_OK(writer->write(chunk.get()));
+    auto result = writer->commit();
+    ASSERT_OK(result.io_status);
+    ASSERT_EQ(result.file_statistics.record_count, 22);
+
+    ChunkPtr read_chunk;
+    ASSERT_OK(_read_chunk(read_chunk, column_names, type_descs, false));
+    assert_equal_chunk(chunk.get(), read_chunk.get());
 }
 
 } // namespace starrocks::formats

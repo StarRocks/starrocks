@@ -162,6 +162,7 @@ public:
 private:
     friend class Future<R>;
     friend class FutureBase<R>;
+    friend class SharedFuture<R>;
     friend class Promise<R>;
 
     R& value() noexcept { return _result.value(); }

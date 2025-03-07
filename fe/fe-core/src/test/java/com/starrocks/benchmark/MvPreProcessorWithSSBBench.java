@@ -112,7 +112,6 @@ public class MvPreProcessorWithSSBBench extends MaterializedViewTestBase {
                     "            INNER JOIN supplier AS s ON s.S_SUPPKEY = l.LO_SUPPKEY\n" +
                     "            INNER JOIN part AS p ON p.P_PARTKEY = l.LO_PARTKEY\n" +
                     "            INNER JOIN dates AS d ON l.lo_orderdate = d.d_datekey;\n", i);
-            System.out.println("create table :" + i);
             starRocksAssert.withMaterializedView(mv);
         }
 

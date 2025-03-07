@@ -370,7 +370,7 @@ public abstract class JoinOrder {
 
         UKFKConstraints.JoinProperty joinProperty = null;
         SessionVariable sessionVariable = ConnectContext.get().getSessionVariable();
-        if (sessionVariable.isEnableUKFKOpt()) {
+        if (sessionVariable.isEnableUKFKJoinReorder()) {
             UKFKConstraintsCollector.collectColumnConstraints(leftExprInfo.expr);
             UKFKConstraintsCollector.collectColumnConstraints(rightExprInfo.expr);
             UKFKConstraints constraint = UKFKConstraintsCollector.buildJoinColumnConstraint(newJoin,

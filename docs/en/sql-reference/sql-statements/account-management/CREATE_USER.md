@@ -1,28 +1,31 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # CREATE USER
 
-import UserManagementPriv from '../../../assets/commonMarkdown/userManagementPriv.md'
+import UserManagementPriv from '../../../_assets/commonMarkdown/userManagementPriv.md'
 
 ## Description
 
-Creates a StarRocks user. In StarRocks, a "user_identity" uniquely identifies a user.
+Creates a StarRocks user. In StarRocks, a "user_identity" uniquely identifies a user. From v3.3.3, StarRocks supports setting user properties when creating a user.
 
 <UserManagementPriv />
 
 ### Syntax
 
 ```SQL
-CREATE USER <user_identity> [auth_option] [DEFAULT ROLE <role_name>[, <role_name>, ...]]
+CREATE USER [IF NOT EXISTS] <user_identity> 
+[auth_option] 
+[DEFAULT ROLE <role_name>[, <role_name>, ...]]
+[PROPERTIES ("key"="value", ...)]
 ```
 
 ## Parameters
 
 - `user_identity` consists of two parts, "user_name" and "host", in the format of `username@'userhost'`.  For the "host" part, you can use `%` for fuzzy match. If "host" is not specified, "%" is used by default, meaning that the user can connect to StarRocks from any host.
 
-  For the naming conventions of usernames, see [System limits](../../../reference/System_limit.md).
+  For the naming conventions of usernames, see [System limits](../../System_limit.md).
 
 - `auth_option` specifies the authentication method. Currently, three authentication methods are supported: StarRocks native password, mysql_native_password, and "authentication_ldap_simple". StarRocks native password is the same as mysql_native_password in logic but slightly differs in syntax. One user identity can use only one authentication method.
 
@@ -46,6 +49,26 @@ CREATE USER <user_identity> [auth_option] [DEFAULT ROLE <role_name>[, <role_name
 > Note: StarRocks encrypts users' passwords before storing them.
 
 - `DEFAULT ROLE <role_name>[, <role_name>, ...]`: If this parameter is specified, the roles are automatically assigned to the user and activated by default when the user logs in. If not specified, this user does not have any privileges. Make sure that all the roles that are specified already exist.
+
+- `PROPERTIES` sets user properties, including the maximum user connection number (`max_user_connections`), catalog, database or session variables on the user level. User-level session variables take effect as the user logs in. This feature is supported from v3.3.3.
+
+  ```SQL
+  -- Set the maximum user connection number.
+  PROPERTIES ("max_user_connections" = "<Integer>")
+  -- Set the catalog.
+  PROPERTIES ("catalog" = "<catalog_name>")
+  -- Set the database.
+  PROPERTIES ("catalog" = "<catalog_name>", "database" = "<database_name>")
+  -- Set session variables.
+  PROPERTIES ("session.<variable_name>" = "<value>", ...)
+  ```
+
+  :::tip
+  - `PROPERTIES` works on user instead of user identity.
+  - Global variables and read-only variables cannot be set for a specific user.
+  - Variables take effect in the following order: SET_VAR > Session > User property > Global.
+  - You can use [SHOW PROPERTY](./SHOW_PROPERTY.md) to view the properties of a specific user.
+  :::
 
 ## Examples
 
@@ -92,4 +115,28 @@ Example 7: Create a user who is allowed to log in from the '192.168' subnet and 
 
 ```SQL
 CREATE USER 'jack'@'192.168.%' DEFAULT ROLE db_admin, user_admin;
+```
+
+Example 8: Create a user and set its maximum user connection number to `600`.
+
+```SQL
+CREATE USER 'jack'@'192.168.%' PROPERTIES ("max_user_connections" = "600");
+```
+
+Example 9: Create a user and set the catalog of the user to `hive_catalog`.
+
+```SQL
+CREATE USER 'jack'@'192.168.%' PROPERTIES ('catalog' = 'hive_catalog');
+```
+
+Example 10: Create a user and set the database of the user to `test_db` in the default catalog.
+
+```SQL
+CREATE USER 'jack'@'192.168.%' PROPERTIES ('catalog' = 'default_catalog', 'database' = 'test_db');
+```
+
+Example 11: Create a user and set the session variable `query_timeout` to `600` for the user.
+
+```SQL
+CREATE USER 'jack'@'192.168.%' PROPERTIES ('session.query_timeout' = '600');
 ```

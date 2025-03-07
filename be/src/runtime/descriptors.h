@@ -38,6 +38,7 @@
 #include <google/protobuf/stubs/common.h>
 
 #include <ostream>
+#include <shared_mutex>
 #include <unordered_map>
 #include <vector>
 
@@ -108,6 +109,7 @@ public:
     std::string debug_string() const;
 
     int32_t col_unique_id() const { return _col_unique_id; }
+    const std::string& col_physical_name() const { return _col_physical_name; }
 
     SlotDescriptor(const TSlotDescriptor& tdesc);
 
@@ -124,6 +126,7 @@ private:
     const NullIndicatorOffset _null_indicator_offset;
     const std::string _col_name;
     const int32_t _col_unique_id;
+    const std::string _col_physical_name;
 
     // the idx of the slot in the tuple descriptor (0-based).
     // this is provided by the FE
@@ -162,11 +165,7 @@ private:
 
 class HdfsPartitionDescriptor {
 public:
-    HdfsPartitionDescriptor(const THdfsTable& thrift_table, const THdfsPartition& thrift_partition);
-    HdfsPartitionDescriptor(const THudiTable& thrift_table, const THdfsPartition& thrift_partition);
-    HdfsPartitionDescriptor(const TDeltaLakeTable& thrift_table, const THdfsPartition& thrift_partition);
-    HdfsPartitionDescriptor(const TIcebergTable& thrift_table, const THdfsPartition& thrift_partition);
-
+    HdfsPartitionDescriptor(const THdfsPartition& thrift_partition);
     int64_t id() const { return _id; }
     THdfsFileFormat::type file_format() { return _file_format; }
     std::string& location() { return _location; }
@@ -175,7 +174,7 @@ public:
     // partition slots would be [x, y]
     // partition key values wold be [1, 2]
     std::vector<ExprContext*>& partition_key_value_evals() { return _partition_key_value_evals; }
-    Status create_part_key_exprs(RuntimeState* state, ObjectPool* pool, int32_t chunk_size);
+    Status create_part_key_exprs(RuntimeState* state, ObjectPool* pool);
 
 private:
     int64_t _id = 0;
@@ -196,9 +195,9 @@ public:
     virtual bool has_base_path() const { return false; }
     virtual const std::string& get_base_path() const { return _table_location; }
 
-    Status create_key_exprs(RuntimeState* state, ObjectPool* pool, int32_t chunk_size) {
+    Status create_key_exprs(RuntimeState* state, ObjectPool* pool) {
         for (auto& part : _partition_id_to_desc_map) {
-            RETURN_IF_ERROR(part.second->create_part_key_exprs(state, pool, chunk_size));
+            RETURN_IF_ERROR(part.second->create_part_key_exprs(state, pool));
         }
         return Status::OK();
     }
@@ -206,10 +205,14 @@ public:
     StatusOr<TPartitionMap*> deserialize_partition_map(const TCompressedPartitionMap& compressed_partition_map,
                                                        ObjectPool* pool);
 
+    Status add_partition_value(RuntimeState* runtime_state, ObjectPool* pool, int64_t id,
+                               const THdfsPartition& thrift_partition);
+
 protected:
     std::string _hdfs_base_path;
     std::vector<TColumn> _columns;
     std::vector<TColumn> _partition_columns;
+    mutable std::shared_mutex _map_mutex;
     std::map<int64_t, HdfsPartitionDescriptor*> _partition_id_to_desc_map;
     std::string _table_location;
 };
@@ -241,7 +244,6 @@ public:
     ~IcebergTableDescriptor() override = default;
     bool has_partition() const override { return false; }
     const TIcebergSchema* get_iceberg_schema() const { return &_t_iceberg_schema; }
-    const TIcebergSchema* get_iceberg_equal_delete_schema() const { return &_t_iceberg_equal_delete_schema; }
     bool is_unpartitioned_table() { return _partition_column_names.empty(); }
     const std::vector<std::string>& partition_column_names() { return _partition_column_names; }
     const std::vector<std::string> full_column_names();
@@ -252,7 +254,6 @@ public:
 
 private:
     TIcebergSchema _t_iceberg_schema;
-    TIcebergSchema _t_iceberg_equal_delete_schema;
     std::vector<std::string> _partition_column_names;
 };
 
@@ -281,6 +282,7 @@ public:
     DeltaLakeTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
     ~DeltaLakeTableDescriptor() override = default;
     bool has_partition() const override { return true; }
+    bool has_base_path() const override { return true; }
 };
 
 class HudiTableDescriptor : public HiveTableDescriptor {
@@ -330,6 +332,28 @@ private:
     std::string _database_name;
     std::string _table_name;
     std::string _time_zone;
+};
+
+class IcebergMetadataTableDescriptor : public HiveTableDescriptor {
+public:
+    IcebergMetadataTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
+    ~IcebergMetadataTableDescriptor() override = default;
+    const std::string& get_hive_column_names() const;
+    const std::string& get_hive_column_types() const;
+    const std::string& get_time_zone() const;
+    bool has_partition() const override { return false; }
+
+private:
+    std::string _hive_column_names;
+    std::string _hive_column_types;
+    std::string _time_zone;
+};
+
+class KuduTableDescriptor : public HiveTableDescriptor {
+public:
+    KuduTableDescriptor(const TTableDescriptor& tdesc, ObjectPool* pool);
+    ~KuduTableDescriptor() override = default;
+    bool has_partition() const override { return false; }
 };
 
 // ===========================================
@@ -424,6 +448,15 @@ public:
     const TableDescriptor* table_desc() const { return _table_desc; }
     void set_table_desc(TableDescriptor* table_desc) { _table_desc = table_desc; }
 
+    SlotDescriptor* get_slot_by_id(SlotId id) const {
+        for (auto s : _slots) {
+            if (s->id() == id) {
+                return s;
+            }
+        }
+        return nullptr;
+    }
+
     TupleId id() const { return _id; }
 
     std::string debug_string() const;
@@ -457,6 +490,7 @@ public:
     TableDescriptor* get_table_descriptor(TableId id) const;
     TupleDescriptor* get_tuple_descriptor(TupleId id) const;
     SlotDescriptor* get_slot_descriptor(SlotId id) const;
+    SlotDescriptor* get_slot_descriptor_with_column(SlotId id) const;
 
     // return all registered tuple descriptors
     void get_tuple_descs(std::vector<TupleDescriptor*>* descs) const;
@@ -471,6 +505,7 @@ private:
     TableDescriptorMap _tbl_desc_map;
     TupleDescriptorMap _tuple_desc_map;
     SlotDescriptorMap _slot_desc_map;
+    SlotDescriptorMap _slot_with_column_name_map;
 
     DescriptorTbl() = default;
 };
@@ -484,15 +519,12 @@ private:
 // case)
 class RowDescriptor {
 public:
-    RowDescriptor(const DescriptorTbl& desc_tbl, const std::vector<TTupleId>& row_tuples,
-                  const std::vector<bool>& nullable_tuples);
+    RowDescriptor(const DescriptorTbl& desc_tbl, const std::vector<TTupleId>& row_tuples);
 
     // standard copy c'tor, made explicit here
-    RowDescriptor(const RowDescriptor& desc)
+    RowDescriptor(const RowDescriptor& desc) = default;
 
-            = default;
-
-    RowDescriptor(TupleDescriptor* tuple_desc, bool is_nullable);
+    RowDescriptor(TupleDescriptor* tuple_desc);
 
     // dummy descriptor, needed for the JNI EvalPredicate() function
     RowDescriptor() = default;
@@ -524,9 +556,6 @@ private:
 
     // map from position of tuple w/in row to its descriptor
     std::vector<TupleDescriptor*> _tuple_desc_map;
-
-    // _tuple_idx_nullable_map[i] is true if tuple i can be null
-    std::vector<bool> _tuple_idx_nullable_map;
 
     // map from TupleId to position of tuple w/in row
     std::vector<int> _tuple_idx_map;

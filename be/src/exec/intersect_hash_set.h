@@ -52,7 +52,7 @@ template <typename HashSet>
 class IntersectHashSet {
 public:
     using Iterator = typename HashSet::iterator;
-    using KeyVector = typename std::vector<Slice>;
+    using KeyVector = Buffer<Slice>;
 
     IntersectHashSet() = default;
 
@@ -70,7 +70,7 @@ public:
     Status refine_intersect_row(RuntimeState* state, const ChunkPtr& chunkPtr, const std::vector<ExprContext*>& exprs,
                                 int hit_times);
 
-    void deserialize_to_columns(KeyVector& keys, const Columns& key_columns, size_t chunk_size);
+    void deserialize_to_columns(KeyVector& keys, Columns& key_columns, size_t chunk_size);
 
     int64_t mem_usage() const;
 

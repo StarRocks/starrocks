@@ -16,7 +16,6 @@
 
 #include <future>
 
-#include "column/datum.h"
 #include "exec/pipeline/fragment_context.h"
 #include "exprs/expr.h"
 #include "formats/csv/csv_file_writer.h"
@@ -33,47 +32,14 @@ HiveChunkSink::HiveChunkSink(std::vector<std::string> partition_columns,
                              std::unique_ptr<LocationProvider> location_provider,
                              std::unique_ptr<formats::FileWriterFactory> file_writer_factory, int64_t max_file_size,
                              RuntimeState* state)
-        : _partition_column_names(std::move(partition_columns)),
-          _partition_column_evaluators(std::move(partition_column_evaluators)),
-          _location_provider(std::move(location_provider)),
-          _file_writer_factory(std::move(file_writer_factory)),
-          _max_file_size(max_file_size),
-          _state(state) {}
+        : ConnectorChunkSink(std::move(partition_columns), std::move(partition_column_evaluators),
+                             std::move(location_provider), std::move(file_writer_factory), max_file_size, state,
+                             false) {}
 
-Status HiveChunkSink::init() {
-    RETURN_IF_ERROR(ColumnEvaluator::init(_partition_column_evaluators));
-    RETURN_IF_ERROR(_file_writer_factory->init());
-    return Status::OK();
-}
-
-// requires that input chunk belongs to a single partition (see LocalKeyPartitionExchange)
-StatusOr<ConnectorChunkSink::Futures> HiveChunkSink::add(ChunkPtr chunk) {
-    std::string partition = DEFAULT_PARTITION;
-    bool partitioned = !_partition_column_names.empty();
-    if (partitioned) {
-        ASSIGN_OR_RETURN(partition, HiveUtils::make_partition_name(_partition_column_names,
-                                                                   _partition_column_evaluators, chunk.get()));
-    }
-
-    return HiveUtils::hive_style_partitioning_write_chunk(chunk, partitioned, partition, _max_file_size,
-                                                          _file_writer_factory.get(), _location_provider.get(),
-                                                          _partition_writers);
-}
-
-ConnectorChunkSink::Futures HiveChunkSink::finish() {
-    Futures futures;
-    for (auto& [_, writer] : _partition_writers) {
-        auto f = writer->commit();
-        futures.commit_file_futures.push_back(std::move(f));
-    }
-    return futures;
-}
-
-std::function<void(const formats::FileWriter::CommitResult& result)> HiveChunkSink::callback_on_success() {
-    return [state = _state](const formats::FileWriter::CommitResult& result) {
-        DCHECK(result.io_status.ok());
-        state->update_num_rows_load_sink(result.file_statistics.record_count);
-
+void HiveChunkSink::callback_on_commit(const CommitResult& result) {
+    _rollback_actions.push_back(std::move(result.rollback_action));
+    if (result.io_status.ok()) {
+        _state->update_num_rows_load_sink(result.file_statistics.record_count);
         THiveFileInfo hive_file_info;
         hive_file_info.__set_file_name(PathUtils::get_filename(result.location));
         hive_file_info.__set_partition_path(PathUtils::get_parent_path(result.location));
@@ -81,8 +47,8 @@ std::function<void(const formats::FileWriter::CommitResult& result)> HiveChunkSi
         hive_file_info.__set_file_size_in_bytes(result.file_statistics.file_size);
         TSinkCommitInfo commit_info;
         commit_info.__set_hive_file_info(hive_file_info);
-        state->add_sink_commit_info(commit_info);
-    };
+        _state->add_sink_commit_info(commit_info);
+    }
 }
 
 StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chunk_sink(
@@ -97,6 +63,9 @@ StatusOr<std::unique_ptr<ConnectorChunkSink>> HiveChunkSinkProvider::create_chun
 
     std::unique_ptr<formats::FileWriterFactory> file_writer_factory;
     if (boost::iequals(ctx->format, formats::PARQUET)) {
+        // ensure hive compatibility since hive 3 and lower version accepts specific encoding
+        ctx->options[formats::ParquetWriterOptions::USE_LEGACY_DECIMAL_ENCODING] = "true";
+        ctx->options[formats::ParquetWriterOptions::USE_INT96_TIMESTAMP_ENCODING] = "true";
         file_writer_factory = std::make_unique<formats::ParquetFileWriterFactory>(
                 std::move(fs), ctx->compression_type, ctx->options, ctx->data_column_names,
                 std::move(data_column_evaluators), std::nullopt, ctx->executor, runtime_state);

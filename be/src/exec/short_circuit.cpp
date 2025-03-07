@@ -85,7 +85,10 @@ public:
                     _row_buffer->start_binary_row(num_columns);
                 }
                 for (auto& result_column : result_columns) {
-                    result_column->put_mysql_row_buffer(_row_buffer, i);
+                    if (_is_binary_format && !result_column->is_nullable()) {
+                        _row_buffer->update_field_pos();
+                    }
+                    result_column->put_mysql_row_buffer(_row_buffer, i, _is_binary_format);
                 }
                 size_t len = _row_buffer->length();
                 _row_buffer->move_content(&result_rows[i]);
@@ -234,8 +237,7 @@ Status ShortCircuitExecutor::build_source_exec_node(starrocks::ObjectPool* pool,
                                                     starrocks::ExecNode** node) {
     switch (t_node.node_type) {
     case TPlanNodeType::OLAP_SCAN_NODE: {
-        *node = pool->add(
-                new ShortCircuitHybridScanNode(pool, t_node, descs, scan_range, _runtime_profile, *_common_request));
+        *node = pool->add(new ShortCircuitHybridScanNode(pool, t_node, descs, scan_range, *_common_request));
         break;
     }
     case TPlanNodeType::PROJECT_NODE:

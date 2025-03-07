@@ -23,8 +23,9 @@
 #include "runtime/global_dict/types.h"
 #include "storage/chunk_iterator.h"
 #include "storage/olap_common.h"
-#include "storage/olap_runtime_range_pruner.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
+#include "storage/runtime_filter_predicate.h"
+#include "storage/runtime_range_pruner.h"
 #include "storage/tuple.h"
 
 namespace starrocks {
@@ -38,6 +39,8 @@ using RowidRangeOptionPtr = std::shared_ptr<RowidRangeOption>;
 struct ShortKeyRangesOption;
 using ShortKeyRangesOptionPtr = std::shared_ptr<ShortKeyRangesOption>;
 struct OlapScanRange;
+struct VectorSearchOption;
+using VectorSearchOptionPtr = std::shared_ptr<VectorSearchOption>;
 
 static inline std::unordered_set<uint32_t> EMPTY_FILTERED_COLUMN_IDS;
 // Params for TabletReader
@@ -60,13 +63,17 @@ struct TabletReaderParams {
     bool use_page_cache = false;
 
     // Options only applies to cloud-native table r/w IO
-    LakeIOOptions lake_io_opts{.fill_data_cache = true};
+    LakeIOOptions lake_io_opts{.fill_data_cache = true, .fill_metadata_cache = true};
+
+    // Disable local disk cache or not
+    bool skip_disk_cache = false;
 
     RangeStartOperation range = RangeStartOperation::GT;
     RangeEndOperation end_range = RangeEndOperation::LT;
     std::vector<OlapTuple> start_key;
     std::vector<OlapTuple> end_key;
     PredicateTree pred_tree;
+    RuntimeFilterPredicates runtime_filter_preds;
 
     RuntimeState* runtime_state = nullptr;
 
@@ -81,7 +88,7 @@ struct TabletReaderParams {
     ShortKeyRangesOptionPtr short_key_ranges_option = nullptr;
 
     bool sorted_by_keys_per_tablet = false;
-    OlapRuntimeScanRangePruner runtime_range_pruner;
+    RuntimeScanRangePruner runtime_range_pruner;
 
     std::vector<ColumnAccessPathPtr>* column_access_paths = nullptr;
     bool use_pk_index = false;
@@ -92,6 +99,14 @@ struct TabletReaderParams {
     int32_t plan_node_id;
 
     bool prune_column_after_index_filter = false;
+    bool enable_gin_filter = false;
+
+    bool use_vector_index = false;
+
+    VectorSearchOptionPtr vector_search_option = nullptr;
+
+    TTableSampleOptions sample_options;
+    bool enable_join_runtime_filter_pushdown = false;
 
 public:
     std::string to_string() const;

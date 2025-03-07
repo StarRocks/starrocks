@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # hours_add
 
-## 功能
+
 
 给指定的日期时间或日期增加指定的小时数。
 

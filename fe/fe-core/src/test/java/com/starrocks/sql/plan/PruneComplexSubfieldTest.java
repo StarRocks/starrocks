@@ -15,7 +15,6 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.optimizer.rule.tree.prunesubfield.SubfieldAccessPathNormalizer;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.BeforeClass;
@@ -103,6 +102,17 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\"\n" +
                 ");");
+        starRocksAssert.withTable("CREATE TABLE IF NOT EXISTS t1(\n" +
+                "    tenant_id BIGINT NOT NULL,\n" +
+                "    id BIGINT NOT NULL,\n" +
+                "    c1 STRING NULL,\n" +
+                "    c2 BIGINT NULL\n" +
+                ")\n" +
+                "DUPLICATE KEY (tenant_id, id)\n" +
+                "DISTRIBUTED BY HASH (tenant_id)\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");");
     }
 
     @Before
@@ -114,7 +124,8 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(-1);
         connectContext.getSessionVariable().setCboCteReuse(true);
         connectContext.getSessionVariable().setCboCTERuseRatio(0);
-        SubfieldAccessPathNormalizer.JSON_FLATTEN_DEPTH = 2;
+        connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(2);
+        connectContext.getSessionVariable().setCboPushDownAggregateMode(-1);
     }
 
     @After
@@ -125,7 +136,7 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         connectContext.getSessionVariable().setEnablePruneComplexTypes(true);
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(300000);
         connectContext.getSessionVariable().setCboCTERuseRatio(1.5);
-        SubfieldAccessPathNormalizer.JSON_FLATTEN_DEPTH = 1;
+        connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(1);
     }
 
     @Test
@@ -1052,11 +1063,41 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
                 "          B AS (SELECT 'a' as event_key, map { 'x' :1 } as props ) \n" +
                 "SELECT * FROM A JOIN B ON A.event_key = B.event_key WHERE props [property_key] = 1;";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, " 6:HASH JOIN\n" +
-                "  |  join op: INNER JOIN (PARTITIONED)\n" +
+        assertContains(plan, " 7:NESTLOOP JOIN\n" +
+                "  |  join op: CROSS JOIN\n" +
                 "  |  colocate: false, reason: \n" +
-                "  |  equal join conjunct: 2: expr = 5: expr\n" +
-                "  |  other join predicates: 6: expr[3: expr] = 1");
+                "  |  \n" +
+                "  |----6:EXCHANGE\n" +
+                "  |    \n" +
+                "  2:Project\n" +
+                "  |  <slot 2> : 'a'\n" +
+                "  |  <slot 3> : 'x'\n" +
+                "  |  \n" +
+                "  1:SELECT\n" +
+                "  |  predicates: map{'x':1}['x'] = 1\n" +
+                "  |  \n" +
+                "  0:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL\n" +
+                "\n" +
+                "PLAN FRAGMENT 1\n" +
+                " OUTPUT EXPRS:\n" +
+                "  PARTITION: UNPARTITIONED\n" +
+                "\n" +
+                "  STREAM DATA SINK\n" +
+                "    EXCHANGE ID: 06\n" +
+                "    UNPARTITIONED\n" +
+                "\n" +
+                "  5:Project\n" +
+                "  |  <slot 5> : 'a'\n" +
+                "  |  <slot 6> : map{'x':1}\n" +
+                "  |  \n" +
+                "  4:SELECT\n" +
+                "  |  predicates: map{'x':1}['x'] = 1\n" +
+                "  |  \n" +
+                "  3:UNION\n" +
+                "     constant exprs: \n" +
+                "         NULL");
     }
 
     @Test
@@ -1106,5 +1147,133 @@ public class PruneComplexSubfieldTest extends PlanTestNoneDBBase {
         String sql = "select get_json_bool(j1, 'a') from js0";
         String plan = getVerboseExplain(sql);
         assertContains(plan, "ColumnAccessPath: [/j1/a(json)]");
+    }
+
+    @Test
+    public void testOtherFunctionJson() throws Exception {
+        String sql = "select v1 from js0 where LOWER( COALESCE( j1 -> 'a', j1 -> 'b' ) ) = 'x'";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "lower(CAST(coalesce(json_query(2: j1, 'a'), json_query(2: j1, 'b')) AS VARCHAR)) = 'x'");
+    }
+
+    @Test
+    public void testTopN() throws Exception {
+        String sql = "select array_length(a1) " +
+                "from (select * from pc0 order by a1 limit 10) x";
+        String plan = getVerboseExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath");
+        assertContains(plan, "  1:TOP-N\n" +
+                "  |  order by: [7, ARRAY<INT>, true] ASC");
+        assertContains(plan, "3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  8 <-> array_length");
+
+        sql = "select array_length(a1) " +
+                "from (select * from pc0 order by v1 limit 10) x";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/a1/OFFSET]");
+        assertContains(plan, "1:Project");
+    }
+
+    @Test
+    public void testMultiLevelJson() throws Exception {
+        connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(20);
+        String sql = "select " +
+                "get_json_int(j1, '$.a.b.c.d') " +
+                "from js0;";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/j1/a/b/c/d(bigint(20))]");
+
+        sql = "select " +
+                "get_json_int(st1.j1, '$.a.b.c') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/st1/j1/a/b/c(bigint(20))]");
+
+        sql = "select " +
+                "get_json_int(ar1[1], '$.a.b.c'), " +
+                "get_json_int(mp1[1], '$.a.b.c') " +
+                "from js0;";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "ColumnAccessPath: [/ar1/INDEX/a/b/c(bigint(20)), /mp1/INDEX/a/b/c(bigint(20))]");
+    }
+
+    @Test
+    public void testCantPruneComplexJsonOnJoin() throws Exception {
+        connectContext.getSessionVariable().setCboPruneJsonSubfieldDepth(20);
+        String sql = "select x.v4 -> 'platform_id', x.v3 -> 'p2' " +
+                "from (select JSON_OBJECT('p1', t0.v1, 'p2', js0.v1, 'p3', 3) as v3, js0.j1 as v4 " +
+                "      from t0 left join js0 on js0.v1 = t0.v2 where cast(js0.j1 -> 'v4' as int) + t0.v2 > 1) x";
+        String plan = getVerboseExplain(sql);
+        assertContains(plan, "  4:HASH JOIN\n" +
+                "  |  join op: INNER JOIN (BROADCAST)\n" +
+                "  |  equal join conjunct: [3: v1, BIGINT, true] = [2: v2, BIGINT, true]\n" +
+                "  |  other join predicates: " +
+                "cast(cast([13: json_query, JSON, true] as INT) as BIGINT) + [2: v2, BIGINT, true] > 1");
+    }
+
+    @Test
+    public void testConstStructError() throws Exception {
+        String sql = "with buckets as (\n" +
+                "    SELECT named_struct(\n" +
+                "            'start_date',\n" +
+                "            str_to_date('2024-08-08T17:46:00', '%Y-%m-%dT%H:%i:%s'),\n" +
+                "            'end_date',\n" +
+                "            str_to_date('2024-08-14T17:46:58', '%Y-%m-%dT%H:%i:%s')\n" +
+                "        ) as bucket\n" +
+                ")\n" +
+                "select date(b.bucket.start_date) \n" +
+                "from buckets b\n" +
+                "left join t1 c on b.bucket.start_date = c.c1\n" +
+                "order by b.bucket.start_date;\n";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "equal join conjunct: 9: expr = 10: cast");
+    }
+
+    @Test
+    public void testPushDownNullFunctionJoin() throws Exception {
+        String sql = "with buckets as (\n" +
+                "    SELECT named_struct(\n" +
+                "            'start_date',\n" +
+                "            str_to_date('2024-08-08T17:46:00', '%Y-%m-%dT%H:%i:%s'),\n" +
+                "            'end_date',\n" +
+                "            str_to_date('2024-08-14T17:46:58', '%Y-%m-%dT%H:%i:%s')\n" +
+                "        ) as bucket\n" +
+                "    UNION ALL\n" +
+                "    SELECT named_struct(\n" +
+                "            'start_date',\n" +
+                "            str_to_date('2024-08-15T17:46:00', '%Y-%m-%dT%H:%i:%s'),\n" +
+                "            'end_date',\n" +
+                "            str_to_date('2024-08-21T17:46:58', '%Y-%m-%dT%H:%i:%s')\n" +
+                "        ) as bucket\n" +
+                "),\n" +
+                "test_cte as (\n" +
+                "    select \"2024-08-08 17:46:00\" as bucket_start,\n" +
+                "        ARRAY_SLICE(ARRAY_AGG([id, c1, c2]), 1, 10) as test_arr\n" +
+                "    from t1\n" +
+                ")\n" +
+                "select date(b.bucket.start_date) ,\n" +
+                "    coalesce(\n" +
+                "        array_map(\n" +
+                "            x->[x[1],\n" +
+                "            x [2]], c.test_arr), [[]]) as test_output,\n" +
+                "    c.test_arr\n" +
+                "from buckets b\n" +
+                "left join test_cte c on b.bucket.start_date = c.bucket_start\n" +
+                "order by b.bucket.start_date;\n";
+
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  9:Project\n" +
+                "  |  <slot 13> : 13: array_slice\n" +
+                "  |  <slot 14> : date(20: expr)\n" +
+                "  |  <slot 16> : coalesce(array_map(<slot 15> -> [<slot 15>[1],<slot 15>[2]], " +
+                "13: array_slice), CAST([[]] AS ARRAY<ARRAY<VARCHAR(65533)>>))\n" +
+                "  |  <slot 17> : 20: expr\n" +
+                "  |  \n" +
+                "  8:HASH JOIN");
+        assertContains(plan, "  1:Project\n" +
+                "  |  <slot 18> : clone(20: expr)\n" +
+                "  |  <slot 20> : 20: expr");
     }
 }

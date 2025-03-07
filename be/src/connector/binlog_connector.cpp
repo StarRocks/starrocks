@@ -104,7 +104,7 @@ Status BinlogDataSource::get_next(RuntimeState* state, ChunkPtr* chunk) {
         _need_seek_binlog.store(false);
     }
 
-    _init_chunk(chunk, state->chunk_size());
+    RETURN_IF_ERROR(_init_chunk_if_needed(chunk, state->chunk_size()));
     status = _binlog_reader->get_next(chunk, _max_version_exclusive);
     VLOG_IF(3, !status.ok()) << "Fail to read binlog, tablet: " << _tablet->full_name()
                              << ", binlog reader id: " << _binlog_reader->reader_id()
@@ -298,7 +298,7 @@ Status BinlogDataSource::_mock_chunk_test(ChunkPtr* chunk) {
             VLOG_ROW << "Append col:" << idx << ", row:" << start;
             column->append(start % ndv_count);
         }
-        chunk_temp->append_column(column, SlotId(idx));
+        chunk_temp->append_column(std::move(column), SlotId(idx));
     }
 
     // ops

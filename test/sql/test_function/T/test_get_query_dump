@@ -1,0 +1,80 @@
+-- name: test_get_query_dump
+
+-- Prepare data.
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+insert into __row_util_base select * from __row_util_base; -- 20000
+insert into __row_util_base select * from __row_util_base; -- 40000
+
+CREATE TABLE __row_util (
+  idx bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+insert into __row_util select row_number() over() as idx from __row_util_base;
+
+CREATE TABLE t1 (
+  k1 bigint NULL,
+  c_int_1_seq bigint NULL,
+  c_int_2_seq string NULL
+
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into t1
+select 
+    idx,
+    idx,
+    concat('abc1-', idx)
+from __row_util;
+
+-- Invalid cases.
+select get_query_dump('');
+select get_query_dump('invalid-query');
+select get_query_dump(trim('select * from t1'));
+
+-- Valid cases.
+with 
+    query_dump as (select get_query_dump('select * from t1') as x),
+    w1 as (
+        select 'statement' as k, length(get_json_string(x, '$.statement')) > 2 as not_empty from query_dump
+        UNION ALL
+        select 'table_meta' as k, length(get_json_string(x, '$.table_meta')) > 2  as not_empty from query_dump
+        UNION ALL
+        select 'table_row_count' as k, length(get_json_string(x, '$.table_row_count')) > 2  as not_empty from query_dump
+        UNION ALL
+        select 'column_statistics' as k, length(get_json_string(x, '$.column_statistics')) > 2  as not_empty from query_dump
+    ) 
+select * from w1 order by k;
+
+
+with 
+    query_dump as (select get_query_dump(concat('select *', ' from t1')) as x),
+    w1 as (
+        select 'statement' as k, length(get_json_string(x, '$.statement')) > 2 as not_empty from query_dump
+        UNION ALL
+        select 'table_meta' as k, length(get_json_string(x, '$.table_meta')) > 2  as not_empty from query_dump
+        UNION ALL
+        select 'table_row_count' as k, length(get_json_string(x, '$.table_row_count')) > 2  as not_empty from query_dump
+        UNION ALL
+        select 'column_statistics' as k, length(get_json_string(x, '$.column_statistics')) > 2  as not_empty from query_dump
+    ) 
+select * from w1 order by k;
+
+with 
+    query_dump as (select get_query_dump('select * from t1', true) as x)
+select get_json_string(x, '$.statement') from query_dump;

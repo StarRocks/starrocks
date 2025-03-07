@@ -50,6 +50,7 @@
 #include "exec/aggregate/distinct_streaming_node.h"
 #include "exec/analytic_node.h"
 #include "exec/assert_num_rows_node.h"
+#include "exec/capture_version_node.h"
 #include "exec/connector_scan_node.h"
 #include "exec/cross_join_node.h"
 #include "exec/dict_decode_node.h"
@@ -74,6 +75,7 @@
 #include "exec/union_node.h"
 #include "exprs/dictionary_get_expr.h"
 #include "exprs/expr_context.h"
+#include "gen_cpp/PlanNodes_types.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -92,7 +94,7 @@ ExecNode::ExecNode(ObjectPool* pool, const TPlanNode& tnode, const DescriptorTbl
           _type(tnode.node_type),
           _pool(pool),
           _tuple_ids(tnode.row_tuples),
-          _row_descriptor(descs, tnode.row_tuples, tnode.nullable_tuples),
+          _row_descriptor(descs, tnode.row_tuples),
           _resource_profile(tnode.resource_profile),
           _debug_phase(TExecNodePhase::INVALID),
           _debug_action(TDebugAction::WAIT),
@@ -148,7 +150,7 @@ void ExecNode::push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterP
     if (_type != TPlanNodeType::AGGREGATION_NODE && _type != TPlanNodeType::ANALYTIC_EVAL_NODE) {
         push_down_join_runtime_filter_to_children(state, collector);
     }
-    _runtime_filter_collector.push_down(collector, _tuple_ids, _local_rf_waiting_set);
+    _runtime_filter_collector.push_down(state, id(), collector, _tuple_ids, _local_rf_waiting_set);
 }
 
 void ExecNode::push_down_join_runtime_filter_to_children(RuntimeState* state, RuntimeFilterProbeCollector* collector) {
@@ -296,8 +298,8 @@ Status ExecNode::get_next_big_chunk(RuntimeState* state, ChunkPtr* chunk, bool* 
                     return Status::OK();
                 } else {
                     // TODO: copy the small chunk to big chunk
-                    Columns& dest_columns = pre_output_chunk->columns();
-                    Columns& src_columns = cur_chunk->columns();
+                    auto& dest_columns = pre_output_chunk->columns();
+                    auto& src_columns = cur_chunk->columns();
                     size_t num_rows = cur_size;
                     // copy the new read chunk to the reserved
                     for (size_t i = 0; i < dest_columns.size(); i++) {
@@ -373,6 +375,8 @@ Status ExecNode::create_tree_helper(RuntimeState* state, ObjectPool* pool, const
 
     int num_children = tnodes[*node_idx].num_children;
     ExecNode* node = nullptr;
+    // check tuple ids is in descs before create node
+    RETURN_IF_ERROR(checkTupleIdsInDescs(descs, tnodes[*node_idx]));
     RETURN_IF_ERROR(create_vectorized_node(state, pool, tnodes[*node_idx], descs, &node));
 
     DCHECK((parent != nullptr) || (root != nullptr));
@@ -495,7 +499,8 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
     case TPlanNodeType::TABLE_FUNCTION_NODE:
         *node = pool->add(new TableFunctionNode(pool, tnode, descs));
         return Status::OK();
-    case TPlanNodeType::HDFS_SCAN_NODE: {
+    case TPlanNodeType::HDFS_SCAN_NODE:
+    case TPlanNodeType::KUDU_SCAN_NODE: {
         TPlanNode new_node = tnode;
         TConnectorScanNode connector_scan_node;
         connector_scan_node.connector_name = connector::Connector::HIVE;
@@ -563,6 +568,10 @@ Status ExecNode::create_vectorized_node(starrocks::RuntimeState* state, starrock
         *node = pool->add(new StreamAggregateNode(pool, tnode, descs));
         return Status::OK();
     }
+    case TPlanNodeType::CAPTURE_VERSION_NODE: {
+        *node = pool->add(new CaptureVersionNode(pool, tnode, descs));
+        return Status::OK();
+    }
     default:
         return Status::InternalError(strings::Substitute("Vectorized engine not support node: $0", tnode.node_type));
     }
@@ -572,6 +581,28 @@ std::string ExecNode::debug_string() const {
     std::stringstream out;
     this->debug_string(0, &out);
     return out.str();
+}
+
+Status ExecNode::checkTupleIdsInDescs(const DescriptorTbl& descs, const TPlanNode& planNode) {
+    for (auto id : planNode.row_tuples) {
+        if (descs.get_tuple_descriptor(id) == nullptr) {
+            std::stringstream ss;
+            ss << "Plan node id: " << planNode.node_id << ", Tuple ids: ";
+            for (auto id : planNode.row_tuples) {
+                ss << id << ", ";
+            }
+            LOG(ERROR) << ss.str();
+            ss.str("");
+            ss << "DescriptorTbl: " << descs.debug_string();
+            LOG(ERROR) << ss.str();
+            ss.str("");
+            ss << "TPlanNode: " << apache::thrift::ThriftDebugString(planNode);
+            LOG(ERROR) << ss.str();
+            return Status::InternalError("Tuple ids are not in descs");
+        }
+    }
+
+    return Status::OK();
 }
 
 void ExecNode::debug_string(int indentation_level, std::stringstream* out) const {

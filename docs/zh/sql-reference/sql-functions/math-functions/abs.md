@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # abs
 
-## 功能
+
 
 返回 `x` 的绝对值。如果输入值为 NULL，则返回 NULL。
 

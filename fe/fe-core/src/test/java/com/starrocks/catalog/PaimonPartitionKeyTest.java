@@ -23,6 +23,6 @@ public class PaimonPartitionKeyTest {
     @Test
     public void testInit() {
         PaimonPartitionKey paimonPartitionKey = new PaimonPartitionKey();
-        assertEquals(paimonPartitionKey.nullPartitionValueList(), ImmutableList.of("__DEFAULT_PARTITION__"));
+        assertEquals(paimonPartitionKey.nullPartitionValueList(), ImmutableList.of("__DEFAULT_PARTITION__", "null"));
     }
 }

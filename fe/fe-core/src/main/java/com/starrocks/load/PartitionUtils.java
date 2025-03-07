@@ -25,8 +25,8 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PhysicalPartition;
 import com.starrocks.catalog.RangePartitionInfo;
-import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
@@ -42,11 +42,14 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DistributionDesc;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 public class PartitionUtils {
@@ -67,7 +70,7 @@ public class PartitionUtils {
         boolean success = false;
         try {
             // should check whether targetTable exists
-            Table tmpTable = db.getTable(targetTable.getId());
+            Table tmpTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), targetTable.getId());
             if (tmpTable == null) {
                 throw new DdlException("create partition failed because target table does not exist");
             }
@@ -100,13 +103,13 @@ public class PartitionUtils {
                             partitionInfo.getReplicationNum(partition.getId()),
                             partitionInfo.getIsInMemory(partition.getId()), true,
                             range, partitionInfo.getDataCacheInfo(partition.getId()));
-                } else if (partitionInfo instanceof SinglePartitionInfo) {
+                } else if (partitionInfo.isUnPartitioned()) {
                     info = new SinglePartitionPersistInfo(db.getId(), targetTable.getId(),
                             partition, partitionInfo.getDataProperty(partition.getId()),
                             partitionInfo.getReplicationNum(partition.getId()),
                             partitionInfo.getIsInMemory(partition.getId()), true,
                             partitionInfo.getDataCacheInfo(partition.getId()));
-                } else if (partitionInfo instanceof ListPartitionInfo) {
+                } else if (partitionInfo.isListPartition()) {
                     ListPartitionInfo listPartitionInfo = (ListPartitionInfo) partitionInfo;
 
                     listPartitionInfo.setIdToIsTempPartition(partition.getId(), true);
@@ -147,16 +150,19 @@ public class PartitionUtils {
                     LOG.warn("clear tablets from inverted index failed", t);
                 }
             }
-            locker.unLockDatabase(db, LockType.WRITE);
+            locker.unLockDatabase(db.getId(), LockType.WRITE);
         }
     }
 
     public static void clearTabletsFromInvertedIndex(List<Partition> partitions) {
         TabletInvertedIndex invertedIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
         for (Partition partition : partitions) {
-            for (MaterializedIndex materializedIndex : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
-                for (Tablet tablet : materializedIndex.getTablets()) {
-                    invertedIndex.deleteTablet(tablet.getId());
+            for (PhysicalPartition subPartition : partition.getSubPartitions()) {
+                for (MaterializedIndex materializedIndex : subPartition.getMaterializedIndices(
+                            MaterializedIndex.IndexExtState.ALL)) {
+                    for (Tablet tablet : materializedIndex.getTablets()) {
+                        invertedIndex.deleteTablet(tablet.getId());
+                    }
                 }
             }
         }
@@ -200,6 +206,34 @@ public class PartitionUtils {
         }
 
         return new RangePartitionBoundary(isMinPartition, isMaxPartition, startKeys, endKeys);
+    }
+
+    public static List<List<Object>> calListPartitionKeys(List<List<LiteralExpr>> multiLiteralExprs,
+                                                          List<LiteralExpr> literalExprs) {
+        List<List<Object>> keys = new ArrayList<>();
+        if (CollectionUtils.isNotEmpty(multiLiteralExprs)) {
+            for (List<LiteralExpr> exprs : multiLiteralExprs) {
+                keys.add(initItemOfInKeys(exprs));
+            }
+        }
+        if (CollectionUtils.isNotEmpty(literalExprs)) {
+            for (LiteralExpr expr : literalExprs) {
+                keys.add(initItemOfInKeys(Collections.singletonList(expr)));
+            }
+        }
+        return keys;
+    }
+
+    private static List<Object> initItemOfInKeys(List<LiteralExpr> exprs) {
+        return exprs.stream()
+                .filter(Objects::nonNull)
+                .map(PartitionUtils::exprValue)
+                .collect(Collectors.toList());
+    }
+
+    private static Object exprValue(LiteralExpr expr) {
+        return expr instanceof DateLiteral
+                ? convertDateLiteralToNumber((DateLiteral) expr) : expr.getRealObjectValue();
     }
 
     // This is to be compatible with Spark Load Job formats for Date type.

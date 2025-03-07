@@ -71,11 +71,10 @@ TupleDescriptor* ScrollParserTest::_create_tuple_desc(SlotDesc* descs) {
     }
     tuple_desc_builder.build(&table_desc_builder);
     std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-    std::vector<bool> nullable_tuples = std::vector<bool>{true};
     DescriptorTbl* tbl = nullptr;
     CHECK(DescriptorTbl::create(_runtime_state, &_pool, table_desc_builder.desc_tbl(), &tbl, config::vector_chunk_size)
                   .ok());
-    auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+    auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
     auto* tuple_desc = row_desc->tuple_descriptors()[0];
     return tuple_desc;
 }
@@ -88,7 +87,7 @@ TEST_F(ScrollParserTest, ArrayTest) {
 
     auto get_parsed_column = [&scroll_parser](const rapidjson::Document& document, const TypeDescriptor& t,
                                               bool pure_doc_value) {
-        ColumnPtr column = ColumnHelper::create_column(t, true);
+        MutableColumnPtr column = ColumnHelper::create_column(t, true);
         if (pure_doc_value) {
             const rapidjson::Value& val = document["fields"]["array"];
             EXPECT_TRUE(scroll_parser->_append_value_from_json_val(column.get(), t, val, pure_doc_value).ok());
@@ -109,7 +108,7 @@ TEST_F(ScrollParserTest, ArrayTest) {
         //     }
         // }
 
-        auto validator = [](const ColumnPtr& col) {
+        auto validator = [](const MutableColumnPtr& col) {
             auto arr = col->get(0).get_array();
             EXPECT_EQ(1, arr.size());
             EXPECT_EQ(1, arr[0].get_int8());
@@ -135,7 +134,7 @@ TEST_F(ScrollParserTest, ArrayTest) {
         //     }
         // }
 
-        auto validator = [](const ColumnPtr& col) {
+        auto validator = [](const MutableColumnPtr& col) {
             auto arr = col->get(0).get_array();
             EXPECT_EQ(3, arr.size());
             EXPECT_EQ(1, arr[0].get_int8());
@@ -163,7 +162,7 @@ TEST_F(ScrollParserTest, ArrayTest) {
         //     }
         // }
 
-        auto validator = [](const ColumnPtr& col) {
+        auto validator = [](const MutableColumnPtr& col) {
             auto arr = col->get(0).get_array();
             EXPECT_EQ(3, arr.size());
             EXPECT_EQ(1, arr[0].get_int8());
@@ -191,7 +190,7 @@ TEST_F(ScrollParserTest, ArrayTest) {
         //     }
         // }
 
-        auto validator = [](const ColumnPtr& col) {
+        auto validator = [](const MutableColumnPtr& col) {
             auto arr = col->get(0).get_array();
             EXPECT_EQ(2, arr.size());
             EXPECT_EQ(1, arr[0].get_int8());
@@ -218,7 +217,7 @@ TEST_F(ScrollParserTest, ArrayTest) {
         //     }
         // }
 
-        auto validator = [](const ColumnPtr& col) {
+        auto validator = [](const MutableColumnPtr& col) {
             auto arr = col->get(0).get_array();
             EXPECT_EQ(0, arr.size());
         };

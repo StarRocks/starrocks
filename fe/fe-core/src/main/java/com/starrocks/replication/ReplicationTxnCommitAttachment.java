@@ -20,7 +20,6 @@ import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TxnCommitAttachment;
 
-import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOException;
 import java.util.Map;
@@ -31,19 +30,27 @@ import java.util.Map;
  */
 public class ReplicationTxnCommitAttachment extends TxnCommitAttachment {
     @SerializedName("partitionVersions")
-    private Map<Long, Long> partitionVersions; // The version of partitions
+    private Map<Long, Long> partitionVersions; // The data version of partitions, not the visible version
+
+    @SerializedName("partitionVersionEpochs")
+    private Map<Long, Long> partitionVersionEpochs; // The version epoch of partitions
 
     public ReplicationTxnCommitAttachment() {
         super(TransactionState.LoadJobSourceType.REPLICATION);
     }
 
-    public ReplicationTxnCommitAttachment(Map<Long, Long> partitionVersions) {
+    public ReplicationTxnCommitAttachment(Map<Long, Long> partitionVersions, Map<Long, Long> partitionVersionEpochs) {
         super(TransactionState.LoadJobSourceType.REPLICATION);
         this.partitionVersions = partitionVersions;
+        this.partitionVersionEpochs = partitionVersionEpochs;
     }
 
     public Map<Long, Long> getPartitionVersions() {
         return partitionVersions;
+    }
+
+    public Map<Long, Long> getPartitionVersionEpochs() {
+        return partitionVersionEpochs;
     }
 
     @Override
@@ -51,13 +58,5 @@ public class ReplicationTxnCommitAttachment extends TxnCommitAttachment {
         super.write(out);
         String s = GsonUtils.GSON.toJson(this);
         Text.writeString(out, s);
-    }
-
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        String s = Text.readString(in);
-        ReplicationTxnCommitAttachment insertTxnCommitAttachment = GsonUtils.GSON.fromJson(s,
-                ReplicationTxnCommitAttachment.class);
-        this.partitionVersions = insertTxnCommitAttachment.getPartitionVersions();
     }
 }

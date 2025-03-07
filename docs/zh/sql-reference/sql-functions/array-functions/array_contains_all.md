@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # array_contains_all
 
-## 功能
+
 
 检查数组`arr1`是否包含数组`arr2`中的所有元素，即`arr2`是否为`arr1`的子集。是的话返回`1`，否则返回`0`。
 

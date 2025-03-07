@@ -21,11 +21,13 @@ import com.starrocks.proto.DropTableRequest;
 import com.starrocks.proto.DropTableResponse;
 import com.starrocks.proto.StatusPB;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
@@ -50,13 +52,14 @@ public class CatalogRecycleBinLakeTableTest {
     @BeforeClass
     public static void beforeClass() {
         UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
+        GlobalStateMgr.getCurrentState().getWarehouseMgr().initDefaultWarehouse();
     }
 
     private static Table createTable(ConnectContext connectContext, String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb(createTableStmt.getDbName());
-        return db.getTable(createTableStmt.getTableName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createTableStmt.getDbName());
+        return GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), createTableStmt.getTableName());
     }
 
     private static void dropTable(ConnectContext connectContext, String sql) throws Exception {
@@ -66,7 +69,7 @@ public class CatalogRecycleBinLakeTableTest {
 
     private static void alterTable(ConnectContext connectContext, String sql) throws Exception {
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(stmt);
+        DDLStmtExecutor.execute(stmt, connectContext);
     }
 
     private static void recoverDatabase(ConnectContext connectContext, String sql) throws Exception {
@@ -95,7 +98,8 @@ public class CatalogRecycleBinLakeTableTest {
 
     private static void checkPartitionTablet(Partition partition, boolean expectExist) {
         TabletInvertedIndex tabletIndex = GlobalStateMgr.getCurrentState().getTabletInvertedIndex();
-        for (MaterializedIndex index : partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
+        for (MaterializedIndex index :
+                partition.getDefaultPhysicalPartition().getMaterializedIndices(MaterializedIndex.IndexExtState.ALL)) {
             for (Tablet tablet : index.getTablets()) {
                 TabletMeta meta = tabletIndex.getTabletMeta(tablet.getId());
                 if (expectExist) {
@@ -111,6 +115,48 @@ public class CatalogRecycleBinLakeTableTest {
         return GlobalStateMgr.getCurrentState().getStorageVolumeMgr().getStorageVolumeIdOfTable(tableId);
     }
 
+    private static void waitTableClearFinished(CatalogRecycleBin recycleBin, long id,
+                                               long time) {
+        while (recycleBin.getRecycleTableInfo(id) != null) {
+            recycleBin.eraseTable(time);
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
+    private static void waitPartitionClearFinished(CatalogRecycleBin recycleBin, long id,
+                                                   long time) {
+        while (recycleBin.getRecyclePartitionInfo(id) != null) {
+            recycleBin.erasePartition(time);
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
+    private static void waitTableToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
+        while (recycleBin.isDeletingTable(id)) {
+            recycleBin.eraseTable(time);
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
+    private static void waitPartitionToBeDone(CatalogRecycleBin recycleBin, long id, long time) {
+        while (recycleBin.isDeletingPartition(id)) {
+            recycleBin.erasePartition(time);
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
     @Test
     public void testRecycleLakeTable(@Mocked LakeService lakeService) throws Exception {
         CatalogRecycleBin recycleBin = GlobalStateMgr.getCurrentState().getRecycleBin();
@@ -118,8 +164,8 @@ public class CatalogRecycleBinLakeTableTest {
         // create database
         String createDbStmtStr = "create database recycle_bin_test;";
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
-        Database db = GlobalStateMgr.getCurrentState().getMetadata().getDb("recycle_bin_test");
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("recycle_bin_test");
 
         Table table1 = createTable(connectContext, "create table recycle_bin_test.t0" +
                 "(key1 int," +
@@ -170,6 +216,7 @@ public class CatalogRecycleBinLakeTableTest {
 
         // table1 cannot be deleted because LakeService.dropTable() will return an error status
         recycleBin.eraseTable(System.currentTimeMillis());
+        waitTableToBeDone(recycleBin, table1.getId(), System.currentTimeMillis());
         Assert.assertNotNull(recycleBin.getTable(db.getId(), table2.getId()));
         Assert.assertTrue(recycleBin.isTableRecoverable(db.getId(), table2.getId()));
         Assert.assertNotNull(recycleBin.getTable(db.getId(), table1.getId()));
@@ -189,6 +236,8 @@ public class CatalogRecycleBinLakeTableTest {
 
         // Now the retry interval has reached, table1 should be deleted after return
         recycleBin.eraseTable(System.currentTimeMillis() + CatalogRecycleBin.getFailRetryInterval() + 1);
+        waitTableClearFinished(recycleBin, table1.getId(),
+                               System.currentTimeMillis() + CatalogRecycleBin.getFailRetryInterval() + 1);
         Assert.assertNotNull(recycleBin.getTable(db.getId(), table2.getId()));
         Assert.assertTrue(recycleBin.isTableRecoverable(db.getId(), table2.getId()));
         Assert.assertNull(recycleBin.getTable(db.getId(), table1.getId()));
@@ -213,12 +262,13 @@ public class CatalogRecycleBinLakeTableTest {
 
         // Recover table2
         Assert.assertTrue(recycleBin.recoverTable(db, "t0"));
-        Assert.assertSame(table2, db.getTable("t0"));
+        Assert.assertSame(table2, GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "t0"));
         Assert.assertNull(recycleBin.getTable(db.getId(), table2.getId()));
         checkTableTablet(table2, true);
 
         // table3 should be deleted after return
         recycleBin.eraseTable(System.currentTimeMillis());
+        waitTableClearFinished(recycleBin, table3.getId(), System.currentTimeMillis());
         Assert.assertEquals(0, recycleBin.getTables(db.getId()).size());
         Assert.assertNull(recycleBin.getTable(db.getId(), table3.getId()));
         checkTableTablet(table3, false);
@@ -232,8 +282,8 @@ public class CatalogRecycleBinLakeTableTest {
         // create database
         String createDbStmtStr = String.format("create database %s;", dbName);
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
-        Database db = GlobalStateMgr.getCurrentState().getMetadata().getDb(dbName);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
 
         Table table1 = createTable(connectContext, String.format("create table %s.t0" +
                 "(key1 int," +
@@ -257,8 +307,8 @@ public class CatalogRecycleBinLakeTableTest {
         // create database
         String createDbStmtStr = String.format("create database %s;", dbName);
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
-        Database db = GlobalStateMgr.getCurrentState().getMetadata().getDb(dbName);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
 
         Table table1 = createTable(connectContext, String.format("create table %s.t1" +
                 "(key1 int," +
@@ -306,6 +356,8 @@ public class CatalogRecycleBinLakeTableTest {
         // Now the retry interval has reached
         long delay = Math.max(Config.catalog_trash_expire_second * 1000, CatalogRecycleBin.getMinEraseLatency()) + 1;
         recycleBin.eraseTable(System.currentTimeMillis() + delay);
+        waitTableToBeDone(recycleBin, table1.getId(), System.currentTimeMillis() + delay);
+        waitTableToBeDone(recycleBin, table2.getId(), System.currentTimeMillis() + delay);
         Assert.assertThrows(DdlException.class, () -> recoverDatabase(connectContext, recoverDbSql));
         Assert.assertNotNull(recycleBin.getTable(db.getId(), table1.getId()));
         Assert.assertNotNull(recycleBin.getTable(db.getId(), table2.getId()));
@@ -319,8 +371,8 @@ public class CatalogRecycleBinLakeTableTest {
         // create database
         String createDbStmtStr = String.format("create database %s;", dbName);
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
-        Database db = GlobalStateMgr.getCurrentState().getMetadata().getDb(dbName);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
 
         Table table1 = createTable(connectContext, String.format(
                 "CREATE TABLE %s.t1" +
@@ -341,9 +393,12 @@ public class CatalogRecycleBinLakeTableTest {
         Partition p2 = table1.getPartition("p2");
         Partition p3 = table1.getPartition("p3");
         Assert.assertNotNull(p1);
-        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1));
-        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p2));
-        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p3));
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1.getDefaultPhysicalPartition(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p2.getDefaultPhysicalPartition(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID));
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p3.getDefaultPhysicalPartition(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID));
 
         // Drop partition "p1"
         alterTable(connectContext, String.format("ALTER TABLE %s.t1 DROP PARTITION p1", dbName));
@@ -370,13 +425,6 @@ public class CatalogRecycleBinLakeTableTest {
             recoverPartition(connectContext, String.format("RECOVER PARTITION p2 FROM %s.t1", dbName));
         });
 
-        // Erase time not reached
-        recycleBin.erasePartition(System.currentTimeMillis());
-        Assert.assertSame(p1, recycleBin.getPartition(p1.getId()));
-        Assert.assertSame(p2, recycleBin.getPartition(p2.getId()));
-        checkPartitionTablet(p1, true);
-        checkPartitionTablet(p2, true);
-
         new MockUp<BrpcProxy>() {
             @Mock
             public LakeService getLakeService(TNetworkAddress address) throws RpcException {
@@ -386,9 +434,25 @@ public class CatalogRecycleBinLakeTableTest {
         new Expectations() {
             {
                 lakeService.dropTable((DropTableRequest) any);
-                minTimes = 2;
-                maxTimes = 2;
-                result = buildDropTableResponse(1, "injected error");
+                minTimes = 1;
+                maxTimes = 1;
+                result = buildDropTableResponse(0, "");
+            }
+        };
+        // Erase time not reached for p1 but not p2
+        recycleBin.erasePartition(System.currentTimeMillis());
+        Assert.assertTrue(!recycleBin.isDeletingPartition(p1.getId()));
+        waitPartitionClearFinished(recycleBin, p2.getId(), System.currentTimeMillis());
+        Assert.assertSame(p1, recycleBin.getPartition(p1.getId()));
+        Assert.assertNull(recycleBin.getPartition(p2.getId()));
+        checkPartitionTablet(p1, true);
+        checkPartitionTablet(p2, false);
+
+        new Expectations() {
+            {
+                lakeService.dropTable((DropTableRequest) any);
+                minTimes = 1;
+                maxTimes = 1;
                 result = buildDropTableResponse(1, "injected error");
             }
         };
@@ -396,8 +460,9 @@ public class CatalogRecycleBinLakeTableTest {
         // Erase time reached but LakeService.dropTable() failed
         long delay = Math.max(Config.catalog_trash_expire_second * 1000, CatalogRecycleBin.getMinEraseLatency()) + 1;
         recycleBin.erasePartition(System.currentTimeMillis() + delay);
+        waitPartitionToBeDone(recycleBin, p1.getId(), System.currentTimeMillis() + delay);
         Assert.assertSame(p1, recycleBin.getPartition(p1.getId()));
-        Assert.assertSame(p2, recycleBin.getPartition(p2.getId()));
+        Assert.assertNull(recycleBin.getPartition(p2.getId()));
         Assert.assertThrows(DdlException.class, () -> {
             recoverPartition(connectContext, String.format("RECOVER PARTITION p1 FROM %s.t1", dbName));
         });
@@ -405,18 +470,19 @@ public class CatalogRecycleBinLakeTableTest {
             recoverPartition(connectContext, String.format("RECOVER PARTITION p2 FROM %s.t1", dbName));
         });
         checkPartitionTablet(p1, true);
-        checkPartitionTablet(p2, true);
+        checkPartitionTablet(p2, false);
 
         new Expectations() {
             {
                 lakeService.dropTable((DropTableRequest) any);
-                minTimes = 2;
-                maxTimes = 2;
-                result = buildDropTableResponse(0, "");
+                minTimes = 1;
+                maxTimes = 1;
                 result = buildDropTableResponse(0, "");
             }
         };
         recycleBin.erasePartition(System.currentTimeMillis() + delay);
+        waitPartitionClearFinished(recycleBin, p1.getId(), System.currentTimeMillis() + delay);
+        waitPartitionClearFinished(recycleBin, p2.getId(), System.currentTimeMillis() + delay);
         Assert.assertNull(recycleBin.getPartition(p1.getId()));
         Assert.assertNull(recycleBin.getPartition(p2.getId()));
         checkPartitionTablet(p1, false);
@@ -438,7 +504,8 @@ public class CatalogRecycleBinLakeTableTest {
                         "PROPERTIES('replication_num' = '1');", dbName));
 
         p1 = table2.getPartition("p1");
-        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1));
+        Assert.assertFalse(LakeTableHelper.isSharedPartitionDirectory(p1.getDefaultPhysicalPartition(),
+                WarehouseManager.DEFAULT_WAREHOUSE_ID));
         // Drop partition "p1"
         alterTable(connectContext, String.format("ALTER TABLE %s.t2 DROP PARTITION p1", dbName));
         Assert.assertNull(table2.getPartition("p1"));
@@ -458,6 +525,7 @@ public class CatalogRecycleBinLakeTableTest {
             }
         };
         recycleBin.erasePartition(System.currentTimeMillis() + delay);
+        waitPartitionClearFinished(recycleBin, p1.getId(), System.currentTimeMillis() + delay);
         Assert.assertNull(recycleBin.getPartition(p1.getId()));
         checkPartitionTablet(p1, false);
     }
@@ -470,8 +538,8 @@ public class CatalogRecycleBinLakeTableTest {
         // create database
         String createDbStmtStr = String.format("create database %s;", dbName);
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
-        Database db = GlobalStateMgr.getCurrentState().getMetadata().getDb(dbName);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
 
         Table table1 = createTable(connectContext, String.format(
                 "CREATE TABLE %s.t1" +
@@ -504,7 +572,7 @@ public class CatalogRecycleBinLakeTableTest {
             @Mock
             public boolean isSharedDirectory(String path, long partitionId) {
                 Assert.assertTrue(path.endsWith("/" + partitionId));
-                return partitionId == p1.getId();
+                return partitionId == p1.getDefaultPhysicalPartition().getId();
             }
         };
         new MockUp<BrpcProxy>() {
@@ -523,6 +591,8 @@ public class CatalogRecycleBinLakeTableTest {
         };
 
         recycleBin.erasePartition(System.currentTimeMillis());
+        waitPartitionClearFinished(recycleBin, p1.getId(), System.currentTimeMillis());
+        waitPartitionClearFinished(recycleBin, p2.getId(), System.currentTimeMillis());
         Assert.assertNull(recycleBin.getPartition(p1.getId()));
         Assert.assertNull(recycleBin.getPartition(p2.getId()));
         checkPartitionTablet(p1, false);

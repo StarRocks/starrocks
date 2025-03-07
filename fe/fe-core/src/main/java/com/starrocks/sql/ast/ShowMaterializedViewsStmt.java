@@ -65,6 +65,7 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
                     .column("text", ScalarType.createVarchar(1024))
                     .column("extra_message", ScalarType.createVarchar(1024))
                     .column("query_rewrite_status", ScalarType.createVarchar(64))
+                    .column("creator", ScalarType.createVarchar(64))
                     .build();
 
     private static final Map<String, String> ALIAS_MAP = ImmutableMap.of(
@@ -79,24 +80,27 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
 
     private String db;
 
+    private String catalogName;
+
     private final String pattern;
 
     private Expr where;
 
-    public ShowMaterializedViewsStmt(String db) {
-        this(db, null, null, NodePosition.ZERO);
+    public ShowMaterializedViewsStmt(String catalogName, String db) {
+        this(catalogName, db, null, null, NodePosition.ZERO);
     }
 
-    public ShowMaterializedViewsStmt(String db, String pattern) {
-        this(db, pattern, null, NodePosition.ZERO);
+    public ShowMaterializedViewsStmt(String catalogName, String db, String pattern) {
+        this(catalogName, db, pattern, null, NodePosition.ZERO);
     }
 
-    public ShowMaterializedViewsStmt(String db, Expr where) {
-        this(db, null, where, NodePosition.ZERO);
+    public ShowMaterializedViewsStmt(String catalogName, String db, Expr where) {
+        this(catalogName, db, null, where, NodePosition.ZERO);
     }
 
-    public ShowMaterializedViewsStmt(String db, String pattern, Expr where, NodePosition pos) {
+    public ShowMaterializedViewsStmt(String catalogName, String db, String pattern, Expr where, NodePosition pos) {
         super(pos);
+        this.catalogName = catalogName;
         this.db = db;
         this.pattern = pattern;
         this.where = where;
@@ -112,6 +116,10 @@ public class ShowMaterializedViewsStmt extends ShowStmt {
 
     public String getPattern() {
         return pattern;
+    }
+
+    public String getCatalogName() {
+        return catalogName;
     }
 
     @Override

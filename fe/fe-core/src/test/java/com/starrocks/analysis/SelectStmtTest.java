@@ -98,17 +98,25 @@ public class SelectStmtTest {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"replicated_storage\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 "); ";
+
+        String createTableWithPrimaryKey = "CREATE TABLE db1.t_with_pk (" +
+                "user_id INT," +
+                "value INT) " +
+                "PRIMARY KEY (user_id) " +
+                "PROPERTIES('replication_num' = '1');";
+
         starRocksAssert = new StarRocksAssert();
         starRocksAssert.withDatabase("db1").useDatabase("db1");
         starRocksAssert.withTable(createTblStmtStr)
                 .withTable(createBaseAllStmtStr)
                 .withTable(createDateTblStmtStr)
                 .withTable(createPratitionTableStr)
-                .withTable(createTable1);
+                .withTable(createTable1)
+                .withTable(createTableWithPrimaryKey);
         FeConstants.enablePruneEmptyOutputScan = false;
     }
 
@@ -224,6 +232,13 @@ public class SelectStmtTest {
     }
 
     @Test
+    void testSessionUserFunSupport() throws Exception {
+        String sql = "select session_user()";
+        String result = starRocksAssert.query(sql).explainQuery();
+        Assert.assertTrue(result.contains("root"));
+    }
+
+    @Test
     void testTimeFunSupport() throws Exception {
         String sql = "select current_timestamp()";
         starRocksAssert.query(sql).explainQuery();
@@ -282,7 +297,7 @@ public class SelectStmtTest {
                 "select * from db1.tbl1 where not(k1 <=> k2)",
                 "select * from db1.tbl1 where not(k1 <=> 'abc-def')",
         };
-        Pattern re = Pattern.compile("PREDICATES: NOT.*<=>.*");
+        Pattern re = Pattern.compile("PREDICATES: NOT.*<=>.*", Pattern.CASE_INSENSITIVE);
         for (String q : queryList) {
             String s = starRocksAssert.query(q).explainQuery();
             Assert.assertTrue(re.matcher(s).find());
@@ -364,37 +379,15 @@ public class SelectStmtTest {
     }
 
     @Test
-    void testGroupByCountDistinctArrayWithSkewHint() throws Exception {
+    void testGroupByCountDistinctWithSkewHintLossPredicate() throws Exception {
         FeConstants.runningUnitTest = true;
-        // array is not supported now
         String sql =
-                "select b1, count(distinct [skew] a1) as cnt from (select split('a,b,c', ',') as a1, 'aaa' as b1) t1 group by b1";
+                "select t from(select cast(k1 as int), count(distinct [skew] cast(k2 as int)) as t from db1.tbl1 group by cast(k1 as int)) temp where t > 1";
         String s = starRocksAssert.query(sql).explainQuery();
-        Assert.assertTrue(s, s.contains("PLAN FRAGMENT 0\n" +
-                " OUTPUT EXPRS:3: expr | 4: count\n" +
-                "  PARTITION: UNPARTITIONED\n" +
-                "\n" +
-                "  RESULT SINK\n" +
-                "\n" +
-                "  4:AGGREGATE (merge finalize)\n" +
-                "  |  output: count(4: count)\n" +
-                "  |  group by: 3: expr\n" +
-                "  |  \n" +
-                "  3:AGGREGATE (update serialize)\n" +
-                "  |  STREAMING\n" +
-                "  |  output: count(2: split)\n" +
-                "  |  group by: 3: expr\n" +
-                "  |  \n" +
-                "  2:AGGREGATE (update serialize)\n" +
-                "  |  group by: 2: split, 3: expr\n" +
-                "  |  \n" +
-                "  1:Project\n" +
-                "  |  <slot 2> : split('a,b,c', ',')\n" +
-                "  |  <slot 3> : 'aaa'\n" +
-                "  |  \n" +
-                "  0:UNION\n" +
-                "     constant exprs: \n" +
-                "         NULL"));
+        Assert.assertTrue(s, s.contains(" 8:AGGREGATE (merge finalize)\n" +
+                "  |  output: sum(7: count)\n" +
+                "  |  group by: 5: cast\n" +
+                "  |  having: 7: count > 1"));
         FeConstants.runningUnitTest = false;
     }
 
@@ -628,13 +621,10 @@ public class SelectStmtTest {
             String sql = "select str_to_map('age=18&sex=1&gender=1','&','=')['age'] AS age, " +
                     "str_to_map('age=18&sex=1&gender=1','&','=')['sex'] AS sex;";
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
-            Assert.assertTrue(plan, plan.contains("2 <-> 4: str_to_map['age']\n" +
-                    "  |  3 <-> 4: str_to_map['sex']\n" +
-                    "  |  common expressions:\n" +
-                    "  |  4 <-> str_to_map[('age=18&sex=1&gender=1', '&', '='); " +
-                    "args: VARCHAR,VARCHAR,VARCHAR; " +
-                    "result: MAP<VARCHAR,VARCHAR>; args " +
-                    "nullable: false; result nullable: true]"));
+            Assert.assertTrue(plan, plan.contains("1:Project\n" +
+                    "  |  output columns:\n" +
+                    "  |  2 <-> str_to_map('age=18&sex=1&gender=1', '&', '=')['age']\n" +
+                    "  |  3 <-> str_to_map('age=18&sex=1&gender=1', '&', '=')['sex']"));
         } catch (Exception e) {
             Assert.fail("Should not throw an exception");
         }
@@ -687,5 +677,26 @@ public class SelectStmtTest {
                 "         NULL\n" +
                 "     limit: 1\n" +
                 "     cardinality: 1\n"));
+    }
+
+    @Test
+    void testDistinctCountOnPrimaryKey() throws Exception {
+        String insertData = "INSERT INTO t0 VALUES (1,0),(2,1),(3,0),(4,1);";
+        starRocksAssert.query(insertData);
+        String sql = "SELECT CASE WHEN(value = 1) THEN 'A' ELSE 'B' END as flag, COUNT(DISTINCT user_id) " +
+                "FROM db1.t_with_pk " +
+                "GROUP BY 1";
+
+        String plan = starRocksAssert.query(sql).explainQuery();
+
+        Assert.assertTrue(plan, plan.contains("2:AGGREGATE (update finalize)\n" +
+                "  |  output: count(1: user_id)\n" +
+                "  |  group by: 3: case\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 1> : 1: user_id\n" +
+                "  |  <slot 3> : if(2: value = 1, 'A', 'B')\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n"));
     }
 }

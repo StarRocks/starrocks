@@ -23,6 +23,7 @@
 #include "fs/fs.h"
 #include "runtime/stream_load/load_stream_mgr.h"
 #include "simdjson.h"
+#include "util/compression/stream_compression.h"
 #include "util/raw_container.h"
 #include "util/slice.h"
 
@@ -73,6 +74,11 @@ private:
     std::vector<std::vector<SimpleJsonPath>> _json_paths;
     std::vector<SimpleJsonPath> _root_paths;
     bool _strip_outer_array = false;
+
+    // An empty chunk that can be reused as the container for the result of get_next().
+    // It's mainly for optimizing the performance where get_next() returns Status::Timeout
+    // frequently by avoiding creating a chunk in each call
+    ChunkPtr _reusable_empty_chunk = nullptr;
 };
 
 // Reader to parse the json.
@@ -82,7 +88,8 @@ private:
 class JsonReader {
 public:
     JsonReader(RuntimeState* state, ScannerCounter* counter, JsonScanner* scanner, std::shared_ptr<SequentialFile> file,
-               bool strict_mode, std::vector<SlotDescriptor*> slot_descs);
+               bool strict_mode, std::vector<SlotDescriptor*> slot_descs, std::vector<TypeDescriptor> types,
+               const TBrokerRangeDesc& range_desc);
 
     ~JsonReader();
 
@@ -130,9 +137,11 @@ private:
     std::shared_ptr<SequentialFile> _file;
     bool _closed = false;
     std::vector<SlotDescriptor*> _slot_descs;
+    std::vector<TypeDescriptor> _type_descs;
     //Attention: _slot_desc_dict's key is the string_view of the column of _slot_descs,
     // so the lifecycle of _slot_descs should be longer than _slot_desc_dict;
     std::unordered_map<std::string_view, SlotDescriptor*> _slot_desc_dict;
+    std::unordered_map<std::string_view, TypeDescriptor> _type_desc_dict;
 
     // For performance reason, the simdjson parser should be reused over several files.
     //https://github.com/simdjson/simdjson/blob/master/doc/performance.md
@@ -158,6 +167,8 @@ private:
     char* _payload = nullptr;
     size_t _payload_size = 0;
     size_t _payload_capacity = 0;
+
+    TBrokerRangeDesc _range_desc;
 };
 
 } // namespace starrocks

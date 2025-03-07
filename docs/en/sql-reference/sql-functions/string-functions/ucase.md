@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # ucase
 
-## Description
+
 
 This function converts a string to upper-case. It is analogous to the function upper.
 

@@ -45,7 +45,6 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
-import com.starrocks.sql.optimizer.operator.scalar.CaseWhenOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -59,6 +58,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.rule.mv.MaterializedViewRewriter.isCaseWhenScalarOperator;
 
 /**
  * Select best materialized view for olap scan node
@@ -503,7 +504,7 @@ public class MaterializedViewRule extends Rule {
         for (Long indexId : indexesMatchingBestPrefixIndex) {
             long rowCount = 0;
             for (Partition partition : olapTable.getPartitions()) {
-                rowCount += partition.getIndex(indexId).getRowCount();
+                rowCount += partition.getDefaultPhysicalPartition().getIndex(indexId).getRowCount();
             }
             if (rowCount < minRowCount) {
                 minRowCount = rowCount;
@@ -851,7 +852,7 @@ public class MaterializedViewRule extends Rule {
 
         if (!queryFnChild0.isColumnRef()) {
             IsNoCallChildrenValidator validator = new IsNoCallChildrenValidator(keyColumns, aggregateColumns);
-            if (!(isSupportScalarOperator(queryFnChild0) && queryFnChild0.accept(validator, null))) {
+            if (!(isCaseWhenScalarOperator(queryFnChild0) && queryFnChild0.accept(validator, null))) {
                 ColumnRefOperator mvColumnRef = factory.getColumnRef(mvColumnFnChild0.getUsedColumns().getFirstId());
                 Column mvColumn = factory.getColumn(mvColumnRef);
                 if (mvColumn.getDefineExpr() != null && mvColumn.getDefineExpr() instanceof FunctionCallExpr &&
@@ -873,7 +874,7 @@ public class MaterializedViewRule extends Rule {
             return true;
         }
 
-        if (isSupportScalarOperator(queryFnChild0)) {
+        if (isCaseWhenScalarOperator(queryFnChild0)) {
             int[] queryColumnIds = queryFnChild0.getUsedColumns().getColumnIds();
             Set<Integer> mvColumnIdSet = usedBaseColumnIds.stream()
                     .collect(Collectors.toSet());
@@ -922,14 +923,5 @@ public class MaterializedViewRule extends Rule {
             this.mvColumnRef = mvColumnRef;
             this.mvColumn = mvColumn;
         }
-    }
-
-    private boolean isSupportScalarOperator(ScalarOperator operator) {
-        if (operator instanceof CaseWhenOperator) {
-            return true;
-        }
-
-        return operator instanceof CallOperator &&
-                FunctionSet.IF.equalsIgnoreCase(((CallOperator) operator).getFnName());
     }
 }

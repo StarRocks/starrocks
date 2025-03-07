@@ -19,6 +19,7 @@
 
 #include "column/column.h"
 #include "column/column_helper.h"
+#include "column/nullable_column.h"
 #include "common/status.h"
 #include "formats/parquet/encoding.h"
 #include "simd/simd.h"
@@ -107,13 +108,14 @@ public:
     }
 
     Status skip(size_t values_to_skip) override {
-        //TODO(Smith) still heavy work load
-        _indexes.reserve(values_to_skip);
-        _rle_batch_reader.GetBatch(&_indexes[0], values_to_skip);
+        auto ret = _rle_batch_reader.SkipBatch(values_to_skip);
+        if (UNLIKELY(ret != values_to_skip)) {
+            return Status::InternalError("rle skip error, not enough values");
+        }
         return Status::OK();
     }
 
-    Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
         FixedLengthColumn<T>* data_column /* = nullptr */;
         if (dst->is_nullable()) {
             auto nullable_column = down_cast<NullableColumn*>(dst);
@@ -186,9 +188,8 @@ public:
         return Status::OK();
     }
 
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls,
-                           Column* column) override {
-        const std::vector<uint8_t>& null_data = nulls.immutable_null_column_data();
+    Status get_dict_values(const Buffer<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) override {
+        const NullData& null_data = nulls.immutable_null_column_data();
         bool has_null = nulls.has_null();
         bool all_null = false;
 
@@ -243,13 +244,14 @@ public:
     }
 
     Status skip(size_t values_to_skip) override {
-        //TODO(Smith) still heavy work load
-        _indexes.reserve(values_to_skip);
-        _rle_batch_reader.GetBatch(&_indexes[0], values_to_skip);
+        auto ret = _rle_batch_reader.SkipBatch(values_to_skip);
+        if (UNLIKELY(ret != values_to_skip)) {
+            return Status::InternalError("rle skip error, not enough values");
+        }
         return Status::OK();
     }
 
-    Status next_batch(size_t count, ColumnContentType content_type, Column* dst) override {
+    Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
         switch (content_type) {
         case DICT_CODE: {
             FixedLengthColumn<int32_t>* data_column;
@@ -293,7 +295,6 @@ private:
     std::vector<Slice> _dict;
     std::vector<uint32_t> _indexes;
     std::vector<Slice> _slices;
-
     size_t _max_value_length = 0;
 };
 

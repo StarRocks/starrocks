@@ -24,17 +24,17 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SysObjectDependencies::_s_columns[] = {
-        {"OBJECT_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"OBJECT_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"OBJECT_DATABASE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"OBJECT_CATALOG", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"OBJECT_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"OBJECT_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"OBJECT_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"OBJECT_DATABASE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"OBJECT_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"OBJECT_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 
-        {"REF_OBJECT_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"REF_OBJECT_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"REF_OBJECT_DATABASE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"REF_OBJECT_CATALOG", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"REF_OBJECT_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"REF_OBJECT_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"REF_OBJECT_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"REF_OBJECT_DATABASE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"REF_OBJECT_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"REF_OBJECT_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 };
 
 SysObjectDependencies::SysObjectDependencies()
@@ -45,12 +45,14 @@ SysObjectDependencies::~SysObjectDependencies() = default;
 Status SysObjectDependencies::start(RuntimeState* state) {
     RETURN_IF(!_is_init, Status::InternalError("used before initialized."));
     RETURN_IF(!_param->ip || !_param->port, Status::InternalError("IP or port not exists"));
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
 
     TAuthInfo auth = build_auth_info();
     TObjectDependencyReq request;
     request.__set_auth_info(auth);
 
-    return (SchemaHelper::list_object_dependencies(*(_param->ip), _param->port, request, &_result));
+    return SchemaHelper::list_object_dependencies(_ss_state, request, &_result);
 }
 
 Status SysObjectDependencies::_fill_chunk(ChunkPtr* chunk) {

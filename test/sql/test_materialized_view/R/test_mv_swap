@@ -1,8 +1,11 @@
--- name: test_mv_swap
-create database db_test_mv_swap;
+-- name: test_mv_swap 
+admin set frontend config('enable_mv_automatic_active_check'='false');
 -- result:
 -- !result
-use db_test_mv_swap;
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
 -- result:
 -- !result
 CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "1");
@@ -87,11 +90,11 @@ SELECT * FROM mv2 ORDER BY event_day;
 -- !result
 ALTER MATERIALIZED VIEW mv1 SWAP WITH ss;
 -- result:
-E: (1064, 'Unexpected exception: Materialized view can only SWAP WITH materialized view')
+E: (1064, 'Materialized view can only SWAP WITH materialized view')
 -- !result
 ALTER TABLE ss SWAP WITH mv1;
 -- result:
-E: (1064, 'Unexpected exception: Materialized view can only SWAP WITH materialized view')
+E: (1064, 'Materialized view can only SWAP WITH materialized view')
 -- !result
 ALTER MATERIALIZED VIEW mv1 SWAP WITH mv1;
 -- result:
@@ -113,27 +116,27 @@ AS SELECT sum_sum_pv + 1 FROM mv_on_mv_1;
 ALTER MATERIALIZED VIEW mv1 SWAP WITH mv2;
 -- result:
 -- !result
-SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1' and TABLE_SCHEMA='db_${uuid0}';
 -- result:
 false	base-table swapped: mv1
 -- !result
-SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2' and TABLE_SCHEMA='db_${uuid0}';
 -- result:
 false	base-mv inactive: mv_on_mv_1
 -- !result
 ALTER MATERIALIZED VIEW mv_on_mv_1 ACTIVE;
 -- result:
-E: (1064, 'Unexpected exception: Getting analyzing error. Detail message: Can not active materialized view [mv_on_mv_1] because analyze materialized view define sql: \n\nCREATE MATERIALIZED VIEW `mv_on_mv_1` (`sum_sum_pv`)\nDISTRIBUTED BY RANDOM\nREFRESH ASYNC\nPROPERTIES (\n"replicated_storage" = "true",\n"replication_num" = "1",\n"storage_medium" = "HDD"\n)\nAS SELECT sum(`db_test_mv_swap`.`mv1`.`sum_pv`) AS `sum_sum_pv`\nFROM `db_test_mv_swap`.`mv1`;\n\nCause an error: Column \'`db_test_mv_swap`.`mv1`.`sum_pv`\' cannot be resolved.')
+[REGEX].*Can not active materialized view.*
 -- !result
 ALTER MATERIALIZED VIEW mv_on_mv_2 ACTIVE;
 -- result:
-E: (1064, 'Unexpected exception: Getting analyzing error. Detail message: Can not active materialized view [mv_on_mv_2] because analyze materialized view define sql: \n\nCREATE MATERIALIZED VIEW `mv_on_mv_2` (`sum_sum_pv + 1`)\nDISTRIBUTED BY RANDOM\nREFRESH ASYNC\nPROPERTIES (\n"replicated_storage" = "true",\n"replication_num" = "1",\n"storage_medium" = "HDD"\n)\nAS SELECT `db_test_mv_swap`.`mv_on_mv_1`.`sum_sum_pv` + 1 AS `sum_sum_pv + 1`\nFROM `db_test_mv_swap`.`mv_on_mv_1`;\n\nCause an error: Create/Rebuild materialized view from inactive materialized view: mv_on_mv_1.')
+[REGEX].*Can not active materialized view.*
 -- !result
-SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1' and TABLE_SCHEMA='db_${uuid0}';
 -- result:
 false	base-table swapped: mv1
 -- !result
-SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2' and TABLE_SCHEMA='db_${uuid0}';
 -- result:
 false	base-mv inactive: mv_on_mv_1
 -- !result
@@ -146,11 +149,11 @@ ALTER MATERIALIZED VIEW mv_on_mv_1 ACTIVE;
 ALTER MATERIALIZED VIEW mv_on_mv_2 ACTIVE;
 -- result:
 -- !result
-SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1';
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_1' and TABLE_SCHEMA='db_${uuid0}';
 -- result:
 true	
 -- !result
-SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2';
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_mv_2' and TABLE_SCHEMA='db_${uuid0}';
 -- result:
 true	
 -- !result
@@ -164,14 +167,20 @@ AS SELECT ss.event_day, sum(ss.pv) as ss_sum_pv, sum(jj.pv) as jj_sum_pv
 ALTER TABLE ss SWAP WITH jj;
 -- result:
 -- !result
-SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_table_1';
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_table_1' and TABLE_SCHEMA='db_${uuid0}';
 -- result:
 false	base-table swapped: jj
 -- !result
 ALTER MATERIALIZED VIEW mv_on_table_1 ACTIVE;
 -- result:
 -- !result
-SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_table_1';
+SELECT IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv_on_table_1' and TABLE_SCHEMA='db_${uuid0}';
 -- result:
 true	
+-- !result
+[UC]drop database db_${uuid0} force;
+-- result:
+-- !result
+admin set frontend config('enable_mv_automatic_active_check'='true');
+-- result:
 -- !result

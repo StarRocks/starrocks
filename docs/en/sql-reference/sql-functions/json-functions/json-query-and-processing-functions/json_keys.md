@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # json_keys
 
-## Description
+
 
 Returns the top-level keys from a JSON object as a JSON array, or, if a `path` is specified, the top-level keys from the path.
 

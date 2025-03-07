@@ -14,6 +14,7 @@
 
 #include "exec/hash_join_node.h"
 
+#include <glog/logging.h>
 #include <runtime/runtime_state.h>
 
 #include <memory>
@@ -141,6 +142,12 @@ Status HashJoinNode::init(const TPlanNode& tnode, RuntimeState* state) {
     if (tnode.hash_join_node.__isset.output_columns) {
         _output_slots.insert(tnode.hash_join_node.output_columns.begin(), tnode.hash_join_node.output_columns.end());
     }
+    if (tnode.hash_join_node.__isset.late_materialization) {
+        _enable_late_materialization = tnode.hash_join_node.late_materialization;
+    }
+    if (tnode.hash_join_node.__isset.enable_partition_hash_join) {
+        _enable_partition_hash_join = tnode.hash_join_node.enable_partition_hash_join;
+    }
     return Status::OK();
 }
 
@@ -164,6 +171,7 @@ Status HashJoinNode::prepare(RuntimeState* state) {
             ADD_CHILD_TIMER(_runtime_profile, "6-OtherJoinConjunctEvaluateTime", "ProbeTime");
     _where_conjunct_evaluate_timer = ADD_CHILD_TIMER(_runtime_profile, "7-WhereConjunctEvaluateTime", "ProbeTime");
 
+    _probe_counter = ADD_COUNTER(_runtime_profile, "probeCount", TUnit::UNIT);
     _probe_rows_counter = ADD_COUNTER(_runtime_profile, "ProbeRows", TUnit::UNIT);
     _build_rows_counter = ADD_COUNTER(_runtime_profile, "BuildRows", TUnit::UNIT);
     _build_buckets_counter = ADD_COUNTER(_runtime_profile, "BuildBuckets", TUnit::UNIT);
@@ -189,14 +197,16 @@ Status HashJoinNode::prepare(RuntimeState* state) {
 void HashJoinNode::_init_hash_table_param(HashTableParam* param) {
     param->with_other_conjunct = !_other_join_conjunct_ctxs.empty();
     param->join_type = _join_type;
-    param->row_desc = &_row_descriptor;
     param->build_row_desc = &child(1)->row_desc();
     param->probe_row_desc = &child(0)->row_desc();
     param->search_ht_timer = _search_ht_timer;
+    param->probe_counter = _probe_counter;
     param->output_build_column_timer = _output_build_column_timer;
     param->output_probe_column_timer = _output_probe_column_timer;
     param->build_output_slots = _output_slots;
     param->probe_output_slots = _output_slots;
+    param->enable_late_materialization = _enable_late_materialization;
+    param->enable_partition_hash_join = _enable_partition_hash_join;
 
     std::set<SlotId> predicate_slots;
     for (ExprContext* expr_context : _conjunct_ctxs) {
@@ -463,10 +473,11 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
     }
 
     auto* pool = context->fragment_context()->runtime_state()->obj_pool();
-    HashJoinerParam param(pool, _hash_join_node, _id, _type, _is_null_safes, _build_expr_ctxs, _probe_expr_ctxs,
+    HashJoinerParam param(pool, _hash_join_node, _is_null_safes, _build_expr_ctxs, _probe_expr_ctxs,
                           _other_join_conjunct_ctxs, _conjunct_ctxs, child(1)->row_desc(), child(0)->row_desc(),
-                          _row_descriptor, child(1)->type(), child(0)->type(), child(1)->conjunct_ctxs().empty(),
-                          _build_runtime_filters, _output_slots, _output_slots, _distribution_mode, false);
+                          child(1)->type(), child(0)->type(), child(1)->conjunct_ctxs().empty(), _build_runtime_filters,
+                          _output_slots, _output_slots, _distribution_mode, false, _enable_late_materialization,
+                          _enable_partition_hash_join);
     auto hash_joiner_factory = std::make_shared<starrocks::pipeline::HashJoinerFactory>(param);
 
     // Create a shared RefCountedRuntimeFilterCollector
@@ -537,6 +548,8 @@ pipeline::OpFactories HashJoinNode::_decompose_to_pipeline(pipeline::PipelineBui
             DCHECK(!runtime_filter_build_desc->has_remote_targets());
             runtime_filter_build_desc->set_num_colocate_partition(num_right_partitions);
         }
+        size_t num_left_partition = context->source_operator(lhs_operators)->degree_of_parallelism();
+        DCHECK_EQ(num_left_partition, num_right_partitions);
         context->fragment_context()->runtime_filter_hub()->add_holder(_id, num_right_partitions);
     } else {
         context->fragment_context()->runtime_filter_hub()->add_holder(_id);
@@ -609,9 +622,9 @@ Status HashJoinNode::_evaluate_build_keys(const ChunkPtr& chunk) {
         const TypeDescriptor& data_type = ctx->root()->type();
         ASSIGN_OR_RETURN(ColumnPtr key_column, ctx->evaluate(chunk.get()));
         if (key_column->only_null()) {
-            ColumnPtr column = ColumnHelper::create_column(data_type, true);
+            MutableColumnPtr column = ColumnHelper::create_column(data_type, true);
             column->append_nulls(num_rows);
-            _key_columns.emplace_back(column);
+            _key_columns.emplace_back(std::move(column));
         } else if (key_column->is_constant()) {
             auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(key_column);
             const_column->data_column()->assign(num_rows, 0);
@@ -665,8 +678,8 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
                                     _pre_left_input_chunk = std::move(_cur_left_input_chunk);
                                 } else {
                                     // TODO: copy the small chunk to big chunk
-                                    Columns& dest_columns = _pre_left_input_chunk->columns();
-                                    Columns& src_columns = _cur_left_input_chunk->columns();
+                                    auto& dest_columns = _pre_left_input_chunk->columns();
+                                    auto& src_columns = _cur_left_input_chunk->columns();
                                     size_t num_rows = _cur_left_input_chunk->num_rows();
                                     // copy the new read chunk to the reserved
                                     for (size_t i = 0; i < dest_columns.size(); i++) {
@@ -688,9 +701,9 @@ Status HashJoinNode::_probe(RuntimeState* state, ScopedTimer<MonotonicStopWatch>
                     for (auto& probe_expr_ctx : _probe_expr_ctxs) {
                         ASSIGN_OR_RETURN(ColumnPtr column_ptr, probe_expr_ctx->evaluate(_probing_chunk.get()));
                         if (column_ptr->is_nullable() && column_ptr->is_constant()) {
-                            ColumnPtr column = ColumnHelper::create_column(probe_expr_ctx->root()->type(), true);
+                            MutableColumnPtr column = ColumnHelper::create_column(probe_expr_ctx->root()->type(), true);
                             column->append_nulls(_probing_chunk->num_rows());
-                            _key_columns.emplace_back(column);
+                            _key_columns.emplace_back(std::move(column));
                         } else if (column_ptr->is_constant()) {
                             auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(column_ptr);
                             const_column->data_column()->assign(_probing_chunk->num_rows(), 0);
@@ -945,10 +958,11 @@ Status HashJoinNode::_do_publish_runtime_filters(RuntimeState* state, int64_t li
         // skip if ht.size() > limit and it's only for local.
         if (!rf_desc->has_remote_targets() && _ht.get_row_count() > limit) continue;
         LogicalType build_type = rf_desc->build_expr_type();
-        JoinRuntimeFilter* filter = RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type);
+        RuntimeFilter* filter =
+                RuntimeFilterHelper::create_join_runtime_filter(_pool, build_type, rf_desc->join_mode());
         if (filter == nullptr) continue;
-        filter->set_join_mode(rf_desc->join_mode());
-        filter->init(_ht.get_row_count());
+        filter->get_bloom_filter()->init(_ht.get_row_count());
+
         int expr_order = rf_desc->build_expr_order();
         ColumnPtr column = _ht.get_key_columns()[expr_order];
         bool eq_null = _is_null_safes[expr_order];
@@ -994,6 +1008,29 @@ Status HashJoinNode::_create_implicit_local_join_runtime_filters(RuntimeState* s
     child(0)->push_down_join_runtime_filter(state, &(child(0)->runtime_filter_collector()));
 
     return Status::OK();
+}
+
+bool HashJoinNode::can_generate_global_runtime_filter() const {
+    return std::any_of(_build_runtime_filters.begin(), _build_runtime_filters.end(),
+                       [](const RuntimeFilterBuildDescriptor* rf) { return rf->has_remote_targets(); });
+}
+
+void HashJoinNode::push_down_join_runtime_filter(RuntimeState* state, RuntimeFilterProbeCollector* collector) {
+    if (collector->empty()) return;
+    if (_join_type == TJoinOp::INNER_JOIN || _join_type == TJoinOp::LEFT_SEMI_JOIN ||
+        _join_type == TJoinOp::RIGHT_SEMI_JOIN) {
+        ExecNode::push_down_join_runtime_filter(state, collector);
+        return;
+    }
+    _runtime_filter_collector.push_down(state, id(), collector, _tuple_ids, _local_rf_waiting_set);
+}
+
+TJoinDistributionMode::type HashJoinNode::distribution_mode() const {
+    return _distribution_mode;
+}
+
+const std::list<RuntimeFilterBuildDescriptor*>& HashJoinNode::build_runtime_filters() const {
+    return _build_runtime_filters;
 }
 
 } // namespace starrocks

@@ -672,9 +672,12 @@ public class InsertPlanTest extends PlanTestBase {
                     "    TUPLE ID: 2\n" +
                     "    RANDOM\n" +
                     "\n" +
-                    "  1:AGGREGATE (update finalize)\n" +
-                    "  |  output: min(2: v1), max(3: v2)\n" +
-                    "  |  group by: 1: pk");
+                    "  1:Project\n" +
+                    "  |  <slot 1> : 1: pk\n" +
+                    "  |  <slot 4> : CAST(2: v1 AS VARCHAR)\n" +
+                    "  |  <slot 5> : 3: v2\n" +
+                    "  |  \n" +
+                    "  0:OlapScanNode");
         }
         {
             // KesType is AGG_KEYS
@@ -805,8 +808,8 @@ public class InsertPlanTest extends PlanTestBase {
         Column k2 = new Column("k2", Type.INT);
         IcebergTable.Builder builder = IcebergTable.builder();
         builder.setCatalogName("iceberg_catalog");
-        builder.setRemoteDbName("iceberg_db");
-        builder.setRemoteTableName("iceberg_table");
+        builder.setCatalogDBName("iceberg_db");
+        builder.setCatalogTableName("iceberg_table");
         builder.setSrTableName("iceberg_table");
         builder.setFullSchema(Lists.newArrayList(k1, k2));
         builder.setNativeTable(nativeTable);

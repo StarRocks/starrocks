@@ -29,6 +29,7 @@ import org.apache.hudi.avro.HoodieAvroUtils;
 import org.apache.hudi.common.model.HoodieRecord;
 import org.apache.hudi.common.table.HoodieTableMetaClient;
 import org.apache.hudi.common.table.TableSchemaResolver;
+import org.apache.hudi.storage.hadoop.HadoopStorageConfiguration;
 
 import java.util.Arrays;
 import java.util.HashSet;
@@ -50,8 +51,8 @@ public class HudiTableFactory extends ExternalTableFactory {
     public static void copyFromCatalogTable(HudiTable.Builder builder, HudiTable catalogTable, Map<String, String> properties) {
         builder.setCatalogName(catalogTable.getCatalogName())
                 .setResourceName(properties.get(RESOURCE))
-                .setHiveDbName(catalogTable.getDbName())
-                .setHiveTableName(catalogTable.getTableName())
+                .setHiveDbName(catalogTable.getCatalogDBName())
+                .setHiveTableName(catalogTable.getCatalogTableName())
                 .setPartitionColNames(catalogTable.getPartitionColumnNames())
                 .setDataColNames(catalogTable.getDataColumnNames())
                 .setHudiProperties(catalogTable.getProperties())
@@ -107,7 +108,7 @@ public class HudiTableFactory extends ExternalTableFactory {
 
     private static void validateHudiColumnType(List<Column> columns, HudiTable oTable) throws DdlException {
         String hudiBasePath = oTable.getTableLocation();
-        Configuration conf = new Configuration();
+        HadoopStorageConfiguration conf = new HadoopStorageConfiguration(new Configuration());
         HoodieTableMetaClient metaClient =
                 HoodieTableMetaClient.builder().setConf(conf).setBasePath(hudiBasePath).build();
         TableSchemaResolver schemaUtil = new TableSchemaResolver(metaClient);

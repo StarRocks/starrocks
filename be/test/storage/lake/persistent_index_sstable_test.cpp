@@ -23,6 +23,7 @@
 #include "fs/fs.h"
 #include "fs/fs_util.h"
 #include "storage/lake/join_path.h"
+#include "storage/lake/utils.h"
 #include "storage/persistent_index.h"
 #include "storage/sstable/iterator.h"
 #include "storage/sstable/merger.h"
@@ -211,11 +212,9 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
     // 1. build sstable
     const std::string filename = "test_persistent_index_sstable_1.sst";
     ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
-    phmap::btree_map<std::string, std::list<IndexValueWithVer>, std::less<>> map;
+    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> map;
     for (int i = 0; i < N; i++) {
-        std::list<IndexValueWithVer> index_value_vers;
-        index_value_vers.emplace_front(100, i);
-        map.insert({fmt::format("test_key_{:016X}", i), index_value_vers});
+        map.emplace(fmt::format("test_key_{:016X}", i), std::make_pair(100, IndexValue(i)));
     }
     uint64_t filesize = 0;
     ASSERT_OK(PersistentIndexSstable::build_sstable(map, file.get(), &filesize));
@@ -228,6 +227,8 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
     sstable_pb.set_filename(filename);
     sstable_pb.set_filesize(filesize);
     ASSERT_OK(sst->init(std::move(read_file), sstable_pb, cache_ptr.get()));
+    // check memory usage
+    ASSERT_TRUE(sst->memory_usage() > 0);
 
     {
         // 3. multi get with version (all keys included)
@@ -368,10 +369,10 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
         int i = 0;
         for (; iter->Valid(); iter->Next()) {
             ASSERT_EQ(iter->key().to_string(), fmt::format("test_key_{:016X}", i));
-            IndexValueWithVerPB index_value_with_ver_pb;
+            IndexValuesWithVerPB index_value_with_ver_pb;
             ASSERT_TRUE(index_value_with_ver_pb.ParseFromArray(iter->value().data, iter->value().size));
-            ASSERT_EQ(index_value_with_ver_pb.versions(0), 100);
-            ASSERT_EQ(index_value_with_ver_pb.values(0), i);
+            ASSERT_EQ(index_value_with_ver_pb.values(0).version(), 100);
+            ASSERT_EQ(index_value_with_ver_pb.values(0).rowid(), i);
             i++;
         }
         ASSERT_OK(iter->status());
@@ -386,10 +387,10 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
         int i = N - 1;
         for (; iter->Valid(); iter->Prev()) {
             ASSERT_EQ(iter->key().to_string(), fmt::format("test_key_{:016X}", i));
-            IndexValueWithVerPB index_value_with_ver_pb;
+            IndexValuesWithVerPB index_value_with_ver_pb;
             ASSERT_TRUE(index_value_with_ver_pb.ParseFromArray(iter->value().data, iter->value().size));
-            ASSERT_EQ(index_value_with_ver_pb.versions(0), 100);
-            ASSERT_EQ(index_value_with_ver_pb.values(0), i);
+            ASSERT_EQ(index_value_with_ver_pb.values(0).version(), 100);
+            ASSERT_EQ(index_value_with_ver_pb.values(0).rowid(), i);
             i--;
         }
         ASSERT_OK(iter->status());
@@ -407,15 +408,64 @@ TEST_F(PersistentIndexSstableTest, test_persistent_index_sstable) {
             iter->Seek(fmt::format("test_key_{:016X}", r));
             if (r < N) {
                 ASSERT_EQ(iter->key().to_string(), fmt::format("test_key_{:016X}", r));
-                IndexValueWithVerPB index_value_with_ver_pb;
+                IndexValuesWithVerPB index_value_with_ver_pb;
                 ASSERT_TRUE(index_value_with_ver_pb.ParseFromArray(iter->value().data, iter->value().size));
-                ASSERT_EQ(index_value_with_ver_pb.versions(0), 100);
-                ASSERT_EQ(index_value_with_ver_pb.values(0), r);
+                ASSERT_EQ(index_value_with_ver_pb.values(0).version(), 100);
+                ASSERT_EQ(index_value_with_ver_pb.values(0).rowid(), r);
             } else {
                 ASSERT_FALSE(iter->Valid());
             }
         }
         delete iter;
+    }
+}
+
+TEST_F(PersistentIndexSstableTest, test_index_value_protobuf) {
+    IndexValuesWithVerPB index_value_pb;
+    for (int i = 0; i < 10; i++) {
+        auto* value = index_value_pb.add_values();
+        value->set_version(i);
+        value->set_rssid(i * 10 + i);
+        value->set_rowid(i * 20 + i);
+    }
+    for (int i = 0; i < 10; i++) {
+        const auto& value = index_value_pb.values(i);
+        ASSERT_EQ(value.version(), i);
+        IndexValue val = build_index_value(value);
+        ASSERT_TRUE(val == IndexValue(((uint64_t)(i * 10 + i) << 32) | (i * 20 + i)));
+    }
+}
+
+TEST_F(PersistentIndexSstableTest, test_ioerror_inject) {
+    const int N = 10000;
+    sstable::Options options;
+    const std::string filename = "test_ioerror_inject.sst";
+    ASSIGN_OR_ABORT(auto file, fs::new_writable_file(lake::join_path(kTestDir, filename)));
+    sstable::TableBuilder builder(options, file.get());
+    for (int i = 0; i < N; i++) {
+        std::string str = fmt::format("test_key_{:016X}", i);
+        IndexValue val(i);
+        builder.Add(Slice(str), Slice(val.v, 8));
+    }
+    SyncPoint::GetInstance()->SetCallBack("table_builder_footer_error",
+                                          [&](void* arg) { *(Status*)arg = Status::IOError("ut_test"); });
+    SyncPoint::GetInstance()->EnableProcessing();
+    auto st = builder.Finish();
+    SyncPoint::GetInstance()->ClearCallBack("table_builder_footer_error");
+    SyncPoint::GetInstance()->DisableProcessing();
+    uint64_t filesz = builder.FileSize();
+    if (st.ok()) {
+        // scan & check
+        sstable::Table* sstable = nullptr;
+        ASSIGN_OR_ABORT(auto read_file, fs::new_random_access_file(lake::join_path(kTestDir, filename)));
+        CHECK_OK(sstable::Table::Open(options, read_file.get(), filesz, &sstable));
+        sstable::ReadOptions read_options;
+        sstable::Iterator* iter = sstable->NewIterator(read_options);
+        for (iter->SeekToFirst(); iter->Valid() && iter->status().ok(); iter->Next()) {
+        }
+        ASSERT_TRUE(iter->status().ok());
+        delete iter;
+        delete sstable;
     }
 }
 

@@ -34,6 +34,9 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+
+import static com.starrocks.common.util.TimeUtils.DATETIME_WITH_TIME_ZONE_PATTERN;
 
 public class TimeUtilsTest {
 
@@ -249,5 +252,39 @@ public class TimeUtilsTest {
         } catch (DdlException e) {
             Assert.fail(e.getMessage());
         }
+    }
+    
+    @Test
+    public void testDateTimeWithTimeZonePattern() {
+        // Case1: date time string is '2024-09-10 Asia/Shanghai'
+        String value1 = "2024-09-10 Asia/Shanghai";
+        Matcher matcher1 = DATETIME_WITH_TIME_ZONE_PATTERN.matcher(value1);
+        Assert.assertTrue(matcher1.matches());
+        Assert.assertEquals("2024", matcher1.group("year"));
+        Assert.assertEquals("09", matcher1.group("month"));
+        Assert.assertEquals("10", matcher1.group("day"));
+        Assert.assertEquals("Asia/Shanghai", matcher1.group("timezone"));
+        Assert.assertNull(matcher1.group("hour"));
+        Assert.assertNull(matcher1.group("minute"));
+        Assert.assertNull(matcher1.group("second"));
+        Assert.assertNull(matcher1.group("fraction"));
+    
+        // Case2: date time string is '2024-09-10 01:01:01.123 Asia/Shanghai'
+        String value2 = "2024-09-10 01:01:01.123 Asia/Shanghai";
+        Matcher matcher2 = DATETIME_WITH_TIME_ZONE_PATTERN.matcher(value2);
+        Assert.assertTrue(matcher2.matches());
+        Assert.assertEquals("2024", matcher2.group("year"));
+        Assert.assertEquals("09", matcher2.group("month"));
+        Assert.assertEquals("10", matcher2.group("day"));
+        Assert.assertEquals("01", matcher2.group("hour"));
+        Assert.assertEquals("01", matcher2.group("minute"));
+        Assert.assertEquals("01", matcher2.group("second"));
+        Assert.assertEquals("123", matcher2.group("fraction"));
+        Assert.assertEquals("Asia/Shanghai", matcher2.group("timezone"));
+    
+        // Case3: date time string is ' 2024-09-10'. It will not match
+        String value3 = " 2024-09-10";
+        Matcher matcher3 = DATETIME_WITH_TIME_ZONE_PATTERN.matcher(value3);
+        Assert.assertFalse(matcher3.matches());
     }
 }

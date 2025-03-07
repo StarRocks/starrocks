@@ -38,6 +38,7 @@ import com.google.common.base.Strings;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.AccessTestUtil;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mysql.MysqlCapability;
@@ -48,24 +49,28 @@ import com.starrocks.mysql.MysqlErrPacket;
 import com.starrocks.mysql.MysqlOkPacket;
 import com.starrocks.mysql.MysqlSerializer;
 import com.starrocks.plugin.AuditEvent.AuditEventBuilder;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.DDLTestBase;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.mockito.Mockito;
+import org.xnio.StreamConnection;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.nio.channels.SocketChannel;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class ConnectProcessorTest extends DDLTestBase {
     private static ByteBuffer initDbPacket;
@@ -80,9 +85,10 @@ public class ConnectProcessorTest extends DDLTestBase {
     private static ConnectContext myContext;
 
     @Mocked
-    private static SocketChannel socketChannel;
+    private static StreamConnection connection;
 
     private static PQueryStatistics statistics = new PQueryStatistics();
+
 
     @BeforeClass
     public static void setUpClass() {
@@ -164,6 +170,8 @@ public class ConnectProcessorTest extends DDLTestBase {
 
         statistics.scanBytes = 0L;
         statistics.scanRows = 0L;
+
+        Mockito.mockStatic(AuditEncryptionChecker.class);
     }
 
     @Before
@@ -178,7 +186,7 @@ public class ConnectProcessorTest extends DDLTestBase {
         changeUserPacket.clear();
         resetConnectionPacket.clear();
         // Mock
-        MysqlChannel channel = new MysqlChannel(socketChannel);
+        MysqlChannel channel = new MysqlChannel(connection);
         new Expectations(channel) {
             {
                 channel.getRemoteHostPortString();
@@ -186,13 +194,13 @@ public class ConnectProcessorTest extends DDLTestBase {
                 result = "127.0.0.1:12345";
             }
         };
-        myContext = new ConnectContext(socketChannel);
+        myContext = new ConnectContext(connection);
         Deencapsulation.setField(myContext, "mysqlChannel", channel);
     }
 
     private static MysqlChannel mockChannel(ByteBuffer packet) {
         try {
-            MysqlChannel channel = new MysqlChannel(socketChannel);
+            MysqlChannel channel = new MysqlChannel(connection);
             new Expectations(channel) {
                 {
                     // Mock receive
@@ -220,7 +228,7 @@ public class ConnectProcessorTest extends DDLTestBase {
     }
 
     private static ConnectContext initMockContext(MysqlChannel channel, GlobalStateMgr globalStateMgr) {
-        ConnectContext context = new ConnectContext(socketChannel) {
+        ConnectContext context = new ConnectContext(connection) {
             private boolean firstTimeToSetCommand = true;
 
             @Override
@@ -409,7 +417,6 @@ public class ConnectProcessorTest extends DDLTestBase {
         ConnectContext ctx = initMockContext(mockChannel(queryPacket), GlobalStateMgr.getCurrentState());
 
         ConnectProcessor processor = new ConnectProcessor(ctx);
-
         // Mock statement executor
         new Expectations() {
             {
@@ -466,6 +473,34 @@ public class ConnectProcessorTest extends DDLTestBase {
         processor.processOnce();
         Assert.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
         Assert.assertTrue(myContext.getState().toResponsePacket() instanceof MysqlErrPacket);
+    }
+
+    @Test
+    public void testQueryWithCustomQueryId(@Mocked StmtExecutor executor) throws Exception {
+        ConnectContext ctx = initMockContext(mockChannel(queryPacket), GlobalStateMgr.getCurrentState());
+        ctx.getSessionVariable().setCustomQueryId("a_custom_query_id");
+
+        ConnectProcessor processor = new ConnectProcessor(ctx);
+
+        AtomicReference<String> customQueryId = new AtomicReference<>();
+        new MockUp<StmtExecutor>() {
+            @Mock
+            public void execute() throws Exception {
+                customQueryId.set(ctx.getCustomQueryId());
+            }
+
+            @Mock
+            public PQueryStatistics getQueryStatisticsForAuditLog() {
+                return null;
+            }
+        };
+        processor.processOnce();
+        Assert.assertEquals(MysqlCommand.COM_QUERY, myContext.getCommand());
+        // verify customQueryId is set during query execution
+        Assert.assertEquals("a_custom_query_id", customQueryId.get());
+        // customQueryId is cleared after query finished
+        Assert.assertEquals("", ctx.getCustomQueryId());
+        Assert.assertEquals("", ctx.getSessionVariable().getCustomQueryId());
     }
 
     @Test
@@ -585,7 +620,8 @@ public class ConnectProcessorTest extends DDLTestBase {
                 ");";
         StatementBase statementBase = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
 
-        processor.addRunningQueryDetail(statementBase);
+        processor.executor = new StmtExecutor(ctx, statementBase);
+        processor.executor.addRunningQueryDetail(statementBase);
 
         Assert.assertFalse(Strings.isNullOrEmpty(QueryDetailQueue.getQueryDetailsAfterTime(0).get(0).getSql()));
     }

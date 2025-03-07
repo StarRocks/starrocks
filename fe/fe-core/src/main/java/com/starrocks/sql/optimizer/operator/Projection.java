@@ -27,6 +27,7 @@ import java.util.Objects;
 import java.util.Set;
 
 public class Projection {
+    // output column ref -> expression
     private final Map<ColumnRefOperator, ScalarOperator> columnRefMap;
     // Used for common operator compute result reuse, we need to compute
     // common sub operators firstly in BE
@@ -75,7 +76,17 @@ public class Projection {
     public ColumnRefSet getUsedColumns() {
         final ColumnRefSet usedColumns = new ColumnRefSet();
         columnRefMap.values().stream().forEach(e -> usedColumns.union(e.getUsedColumns()));
+        commonSubOperatorMap.values().stream().forEach(e -> usedColumns.union(e.getUsedColumns()));
+        // remove some of columnRefMap's used columns which are from commonSubOperatorMap's output column
+        commonSubOperatorMap.keySet().stream().forEach(e -> usedColumns.union(e.getUsedColumns()));
         return usedColumns;
+    }
+
+    public ScalarOperator resolveColumnRef(ColumnRefOperator ref) {
+        if (columnRefMap.containsKey(ref)) {
+            return columnRefMap.get(ref);
+        }
+        return commonSubOperatorMap.get(ref);
     }
 
     public Map<ColumnRefOperator, ScalarOperator> getColumnRefMap() {

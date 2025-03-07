@@ -94,8 +94,8 @@ public:
         c2->append_numbers(k1.data(), k1.size() * sizeof(int));
         c3->append_numbers(v1.data(), v1.size() * sizeof(int));
 
-        Chunk chunk0({c0, c1}, _schema);
-        Chunk chunk1({c2, c3}, _schema);
+        Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
+        Chunk chunk1({std::move(c2), std::move(c3)}, _schema);
 
         ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(tablet_metadata->id()));
 
@@ -160,8 +160,8 @@ TEST_F(LakeScanNodeTest, test_could_split) {
     auto tablet_internal_parallel_mode = TTabletInternalParallelMode::type::AUTO;
     std::map<int32_t, std::vector<TScanRangeParams>> no_scan_ranges_per_driver_seq;
 
-    auto data_source_provider = scan_node->data_source_provider();
-    dynamic_cast<connector::LakeDataSourceProvider*>(data_source_provider)->set_lake_tablet_manager(_tablet_mgr.get());
+    auto data_source_provider = dynamic_cast<connector::LakeDataSourceProvider*>(scan_node->data_source_provider());
+    data_source_provider->set_lake_tablet_manager(_tablet_mgr.get());
 
     config::tablet_internal_parallel_max_splitted_scan_bytes = 32;
     config::tablet_internal_parallel_min_splitted_scan_rows = 4;
@@ -172,7 +172,7 @@ TEST_F(LakeScanNodeTest, test_could_split) {
     auto scan_ranges = create_scan_ranges_cloud(tablet_metas);
     ASSIGN_OR_ABORT(auto morsel_queue_factory,
                     scan_node->convert_scan_range_to_morsel_queue_factory(
-                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop,
+                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop, false,
                             enable_tablet_internal_parallel, tablet_internal_parallel_mode));
     ASSERT_FALSE(data_source_provider->could_split());
     ASSERT_FALSE(data_source_provider->could_split_physically());
@@ -182,7 +182,7 @@ TEST_F(LakeScanNodeTest, test_could_split) {
     config::tablet_internal_parallel_min_scan_dop = 10;
     ASSIGN_OR_ABORT(morsel_queue_factory,
                     scan_node->convert_scan_range_to_morsel_queue_factory(
-                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop,
+                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop, false,
                             enable_tablet_internal_parallel, tablet_internal_parallel_mode));
     ASSERT_FALSE(data_source_provider->could_split());
     ASSERT_FALSE(data_source_provider->could_split_physically());
@@ -192,7 +192,7 @@ TEST_F(LakeScanNodeTest, test_could_split) {
     config::tablet_internal_parallel_min_scan_dop = 4;
     ASSIGN_OR_ABORT(morsel_queue_factory,
                     scan_node->convert_scan_range_to_morsel_queue_factory(
-                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop,
+                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop, false,
                             enable_tablet_internal_parallel, tablet_internal_parallel_mode));
     ASSERT_TRUE(data_source_provider->could_split());
     ASSERT_TRUE(data_source_provider->could_split_physically());
@@ -218,8 +218,8 @@ TEST_F(LakeScanNodeTest, test_issue_44386) {
     auto tablet_internal_parallel_mode = TTabletInternalParallelMode::type::AUTO;
     std::map<int32_t, std::vector<TScanRangeParams>> no_scan_ranges_per_driver_seq;
 
-    auto data_source_provider = scan_node->data_source_provider();
-    dynamic_cast<connector::LakeDataSourceProvider*>(data_source_provider)->set_lake_tablet_manager(_tablet_mgr.get());
+    auto data_source_provider = dynamic_cast<connector::LakeDataSourceProvider*>(scan_node->data_source_provider());
+    data_source_provider->set_lake_tablet_manager(_tablet_mgr.get());
 
     config::tablet_internal_parallel_max_splitted_scan_bytes = 32;
     config::tablet_internal_parallel_min_splitted_scan_rows = 4;
@@ -231,7 +231,7 @@ TEST_F(LakeScanNodeTest, test_issue_44386) {
     config::tablet_internal_parallel_min_scan_dop = 4;
     ASSIGN_OR_ABORT(auto morsel_queue_factory,
                     scan_node->convert_scan_range_to_morsel_queue_factory(
-                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop,
+                            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), pipeline_dop, false,
                             enable_tablet_internal_parallel, tablet_internal_parallel_mode));
     ASSERT_TRUE(data_source_provider->could_split());
     ASSERT_TRUE(data_source_provider->could_split_physically());

@@ -66,7 +66,7 @@ void GrepLogAction::handle(HttpRequest* req) {
         return;
     }
 
-    auto ret = grep_log_as_string(start_ts, end_ts, std::toupper(level[0]), pattern, limit);
+    auto ret = grep_log_as_string(start_ts, end_ts, level, pattern, limit);
 
     HttpChannel::send_reply(req, HttpStatus::OK, ret);
 }

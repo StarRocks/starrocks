@@ -19,6 +19,7 @@
 
 #include <boost/cstdint.hpp>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -38,6 +39,8 @@ public:
     static const int64_t POPCNT = (1 << 4);
     static const int64_t AVX = (1 << 5);
     static const int64_t AVX2 = (1 << 6);
+    static const int64_t AVX512F = (1 << 7);
+    static const int64_t AVX512BW = (1 << 8);
 
     /// Cache enums for L1 (data), L2 and L3
     enum CacheLevel {
@@ -82,6 +85,40 @@ public:
 
     static std::string debug_string();
 
+    static const std::vector<long>& get_cache_sizes() {
+        static std::vector<long> cache_sizes;
+        static std::vector<long> cache_line_sizes;
+
+        if (cache_sizes.empty()) {
+            cache_sizes.resize(NUM_CACHE_LEVELS);
+            cache_line_sizes.resize(NUM_CACHE_LEVELS);
+            _get_cache_info(cache_sizes.data(), cache_line_sizes.data());
+        }
+        return cache_sizes;
+    }
+
+    static long get_l3_cache_size() {
+        auto& cache_sizes = get_cache_sizes();
+        return cache_sizes[CacheLevel::L3_CACHE] ? cache_sizes[CacheLevel::L3_CACHE]
+                                                 : cache_sizes[CacheLevel::L2_CACHE];
+    }
+
+    static std::vector<size_t> get_core_ids();
+
+    static bool is_cgroup_with_cpuset() { return is_cgroup_with_cpuset_; }
+    static bool is_cgroup_with_cpu_quota() { return is_cgroup_with_cpu_quota_; }
+
+    /// Parse a string-formatted cpus in the format "0-3,5,7-9" and return the parsed core IDs.
+    static std::vector<size_t> parse_cpus(const std::string& cpus_str);
+
+    // Check cpu flags in runtime, whether the running CPU matches the compiled binary with necessary
+    // CPU instruction set such as SSE4/AVX/AVX2/AVX512/...
+    // Return value: the cpu instruction sets that are not supported in the current running env.
+    static std::vector<std::string> unsupported_cpu_flags_from_current_env();
+
+    // For TEST only
+    static int64_t* TEST_mutable_hardware_flags() { return &hardware_flags_; }
+
 private:
     /// Initialize NUMA-related state - called from Init();
     static void _init_numa();
@@ -92,6 +129,9 @@ private:
     /// Initialize 'numa_node_to_cores_' based on 'max_num_numa_nodes_' and
     /// 'core_to_numa_node_'. Called from InitNuma();
     static void _init_numa_node_to_cores();
+
+    /// Initialize 'core_to_numa_node_' from `/sys/devices/system/cpu/offline`.
+    static void _init_offline_cores();
 
     /// Populates the arguments with information about this machine's caches.
     /// The values returned are not reliable in some environments, e.g. RHEL5 on EC2, so
@@ -105,6 +145,9 @@ private:
     static int max_num_cores_;
     static std::string model_name_;
 
+    static bool is_cgroup_with_cpuset_;
+    static bool is_cgroup_with_cpu_quota_;
+
     /// Maximum possible number of NUMA nodes.
     static int max_num_numa_nodes_;
 
@@ -114,6 +157,8 @@ private:
     /// Vector with 'max_num_numa_nodes_' entries, each of which is a vector of the cores
     /// belonging to that NUMA node.
     static std::vector<std::vector<int>> numa_node_to_cores_;
+    static std::vector<size_t> cpuset_cores_;
+    static std::set<size_t> offline_cores_;
 
     /// Array with 'max_num_cores_' entries, each of which is the index of that core in its
     /// NUMA node.

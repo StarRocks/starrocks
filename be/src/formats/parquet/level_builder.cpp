@@ -14,42 +14,57 @@
 
 #include "formats/parquet/level_builder.h"
 
-#include <parquet/arrow/writer.h>
+#include <fmt/core.h>
 
-#include <functional>
+#include <string>
 #include <utility>
 
 #include "column/array_column.h"
+#include "column/column.h"
 #include "column/column_helper.h"
+#include "column/fixed_length_column.h"
 #include "column/map_column.h"
+#include "column/nullable_column.h"
 #include "column/struct_column.h"
-#include "column/vectorized_fwd.h"
-#include "common/logging.h"
-#include "exprs/expr.h"
+#include "column/type_traits.h"
+#include "common/compiler_util.h"
 #include "gutil/casts.h"
-#include "gutil/endian.h"
+#include "types/date_value.h"
 #include "util/defer_op.h"
+#include "utils.h"
 
 namespace starrocks::parquet {
 
-inline uint8_t* get_raw_null_column(const ColumnPtr& col) {
+inline const uint8_t* get_raw_null_column(const ColumnPtr& col) {
     if (!col->has_null()) {
         return nullptr;
     }
-    auto& null_column = down_cast<NullableColumn*>(col.get())->null_column();
+    auto& null_column = down_cast<const NullableColumn*>(col.get())->null_column();
     auto* raw_column = null_column->get_data().data();
     return raw_column;
 }
 
 template <LogicalType lt>
-inline RunTimeCppType<lt>* get_raw_data_column(const ColumnPtr& col) {
+inline const RunTimeCppType<lt>* get_raw_data_column(const ColumnPtr& col) {
     auto* data_column = ColumnHelper::get_data_column(col.get());
-    auto* raw_column = down_cast<RunTimeColumnType<lt>*>(data_column)->get_data().data();
+    auto* raw_column = down_cast<const RunTimeColumnType<lt>*>(data_column)->get_data().data();
     return raw_column;
 }
 
-LevelBuilder::LevelBuilder(TypeDescriptor type_desc, ::parquet::schema::NodePtr root)
-        : _type_desc(std::move(type_desc)), _root(std::move(root)) {}
+LevelBuilder::LevelBuilder(TypeDescriptor type_desc, ::parquet::schema::NodePtr root, std::string timezone,
+                           bool use_legacy_decimal_encoding, bool use_int96_timestamp_encoding)
+        : _type_desc(std::move(type_desc)),
+          _root(std::move(root)),
+          _timezone(std::move(timezone)),
+          _use_legacy_decimal_encoding(use_legacy_decimal_encoding),
+          _use_int96_timestamp_encoding(use_int96_timestamp_encoding) {}
+
+Status LevelBuilder::init() {
+    if (!TimezoneUtils::find_cctz_time_zone(_timezone, _ctz)) {
+        return Status::InternalError(fmt::format("can not find cctz time zone {}", timezone));
+    }
+    return Status::OK();
+}
 
 Status LevelBuilder::write(const LevelBuilderContext& ctx, const ColumnPtr& col,
                            const CallbackFunction& write_leaf_callback) {
@@ -88,21 +103,33 @@ Status LevelBuilder::_write_column_chunk(const LevelBuilderContext& ctx, const T
                                                                              write_leaf_callback);
     }
     case TYPE_DECIMAL32: {
-        return _write_int_column_chunk<TYPE_DECIMAL32, ::parquet::Type::INT32>(ctx, type_desc, node, col,
-                                                                               write_leaf_callback);
+        if (!_use_legacy_decimal_encoding) {
+            return _write_int_column_chunk<TYPE_DECIMAL32, ::parquet::Type::INT32>(ctx, type_desc, node, col,
+                                                                                   write_leaf_callback);
+        } else {
+            return _write_decimal_to_flba_column_chunk<TYPE_DECIMAL32>(ctx, type_desc, node, col, write_leaf_callback);
+        }
     }
     case TYPE_DECIMAL64: {
-        return _write_int_column_chunk<TYPE_DECIMAL64, ::parquet::Type::INT64>(ctx, type_desc, node, col,
-                                                                               write_leaf_callback);
+        if (!_use_legacy_decimal_encoding) {
+            return _write_int_column_chunk<TYPE_DECIMAL64, ::parquet::Type::INT64>(ctx, type_desc, node, col,
+                                                                                   write_leaf_callback);
+        } else {
+            return _write_decimal_to_flba_column_chunk<TYPE_DECIMAL64>(ctx, type_desc, node, col, write_leaf_callback);
+        }
     }
     case TYPE_DECIMAL128: {
-        return _write_decimal128_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
+        return _write_decimal_to_flba_column_chunk<TYPE_DECIMAL128>(ctx, type_desc, node, col, write_leaf_callback);
     }
     case TYPE_DATE: {
         return _write_date_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
     }
     case TYPE_DATETIME: {
-        return _write_datetime_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
+        if (_use_int96_timestamp_encoding) {
+            return _write_datetime_column_chunk<true>(ctx, type_desc, node, col, write_leaf_callback);
+        } else {
+            return _write_datetime_column_chunk<false>(ctx, type_desc, node, col, write_leaf_callback);
+        }
     }
     case TYPE_CHAR:
     case TYPE_VARCHAR: {
@@ -123,6 +150,9 @@ Status LevelBuilder::_write_column_chunk(const LevelBuilderContext& ctx, const T
     }
     case TYPE_TIME: {
         return _write_time_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
+    }
+    case TYPE_JSON: {
+        return _write_json_column_chunk(ctx, type_desc, node, col, write_leaf_callback);
     }
     default: {
         return Status::NotSupported(fmt::format("Doesn't support to write {} type data", type_desc.debug_string()));
@@ -164,8 +194,8 @@ template <LogicalType lt, ::parquet::Type::type pt>
 Status LevelBuilder::_write_int_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
                                              const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                              const CallbackFunction& write_leaf_callback) {
-    auto* data_col = get_raw_data_column<lt>(col);
-    auto* null_col = get_raw_null_column(col);
+    const auto* data_col = get_raw_data_column<lt>(col);
+    const auto* null_col = get_raw_null_column(col);
 
     // Use the rep_levels in the context from caller since node is primitive.
     auto& rep_levels = ctx._rep_levels;
@@ -182,7 +212,7 @@ Status LevelBuilder::_write_int_column_chunk(const LevelBuilderContext& ctx, con
                 .num_levels = ctx._num_levels,
                 .def_levels = def_levels ? def_levels->data() : nullptr,
                 .rep_levels = rep_levels ? rep_levels->data() : nullptr,
-                .values = reinterpret_cast<uint8_t*>(data_col),
+                .values = const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(data_col)),
                 .null_bitset = null_bitset ? null_bitset->data() : nullptr,
         });
     } else {
@@ -206,10 +236,13 @@ Status LevelBuilder::_write_int_column_chunk(const LevelBuilderContext& ctx, con
     return Status::OK();
 }
 
-Status LevelBuilder::_write_decimal128_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
-                                                    const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
-                                                    const CallbackFunction& write_leaf_callback) {
-    const auto* data_col = get_raw_data_column<TYPE_DECIMAL128>(col);
+template <LogicalType lt>
+Status LevelBuilder::_write_decimal_to_flba_column_chunk(const LevelBuilderContext& ctx,
+                                                         const TypeDescriptor& type_desc,
+                                                         const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                                         const CallbackFunction& write_leaf_callback) {
+    static_assert(lt_is_decimal<lt>);
+    const auto* data_col = get_raw_data_column<lt>(col);
     const auto* null_col = get_raw_null_column(col);
 
     // Use the rep_levels in the context from caller since node is primitive.
@@ -217,20 +250,22 @@ Status LevelBuilder::_write_decimal128_column_chunk(const LevelBuilderContext& c
     auto def_levels = _make_def_levels(ctx, node, null_col, col->size());
     auto null_bitset = _make_null_bitset(ctx, null_col, col->size());
 
-    auto values = new unsigned __int128[col->size()];
+    using cpp_type = RunTimeCppType<lt>;
+    auto values = new cpp_type[col->size()];
     DeferOp defer([&] { delete[] values; });
 
     for (size_t i = 0; i < col->size(); i++) {
         // unscaled number must be encoded as two's complement using big-endian byte order (the most significant byte
         // is the zeroth element). See https://github.com/apache/parquet-format/blob/master/LogicalTypes.md#decimal
-        values[i] = BigEndian::FromHost128(data_col[i]);
+        values[i] = BitUtil::big_endian<cpp_type>(data_col[i]);
     }
 
     auto flba_values = new ::parquet::FixedLenByteArray[col->size()];
     DeferOp flba_defer([&] { delete[] flba_values; });
 
+    size_t padding = sizeof(cpp_type) - ParquetUtils::decimal_precision_to_byte_count(type_desc.precision);
     for (size_t i = 0; i < col->size(); i++) {
-        flba_values[i].ptr = reinterpret_cast<const uint8_t*>(values + i);
+        flba_values[i].ptr = reinterpret_cast<const uint8_t*>(values + i) + padding;
     }
 
     write_leaf_callback(LevelBuilderResult{
@@ -303,6 +338,7 @@ Status LevelBuilder::_write_time_column_chunk(const LevelBuilderContext& ctx, co
     return Status::OK();
 }
 
+template <bool use_int96_timestamp_encoding>
 Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
                                                   const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
                                                   const CallbackFunction& write_leaf_callback) {
@@ -314,11 +350,28 @@ Status LevelBuilder::_write_datetime_column_chunk(const LevelBuilderContext& ctx
     auto def_levels = _make_def_levels(ctx, node, null_col, col->size());
     auto null_bitset = _make_null_bitset(ctx, null_col, col->size());
 
-    auto values = new int64_t[col->size()];
+    using cpp_type = std::conditional_t<use_int96_timestamp_encoding, ::parquet::Int96, int64_t>;
+    auto values = new cpp_type[col->size()];
     DeferOp defer([&] { delete[] values; });
 
     for (size_t i = 0; i < col->size(); i++) {
-        values[i] = data_col[i].to_unix_second() * 1000;
+        auto offset = timestamp::get_timezone_offset_by_timestamp(data_col[i]._timestamp, _ctz);
+
+        auto timestamp = use_int96_timestamp_encoding ? timestamp::sub<TimeUnit::SECOND>(data_col[i]._timestamp, offset)
+                                                      : data_col[i]._timestamp;
+
+        if constexpr (use_int96_timestamp_encoding) {
+            auto date = reinterpret_cast<int32_t*>(values[i].value + 2);
+            auto nanosecond = reinterpret_cast<int64_t*>(values[i].value);
+            *date = timestamp::to_julian(timestamp);
+            *nanosecond = timestamp::to_time(timestamp) * 1000;
+        } else {
+            int64_t value = timestamp::to_julian(timestamp);
+            value *= USECS_PER_DAY;
+            value += timestamp::to_time(timestamp);
+            value -= timestamp::UNIX_EPOCH_SECONDS * USECS_PER_SEC;
+            values[i] = value;
+        }
     }
 
     write_leaf_callback(LevelBuilderResult{
@@ -380,7 +433,7 @@ Status LevelBuilder::_write_array_column_chunk(const LevelBuilderContext& ctx, c
     auto inner_node = mid_node->field(0);
 
     auto* null_col = get_raw_null_column(col);
-    auto* array_col = down_cast<ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
+    auto* array_col = down_cast<const ArrayColumn*>(ColumnHelper::get_data_column(col.get()));
     const auto& elements = array_col->elements_column();
     const auto& offsets = array_col->offsets_column()->get_data();
 
@@ -459,7 +512,7 @@ Status LevelBuilder::_write_map_column_chunk(const LevelBuilderContext& ctx, con
     auto value_node = mid_node->field(1);
 
     auto* null_col = get_raw_null_column(col);
-    auto* map_col = down_cast<MapColumn*>(ColumnHelper::get_data_column(col.get()));
+    auto* map_col = down_cast<const MapColumn*>(ColumnHelper::get_data_column(col.get()));
     const auto& keys = map_col->keys_column();
     if (UNLIKELY(keys->has_null())) {
         return Status::NotSupported("Does not support to write map value of null key");
@@ -531,7 +584,7 @@ Status LevelBuilder::_write_struct_column_chunk(const LevelBuilderContext& ctx, 
 
     auto* null_col = get_raw_null_column(col);
     auto* data_col = ColumnHelper::get_data_column(col.get());
-    auto* struct_col = down_cast<StructColumn*>(data_col);
+    auto* struct_col = down_cast<const StructColumn*>(data_col);
 
     // Use the rep_levels in the context from caller since node is primitive.
     auto rep_levels = ctx._rep_levels;
@@ -546,6 +599,41 @@ Status LevelBuilder::_write_struct_column_chunk(const LevelBuilderContext& ctx, 
         RETURN_IF_ERROR(_write_column_chunk(derived_ctx, type_desc.children[i], struct_node->field(i), sub_col,
                                             write_leaf_callback));
     }
+    return Status::OK();
+}
+
+Status LevelBuilder::_write_json_column_chunk(const LevelBuilderContext& ctx, const TypeDescriptor& type_desc,
+                                              const ::parquet::schema::NodePtr& node, const ColumnPtr& col,
+                                              const CallbackFunction& write_leaf_callback) {
+    const auto* data_col = down_cast<const JsonColumn*>(ColumnHelper::get_data_column(col.get()));
+    const auto* null_col = get_raw_null_column(col);
+
+    // Use the rep_levels in the context from caller since node is primitive.
+    auto& rep_levels = ctx._rep_levels;
+    auto def_levels = _make_def_levels(ctx, node, null_col, col->size());
+    auto null_bitset = _make_null_bitset(ctx, null_col, col->size());
+
+    auto values = new ::parquet::ByteArray[col->size()];
+    DeferOp defer([&] { delete[] values; });
+
+    std::vector<std::string> datas;
+    datas.reserve(col->size());
+    for (size_t i = 0; i < col->size(); i++) {
+        auto json_value = data_col->get_object(i);
+        datas.emplace_back(json_value->to_string_uncheck());
+        const std::string& v = datas.back();
+        values[i].len = static_cast<uint32_t>(v.size());
+        values[i].ptr = reinterpret_cast<const uint8_t*>(v.c_str());
+    }
+
+    write_leaf_callback(LevelBuilderResult{
+            .num_levels = ctx._num_levels,
+            .def_levels = def_levels ? def_levels->data() : nullptr,
+            .rep_levels = rep_levels ? rep_levels->data() : nullptr,
+            .values = reinterpret_cast<uint8_t*>(values),
+            .null_bitset = null_bitset ? null_bitset->data() : nullptr,
+    });
+
     return Status::OK();
 }
 

@@ -72,6 +72,10 @@ public class MvRewriteContext {
         this.joinDeriveContexts = Lists.newArrayList();
     }
 
+    public String getMVName() {
+        return materializationContext.getMv().getName();
+    }
+
     public MaterializationContext getMaterializationContext() {
         return materializationContext;
     }
@@ -142,6 +146,10 @@ public class MvRewriteContext {
 
     public void setMvTableScanDescs(List<TableScanDesc> mvTableScanDescs) {
         this.mvTableScanDescs = mvTableScanDescs;
+    }
+
+    public boolean isInAggregatePushDown() {
+        return aggregatePushDownContext != null;
     }
 
     public AggregatePushDownContext getAggregatePushDownContext() {

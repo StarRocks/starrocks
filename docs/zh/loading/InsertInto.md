@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 通过 INSERT 语句导入数据
 
-import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
+import InsertPrivNote from '../_assets/commonMarkdown/insertPrivNote.md'
 
 本文介绍如何使用 INSERT 语句向 StarRocks 导入数据。
 
@@ -12,19 +12,21 @@ import InsertPrivNote from '../assets/commonMarkdown/insertPrivNote.md'
 
 2.4 版本中，StarRocks 进一步支持通过 INSERT OVERWRITE 语句批量**覆盖写入**目标表。INSERT OVERWRITE 语句通过整合以下三部分操作来实现覆盖写入：
 
-1. 为目标分区[创建临时分区](../table_design/Temporary_partition.md#创建临时分区)
-2. [写入数据至临时分区](../table_design/Temporary_partition.md#导入数据至临时分区)
-3. [使用临时分区原子替换目标分区](../table_design/Temporary_partition.md#使用临时分区进行替换)
+1. 为目标分区[创建临时分区](../table_design/data_distribution/Temporary_partition.md#创建临时分区)
+2. [写入数据至临时分区](../table_design/data_distribution/Temporary_partition.md#导入数据至临时分区)
+3. [使用临时分区原子替换目标分区](../table_design/data_distribution/Temporary_partition.md#使用临时分区进行替换)
 
 如果您希望在替换前验证数据，可以根据以上步骤自行实现覆盖写入数据。
+
+从 v3.4.0 开始，StarRocks 支持分区表的 INSERT OVERWRITE 操作的新语义 — Dynamic Overwrite。更多信息，参考 [Dynamic Overwrite](#dynamic-overwrite)。
 
 ## 注意事项
 
 - 您只能在 MySQL 客户端通过 `Ctrl` + `C` 按键强制取消同步 INSERT 导入任务。
-- 您可以通过 [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md) 创建异步 INSERT 导入任务。
+- 您可以通过 [SUBMIT TASK](../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) 创建异步 INSERT 导入任务。
 - 当前版本中，StarRocks 在执行 INSERT 语句时，如果有数据不符合目标表格式（例如字符串超长等情况），INSERT 操作默认执行失败。您可以通过设置会话变量 `enable_insert_strict` 为 `false` 以确保 INSERT 操作过滤不符合目标表格式的数据，并继续执行。
 - 频繁使用 INSERT 语句导入小批量数据会产生过多的数据版本，从而影响查询性能，因此不建议您频繁使用 INSERT 语句导入数据或将其作为生产环境的日常例行导入作业。如果您的业务场景需要流式导入或者小批量多次导入数据，建议使用 Apache Kafka® 作为数据源并通过 [Routine Load](../loading/RoutineLoad.md) 方式进行导入作业。
-- 执行 INSERT OVERWRITE 语句后，系统将为目标分区创建相应的临时分区，并将数据写入临时分区，最后使用临时分区[原子替换](../sql-reference/sql-statements/data-definition/ALTER_TABLE.md#使用临时分区替换原分区)目标分区来实现覆盖写入。其所有过程均在 Leader FE 节点执行。因此，如果 Leader FE 节点在覆盖写入过程中发生宕机，将会导致该次 INSERT OVERWRITE 导入失败，其过程中所创建的临时分区也会被删除。
+- 执行 INSERT OVERWRITE 语句后，系统将为目标分区创建相应的临时分区，并将数据写入临时分区，最后使用临时分区[原子替换](../sql-reference/sql-statements/table_bucket_part_index/ALTER_TABLE.md#使用临时分区替换原分区)目标分区来实现覆盖写入。其所有过程均在 Leader FE 节点执行。因此，如果 Leader FE 节点在覆盖写入过程中发生宕机，将会导致该次 INSERT OVERWRITE 导入失败，其过程中所创建的临时分区也会被删除。
 
 ## 准备工作
 
@@ -109,11 +111,11 @@ DISTRIBUTED BY HASH(user);
 
 > **注意**
 >
-> 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/Data_distribution.md#设置分桶数量)。
+> 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../table_design/data_distribution/Data_distribution.md#设置分桶数量)。
 
 ## 通过 INSERT INTO VALUES 语句导入数据
 
-您可以通过 INSERT INTO VALUES 语句向指定的表中直接导入数据。此导入方式中，多条数据用逗号（,）分隔。详细使用方式，参考 [SQL 参考 - INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)。详细参数信息，参考 [INSERT 参数说明](../sql-reference/sql-statements/data-manipulation/INSERT.md#参数说明)。
+您可以通过 INSERT INTO VALUES 语句向指定的表中直接导入数据。此导入方式中，多条数据用逗号（,）分隔。详细使用方式，参考 [SQL 参考 - INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md)。详细参数信息，参考 [INSERT 参数说明](../sql-reference/sql-statements/loading_unloading/INSERT.md#参数说明)。
 
 > **注意**
 >
@@ -137,7 +139,7 @@ VALUES
 
 ## 通过 INSERT INTO SELECT 语句导入数据
 
-您可以通过 INSERT INTO SELECT 语句将源表中的数据导入至目标表中。INSERT INTO SELECT 将源表中的数据进行 ETL 转换之后，导入到 StarRocks 内表中。源表可以是一张或多张内部表或者外部表，甚至云存储或 HDFS 中的数据文件。目标表必须是 StarRocks 的内表。执行该语句之后，系统将 SELECT 语句结果导入目标表。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)。详细参数信息，参考 [INSERT 参数](../sql-reference/sql-statements/data-manipulation/INSERT.md#参数说明)。
+您可以通过 INSERT INTO SELECT 语句将源表中的数据导入至目标表中。INSERT INTO SELECT 将源表中的数据进行 ETL 转换之后，导入到 StarRocks 内表中。源表可以是一张或多张内部表或者外部表，甚至云存储或 HDFS 中的数据文件。目标表必须是 StarRocks 的内表。执行该语句之后，系统将 SELECT 语句结果导入目标表。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md)。详细参数信息，参考 [INSERT 参数](../sql-reference/sql-statements/loading_unloading/INSERT.md#参数说明)。
 
 ### 通过 INSERT INTO SELECT 将内外表数据导入内表
 
@@ -192,6 +194,10 @@ WITH LABEL insert_load_wikipedia_3
 SELECT event_time, channel FROM source_wiki_edit;
 ```
 
+:::note
+自 v3.3.1 起，INSERT INTO 导入主键表时指定 Column List 会执行部分列更新（而在先前版本中，指定 Column List 仍然导致 Full Upsert）。如不指定 Column List，系统执行 Full Upsert。
+:::
+
 | 参数        | 说明                                                         |
 | ----------- | ------------------------------------------------------------ |
 | table_name  | 导入数据的目标表。可以为 `db_name.table_name` 形式。         |
@@ -219,7 +225,7 @@ INSERT INTO insert_wiki_edit
 
 ## 通过 INSERT OVERWRITE VALUES 语句覆盖写入数据
 
-您可以通过 INSERT OVERWRITE VALUES 语句向指定的表中覆盖写入数据。此导入方式中，多条数据用逗号（,）分隔。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)。详细参数信息，参考 [INSERT 参数说明](../sql-reference/sql-statements/data-manipulation/INSERT.md#参数说明)。
+您可以通过 INSERT OVERWRITE VALUES 语句向指定的表中覆盖写入数据。此导入方式中，多条数据用逗号（,）分隔。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md)。详细参数信息，参考 [INSERT 参数说明](../sql-reference/sql-statements/loading_unloading/INSERT.md#参数说明)。
 
 > **注意**
 >
@@ -259,7 +265,7 @@ VALUES
 
 ## 通过 INSERT OVERWRITE SELECT 语句覆盖写入数据
 
-您可以通过 INSERT OVERWRITE SELECT 语句将源表中的数据覆盖写入至目标表中。INSERT OVERWRITE SELECT 将源表中的数据进行 ETL 转换之后，覆盖写入到 StarRocks 内表中。源表可以是一张或多张内部表或者外部表。目标表必须是 StarRocks 的内表。执行该语句之后，系统使用 SELECT 语句结果覆盖目标表的数据。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/data-manipulation/INSERT.md)。详细参数信息，参考 [INSERT 参数](../sql-reference/sql-statements/data-manipulation/INSERT.md#参数说明)。
+您可以通过 INSERT OVERWRITE SELECT 语句将源表中的数据覆盖写入至目标表中。INSERT OVERWRITE SELECT 将源表中的数据进行 ETL 转换之后，覆盖写入到 StarRocks 内表中。源表可以是一张或多张内部表或者外部表。目标表必须是 StarRocks 的内表。执行该语句之后，系统使用 SELECT 语句结果覆盖目标表的数据。详细使用方式，参考 [INSERT](../sql-reference/sql-statements/loading_unloading/INSERT.md)。详细参数信息，参考 [INSERT 参数](../sql-reference/sql-statements/loading_unloading/INSERT.md#参数说明)。
 
 > 说明
 >
@@ -300,6 +306,28 @@ MySQL > select * from insert_wiki_edit;
 Empty set (0.00 sec)
 ```
 
+:::note
+对于使用列表达式分区方式（`PARTITION BY column`）的表，INSERT OVERWRITE 支持通过指定分区键的值在目标表上创建不存在的分区。对于已有的分区，将正常进行覆盖写。
+
+以下示例创建了分区表 `activity`，向其中导入新数据时自动创建了先前不存在的分区：
+
+```SQL
+CREATE TABLE activity (
+id INT          NOT NULL,
+dt VARCHAR(10)  NOT NULL
+) ENGINE=OLAP 
+DUPLICATE KEY(`id`)
+PARTITION BY (`id`, `dt`)
+DISTRIBUTED BY HASH(`id`);
+
+INSERT OVERWRITE activity
+PARTITION(id='4', dt='2022-01-01')
+WITH LABEL insert_activity_auto_partition
+VALUES ('4', '2022-01-01');
+```
+
+:::
+
 - 以下示例以 `insert_load_wikipedia_ow_3` 为 Label 将源表中 `event_time` 和 `channel` 列的数据覆盖写入至目标表的对应列中。未被导入的列将被赋予默认值。
 
 ```SQL
@@ -310,6 +338,38 @@ WITH LABEL insert_load_wikipedia_ow_3
     channel
 )
 SELECT event_time, channel FROM source_wiki_edit;
+```
+
+### Dynamic Overwrite
+
+从 v3.4.0 开始，StarRocks 支持分区表的 INSERT OVERWRITE 操作的新语义 — Dynamic Overwrite。
+
+当前 INSERT OVERWRITE 默认行为如下：
+
+- 当覆盖整个分区表（即未指定 PARTITION 子句）时，新数据会替换对应分区中的数据。如果存在表中已有分区未涉及覆盖操作，系统会清空该分区数据。
+- 当覆盖空的分区表（即其中没有任何分区）但指定了 PARTITION 子句时，系统会报错 `ERROR 1064 (HY000): Getting analyzing error. Detail message: Unknown partition 'xxx' in table 'yyy'`。
+- 当覆盖分区表时指定了不存在的分区，系统会报错 `ERROR 1064 (HY000): Getting analyzing error. Detail message: Unknown partition 'xxx' in table 'yyy'`。
+- 当覆盖分区表的数据与指定的分区不匹配时，如果开启严格模式，系统会报错 `ERROR 1064 (HY000): Insert has filtered data in strict mode`；如果未开启严格模式，系统会过滤不合格的数据。
+
+新的 Dynamic Overwrite 语义的行为与上述默认行为有很大不同：
+
+当覆盖整个分区表时，新数据会替换对应分区中的数据。但未涉及的分区会保留，而不会被清空或删除。如果新数据对应不存在的分区，系统会自动创建该分区。
+
+Dynamic Overwrite 语义默认禁用。如需启用，需要将系统变量 `dynamic_overwrite` 设置为 `true`。
+
+在当前 Session 中启用 Dynamic Overwrite:
+
+```SQL
+SET dynamic_overwrite = true;
+```
+
+您也可以在 INSERT OVERWRITE 语句中通过 Hint 启用 Dynamic Overwrite，仅对该语句生效：
+
+示例：
+
+```SQL
+INSERT OVERWRITE /*+set_var(set dynamic_overwrite = false)*/ insert_wiki_edit
+SELECT * FROM source_wiki_edit;
 ```
 
 ## 通过 INSERT 语句导入数据至生成列
@@ -353,9 +413,111 @@ mysql> SELECT * FROM insert_generated_columns;
 1 row in set (0.02 sec)
 ```
 
+## 插入数据时配置 PROPERTIES
+
+从 v3.4.0 版本开始，INSERT 语句支持配置 PROPERTIES，可用于多种功能。当同时指定 PROPERTIES 和其对应的系统变量时，PROPERTIES 优先生效。
+
+### 启用严格模式
+
+从 v3.4.0 起，您可以为 INSERT from FILES() 启用严格模式并设置 `max_filter_ratio`。INSERT from FILES() 的严格模式与其他导入方法的行为相同。
+
+如果要导入包含某些不合格行的数据集，您可以选择过滤这些不合格行，或导入该数据行并为其中不合格的列赋 NULL 值。您可以使用 `strict_mode` 和 `max_filter_ratio` 属性实现这两种方式。
+
+- 如需过滤不合格行，需将 `strict_mode` 设置为 `true`，并将 `max_filter_ratio` 设置为所需值。
+- 如需导入不合格行并赋予 NULL 值，需将 `strict_mode` 设置为 `false`。
+
+以下示例将 AWS S3 存储桶 `inserttest` 内 Parquet 文件 **parquet/insert_wiki_edit_append.parquet** 中的数据插入至表 `insert_wiki_edit` 中，启用严格模式以过滤不合格的数据行，并且设置最大容错比为 10%：
+
+```SQL
+INSERT INTO insert_wiki_edit
+PROPERTIES(
+    "strict_mode" = "true",
+    "max_filter_ratio" = "0.1"
+)
+SELECT * FROM FILES(
+    "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
+    "format" = "parquet",
+    "aws.s3.access_key" = "XXXXXXXXXX",
+    "aws.s3.secret_key" = "YYYYYYYYYY",
+    "aws.s3.region" = "us-west-2"
+);
+```
+
+:::note
+
+`strict_mode` 和 `max_filter_ratio` 仅支持 INSERT from FILES() 导入方式。INSERT from Table 导入方式不支持以上属性。
+
+:::
+
+### 设置超时时间
+
+从 v3.4.0 开始，您可以设置 INSERT 语句的超时时间。在 v3.4.0 之前的版本中，INSERT 语句的超时时间由系统变量 `query_timeout` 控制。
+
+以下示例将源表 `source_wiki_edit` 中的数据插入到目标表 `insert_wiki_edit`，并将超时时间设置为 `2` 秒：
+
+```SQL
+INSERT INTO insert_wiki_edit
+PROPERTIES(
+    "timeout" = "2"
+)
+SELECT * FROM source_wiki_edit;
+```
+
+:::note
+
+从 v3.4.0 版本开始，系统变量 `insert_timeout` 作用于所有涉及 INSERT 的操作（例如，UPDATE、DELETE、CTAS、物化视图刷新、统计信息收集和 PIPE），替代原本的 `query_timeout`。
+
+:::
+
+### INSERT 按名称匹配列
+
+默认情况下，INSERT 根据源表和目标表中列的位置（即语句中列的映射关系）来匹配列。
+
+以下示例通过指定位置的方式显式匹配源表和目标表中的列：
+
+```SQL
+INSERT INTO insert_wiki_edit (
+    event_time,
+    channel,
+    user
+)
+SELECT event_time, channel, user FROM source_wiki_edit;
+```
+
+如果您在 Column List 或 SELECT 语句中改变了 `channel` 和 `user` 的顺序，列的映射关系将发生变化。
+
+```SQL
+INSERT INTO insert_wiki_edit (
+    event_time,
+    channel,
+    user
+)
+SELECT event_time, user, channel FROM source_wiki_edit;
+```
+
+此处，由于目标表 `insert_wiki_edit` 中的 `channel` 列被源表 `source_wiki_edit` 中的 `user` 的数据所填满，导入的数据可能并不是所需的结果。
+
+通过在 INSERT 语句中添加 `BY NAME` 子句，系统将根据检查源表和目标表中的列名，匹配同名的列。
+
+:::note
+
+- 如果指定了 `BY NAME`，则不能指定 Column List。
+- 如果未指定 `BY NAME`，系统将根据 Column List 和 SELECT 语句中列的位置来匹配列。
+
+:::
+
+以下示例通过列名匹配源表和目标表中的列：
+
+```SQL
+INSERT INTO insert_wiki_edit BY NAME
+SELECT event_time, user, channel FROM source_wiki_edit;
+```
+
+在这种情况下，改变 `channel` 和 `user` 的顺序不会改变列的映射关系。
+
 ## 通过 INSERT 语句异步导入数据
 
-使用 INSERT 语句创建的同步导入任务，可能会因为会话中断或超时而失败。您可以使用 [SUBMIT TASK](../sql-reference/sql-statements/data-manipulation/SUBMIT_TASK.md) 语句提交异步 INSERT 任务。此功能自 StarRocks v2.5 起支持。
+使用 INSERT 语句创建的同步导入任务，可能会因为会话中断或超时而失败。您可以使用 [SUBMIT TASK](../sql-reference/sql-statements/loading_unloading/ETL/SUBMIT_TASK.md) 语句提交异步 INSERT 任务。此功能自 StarRocks v2.5 起支持。
 
 - 以下示例将源表中的数据异步导入至目标表中。
 
@@ -427,7 +589,7 @@ ERROR 1064 (HY000): Insert has filtered data in strict mode, tracking_url=http:/
 
 ### 通过 Information Schema 查看
 
-您可以通过 [SELECT](../sql-reference/sql-statements/data-manipulation/SELECT.md) 语句从 `information_schema` 数据库中的 `loads` 表来查看 INSERT INTO 作业的结果。该功能自 3.1 版本起支持。
+您可以通过 [SELECT](../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 语句从 `information_schema` 数据库中的 `loads` 表来查看 INSERT INTO 作业的结果。该功能自 3.1 版本起支持。
 
 示例一：查看 `load_test` 数据库中导入作业的执行情况，同时指定查询结果根据作业创建时间 (`CREATE_TIME`) 按降序排列，并且最多显示一条结果数据：
 
@@ -475,7 +637,7 @@ REJECTED_RECORD_PATH: NULL
 1 row in set (0.01 sec)
 ```
 
-有关返回字段的说明，参见 [`information_schema.loads`](../reference/information_schema/loads.md)。
+有关返回字段的说明，参见 [`information_schema.loads`](../sql-reference/information_schema/loads.md)。
 
 ## 相关配置项
 

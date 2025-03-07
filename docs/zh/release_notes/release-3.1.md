@@ -1,8 +1,148 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # StarRocks version 3.1
+
+## 3.1.17
+
+发布日期：2025 年 01 月 03 日
+
+### 问题修复
+
+修复了如下问题：
+
+- 跨集群数据迁移工具在迁移数据时，由于未考虑目标集群分区删除的情况，在同步数据并做 Commit 时导致 Follower FE Crash。[#54061](https://github.com/StarRocks/starrocks/pull/54061)
+- 使用跨集群数据迁移工具同步有过 DELETE 操作的表时，目标集群的 BE 可能会 Crash。[#54081](https://github.com/StarRocks/starrocks/pull/54081)
+- BDBJE 的 Handshake 存在 Bug，导致 Leader FE 和 Follower FE 链接重连的时候会被 Leader FE 拒绝，从而导致 Follwer FE 节点退出。[#50412](https://github.com/StarRocks/starrocks/pull/50412)
+- FE 中内存统计有重复统计的情况，会导致消耗大量内存。[#53055](https://github.com/StarRocks/starrocks/pull/53055)
+- 异步物化视图刷新时的任务状态在多个 FE 之间不一致，导致查询时的状态不准确。[#54236](https://github.com/StarRocks/starrocks/pull/54236)
+
+## 3.1.16
+
+发布日期：2024 年 12 月 16 日
+
+### 功能优化
+
+- 优化了表相关统计信息。[#50316](https://github.com/StarRocks/starrocks/pull/50316)
+
+### 问题修复
+
+修复了如下问题：
+
+- 由于系统对磁盘写满时的错误码判断不够细化，导致 BE 认为磁盘有错误而误删数据。[#51411](https://github.com/StarRocks/starrocks/pull/51411)
+- 通过 HTTP 1.0 提交的 Stream Load 失败。[#53010](https://github.com/StarRocks/starrocks/pull/53010) [#53008](https://github.com/StarRocks/starrocks/pull/53008)
+- Routine Load 因事务过期而导致任务取消（当前仅有数据库或表不存在任务才会被取消，事务过期时任务会被暂停）。[#50334](https://github.com/StarRocks/starrocks/pull/50334)
+- 使用 EXPORT 命令通过  Broker 方式导出数据到 `file://` 时，系统会报文件 RENAME 错误进而导致导出失败。[#52544](https://github.com/StarRocks/starrocks/pull/52544)
+- Equal-join 中，如果 JOIN 的条件是基于一个低基数列的表达式，系统会错误地下推一个 Runtime Filter 谓词，导致 BE Crash。[#50690](https://github.com/StarRocks/starrocks/pull/50690)
+
+## 3.1.15
+
+发布日期：2024 年 9 月 4 日
+
+### 问题修复
+
+修复了如下问题：
+
+- 在通过异步物化视图改写查询时，部分表 `count(*)` 返回的结果为 NULL。[#49288](https://github.com/StarRocks/starrocks/pull/49288)
+- `partition_linve_nubmer` 不生效。[#49213](https://github.com/StarRocks/starrocks/pull/49213)
+- FE 汇报 Tablet 异常：BE 磁盘下线，Tablet 无法迁移。[#47833](https://github.com/StarRocks/starrocks/pull/47833)
+
+## 3.1.14
+
+发布日期：2024 年 7 月 29 日
+
+### 功能优化
+
+- Stream Load 支持将 `\t` 和 `\n` 分别作为行列分割符，无需转成对应的十六进制 ASCII 码。[#47302](https://github.com/StarRocks/starrocks/pull/47302)
+
+### 问题修复
+
+修复了如下问题：
+
+- 主键表频繁 INSERT UPDATE，可能会导致数据库写入和查询卡顿。 [#47838](https://github.com/StarRocks/starrocks/pull/47838)
+- 主键表写盘失败时，持久化索引可能会因为无法捕捉错误导致数据丢失，并报错 “Insert found duplicate key”。[#48045](https://github.com/StarRocks/starrocks/pull/48045)
+- 物化视图在刷新时，可能会报告权限不够。 [#47561](https://github.com/StarRocks/starrocks/pull/47561)
+- 物化视图刷新时报错 “For input string”。 [#46131](https://github.com/StarRocks/starrocks/pull/46131)
+- 物化视图刷新时持锁时间太长，导致死锁检测脚本重启了 Leader FE。[#48256](https://github.com/StarRocks/starrocks/pull/48256)
+- 视图带有 IN 的查询可能结果不准确。 [#47484](https://github.com/StarRocks/starrocks/pull/47484)
+- Global Runtime Filter 导致查询结果跳变。[#48496](https://github.com/StarRocks/starrocks/pull/48496)
+- MySQL 协议 `COM_CHANGE_USER` 不支持 `conn_attr`。[#47796](https://github.com/StarRocks/starrocks/pull/47796)
+
+### 行为变更
+
+- 非分区表为自动设置分桶数量时，系统自动设置的分桶数最小值修改为 `16`（原来的规则是 `2 * BE 数量`，也即最小会创建 2 个 Tablet）。如果是小数据且想要更小的分桶数，需要手动设置。[#47005](https://github.com/StarRocks/starrocks/pull/47005)
+
+
+
+## 3.1.13
+
+发布日期：2024 年 6 月 26 日
+
+### 功能优化
+
+- Broker 进程支持访问腾讯云 COS 融合桶，从而可以通过 Broker Load 从 COS 融合桶导入数据，以及通过 SELECT INTO OUTFILE 导出数据到 COS 融合桶。[#46597](https://github.com/StarRocks/starrocks/pull/46597)
+- 通过 SHOW CREATE TABLE 能够查看 Hive Catalog 中 Hive 外表的 Comment。[#37686](https://github.com/StarRocks/starrocks/pull/37686)
+- 优化 WHERE 子句中的 Conjunct 的评估时间，包括同一个 Column 有多个 LIKE 语句或 CASE WHEN 表达式。[#46914](https://github.com/StarRocks/starrocks/pull/46914)
+
+### 问题修复
+
+修复了如下问题：
+
+- 存算分离集群中使用 DELETE 语句时因为要删除的分区比较多而导致失败。[#46229](https://github.com/StarRocks/starrocks/pull/46229)
+
+## 3.1.12
+
+发布日期：2024 年 5 月 30 日
+
+### 新增特性
+
+- 支持从 StarRocks 读取 ARRAY、MAP 和 STRUCT 等复杂类型的数据，并以 Arrow 格式可提供给 Flink connector 读取使用。[#43514](https://github.com/StarRocks/starrocks/pull/43514) [#347](https://github.com/StarRocks/starrocks-connector-for-apache-flink/pull/347)
+
+### 功能优化
+
+- 在 BE 通过 RPC 与 FE 通信失败时，FE 只会统一返回报错信息 `call frontend service failed reason=xxx`，导致具体出错原因不明。优化后报错信息中会提示具体的出错原因，例如超时或服务器繁忙。 [#44153](https://github.com/StarRocks/starrocks/pull/44153)
+- 优化导入中报错信息，例如错误数据行超限、列数不对应、无效列名、所有分区中没有数据。
+
+### 安全
+
+- 升级 Kafka client 依赖包为 v3.4.0，以修复 [CVE-2023-25194](https://github.com/advisories/GHSA-26f8-x7cc-wqpc) 安全问题。[#45382](https://github.com/StarRocks/starrocks/pull/45382)
+
+### 问题修复
+
+修复了如下问题：
+
+- 如果一个物化视图定义中包含多个相同的表的 self join，且根据该表进行分区增量刷新，会因分区选择错误而导致结果错误。[#45936](https://github.com/StarRocks/starrocks/pull/45936)
+- 存算分离模式下在物化视图中创建 Bitmap 索引，会导致 FE crash。[#45665](https://github.com/StarRocks/starrocks/pull/45665)
+- 通过 ODBC 连接 FE follower 并执行 CREATE TABLE 时因空指针问题导致 BE crash。[#45043](https://github.com/StarRocks/starrocks/pull/45043)
+- 如果有较多异步任务，查询 information_schema.task_runs 会频繁失败。[#45520](https://github.com/StarRocks/starrocks/pull/45520)
+- SQL 语句中包含多个 COUNT DISTINCT 且包含 LIMIT，则 LIMIT 处理出现问题，导致每次执行语句返回数据不一致。[#44749](https://github.com/StarRocks/starrocks/pull/44749)
+- 查询明细表和聚合表的语句中包含 ORDER BY LIMIT 子句时，查询结果错误。[#45037](https://github.com/StarRocks/starrocks/pull/45037)
+
+## 3.1.11
+
+发布日期：2024 年 4 月 28 日
+
+### 行为变更
+
+- 禁止删除系统数据库 `information_schema` 中的视图。[#43556](https://github.com/StarRocks/starrocks/pull/43556)
+- 主键表的排序键（由 ORDER BY 语句指定）中不再支持指定重复的列。[#43374](https://github.com/StarRocks/starrocks/pull/43374)
+
+### 功能优化
+
+- 支持读取 Iceberg 中 Equality Delete 的 Parquet 文件。[#42489](https://github.com/StarRocks/starrocks/pull/42489)
+
+### 问题修复
+
+修复了如下问题：
+
+- 查询 Hive/Iceberg catalog 等外表时报错无权限，权限丢失，但用 `SHOW GRANTS` 查询时对应的权限是存在的。[#44061](https://github.com/StarRocks/starrocks/pull/44061)
+- `str_to_map` 函数使用时可能会导致 BE crash。[#43930](https://github.com/StarRocks/starrocks/pull/43930)
+- 使用 Routine Load 导入数据时，执行 `show proc '/routine_loads'` 会卡住，是因为内部有死锁问题。[#44249](https://github.com/StarRocks/starrocks/pull/44249)
+- 主键表的 Persistent Index 在使用中可能会因为内部并发控制问题而导致 BE crash。[#43720](https://github.com/StarRocks/starrocks/pull/43720)
+- 通过 `leaderFE_IP:8030` 界面查到的 `pending_task_run_count` 数据错误，当前统计的是 Pending+Running 的总数，而不是 Pending 的任务数。同时，从 `followerFE_IP:8030` 查不到 `refresh_pending` 监控指标的信息。[#43052](https://github.com/StarRocks/starrocks/pull/43052)
+- 查询 `information_schema.task_runs` 会频繁失败。[#43052](https://github.com/StarRocks/starrocks/pull/43052)
+- 一些含有 CTE 的 SQL 查询时会报 `Invalid plan: PhysicalTopNOperator` 错误。[#44185](https://github.com/StarRocks/starrocks/pull/44185)
 
 ## 3.1.10（已下线）
 
@@ -21,6 +161,7 @@ displayed_sidebar: "Chinese"
 ### 新增特性
 
 - 主键表支持 Size-tiered Compaction。[#42474](https://github.com/StarRocks/starrocks/pull/42474)
+- 新增模糊/正则匹配函数 `regexp_extract_all`。[#42178](https://github.com/StarRocks/starrocks/pull/42178)
 
 ### 行为变更
 
@@ -46,7 +187,6 @@ displayed_sidebar: "Chinese"
 ### 新增特性
 
 - 存算分离集群中的云原生主键表支持 Size-tiered 模式 Compaction，以减轻导入较多小文件时 Compaction 的写放大问题。[#41610](https://github.com/StarRocks/starrocks/pull/41610)
-- 新增函数 `regexp_extract_all`。[#42178](https://github.com/StarRocks/starrocks/pull/42178)
 - 新增 `information_schema.partitions_meta` 视图，提供丰富的 PARTITION 元信息。[#41101](https://github.com/StarRocks/starrocks/pull/41101)
 - 新增 `sys.fe_memory_usage` 视图，提供 StarRocks 的内存使用信息。[#41083](https://github.com/StarRocks/starrocks/pull/41083)
 
@@ -89,7 +229,6 @@ displayed_sidebar: "Chinese"
 - 社区提供 StarRocks 数据迁移工具，支持将数据从存算一体集群迁移数据到存算一体集群或者存算分离集群。
 - 支持创建带有 WHERE 子句的同步物化视图。
 - MemTracker 中新增了 Data Cache 内存使用的相关指标。[#39600](https://github.com/StarRocks/starrocks/pull/39600)
-- 新增函数 `array_unique_agg`。
 
 ### 参数变更
 
@@ -493,7 +632,7 @@ displayed_sidebar: "Chinese"
 
 #### 存储、导入与查询
 
-- 正式支持[大算子落盘 (Spill)](https://docs.starrocks.io/zh/docs/administration/spill_to_disk/) 功能，允许将部分阻塞算子的中间结果落盘。开启大算子落盘功能后，当查询中包含聚合、排序或连接算子时，StarRocks 会将以上算子的中间结果缓存到磁盘以减少内存占用，尽量避免查询因内存不足而导致查询失败。
+- 正式支持[大算子落盘 (Spill)](https://docs.starrocks.io/zh/docs/3.1/administration/management/resource_management/spill_to_disk/) 功能，允许将部分阻塞算子的中间结果落盘。开启大算子落盘功能后，当查询中包含聚合、排序或连接算子时，StarRocks 会将以上算子的中间结果缓存到磁盘以减少内存占用，尽量避免查询因内存不足而导致查询失败。
 - 支持基数保持 JOIN 表（Cardinality-preserving Joins）的裁剪。在较多表的星型模型（比如 SSB）和雪花模型 (TPC-H) 的建模中、且查询只涉及到少量表的一些情况下，能裁剪掉一些不必要的表，从而提升 JOIN 的性能。
 - 执行 [UPDATE](https://docs.starrocks.io/zh/docs/sql-reference/sql-statements/data-manipulation/UPDATE/) 语句对主键表进行部分更新时支持启用列模式，适用于更新少部分列但是大量行的场景，更新性能可提升十倍。
 - 优化统计信息收集，以降低对导入影响，提高收集性能。

@@ -38,9 +38,14 @@ public:
     virtual Status apply(const TxnLogPB& tnx_log) = 0;
 
     virtual Status finish() = 0;
+
+    void observe_empty_compaction() { _has_empty_compaction = true; }
+
+protected:
+    bool _has_empty_compaction = false;
 };
 
 std::unique_ptr<TxnLogApplier> new_txn_log_applier(const Tablet& tablet, MutableTabletMetadataPtr metadata,
-                                                   int64_t new_version);
+                                                   int64_t new_version, bool rebuild_pindex);
 
 } // namespace starrocks::lake

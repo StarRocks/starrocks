@@ -21,6 +21,7 @@
 #include "fs/fs.h" // FileInfo
 #include "gen_cpp/data.pb.h"
 #include "gen_cpp/lake_types.pb.h"
+#include "storage/lake/location_provider.h"
 #include "storage/tablet_schema.h"
 
 namespace starrocks {
@@ -41,12 +42,13 @@ enum WriterType : int { kHorizontal = 0, kVertical = 1 };
 class TabletWriter {
 public:
     explicit TabletWriter(TabletManager* tablet_mgr, int64_t tablet_id, std::shared_ptr<const TabletSchema> schema,
-                          int64_t txn_id, ThreadPool* flush_pool = nullptr)
+                          int64_t txn_id, bool is_compaction, ThreadPool* flush_pool = nullptr)
             : _tablet_mgr(tablet_mgr),
               _tablet_id(tablet_id),
               _schema(std::move(schema)),
               _txn_id(txn_id),
-              _flush_pool(flush_pool) {}
+              _flush_pool(flush_pool),
+              _is_compaction(is_compaction) {}
 
     virtual ~TabletWriter() = default;
 
@@ -81,6 +83,11 @@ public:
     // For horizontal writer.
     virtual Status write(const Chunk& data, SegmentPB* segment = nullptr) = 0;
 
+    // Writes both chunk and each rows's rssid & rowid
+    // For horizontal writer.
+    virtual Status write(const Chunk& data, const std::vector<uint64_t>& rssid_rowids,
+                         SegmentPB* segment = nullptr) = 0;
+
     // Writes partial columns data to this rowset.
     //
     // It's guaranteed that the elements in each chunk are arranged in ascending order by keys,
@@ -88,6 +95,12 @@ public:
     //
     // For vertical writer.
     virtual Status write_columns(const Chunk& data, const std::vector<uint32_t>& column_indexes, bool is_key) = 0;
+
+    // Writes partial columns data and each rows's rssid & rowid to this rowset.
+    //
+    // For vertical writer.
+    virtual Status write_columns(const Chunk& data, const std::vector<uint32_t>& column_indexes, bool is_key,
+                                 const std::vector<uint64_t>& rssid_rowids) = 0;
 
     // Write del file to this rowset. PK table only
     virtual Status flush_del_file(const Column& deletes) = 0;
@@ -116,6 +129,15 @@ public:
     // allow to set custom tablet schema for writer, used in partial update
     void set_tablet_schema(TabletSchemaCSPtr schema) { _schema = std::move(schema); }
 
+    const starrocks::TabletSchemaCSPtr& tablet_schema() const { return _schema; }
+
+    void set_auto_flush(bool auto_flush) { _auto_flush = auto_flush; }
+
+    void set_fs(const std::shared_ptr<FileSystem> fs) { _fs = std::move(fs); }
+    void set_location_provider(const std::shared_ptr<LocationProvider> location_provider) {
+        _location_provider = std::move(location_provider);
+    }
+
     const OlapWriterStatistics& stats() const { return _stats; }
 
 protected:
@@ -129,7 +151,12 @@ protected:
     int64_t _data_size = 0;
     uint32_t _seg_id = 0;
     bool _finished = false;
+    bool _auto_flush = true;
+    std::shared_ptr<FileSystem> _fs;
+    std::shared_ptr<LocationProvider> _location_provider;
     OlapWriterStatistics _stats;
+
+    bool _is_compaction = false;
 };
 
 } // namespace lake

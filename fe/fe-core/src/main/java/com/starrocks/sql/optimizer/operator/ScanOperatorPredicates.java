@@ -22,6 +22,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -45,6 +46,8 @@ public class ScanOperatorPredicates {
     private List<ScalarOperator> minMaxConjuncts = new ArrayList<>();
     // Map of columnRefOperator to column which column in minMaxConjuncts
     private Map<ColumnRefOperator, Column> minMaxColumnRefMap = Maps.newHashMap();
+    // flag to indicate whether if has pruned partition
+    private boolean hasPrunedPartition = false;
 
     public Map<Long, PartitionKey> getIdToPartitionKey() {
         return idToPartitionKey;
@@ -63,6 +66,7 @@ public class ScanOperatorPredicates {
     }
 
     public void setSelectedPartitionIds(Collection<Long> selectedPartitionIds) {
+        this.hasPrunedPartition = true;
         this.selectedPartitionIds = selectedPartitionIds;
     }
 
@@ -95,6 +99,10 @@ public class ScanOperatorPredicates {
         return minMaxColumnRefMap;
     }
 
+    public boolean hasPrunedPartition() {
+        return hasPrunedPartition;
+    }
+
     public void clear() {
         idToPartitionKey.clear();
         selectedPartitionIds.clear();
@@ -115,6 +123,7 @@ public class ScanOperatorPredicates {
         other.nonPartitionConjuncts.addAll(this.nonPartitionConjuncts);
         other.minMaxConjuncts.addAll(this.minMaxConjuncts);
         other.minMaxColumnRefMap.putAll(this.minMaxColumnRefMap);
+        other.hasPrunedPartition = this.hasPrunedPartition;
 
         return other;
     }
@@ -162,5 +171,21 @@ public class ScanOperatorPredicates {
             strings.add(String.format("minMaxConjuncts=%s", minMaxConjuncts));
         }
         return Joiner.on(", ").join(strings);
+    }
+
+    /**
+     * Duplicate and rewrite all columnRefOperator in predicates by rewriter.
+     */
+    public void duplicate(ReplaceColumnRefRewriter rewriter) {
+        this.partitionConjuncts = this.partitionConjuncts.stream().map(x -> rewriter.rewrite(x)).collect(Collectors.toList());
+        this.noEvalPartitionConjuncts = this.noEvalPartitionConjuncts.stream()
+                .map(x -> rewriter.rewrite(x)).collect(Collectors.toList());
+        this.nonPartitionConjuncts = nonPartitionConjuncts.stream().map(x -> rewriter.rewrite(x)).collect(Collectors.toList());
+        this.minMaxConjuncts = minMaxConjuncts.stream().map(x -> rewriter.rewrite(x)).collect(Collectors.toList());
+        Map<ColumnRefOperator, Column> newMinMaxColumnRefMap = Maps.newHashMap();
+        for (Map.Entry<ColumnRefOperator, Column> e : this.minMaxColumnRefMap.entrySet()) {
+            newMinMaxColumnRefMap.put((ColumnRefOperator) rewriter.rewrite(e.getKey()), e.getValue());
+        }
+        this.minMaxColumnRefMap = newMinMaxColumnRefMap;
     }
 }

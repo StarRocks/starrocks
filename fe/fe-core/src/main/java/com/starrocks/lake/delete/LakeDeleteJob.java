@@ -29,7 +29,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.lake.Utils;
@@ -84,7 +84,7 @@ public class LakeDeleteJob extends DeleteJob {
         Preconditions.checkState(table.isCloudNativeTable());
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         try {
             beToTablets = Utils.groupTabletID(partitions, MaterializedIndex.IndexExtState.VISIBLE, warehouseId);
         } catch (Throwable t) {
@@ -96,7 +96,7 @@ public class LakeDeleteJob extends DeleteJob {
             }
             throw new DdlException(t.getMessage(), t);
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.READ);
         }
 
         // create delete predicate
@@ -189,7 +189,7 @@ public class LakeDeleteJob extends DeleteJob {
     }
 
     @Override
-    public boolean commitImpl(Database db, long timeoutMs) throws UserException {
+    public boolean commitImpl(Database db, long timeoutMs) throws StarRocksException {
         return GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
                 .commitAndPublishTransaction(db, getTransactionId(), getTabletCommitInfos(), getTabletFailInfos(),
                         timeoutMs);

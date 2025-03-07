@@ -55,3 +55,12 @@ insert into pk_tbl1(k2, k3, k4, k5) values('2024-01-01', 1, 2, 3), ('2024-01-01'
 update pk_tbl1 set K4 = 1, K3 = 1, K5 = 1 where K1 = 1;
 select * from pk_tbl1 order by k1;
 drop table if exists pk_tbl1;
+
+-- test data filter
+create table pk_tbl2 (k1 int, k2 varchar(1)) primary key (k1) distributed by hash(k1);
+insert into pk_tbl2 values (1, "a"), (2, "bb");
+set insert_max_filter_ratio = 1;
+insert into pk_tbl2 values (1, "a"), (2, "bb");
+select * from pk_tbl2;
+set insert_max_filter_ratio = 0;
+drop table if exists pk_tbl2;

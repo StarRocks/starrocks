@@ -15,7 +15,7 @@
 package com.starrocks.credential.tencent;
 
 import com.staros.proto.FileStoreInfo;
-import com.starrocks.credential.CloudConfigurationConstants;
+import com.starrocks.connector.share.credential.CloudConfigurationConstants;
 import com.starrocks.credential.CloudCredential;
 import org.apache.hadoop.conf.Configuration;
 

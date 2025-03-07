@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # months_add
 
-## Description
+
 
 Adds a specified number of months to the date, accurate to the month.
 

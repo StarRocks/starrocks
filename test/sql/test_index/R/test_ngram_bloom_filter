@@ -15,7 +15,7 @@ CREATE TABLE ngram_index(
 -- !result
 show index from ngram_index;
 -- result:
-ngram_bloom_filter_db_1.ngram_index		idx_name1		username						NGRAMBF("bloom_filter_fpp" = "0.05", "gram_num" = "4")	
+ngram_bloom_filter_db_1.ngram_index		idx_name1		username						NGRAMBF("bloom_filter_fpp" = "0.05", "case_sensitive" = "true", "gram_num" = "4")	
 -- !result
 insert into ngram_index values ('2023-01-01',"chinese",3),('2023-01-02',"chineaaaaaaaaaaaab",4),('2023-01-03',"我爱吃烤全羊yangyangchin",4),('2023-01-04',"tonightisgreadnight",4);
 -- result:
@@ -46,7 +46,7 @@ None
 -- !result
 show index from ngram_index;
 -- result:
-ngram_bloom_filter_db_1.ngram_index		idx_name1		username						NGRAMBF("bloom_filter_fpp" = "0.01", "gram_num" = "4")	
+ngram_bloom_filter_db_1.ngram_index		idx_name1		username						NGRAMBF("bloom_filter_fpp" = "0.01", "case_sensitive" = "true", "gram_num" = "4")	
 -- !result
 select * from ngram_index order by  ngram_search(username, 'chinese',4) desc;
 -- result:
@@ -58,10 +58,6 @@ select * from ngram_index order by  ngram_search(username, 'chinese',4) desc;
 drop database ngram_bloom_filter_db_1;
 -- result:
 -- !result
-
-
-
-
 -- name: test_ngram_bloom_filter_default
 create database ngram_bloom_filter_db_2;
 -- result:
@@ -79,7 +75,7 @@ CREATE TABLE ngram_index_default_1(
 -- !result
 show index from ngram_index_default_1;
 -- result:
-ngram_bloom_filter_db_2.ngram_index_default_1		idx_name1		username						NGRAMBF("gram_num" = "4")	
+ngram_bloom_filter_db_2.ngram_index_default_1		idx_name1		username						NGRAMBF("bloom_filter_fpp" = "0.05", "case_sensitive" = "true", "gram_num" = "4")	
 -- !result
 CREATE TABLE ngram_index_default_2(
     timestamp DATETIME NOT NULL,
@@ -91,7 +87,10 @@ CREATE TABLE ngram_index_default_2(
 -- !result
 show index from ngram_index_default_2;
 -- result:
-ngram_bloom_filter_db_2.ngram_index_default_2		idx_name1		username						NGRAMBF("bloom_filter_fpp" = "0.05")	
+ngram_bloom_filter_db_2.ngram_index_default_2		idx_name1		username						NGRAMBF("bloom_filter_fpp" = "0.05", "case_sensitive" = "true", "gram_num" = "2")	
+-- !result
+insert into ngram_index_default_2 values ('2023-01-01',"chinese",3),('2023-01-02',"chineaaaaaaaaaaaab",4),('2023-01-03',"我爱吃烤全羊yangyangchin",4),('2023-01-04',"tonightisgreadnight",4);
+-- result:
 -- !result
 CREATE TABLE ngram_index_default_3(
     timestamp DATETIME NOT NULL,
@@ -103,12 +102,8 @@ CREATE TABLE ngram_index_default_3(
 -- !result
 show index from ngram_index_default_3;
 -- result:
-ngram_bloom_filter_db_2.ngram_index_default_3		idx_name1		username						NGRAMBF	
+ngram_bloom_filter_db_2.ngram_index_default_3		idx_name1		username						NGRAMBF("bloom_filter_fpp" = "0.05", "case_sensitive" = "true", "gram_num" = "2")	
 -- !result
-
-
-
-
 -- name: test_ngram_bloom_filter_like
 CREATE TABLE ngram_index_like(
     timestamp DATETIME NOT NULL,
@@ -135,10 +130,6 @@ select * from ngram_index_like where username like '_hin%';
 -- result:
 2023-01-01 00:00:00	chinese	3
 -- !result
-
-
-
-
 -- name: test_ngram_bloom_filter_case_insensitive
 CREATE TABLE ngram_index_case_in_sensitive(
     timestamp DATETIME NOT NULL,
@@ -163,6 +154,10 @@ select ngram_search_case_insensitive(Username,"aabaa",4) as order_col from ngram
 1.0
 0.5
 -- !result
+select * from ngram_index_case_in_sensitive where Username like "AaBA_";
+-- result:
+2023-01-01 00:00:00	AaBAa	3
+-- !result
 ALTER TABLE ngram_index_case_in_sensitive ADD INDEX idx_name1(Username) USING NGRAMBF ('gram_num' = "4", "bloom_filter_fpp" = "0.01");
 -- result:
 -- !result
@@ -177,6 +172,10 @@ select * from ngram_index_case_in_sensitive order by ngram_search_case_insensiti
 -- result:
 2023-01-01 00:00:00	AaBAa	3
 2023-01-01 00:00:00	aAbac	3
+-- !result
+select * from ngram_index_case_in_sensitive where Username like "AaBA_";
+-- result:
+2023-01-01 00:00:00	AaBAa	3
 -- !result
 drop index idx_name1 on ngram_index_case_in_sensitive;
 -- result:
@@ -219,7 +218,7 @@ CREATE TABLE ngram_index_char(
 -- !result
 show index from ngram_index_char;
 -- result:
-ngram_bloom_filter_db_3.ngram_index_char		idx_name1		username						NGRAMBF("bloom_filter_fpp" = "0.05", "gram_num" = "4")	
+ngram_bloom_filter_db_3.ngram_index_char		idx_name1		username						NGRAMBF("bloom_filter_fpp" = "0.05", "case_sensitive" = "true", "gram_num" = "4")	
 -- !result
 insert into ngram_index_char values ('2023-01-01',"chinese",3),('2023-01-02',"chineaaa",4),('2023-01-03',"我爱chin",4),('2023-01-04',"toniggrht",4);
 -- result:
@@ -227,4 +226,71 @@ insert into ngram_index_char values ('2023-01-01',"chinese",3),('2023-01-02',"ch
 select * from ngram_index_char where username like '_hiaa%';
 -- result:
 -- !result
-
+-- name: test_bloom_filter
+create database ngram_bloom_filter_db_4;
+-- result:
+-- !result
+use ngram_bloom_filter_db_4;
+-- result:
+-- !result
+CREATE TABLE `common_duplicate` (
+  `c0` int(11) NOT NULL COMMENT "",
+  `c1` int(11) NOT NULL COMMENT "",
+  `c2` varchar(500)  NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`c0`, `c1`, `c2`)
+COMMENT "OLAP"
+DISTRIBUTED BY HASH(`c0`, `c1`, `c2`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1",
+"bloom_filter_columns" = "c1,c2",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into common_duplicate values (1,1,"abc"),(2,2,"abc"),(3,3,"abc"),(4,4,"abc"),(5,5,"abc"),(6,6,NULL);
+-- result:
+-- !result
+select * from common_duplicate where c2 like '%b%' order by c0;
+-- result:
+1	1	abc
+2	2	abc
+3	3	abc
+4	4	abc
+5	5	abc
+-- !result
+select * from common_duplicate where c2 in ("ab","bc","abc") order by c0;
+-- result:
+1	1	abc
+2	2	abc
+3	3	abc
+4	4	abc
+5	5	abc
+-- !result
+select * from common_duplicate where c2 is not null order by c0;
+-- result:
+1	1	abc
+2	2	abc
+3	3	abc
+4	4	abc
+5	5	abc
+-- !result
+select * from common_duplicate where c2 is  null order by c0;
+-- result:
+6	6	None
+-- !result
+select * from common_duplicate where c2 ="abc" order by c0;
+-- result:
+1	1	abc
+2	2	abc
+3	3	abc
+4	4	abc
+5	5	abc
+-- !result
+select * from common_duplicate where c1 = 2;
+-- result:
+2	2	abc
+-- !result

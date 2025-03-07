@@ -33,6 +33,7 @@ Status AggregateBlockingSinkOperator::prepare(RuntimeState* state) {
                                 _aggregator->limit() != -1 &&                 // has limit
                                 _aggregator->conjunct_ctxs().empty() &&       // no 'having' clause
                                 _aggregator->get_aggr_phase() == AggrPhase2); // phase 2, keep it to make things safe
+    _aggregator->attach_sink_observer(state, this->_observer);
     return Status::OK();
 }
 
@@ -46,6 +47,7 @@ void AggregateBlockingSinkOperator::close(RuntimeState* state) {
 Status AggregateBlockingSinkOperator::set_finishing(RuntimeState* state) {
     if (_is_finished) return Status::OK();
     ONCE_DETECT(_set_finishing_once);
+    auto notify = _aggregator->defer_notify_source();
     auto defer = DeferOp([this]() {
         COUNTER_UPDATE(_aggregator->input_row_count(), _aggregator->num_input_rows());
         _aggregator->sink_complete();
@@ -95,10 +97,11 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const Chun
     DCHECK_LE(chunk_size, state->chunk_size());
 
     SCOPED_TIMER(_aggregator->agg_compute_timer());
+    TRY_CATCH_ALLOC_SCOPE_START()
     // try to build hash table if has group by keys
     if (!_aggregator->is_none_group_by_exprs()) {
-        TRY_CATCH_BAD_ALLOC(_aggregator->build_hash_map(chunk_size, _shared_limit_countdown, _agg_group_by_with_limit));
-        TRY_CATCH_BAD_ALLOC(_aggregator->try_convert_to_two_level_map());
+        _aggregator->build_hash_map(chunk_size, _shared_limit_countdown, _agg_group_by_with_limit);
+        _aggregator->try_convert_to_two_level_map();
     }
 
     // batch compute aggregate states
@@ -118,6 +121,7 @@ Status AggregateBlockingSinkOperator::push_chunk(RuntimeState* state, const Chun
             RETURN_IF_ERROR(_aggregator->compute_batch_agg_states(chunk.get(), chunk_size));
         }
     }
+    TRY_CATCH_ALLOC_SCOPE_END()
 
     _aggregator->update_num_input_rows(chunk_size);
     RETURN_IF_ERROR(_aggregator->check_has_error());

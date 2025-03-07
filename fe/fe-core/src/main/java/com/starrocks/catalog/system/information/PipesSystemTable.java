@@ -21,7 +21,6 @@ import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
 
 public class PipesSystemTable {
-
     public static final String NAME = "pipes";
 
     public static SystemTable create() {

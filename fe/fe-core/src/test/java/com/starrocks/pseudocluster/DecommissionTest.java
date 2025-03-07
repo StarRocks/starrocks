@@ -20,7 +20,9 @@ import com.starrocks.server.GlobalStateMgr;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 
+import java.sql.SQLException;
 import java.util.Date;
 import java.util.Random;
 
@@ -35,11 +37,12 @@ public class DecommissionTest {
         Config.sys_log_verbose_modules = new String[] {"com.starrocks.clone"};
         Config.alter_scheduler_interval_millisecond = 5000;
         Config.tablet_sched_slot_num_per_path = 32;
+        Config.tablet_sched_colocate_balance_wait_system_stable_time_s = 1;
         PseudoBackend.reportIntervalMs = 1000;
         PseudoCluster.getOrCreateWithRandomPort(true, 4);
         GlobalStateMgr.getCurrentState().getTabletChecker().setInterval(500);
-        ColocateTableBalancer.getInstance().setInterval(1000);
-        GlobalStateMgr.getCurrentState().getTabletScheduler().setInterval(1000);
+        ColocateTableBalancer.getInstance().setInterval(500);
+        GlobalStateMgr.getCurrentState().getTabletScheduler().setInterval(500);
         PseudoCluster.getInstance().runSql(null, "create database test");
     }
 
@@ -60,14 +63,13 @@ public class DecommissionTest {
         for (int i = 0; i < numTable; i++) {
             tableNames[i] = "test_" + i;
             PseudoCluster.CreateTableSqlBuilder sqlBuilder = PseudoCluster.newCreateTableSqlBuilder().setTableName(tableNames[i])
-                    .setBuckets(2);
-            if (i % 2 == 0) {
-                sqlBuilder.setColocateGroup("g1");
-            }
+                    .setBuckets(1);
             createTableSqls[i] = sqlBuilder.build();
             insertSqls[i] = PseudoCluster.buildInsertSql("test", tableNames[i]);
             cluster.runSqls("test", createTableSqls[i], insertSqls[i], insertSqls[i], insertSqls[i]);
         }
+        cluster.runSql("test", "create database if not exists _statistics_");
+        cluster.runSql("_statistics_", createTableSqls[0]);
         final PseudoBackend decommissionBE = cluster.getBackend(10001);
         int oldTabletNum = decommissionBE.getTabletManager().getNumTablet();
         cluster.runSql(null, String.format("ALTER SYSTEM DECOMMISSION BACKEND \"%s\"", decommissionBE.getHostHeartbeatPort()));
@@ -80,8 +82,22 @@ public class DecommissionTest {
                 break;
             }
             cluster.runSql("test", insertSqls[rand.nextInt(numTable)]);
-            Thread.sleep(1000);
+            Thread.sleep(3000);
         }
         System.out.println("decommission finished");
+
+        // decommission from 3 to 2
+        final PseudoBackend decommissionBE2 = cluster.getBackend(10002);
+        oldTabletNum = decommissionBE2.getTabletManager().getNumTablet();
+        Assertions.assertThrows(SQLException.class, () ->
+                cluster.runSql(null, String.format("ALTER SYSTEM DECOMMISSION BACKEND \"%s\"",
+                        decommissionBE2.getHostHeartbeatPort())));
+
+        for (int i = 0; i < numTable; i++) {
+            String tableName = tableNames[i];
+            cluster.runSql("test", "drop table " + tableName);
+        }
+        cluster.runSql(null, String.format("ALTER SYSTEM DECOMMISSION BACKEND \"%s\"",
+                decommissionBE2.getHostHeartbeatPort()));
     }
 }

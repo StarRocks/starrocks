@@ -314,7 +314,7 @@ DROP TABLE t;
 
 DROP DATABASE test_schema_change_for_add_optimization;
 
--- name: test_schema_change_for_constant_expression
+-- name: test_schema_change_for_constant_expression @slow
 CREATE DATABASE test_schema_change_for_constant_expression;
 USE test_schema_change_for_constant_expression;
 
@@ -392,7 +392,7 @@ PRIMARY KEY(`c1`)
 DISTRIBUTED BY HASH(`c1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -411,3 +411,39 @@ SELECT sleep(30);
 SELECT * FROM t;
 
 DROP DATABASE test_compaction_after_adding_generated_column;
+
+-- name: test_information_schema_generated_column
+CREATE TABLE `t_information_schema_generated_column_1` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT AS k + 10
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false"
+);
+
+CREATE TABLE `t_information_schema_generated_column_2` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT AS k + 10
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false"
+);
+
+select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where TABLE_NAME = 't_information_schema_generated_column_1';
+select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where TABLE_NAME = 't_information_schema_generated_column_2';
+
+DROP TABLE t_information_schema_generated_column_1;
+DROP TABLE t_information_schema_generated_column_2;
+
+select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where TABLE_NAME = 't_information_schema_generated_column_1';
+select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where TABLE_NAME = 't_information_schema_generated_column_2';

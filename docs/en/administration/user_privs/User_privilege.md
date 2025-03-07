@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Manage user privileges
 
-import UserPrivilegeCase from '../../assets/commonMarkdown/userPrivilegeCase.md'
+import UserPrivilegeCase from '../../_assets/commonMarkdown/userPrivilegeCase.md'
 
 This topic describes how to manage users, roles, and privileges in StarRocks.
 
@@ -119,14 +119,14 @@ Both of the following examples set the default role of `jack` to `db1_admin`. No
 
 #### Alter the property of a user
 
-You can set the property of a user using [SET PROPERTY](../../sql-reference/sql-statements/account-management/SET_PROPERTY.md).
+You can set the property of a user using [ALTER USER](../../sql-reference/sql-statements/account-management/ALTER_USER.md).
 
 The following example sets the maximum number of connections for user `jack` to `1000`. User identities that have the same user name share the same property.
 
 Therefore, you only need to set the property for `jack` and this setting takes effect for all the user identities with the user name `jack`.
 
 ```SQL
-SET PROPERTY FOR jack 'max_user_connections' = '1000';
+ALTER USER 'jack' SET PROPERTIES ("max_user_connections" = "1000");
 ```
 
 #### Reset password for a user
@@ -348,15 +348,15 @@ Usually, a company-owned StarRocks cluster is managed by a sole service provider
 
 As shown below, a StarRocks cluster's users include members from the service provider and two LOBs (A and B). Each LOB is operated by two roles - analysts and executives. Analysts generate and analyze business statements, and executives query the statements.
 
-![User Privileges](../../assets/user_privilege_1.png)
+![User Privileges](../../_assets/user_privilege_1.png)
 
 LOB A independently manages the database `DB_A`, and LOB B the database `DB_B`. LOB A and LOB B use different tables in `DB_C`. `DB_PUBLIC` can be accessed by all members of both LOBs.
 
-![User Privileges](../../assets/user_privilege_2.png)
+![User Privileges](../../_assets/user_privilege_2.png)
 
 Because different members perform different operations on different databases and tables, we recommend you create roles in accordance with their services and positions, apply only the necessary privileges to each role, and assign these roles to corresponding members. As shown below:
 
-![User Privileges](../../assets/user_privilege_3.png)
+![User Privileges](../../_assets/user_privilege_3.png)
 
 1. Assign the system-defined roles `db_admin`, `user_admin`, and `cluster_admin` to cluster maintainers, set `db_admin` and `user_admin` as their default roles for daily maintenance, and manually activate the role `cluster_admin` when they need to operate the nodes of the cluster.
 

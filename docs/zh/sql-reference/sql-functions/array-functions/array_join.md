@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # array_join
 
-## 功能
+
 
 将数组中的所有元素连接生成一个字符串。
 

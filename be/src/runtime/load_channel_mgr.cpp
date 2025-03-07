@@ -37,11 +37,14 @@
 #include <memory>
 
 #include "common/closure_guard.h"
+#include "fs/key_cache.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_channel.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/tablets_channel.h"
 #include "storage/lake/tablet_manager.h"
+#include "storage/utils.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 #include "util/thread.h"
@@ -99,6 +102,15 @@ Status LoadChannelMgr::init(MemTracker* mem_tracker) {
 void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request,
                           PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
     ClosureGuard done_guard(done);
+    if (!request.encryption_meta().empty()) {
+        Status st = KeyCache::instance().refresh_keys(request.encryption_meta());
+        if (!st.ok()) {
+            response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
+            response->mutable_status()->add_error_msgs(fmt::format(
+                    "refresh keys using encryption_meta in PTabletWriterOpenRequest failed {}", st.detailed_message()));
+            return;
+        }
+    }
     UniqueId load_id(request.id());
     int64_t txn_id = request.txn_id();
     std::shared_ptr<LoadChannel> channel;
@@ -107,7 +119,9 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
         auto it = _load_channels.find(load_id);
         if (it != _load_channels.end()) {
             channel = it->second;
-        } else if (!_mem_tracker->limit_exceeded() || config::enable_new_load_on_memory_limit_exceeded) {
+        } else if (!is_tracker_hit_hard_limit(_mem_tracker, config::load_process_max_memory_hard_limit_ratio) ||
+                   config::enable_new_load_on_memory_limit_exceeded) {
+            // When loading memory usage is larger than hard limit, we will reject new loading task.
             int64_t mem_limit_in_req = request.has_load_mem_limit() ? request.load_mem_limit() : -1;
             int64_t job_max_memory = calc_job_max_load_memory(mem_limit_in_req, _mem_tracker->limit());
 
@@ -125,8 +139,7 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
             response->mutable_status()->set_status_code(TStatusCode::MEM_LIMIT_EXCEEDED);
             response->mutable_status()->add_error_msgs(
                     "memory limit exceeded, please reduce load frequency or increase config "
-                    "`load_process_max_memory_limit_percent` or `load_process_max_memory_limit_bytes` "
-                    "or add more BE nodes");
+                    "`load_process_max_memory_hard_limit_ratio` or add more BE nodes");
             return;
         }
     }
@@ -178,7 +191,8 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
     if (request.has_tablet_id()) {
         auto channel = _find_load_channel(load_id);
         if (channel != nullptr) {
-            channel->abort(request.index_id(), {request.tablet_id()}, request.reason());
+            channel->abort(TabletsChannelKey(request.id(), request.sink_id(), request.index_id()),
+                           {request.tablet_id()}, request.reason());
         }
     } else if (request.tablet_ids_size() > 0) {
         auto channel = _find_load_channel(load_id);
@@ -187,13 +201,30 @@ void LoadChannelMgr::cancel(brpc::Controller* cntl, const PTabletWriterCancelReq
             for (auto& tablet_id : request.tablet_ids()) {
                 tablet_ids.emplace_back(tablet_id);
             }
-            channel->abort(request.index_id(), tablet_ids, request.reason());
+            channel->abort(TabletsChannelKey(request.id(), request.sink_id(), request.index_id()), tablet_ids,
+                           request.reason());
         }
     } else {
         if (auto channel = remove_load_channel(load_id); channel != nullptr) {
             channel->cancel();
             channel->abort();
         }
+    }
+}
+
+void LoadChannelMgr::load_diagnose(brpc::Controller* cntl, const PLoadDiagnoseRequest* request,
+                                   PLoadDiagnoseResult* response, google::protobuf::Closure* done) {
+    ClosureGuard done_guard(done);
+    UniqueId load_id(request->id());
+    auto channel = _find_load_channel(load_id);
+    if (channel == nullptr) {
+        if (request->has_profile() && request->profile()) {
+            response->mutable_profile_status()->set_status_code(TStatusCode::NOT_FOUND);
+            response->mutable_profile_status()->add_error_msgs("can't find the load channel");
+        }
+    } else {
+        VLOG(2) << "receive load diagnose, load_id: " << load_id << ", txn_id: " << request->txn_id();
+        channel->diagnose(request, response);
     }
 }
 
@@ -252,11 +283,6 @@ void LoadChannelMgr::_start_load_channels_clean() {
     if (auto lake_tablet_manager = ExecEnv::GetInstance()->lake_tablet_manager(); lake_tablet_manager != nullptr) {
         lake_tablet_manager->clean_in_writing_data_size();
     }
-
-    // this log print every 1 min, so that we could observe the mem consumption of load process
-    // on this Backend
-    LOG(INFO) << "Memory consumption(bytes) limit=" << _mem_tracker->limit()
-              << " current=" << _mem_tracker->consumption() << " peak=" << _mem_tracker->peak_consumption();
 }
 
 std::shared_ptr<LoadChannel> LoadChannelMgr::_find_load_channel(const UniqueId& load_id) {

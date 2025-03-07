@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # conv
 
-## 功能
+
 
 对输入的参数 `x` 进行进制转换。
 

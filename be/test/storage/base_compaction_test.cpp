@@ -17,6 +17,8 @@
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
+#include <cstddef>
+
 #include "column/schema.h"
 #include "fs/fs_util.h"
 #include "runtime/exec_env.h"
@@ -24,6 +26,7 @@
 #include "runtime/mem_tracker.h"
 #include "storage/chunk_helper.h"
 #include "storage/compaction.h"
+#include "storage/index/index_descriptor.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
 #include "storage/rowset/rowset_writer_context.h"
@@ -57,7 +60,7 @@ public:
         rowset_writer_context->version.second = 1;
     }
 
-    void create_tablet_schema(KeysType keys_type) {
+    void create_tablet_schema(KeysType keys_type, bool test_gin = false) {
         TabletSchemaPB tablet_schema_pb;
         tablet_schema_pb.set_keys_type(keys_type);
         tablet_schema_pb.set_num_short_key_columns(2);
@@ -104,6 +107,16 @@ public:
         column_4->set_is_bf_column(false);
         column_4->set_aggregation("REPLACE");
 
+        if (test_gin) {
+            TabletIndexPB tablet_index_pb;
+            tablet_index_pb.set_index_id(100);
+            tablet_index_pb.set_index_name("test_gin_index");
+            tablet_index_pb.set_index_type(GIN);
+            tablet_index_pb.add_col_unique_id(2);
+            auto* tablet_index = tablet_schema_pb.add_table_indices();
+            *tablet_index = tablet_index_pb;
+        }
+
         _tablet_schema = std::make_unique<TabletSchema>(tablet_schema_pb);
     }
 
@@ -143,6 +156,27 @@ public:
             cols[3]->append_datum(Datum(&json));
         }
         CHECK_OK(writer->add_chunk(*chunk));
+    }
+
+    void do_compaction_failed_with_gin() {
+        create_tablet_schema(DUP_KEYS, true);
+
+        RowsetWriterContext rowset_writer_context;
+        rowset_writer_context.writer_type = kVertical;
+        create_rowset_writer_context(&rowset_writer_context);
+        std::unique_ptr<RowsetWriter> _rowset_writer;
+        ASSERT_TRUE(RowsetFactory::create_rowset_writer(rowset_writer_context, &_rowset_writer).ok());
+
+        // create fake directory/file for index files and segment file
+        auto seg_path =
+                Rowset::segment_file_path(rowset_writer_context.rowset_path_prefix, rowset_writer_context.rowset_id, 0);
+        std::string index_path = IndexDescriptor::inverted_index_file_path(
+                rowset_writer_context.rowset_path_prefix, rowset_writer_context.rowset_id.to_string(), 0, 100);
+        (void)FileSystem::Default()->new_random_access_file(seg_path);
+        fs::create_directories(index_path).ok();
+        int* _num_segment = (int*)((char*)_rowset_writer.get() + offsetof(VerticalRowsetWriter, _num_segment));
+        (*_num_segment) = 1;
+        // test for the abnormal destory for rowset writer
     }
 
     void do_compaction() {
@@ -345,6 +379,11 @@ TEST_F(BaseCompactionTest, test_horizontal_compact_succeed) {
 TEST_F(BaseCompactionTest, test_vertical_compact_succeed) {
     config::vertical_compaction_max_columns_per_group = 1;
     do_compaction();
+}
+
+TEST_F(BaseCompactionTest, test_vertical_compact_failed_with_gin) {
+    config::vertical_compaction_max_columns_per_group = 1;
+    do_compaction_failed_with_gin();
 }
 
 } // namespace starrocks

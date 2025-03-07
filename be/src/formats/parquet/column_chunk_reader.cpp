@@ -14,14 +14,24 @@
 
 #include "formats/parquet/column_chunk_reader.h"
 
-#include <memory>
+#include <glog/logging.h>
 
+#include <memory>
+#include <string>
+#include <string_view>
+#include <utility>
+
+#include "common/compiler_util.h"
 #include "common/status.h"
+#include "common/statusor.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
+#include "fs/fs.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/current_thread.h"
+#include "runtime/mem_tracker.h"
+#include "util/compression/block_compression.h"
 
 namespace starrocks::parquet {
 
@@ -33,7 +43,12 @@ ColumnChunkReader::ColumnChunkReader(level_t max_def_level, level_t max_rep_leve
           _chunk_metadata(column_chunk),
           _opts(opts),
           _def_level_decoder(&opts.stats->level_decode_ns),
-          _rep_level_decoder(&opts.stats->level_decode_ns) {}
+          _rep_level_decoder(&opts.stats->level_decode_ns) {
+    if (_chunk_metadata->meta_data.__isset.statistics && _chunk_metadata->meta_data.statistics.__isset.null_count &&
+        _chunk_metadata->meta_data.statistics.null_count == 0) {
+        _current_row_group_no_null = true;
+    }
+}
 
 ColumnChunkReader::~ColumnChunkReader() = default;
 
@@ -52,7 +67,7 @@ Status ColumnChunkReader::init(int chunk_size) {
     // seek to the first page
     RETURN_IF_ERROR(_page_reader->seek_to_offset(start_offset));
 
-    auto compress_type = convert_compression_codec(metadata().codec);
+    auto compress_type = ParquetUtils::convert_compression_codec(metadata().codec);
     RETURN_IF_ERROR(get_block_compression_codec(compress_type, &_compress_codec));
 
     _chunk_size = chunk_size;
@@ -105,18 +120,28 @@ Status ColumnChunkReader::_parse_page_header() {
     size_t now = _page_reader->get_offset();
     _opts.stats->request_bytes_read += (now - off);
     _opts.stats->request_bytes_read_uncompressed += (now - off);
+    _page_parse_state = PAGE_HEADER_PARSED;
 
     // The page num values will be used for late materialization before parsing page data,
     // so we set _num_values when parsing header.
-    if (_page_reader->current_header()->type == tparquet::PageType::DATA_PAGE) {
+    auto& page_type = _page_reader->current_header()->type;
+    // TODO: support DATA_PAGE_V2, now common writer use DATA_PAGE as default
+    if (UNLIKELY(page_type != tparquet::PageType::DICTIONARY_PAGE && page_type != tparquet::PageType::DATA_PAGE)) {
+        return Status::NotSupported(strings::Substitute("Not supported page type: $0", page_type));
+    }
+    if (page_type == tparquet::PageType::DATA_PAGE) {
         const auto& header = *_page_reader->current_header();
         _num_values = header.data_page_header.num_values;
         _opts.stats->has_page_statistics |=
                 (header.data_page_header.__isset.statistics && (header.data_page_header.statistics.__isset.min_value ||
                                                                 header.data_page_header.statistics.__isset.min));
+        _current_page_no_null =
+                (header.data_page_header.__isset.statistics && header.data_page_header.statistics.__isset.null_count &&
+                 header.data_page_header.statistics.null_count == 0)
+                        ? true
+                        : false;
     }
 
-    _page_parse_state = PAGE_HEADER_PARSED;
     return Status::OK();
 }
 

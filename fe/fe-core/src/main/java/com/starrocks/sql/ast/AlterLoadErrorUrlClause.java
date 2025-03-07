@@ -38,7 +38,6 @@ public class AlterLoadErrorUrlClause extends AlterClause {
         this.properties = properties;
     }
 
-    @Override
     public Map<String, String> getProperties() {
         return properties;
     }

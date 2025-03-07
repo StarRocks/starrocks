@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+sidebar_position: 0.9
 ---
 
 # Java UDF
@@ -409,6 +410,7 @@ PROPERTIES (
 |symbol|UDF 所在项目的类名。格式为`<package_name>.<class_name>`。|
 |type|用于标记所创建的 UDF 类型。取值为 `StarrocksJar`，表示基于 Java 的 UDF。|
 |file|UDF 所在 Jar 包的 HTTP 路径。格式为`http://<http_server_ip>:<http_server_port>/<jar_package_name>`。|
+|isolation|(可选）如需在 UDF 执行中共享函数实例并支持静态变量，请将其设置为 "shared"。|
 
 #### 创建 UDAF
 
@@ -527,7 +529,7 @@ SELECT t1.a,t1.b, MY_UDF_SPLIT FROM t1, MY_UDF_SPLIT(t1.c1);
 SHOW [GLOBAL] FUNCTIONS;
 ```
 
-更多信息，请参见[SHOW FUNCTIONS](../sql-statements/data-definition/SHOW_FUNCTIONS.md)。
+更多信息，请参见[SHOW FUNCTIONS](../sql-statements/Function/SHOW_FUNCTIONS.md)。
 
 ## 删除 UDF
 
@@ -537,7 +539,7 @@ SHOW [GLOBAL] FUNCTIONS;
 DROP [GLOBAL] FUNCTION <function_name>(arg_type [, ...]);
 ```
 
-更多信息，请参见[DROP FUNCTION](../sql-statements/data-definition/DROP_FUNCTION.md)。
+更多信息，请参见[DROP FUNCTION](../sql-statements/Function/DROP_FUNCTION.md)。
 
 ## 类型映射关系
 

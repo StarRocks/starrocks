@@ -10,6 +10,18 @@ shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/dict_two_p
 
 Succeed: Total num: 1, size: 24,270. OK num: 1(upload 1 files).
 -- !result
+shell: ossutil64 cp --force ../be/test/exec/test_data/parquet_scanner/data_two_page_nullable.parquet oss://${oss_bucket}/test_query_external_file/${uuid0}/data_two_page_nullable.parquet | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 9,715. OK num: 1(upload 1 files).
+-- !result
+shell: ossutil64 cp --force ../be/test//formats/parquet/test_data/float_double.parquet oss://${oss_bucket}/test_query_external_file/${uuid0}/float_double.parquet | grep -Pv "(average|elapsed)"
+-- result:
+0
+
+Succeed: Total num: 1, size: 1,777,978. OK num: 1(upload 1 files).
+-- !result
 CREATE EXTERNAL TABLE dict_two_page
 (
     seq bigint,
@@ -22,7 +34,7 @@ CREATE EXTERNAL TABLE dict_two_page
 ENGINE=file
 PROPERTIES 
 (
-    "path" = "oss://${oss_bucket}/test_query_external_file/${uuid0}/", 
+    "path" = "oss://${oss_bucket}/test_query_external_file/${uuid0}/dict_two_page.parquet",
     "format" = "parquet"
 );
 -- result:
@@ -80,6 +92,74 @@ select count(distinct seq) from dict_two_page;
 select count(*), min(f00), max(f00) from dict_two_page group by seq having seq = 99;
 -- result:
 2	vwxyzabcdefghijklmno	vwxyzabcdefghijklmno
+-- !result
+set enable_rewrite_simple_agg_to_hdfs_scan = true;
+-- result:
+-- !result
+select count(*) from dict_two_page;
+-- result:
+200
+-- !result
+set enable_rewrite_simple_agg_to_hdfs_scan = false;
+-- result:
+-- !result
+select count(*) from dict_two_page;
+-- result:
+200
+-- !result
+CREATE EXTERNAL TABLE data_two_page_nullable
+(
+    c0 int
+)
+ENGINE=file
+PROPERTIES
+(
+    "path" = "oss://${oss_bucket}/test_query_external_file/${uuid0}/data_two_page_nullable.parquet",
+    "format" = "parquet"
+);
+-- result:
+-- !result
+select count(*) from data_two_page_nullable where c0 is null;
+-- result:
+1500
+-- !result
+select count(*) from data_two_page_nullable where c0 is not null;
+-- result:
+1500
+-- !result
+CREATE EXTERNAL TABLE data_float_double
+(
+    c0 int,
+    c1 float,
+    c2 double
+)
+ENGINE=file
+PROPERTIES
+(
+    "path" = "oss://${oss_bucket}/test_query_external_file/${uuid0}/float_double.parquet",
+    "format" = "parquet"
+);
+-- result:
+-- !result
+select * from data_float_double where c1 = 999;
+-- result:
+999	999.0	999.0
+-- !result
+select * from data_float_double where c2 = 999;
+-- result:
+999	999.0	999.0
+-- !result
+select * from data_float_double where c1 in (999, 9999, 99999) order by c1;
+-- result:
+999	999.0	999.0
+9999	9999.0	9999.0
+99999	99999.0	99999.0
+-- !result
+select * from data_float_double where c2 in (999, 9999, 99999) order by c2;
+-- result:
+999	999.0	999.0
+9999	9999.0	9999.0
+99999	99999.0	99999.0
 -- !result
 shell: ossutil64 rm -rf oss://${oss_bucket}/test_query_external_file/${uuid0}/ >/dev/null || echo "exit 0" >/dev/null
 -- result:

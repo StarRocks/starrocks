@@ -65,7 +65,7 @@ public:
         const auto& query_id = params.query_id;
         const auto& fragment_id = params.fragment_instance_id;
 
-        _query_ctx = _exec_env->query_context_mgr()->get_or_register(query_id);
+        ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
         _query_ctx->set_total_fragments(1);
         _query_ctx->set_delivery_expire_seconds(60);
         _query_ctx->set_query_expire_seconds(60);
@@ -190,14 +190,12 @@ std::vector<TScanRangeParams> PipeLineFileScanNodeTest::_create_csv_scan_ranges(
 
 std::shared_ptr<TPlanNode> PipeLineFileScanNodeTest::_create_tplan_node() {
     std::vector<::starrocks::TTupleId> tuple_ids{0};
-    std::vector<bool> nullable_tuples{true};
 
     auto tnode = std::make_shared<TPlanNode>();
 
     tnode->__set_node_id(1);
     tnode->__set_node_type(TPlanNodeType::FILE_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
-    tnode->__set_nullable_tuples(nullable_tuples);
     tnode->__set_limit(-1);
 
     TConnectorScanNode connector_scan_node;
@@ -265,7 +263,7 @@ void PipeLineFileScanNodeTest::generate_morse_queue(const std::vector<starrocks:
     for (auto& i : scan_nodes) {
         auto* scan_node = (ScanNode*)(i);
         auto morsel_queue_factory = scan_node->convert_scan_range_to_morsel_queue_factory(
-                scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), degree_of_parallelism, true,
+                scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), degree_of_parallelism, false, true,
                 TTabletInternalParallelMode::type::AUTO);
         DCHECK(morsel_queue_factory.ok());
         morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory).value());

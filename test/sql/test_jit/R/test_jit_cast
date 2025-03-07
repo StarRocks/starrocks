@@ -417,7 +417,6 @@ None
 None
 None
 None
-None
 -123547.123
 -74367.123
 -56813.123
@@ -442,6 +441,7 @@ None
 32733.877
 9876654.877
 9999898.877
+9223372036854775666.877
 -- !result
 SELECT k1 + v3 + v4 - 12 as result FROM jit_cast ORDER BY result, k1, k2,v1;
 -- result:
@@ -809,8 +809,8 @@ None
 None
 None
 None
-None
 -4.3534316015543816e+21
+-9.223371761043117e+18
 -158921843154.124
 -158921645735.67087
 -33508329289.124
@@ -1543,8 +1543,7 @@ None
 None
 None
 None
-None
-None
+-9223372036854710269.123
 -133.123
 -133.123
 -125.123
@@ -1562,6 +1561,7 @@ None
 2394.877
 123441120.877
 2147549185.877
+9223372036854776183.877
 -- !result
 SELECT v1 * v2 + v3 + 0 + v4 - v6 * 0 + v10 as result FROM jit_cast ORDER BY result, k1, k2,v1;
 -- result:

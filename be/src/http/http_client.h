@@ -92,8 +92,10 @@ public:
     }
     // used to get content length
     int64_t get_content_length() const {
-        double cl = 0.0f;
-        curl_easy_getinfo(_curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD, &cl);
+        // CURLINFO_CONTENT_LENGTH_DOWNLOAD is deprecated since v7.55.0
+        // https://curl.se/libcurl/c/CURLINFO_CONTENT_LENGTH_DOWNLOAD.html
+        curl_off_t cl = 0;
+        curl_easy_getinfo(_curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD_T, &cl);
         return cl;
     }
 
@@ -113,7 +115,8 @@ public:
     // a file to local_path
     StatusOr<uint64_t> download(const std::string& local_path);
 
-    Status download(const std::function<Status(const void* data, size_t length)>& callback);
+    Status download(const std::function<Status(const void* data, size_t length)>& callback,
+                    int32_t min_speed_limit_kbps, int32_t min_speed_time_sec, int32_t max_speed_limit_kbps);
 
     Status execute_post_request(const std::string& payload, std::string* response);
 

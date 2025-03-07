@@ -16,6 +16,7 @@
 package com.starrocks.scheduler.mv;
 
 import com.starrocks.common.util.FrontendDaemon;
+import com.starrocks.server.GlobalStateMgr;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -50,7 +51,7 @@ public class MVJobExecutor extends FrontendDaemon {
     }
 
     private void runImpl() {
-        List<MVMaintenanceJob> jobs = MaterializedViewMgr.getInstance().getRunnableJobs();
+        List<MVMaintenanceJob> jobs = GlobalStateMgr.getCurrentState().getMaterializedViewMgr().getRunnableJobs();
         if (CollectionUtils.isEmpty(jobs)) {
             return;
         }

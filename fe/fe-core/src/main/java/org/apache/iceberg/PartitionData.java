@@ -18,12 +18,6 @@
  */
 package org.apache.iceberg;
 
-import java.io.Serializable;
-import java.nio.ByteBuffer;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Objects;
-import java.util.stream.Stream;
 import org.apache.avro.Schema;
 import org.apache.avro.generic.IndexedRecord;
 import org.apache.avro.specific.SpecificData;
@@ -34,6 +28,13 @@ import org.apache.iceberg.relocated.com.google.common.hash.Hasher;
 import org.apache.iceberg.relocated.com.google.common.hash.Hashing;
 import org.apache.iceberg.types.Type;
 import org.apache.iceberg.types.Types;
+
+import java.io.Serializable;
+import java.nio.ByteBuffer;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Objects;
+import java.util.stream.Stream;
 
 // copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.5.0/core/src/main/java/org/apache/iceberg/PartitionData.java
 public class PartitionData
@@ -89,6 +90,14 @@ public class PartitionData
         this.data = copyData(partitionType, partition);
         this.stringSchema = toCopy.stringSchema;
         this.schema = toCopy.schema;
+    }
+
+    public PartitionData(PartitionData toCopy, Object[] data) {
+        this.partitionType = toCopy.partitionType;
+        this.size = toCopy.size;
+        this.stringSchema = toCopy.stringSchema;
+        this.schema = toCopy.schema;
+        this.data = data;
     }
 
     public Types.StructType getPartitionType() {

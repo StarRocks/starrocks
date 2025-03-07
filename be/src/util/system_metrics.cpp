@@ -35,14 +35,25 @@
 #include "util/system_metrics.h"
 
 #include <runtime/exec_env.h>
+#ifdef WITH_TENANN
+#include <tenann/index/index_cache.h>
+#endif
 
 #include <cstdio>
 #include <memory>
 
-#include "column/column_pool.h"
+#include "cache/block_cache/block_cache.h"
+#ifdef USE_STAROS
+#include "fslib/star_cache_handler.h"
+#endif
 #include "gutil/strings/split.h" // for string split
 #include "gutil/strtoint.h"      //  for atoi64
+#include "io/io_profiler.h"
 #include "jemalloc/jemalloc.h"
+#include "runtime/mem_tracker.h"
+#include "runtime/runtime_filter_worker.h"
+#include "storage/page_cache.h"
+#include "util/metrics.h"
 
 namespace starrocks {
 
@@ -118,6 +129,31 @@ public:
     METRIC_DEFINE_DOUBLE_GAUGE(query_cache_hit_ratio, MetricUnit::PERCENT);
 };
 
+class VectorIndexCacheMetrics {
+    friend class SystemMetrics;
+
+public:
+    METRIC_DEFINE_INT_GAUGE(vector_index_cache_capacity, MetricUnit::BYTES);
+    METRIC_DEFINE_INT_GAUGE(vector_index_cache_usage, MetricUnit::BYTES);
+    METRIC_DEFINE_DOUBLE_GAUGE(vector_index_cache_usage_ratio, MetricUnit::PERCENT);
+    METRIC_DEFINE_INT_GAUGE(vector_index_cache_lookup_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(vector_index_cache_hit_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_DOUBLE_GAUGE(vector_index_cache_hit_ratio, MetricUnit::PERCENT);
+    METRIC_DEFINE_INT_GAUGE(vector_index_cache_dynamic_lookup_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(vector_index_cache_dynamic_hit_count, MetricUnit::NOUNIT);
+    METRIC_DEFINE_DOUBLE_GAUGE(vector_index_cache_dynamic_hit_ratio, MetricUnit::PERCENT);
+
+private:
+    int _previous_lookup_count;
+    int _previous_hit_count;
+};
+
+class RuntimeFilterMetrics {
+public:
+    METRIC_DEFINE_INT_GAUGE(runtime_filter_events_in_queue, MetricUnit::NOUNIT);
+    METRIC_DEFINE_INT_GAUGE(runtime_filter_bytes_in_queue, MetricUnit::BYTES);
+};
+
 SystemMetrics::SystemMetrics() = default;
 
 SystemMetrics::~SystemMetrics() {
@@ -135,6 +171,12 @@ SystemMetrics::~SystemMetrics() {
     if (_line_ptr != nullptr) {
         free(_line_ptr);
     }
+    for (auto& it : _runtime_filter_metrics) {
+        delete it.second;
+    }
+    for (auto& it : _io_metrics) {
+        delete it;
+    }
 }
 
 void SystemMetrics::install(MetricRegistry* registry, const std::set<std::string>& disk_devices,
@@ -150,6 +192,9 @@ void SystemMetrics::install(MetricRegistry* registry, const std::set<std::string
     _install_fd_metrics(registry);
     _install_snmp_metrics(registry);
     _install_query_cache_metrics(registry);
+    _install_runtime_filter_metrics(registry);
+    _install_vector_index_cache_metrics(registry);
+    _install_io_metrics(registry);
     _registry = registry;
 }
 
@@ -161,6 +206,8 @@ void SystemMetrics::update() {
     _update_fd_metrics();
     _update_snmp_metrics();
     _update_query_cache_metrics();
+    _update_runtime_filter_metrics();
+    _update_vector_index_cache_metrics();
 }
 
 void SystemMetrics::_install_cpu_metrics(MetricRegistry* registry) {
@@ -241,7 +288,6 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("short_key_index_mem_bytes", &_memory_metrics->short_key_index_mem_bytes);
     registry->register_metric("compaction_mem_bytes", &_memory_metrics->compaction_mem_bytes);
     registry->register_metric("schema_change_mem_bytes", &_memory_metrics->schema_change_mem_bytes);
-    registry->register_metric("column_pool_mem_bytes", &_memory_metrics->column_pool_mem_bytes);
     registry->register_metric("storage_page_cache_mem_bytes", &_memory_metrics->storage_page_cache_mem_bytes);
     registry->register_metric("jit_cache_mem_bytes", &_memory_metrics->jit_cache_mem_bytes);
     registry->register_metric("update_mem_bytes", &_memory_metrics->update_mem_bytes);
@@ -249,29 +295,40 @@ void SystemMetrics::_install_memory_metrics(MetricRegistry* registry) {
     registry->register_metric("clone_mem_bytes", &_memory_metrics->clone_mem_bytes);
     registry->register_metric("consistency_mem_bytes", &_memory_metrics->consistency_mem_bytes);
     registry->register_metric("datacache_mem_bytes", &_memory_metrics->datacache_mem_bytes);
+}
 
-    registry->register_metric("total_column_pool_bytes", &_memory_metrics->column_pool_total_bytes);
-    registry->register_metric("local_column_pool_bytes", &_memory_metrics->column_pool_local_bytes);
-    registry->register_metric("central_column_pool_bytes", &_memory_metrics->column_pool_central_bytes);
-    registry->register_metric("binary_column_pool_bytes", &_memory_metrics->column_pool_binary_bytes);
-    registry->register_metric("uint8_column_pool_bytes", &_memory_metrics->column_pool_uint8_bytes);
-    registry->register_metric("int8_column_pool_bytes", &_memory_metrics->column_pool_int8_bytes);
-    registry->register_metric("int16_column_pool_bytes", &_memory_metrics->column_pool_int16_bytes);
-    registry->register_metric("int32_column_pool_bytes", &_memory_metrics->column_pool_int32_bytes);
-    registry->register_metric("int64_column_pool_bytes", &_memory_metrics->column_pool_int64_bytes);
-    registry->register_metric("int128_column_pool_bytes", &_memory_metrics->column_pool_int128_bytes);
-    registry->register_metric("float_column_pool_bytes", &_memory_metrics->column_pool_float_bytes);
-    registry->register_metric("double_column_pool_bytes", &_memory_metrics->column_pool_double_bytes);
-    registry->register_metric("decimal_column_pool_bytes", &_memory_metrics->column_pool_decimal_bytes);
-    registry->register_metric("date_column_pool_bytes", &_memory_metrics->column_pool_date_bytes);
-    registry->register_metric("datetime_column_pool_bytes", &_memory_metrics->column_pool_datetime_bytes);
+void SystemMetrics::_update_datacache_mem_tracker() {
+    // update datacache mem_tracker
+    int64_t datacache_mem_bytes = 0;
+    auto* datacache_mem_tracker = GlobalEnv::GetInstance()->datacache_mem_tracker();
+    if (datacache_mem_tracker) {
+        BlockCache* block_cache = BlockCache::instance();
+        if (block_cache != nullptr && block_cache->is_initialized()) {
+            auto datacache_metrics = block_cache->cache_metrics();
+            datacache_mem_bytes = datacache_metrics.mem_used_bytes + datacache_metrics.meta_used_bytes;
+        }
+#ifdef USE_STAROS
+        if (!config::datacache_unified_instance_enable) {
+            datacache_mem_bytes += staros::starlet::fslib::star_cache_get_memory_usage();
+        }
+#endif
+        datacache_mem_tracker->set(datacache_mem_bytes);
+    }
+}
+
+void SystemMetrics::_update_pagecache_mem_tracker() {
+    auto* pagecache_mem_tracker = GlobalEnv::GetInstance()->page_cache_mem_tracker();
+    auto* page_cache = StoragePageCache::instance();
+    if (pagecache_mem_tracker && page_cache) {
+        pagecache_mem_tracker->set(page_cache->memory_usage());
+    }
 }
 
 void SystemMetrics::_update_memory_metrics() {
-    size_t value = 0;
 #if defined(ADDRESS_SANITIZER) || defined(LEAK_SANITIZER) || defined(THREAD_SANITIZER)
     LOG(INFO) << "Memory tracking is not available with address sanitizer builds.";
 #else
+    size_t value = 0;
     // Update the statistics cached by mallctl.
     uint64_t epoch = 1;
     size_t sz = sizeof(epoch);
@@ -300,6 +357,9 @@ void SystemMetrics::_update_memory_metrics() {
     }
 #endif
 
+    _update_datacache_mem_tracker();
+    _update_pagecache_mem_tracker();
+
 #define SET_MEM_METRIC_VALUE(tracker, key)                                                  \
     if (GlobalEnv::GetInstance()->tracker() != nullptr) {                                   \
         _memory_metrics->key.set_value(GlobalEnv::GetInstance()->tracker()->consumption()); \
@@ -326,30 +386,11 @@ void SystemMetrics::_update_memory_metrics() {
     SET_MEM_METRIC_VALUE(jit_cache_mem_tracker, jit_cache_mem_bytes)
     SET_MEM_METRIC_VALUE(update_mem_tracker, update_mem_bytes)
     SET_MEM_METRIC_VALUE(chunk_allocator_mem_tracker, chunk_allocator_mem_bytes)
+    SET_MEM_METRIC_VALUE(passthrough_mem_tracker, passthrough_mem_bytes)
     SET_MEM_METRIC_VALUE(clone_mem_tracker, clone_mem_bytes)
-    SET_MEM_METRIC_VALUE(column_pool_mem_tracker, column_pool_mem_bytes)
     SET_MEM_METRIC_VALUE(consistency_mem_tracker, consistency_mem_bytes)
     SET_MEM_METRIC_VALUE(datacache_mem_tracker, datacache_mem_bytes)
 #undef SET_MEM_METRIC_VALUE
-
-#define UPDATE_COLUMN_POOL_METRIC(var, type)                 \
-    value = describe_column_pool<type>().central_free_bytes; \
-    var.set_value(value);
-
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_binary_bytes, BinaryColumn)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_uint8_bytes, UInt8Column)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_int8_bytes, Int8Column)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_int16_bytes, Int16Column)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_int32_bytes, Int32Column)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_int64_bytes, Int64Column)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_int128_bytes, Int128Column)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_float_bytes, FloatColumn)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_double_bytes, DoubleColumn)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_decimal_bytes, DecimalColumn)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_date_bytes, DateColumn)
-    UPDATE_COLUMN_POOL_METRIC(_memory_metrics->column_pool_datetime_bytes, TimestampColumn)
-
-#undef UPDATE_COLUMN_POOL_METRIC
 }
 
 void SystemMetrics::_install_disk_metrics(MetricRegistry* registry, const std::set<std::string>& devices) {
@@ -634,6 +675,61 @@ void SystemMetrics::_update_query_cache_metrics() {
     _query_cache_metrics->query_cache_hit_ratio.set_value(hit_ratio);
 }
 
+void SystemMetrics::_install_vector_index_cache_metrics(MetricRegistry* registry) {
+    _vector_index_cache_metrics = std::make_unique<VectorIndexCacheMetrics>();
+    registry->register_metric("vector_index_cache_capacity", &_vector_index_cache_metrics->vector_index_cache_capacity);
+    registry->register_metric("vector_index_cache_usage", &_vector_index_cache_metrics->vector_index_cache_usage);
+    registry->register_metric("vector_index_cache_usage_ratio",
+                              &_vector_index_cache_metrics->vector_index_cache_usage_ratio);
+    registry->register_metric("vector_index_cache_lookup_count",
+                              &_vector_index_cache_metrics->vector_index_cache_lookup_count);
+    registry->register_metric("vector_index_cache_hit_count",
+                              &_vector_index_cache_metrics->vector_index_cache_hit_count);
+    registry->register_metric("vector_index_cache_hit_ratio",
+                              &_vector_index_cache_metrics->vector_index_cache_hit_ratio);
+    registry->register_metric("vector_index_cache_dynamic_lookup_count",
+                              &_vector_index_cache_metrics->vector_index_cache_dynamic_lookup_count);
+    registry->register_metric("vector_index_cache_dynamic_hit_count",
+                              &_vector_index_cache_metrics->vector_index_cache_dynamic_hit_count);
+    registry->register_metric("vector_index_cache_dynamic_hit_ratio",
+                              &_vector_index_cache_metrics->vector_index_cache_dynamic_hit_ratio);
+}
+
+void SystemMetrics::_update_vector_index_cache_metrics() {
+    auto hit_count = 0;
+#ifdef WITH_TENANN
+    auto* index_cache = tenann::IndexCache::GetGlobalInstance();
+    if (UNLIKELY(index_cache == nullptr)) {
+        return;
+    }
+    auto capacity = index_cache->capacity();
+    auto usage = index_cache->memory_usage();
+    auto lookup_count = index_cache->lookup_count();
+#else
+    auto capacity = 0;
+    auto usage = 0;
+    auto lookup_count = 0;
+#endif
+    auto usage_ratio = (capacity == 0L) ? 0.0 : double(usage) / double(capacity);
+    auto hit_ratio = (lookup_count == 0L) ? 0.0 : double(hit_count) / double(lookup_count);
+    auto dynamic_lookup_count = lookup_count - _vector_index_cache_metrics->_previous_lookup_count;
+    auto dynamic_hit_count = hit_count - _vector_index_cache_metrics->_previous_hit_count;
+    auto dynamic_hit_ratio =
+            (dynamic_lookup_count == 0) ? 0.0 : double(dynamic_lookup_count) / double(dynamic_hit_count);
+    _vector_index_cache_metrics->vector_index_cache_capacity.set_value(capacity);
+    _vector_index_cache_metrics->vector_index_cache_usage.set_value(usage);
+    _vector_index_cache_metrics->vector_index_cache_usage_ratio.set_value(usage_ratio);
+    _vector_index_cache_metrics->vector_index_cache_lookup_count.set_value(lookup_count);
+    _vector_index_cache_metrics->vector_index_cache_hit_count.set_value(hit_count);
+    _vector_index_cache_metrics->vector_index_cache_hit_ratio.set_value(hit_ratio);
+    _vector_index_cache_metrics->vector_index_cache_dynamic_lookup_count.set_value(dynamic_lookup_count);
+    _vector_index_cache_metrics->vector_index_cache_dynamic_hit_count.set_value(dynamic_hit_count);
+    _vector_index_cache_metrics->vector_index_cache_dynamic_hit_ratio.set_value(dynamic_hit_ratio);
+
+    _vector_index_cache_metrics->_previous_lookup_count = lookup_count;
+    _vector_index_cache_metrics->_previous_hit_count = hit_count;
+}
+
 void SystemMetrics::_install_fd_metrics(MetricRegistry* registry) {
     _fd_metrics = std::make_unique<FileDescriptorMetrics>();
     registry->register_metric("fd_num_limit", &_fd_metrics->fd_num_limit);
@@ -648,6 +744,35 @@ void SystemMetrics::_install_query_cache_metrics(starrocks::MetricRegistry* regi
     registry->register_metric("query_cache_lookup_count", &_query_cache_metrics->query_cache_lookup_count);
     registry->register_metric("query_cache_hit_count", &_query_cache_metrics->query_cache_hit_count);
     registry->register_metric("query_cache_hit_ratio", &_query_cache_metrics->query_cache_hit_ratio);
+}
+
+void SystemMetrics::_install_runtime_filter_metrics(starrocks::MetricRegistry* registry) {
+    for (int i = 0; i < EventType::MAX_COUNT; i++) {
+        auto* metrics = new RuntimeFilterMetrics();
+        const auto& type = EventTypeToString((EventType)i);
+#define REGISTER_RUNTIME_FILTER_METRIC(name) \
+    registry->register_metric(#name, MetricLabels().add("type", type), &metrics->name)
+        REGISTER_RUNTIME_FILTER_METRIC(runtime_filter_events_in_queue);
+        REGISTER_RUNTIME_FILTER_METRIC(runtime_filter_bytes_in_queue);
+        _runtime_filter_metrics.emplace(type, metrics);
+    }
+}
+
+void SystemMetrics::_update_runtime_filter_metrics() {
+    auto* runtime_filter_worker = ExecEnv::GetInstance()->runtime_filter_worker();
+    if (UNLIKELY(runtime_filter_worker == nullptr)) {
+        return;
+    }
+    const auto* metrics = runtime_filter_worker->metrics();
+    for (int i = 0; i < EventType::MAX_COUNT; i++) {
+        const auto& event_name = EventTypeToString((EventType)i);
+        auto iter = _runtime_filter_metrics.find(event_name);
+        if (iter == _runtime_filter_metrics.end()) {
+            continue;
+        }
+        iter->second->runtime_filter_events_in_queue.set_value(metrics->event_nums[i]);
+        iter->second->runtime_filter_bytes_in_queue.set_value(metrics->runtime_filter_bytes[i]);
+    }
 }
 
 void SystemMetrics::_update_fd_metrics() {
@@ -739,5 +864,20 @@ void SystemMetrics::get_max_net_traffic(const std::map<std::string, int64_t>& ls
 
     *send_rate = max_send / interval_sec;
     *rcv_rate = max_rcv / interval_sec;
+}
+
+void SystemMetrics::_install_io_metrics(MetricRegistry* registry) {
+    for (uint32_t i = 0; i < IOProfiler::TAG::TAG_END; i++) {
+        std::string tag_name = IOProfiler::tag_to_string(i);
+        auto* metrics = new IOMetrics();
+#define REGISTER_IO_METRIC(name) \
+    registry->register_metric("io_" #name, MetricLabels().add("tag", tag_name), &metrics->name);
+        REGISTER_IO_METRIC(read_ops);
+        REGISTER_IO_METRIC(read_bytes);
+        REGISTER_IO_METRIC(write_ops);
+        REGISTER_IO_METRIC(write_bytes);
+
+        _io_metrics.emplace_back(metrics);
+    }
 }
 } // namespace starrocks

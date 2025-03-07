@@ -20,6 +20,7 @@
 
 #include "ColumnWriter.hh"
 #include "Timezone.hh"
+#include "common/config.h"
 #include "orc/Common.hh"
 #include "orc/OrcFile.hh"
 
@@ -386,7 +387,11 @@ void WriterImpl::init() {
     postScript.add_version(options.getFileVersion().getMajor());
     postScript.add_version(options.getFileVersion().getMinor());
 
-    postScript.set_writerversion(WriterVersion_ORC_135);
+    if (starrocks::config::orc_writer_version != -1) {
+        postScript.set_writerversion(starrocks::config::orc_writer_version);
+    } else {
+        postScript.set_writerversion(WriterVersion_ORC_135);
+    }
     postScript.set_magic("ORC");
 
     // Initialize first stripe

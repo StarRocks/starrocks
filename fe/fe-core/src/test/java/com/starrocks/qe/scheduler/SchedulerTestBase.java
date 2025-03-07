@@ -29,7 +29,7 @@ public class SchedulerTestBase extends SchedulerTestNoneDBBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
         SchedulerTestNoneDBBase.beforeClass();
-
+        starRocksAssert.getCtx().getSessionVariable().setCboPushDownAggregateMode(-1);
         starRocksAssert.withDatabase(DB_NAME).useDatabase(DB_NAME);
 
         final String tpchGroup = "tpch_group_" + COLOCATE_GROUP_INDEX.getAndIncrement();

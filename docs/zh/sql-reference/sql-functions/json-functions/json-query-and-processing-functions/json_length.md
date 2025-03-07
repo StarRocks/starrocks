@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # json_length
 
-## 功能
+
 
 返回 JSON 字符串的长度。如果指定了 `path`，则返回 `path` 指定的值的长度。
 

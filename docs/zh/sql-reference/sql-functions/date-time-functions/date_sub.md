@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # date_sub,subdate
 
-## 功能
+
 
 从日期中减去指定的时间间隔。
 

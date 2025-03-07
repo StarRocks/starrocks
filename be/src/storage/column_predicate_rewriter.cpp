@@ -48,46 +48,126 @@ namespace starrocks {
 
 constexpr static const LogicalType kDictCodeType = TYPE_INT;
 
-Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool) {
-    // because schema has reordered
-    // so we only need to check the first `predicate_column_size` fields
-    for (size_t i = 0; i < _column_size; i++) {
-        const FieldPtr& field = _schema.field(i);
-        const auto cid = field->id();
+struct RewritePredicateTreeVisitor {
+    using RewriteStatus = ColumnPredicateRewriter::RewriteStatus;
 
-        auto iter = _pred_map.find(cid);
-        if (iter == _pred_map.end()) {
-            continue;
+    template <CompoundNodeType ParentType>
+    StatusOr<RewriteStatus> operator()(PredicateColumnNode& node, PredicateCompoundNode<ParentType>& parent) const {
+        const auto* col_pred = node.col_pred();
+        const auto cid = col_pred->column_id();
+        // index only filter only used for storage engine index filter
+        // after index filter,it's useless and will be thrown away in SegmentIterator::_init_column_predicates
+        if (col_pred->is_index_filter_only() && col_pred->is_expr_predicate()) {
+            return RewriteStatus::UNCHANGED;
         }
-        auto& preds = iter->second;
 
-        std::vector<const ColumnPredicate*> remove_list;
-        for (auto& pred : preds) {
-            ColumnPredicate* new_pred = nullptr;
-            ASSIGN_OR_RETURN(auto rewrite_status, _rewrite_predicate(pool, field, pred, &new_pred));
+        if (!_rewriter._need_rewrite[cid]) {
+            return RewriteStatus::UNCHANGED;
+        }
+
+        const auto& field = _cid_to_field.find(cid)->second;
+        DCHECK(_rewriter._column_iterators[cid]->all_page_dict_encoded());
+
+        ColumnPredicate* rewrited_pred;
+        ASSIGN_OR_RETURN(auto rewrite_status, _rewriter._rewrite_predicate(_pool, field, col_pred, &rewrited_pred));
+
+        if (rewrite_status == RewriteStatus::CHANGED) {
+            _pool->add(rewrited_pred);
+            parent.add_child(PredicateColumnNode{rewrited_pred});
+        }
+
+        return rewrite_status;
+    }
+
+    template <CompoundNodeType Type, CompoundNodeType ParentType>
+    StatusOr<RewriteStatus> operator()(PredicateCompoundNode<Type>& node,
+                                       PredicateCompoundNode<ParentType>& parent) const {
+        std::vector<PredicateNodePtr> unchanged_children;
+        unchanged_children.reserve(node.num_children());
+        auto new_node = PredicateCompoundNode<Type>{};
+
+        bool changed = false;
+        for (auto child : node.children()) {
+            ASSIGN_OR_RETURN(auto rewrite_status, child.visit(*this, new_node));
+
+            changed |= rewrite_status != RewriteStatus::UNCHANGED;
 
             switch (rewrite_status) {
             case RewriteStatus::ALWAYS_TRUE:
-                remove_list.emplace_back(pred);
-                break;
+                if constexpr (Type == CompoundNodeType::AND) {
+                    break; // Do nothing.
+                } else {
+                    return RewriteStatus::ALWAYS_TRUE;
+                }
             case RewriteStatus::ALWAYS_FALSE:
-                // predicate always false, clear scan range, this will make `get_next` return EOF directly.
-                _scan_range = _scan_range.intersection(SparseRange<>());
-                return Status::OK();
+                if constexpr (Type == CompoundNodeType::AND) {
+                    return RewriteStatus::ALWAYS_FALSE;
+                } else {
+                    break; // Do nothing.
+                }
             case RewriteStatus::CHANGED:
-                pred = pool->add(new_pred);
+                // The changed new node has been added to new_node when visiting the child.
                 break;
             case RewriteStatus::UNCHANGED:
                 [[fallthrough]];
             default:
-                break; // Do nothing.
+                unchanged_children.emplace_back(std::move(child));
+                break;
             }
         }
 
-        for (const auto pred_will_remove : remove_list) {
-            auto willrm = std::find(preds.begin(), preds.end(), pred_will_remove);
-            preds.erase(willrm);
+        if (!changed) {
+            return RewriteStatus::UNCHANGED;
         }
+
+        if (unchanged_children.empty() && new_node.empty()) {
+            if constexpr (Type == CompoundNodeType::AND) {
+                return RewriteStatus::ALWAYS_TRUE;
+            } else {
+                return RewriteStatus::ALWAYS_FALSE;
+            }
+        }
+
+        for (auto& child_var : unchanged_children) {
+            child_var.visit([&new_node](auto& child) { new_node.add_child(std::move(child)); });
+        }
+        parent.add_child(std::move(new_node));
+        return RewriteStatus::CHANGED;
+    }
+
+    ColumnPredicateRewriter& _rewriter;
+    std::unordered_map<ColumnId, const FieldPtr&>& _cid_to_field;
+    ObjectPool* _pool;
+};
+
+Status ColumnPredicateRewriter::rewrite_predicate(ObjectPool* pool, PredicateTree& pred_tree) {
+    std::unordered_map<ColumnId, const FieldPtr&> cid_to_field;
+    for (size_t i = 0; i < _column_size; i++) {
+        const FieldPtr& field = _schema.field(i);
+        const ColumnId cid = field->id();
+        cid_to_field.emplace(cid, field);
+    }
+
+    auto root = pred_tree.release_root();
+    PredicateAndNode new_root;
+    ASSIGN_OR_RETURN(auto rewrite_status, root.visit(RewritePredicateTreeVisitor{*this, cid_to_field, pool}, new_root));
+
+    switch (rewrite_status) {
+    case RewriteStatus::ALWAYS_TRUE:
+        pred_tree = PredicateTree();
+        break;
+    case RewriteStatus::ALWAYS_FALSE:
+        _scan_range = _scan_range.intersection(SparseRange<>());
+        pred_tree = PredicateTree();
+        break;
+    case RewriteStatus::CHANGED:
+        pred_tree = PredicateTree::create(std::move(new_root));
+        break;
+    case RewriteStatus::UNCHANGED:
+        [[fallthrough]];
+    default:
+        pred_tree = PredicateTree::create(std::move(root));
+        break;
     }
     return Status::OK();
 }
@@ -99,7 +179,6 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
         return RewriteStatus::UNCHANGED;
     }
     DCHECK(_column_iterators[cid]->all_page_dict_encoded());
-
     if (PredicateType::kEQ == pred->type()) {
         Datum value = pred->value();
         int code = _column_iterators[cid]->dict_lookup(value.get_slice());
@@ -237,6 +316,9 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
 
         return _rewrite_expr_predicate(pool, dict_column, code_column, field->is_nullable(), pred, dest_pred);
     }
+    if (PredicateType::kPlaceHolder == pred->type()) {
+        return RewriteStatus::ALWAYS_TRUE;
+    }
 
     return RewriteStatus::UNCHANGED;
 }
@@ -302,14 +384,14 @@ Status ColumnPredicateRewriter::_load_segment_dict_vec(ColumnIterator* iter, Col
 
     if (field_nullable) {
         // create nullable column with NULL at last.
-        NullColumnPtr null_col = NullColumn::create();
+        NullColumn::MutablePtr null_col = NullColumn::create();
         null_col->resize(dict_size);
-        auto null_column = NullableColumn::create(dict_col, null_col);
+        auto null_column = NullableColumn::create(std::move(dict_col), std::move(null_col));
         null_column->append_default();
-        *dict_column = null_column;
+        *dict_column = std::move(null_column);
     } else {
         // otherwise we just give binary column.
-        *dict_column = dict_col;
+        *dict_column = std::move(dict_col);
     }
 
     auto code_col = Int32Column::create();
@@ -318,7 +400,7 @@ Status ColumnPredicateRewriter::_load_segment_dict_vec(ColumnIterator* iter, Col
     for (int i = 0; i < dict_size; i++) {
         code_buf[i] = dict_codes[i];
     }
-    *code_column = code_col;
+    *code_column = std::move(code_col);
     return Status::OK();
 }
 
@@ -398,7 +480,7 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
     builder.set_is_not_in(is_not_in);
     builder.use_array_set(code_size);
     DCHECK_IF_ERROR(builder.create());
-    (void)builder.add_values(used_values, 0);
+    (void)builder.add_values(std::move(used_values), 0);
     ExprContext* filter = builder.get_in_const_predicate();
 
     DCHECK_IF_ERROR(filter->prepare(state));
@@ -432,7 +514,7 @@ StatusOr<ColumnPredicatePtr> GlobalDictPredicatesRewriter::_rewrite_predicate(co
     RETURN_IF_ERROR(pred->evaluate(binary_column.get(), selection.data(), 0, dict_rows));
 
     std::vector<uint8_t> code_mapping;
-    code_mapping.resize(DICT_DECODE_MAX_SIZE + 1);
+    code_mapping.resize(dict_rows + 1);
     for (size_t i = 0; i < codes.size(); ++i) {
         code_mapping[codes[i]] = selection[i];
     }
@@ -461,34 +543,83 @@ Status GlobalDictPredicatesRewriter::rewrite_predicate(ObjectPool* pool, Conjunc
     return Status::OK();
 }
 
+struct GlobalDictPredicateTreeVisitor {
+    Status operator()(PredicateColumnNode& node) const {
+        ASSIGN_OR_RETURN(auto new_col_pred, parent->_rewrite_predicate(node.col_pred(), selection));
+        if (new_col_pred != nullptr) {
+            node.set_col_pred(pool->add(new_col_pred.release()));
+        }
+        return Status::OK();
+    }
+
+    template <CompoundNodeType Type>
+    Status operator()(PredicateCompoundNode<Type>& node) const {
+        for (auto child : node.children()) {
+            RETURN_IF_ERROR(child.visit(*this));
+        }
+        return Status::OK();
+    }
+
+    GlobalDictPredicatesRewriter* parent;
+    ObjectPool* pool;
+    std::vector<uint8_t>& selection;
+};
+
+Status GlobalDictPredicatesRewriter::rewrite_predicate(ObjectPool* pool, PredicateTree& pred_tree) {
+    std::vector<uint8_t> selection;
+    auto root = pred_tree.release_root();
+    RETURN_IF_ERROR(root.visit(GlobalDictPredicateTreeVisitor{this, pool, selection}));
+    pred_tree = PredicateTree::create(std::move(root));
+    return Status::OK();
+}
+
 // ------------------------------------------------------------------------------------
 // ZonemapPredicatesRewriter
 // ------------------------------------------------------------------------------------
 
-Status ZonemapPredicatesRewriter::rewrite_predicate_map(ObjectPool* pool, const ColumnPredicateMap& src_pred_map,
-                                                        ColumnPredicateMap* dst_pred_map) {
-    DCHECK(dst_pred_map != nullptr);
-    for (auto& [cid, src_preds] : src_pred_map) {
-        auto& dst_preds = dst_pred_map->insert({cid, {}}).first->second;
-
-        for (const auto* src_pred : src_preds) {
-            RETURN_IF_ERROR(_rewrite_predicate(pool, src_pred, dst_preds));
-        }
+struct ZonemapPredicatesRewriterVisitor {
+    template <CompoundNodeType ParentType>
+    Status operator()(const PredicateColumnNode& node, PredicateCompoundNode<ParentType>& parent) const {
+        return ZonemapPredicatesRewriter::_rewrite_predicate(pool, node.col_pred(), parent);
     }
+
+    template <CompoundNodeType Type, CompoundNodeType ParentType>
+    Status operator()(const PredicateCompoundNode<Type>& node, PredicateCompoundNode<ParentType>& parent) const {
+        PredicateCompoundNode<Type> new_node;
+        for (const auto& child : node.children()) {
+            RETURN_IF_ERROR(child.visit(*this, new_node));
+        }
+        parent.add_child(std::move(new_node));
+        return Status::OK();
+    }
+
+    ObjectPool* pool;
+};
+
+Status ZonemapPredicatesRewriter::rewrite_predicate_tree(ObjectPool* pool, const PredicateTree& src_pred_tree,
+                                                         PredicateTree& dst_pred_tree) {
+    PredicateAndNode new_pred_root;
+    RETURN_IF_ERROR(src_pred_tree.visit(ZonemapPredicatesRewriterVisitor{pool}, new_pred_root));
+    dst_pred_tree = PredicateTree::create(std::move(new_pred_root));
     return Status::OK();
 }
 
+template <CompoundNodeType ParentType>
 Status ZonemapPredicatesRewriter::_rewrite_predicate(ObjectPool* pool, const ColumnPredicate* src_pred,
-                                                     ColumnPredicates& dst_preds) {
+                                                     PredicateCompoundNode<ParentType>& dst_node) {
     if (!src_pred->is_expr_predicate()) {
-        dst_preds.emplace_back(src_pred);
+        dst_node.add_child(PredicateColumnNode{src_pred});
     } else {
         std::vector<const ColumnExprPredicate*> new_preds;
         RETURN_IF_ERROR(_rewrite_column_expr_predicate(pool, src_pred, new_preds));
         if (!new_preds.empty()) {
-            dst_preds.insert(dst_preds.end(), new_preds.begin(), new_preds.end());
+            PredicateAndNode new_and_node;
+            for (auto* new_pred : new_preds) {
+                new_and_node.add_child(PredicateColumnNode{new_pred});
+            }
+            dst_node.add_child(std::move(new_and_node));
         } else {
-            dst_preds.emplace_back(src_pred);
+            dst_node.add_child(PredicateColumnNode{src_pred});
         }
     }
     return Status::OK();

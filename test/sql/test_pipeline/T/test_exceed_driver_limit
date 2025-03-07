@@ -1,0 +1,42 @@
+-- name: test_exceed_driver_limit @sequential @slow
+
+CREATE TABLE `t1` (
+  `k1` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+
+insert into t1 values (1);
+
+
+-- This query will exceed the driver limit in BEs.
+select /*+SET_VAR(pipeline_dop=163841)*/ * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL 
+select count(1) from t1 group by k1;
+
+
+-- After the above query fails, we can run the following query to verify that the driver limit is not exceeded.
+select /*+SET_VAR(pipeline_dop=10240)*/ count(1) from t1;
+
+select /*+SET_VAR(pipeline_dop=1024)*/ * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL 
+select count(1) from t1 group by k1;

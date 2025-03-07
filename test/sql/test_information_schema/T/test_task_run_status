@@ -1,0 +1,31 @@
+-- name: test_task_run_status
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE ss( event_day DATE, pv BIGINT) DUPLICATE KEY(event_day) DISTRIBUTED BY HASH(event_day) BUCKETS 8 PROPERTIES("replication_num" = "1");
+insert into ss values('2020-01-14', 1), ('2020-01-14', 3), ('2020-01-15', 2);
+
+CREATE MATERIALIZED VIEW mv1 DISTRIBUTED BY hash(event_day) 
+REFRESH DEFERRED MANUAL
+AS SELECT event_day, sum(pv) as sum_pv FROM ss GROUP BY event_day;
+[UC]REFRESH MATERIALIZED VIEW mv1 with sync mode ;
+SELECT * FROM mv1 ORDER BY event_day;
+
+SELECT TABLE_NAME, REFRESH_TYPE, IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE table_name = 'mv1' and TABLE_SCHEMA='db_${uuid0}';
+SELECT TABLE_NAME, REFRESH_TYPE, IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_NAME = 'mv1' and TABLE_SCHEMA='db_${uuid0}';
+SELECT TABLE_NAME, REFRESH_TYPE, IS_ACTIVE, INACTIVE_REASON FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}';
+SELECT count(1) FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}';
+
+[UC]task_name=SELECT TASK_NAME FROM information_schema.materialized_views WHERE TABLE_SCHEMA = 'db_${uuid0}' AND TABLE_NAME='mv1';
+SELECT count(1) FROM information_schema.task_runs WHERE TASK_NAME = '${task_name}';
+SELECT count(1) FROM information_schema.task_runs WHERE task_name = '${task_name}';
+
+[UC]query_id=SELECT `QUERY_ID` FROM information_schema.task_runs WHERE task_name = '${task_name}' limit 1;
+SELECT count(1) FROM information_schema.task_runs WHERE QUERY_ID = '${query_id}';
+SELECT count(1) FROM information_schema.task_runs WHERE query_id= '${query_id}';
+
+[UC]state=SELECT `STATE` FROM information_schema.task_runs WHERE QUERY_ID = '${query_id}';
+SELECT count(1) FROM information_schema.task_runs WHERE `STATE` = '${state}' and task_name = '${task_name}' and QUERY_ID = '${query_id}';
+
+drop database db_${uuid0};

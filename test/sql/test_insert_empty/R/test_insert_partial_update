@@ -66,4 +66,5 @@ insert into test4 values(1, 'v0', 1), (2, 'v2', 2);
 -- !result
 insert into test4 (pk, v0) values(1, 'v0_1'), (3, 'v3_1');
 -- result:
+[REGEX].*partial update on table with sort key must provide all sort key columns.*
 -- !result

@@ -346,6 +346,10 @@ inline T StringParser::string_to_int_internal(const char* s, int len, int base, 
     case '-':
         negative = true;
         max_val = StringParser::numeric_limits<T>(false) + 1;
+        if (UNLIKELY(len == 1)) {
+            *result = PARSE_FAILURE;
+            return 0;
+        }
     case '+':
         i = 1;
     }
@@ -393,7 +397,7 @@ template <typename T>
 inline T StringParser::string_to_int_no_overflow(const char* s, int len, ParseResult* result) {
     T val = 0;
     if (UNLIKELY(len == 0)) {
-        *result = PARSE_SUCCESS;
+        *result = PARSE_FAILURE;
         return val;
     }
     // Factor out the first char for error handling speeds up the loop.
@@ -518,6 +522,14 @@ inline T StringParser::string_to_float_internal(const char* s, int len, ParseRes
     auto res = fast_float::from_chars(s + i, s + j + 1, val);
 
     if (LIKELY(res.ec == std::errc())) {
+        // 'res.ptr' is set to point right after the parsed number.
+        // if there are some chars left, treate it as failure.
+        // for example,
+        // '10.11.12.13' is parsed as 10.11, res.ptr is '.12.13', so it is invalid.
+        if (res.ptr != s + j + 1) {
+            *result = PARSE_FAILURE;
+            return 0;
+        }
         if (UNLIKELY(val == std::numeric_limits<T>::infinity())) {
             *result = PARSE_OVERFLOW;
         } else {

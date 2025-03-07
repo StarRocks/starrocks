@@ -22,25 +22,33 @@ namespace starrocks::csv {
 
 Status NullableConverter::write_string(OutputStream* os, const Column& column, size_t row_num,
                                        const Options& options) const {
-    auto nullable_column = down_cast<const NullableColumn*>(&column);
-    auto data_column = nullable_column->data_column().get();
-    auto null_column = nullable_column->null_column().get();
-    if (null_column->get_data()[row_num] != 0) {
-        return os->write("\\N");
+    if (column.is_nullable()) {
+        auto nullable_column = down_cast<const NullableColumn*>(&column);
+        auto data_column = nullable_column->data_column().get();
+        auto null_column = nullable_column->null_column().get();
+        if (null_column->get_data()[row_num] != 0) {
+            return os->write("\\N");
+        } else {
+            return _base_converter->write_string(os, *data_column, row_num, options);
+        }
     } else {
-        return _base_converter->write_string(os, *data_column, row_num, options);
+        return _base_converter->write_string(os, column, row_num, options);
     }
 }
 
 Status NullableConverter::write_quoted_string(OutputStream* os, const Column& column, size_t row_num,
                                               const Options& options) const {
-    auto nullable_column = down_cast<const NullableColumn*>(&column);
-    auto data_column = nullable_column->data_column().get();
-    auto null_column = nullable_column->null_column().get();
-    if (null_column->get_data()[row_num] != 0) {
-        return os->write("null");
+    if (column.is_nullable()) {
+        auto nullable_column = down_cast<const NullableColumn*>(&column);
+        auto data_column = nullable_column->data_column().get();
+        auto null_column = nullable_column->null_column().get();
+        if (null_column->get_data()[row_num] != 0) {
+            return os->write("null");
+        } else {
+            return _base_converter->write_quoted_string(os, *data_column, row_num, options);
+        }
     } else {
-        return _base_converter->write_quoted_string(os, *data_column, row_num, options);
+        return _base_converter->write_quoted_string(os, column, row_num, options);
     }
 }
 

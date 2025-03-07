@@ -23,8 +23,8 @@
 #include "common/status.h"
 #include "exec/sorting/sort_permute.h"
 #include "exec/sorting/sorting.h"
-#include "exec/spill/block_manager.h"
 #include "exec/spill/data_stream.h"
+#include "exec/spill/spill_fwd.h"
 #include "exec/workgroup/scan_task_queue.h"
 #include "exprs/expr_context.h"
 #include "runtime/mem_tracker.h"
@@ -32,9 +32,6 @@
 
 namespace starrocks::spill {
 using FlushCallBack = std::function<Status(const ChunkPtr&)>;
-class SpillInputStream;
-class Spiller;
-class MemoryBlock;
 //  This component is the intermediate buffer for our spill data, which may be ordered or unordered,
 // depending on the requirements of the upper layer
 
@@ -63,9 +60,8 @@ public:
     virtual bool is_empty() = 0;
     size_t mem_usage() { return _tracker->consumption(); }
     // append data to mem table
-    [[nodiscard]] virtual Status append(ChunkPtr chunk) = 0;
-    [[nodiscard]] virtual Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
-                                                  uint32_t size) = 0;
+    virtual Status append(ChunkPtr chunk) = 0;
+    virtual Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) = 0;
 
     // Theoretically, the implementation of done and finalize interfaces only have calculation logic, and there is no need to do them separately.
     // However, there are some limitations at this stage:
@@ -87,9 +83,12 @@ public:
         return Status::NotSupported("unsupport to call as_input_stream");
     }
 
-    virtual void reset() = 0;
+    virtual void reset();
 
     size_t num_rows() const { return _num_rows; }
+
+    // mem table is done. we can't append data any more
+    bool is_done() const { return _is_done; }
 
 protected:
     RuntimeState* _runtime_state;
@@ -109,9 +108,8 @@ public:
     ~UnorderedMemTable() override = default;
 
     bool is_empty() override;
-    [[nodiscard]] Status append(ChunkPtr chunk) override;
-    [[nodiscard]] Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
-                                          uint32_t size) override;
+    Status append(ChunkPtr chunk) override;
+    Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
     Status finalize(workgroup::YieldContext& yield_ctx, const SpillOutputDataStreamPtr& output) override;
     void reset() override;
@@ -131,9 +129,8 @@ public:
     ~OrderedMemTable() override = default;
 
     bool is_empty() override;
-    [[nodiscard]] Status append(ChunkPtr chunk) override;
-    [[nodiscard]] Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from,
-                                          uint32_t size) override;
+    Status append(ChunkPtr chunk) override;
+    Status append_selective(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size) override;
 
     Status done() override;
     Status finalize(workgroup::YieldContext& yield_ctx, const SpillOutputDataStreamPtr& output) override;

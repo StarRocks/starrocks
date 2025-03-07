@@ -14,14 +14,28 @@
 
 #include "formats/parquet/stored_column_reader.h"
 
+#include <fmt/core.h>
+#include <glog/logging.h>
+
+#include <algorithm>
+#include <sstream>
+#include <string>
+#include <utility>
+
 #include "column/column.h"
 #include "column_reader.h"
+#include "common/compiler_util.h"
+#include "common/logging.h"
 #include "common/status.h"
-#include "exec/hdfs_scanner.h"
+#include "formats/parquet/level_codec.h"
+#include "formats/parquet/schema.h"
 #include "formats/parquet/types.h"
 #include "formats/parquet/utils.h"
 #include "simd/simd.h"
-#include "util/runtime_profile.h"
+
+namespace tparquet {
+class ColumnChunk;
+} // namespace tparquet
 
 namespace starrocks::parquet {
 
@@ -67,9 +81,15 @@ private:
 
     Status _lazy_skip_values(uint64_t begin) override;
     Status _read_values_on_levels(size_t num_values, starrocks::parquet::ColumnContentType content_type,
-                                  starrocks::Column* dst, bool append_default) override;
+                                  starrocks::Column* dst, bool append_default, const FilterData* filter) override;
 
     bool _cur_page_selected(size_t row_readed, const Filter* filter, size_t to_read) override;
+
+    const FilterData* _convert_filter_row_to_value(const Filter* filter, size_t row_readed) override {
+        // if we need it, remember considering null value in ancestor
+        // and the cost convert filter of row to value for repeated column
+        return nullptr;
+    }
 
 private:
     const ParquetField* _field = nullptr;
@@ -121,7 +141,7 @@ private:
     void _consume_levels(size_t num_values) { _reader->def_level_decoder().consume_levels(num_values); }
     Status _lazy_skip_values(uint64_t begin) override;
     Status _read_values_on_levels(size_t num_values, starrocks::parquet::ColumnContentType content_type,
-                                  starrocks::Column* dst, bool append_default) override;
+                                  starrocks::Column* dst, bool append_default, const FilterData* filter) override;
 
     void _append_default_levels(size_t row_nums) override {
         if (_need_parse_levels) {
@@ -164,7 +184,7 @@ public:
 private:
     Status _lazy_skip_values(uint64_t begin) override;
     Status _read_values_on_levels(size_t num_values, starrocks::parquet::ColumnContentType content_type,
-                                  starrocks::Column* dst, bool append_default) override;
+                                  starrocks::Column* dst, bool append_default, const FilterData* filter) override;
     const ParquetField* _field = nullptr;
 };
 
@@ -289,7 +309,7 @@ Status StoredColumnReaderImpl::read_range(const Range<uint64_t>& range, const Fi
 Status StoredColumnReaderImpl::_skip(uint64_t rows_to_skip) {
     uint64_t skipped_row = 0;
     while (skipped_row < rows_to_skip) {
-        uint64_t batch_to_skip = std::min(rows_to_skip - skipped_row, (uint64_t)10000);
+        uint64_t batch_to_skip = std::min(rows_to_skip - skipped_row, (uint64_t)BATCH_PROCESS_SIZE);
         size_t batch_skipped = 0;
         while (batch_skipped < batch_to_skip) {
             if (_num_values_left_in_cur_page > 0) {
@@ -321,7 +341,8 @@ Status StoredColumnReaderImpl::_read(const Range<uint64_t>& range, const starroc
             DCHECK_LE(num_values, _num_values_left_in_cur_page);
             if (_cur_page_selected(row_readed, filter, to_read)) {
                 RETURN_IF_ERROR(_lazy_skip_values(range.begin()));
-                RETURN_IF_ERROR(_read_values_on_levels(num_values, content_type, dst, false));
+                auto* value_filter = _convert_filter_row_to_value(filter, row_readed);
+                RETURN_IF_ERROR(_read_values_on_levels(num_values, content_type, dst, false, value_filter));
             } else {
                 RETURN_IF_ERROR(_read_values_on_levels(num_values, content_type, dst, true));
             }
@@ -386,7 +407,9 @@ Status OptionalStoredColumnReader::_lazy_skip_values(uint64_t begin) {
         level_t* def_levels = nullptr;
         size_t level_parsed = 0;
         size_t cur_to_skip = row_to_skip - row_skipped;
-        RETURN_IF_ERROR(_decode_levels(&cur_to_skip, &level_parsed, &def_levels));
+        // skip batch by batch to avoid big memory alloc
+        size_t batch_to_skip = std::min(cur_to_skip, (size_t)BATCH_PROCESS_SIZE);
+        RETURN_IF_ERROR(_decode_levels(&batch_to_skip, &level_parsed, &def_levels));
         values_to_skip += count_not_null(&def_levels[0], level_parsed, _field->max_def_level());
         row_skipped += level_parsed;
         // reset_levels() to avoiding using too much memory and prepare levels for new reading.
@@ -403,17 +426,19 @@ Status RepeatedStoredColumnReader::_lazy_skip_values(uint64_t begin) {
 
 Status RequiredStoredColumnReader::_read_values_on_levels(size_t num_values,
                                                           starrocks::parquet::ColumnContentType content_type,
-                                                          starrocks::Column* dst, bool append_default) {
+                                                          starrocks::Column* dst, bool append_default,
+                                                          const FilterData* filter) {
     if (append_default) {
         dst->append_default(num_values);
         return Status::OK();
     }
-    return _reader->decode_values(num_values, content_type, dst);
+    return _reader->decode_values(num_values, content_type, dst, filter);
 }
 
 Status OptionalStoredColumnReader::_read_values_on_levels(size_t num_values,
                                                           starrocks::parquet::ColumnContentType content_type,
-                                                          starrocks::Column* dst, bool append_default) {
+                                                          starrocks::Column* dst, bool append_default,
+                                                          const FilterData* filter) {
     if (append_default) {
         _append_default_levels(num_values);
         dst->append_default(num_values);
@@ -428,13 +453,14 @@ Status OptionalStoredColumnReader::_read_values_on_levels(size_t num_values,
         for (size_t i = 0; i < num_values; ++i) {
             _is_nulls[i] = def_levels[i] < _field->max_def_level();
         }
-        return _reader->decode_values(num_values, &_is_nulls[0], content_type, dst);
+        return _reader->decode_values(num_values, &_is_nulls[0], content_type, dst, filter);
     }
 }
 
 Status RepeatedStoredColumnReader::_read_values_on_levels(size_t num_values,
                                                           starrocks::parquet::ColumnContentType content_type,
-                                                          starrocks::Column* dst, bool append_default) {
+                                                          starrocks::Column* dst, bool append_default,
+                                                          const FilterData* filter) {
     _is_nulls.resize(num_values);
     int null_pos = 0;
     level_t* def_levels = _reader->def_level_decoder().get_forward_levels(num_values);
@@ -449,8 +475,10 @@ Status RepeatedStoredColumnReader::_read_values_on_levels(size_t num_values,
         _collect_not_null_values(num_values, num_values != _num_values_left_in_cur_page);
         dst->append_default(null_pos);
         return Status::OK();
+    } else if (null_pos != 0) {
+        return _reader->decode_values(null_pos, &_is_nulls[0], content_type, dst, filter);
     } else {
-        return _reader->decode_values(null_pos, &_is_nulls[0], content_type, dst);
+        return Status::OK();
     }
 }
 

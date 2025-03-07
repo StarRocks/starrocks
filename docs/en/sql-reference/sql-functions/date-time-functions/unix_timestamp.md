@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # unix_timestamp
 
-## Description
+
 
 Converts a DATE or DATETIME value into a UNIX timestamp.
 

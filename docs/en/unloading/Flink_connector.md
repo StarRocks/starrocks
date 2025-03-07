@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Read data from StarRocks using Flink connector
@@ -20,21 +20,22 @@ Unlike the JDBC connector provided by Flink, the Flink connector of StarRocks su
 
   With the Flink connector of StarRocks, Flink can first obtain the query plan from the responsible FE, then distribute the obtained query plan as parameters to all the involved BEs, and finally obtain the data returned by the BEs.
 
-  ![- Flink connector of StarRocks](../assets/5.3.2-1.png)
+  ![- Flink connector of StarRocks](../_assets/5.3.2-1.png)
 
 - JDBC connector of Flink
 
   With the JDBC connector of Flink, Flink can only read data from individual FEs, one at a time. Data reads are slow.
 
-  ![JDBC connector of Flink](../assets/5.3.2-2.png)
+  ![JDBC connector of Flink](../_assets/5.3.2-2.png)
 
 ## Version requirements
 
 | Connector | Flink                    | StarRocks     | Java | Scala     |
 |-----------|--------------------------|---------------| ---- |-----------|
-| 1.2.9 | 1.15,1.16,1.17,1.18 | 2.1 and later| 8 | 2.11,2.12 |
-| 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later| 8    | 2.11,2.12 |
-| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later| 8    | 2.11,2.12 |
+| 1.2.10    | 1.15,1.16,1.17,1.18,1.19 | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.9     | 1.15,1.16,1.17,1.18      | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.8     | 1.13,1.14,1.15,1.16,1.17 | 2.1 and later | 8    | 2.11,2.12 |
+| 1.2.7     | 1.11,1.12,1.13,1.14,1.15 | 2.1 and later | 8    | 2.11,2.12 |
 
 ## Prerequisites
 
@@ -101,7 +102,7 @@ Follow these steps to deploy the Flink connector:
 
 ### Network configuration
 
-Ensure that the machine where Flink is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/management/FE_configuration.md#http_port) (default: `8030`) and [`query_port`](../administration/management/FE_configuration.md#query_port) (default: `9030`), and the BE nodes via the [`be_http_port`](../administration/management/BE_configuration.md#be_http_port) (default: `8040`).
+Ensure that the machine where Flink is located can access the FE nodes of the StarRocks cluster via the [`http_port`](../administration/management/FE_configuration.md#http_port) (default: `8030`) and [`query_port`](../administration/management/FE_configuration.md#query_port) (default: `9030`), and the BE nodes via the [`be_port`](../administration/management/BE_configuration.md#be_port) (default: `9060`).
 
 ## Parameters
 
@@ -159,6 +160,10 @@ The following data type mapping is valid only for Flink reading data from StarRo
 | DECIMAL128 | DECIMAL   |
 | CHAR       | CHAR      |
 | VARCHAR    | STRING    |
+| JSON       | STRING <br /> **NOTE:** <br /> **Supported since version 1.2.10** |
+| ARRAY      | ARRAY  <br /> **NOTE:** <br /> **Supported since version 1.2.10, and StarRocks v3.1.12/v3.2.5 or later is required.** |
+| STRUCT     | ROW    <br /> **NOTE:** <br /> **Supported since version 1.2.10, and StarRocks v3.1.12/v3.2.5 or later is required.** |
+| MAP        | MAP    <br /> **NOTE:** <br /> **Supported since version 1.2.10, and StarRocks v3.1.12/v3.2.5 or later is required.** |
 
 ## Examples
 

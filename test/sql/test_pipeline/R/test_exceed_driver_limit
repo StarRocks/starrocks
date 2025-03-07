@@ -1,0 +1,56 @@
+-- name: test_exceed_driver_limit @sequential @slow
+CREATE TABLE `t1` (
+  `k1` bigint(20) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1 values (1);
+-- result:
+-- !result
+select /*+SET_VAR(pipeline_dop=163841)*/ * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL 
+select count(1) from t1 group by k1;
+-- result:
+[REGEX].*BE has overloaded with pipeline drivers.*
+-- !result
+select /*+SET_VAR(pipeline_dop=10240)*/ count(1) from t1;
+-- result:
+1
+-- !result
+select /*+SET_VAR(pipeline_dop=1024)*/ * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL
+select * from t1 UNION ALL 
+select count(1) from t1 group by k1;
+-- result:
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+1
+-- !result

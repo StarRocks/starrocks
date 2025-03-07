@@ -15,6 +15,7 @@
 package com.starrocks.sql.plan;
 
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Type;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.statistic.MockHistogramStatisticStorage;
@@ -40,29 +41,30 @@ public class SkewJoinTest extends PlanTestBase {
         int scale = 100;
         connectContext.getGlobalStateMgr().setStatisticStorage(new MockHistogramStatisticStorage(scale));
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
+        connectContext.getSessionVariable().setEnableStatsToOptimizeSkewJoin(true);
 
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("region");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("region");
         setTableStatistics(t0, 5);
 
-        OlapTable t5 = (OlapTable) globalStateMgr.getDb("test").getTable("nation");
+        OlapTable t5 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("nation");
         setTableStatistics(t5, 25);
 
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("supplier");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("supplier");
         setTableStatistics(t1, 10000 * scale);
 
-        OlapTable t4 = (OlapTable) globalStateMgr.getDb("test").getTable("customer");
+        OlapTable t4 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("customer");
         setTableStatistics(t4, 150000 * scale);
 
-        OlapTable t6 = (OlapTable) globalStateMgr.getDb("test").getTable("part");
+        OlapTable t6 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("part");
         setTableStatistics(t6, 200000 * scale);
 
-        OlapTable t2 = (OlapTable) globalStateMgr.getDb("test").getTable("partsupp");
+        OlapTable t2 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("partsupp");
         setTableStatistics(t2, 800000 * scale);
 
-        OlapTable t3 = (OlapTable) globalStateMgr.getDb("test").getTable("orders");
+        OlapTable t3 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("orders");
         setTableStatistics(t3, 1500000 * scale);
 
-        OlapTable t7 = (OlapTable) globalStateMgr.getDb("test").getTable("lineitem");
+        OlapTable t7 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("lineitem");
         setTableStatistics(t7, 6000000 * scale);
 
         starRocksAssert.withTable("create table struct_tbl(c0 INT, " +
@@ -219,8 +221,8 @@ public class SkewJoinTest extends PlanTestBase {
                 "  |  colocate: false, reason: \n" +
                 "  |  equal join conjunct: 10: rand_col = 17: rand_col\n" +
                 "  |  equal join conjunct: 9: cast = 5: v1",
-                "<slot 10> : CASE WHEN 2: c1.a[true] IS NULL THEN 24: round WHEN 2: c1.a[true] IN (1, 2) THEN 24: " +
-                        "round ELSE 0 END");
+                "<slot 10> : CASE WHEN 2: c1.a[true] IS NULL THEN 23: round WHEN 2: c1.a[true] IN (1, 2) THEN " +
+                        "23: round ELSE 0 END");
     }
 
     @Test
@@ -287,5 +289,26 @@ public class SkewJoinTest extends PlanTestBase {
         assertCContains(sqlPlan, "equal join conjunct: 20: rand_col = 27: rand_col\n" +
                 "  |  equal join conjunct: 7: C_MKTSEGMENT = 11: P_NAME\n" +
                 "  |  equal join conjunct: 1: C_CUSTKEY = 10: P_PARTKEY");
+    }
+
+    @Test
+    public void testSkewJoinWithStats2() throws Exception {
+        // test hive partitioned table
+        String sql = "select l_returnflag, t3.c3 from hive0.partitioned_db.lineitem_par join hive0.partitioned_db.t3" +
+                " on l_returnflag = t3.c3";
+        String sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "equal join conjunct: 21: rand_col = 28: rand_col\n" +
+                "  |  equal join conjunct: 9: l_returnflag = 19: c3", "cardinality=540034112");
+    }
+
+    @Test
+    public void testIntSkewColumnVarchar() throws Exception {
+        connectContext.getSessionVariable().setSkewJoinDataSkewThreshold(0);
+        ((MockHistogramStatisticStorage) connectContext.getGlobalStateMgr()
+                .getStatisticStorage()).addHistogramStatistis("c_nationkey", Type.INT, 100);
+
+        String sql = "select * from test.customer join test.part on P_SIZE = C_NATIONKEY and p_partkey = c_custkey";
+        String sqlPlan = getFragmentPlan(sql);
+        assertCContains(sqlPlan, "C_NATIONKEY IN (22, 23, 24, 10, 11)");
     }
 }

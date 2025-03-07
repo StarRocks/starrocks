@@ -70,7 +70,7 @@ public:
     Status upsert(uint32_t rssid, uint32_t rowid_start, const Column& pks, uint32_t idx_begin, uint32_t idx_end,
                   DeletesMap* deletes);
 
-    // replace old values, and make sure key exist
+    // replace old values and insert when key not exist.
     // Used in compaction apply & publish.
     // [not thread-safe]
     //
@@ -84,7 +84,6 @@ public:
     // replace_indexes : {2, 3}
     // So we only need to replace {c : rssid + rowid_start + 2, d : rssid + rowid_start + 3}
     //
-    // Return NotFound error when key not exist.
     Status replace(uint32_t rssid, uint32_t rowid_start, const std::vector<uint32_t>& replace_indexes,
                    const Column& pks);
 
@@ -154,6 +153,8 @@ public:
 
     Status pk_dump(PrimaryKeyDump* dump, PrimaryIndexMultiLevelPB* dump_pb);
 
+    Status get_load_status() { return _status; }
+
     // only for ut
     void set_status(bool loaded, Status st) {
         _loaded = loaded;
@@ -162,6 +163,9 @@ public:
 
 protected:
     void _set_schema(const Schema& pk_schema);
+    // Return the pointer of specific position of slice array.
+    const Slice* _build_persistent_keys(const Column& pks, uint32_t idx_begin, uint32_t idx_end,
+                                        std::vector<Slice>* key_slices) const;
 
 private:
     Status _do_load(Tablet* tablet);
@@ -171,9 +175,6 @@ private:
 
     Status _build_persistent_values(uint32_t rssid, const vector<uint32_t>& rowids, uint32_t idx_begin,
                                     uint32_t idx_end, std::vector<uint64_t>* values) const;
-
-    const Slice* _build_persistent_keys(const Column& pks, uint32_t idx_begin, uint32_t idx_end,
-                                        std::vector<Slice>* key_slices) const;
 
     Status _insert_into_persistent_index(uint32_t rssid, const vector<uint32_t>& rowids, const Column& pks);
 
@@ -200,7 +201,7 @@ protected:
     std::atomic<bool> _loaded{false};
     Status _status;
     int64_t _tablet_id = 0;
-    std::unique_ptr<PersistentIndex> _persistent_index;
+    std::shared_ptr<PersistentIndex> _persistent_index;
 
 private:
     size_t _key_size = 0;

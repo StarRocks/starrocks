@@ -1,11 +1,11 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 
 # hll_union
 
-## Description
+
 
 Returns the concatenation of a set of HLL values.
 

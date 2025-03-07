@@ -36,6 +36,19 @@ public:
     // The result should be guaranteed to not end with "/"
     virtual std::string root_location(int64_t tablet_id) const = 0;
 
+    // In the share data mode, we use the virtual path of staros to access objects on remote storage.
+    // When the same object is accessed by different Tablet, the path used may be different (this is
+    // bad, we should use the real path), which will reduce the cache hit rate when using the virtual
+    // path as the in-memory cache key. The purpose of this method is to obtain the real path as the
+    // cache key and improve the cache hit rate.
+    //
+    // NOTE: This method returns a path instead of a URI, so it does not contain schemes like "s3://"
+    //
+    // NOTE: you should *NOT* use the real path to read and write objects, otherwise reading and writing
+    // may fail or the behavior does not meet expectations (I know this sounds strange, but this is the
+    // truth).
+    virtual StatusOr<std::string> real_location(const std::string& virtual_path) const { return virtual_path; };
+
     std::string metadata_root_location(int64_t tablet_id) const {
         return join_path(root_location(tablet_id), kMetadataDirectoryName);
     }
@@ -50,6 +63,10 @@ public:
 
     std::string tablet_metadata_location(int64_t tablet_id, int64_t version) const {
         return join_path(metadata_root_location(tablet_id), tablet_metadata_filename(tablet_id, version));
+    }
+
+    std::string tablet_initial_metadata_location(int64_t tablet_id) const {
+        return join_path(metadata_root_location(tablet_id), tablet_initial_metadata_filename());
     }
 
     std::string txn_log_location(int64_t tablet_id, int64_t txn_id) const {

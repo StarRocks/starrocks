@@ -67,7 +67,7 @@ TEST(DeltaWriterTest, test_partial_update_sort_key_conflict_check) {
     }
 
     {
-        // case-2. Column update mode with upsert
+        // case-3. Column update mode with upsert
         std::vector<int32_t> referenced_column_ids = {0, 1, 2, 3, 4};
         std::vector<ColumnId> sort_key_idxes = {0, 1, 2};
         size_t num_key_columns = 3;
@@ -97,6 +97,33 @@ TEST(DeltaWriterTest, test_partial_update_sort_key_conflict_check) {
         num_key_columns = 3;
         ASSERT_FALSE(DeltaWriter::is_partial_update_with_sort_key_conflict(
                 PartialUpdateMode::COLUMN_UPSERT_MODE, referenced_column_ids, sort_key_idxes, num_key_columns));
+    }
+
+    {
+        // case-4. auto mode & unknow mode
+        std::vector<int32_t> referenced_column_ids = {0, 1, 2, 3, 4};
+        std::vector<ColumnId> sort_key_idxes = {0, 1, 2};
+        size_t num_key_columns = 3;
+        ASSERT_FALSE(DeltaWriter::is_partial_update_with_sort_key_conflict(
+                PartialUpdateMode::AUTO_MODE, referenced_column_ids, sort_key_idxes, num_key_columns));
+        ASSERT_FALSE(DeltaWriter::is_partial_update_with_sort_key_conflict(
+                PartialUpdateMode::UNKNOWN_MODE, referenced_column_ids, sort_key_idxes, num_key_columns));
+
+        referenced_column_ids = {0, 1, 2, 3, 4};
+        sort_key_idxes = {2, 3};
+        num_key_columns = 3;
+        ASSERT_FALSE(DeltaWriter::is_partial_update_with_sort_key_conflict(
+                PartialUpdateMode::AUTO_MODE, referenced_column_ids, sort_key_idxes, num_key_columns));
+        ASSERT_FALSE(DeltaWriter::is_partial_update_with_sort_key_conflict(
+                PartialUpdateMode::UNKNOWN_MODE, referenced_column_ids, sort_key_idxes, num_key_columns));
+
+        referenced_column_ids = {0, 1, 2, 4};
+        sort_key_idxes = {2, 3};
+        num_key_columns = 3;
+        ASSERT_TRUE(DeltaWriter::is_partial_update_with_sort_key_conflict(
+                PartialUpdateMode::AUTO_MODE, referenced_column_ids, sort_key_idxes, num_key_columns));
+        ASSERT_TRUE(DeltaWriter::is_partial_update_with_sort_key_conflict(
+                PartialUpdateMode::UNKNOWN_MODE, referenced_column_ids, sort_key_idxes, num_key_columns));
     }
 }
 

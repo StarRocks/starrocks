@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # cosine_similarity_norm
 
-## 功能
+
 
 计算两个归一化向量的余弦夹角来评估向量之间的相似度。该函数假设向量已经做过归一化。如果您需要在计算前对向量做归一化处理，可以使用 [cosine_similarity](./cos_similarity.md) 函数。
 

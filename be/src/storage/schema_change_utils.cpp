@@ -135,7 +135,7 @@ public:
 
     template <LogicalType from_type, LogicalType to_type>
     void add_convert_type_mapping() {
-        _convert_type_set.emplace(std::make_pair(from_type, to_type));
+        _convert_type_set.emplace(from_type, to_type);
     }
 
 private:
@@ -216,9 +216,15 @@ ConvertTypeResolver::ConvertTypeResolver() {
 
 ConvertTypeResolver::~ConvertTypeResolver() = default;
 
-Buffer<uint8_t> ChunkChanger::_execute_where_expr(ChunkPtr& chunk) {
+StatusOr<Buffer<uint8_t>> ChunkChanger::_execute_where_expr(ChunkPtr& chunk) {
     DCHECK(_where_expr != nullptr);
-    ColumnPtr filter_col = _where_expr->evaluate(chunk.get()).value();
+    auto res = _where_expr->evaluate(chunk.get());
+    if (!res.ok()) {
+        std::stringstream ss;
+        ss << "execute where expr failed: " << res.status().message();
+        return Status::InternalError(ss.str());
+    }
+    ColumnPtr filter_col = std::move(res.value());
 
     size_t size = filter_col->size();
     Buffer<uint8_t> filter(size, 0);
@@ -247,7 +253,12 @@ bool ChunkChanger::change_chunk_v2(ChunkPtr& base_chunk, ChunkPtr& new_chunk, co
             }
         }
         if (_where_expr) {
-            auto filter = _execute_where_expr(base_chunk);
+            auto res = _execute_where_expr(base_chunk);
+            if (!res.ok()) {
+                LOG(WARNING) << res.status();
+                return false;
+            }
+            auto filter = std::move(res.value());
             // If no filtered rows are left, return directly
             if (SIMD::count_nonzero(filter) == 0) {
                 base_chunk->set_num_rows(0);
@@ -392,8 +403,8 @@ Status ChunkChanger::fill_generated_columns(ChunkPtr& new_chunk) {
         if (tmp->only_null()) {
             // Only null column maybe lost type info, we append null
             // for the chunk instead of swapping the tmp column.
-            std::dynamic_pointer_cast<NullableColumn>(new_chunk->get_column_by_index(it.first))->reset_column();
-            std::dynamic_pointer_cast<NullableColumn>(new_chunk->get_column_by_index(it.first))
+            NullableColumn::dynamic_pointer_cast(new_chunk->get_column_by_index(it.first))->reset_column();
+            NullableColumn::dynamic_pointer_cast(new_chunk->get_column_by_index(it.first))
                     ->append_nulls(new_chunk->num_rows());
         } else if (tmp->is_nullable()) {
             new_chunk->get_column_by_index(it.first).swap(tmp);
@@ -402,7 +413,7 @@ Status ChunkChanger::fill_generated_columns(ChunkPtr& new_chunk) {
             // it maybe a constant column or some other column type.
             // Unpack normal const column
             ColumnPtr output_column = ColumnHelper::unpack_and_duplicate_const_column(new_chunk->num_rows(), tmp);
-            std::dynamic_pointer_cast<NullableColumn>(new_chunk->get_column_by_index(it.first))
+            NullableColumn::dynamic_pointer_cast(new_chunk->get_column_by_index(it.first))
                     ->swap_by_data_column(output_column);
         }
     }
@@ -490,8 +501,8 @@ Status ChunkChanger::append_generated_columns(ChunkPtr& read_chunk, ChunkPtr& ne
         if (tmp->only_null()) {
             // Only null column maybe lost type info, we append null
             // for the chunk instead of swapping the tmp column.
-            std::dynamic_pointer_cast<NullableColumn>(tmp_new_chunk->get_column_by_index(cid))->reset_column();
-            std::dynamic_pointer_cast<NullableColumn>(tmp_new_chunk->get_column_by_index(cid))
+            NullableColumn::dynamic_pointer_cast(tmp_new_chunk->get_column_by_index(cid))->reset_column();
+            NullableColumn::dynamic_pointer_cast(tmp_new_chunk->get_column_by_index(cid))
                     ->append_nulls(read_chunk->num_rows());
         } else if (tmp->is_nullable()) {
             tmp_new_chunk->get_column_by_index(cid).swap(tmp);
@@ -500,7 +511,7 @@ Status ChunkChanger::append_generated_columns(ChunkPtr& read_chunk, ChunkPtr& ne
             // it maybe a constant column or some other column type
             // Unpack normal const column
             ColumnPtr output_column = ColumnHelper::unpack_and_duplicate_const_column(read_chunk->num_rows(), tmp);
-            std::dynamic_pointer_cast<NullableColumn>(tmp_new_chunk->get_column_by_index(cid))
+            NullableColumn::dynamic_pointer_cast(tmp_new_chunk->get_column_by_index(cid))
                     ->swap_by_data_column(output_column);
         }
     }
@@ -723,6 +734,10 @@ Status SchemaChangeUtils::parse_request_normal(const TabletSchemaCSPtr& base_sch
                 return Status::OK();
             } else if (new_schema->has_index(new_column.unique_id(), NGRAMBF) !=
                        base_schema->has_index(ref_column.unique_id(), NGRAMBF)) {
+                *sc_directly = true;
+                return Status::OK();
+            } else if (new_schema->has_index(new_column.unique_id(), VECTOR) !=
+                       base_schema->has_index(ref_column.unique_id(), VECTOR)) {
                 *sc_directly = true;
                 return Status::OK();
             }

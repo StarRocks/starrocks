@@ -15,17 +15,50 @@
 package com.starrocks.connector.iceberg;
 
 import com.google.common.cache.Cache;
+import com.starrocks.connector.PlanMode;
+import com.starrocks.qe.ConnectContext;
 import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DeleteFile;
 
 import java.util.Set;
 
 public class StarRocksIcebergTableScanContext {
+    private final PlanMode planMode;
+    private final String catalogName;
+    private final String dbName;
+    private final String tableName;
     private boolean dataFileCacheWithMetrics;
     private Cache<String, Set<DataFile>> dataFileCache;
     private Cache<String, Set<DeleteFile>> deleteFileCache;
+    private boolean onlyReadCache;
+    private int localParallelism;
+    private long localPlanningMaxSlotSize;
+    private boolean enableCacheDataFileIdentifierColumnMetrics;
+    private ConnectContext connectContext;
 
-    public StarRocksIcebergTableScanContext() {
+    public StarRocksIcebergTableScanContext(String catalogName, String dbName, String tableName, PlanMode planMode) {
+        this(catalogName, dbName, tableName, planMode, null);
+    }
+
+    public StarRocksIcebergTableScanContext(String catalogName, String dbName, String tableName,
+                                            PlanMode planMode, ConnectContext connectContext) {
+        this.catalogName = catalogName;
+        this.dbName = dbName;
+        this.tableName = tableName;
+        this.planMode = planMode;
+        this.connectContext = connectContext;
+    }
+
+    public String getCatalogName() {
+        return catalogName;
+    }
+
+    public String getDbName() {
+        return dbName;
+    }
+
+    public String getTableName() {
+        return tableName;
     }
 
     public boolean isDataFileCacheWithMetrics() {
@@ -52,4 +85,43 @@ public class StarRocksIcebergTableScanContext {
         this.deleteFileCache = deleteFileCache;
     }
 
+    public boolean isOnlyReadCache() {
+        return onlyReadCache;
+    }
+
+    public void setOnlyReadCache(boolean onlyReadCache) {
+        this.onlyReadCache = onlyReadCache;
+    }
+
+    public PlanMode getPlanMode() {
+        return planMode;
+    }
+
+    public int getLocalParallelism() {
+        return localParallelism;
+    }
+
+    public void setLocalParallelism(int localParallelism) {
+        this.localParallelism = localParallelism;
+    }
+
+    public long getLocalPlanningMaxSlotSize() {
+        return localPlanningMaxSlotSize;
+    }
+
+    public void setLocalPlanningMaxSlotSize(long localPlanningMaxSlotSize) {
+        this.localPlanningMaxSlotSize = localPlanningMaxSlotSize;
+    }
+
+    public boolean isEnableCacheDataFileIdentifierColumnMetrics() {
+        return enableCacheDataFileIdentifierColumnMetrics;
+    }
+
+    public void setEnableCacheDataFileIdentifierColumnMetrics(boolean enableCacheDataFileIdentifierColumnMetrics) {
+        this.enableCacheDataFileIdentifierColumnMetrics = enableCacheDataFileIdentifierColumnMetrics;
+    }
+
+    public ConnectContext getConnectContext() {
+        return connectContext;
+    }
 }

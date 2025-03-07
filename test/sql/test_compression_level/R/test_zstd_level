@@ -1,0 +1,1027 @@
+-- name: test_error_handling
+CREATE TABLE `t_error_handling` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(0)"
+);
+-- result:
+E: (1064, 'Invalid level for zstd compression type')
+-- !result
+CREATE TABLE `t_error_handling` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(23)"
+);
+-- result:
+E: (1064, 'Invalid level for zstd compression type')
+-- !result
+CREATE TABLE `t_error_handling` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(-1)"
+);
+-- result:
+E: (1064, 'unknown compression type: zstd(-1)')
+-- !result
+CREATE TABLE `t_error_handling` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(dfsdfff)"
+);
+-- result:
+E: (1064, 'unknown compression type: zstd(dfsdfff)')
+-- !result
+CREATE TABLE `t_error_handling` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(2aa0)"
+);
+-- result:
+E: (1064, 'unknown compression type: zstd(2aa0)')
+-- !result
+CREATE TABLE `t_error_handling` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "lz4(3)"
+);
+-- result:
+E: (1064, 'unknown compression type: lz4(3)')
+-- !result
+CREATE TABLE `t_error_handling` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zlib(3)"
+);
+-- result:
+E: (1064, 'unknown compression type: zlib(3)')
+-- !result
+CREATE TABLE `t_error_handling` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "snappy(3)"
+);
+-- result:
+E: (1064, 'unknown compression type: snappy(3)')
+-- !result
+CREATE TABLE `t_error_handling` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(10)(1)"
+);
+-- result:
+E: (1064, 'unknown compression type: zstd(10)(1)')
+-- !result
+CREATE TABLE `t_error_handling` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd((10))"
+);
+-- result:
+E: (1064, 'unknown compression type: zstd((10))')
+-- !result
+CREATE TABLE `t_error_handling` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(--2)"
+);
+-- result:
+E: (1064, 'unknown compression type: zstd(--2)')
+-- !result
+-- name: test_normal
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd (  1  )"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(1)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd ( 2)"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(2)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd( 3 )"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(3)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd (4 )"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(4)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(5)"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(5)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(6)"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(6)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(7)"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(7)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(8)"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(8)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(9)"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(9)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(10)"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(10)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(11)"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(11)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(12)"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(12)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(13)"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(13)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(14)"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(14)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(15)"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(15)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(16)"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(16)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(17)"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(17)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(18)"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(18)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(19)"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(19)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(20)"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(20)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(21)"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(21)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+CREATE TABLE `test_normal` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zstd(22)"
+);
+-- result:
+-- !result
+INSERT INTO test_normal VALUES (1, "ABC");
+-- result:
+-- !result
+SELECT * FROM test_normal;
+-- result:
+1	ABC
+-- !result
+SHOW CREATE TABLE test_normal;
+-- result:
+test_normal	CREATE TABLE `test_normal` (
+  `k` bigint(20) NOT NULL COMMENT "",
+  `v` varchar(65533) NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1 
+PROPERTIES (
+"compression" = "ZSTD(22)",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "true",
+"replication_num" = "1"
+);
+-- !result
+DROP TABLE test_normal;
+-- result:
+-- !result
+-- name: test_char_case
+CREATE TABLE `t_char_case` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "zStD(3)"
+);
+-- result:
+-- !result
+DROP TABLE t_char_case;
+-- result:
+-- !result
+CREATE TABLE `t_char_case` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` string COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"compression" = "ZSTD(3)"
+);
+-- result:
+-- !result
+DROP TABLE t_char_case;
+-- result:
+-- !result

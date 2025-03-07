@@ -14,10 +14,13 @@
 
 #include "exprs/cast_expr.h"
 
+#ifdef STARROCKS_JIT_ENABLE
 #include <llvm/ADT/APInt.h>
 #include <llvm/IR/Constants.h>
 #include <llvm/IR/IRBuilder.h>
 #include <llvm/IR/Value.h>
+#endif
+
 #include <ryu/ryu.h>
 
 #include <limits>
@@ -38,20 +41,24 @@
 #include "exprs/binary_function.h"
 #include "exprs/column_ref.h"
 #include "exprs/decimal_cast_expr.h"
-#include "exprs/jit/ir_helper.h"
 #include "exprs/unary_function.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/datetime_value.h"
-#include "runtime/large_int_value.h"
 #include "runtime/runtime_state.h"
 #include "runtime/types.h"
 #include "types/hll.h"
+#include "types/large_int_value.h"
 #include "types/logical_type.h"
 #include "util/date_func.h"
 #include "util/json.h"
 #include "util/json_converter.h"
 #include "util/mysql_global.h"
+#include "util/numeric_types.h"
+
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/ir_helper.h"
+#endif
 
 namespace starrocks {
 
@@ -71,6 +78,7 @@ struct CastFn {
     static ColumnPtr cast_fn(ColumnPtr& column);
 };
 
+// clang-format off
 // All cast implements
 #define SELF_CAST(FROM_TYPE)                                                    \
     template <bool AllowThrowException>                                         \
@@ -121,6 +129,7 @@ struct CastFn {
             return CUSTOMIZE_IMPL<FROM_TYPE, TO_TYPE, AllowThrowException>(column); \
         }                                                                           \
     };
+// clang-format on
 
 DEFINE_UNARY_FN_WITH_IMPL(TimeCheck, value) {
     return ((uint64_t)value % 100 > 59 || (uint64_t)value % 10000 > 5959);
@@ -201,7 +210,6 @@ static ColumnPtr cast_to_json_fn(ColumnPtr& column) {
         }
     }
     return builder.build(column->is_constant());
-    return {};
 }
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException>
@@ -354,12 +362,7 @@ DEFINE_UNARY_FN_WITH_IMPL(ImplicitToNumber, value) {
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(NumberCheck, value) {
-    // std::numeric_limits<T>::lowest() is a finite value x such that there is no other
-    // finite value y where y < x.
-    // This is different from std::numeric_limits<T>::min() for floating-point types.
-    // So we use lowest instead of min for lower bound of all types.
-    return (value < (Type)std::numeric_limits<ResultType>::lowest()) |
-           (value > (Type)std::numeric_limits<ResultType>::max());
+    return check_signed_number_overflow<Type, ResultType>(value);
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(NumberCheckWithThrowException, value) {
@@ -367,8 +370,7 @@ DEFINE_UNARY_FN_WITH_IMPL(NumberCheckWithThrowException, value) {
     // finite value y where y < x.
     // This is different from std::numeric_limits<T>::min() for floating-point types.
     // So we use lowest instead of min for lower bound of all types.
-    auto result = (value < (Type)std::numeric_limits<ResultType>::lowest()) |
-                  (value > (Type)std::numeric_limits<ResultType>::max());
+    const auto result = NumberCheck::apply<Type, ResultType>(value);
     if (result) {
         std::stringstream ss;
         if constexpr (std::is_same_v<Type, __int128_t>) {
@@ -434,7 +436,7 @@ ColumnPtr cast_int_from_string_fn(ColumnPtr& column) {
         }
         return NullableColumn::create(std::move(res_data_column), std::move(null_column));
     } else {
-        NullColumnPtr null_column = NullColumn::create(sz);
+        NullColumn::MutablePtr null_column = NullColumn::create(sz);
         auto& null_data = null_column->get_data();
         auto* data_column = down_cast<BinaryColumn*>(column.get());
 
@@ -816,8 +818,13 @@ ColumnPtr cast_to_timestamp_fn(ColumnPtr& column) {
 
         auto value = viewer.value(row);
         TimestampValue tv;
-
-        bool ret = tv.from_timestamp_literal_with_check((int64_t)value);
+        bool ret;
+        if constexpr (lt_is_decimalv2<FromType>) {
+            ret = value.value() > 0;
+        } else {
+            ret = value > 0;
+        }
+        ret = ret && tv.from_timestamp_literal_with_check(value);
         if constexpr (AllowThrowException) {
             if (!ret) {
                 THROW_RUNTIME_ERROR_WITH_TYPES_AND_VALUE(FromType, ToType, (int64_t)value);
@@ -876,8 +883,8 @@ static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
     auto& res_data = res_data_column->get_data();
 
     if (column->is_nullable()) {
-        const auto* input_column = down_cast<NullableColumn*>(column.get());
-        const auto* data_column = down_cast<BinaryColumn*>(input_column->data_column().get());
+        auto* input_column = down_cast<NullableColumn*>(column.get());
+        auto* data_column = down_cast<BinaryColumn*>(input_column->data_column().get());
 
         NullColumnPtr null_column = ColumnHelper::as_column<NullColumn>(input_column->null_column()->clone());
         auto& null_data = down_cast<NullColumn*>(null_column.get())->get_data();
@@ -898,7 +905,7 @@ static ColumnPtr cast_from_string_to_datetime_fn(ColumnPtr& column) {
         return NullableColumn::create(std::move(res_data_column), std::move(null_column));
     } else {
         auto* data_column = down_cast<BinaryColumn*>(column.get());
-        NullColumnPtr null_column = NullColumn::create(num_rows);
+        NullColumn::MutablePtr null_column = NullColumn::create(num_rows);
         auto& null_data = null_column->get_data();
 
         bool has_null = false;
@@ -1117,6 +1124,7 @@ public:
         }
         return result_column;
     };
+#ifdef STARROCKS_JIT_ENABLE
 
     bool is_compilable(RuntimeState* state) const override {
         return state->can_jit_expr(CompilableExprType::CAST) && !AllowThrowException && FromType != TYPE_LARGEINT &&
@@ -1183,6 +1191,7 @@ public:
             return datum;
         }
     }
+#endif
 
     std::string debug_string() const override {
         std::stringstream out;
@@ -1420,7 +1429,7 @@ private:
     //    length of char.
     // In SR, behaviors of both cast(string as varchar(n)) and cast(string as char(n)) keep the same: neglect
     // of the length of char/varchar and return input column directly.
-    ColumnPtr _evaluate_string(ExprContext* context, const ColumnPtr& column) { return column->clone(); }
+    ColumnPtr _evaluate_string(ExprContext* context, ColumnPtr& column) { return column->clone(); }
 
     ColumnPtr _evaluate_time(ExprContext* context, const ColumnPtr& column) {
         ColumnViewer<TYPE_TIME> viewer(column);
@@ -1538,7 +1547,7 @@ StatusOr<ColumnPtr> MustNullExpr::evaluate_checked(ExprContext* context, Chunk* 
     // only null
     auto column = ColumnHelper::create_column(_type, true);
     column->append_nulls(1);
-    auto only_null = ConstColumn::create(column, 1);
+    auto only_null = ConstColumn::create(std::move(column), 1);
     if (ptr != nullptr) {
         only_null->resize(ptr->num_rows());
     }
@@ -1585,6 +1594,25 @@ Expr* VectorizedCastExprFactory::create_primitive_cast(ObjectPool* pool, const T
         } else {
             return new CastJsonToArray(node, cast_element_expr, cast_to);
         }
+    }
+
+    if (from_type == TYPE_JSON && to_type == TYPE_STRUCT) {
+        TypeDescriptor cast_to = TypeDescriptor::from_thrift(node.type);
+
+        std::vector<std::unique_ptr<Expr>> field_casts(cast_to.children.size());
+        for (int i = 0; i < cast_to.children.size(); ++i) {
+            TypeDescriptor json_type = TypeDescriptor::create_json_type();
+            auto ret = create_cast_expr(pool, json_type, cast_to.children[i], allow_throw_exception);
+            if (!ret.ok()) {
+                LOG(WARNING) << "Not support cast from type: " << json_type << ", to type: " << cast_to.children[i];
+                return nullptr;
+            }
+            field_casts[i] = std::move(ret.value());
+            auto cast_input = create_slot_ref(json_type);
+            field_casts[i]->add_child(cast_input.get());
+            pool->add(cast_input.release());
+        }
+        return new CastJsonToStruct(node, std::move(field_casts));
     }
 
     if (from_type == TYPE_VARCHAR && to_type == TYPE_OBJECT) {

@@ -102,6 +102,8 @@ public class SystemId {
 
     public static final long FE_METRICS_ID = 42L;
 
+    public static final long TEMP_TABLES_ID = 43L;
+
     public static final long SYS_DB_ID = 100L;
 
     public static final long ROLE_EDGES_ID = 101L;
@@ -116,4 +118,12 @@ public class SystemId {
     // Remain for other datacache manage table
 
     public static final long PARTITIONS_META_ID = 140L;
+
+    // ====================  Statistics  =========================== //
+    public static final long COLUMN_STATS_USAGE = 150L;
+    public static final long ANALYZE_STATUS = 151L;
+
+    // ==================  Cluster Snapshot  ======================= //
+    public static final long CLUSTER_SNAPSHOTS_ID = 160L;
+    public static final long CLUSTER_SNAPSHOT_JOBS_ID = 161L;
 }

@@ -93,7 +93,8 @@ public class MVActiveChecker extends FrontendDaemon {
     private void process() {
         Collection<Database> dbs = GlobalStateMgr.getCurrentState().getLocalMetastore().getIdToDb().values();
         for (Database db : CollectionUtils.emptyIfNull(dbs)) {
-            for (Table table : CollectionUtils.emptyIfNull(db.getTables())) {
+            for (Table table : CollectionUtils.emptyIfNull(
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId()))) {
                 if (table.isMaterializedView()) {
                     MaterializedView mv = (MaterializedView) table;
                     if (!mv.isActive()) {
@@ -114,6 +115,9 @@ public class MVActiveChecker extends FrontendDaemon {
      *                         job doesn't
      */
     public static void tryToActivate(MaterializedView mv, boolean checkGracePeriod) {
+        if (!Config.enable_mv_automatic_active_check) {
+            return;
+        }
         // if the mv is set to inactive manually, we don't activate it
         String reason = mv.getInactiveReason();
         if (mv.isActive() || AlterJobMgr.MANUAL_INACTIVE_MV_REASON.equalsIgnoreCase(reason)) {
@@ -124,7 +128,7 @@ public class MVActiveChecker extends FrontendDaemon {
         }
 
         long dbId = mv.getDbId();
-        Optional<String> dbName = GlobalStateMgr.getCurrentState().mayGetDb(dbId).map(Database::getFullName);
+        Optional<String> dbName = GlobalStateMgr.getCurrentState().getLocalMetastore().mayGetDb(dbId).map(Database::getFullName);
         if (!dbName.isPresent()) {
             LOG.warn("[MVActiveChecker] cannot activate MV {} since database {} not found", mv.getName(), dbId);
             return;

@@ -1,10 +1,13 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+keywords: ['profile', 'query']
 ---
 
 # Query Profile Overview
 
 This topic introduces how to view and analyze the Query Profile. The Query Profile records execution information for all working nodes involved in a query. You can quickly identify bottlenecks affecting the query performance through Query Profile.
+
+From v3.3.0 onwards, StarRocks supports providing Query Profile for data loading with INSERT INTO FILES() and Broker Load. For details of the metrics involved, see [OlapTableSink Operator](./query_profile_details.md#olaptablesink-operator).
 
 ## Enable Query Profile
 
@@ -59,11 +62,11 @@ Follow these steps to obtain Query Profile:
 2. On the page that appears, click **queries** in the top navigation.
 3. In the **Finished Queries** list, select the query you want to analyze and click the link in the **Profile** column.
 
-![img](../assets/profile-1.png)
+![img](../_assets/profile-1.png)
 
 You will be redirected to the detailed page of the selected Query Profile.
 
-![img](../assets/profile-2.png)
+![img](../_assets/profile-2.png)
 
 ### Obtain Query Profile via get_query_profile
 

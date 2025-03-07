@@ -10,44 +10,42 @@
     <modelVersion>4.0.0</modelVersion>
 
     <artifactId>udf-extensions</artifactId>
+
+    <properties>
+        <java-extensions.home>${basedir}/../</java-extensions.home>
+    </properties>
+
     <dependencies>
+        <dependency>
+            <groupId>com.starrocks</groupId>
+            <artifactId>java-utils</artifactId>
+        </dependency>
+
+        <!-- https://mvnrepository.com/artifact/junit/junit -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>org.ow2.asm</groupId>
             <artifactId>asm</artifactId>
             <version>9.1</version>
         </dependency>
+
         <dependency>
             <groupId>org.ow2.asm</groupId>
             <artifactId>asm-util</artifactId>
             <version>9.1</version>
         </dependency>
-        <!-- https://mvnrepository.com/artifact/junit/junit -->
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>4.13.1</version>
-            <scope>test</scope>
-        </dependency>
+
         <!-- https://mvnrepository.com/artifact/org.apache.commons/commons-lang3 -->
         <dependency>
             <groupId>org.apache.commons</groupId>
             <artifactId>commons-lang3</artifactId>
             <version>3.9</version>
         </dependency>
-
-        <dependency>
-            <groupId>com.starrocks</groupId>
-            <artifactId>java-utils</artifactId>
-            <version>1.0.0</version>
-        </dependency>
-
     </dependencies>
-
-    <properties>
-        <maven.compiler.source>8</maven.compiler.source>
-        <maven.compiler.target>8</maven.compiler.target>
-        <java-extensions.home>${basedir}/../</java-extensions.home>
-    </properties>
 
     <build>
         <finalName>udf-extensions</finalName>

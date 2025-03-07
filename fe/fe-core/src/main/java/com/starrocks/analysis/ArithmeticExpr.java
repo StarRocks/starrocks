@@ -202,14 +202,14 @@ public class ArithmeticExpr extends Expr {
     // as much as possible to ensure correctness
     // result precision is maximum integer part width + maximum fractional part width + 1
     // This can be fully guaranteed correctness in case of sufficient precision
-    public static void getAddReturnTypeOfDecimal(TypeTriple triple, ScalarType lhsType, ScalarType rhsType) {
+    public static void getAddSubReturnTypeOfDecimal(TypeTriple triple, ScalarType lhsType, ScalarType rhsType) {
         final int lhsPrecision = lhsType.getPrecision();
         final int rhsPrecision = rhsType.getPrecision();
         final int lhsScale = lhsType.getScalarScale();
         final int rhsScale = rhsType.getScalarScale();
 
         // decimal(p1, s1) + decimal(p2, s2)
-        // result type = decimal(max(p1 - s1, p2 - s2) + max(s1, s2), max(s1, s2)) + 1
+        // result type = decimal(max(p1 - s1, p2 - s2) + max(s1, s2) + 1, max(s1, s2))
         int maxIntLength = Math.max(lhsPrecision - lhsScale, rhsPrecision - rhsScale);
         int retPrecision = maxIntLength + Math.max(lhsScale, rhsScale) + 1;
         int retScale = Math.max(lhsScale, rhsScale);
@@ -248,9 +248,9 @@ public class ArithmeticExpr extends Expr {
         int returnPrecision = 0;
         switch (op) {
             case ADD:
-                getAddReturnTypeOfDecimal(result, lhsType, rhsType);
-                return result;
             case SUBTRACT:
+                getAddSubReturnTypeOfDecimal(result, lhsType, rhsType);
+                return result;
             case MOD:
                 returnScale = Math.max(lhsScale, rhsScale);
                 break;
@@ -423,8 +423,8 @@ public class ArithmeticExpr extends Expr {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        if (!super.equals(obj)) {
+    public boolean equalsWithoutChild(Object obj) {
+        if (!super.equalsWithoutChild(obj)) {
             return false;
         }
         return ((ArithmeticExpr) obj).opcode == opcode;

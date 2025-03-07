@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # lower
 
-## Description
+
 
 Converts all strings in an argument to lower-case.
 

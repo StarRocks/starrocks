@@ -117,11 +117,7 @@ public class IcebergFileStats {
             return false;
         }
 
-        if (idToTypeMapping.get(fieldId) == null || values.get(fieldId) == null) {
-            return false;
-        }
-
-        return true;
+        return idToTypeMapping.get(fieldId) != null && values.get(fieldId) != null;
     }
 
     private Optional<Double> getBoundStatistic(Integer fieldId, Map<Integer, Object> boundValues) {

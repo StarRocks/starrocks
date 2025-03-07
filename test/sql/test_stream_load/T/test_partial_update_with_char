@@ -1,0 +1,27 @@
+-- name: test_partial_update_with_char
+create database test_partial_update_with_char_db;
+use test_partial_update_with_char_db;
+CREATE TABLE test1 (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `name` char(16) NULL DEFAULT "" COMMENT "",
+  `city` char(16) NULL DEFAULT "" COMMENT "",
+  `age` char(24) NULL DEFAULT "" COMMENT ""
+) ENGINE=OLAP
+PRIMARY KEY(`id`)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"compression" = "LZ4"
+); 
+
+insert into test_partial_update_with_char_db.test1 values(1,'name1','SD',5),(2,'name2','SH',25),(3,'name3','BJ',50);
+shell: curl --location-trusted -u root: -X PUT -H "Expect:100-continue"  -H "format: json" -H "partial_update: true" -H "columns: id, city" -d '{"id":1, "city": "xx"}' ${url}/api/test_partial_update_with_char_db/test1/_stream_load
+sync;
+
+select * from test_partial_update_with_char_db.test1;
+select * from test_partial_update_with_char_db.test1 where name = "name1";
+
+drop database test_partial_update_with_char_db force;

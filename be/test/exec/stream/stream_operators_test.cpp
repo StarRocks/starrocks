@@ -55,7 +55,7 @@ StatusOr<ChunkPtr> GeneratorStreamSourceOperator::pull_chunk(starrocks::RuntimeS
             VLOG_ROW << "Append col:" << idx << ", row:" << _param.start;
             column->append(_param.start % _param.ndv_count);
         }
-        chunk->append_column(column, SlotId(idx));
+        chunk->append_column(std::move(column), SlotId(idx));
     }
 
     // ops
@@ -112,14 +112,12 @@ protected:
 
 std::shared_ptr<TPlanNode> StreamOperatorsTest::_create_tplan_node(int node_id, int tuple_id) {
     std::vector<::starrocks::TTupleId> tuple_ids{tuple_id};
-    std::vector<bool> nullable_tuples{true};
 
     auto tnode = std::make_shared<TPlanNode>();
 
     tnode->__set_node_id(node_id);
     tnode->__set_node_type(TPlanNodeType::STREAM_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
-    tnode->__set_nullable_tuples(nullable_tuples);
     tnode->__set_use_vectorized(true);
     tnode->__set_limit(-1);
 
@@ -181,7 +179,7 @@ void StreamOperatorsTest::_generate_morse_queue(ConnectorScanNode* scan_node,
 
     std::map<int32_t, std::vector<TScanRangeParams>> no_scan_ranges_per_driver_seq;
     auto morsel_queue_factory = scan_node->convert_scan_range_to_morsel_queue_factory(
-            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), degree_of_parallelism, true,
+            scan_ranges, no_scan_ranges_per_driver_seq, scan_node->id(), degree_of_parallelism, false, true,
             TTabletInternalParallelMode::type::AUTO);
     ASSERT_TRUE(morsel_queue_factory.ok());
     morsel_queue_factories.emplace(scan_node->id(), std::move(morsel_queue_factory).value());

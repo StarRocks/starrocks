@@ -52,7 +52,7 @@ OutPut Exchange Id: 23
 
 22:AGGREGATE (update serialize)
 |  STREAMING
-|  aggregate: sum[([50: expr, DECIMAL128(33,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
+|  aggregate: sum[([50: expr, DECIMAL128(31,4), true]); args: DECIMAL128; result: DECIMAL128(38,4); args nullable: true; result nullable: true]
 |  group by: [42: n_name, VARCHAR, true], [46: n_name, VARCHAR, true], [49: year, SMALLINT, true]
 |  cardinality: 352
 |  column statistics:
@@ -66,7 +66,7 @@ OutPut Exchange Id: 23
 |  42 <-> [42: n_name, VARCHAR, true]
 |  46 <-> [46: n_name, VARCHAR, true]
 |  49 <-> year[([18: l_shipdate, DATE, true]); args: DATE; result: SMALLINT; args nullable: true; result nullable: true]
-|  50 <-> cast([13: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [14: l_discount, DECIMAL64(15,2), true] as DECIMAL128(18,2))
+|  50 <-> cast([13: l_extendedprice, DECIMAL64(15,2), true] as DECIMAL128(15,2)) * cast(1 - [14: l_discount, DECIMAL64(15,2), true] as DECIMAL128(16,2))
 |  cardinality: 554680
 |  column statistics:
 |  * n_name-->[-Infinity, Infinity, 0.0, 25.0, 25.0] ESTIMATE
@@ -117,6 +117,7 @@ TABLE: customer
 NON-PARTITION PREDICATES: 33: c_custkey IS NOT NULL
 partitions=1/1
 avgRowSize=12.0
+dataCacheOptions={populate: false}
 cardinality: 15000000
 column statistics:
 * c_custkey-->[1.0, 1.5E7, 0.0, 8.0, 1.5E7] ESTIMATE
@@ -228,6 +229,7 @@ NON-PARTITION PREDICATES: 18: l_shipdate >= '1995-01-01', 18: l_shipdate <= '199
 MIN/MAX PREDICATES: 18: l_shipdate >= '1995-01-01', 18: l_shipdate <= '1996-12-31'
 partitions=1/1
 avgRowSize=32.0
+dataCacheOptions={populate: false}
 cardinality: 173476304
 probe runtime filters:
 - filter_id = 1, probe_expr = (10: l_suppkey)
@@ -281,6 +283,7 @@ TABLE: supplier
 NON-PARTITION PREDICATES: 1: s_suppkey IS NOT NULL
 partitions=1/1
 avgRowSize=8.0
+dataCacheOptions={populate: false}
 cardinality: 1000000
 probe runtime filters:
 - filter_id = 0, probe_expr = (4: s_nationkey)
@@ -314,6 +317,7 @@ NON-PARTITION PREDICATES: 42: n_name IN ('CANADA', 'IRAN')
 MIN/MAX PREDICATES: 42: n_name >= 'CANADA', 42: n_name <= 'IRAN'
 partitions=1/1
 avgRowSize=29.0
+dataCacheOptions={populate: false}
 cardinality: 25
 column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
@@ -331,6 +335,7 @@ NON-PARTITION PREDICATES: 46: n_name IN ('IRAN', 'CANADA')
 MIN/MAX PREDICATES: 46: n_name >= 'CANADA', 46: n_name <= 'IRAN'
 partitions=1/1
 avgRowSize=29.0
+dataCacheOptions={populate: false}
 cardinality: 25
 column statistics:
 * n_nationkey-->[0.0, 24.0, 0.0, 4.0, 25.0] ESTIMATE
@@ -347,6 +352,7 @@ TABLE: orders
 NON-PARTITION PREDICATES: 24: o_orderkey IS NOT NULL
 partitions=1/1
 avgRowSize=16.0
+dataCacheOptions={populate: false}
 cardinality: 150000000
 probe runtime filters:
 - filter_id = 2, probe_expr = (24: o_orderkey)

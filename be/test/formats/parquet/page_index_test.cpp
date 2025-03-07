@@ -21,15 +21,12 @@
 #include "column/column_helper.h"
 #include "exec/hdfs_scanner.h"
 #include "exprs/binary_predicate.h"
-#include "exprs/expr_context.h"
 #include "formats/parquet/file_reader.h"
 #include "formats/parquet/group_reader.h"
 #include "formats/parquet/parquet_test_util/util.h"
 #include "formats/parquet/parquet_ut_base.h"
 #include "fs/fs.h"
 #include "io/shared_buffered_input_stream.h"
-#include "runtime/descriptor_helper.h"
-#include "runtime/mem_tracker.h"
 
 namespace starrocks::parquet {
 
@@ -84,8 +81,10 @@ HdfsScannerContext* PageIndexTest::_create_file_random_read_context(const std::s
             {"c3", type_array},
             {""},
     };
-    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    ctx->slot_descs = tuple_desc->slots();
     ctx->scan_range = (_create_scan_range(file_path));
 
     return ctx;
@@ -99,8 +98,9 @@ HdfsScannerContext* PageIndexTest::_create_file_only_c0_context(const std::strin
             {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
             {""},
     };
-    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    ctx->slot_descs = tuple_desc->slots();
     ctx->scan_range = (_create_scan_range(file_path));
 
     return ctx;
@@ -116,8 +116,9 @@ HdfsScannerContext* PageIndexTest::_create_file_c0_c1_c2_context(const std::stri
             {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
             {""},
     };
-    ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-    Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+    TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+    Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+    ctx->slot_descs = tuple_desc->slots();
     ctx->scan_range = (_create_scan_range(file_path));
 
     return ctx;
@@ -280,7 +281,7 @@ TEST_F(PageIndexTest, TestRandomReadWith2PageSize) {
                 std::cout << "file path: " << file_path << ", " << _print_predicate(single_flag) << std::endl;
 
                 auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                                std::filesystem::file_size(file_path), 100000);
+                                                                std::filesystem::file_size(file_path));
 
                 Status status = file_reader->init(ctx);
                 ASSERT_TRUE(status.ok());
@@ -337,70 +338,200 @@ TEST_F(PageIndexTest, TestRandomReadWith2PageSize) {
 }
 
 TEST_F(PageIndexTest, TestCollectIORangeWithPageIndex) {
-    auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
-                         chunk->num_columns());
+    auto test = [&]() {
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(
+                ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
+                chunk->num_columns());
 
-    const std::string small_page_file = "./be/test/formats/parquet/test_data/page_index_small_page.parquet";
+        const std::string small_page_file = "./be/test/formats/parquet/test_data/page_index_small_page.parquet";
 
-    Utils::SlotDesc min_max_slots[] = {
-            {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 0},
-            {""},
+        Utils::SlotDesc min_max_slots[] = {
+                {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 0},
+                {""},
+        };
+
+        auto ctx = _create_file_only_c0_context(small_page_file);
+        auto file = _create_file(small_page_file);
+        ctx->conjunct_ctxs_by_slot[0].clear();
+        ctx->min_max_conjunct_ctxs.clear();
+        ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
+
+        std::vector<TExpr> t_conjuncts;
+        ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 0, 5500, &t_conjuncts);
+        ParquetUTBase::append_int_conjunct(TExprOpcode::LT, 0, 7500, &t_conjuncts);
+
+        ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
+        ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjunct_ctxs_by_slot[0]);
+
+        // tuple desc
+        Utils::SlotDesc slot_descs[] = {
+                {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                {""},
+        };
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        std::vector<ExprContext*> all_conjuncts{};
+        for (auto* expr : ctx->min_max_conjunct_ctxs) {
+            all_conjuncts.push_back(expr);
+        }
+        for (auto* expr : ctx->conjunct_ctxs_by_slot[0]) {
+            all_conjuncts.push_back(expr);
+        }
+        ParquetUTBase::setup_conjuncts_manager(all_conjuncts, nullptr, tuple_desc, _runtime_state, ctx);
+
+        auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                        std::filesystem::file_size(small_page_file));
+
+        Status status = file_reader->init(ctx);
+        ASSERT_TRUE(status.ok());
+
+        // two row groups, but one is filtered.
+        EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
+        std::vector<io::SharedBufferedInputStream::IORange> ranges;
+        int64_t end_offset = 0;
+
+        file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset, ColumnIOType::PAGE_INDEX);
+        // collect io of column index and offset index for active column.
+        EXPECT_EQ(ranges.size(), 2);
+        // offset_index_offset = 293436, offset_index_length = 113, column_index_offset = 291196, column_index_length = 211
+        EXPECT_EQ(ranges[1].offset, 293436);
+        EXPECT_EQ(ranges[1].size, 113);
+
+        ranges.clear();
+        end_offset = 0;
+
+        file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
+        // 3 pages, 1 range 5000-8000
+        EXPECT_EQ(file_reader->_row_group_readers[0]->_range.size(), 1);
+        // only collect io of 3 pages, 5001-6000, 6001-7000, 7001-8000 and a dict page.
+        EXPECT_EQ(ranges.size(), 4);
+        // page 7001-8000: offset 50814, size 1660
+        EXPECT_EQ(end_offset, 52474);
+
+        size_t total_row_nums = 0;
+        while (!status.is_end_of_file()) {
+            chunk->reset();
+            status = file_reader->get_next(&chunk);
+            chunk->check_or_die();
+            total_row_nums += chunk->num_rows();
+        }
+        EXPECT_EQ(total_row_nums, 1999);
     };
 
-    auto ctx = _create_file_only_c0_context(small_page_file);
-    auto file = _create_file(small_page_file);
-    ctx->conjunct_ctxs_by_slot[0].clear();
-    ctx->min_max_conjunct_ctxs.clear();
-    ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
-
-    std::vector<TExpr> t_conjuncts;
-    ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 0, 5500, &t_conjuncts);
-    ParquetUTBase::append_int_conjunct(TExprOpcode::LT, 0, 7500, &t_conjuncts);
-
-    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
-    ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->conjunct_ctxs_by_slot[0]);
-
-    auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(small_page_file), 100000);
-
-    Status status = file_reader->init(ctx);
-    ASSERT_TRUE(status.ok());
-
-    // two row groups, but one is filtered.
-    EXPECT_EQ(file_reader->_row_group_readers.size(), 1);
-    std::vector<io::SharedBufferedInputStream::IORange> ranges;
-    int64_t end_offset = 0;
-
-    file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset, ColumnIOType::PAGE_INDEX);
-    // collect io of column index and offset index for active column.
-    EXPECT_EQ(ranges.size(), 2);
-    // offset_index_offset = 293436, offset_index_length = 113, column_index_offset = 291196, column_index_length = 211
-    EXPECT_EQ(ranges[1].offset, 293436);
-    EXPECT_EQ(ranges[1].size, 113);
-
-    ranges.clear();
-    end_offset = 0;
-
-    file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
-    // 3 pages, 1 range 5000-8000
-    EXPECT_EQ(file_reader->_row_group_readers[0]->_range.size(), 1);
-    // only collect io of 3 pages, 5001-6000, 6001-7000, 7001-8000 and a dict page.
-    EXPECT_EQ(ranges.size(), 4);
-    // page 7001-8000: offset 50814, size 1660
-    EXPECT_EQ(end_offset, 52474);
-
-    size_t total_row_nums = 0;
-    while (!status.is_end_of_file()) {
-        chunk->reset();
-        status = file_reader->get_next(&chunk);
-        chunk->check_or_die();
-        total_row_nums += chunk->num_rows();
-    }
-    EXPECT_EQ(total_row_nums, 1999);
+    test();
 }
 
 TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
+    auto test = [&]() {
+        auto chunk = std::make_shared<Chunk>();
+        chunk->append_column(
+                ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
+                chunk->num_columns());
+        chunk->append_column(
+                ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
+                chunk->num_columns());
+        chunk->append_column(
+                ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR), true),
+                chunk->num_columns());
+
+        const std::string small_page_file = "./be/test/formats/parquet/test_data/page_index_small_page.parquet";
+
+        Utils::SlotDesc min_max_slots[] = {
+                {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 0},
+                {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), 1},
+                {""},
+        };
+
+        auto ctx = _create_file_c0_c1_c2_context(small_page_file);
+        auto file = _create_file(small_page_file);
+        ctx->conjunct_ctxs_by_slot[0].clear();
+        ctx->conjunct_ctxs_by_slot[1].clear();
+        ctx->min_max_conjunct_ctxs.clear();
+        ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
+
+        std::vector<TExpr> t_conjuncts;
+        // c0: 1->20000, c0 > 5000
+        ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 0, 5000, &t_conjuncts);
+        // c1: 20000->1, c1 > 5000
+        ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 1, 5000, &t_conjuncts);
+
+        ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
+
+        std::vector<TExpr> t_conjuncts_slot0{t_conjuncts[0]};
+        ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts_slot0, &ctx->conjunct_ctxs_by_slot[0]);
+
+        std::vector<TExpr> t_conjuncts_slot1{t_conjuncts[1]};
+        ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts_slot1, &ctx->conjunct_ctxs_by_slot[1]);
+
+        // tuple desc
+        Utils::SlotDesc slot_descs[] = {
+                {"c0", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                {"c1", TypeDescriptor::from_logical_type(LogicalType::TYPE_INT)},
+                {"c2", TypeDescriptor::from_logical_type(LogicalType::TYPE_VARCHAR)},
+                {""},
+        };
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        std::vector<ExprContext*> all_conjuncts{};
+        for (auto* expr : ctx->min_max_conjunct_ctxs) {
+            all_conjuncts.push_back(expr);
+        }
+        for (auto* expr : ctx->conjunct_ctxs_by_slot[0]) {
+            all_conjuncts.push_back(expr);
+        }
+        for (auto* expr : ctx->conjunct_ctxs_by_slot[1]) {
+            all_conjuncts.push_back(expr);
+        }
+        ParquetUTBase::setup_conjuncts_manager(all_conjuncts, nullptr, tuple_desc, _runtime_state, ctx);
+
+        auto shared_buffer = std::make_shared<io::SharedBufferedInputStream>(
+                file->stream(), small_page_file, std::filesystem::file_size(small_page_file));
+        auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
+                                                        std::filesystem::file_size(small_page_file), DataCacheOptions(),
+                                                        shared_buffer.get());
+
+        Status status = file_reader->init(ctx);
+        ASSERT_TRUE(status.ok());
+
+        // two row groups.
+        EXPECT_EQ(file_reader->_row_group_readers.size(), 2);
+        std::vector<io::SharedBufferedInputStream::IORange> ranges;
+        int64_t end_offset = 0;
+
+        for (auto& r : file_reader->_row_group_readers) {
+            r->collect_io_ranges(&ranges, &end_offset, ColumnIOType::PAGE_INDEX);
+        }
+
+        // collect io of column index and offset index for active column,
+        // and offset index for lazy column
+        // and two group collect together. (2 + 2 + 1) * 2 = 10
+        EXPECT_EQ(ranges.size(), 10);
+
+        ranges.clear();
+        end_offset = 0;
+
+        file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
+        // only collect io of 5 pages, 5001-6000, 6001-7000, 7001-8000, 8001-9000, 9001-10000 and a dict page.
+        // three columns, (5 + 1) * 3 = 18
+        EXPECT_EQ(ranges.size(), 18);
+
+        EXPECT_EQ(shared_buffer->current_range_ref_sum(), 28);
+
+        // The second row group is not prepare yet
+
+        size_t total_row_nums = 0;
+        while (!status.is_end_of_file()) {
+            chunk->reset();
+            status = file_reader->get_next(&chunk);
+            chunk->check_or_die();
+            total_row_nums += chunk->num_rows();
+        }
+        EXPECT_EQ(total_row_nums, 10000);
+    };
+
+    test();
+}
+
+TEST_F(PageIndexTest, TestPageIndexNoPageFiltered) {
     auto chunk = std::make_shared<Chunk>();
     chunk->append_column(ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
                          chunk->num_columns());
@@ -426,10 +557,10 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
     ctx->min_max_tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, min_max_slots);
 
     std::vector<TExpr> t_conjuncts;
-    // c0: 1->20000, c0 > 5000
-    ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 0, 5000, &t_conjuncts);
-    // c1: 20000->1, c1 > 5000
-    ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 1, 5000, &t_conjuncts);
+    // c0: 1->20000, c0 > 500
+    ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 0, 500, &t_conjuncts);
+    // c1: 20000->1, c1 > 500
+    ParquetUTBase::append_int_conjunct(TExprOpcode::GT, 1, 500, &t_conjuncts);
 
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts, &ctx->min_max_conjunct_ctxs);
 
@@ -439,8 +570,11 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
     std::vector<TExpr> t_conjuncts_slot1{t_conjuncts[1]};
     ParquetUTBase::create_conjunct_ctxs(&_pool, _runtime_state, &t_conjuncts_slot1, &ctx->conjunct_ctxs_by_slot[1]);
 
+    auto shared_buffer = std::make_shared<io::SharedBufferedInputStream>(file->stream(), small_page_file,
+                                                                         std::filesystem::file_size(small_page_file));
     auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                    std::filesystem::file_size(small_page_file), 100000);
+                                                    std::filesystem::file_size(small_page_file), DataCacheOptions(),
+                                                    shared_buffer.get());
 
     Status status = file_reader->init(ctx);
     ASSERT_TRUE(status.ok());
@@ -463,9 +597,11 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
     end_offset = 0;
 
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
-    // only collect io of 5 pages, 5001-6000, 6001-7000, 7001-8000, 8001-9000, 9001-10000 and a dict page.
-    // three columns, (5 + 1) * 3 = 18
-    EXPECT_EQ(ranges.size(), 18);
+    // only collect io of 1 chunk / column.
+    // three columns, 1 * 3 = 3
+    EXPECT_EQ(ranges.size(), 3);
+
+    EXPECT_EQ(shared_buffer->current_range_ref_sum(), 13);
 
     // The second row group is not prepare yet
 
@@ -476,7 +612,7 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
         chunk->check_or_die();
         total_row_nums += chunk->num_rows();
     }
-    EXPECT_EQ(total_row_nums, 10000);
+    EXPECT_EQ(total_row_nums, 19000);
 }
 
 } // namespace starrocks::parquet

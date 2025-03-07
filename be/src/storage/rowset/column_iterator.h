@@ -39,6 +39,7 @@
 #include "io/shared_buffered_input_stream.h"
 #include "storage/olap_common.h"
 #include "storage/options.h"
+#include "storage/predicate_tree/predicate_tree_fwd.h"
 #include "storage/range.h"
 #include "storage/rowset/common.h"
 #include "types/logical_type.h"
@@ -60,7 +61,9 @@ struct ColumnIteratorOptions {
     // reader statistics
     OlapReaderStatistics* stats = nullptr;
     bool use_page_cache = false;
-    LakeIOOptions lake_io_opts{.fill_data_cache = true};
+    // temporary data does not allow caching
+    bool temporary_data = false;
+    LakeIOOptions lake_io_opts{.fill_data_cache = true, .skip_disk_cache = false};
 
     // check whether column pages are all dictionary encoding.
     bool check_dict_encoding = false;
@@ -76,6 +79,7 @@ struct ColumnIteratorOptions {
 
     ReaderType reader_type = READER_QUERY;
     int chunk_size = DEFAULT_CHUNK_SIZE;
+    bool has_preaggregation = true;
 };
 
 // Base iterator to read one column data
@@ -104,20 +108,14 @@ public:
 
     virtual Status next_batch(const SparseRange<>& range, Column* dst);
 
-    Status convert_sparse_range_to_io_range(const SparseRange<>& range) {
-        if (auto sharedBufferStream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
-            sharedBufferStream == nullptr) {
-            return Status::OK();
-        }
-
+    StatusOr<std::vector<std::pair<int64_t, int64_t>>> get_io_range_vec(const SparseRange<>& range) {
+        std::vector<std::pair<int64_t, int64_t>> res;
         auto reader = get_column_reader();
         if (reader == nullptr) {
             // should't happen
-            LOG(INFO) << "column reader nullptr, filename: " << _opts.read_file->filename();
-            return Status::OK();
+            return Status::InvalidArgument(fmt::format("column reader for {} is nullptr", _opts.read_file->filename()));
         }
 
-        std::vector<io::SharedBufferedInputStream::IORange> result;
         std::vector<std::pair<int, int>> page_index;
         int prev_page_index = -1;
         for (auto index = 0; index < range.size(); index++) {
@@ -145,7 +143,22 @@ public:
             RETURN_IF_ERROR(reader->seek_by_page_index(pair.second, &iter_end));
             auto offset = iter_start.page().offset;
             auto size = iter_end.page().offset - offset + iter_end.page().size;
-            io::SharedBufferedInputStream::IORange io_range(offset, size);
+            res.push_back({offset, size});
+        }
+
+        return res;
+    }
+
+    Status convert_sparse_range_to_io_range(const SparseRange<>& range) {
+        if (auto sharedBufferStream = dynamic_cast<io::SharedBufferedInputStream*>(_opts.read_file);
+            sharedBufferStream == nullptr) {
+            return Status::OK();
+        }
+
+        std::vector<io::SharedBufferedInputStream::IORange> result;
+        ASSIGN_OR_RETURN(auto vec, get_io_range_vec(range));
+        for (auto e : vec) {
+            io::SharedBufferedInputStream::IORange io_range(e.first, e.second);
             result.emplace_back(io_range);
         }
 
@@ -154,12 +167,27 @@ public:
 
     virtual ordinal_t get_current_ordinal() const = 0;
 
+    virtual bool has_zone_map() const { return false; }
+
+    /// Store the row ranges that satisfy the given predicates into |row_ranges|.
+    /// |pred_relation| is the relation among |predicates|, it can be AND or OR.
     virtual Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                              const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) {
+                                              const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                              CompoundNodeType pred_relation) {
         row_ranges->add({0, static_cast<rowid_t>(num_rows())});
         return Status::OK();
     }
 
+    virtual bool has_original_bloom_filter_index() const { return false; }
+    virtual bool has_ngram_bloom_filter_index() const { return false; }
+    /// Treat the relationship between |predicates| as `(s_pred_1 OR s_pred_2 OR ... OR s_pred_n) AND (ns_pred_1 AND ns_pred_2 AND ... AND ns_pred_n)`,
+    /// where s_pred_i denotes a predicate which supports bloom filter, and ns_pred_i denotes a predicate which does not support bloom filter.
+    /// That is,
+    /// - only keep the rows in |row_ranges| which satisfy any predicate that supports bloom filter in |predicates|.
+    /// - or keep all the rows in |row_ranges| if there is no predicate that supports bloom filter in |predicates|.
+    ///
+    /// prerequisite:
+    /// - if the original relationship between |predicates| is OR, all of them need to support bloom filter.
     virtual Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
                                                   SparseRange<>* row_ranges) {
         return Status::OK();
@@ -240,9 +268,16 @@ public:
 
     virtual Status fetch_subfield_by_rowid(const rowid_t* rowids, size_t size, Column* values) { return Status::OK(); }
 
+    virtual Status null_count(size_t* count) { return Status::OK(); };
+
+    // RAW interface, should be used carefully
+    virtual ColumnReader* get_column_reader() {
+        CHECK(false) << "unreachable";
+        return nullptr;
+    }
+
 protected:
     ColumnIteratorOptions _opts;
-    virtual ColumnReader* get_column_reader() { return nullptr; };
 };
 
 } // namespace starrocks

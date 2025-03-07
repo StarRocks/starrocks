@@ -80,4 +80,85 @@ public class HiveScanTest extends ConnectorPlanTestBase {
             Assert.assertEquals(expexted, scanNodeList.get(0).getScanOptimzeOption().getCanUseMinMaxCountOpt());
         }
     }
+
+    @Test
+    public void testHiveRewriteSimpleAggToHdfsScan() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(true);
+        // positive cases.
+        {
+            String[] sqlString = {
+                    "select count(*) from lineitem_par",
+                    "select count(*) from lineitem_par where l_shipdate = '1998-01-01'",
+                    "select count(*), l_shipdate from lineitem_par where l_shipdate = '1998-01-01' group by l_shipdate"
+            };
+            for (int i = 0; i < sqlString.length; i++) {
+                String sql = sqlString[i];
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "___count___");
+            }
+        }
+        // negative cases.
+        {
+            String[] sqlString = {
+                    "select count(l_orderkey) from lineitem_par",
+                    "select count(*) from lineitem_par where l_shipdate = '1998-01-01' and l_orderkey = 202",
+                    "select count(*), count(l_orderkey), l_shipdate from lineitem_par where l_shipdate = '1998-01-01' group by " +
+                            "l_shipdate"
+            };
+            for (int i = 0; i < sqlString.length; i++) {
+                String sql = sqlString[i];
+                String plan = getFragmentPlan(sql);
+                assertNotContains(plan, "___count___");
+            }
+        }
+        // bad cases
+        {
+            String[] sqlString = {
+                    "select distinct l_shipdate from lineitem_par",
+                    "select count(distinct l_shipdate) from lineitem_par",
+            };
+            for (int i = 0; i < sqlString.length; i++) {
+                String sql = sqlString[i];
+                // just make sure it's not stuck.
+                String plan = getFragmentPlan(sql);
+            }
+        }
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
+    }
+
+    @Test
+    public void testIcebergRewriteSimpleAggToHdfsScan() throws Exception {
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(true);
+        // positive cases.
+        {
+            String[] sqlString = {
+                    "select count(*) from iceberg0.partitioned_db.t1",
+                    "select count(*) from iceberg0.partitioned_db.t1 where date = '2020-01-01'",
+                    "select count(*), date from iceberg0.partitioned_db.t1 where date = '2020-01-01' " +
+                            "group by date"
+            };
+            for (int i = 0; i < sqlString.length; i++) {
+                String sql = sqlString[i];
+                String plan = getFragmentPlan(sql);
+                assertContains(plan, "___count___");
+            }
+        }
+        // negative cases.
+        {
+            String[] sqlString = {
+                    "select count(id) from iceberg0.partitioned_db.t1",
+                    "select count(*) from iceberg0.partitioned_db.t1 where date = '1998-01-01' and id =" +
+                            " 202",
+                    "select count(*), count(id), date from iceberg0.partitioned_db.t1 where date " +
+                            "= '2020-01-01' group by " +
+                            "date"
+            };
+            for (int i = 0; i < sqlString.length; i++) {
+                String sql = sqlString[i];
+                String plan = getFragmentPlan(sql);
+                assertNotContains(plan, "___count___");
+            }
+        }
+        connectContext.getSessionVariable().setEnableRewriteSimpleAggToHdfsScan(false);
+    }
 }

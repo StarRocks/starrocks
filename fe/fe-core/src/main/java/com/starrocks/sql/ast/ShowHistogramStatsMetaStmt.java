@@ -18,12 +18,12 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -62,19 +62,18 @@ public class ShowHistogramStatsMetaStmt extends ShowStmt {
         long dbId = histogramStatsMeta.getDbId();
         long tableId = histogramStatsMeta.getTableId();
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + dbId);
         }
         row.set(0, db.getOriginName());
-        Table table = db.getTable(tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             throw new MetaNotFoundException("No found table: " + tableId);
         }
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
         try {
-            Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), db.getFullName(), table);
+            Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
         } catch (AccessDeniedException e) {
             return null;
         }
@@ -107,8 +106,7 @@ public class ShowHistogramStatsMetaStmt extends ShowStmt {
         }
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
         try {
-            Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), new TableName(catalogName, db.getFullName(), table.getName()));
+            Authorizer.checkAnyActionOnTable(context, new TableName(catalogName, db.getFullName(), table.getName()));
         } catch (AccessDeniedException e) {
             return null;
         }

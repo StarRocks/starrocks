@@ -17,10 +17,9 @@
 #include "exec/tablet_sink_index_channel.h"
 
 namespace starrocks {
-class CombinedTxnLogPB;
-} // namespace starrocks
 
-namespace starrocks::stream_load {
+class CombinedTxnLogPB;
+
 // TabletSinkSender will control one index/table's send chunks.
 class TabletSinkSender {
 public:
@@ -109,4 +108,4 @@ protected:
     std::map<int64_t, CombinedTxnLogPB> _txn_log_map;
 };
 
-} // namespace starrocks::stream_load
+} // namespace starrocks

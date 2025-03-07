@@ -61,6 +61,7 @@ public class AnalyzeArrayTest {
         analyzeSuccess("select array_generate(1,9999999999999999, 10000)");
         analyzeSuccess("select array_generate(1,NULL,1)");
         analyzeSuccess("select array_generate(1,NULL)");
+        analyzeSuccess(" select array_generate(1, array_length([1,2,3]),1)");
         analyzeFail("select array_generate()");
         analyzeFail("select array_generate('c')");
         analyzeFail("select array_generate(a,b) from t");
@@ -72,5 +73,13 @@ public class AnalyzeArrayTest {
         analyzeSuccess("select array_concat([1.0, 2.0, 3.0], [2.00, 2.0])");
         analyzeSuccess("select array_concat([1.0, 2.0, 3.0], ['2.00', '2.0'])");
         analyzeFail("select array_concat([1, 2, 3], [[1, 1], [2, 2]])");
+    }
+
+    @Test
+    public void testArrayFlatten() {
+        analyzeFail("select array_flatten()");
+        analyzeFail("select array_flatten(1)");
+        analyzeFail("select array_flatten([1, 2, 3])");
+        analyzeSuccess("select array_flatten([[1, 2], [1, 4]])");
     }
 }

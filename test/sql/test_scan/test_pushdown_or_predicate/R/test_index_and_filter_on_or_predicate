@@ -2,27 +2,26 @@
 set scan_or_to_union_limit = 1;
 -- result:
 -- !result
+set enable_show_predicate_tree_in_profile = true;
+-- result:
+-- !result
 set enable_profile = true;
 -- result:
 -- !result
 set enable_async_profile=false;
 -- result:
 -- !result
-function: update_be_config("enable_index_segment_level_zonemap_filter", "false")
+update information_schema.be_configs set value="false" where name= "enable_index_segment_level_zonemap_filter";
 -- result:
-None
 -- !result
-function: update_be_config("enable_index_page_level_zonemap_filter", "false")
+update information_schema.be_configs set value="false" where name= "enable_index_page_level_zonemap_filter";
 -- result:
-None
 -- !result
-function: update_be_config("enable_index_bloom_filter", "false")
+update information_schema.be_configs set value="false" where name= "enable_index_bloom_filter";
 -- result:
-None
 -- !result
-function: update_be_config("enable_index_bitmap_filter", "false")
+update information_schema.be_configs set value="false" where name= "enable_index_bitmap_filter";
 -- result:
-None
 -- !result
 CREATE TABLE __row_util_base (
   k1 bigint NULL
@@ -127,6 +126,13 @@ insert into t1 (k1, c_str_5_low_non_null1, c_str_6_low_non_null2, c_str_7_seq_no
 insert into t1 (k1, c_str_5_low_non_null1, c_str_6_low_non_null2, c_str_7_seq_non_null1, c_str_8_seq_non_null2) select null, '<null>', '<null>', '<null>', '<null>';
 -- result:
 -- !result
+ALTER TABLE t1 COMPACT;
+-- result:
+-- !result
+function: wait_compaction_finish("t1", 32)
+-- result:
+None
+-- !result
 create view __profile(idx, k, v) as 
 select 1, 2, 3;
 -- result:
@@ -138,11 +144,12 @@ select 1, 2, 3;
 
 
 
-function: update_be_config("enable_index_segment_level_zonemap_filter", "true")
-
+update information_schema.be_configs set value="true" where name= "enable_index_segment_level_zonemap_filter";
+-- result:
+-- !result
 select count(1) from t1 where c_int_1_seq < 1;
 -- result:
-E: (1064, "Getting syntax error at line 8, column 0. Detail message: Unexpected input 'function', the most similar input is {'UNINSTALL', 'UNLOCK', 'STOP', 'SYNC', 'GRANT', '(', ';'}.")
+0
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
@@ -214,15 +221,15 @@ select count(1) from t1 where c_int_1_seq < 1 or c_int_2_seq < 1280000 * 10;
 1	2	3
 -- !result
   
-function: update_be_config("enable_index_segment_level_zonemap_filter", "false")
-
-
-
-function: update_be_config("enable_index_bloom_filter", "true")
-
+update information_schema.be_configs set value="false" where name= "enable_index_segment_level_zonemap_filter";
+-- result:
+-- !result
+update information_schema.be_configs set value="true" where name= "enable_index_bloom_filter";
+-- result:
+-- !result
 select count(1) from t1 where c_int_1_seq = 1280002;
 -- result:
-E: (1064, "Getting syntax error at line 2, column 0. Detail message: Unexpected input 'function', the most similar input is {'UNINSTALL', 'UNLOCK', 'STOP', 'SYNC', 'GRANT', '(', ';'}.")
+1
 -- !result
   select * from __profile order by idx, k, v;
 -- result:
@@ -355,16 +362,15 @@ select count(1) from t1
 1	2	3
 -- !result
   
-function: update_be_config("enable_index_bloom_filter", "false")
-
-
-
-
-function: update_be_config("enable_index_bitmap_filter", "true")
-
+update information_schema.be_configs set value="false" where name= "enable_index_bloom_filter";
+-- result:
+-- !result
+update information_schema.be_configs set value="true" where name= "enable_index_bitmap_filter";
+-- result:
+-- !result
 select count(1) from t1 where c_int_1_seq = 1280001;
 -- result:
-E: (1064, "Getting syntax error at line 2, column 0. Detail message: Unexpected input 'function', the most similar input is {'UNINSTALL', 'UNLOCK', 'STOP', 'SYNC', 'GRANT', '(', ';'}.")
+1
 -- !result
  select * from __profile order by idx, k, v;
 -- result:
@@ -876,9 +882,212 @@ where
 -- result:
 1	2	3
 -- !result
-function: update_be_config("enable_index_bitmap_filter", "false")
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_int_1_seq in (1280004, 1280005, 1280006)
+    and c_str_1_seq != 'abc1-4'
+  );
 -- result:
-None
+4
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_str_1_seq like '%abc%'
+    and c_str_1_seq != 'abc1-4'
+  );
+-- result:
+1279999
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_int_1_seq in (1280004, 1280005, 1280006)
+    and c_str_1_seq != 'abc1-4'
+    and (
+      c_int_1_seq in (1280004, 1280005, 1280006, 1280007) 
+      or (
+        c_str_1_seq in ('abc1-4', 'abc1-5', 'abc1-6', 'abc1-7') 
+        and c_str_1_seq like '%abc%'
+        and c_str_1_seq != 'abc1-4'
+      )
+    )
+  );
+-- result:
+4
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280004, 1280005, 1280006)
+    and c_str_1_seq != 'abc1-4'
+    and (
+      c_int_1_seq in (1280004, 1280005, 1280006, 1280007) 
+      or (
+        c_str_1_seq in ('abc1-4', 'abc1-5', 'abc1-6', 'abc1-7') 
+        and c_str_1_seq like '%abc%'
+        and c_str_1_seq != 'abc1-4'
+      )
+    )
+  );
+-- result:
+2
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_int_1_seq in (1280004, 1280005, 1280006)
+    and c_str_1_seq != 'abc1-4'
+    and (
+      c_int_1_seq in (1280004, 1280005, 1280006, 1280007) 
+      or (
+        c_str_1_seq not in ('abc1-4', 'abc1-5', 'abc1-6', 'abc1-7') 
+        and c_str_1_seq like '%abc%'
+        and c_str_1_seq != 'abc1-4'
+      )
+    )
+  );
+-- result:
+4
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280004, 1280005, 1280006)
+    and c_str_1_seq != 'abc1-4'
+    and (
+      c_int_1_seq in (1280004, 1280005, 1280006, 1280007) 
+      or (
+        c_str_1_seq not in ('abc1-4', 'abc1-5', 'abc1-6', 'abc1-7') 
+        and c_str_1_seq like '%abc%'
+        and c_str_1_seq != 'abc1-4'
+      )
+    )
+  );
+-- result:
+2
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 in ('a1', 'b1', 'c1');
+-- result:
+1280000
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1 where c_str_3_low1 in ('a1', 'b1');
+-- result:
+853333
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_str_3_low1 in ('a1', 'b1', 'c1')
+    and c_str_5_low_non_null1 in ('a1', 'b1', 'c1')
+  );
+-- result:
+1280000
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1
+where
+  (
+    c_int_1_seq in (1280001, 1280002, 1280003)
+    and c_str_1_seq != 'abc1-1'
+  )
+  or 
+  (
+    c_str_3_low1 in ('a1', 'b1')
+    and c_int_1_seq != 1280004
+  );
+-- result:
+853333
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1
+where
+  c_str_3_low1 in ('a1')
+  or c_str_5_low_non_null1 in ('a1');
+-- result:
+426666
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+select count(1) from t1
+where
+  c_str_3_low1 in ('a1')
+  and c_str_5_low_non_null1 in ('a1');
+-- result:
+426666
+-- !result
+ select * from __profile order by idx, k, v;
+-- result:
+1	2	3
+-- !result
+update information_schema.be_configs set value="false" where name= "enable_index_bitmap_filter";
+-- result:
 -- !result
 select count(k1) from t1 where c_int_1_seq < 1280000 + 128000/3 or c_int_2_seq > 1280000*3 - 1000;
 -- result:
@@ -941,9 +1150,8 @@ where
 -- result:
 1003
 -- !result
-function: update_be_config("enable_index_page_level_zonemap_filter", "true")
+update information_schema.be_configs set value="true" where name= "enable_index_page_level_zonemap_filter";
 -- result:
-None
 -- !result
 select count(1) from t1 where c_int_1_seq < 1;
 -- result:
@@ -1116,23 +1324,18 @@ select count(1) from t1 where c_int_2_seq*2 = (1280000*2+20)*2 or c_int_2_seq*2 
 -- result:
 2001
 -- !result
-function: update_be_config("enable_index_page_level_zonemap_filter", "false")
+update information_schema.be_configs set value="false" where name= "enable_index_page_level_zonemap_filter";
 -- result:
-None
 -- !result
-function: update_be_config("enable_index_segment_level_zonemap_filter", "true")
+update information_schema.be_configs set value="true" where name= "enable_index_segment_level_zonemap_filter";
 -- result:
-None
 -- !result
-function: update_be_config("enable_index_page_level_zonemap_filter", "true")
+update information_schema.be_configs set value="true" where name= "enable_index_page_level_zonemap_filter";
 -- result:
-None
 -- !result
-function: update_be_config("enable_index_bloom_filter", "true")
+update information_schema.be_configs set value="true" where name= "enable_index_bloom_filter";
 -- result:
-None
 -- !result
-function: update_be_config("enable_index_bitmap_filter", "true")
+update information_schema.be_configs set value="true" where name= "enable_index_bitmap_filter";
 -- result:
-None
 -- !result

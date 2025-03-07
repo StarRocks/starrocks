@@ -83,6 +83,11 @@ LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr
     _index_num = ADD_COUNTER(_profile, "IndexNum", TUnit::UNIT);
     ADD_COUNTER(_profile, "LoadMemoryLimit", TUnit::BYTES)->set(_mem_tracker->limit());
     _peak_memory_usage = ADD_PEAK_COUNTER(_profile, "PeakMemoryUsage", TUnit::BYTES);
+    _deserialize_chunk_count = ADD_COUNTER(_profile, "DeserializeChunkCount", TUnit::UNIT);
+    _deserialize_chunk_timer = ADD_TIMER(_profile, "DeserializeChunkTime");
+    _profile_report_count = ADD_COUNTER(_profile, "ProfileReportCount", TUnit::UNIT);
+    _profile_report_timer = ADD_TIMER(_profile, "ProfileReportTime");
+    _profile_serialized_size = ADD_COUNTER(_profile, "ProfileSerializedSize", TUnit::BYTES);
 }
 
 LoadChannel::~LoadChannel() {
@@ -111,10 +116,10 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     ClosureGuard done_guard(done);
 
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
-    int64_t index_id = request.index_id();
     bool is_lake_tablet = request.has_is_lake_tablet() && request.is_lake_tablet();
 
     Status st = Status::OK();
+    TabletsChannelKey key(request.id(), request.sink_id(), request.index_id());
     {
         // We will `bthread::execution_queue_join()` in the destructor of AsyncDeltaWriter,
         // it will block the bthread, so we put its destructor outside the lock.
@@ -125,25 +130,24 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
             RETURN_RESPONSE_IF_ERROR(_schema->init(request.schema()), response);
         }
         if (_row_desc == nullptr) {
-            _row_desc = std::make_unique<RowDescriptor>(_schema->tuple_desc(), false);
+            _row_desc = std::make_unique<RowDescriptor>(_schema->tuple_desc());
         }
-        auto it = _tablets_channels.find(index_id);
+        auto it = _tablets_channels.find(key);
         if (it == _tablets_channels.end()) {
-            TabletsChannelKey key(request.id(), index_id);
             if (is_lake_tablet) {
                 channel = new_lake_tablets_channel(this, _lake_tablet_mgr, key, _mem_tracker.get(), _profile);
             } else {
                 channel = new_local_tablets_channel(this, key, _mem_tracker.get(), _profile);
             }
             if (st = channel->open(request, response, _schema, request.is_incremental()); st.ok()) {
-                _tablets_channels.insert({index_id, std::move(channel)});
+                _tablets_channels.insert({key, std::move(channel)});
             }
             COUNTER_UPDATE(_index_num, 1);
         } else if (request.is_incremental()) {
             st = it->second->incremental_open(request, response, _schema);
         }
     }
-    LOG_IF(WARNING, !st.ok()) << "Fail to open index " << index_id << " of load " << _load_id << ": " << st.to_string();
+    LOG_IF(WARNING, !st.ok()) << "Fail to open index " << key << " of load " << _load_id << ": " << st.to_string();
     response->mutable_status()->set_status_code(st.code());
     response->mutable_status()->add_error_msgs(std::string(st.message()));
 
@@ -152,17 +156,28 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     }
 }
 
-void LoadChannel::_add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
+void LoadChannel::_add_chunk(Chunk* chunk, const MonotonicStopWatch* watch, const PTabletWriterAddChunkRequest& request,
                              PTabletWriterAddBatchResult* response) {
     _num_chunk++;
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
-    auto channel = get_tablets_channel(request.index_id());
+    TabletsChannelKey key(request.id(), request.sink_id(), request.index_id());
+    auto channel = get_tablets_channel(key);
     if (channel == nullptr) {
+        LOG(WARNING) << "cannot find the tablets channel associated with the key " << key.to_string();
         response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
-        response->mutable_status()->add_error_msgs("cannot find the tablets channel associated with the index id");
+        response->mutable_status()->add_error_msgs(
+                fmt::format("cannot find the tablets channel associated with the key {}", key.to_string()));
         return;
     }
-    channel->add_chunk(chunk, request, response);
+    bool close_channel;
+    channel->add_chunk(chunk, request, response, &close_channel);
+    if (close_channel &&
+        (_should_enable_profile() || (watch != nullptr && watch->elapsed_time() > request.timeout_ms() * 1000000))) {
+        // If close_channel is true, the channel has been removed from _tablets_channels
+        // in TabletsChannel::add_chunk, so there will be no chance to get the channel to
+        // update the profile later. So update the profile here
+        channel->update_profile();
+    }
 }
 
 void LoadChannel::add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
@@ -172,9 +187,9 @@ void LoadChannel::add_chunk(const PTabletWriterAddChunkRequest& request, PTablet
         auto& pchunk = request.chunk();
         RETURN_RESPONSE_IF_ERROR(_build_chunk_meta(pchunk), response);
         RETURN_RESPONSE_IF_ERROR(_deserialize_chunk(pchunk, chunk, &uncompressed_buffer), response);
-        _add_chunk(&chunk, request, response);
+        _add_chunk(&chunk, nullptr, request, response);
     } else {
-        _add_chunk(nullptr, request, response);
+        _add_chunk(nullptr, nullptr, request, response);
     }
     report_profile(response, config::pipeline_print_profile);
 }
@@ -190,10 +205,20 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
     watch.start();
     faststring uncompressed_buffer;
     std::unique_ptr<Chunk> chunk;
+    int eos_count = 0;
+    int64_t timeout_ms = -1;
     for (int i = 0; i < req.requests_size(); i++) {
         auto& request = req.requests(i);
         VLOG_RPC << "tablet writer add chunk, id=" << print_id(request.id()) << ", index_id=" << request.index_id()
                  << ", sender_id=" << request.sender_id() << " request_index=" << i << " eos=" << request.eos();
+
+        if (request.eos()) {
+            eos_count = 1;
+        }
+
+        if (timeout_ms == -1) {
+            timeout_ms = request.timeout_ms();
+        }
 
         if (i == 0 && request.has_chunk()) {
             chunk = std::make_unique<Chunk>();
@@ -201,29 +226,57 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
             RETURN_RESPONSE_IF_ERROR(_build_chunk_meta(pchunk), response);
             RETURN_RESPONSE_IF_ERROR(_deserialize_chunk(pchunk, *chunk, &uncompressed_buffer), response);
         }
-        _add_chunk(chunk.get(), request, response);
+        _add_chunk(chunk.get(), &watch, request, response);
 
         if (response->status().status_code() != TStatusCode::OK) {
             LOG(WARNING) << "tablet writer add chunk, id=" << print_id(request.id())
                          << ", index_id=" << request.index_id() << ", sender_id=" << request.sender_id()
                          << " request_index=" << i << " eos=" << request.eos()
                          << " err=" << response->status().error_msgs(0);
-            return;
+            break;
         }
     }
+
+    int64_t total_time_us = watch.elapsed_time() / 1000;
     StarRocksMetrics::instance()->load_channel_add_chunks_total.increment(1);
-    StarRocksMetrics::instance()->load_channel_add_chunks_duration_us.increment(watch.elapsed_time() / 1000);
+    StarRocksMetrics::instance()->load_channel_add_chunks_eos_total.increment(eos_count);
+    StarRocksMetrics::instance()->load_channel_add_chunks_duration_us.increment(total_time_us);
+
     report_profile(response, config::pipeline_print_profile);
+
+    // log profile if rpc timeout
+    if (total_time_us > timeout_ms * 1000) {
+        // update profile
+        auto channels = _get_all_channels();
+        for (auto& channel : channels) {
+            channel->update_profile();
+        }
+
+        std::stringstream ss;
+        _root_profile->pretty_print(&ss);
+        if (timeout_ms > config::load_rpc_slow_log_frequency_threshold_seconds) {
+            LOG(WARNING) << "tablet writer add chunk timeout. txn_id=" << _txn_id << ", cost=" << total_time_us / 1000
+                         << "ms, timeout=" << timeout_ms << "ms, profile=" << ss.str();
+        } else {
+            // reduce slow log print frequency if the log job is small batch and high frequency
+            LOG_EVERY_N(WARNING, 10) << "tablet writer add chunk timeout. txn_id=" << _txn_id
+                                     << ", cost=" << total_time_us / 1000 << "ms, timeout=" << timeout_ms
+                                     << "ms, profile=" << ss.str();
+        }
+    }
 }
 
 void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
                               PTabletWriterAddSegmentResult* response, google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     _num_segment++;
-    auto channel = get_tablets_channel(request->index_id());
+    TabletsChannelKey key(request->id(), request->sink_id(), request->index_id());
+    auto channel = get_tablets_channel(key);
     if (channel == nullptr) {
+        LOG(WARNING) << "cannot find the tablets channel associated with the key " << key.to_string();
         response->mutable_status()->set_status_code(TStatusCode::INTERNAL_ERROR);
-        response->mutable_status()->add_error_msgs("cannot find the tablets channel associated with the index id");
+        response->mutable_status()->add_error_msgs(
+                fmt::format("cannot find the tablets channel associated with the key {}", key.to_string()));
         return;
     }
     auto local_tablets_channel = dynamic_cast<LocalTabletsChannel*>(channel.get());
@@ -253,16 +306,17 @@ void LoadChannel::abort() {
     }
 }
 
-void LoadChannel::abort(int64_t index_id, const std::vector<int64_t>& tablet_ids, const std::string& reason) {
-    auto channel = get_tablets_channel(index_id);
+void LoadChannel::abort(const TabletsChannelKey& key, const std::vector<int64_t>& tablet_ids,
+                        const std::string& reason) {
+    auto channel = get_tablets_channel(key);
     if (channel != nullptr) {
         channel->abort(tablet_ids, reason);
     }
 }
 
-void LoadChannel::remove_tablets_channel(int64_t index_id) {
+void LoadChannel::remove_tablets_channel(const TabletsChannelKey& key) {
     std::unique_lock l(_lock);
-    _tablets_channels.erase(index_id);
+    _tablets_channels.erase(key);
     if (_tablets_channels.empty()) {
         l.unlock();
         _closed.store(true);
@@ -271,9 +325,9 @@ void LoadChannel::remove_tablets_channel(int64_t index_id) {
     }
 }
 
-std::shared_ptr<TabletsChannel> LoadChannel::get_tablets_channel(int64_t index_id) {
+std::shared_ptr<TabletsChannel> LoadChannel::get_tablets_channel(const TabletsChannelKey& key) {
     std::lock_guard l(_lock);
-    auto it = _tablets_channels.find(index_id);
+    auto it = _tablets_channels.find(key);
     if (it != _tablets_channels.end()) {
         return it->second;
     } else {
@@ -300,6 +354,8 @@ Status LoadChannel::_build_chunk_meta(const ChunkPB& pb_chunk) {
 }
 
 Status LoadChannel::_deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer) {
+    COUNTER_UPDATE(_deserialize_chunk_count, 1);
+    SCOPED_TIMER(_deserialize_chunk_timer);
     if (pchunk.compress_type() == CompressionTypePB::NO_COMPRESSION) {
         TRY_CATCH_BAD_ALLOC({
             serde::ProtobufChunkDeserializer des(_chunk_meta);
@@ -331,19 +387,39 @@ Status LoadChannel::_deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, fast
     return Status::OK();
 }
 
+std::vector<std::shared_ptr<TabletsChannel>> LoadChannel::_get_all_channels() {
+    std::vector<std::shared_ptr<TabletsChannel>> channels;
+    std::lock_guard l(_lock);
+    channels.reserve(_tablets_channels.size());
+    for (auto& it : _tablets_channels) {
+        channels.push_back(it.second);
+    }
+    return channels;
+}
+
+bool LoadChannel::_should_enable_profile() {
+    if (_enable_profile) {
+        return true;
+    }
+    if (_big_query_profile_threshold_ns <= 0) {
+        return false;
+    }
+    int64_t query_run_duration = MonotonicNanos() - _create_time_ns;
+    return query_run_duration > _big_query_profile_threshold_ns;
+}
+
 void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print_profile) {
-    // report profile if enable profile or the query has run for a long time
-    if (!_enable_profile) {
-        if (_big_query_profile_threshold_ns <= 0) {
-            return;
-        }
-        int64_t query_run_duration = MonotonicNanos() - _create_time_ns;
-        if (query_run_duration <= _big_query_profile_threshold_ns) {
-            return;
-        }
+    if (!_should_enable_profile()) {
+        return;
     }
 
-    int64_t last_report_tims_ns = _last_report_time_ns.load();
+    bool expect = false;
+    if (!_is_reporting_profile.compare_exchange_strong(expect, true)) {
+        // skip concurrent report
+        return;
+    }
+    DeferOp defer([this]() { _is_reporting_profile.store(false); });
+
     int64_t now = MonotonicNanos();
     bool should_report;
     if (_closed) {
@@ -351,15 +427,41 @@ void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print
         bool old = false;
         should_report = _final_report.compare_exchange_strong(old, true);
     } else {
-        // runtime profile report
-        bool time_to_report = now - last_report_tims_ns >= _runtime_profile_report_interval_ns;
-        should_report = time_to_report && _last_report_time_ns.compare_exchange_strong(last_report_tims_ns, now);
+        // runtime profile report periodically
+        should_report = now - _last_report_time_ns >= _runtime_profile_report_interval_ns;
     }
     if (!should_report) {
         return;
     }
+    _last_report_time_ns.store(now);
+    Status status = _update_and_serialize_profile(result->mutable_load_channel_profile(), print_profile);
+    if (!status.ok()) {
+        result->clear_load_channel_profile();
+    }
+}
+
+void LoadChannel::diagnose(const PLoadDiagnoseRequest* request, PLoadDiagnoseResult* result) {
+    if (request->has_profile() && request->profile()) {
+        Status st = _update_and_serialize_profile(result->mutable_profile_data(), config::pipeline_print_profile);
+        result->mutable_profile_status()->set_status_code(st.code());
+        result->mutable_profile_status()->add_error_msgs(st.to_string());
+        if (!st.ok()) {
+            result->clear_profile_data();
+        }
+        VLOG(2) << "load channel diagnose profile, load_id: " << _load_id << ", txn_id: " << _txn_id
+                << ", status: " << st;
+    }
+}
+
+Status LoadChannel::_update_and_serialize_profile(std::string* result, bool print_profile) {
+    COUNTER_UPDATE(_profile_report_count, 1);
+    SCOPED_TIMER(_profile_report_timer);
 
     COUNTER_SET(_peak_memory_usage, _mem_tracker->peak_consumption());
+    auto channels = _get_all_channels();
+    for (auto& channel : channels) {
+        channel->update_profile();
+    }
     _profile->inc_version();
 
     if (print_profile) {
@@ -377,8 +479,11 @@ void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print
     if (!st.ok()) {
         LOG(ERROR) << "Failed to serialize LoadChannel profile, load_id: " << _load_id << ", txn_id: " << _txn_id
                    << ", status: " << st;
-        return;
+        return Status::InternalError("Failed to serialize profile, error: " + st.to_string());
     }
-    result->set_load_channel_profile((char*)buf, len);
+    COUNTER_UPDATE(_profile_serialized_size, len);
+    result->append((char*)buf, len);
+    VLOG(2) << "report profile, load_id: " << _load_id << ", txn_id: " << _txn_id << ", size: " << len;
+    return Status::OK();
 }
 } // namespace starrocks

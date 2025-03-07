@@ -69,6 +69,9 @@ private:
     void update_realtime_counter(Chunk* chunk);
     void update_counter();
 
+    Status init_column_access_paths(Schema* schema);
+    Status prune_schema_by_access_paths(Schema* schema);
+
 private:
     const LakeDataSourceProvider* _provider;
     const TInternalScanRange _scan_range;
@@ -77,8 +80,7 @@ private:
     // The conjuncts couldn't push down to storage engine
     std::vector<ExprContext*> _not_push_down_conjuncts;
     PredicateTree _non_pushdown_pred_tree;
-    ConjunctivePredicates _not_push_down_predicates;
-    std::vector<uint8_t> _selection;
+    Filter _selection;
 
     ObjectPool _obj_pool;
 
@@ -86,7 +88,7 @@ private:
     const std::vector<SlotDescriptor*>* _slots = nullptr;
     std::vector<std::unique_ptr<OlapScanRange>> _key_ranges;
     std::vector<OlapScanRange*> _scanner_ranges;
-    OlapScanConjunctsManager _conjuncts_manager;
+    std::unique_ptr<ScanConjunctsManager> _conjuncts_manager = nullptr;
 
     lake::VersionedTablet _tablet;
     TabletSchemaCSPtr _tablet_schema;
@@ -102,6 +104,8 @@ private:
 
     // slot descriptors for each one of |output_columns|.
     std::vector<SlotDescriptor*> _query_slots;
+
+    std::vector<ColumnAccessPathPtr> _column_access_paths;
 
     // The following are profile meatures
     int64_t _num_rows_read = 0;
@@ -146,6 +150,7 @@ private:
     RuntimeProfile::Counter* _bi_filtered_counter = nullptr;
     RuntimeProfile::Counter* _bi_filter_timer = nullptr;
     RuntimeProfile::Counter* _pushdown_predicates_counter = nullptr;
+    RuntimeProfile::Counter* _non_pushdown_predicates_counter = nullptr;
     RuntimeProfile::Counter* _rowsets_read_count = nullptr;
     RuntimeProfile::Counter* _segments_read_count = nullptr;
     RuntimeProfile::Counter* _total_columns_data_page_count = nullptr;
@@ -174,6 +179,10 @@ private:
     RuntimeProfile::Counter* _prefetch_hit_counter = nullptr;
     RuntimeProfile::Counter* _prefetch_wait_finish_timer = nullptr;
     RuntimeProfile::Counter* _prefetch_pending_timer = nullptr;
+
+    RuntimeProfile::Counter* _pushdown_access_paths_counter = nullptr;
+    RuntimeProfile::Counter* _access_path_hits_counter = nullptr;
+    RuntimeProfile::Counter* _access_path_unhits_counter = nullptr;
 };
 
 // ================================
@@ -189,16 +198,42 @@ public:
     Status init(ObjectPool* pool, RuntimeState* state) override;
     const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
-    // Make cloud native table behavior same as olap table
-    bool always_shared_scan() const override { return false; }
+    // always enable shared scan for cloud native table
+    bool always_shared_scan() const override { return true; }
 
     StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,
             bool enable_tablet_internal_parallel, TTabletInternalParallelMode::type tablet_internal_parallel_mode,
-            size_t num_total_scan_ranges) override;
+            size_t num_total_scan_ranges, size_t scan_parallelism = 0) override;
 
     // for ut
     void set_lake_tablet_manager(lake::TabletManager* tablet_manager) { _tablet_manager = tablet_manager; }
+
+    // possiable physical distribution optimize of data source
+    bool sorted_by_keys_per_tablet() const override {
+        return _t_lake_scan_node.__isset.sorted_by_keys_per_tablet && _t_lake_scan_node.sorted_by_keys_per_tablet;
+    }
+    bool output_chunk_by_bucket() const override {
+        return _t_lake_scan_node.__isset.output_chunk_by_bucket && _t_lake_scan_node.output_chunk_by_bucket;
+    }
+    bool is_asc_hint() const override {
+        if (!sorted_by_keys_per_tablet() && _t_lake_scan_node.__isset.output_asc_hint) {
+            return _t_lake_scan_node.output_asc_hint;
+        }
+        return true;
+    }
+    std::optional<bool> partition_order_hint() const override {
+        if (!sorted_by_keys_per_tablet() && _t_lake_scan_node.__isset.partition_order_hint) {
+            return _t_lake_scan_node.partition_order_hint;
+        }
+        return std::nullopt;
+    }
+
+    bool could_split() const { return _could_split; }
+
+    bool could_split_physically() const { return _could_split_physically; }
+
+    int64_t get_splitted_scan_rows() const { return splitted_scan_rows; }
 
 protected:
     ConnectorScanNode* _scan_node;
@@ -206,6 +241,10 @@ protected:
 
     // for ut
     lake::TabletManager* _tablet_manager;
+
+    bool _could_split = false;
+    bool _could_split_physically = false;
+    int64_t splitted_scan_rows = 0;
 
 private:
     StatusOr<bool> _could_tablet_internal_parallel(const std::vector<TScanRangeParams>& scan_ranges,

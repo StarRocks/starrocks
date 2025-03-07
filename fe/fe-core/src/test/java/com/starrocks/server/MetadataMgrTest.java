@@ -27,6 +27,7 @@ import com.starrocks.connector.MockedMetadataMgr;
 import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.MockedHiveMetadata;
+import com.starrocks.connector.iceberg.hive.IcebergHiveCatalog;
 import com.starrocks.connector.metadata.MetadataTableName;
 import com.starrocks.connector.metadata.iceberg.LogicalIcebergMetadataTable;
 import com.starrocks.qe.ConnectContext;
@@ -36,6 +37,8 @@ import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
+import mockit.Mock;
+import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient;
 import org.apache.hadoop.hive.metastore.api.Database;
@@ -188,11 +191,10 @@ public class MetadataMgrTest {
         com.starrocks.catalog.Table tbl2 = metadataMgr.getTable("not_exist_catalog", "xxx", "xxx");
         Assert.assertNull(tbl2);
 
-        com.starrocks.catalog.Table tbl3 = metadataMgr.getTable("hive_catalog", "not_exist_db", "xxx");
-        Assert.assertNull(tbl3);
-
-        com.starrocks.catalog.Table tbl4 = metadataMgr.getTable("hive_catalog", "hive_db", "not_exist_tbl");
-        Assert.assertNull(tbl4);
+        Assert.assertThrows(StarRocksConnectorException.class,
+                () -> metadataMgr.getTable("hive_catalog", "not_exist_db", "xxx"));
+        Assert.assertThrows(StarRocksConnectorException.class,
+                () -> metadataMgr.getTable("hive_catalog", "hive_db", "not_exist_tbl"));
     }
 
     @Test
@@ -218,6 +220,9 @@ public class MetadataMgrTest {
                 metadataMgr.getDb("iceberg_catalog", "iceberg_db");
                 result = new com.starrocks.catalog.Database();
                 minTimes = 0;
+
+                metadataMgr.tableExists("iceberg_catalog", "iceberg_db", "iceberg_table");
+                result = false;
             }
         };
 
@@ -418,14 +423,15 @@ public class MetadataMgrTest {
         metadataMgr.dropDb("hive_catalog", "hive_db", false);
     }
 
-    @Test(expected = StarRocksConnectorException.class)
-    public void testGetPrunedPartition() {
-        MetadataMgr metadataMgr = AnalyzeTestUtil.getConnectContext().getGlobalStateMgr().getMetadataMgr();
-        metadataMgr.getPrunedPartitions("hive_catalog", null, null, -1);
-    }
-
     @Test
     public void testGetMetadataTable() throws Exception {
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            boolean tableExists(String dbName, String tableName) {
+                return true;
+            }
+        };
+
         String createIcebergCatalogStmt = "create external catalog iceberg_catalog properties (\"type\"=\"iceberg\", " +
                 "\"hive.metastore.uris\"=\"thrift://hms:9083\", \"iceberg.catalog.type\"=\"hive\")";
         AnalyzeTestUtil.getStarRocksAssert().withCatalog(createIcebergCatalogStmt);

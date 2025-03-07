@@ -36,6 +36,8 @@
 
 #include <gtest/gtest.h>
 
+#include <fstream>
+#include <memory>
 #include <thread>
 
 #include "testutil/assert.h"
@@ -146,7 +148,7 @@ PARALLEL_TEST(StreamLoadPipeTest, append_buffer) {
     StreamLoadPipe pipe(66, 64);
 
     auto appender = [&pipe] {
-        auto buf = ByteBuffer::allocate(64);
+        auto buf = ByteBuffer::allocate_with_tracker(64).value();
         int k = 0;
         for (int j = 0; j < 64; ++j) {
             char c = '0' + (k++ % 10);
@@ -177,13 +179,15 @@ PARALLEL_TEST(StreamLoadPipeTest, append_buffer) {
     ASSERT_TRUE(eof);
 
     t1.join();
+    ASSERT_EQ(1, pipe.num_append_buffers());
+    ASSERT_EQ(64, pipe.append_buffer_bytes());
 }
 
 PARALLEL_TEST(StreamLoadPipeTest, append_and_read_buffer) {
     StreamLoadPipe pipe(66, 64);
 
     auto appender = [&pipe] {
-        auto buf = ByteBuffer::allocate(64);
+        auto buf = ByteBuffer::allocate_with_tracker(64).value();
         int k = 0;
         for (int j = 0; j < 64; ++j) {
             char c = '0' + (k++ % 10);
@@ -209,6 +213,8 @@ PARALLEL_TEST(StreamLoadPipeTest, append_and_read_buffer) {
     ASSERT_TRUE(st.status().is_end_of_file());
 
     t1.join();
+    ASSERT_EQ(1, pipe.num_append_buffers());
+    ASSERT_EQ(64, pipe.append_buffer_bytes());
 }
 
 PARALLEL_TEST(StreamLoadPipeTest, append_large_chunk) {
@@ -232,6 +238,120 @@ PARALLEL_TEST(StreamLoadPipeTest, append_large_chunk) {
     ASSERT_TRUE(eof);
 
     producer.join();
+}
+
+std::vector<char> readFileAsBytes(const std::string& filename) {
+    // Open the file in binary mode
+    std::ifstream file(filename, std::ios::binary);
+
+    // Stop execution if file couldn't be opened
+    if (!file) {
+        throw std::runtime_error("Could not open file");
+    }
+
+    // Seek to the end of the file to find its size
+    file.seekg(0, std::ios::end);
+    std::streamsize size = file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    // Create a vector to hold the bytes of the file
+    std::vector<char> buffer(size);
+
+    // Read the file into the buffer
+    if (!file.read(buffer.data(), size)) {
+        throw std::runtime_error("Error reading file");
+    }
+
+    return buffer;
+}
+
+PARALLEL_TEST(StreamLoadPipeTest, compressed_reader) {
+    auto pipe = std::make_shared<StreamLoadPipe>();
+
+    auto producer = std::thread([&pipe]() {
+        // append data with size larger than max_buffered_bytes
+        auto buf = readFileAsBytes("./be/test/runtime/test_data/compressed_file/foo.json.lz4");
+        EXPECT_OK(pipe->append(buf.data(), buf.size()));
+        pipe->finish();
+    });
+
+    CompressedStreamLoadPipeReader reader(pipe, TCompressionType::LZ4_FRAME);
+
+    auto res = reader.read();
+    EXPECT_OK(res.status());
+    auto buf = res.value();
+    EXPECT_EQ(buf->remaining(), 42000021);
+    EXPECT_EQ(std::string_view(R"({"foo": 1, "bar": 2})"), std::string_view(buf->ptr, 20));
+    producer.join();
+}
+
+PARALLEL_TEST(StreamLoadPipeTest, append_after_finish) {
+    StreamLoadPipe pipe(66, 64);
+
+    auto buf1 = ByteBuffer::allocate_with_tracker(64).value();
+    for (int j = 0; j < 64; ++j) {
+        char c = '0' + j;
+        buf1->put_bytes(&c, sizeof(c));
+    }
+    buf1->flip();
+    ASSERT_OK(pipe.append(std::move(buf1)));
+
+    auto appender = [&pipe] {
+        while (pipe.num_waiting_append_buffer() == 0) {
+            SleepFor(MonoDelta::FromMilliseconds(1));
+        }
+        EXPECT_OK(pipe.finish());
+    };
+    std::thread t1(appender);
+
+    auto buf2 = ByteBuffer::allocate_with_tracker(64).value();
+    for (int j = 0; j < 64; ++j) {
+        char c = '0' + j;
+        buf2->put_bytes(&c, sizeof(c));
+    }
+    buf2->flip();
+    EXPECT_TRUE(pipe.append(std::move(buf2)).is_capacity_limit_exceeded());
+    t1.join();
+}
+
+PARALLEL_TEST(StreamLoadPipeTest, non_blocking_read) {
+    StreamLoadPipe pipe(true, 50, 1000, 1000);
+
+    ASSERT_TRUE(pipe.read().status().is_time_out());
+
+    auto buf = ByteBuffer::allocate_with_tracker(64).value();
+    for (int j = 0; j < 64; ++j) {
+        char c = '0' + j;
+        buf->put_bytes(&c, sizeof(c));
+    }
+    buf->flip();
+    ASSERT_OK(pipe.append(std::move(buf)));
+
+    auto ret = pipe.read();
+    ASSERT_TRUE(ret.ok());
+    auto read_buf = ret.value();
+    ASSERT_EQ(64, read_buf->limit);
+    for (int i = 0; i < read_buf->limit; ++i) {
+        ASSERT_EQ('0' + i, *(read_buf->ptr + i));
+    }
+
+    ASSERT_TRUE(pipe.read().status().is_time_out());
+}
+
+PARALLEL_TEST(StreamLoadPipeTest, non_blocking_cancel_with_ok_status) {
+    StreamLoadPipe pipe(true, 50, 1000, 1000);
+    for (int i = 0; i < 10; ++i) {
+        char buf = '0' + i;
+        pipe.append(&buf, 1);
+    }
+    pipe.cancel(Status::OK());
+    auto st = pipe.read();
+    ASSERT_TRUE(st.status().is_cancelled());
+
+    char read_buf[128];
+    size_t buf_len = 128;
+    bool eof = false;
+    ASSERT_TRUE(pipe.read((uint8_t*)read_buf, &buf_len, &eof).is_cancelled());
 }
 
 } // namespace starrocks

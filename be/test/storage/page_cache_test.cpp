@@ -36,152 +36,165 @@
 
 #include <gtest/gtest.h>
 
-#include "runtime/mem_tracker.h"
+#include "testutil/assert.h"
 
 namespace starrocks {
 
 class StoragePageCacheTest : public testing::Test {
-public:
-    StoragePageCacheTest() { _mem_tracker = std::make_unique<MemTracker>(); }
+protected:
+    StoragePageCacheTest() = default;
     ~StoragePageCacheTest() override = default;
 
-private:
-    std::unique_ptr<MemTracker> _mem_tracker = nullptr;
+    void SetUp() override;
+    void create_obj_cache(size_t capacity);
+
+    std::shared_ptr<ObjectCache> _obj_cache;
+    std::shared_ptr<StoragePageCache> _page_cache;
+    size_t _capacity = kNumShards * 2048;
 };
+
+void StoragePageCacheTest::SetUp() {
+    create_obj_cache(_capacity);
+    _page_cache = std::make_shared<StoragePageCache>(_obj_cache.get());
+}
+
+void StoragePageCacheTest::create_obj_cache(size_t capacity) {
+    ObjectCacheOptions options;
+    options.capacity = capacity;
+    options.module = ObjectCacheModuleType::LRUCACHE;
+
+    _obj_cache = std::make_shared<ObjectCache>();
+    ASSERT_OK(_obj_cache->init(options));
+}
 
 // NOLINTNEXTLINE
 TEST_F(StoragePageCacheTest, normal) {
-    StoragePageCache cache(_mem_tracker.get(), kNumShards * 2048);
-
-    StoragePageCache::CacheKey key("abc", 0);
-    StoragePageCache::CacheKey memory_key("mem", 0);
-
     {
         // insert normal page
-        char* buf = new char[1024];
+        StoragePageCache::CacheKey key("abc", 0);
+        Slice data(new char[1024], 1024);
         PageCacheHandle handle;
-        Slice data(buf, 1024);
-        cache.insert(key, data, &handle, false);
 
-        ASSERT_EQ(handle.data().data, buf);
+        ASSERT_OK(_page_cache->insert(key, data, &handle, false));
+        ASSERT_EQ(handle.data().data, data.data);
 
-        auto found = cache.lookup(key, &handle);
-        ASSERT_TRUE(found);
-        ASSERT_EQ(buf, handle.data().data);
+        ASSERT_TRUE(_page_cache->lookup(key, &handle));
+        ASSERT_EQ(data.data, handle.data().data);
     }
 
     {
         // insert in_memory page
-        char* buf = new char[1024];
+        StoragePageCache::CacheKey memory_key("mem", 0);
+        Slice data(new char[1024], 1024);
         PageCacheHandle handle;
-        Slice data(buf, 1024);
-        cache.insert(memory_key, data, &handle, true);
 
-        ASSERT_EQ(handle.data().data, buf);
+        ASSERT_OK(_page_cache->insert(memory_key, data, &handle, true));
+        ASSERT_EQ(handle.data().data, data.data);
 
-        auto found = cache.lookup(memory_key, &handle);
-        ASSERT_TRUE(found);
+        ASSERT_TRUE(_page_cache->lookup(memory_key, &handle));
     }
 
     // put too many page to eliminate first page
     for (int i = 0; i < 10 * kNumShards; ++i) {
         StoragePageCache::CacheKey key("bcd", i);
-        PageCacheHandle handle;
         Slice data(new char[1024], 1024);
-        cache.insert(key, data, &handle, false);
+        PageCacheHandle handle;
+        ASSERT_OK(_page_cache->insert(key, data, &handle, false));
     }
 
     // cache miss
     {
         PageCacheHandle handle;
         StoragePageCache::CacheKey miss_key("abc", 1);
-        auto found = cache.lookup(miss_key, &handle);
+        auto found = _page_cache->lookup(miss_key, &handle);
         ASSERT_FALSE(found);
     }
 
     // cache miss for eliminated key
     {
+        StoragePageCache::CacheKey key("abc", 0);
         PageCacheHandle handle;
-        auto found = cache.lookup(key, &handle);
-        ASSERT_FALSE(found);
+        ASSERT_FALSE(_page_cache->lookup(key, &handle));
     }
 
     // set capacity
     {
-        size_t ori = cache.get_capacity();
-        cache.set_capacity(ori / 2);
-        ASSERT_EQ(ori / 2, cache.get_capacity());
-        cache.set_capacity(ori);
+        size_t ori = _page_cache->get_capacity();
+        _page_cache->set_capacity(ori / 2);
+        ASSERT_EQ(ori / 2, _page_cache->get_capacity());
+        _page_cache->set_capacity(ori);
     }
 
     // adjust capacity
     {
-        size_t ori = cache.get_capacity();
+        size_t ori = _page_cache->get_capacity();
         for (int i = 1; i <= 10; i++) {
-            cache.adjust_capacity(32);
-            ASSERT_EQ(cache.get_capacity(), ori + 32 * i);
+            _page_cache->adjust_capacity(32);
+            ASSERT_EQ(_page_cache->get_capacity(), ori + 32 * i);
         }
-        cache.set_capacity(ori);
+        _page_cache->set_capacity(ori);
         for (int i = 1; i <= 10; i++) {
-            cache.adjust_capacity(-32);
-            ASSERT_EQ(cache.get_capacity(), ori - 32 * i);
+            _page_cache->adjust_capacity(-32);
+            ASSERT_EQ(_page_cache->get_capacity(), ori - 32 * i);
         }
-        cache.set_capacity(ori);
+        _page_cache->set_capacity(ori);
 
         int64_t delta = ori;
-        ASSERT_FALSE(cache.adjust_capacity(-delta / 2, ori));
-        ASSERT_EQ(cache.get_capacity(), ori);
-        ASSERT_TRUE(cache.adjust_capacity(-delta / 2, ori / 4));
-        cache.set_capacity(ori);
+        ASSERT_FALSE(_page_cache->adjust_capacity(-delta / 2, ori));
+        ASSERT_EQ(_page_cache->get_capacity(), ori);
+        ASSERT_TRUE(_page_cache->adjust_capacity(-delta / 2, ori / 4));
+        _page_cache->set_capacity(ori);
 
         // overflow
-        cache.set_capacity(kNumShards);
-        ASSERT_FALSE(cache.adjust_capacity(-2 * kNumShards, 0));
+        _page_cache->set_capacity(kNumShards);
+        ASSERT_FALSE(_page_cache->adjust_capacity(-2 * kNumShards, 0));
     }
 
     // set capactity = 0
     {
-        cache.set_capacity(0);
-        ASSERT_EQ(cache.get_capacity(), 0);
+        _page_cache->set_capacity(0);
+        ASSERT_EQ(_page_cache->get_capacity(), 0);
     }
 }
 
 TEST_F(StoragePageCacheTest, metrics) {
-    StoragePageCache cache(_mem_tracker.get(), kNumShards * 2048);
-
-    // Insert a piece of data, but the application layer does not release it.
     StoragePageCache::CacheKey key1("abc", 0);
-    char* buf = new char[1024];
-    PageCacheHandle handle;
-    Slice data(buf, 1024);
-    cache.insert(key1, data, &handle, false);
-
     StoragePageCache::CacheKey key2("def", 0);
+    PageCacheHandle handle1;
+
+    {
+        // Insert a piece of data, but the application layer does not release it.
+        Slice data(new char[1024], 1024);
+        ASSERT_OK(_page_cache->insert(key1, data, &handle1, false));
+    }
+
     {
         // Insert another piece of data and release it from the application layer.
-        char* buf = new char[1024];
-        PageCacheHandle handle;
-        Slice data(buf, 1024);
-        cache.insert(key2, data, &handle, false);
+        Slice data(new char[1024], 1024);
+        PageCacheHandle handle2;
+        ASSERT_OK(_page_cache->insert(key2, data, &handle2, false));
     }
 
-    // At this point the cache should have two entries, one for user owner and one for cache Owenr.
-    PageCacheHandle handle1;
-    auto found = cache.lookup(key1, &handle);
-    ASSERT_TRUE(found);
-    PageCacheHandle handle2;
-    found = cache.lookup(key2, &handle2);
-    ASSERT_TRUE(found);
-    ASSERT_EQ(cache.get_lookup_count(), 2);
-    ASSERT_EQ(cache.get_hit_count(), 2);
-    // Test the cache miss
-    for (int i = 0; i < 1024; i++) {
-        PageCacheHandle handle;
-        StoragePageCache::CacheKey key(std::to_string(i), 0);
-        cache.lookup(key, &handle);
+    {
+        // At this point the cache should have two entries, one for user owner and one for cache owner.
+        PageCacheHandle handle3;
+        ASSERT_TRUE(_page_cache->lookup(key1, &handle3));
+        PageCacheHandle handle4;
+        ASSERT_TRUE(_page_cache->lookup(key2, &handle4));
+
+        ASSERT_EQ(_page_cache->get_lookup_count(), 2);
+        ASSERT_EQ(_page_cache->get_hit_count(), 2);
+
+        // Test the cache miss
+        for (int i = 0; i < 1024; i++) {
+            PageCacheHandle handle;
+            StoragePageCache::CacheKey key(std::to_string(i), 0);
+            ASSERT_FALSE(_page_cache->lookup(key, &handle));
+        }
+
+        ASSERT_EQ(_page_cache->get_lookup_count(), 2 + 1024);
+        ASSERT_EQ(_page_cache->get_hit_count(), 2);
     }
-    ASSERT_EQ(cache.get_lookup_count(), 2 + 1024);
-    ASSERT_EQ(cache.get_hit_count(), 2);
 }
 
 } // namespace starrocks

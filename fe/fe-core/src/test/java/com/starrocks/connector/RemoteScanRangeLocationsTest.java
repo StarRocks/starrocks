@@ -15,14 +15,13 @@
 package com.starrocks.connector;
 
 import com.starrocks.common.Pair;
-import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.DefaultCoordinator;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.THdfsScanRange;
 import com.starrocks.thrift.TScanRange;
-import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.thrift.TScanRangeParams;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
 import org.junit.Assert;
@@ -53,16 +52,31 @@ public class RemoteScanRangeLocationsTest extends PlanTestBase {
 
         {
             connectContext.getSessionVariable().setEnableConnectorSplitIoTasks(true);
+            connectContext.getSessionVariable().setConnectorHugeFileSize(1024 * 1024 * 1024);
+            connectContext.getSessionVariable().setConnectorMaxSplitSize(64 * 1024 * 1024);
+            // in this case, if we split in huge file size, we will get two splits
+            // which is not suitable for backend split, then it will fall back to fe split.
+            // 2 * 1G / 64MB = 32
             Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
-            List<TScanRangeLocations> scanRangeLocations = pair.second.getFragments().get(1).collectScanNodes()
-                    .get(new PlanNodeId(0)).getScanRangeLocations(100);
-            Assert.assertEquals(2, scanRangeLocations.size());
+            List<TScanRangeParams> scanRangeLocations = collectAllScanRangeParams(pair.second);
+            Assert.assertEquals(32, scanRangeLocations.size());
+        }
+        {
+            connectContext.getSessionVariable().setEnableConnectorSplitIoTasks(true);
+            // in this case, if we split in huge file size, we will get 4 splits
+            // which is suitable for backend split.
+            // 2 * 1G / 512MB = 4
+            connectContext.getSessionVariable().setConnectorHugeFileSize(512 * 1024 * 1024);
+            connectContext.getSessionVariable().setConnectorMaxSplitSize(64 * 1024 * 1024);
+            Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
+            List<TScanRangeParams> scanRangeLocations = collectAllScanRangeParams(pair.second);
+            Assert.assertEquals(4, scanRangeLocations.size());
         }
         {
             connectContext.getSessionVariable().setEnableConnectorSplitIoTasks(false);
+            connectContext.getSessionVariable().setConnectorMaxSplitSize(512 * 1024 * 1024);
             Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
-            List<TScanRangeLocations> scanRangeLocations = pair.second.getFragments().get(1).collectScanNodes()
-                    .get(new PlanNodeId(0)).getScanRangeLocations(100);
+            List<TScanRangeParams> scanRangeLocations = collectAllScanRangeParams(pair.second);
             Assert.assertEquals(4, scanRangeLocations.size());
             scanRangeLocations.sort((o1, o2) -> {
                 THdfsScanRange scanRange1 = o1.scan_range.hdfs_scan_range;
@@ -87,8 +101,7 @@ public class RemoteScanRangeLocationsTest extends PlanTestBase {
 
         String executeSql = "select * from hive0.file_split_db.file_split_tbl;";
         Pair<String, DefaultCoordinator> pair = UtFrameUtils.getPlanAndStartScheduling(connectContext, executeSql);
-        List<TScanRangeLocations> scanRangeLocations = pair.second.getFragments().get(1).collectScanNodes()
-                .get(new PlanNodeId(0)).getScanRangeLocations(100);
+        List<TScanRangeParams> scanRangeLocations = collectAllScanRangeParams(pair.second);
         Assert.assertEquals(8, scanRangeLocations.size());
 
         scanRangeLocations.sort((o1, o2) -> {

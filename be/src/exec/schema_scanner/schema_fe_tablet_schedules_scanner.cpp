@@ -23,21 +23,21 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaFeTabletSchedulesScanner::_s_columns[] = {
-        {"TABLE_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"PARTITION_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"TABLET_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PRIORITY", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"STATE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLET_STATUS", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CREATE_TIME", TYPE_DOUBLE, sizeof(double), false},
-        {"SCHEDULE_TIME", TYPE_DOUBLE, sizeof(double), false},
-        {"FINISH_TIME", TYPE_DOUBLE, sizeof(double), false},
-        {"CLONE_SRC", TYPE_BIGINT, sizeof(int64_t), false},
-        {"CLONE_DEST", TYPE_BIGINT, sizeof(int64_t), false},
-        {"CLONE_BYTES", TYPE_BIGINT, sizeof(int64_t), false},
-        {"CLONE_DURATION", TYPE_DOUBLE, sizeof(double), false},
-        {"MSG", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"TABLE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"PARTITION_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TABLET_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PRIORITY", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLET_STATUS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
+        {"SCHEDULE_TIME", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
+        {"FINISH_TIME", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
+        {"CLONE_SRC", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"CLONE_DEST", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"CLONE_BYTES", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"CLONE_DURATION", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
+        {"MSG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 };
 
 SchemaFeTabletSchedulesScanner::SchemaFeTabletSchedulesScanner()
@@ -70,12 +70,10 @@ Status SchemaFeTabletSchedulesScanner::start(RuntimeState* state) {
     if (nullptr != _param->current_user_ident) {
         request.__set_current_user_ident(*(_param->current_user_ident));
     }
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_tablet_schedules(*(_param->ip), _param->port, request, &response));
-        _infos.swap(response.tablet_schedules);
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_tablet_schedules(_ss_state, request, &response));
+    _infos.swap(response.tablet_schedules);
     return Status::OK();
 }
 

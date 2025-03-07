@@ -14,38 +14,30 @@
 
 #pragma once
 
+#include <future>
+#include <queue>
 #include <string>
 #include <vector>
 
 #include "common/statusor.h"
-#include "connector_chunk_sink.h"
 #include "exprs/expr_context.h"
 #include "fmt/format.h"
 #include "formats/column_evaluator.h"
 #include "formats/parquet/parquet_file_writer.h"
+#include "formats/utils.h"
+#include "fs/fs.h"
 #include "runtime/types.h"
 
 namespace starrocks::connector {
-
-class LocationProvider;
 
 class HiveUtils {
 public:
     static StatusOr<std::string> make_partition_name(
             const std::vector<std::string>& column_names,
-            const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk);
+            const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk,
+            bool support_null_partition);
 
-    static StatusOr<std::string> make_partition_name_nullable(
-            const std::vector<std::string>& column_names,
-            const std::vector<std::unique_ptr<ColumnEvaluator>>& column_evaluators, Chunk* chunk);
-
-    static StatusOr<ConnectorChunkSink::Futures> hive_style_partitioning_write_chunk(
-            const ChunkPtr& chunk, bool partitioned, const std::string& partition, int64_t max_file_size,
-            const formats::FileWriterFactory* file_writer_factory, LocationProvider* location_provider,
-            std::map<std::string, std::shared_ptr<formats::FileWriter>>& partition_writers);
-
-private:
-    static StatusOr<std::string> column_value(const TypeDescriptor& type_desc, const ColumnPtr& column);
+    static StatusOr<std::string> column_value(const TypeDescriptor& type_desc, const ColumnPtr& column, int idx);
 };
 
 class IcebergUtils {

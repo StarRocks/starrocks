@@ -15,13 +15,14 @@
 package com.starrocks.http.rest.transaction;
 
 import com.starrocks.common.DdlException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.rest.TransactionResult;
 import com.starrocks.http.rest.transaction.TransactionOperationParams.Channel;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.lang3.Validate;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -41,7 +42,7 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
     }
 
     @Override
-    public ResultWrapper handle(BaseRequest request, BaseResponse response) throws UserException {
+    public ResultWrapper handle(BaseRequest request, BaseResponse response) throws StarRocksException {
         TransactionOperation txnOperation = txnOperationParams.getTxnOperation();
         String dbName = txnOperationParams.getDbName();
         String tableName = txnOperationParams.getTableName();
@@ -57,9 +58,12 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
                     throw new DdlException(String.format(
                             "Channel ID should be between [0, %d].", (channel.getNum() - 1)));
                 }
-
-                GlobalStateMgr.getCurrentState().getStreamLoadMgr().beginLoadTask(
-                        dbName, tableName, label, timeoutMillis, channel.getNum(), channel.getId(), result);
+                String warehouseName = txnOperationParams.getWarehouseName();
+                Warehouse warehouse =
+                        GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
+                GlobalStateMgr.getCurrentState().getStreamLoadMgr().beginLoadTaskFromFrontend(
+                        dbName, tableName, label, "", "", timeoutMillis, channel.getNum(), channel.getId(), result,
+                        warehouse.getId());
                 return new ResultWrapper(result);
             case TXN_PREPARE:
                 GlobalStateMgr.getCurrentState().getStreamLoadMgr().prepareLoadTask(
@@ -84,7 +88,7 @@ public class TransactionWithChannelHandler implements TransactionOperationHandle
                 }
                 return new ResultWrapper(redirectAddr);
             default:
-                throw new UserException("Unsupported operation: " + txnOperation);
+                throw new StarRocksException("Unsupported operation: " + txnOperation);
         }
     }
 }

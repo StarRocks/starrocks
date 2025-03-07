@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # DataGrip
@@ -8,9 +8,9 @@ DataGrip 支持查询 StarRocks 中的内部数据和外部数据。
 
 在 DataGrip 中创建数据源。注意创建过程中需要选择 **MySQL** 作为数据源 (**Data** **Source**)。
 
-![DataGrip - 1](../../assets/BI_datagrip_1.png)
+![DataGrip - 1](../../_assets/BI_datagrip_1.png)
 
-![DataGrip - 2](../../assets/BI_datagrip_2.png)
+![DataGrip - 2](../../_assets/BI_datagrip_2.png)
 
 需要设置的参数说明如下：
 

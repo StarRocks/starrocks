@@ -19,6 +19,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.persist.TaskRunStatus;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -39,6 +40,8 @@ public class TaskRunExecutor {
         }
         TaskRunStatus status = taskRun.getStatus();
         if (status == null) {
+            LOG.warn("TaskRun {}/{} has no state, avoid execute it again", status.getTaskName(),
+                    status.getQueryId());
             return false;
         }
         if (status.getState() != Constants.TaskRunState.PENDING) {
@@ -47,10 +50,11 @@ public class TaskRunExecutor {
             return false;
         }
 
+        // Synchronously update the status, to make sure they can be persisted
+        status.setState(Constants.TaskRunState.RUNNING);
+        status.setProcessStartTime(System.currentTimeMillis());
+
         CompletableFuture<Constants.TaskRunState> future = CompletableFuture.supplyAsync(() -> {
-            status.setState(Constants.TaskRunState.RUNNING);
-            // set process start time
-            status.setProcessStartTime(System.currentTimeMillis());
             try {
                 boolean isSuccess = taskRun.executeTaskRun();
                 if (isSuccess) {
@@ -67,6 +71,7 @@ public class TaskRunExecutor {
                 // NOTE: Ensure this thread local is removed after this method to avoid memory leak in JVM.
                 ConnectContext.remove();
                 status.setFinishTime(System.currentTimeMillis());
+                WarehouseIdleChecker.updateJobLastFinishTime(taskRun.getRunCtx().getCurrentWarehouseId());
             }
             return status.getState();
         }, taskRunPool);

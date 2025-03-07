@@ -25,4 +25,9 @@ public class AnalyzeBasicDesc extends AnalyzeTypeDesc {
     public AnalyzeBasicDesc(NodePosition pos) {
         super(pos);
     }
+
+    @Override
+    public boolean isBasic() {
+        return true;
+    }
 }

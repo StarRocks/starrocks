@@ -17,6 +17,7 @@
 
 package com.starrocks.transaction;
 
+import com.starrocks.proto.TransactionStatusPB;
 import com.starrocks.thrift.TTransactionStatus;
 
 import java.util.Arrays;
@@ -64,6 +65,31 @@ public enum TransactionStatus {
                 return TTransactionStatus.PREPARED;
             default:
                 return TTransactionStatus.UNKNOWN;
+        }
+    }
+
+    public TransactionStatusPB toProto() {
+        switch (this.getFlag()) {
+            // UNKNOWN
+            case 0:
+                return TransactionStatusPB.TRANS_UNKNOWN;
+            // PREPARE
+            case 1:
+                return TransactionStatusPB.TRANS_PREPARE;
+            // COMMITTED
+            case 2:
+                return TransactionStatusPB.TRANS_COMMITTED;
+            // VISIBLE
+            case 3:
+                return TransactionStatusPB.TRANS_VISIBLE;
+            // ABORTED
+            case 4:
+                return TransactionStatusPB.TRANS_ABORTED;
+            // PREPARED
+            case 5:
+                return TransactionStatusPB.TRANS_PREPARED;
+            default:
+                return TransactionStatusPB.TRANS_UNKNOWN;
         }
     }
 

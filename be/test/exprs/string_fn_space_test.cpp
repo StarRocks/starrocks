@@ -28,7 +28,7 @@ TEST_F(StringFunctionSpaceTest, spaceTest) {
         times->append(j);
     }
 
-    columns.emplace_back(times);
+    columns.emplace_back(std::move(times));
 
     ColumnPtr result = StringFunctions::space(ctx.get(), columns).value();
     ASSERT_EQ(20, result->size());
@@ -116,9 +116,9 @@ TEST_F(StringFunctionSpaceTest, spaceNullableColumnTest) {
         times_col->append(times);
         null_col->append(is_null);
     }
-    Columns columns{NullableColumn::create(times_col, null_col)};
-    auto result = StringFunctions::space(ctx.get(), columns).value();
     const auto num_rows = times_col->size();
+    Columns columns{NullableColumn::create(std::move(times_col), std::move(null_col))};
+    auto result = StringFunctions::space(ctx.get(), columns).value();
     ASSERT_EQ(result->size(), num_rows);
     ASSERT_TRUE(num_rows - start_row > 0);
     for (int i = start_row; i < num_rows; ++i) {

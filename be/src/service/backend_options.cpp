@@ -37,7 +37,14 @@ TBackend BackendOptions::_backend;
 bool BackendOptions::_bind_ipv6 = false;
 const char* _service_bind_address = "0.0.0.0";
 
-bool BackendOptions::init() {
+bool BackendOptions::_is_cn = false;
+
+bool BackendOptions::is_cn() {
+    return _is_cn;
+}
+
+bool BackendOptions::init(bool is_cn) {
+    _is_cn = is_cn;
     if (!analyze_priority_cidrs()) {
         return false;
     }

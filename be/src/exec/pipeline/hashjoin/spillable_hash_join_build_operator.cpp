@@ -20,9 +20,12 @@
 #include "column/column_helper.h"
 #include "column/vectorized_fwd.h"
 #include "common/statusor.h"
+#include "exec/hash_join_components.h"
 #include "exec/hash_join_node.h"
+#include "exec/hash_joiner.h"
 #include "exec/join_hash_map.h"
 #include "exec/pipeline/hashjoin/hash_join_build_operator.h"
+#include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/spill/options.h"
 #include "exec/spill/spiller.h"
@@ -54,13 +57,13 @@ void SpillableHashJoinBuildOperator::close(RuntimeState* state) {
 
 size_t SpillableHashJoinBuildOperator::estimated_memory_reserved(const ChunkPtr& chunk) {
     if (chunk && !chunk->is_empty()) {
-        return chunk->memory_usage() + _join_builder->hash_join_builder()->hash_table().mem_usage();
+        return chunk->memory_usage() + _join_builder->hash_join_builder()->ht_mem_usage();
     }
     return 0;
 }
 
 size_t SpillableHashJoinBuildOperator::estimated_memory_reserved() {
-    return _join_builder->hash_join_builder()->hash_table().mem_usage() * 2;
+    return _join_builder->hash_join_builder()->ht_mem_usage() * 2;
 }
 
 bool SpillableHashJoinBuildOperator::need_input() const {
@@ -72,8 +75,7 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
     auto defer_set_finishing = DeferOp([this]() { _join_builder->spill_channel()->set_finishing(); });
 
     if (spill_strategy() == spill::SpillStrategy::NO_SPILL ||
-        (!_join_builder->spiller()->spilled() &&
-         _join_builder->hash_join_builder()->hash_table().get_row_count() == 0)) {
+        (!_join_builder->spiller()->spilled() && _join_builder->hash_join_builder()->hash_table_row_count() == 0)) {
         return HashJoinBuildOperator::set_finishing(state);
     }
 
@@ -83,10 +85,8 @@ Status SpillableHashJoinBuildOperator::set_finishing(RuntimeState* state) {
     if (!_join_builder->spiller()->spilled()) {
         DCHECK(_is_first_time_spill);
         _is_first_time_spill = false;
-        auto& ht = _join_builder->hash_join_builder()->hash_table();
-        RETURN_IF_ERROR(init_spiller_partitions(state, ht));
-
-        _hash_table_slice_iterator = _convert_hash_map_to_chunk();
+        RETURN_IF_ERROR(init_spiller_partitions(state, _join_builder->hash_join_builder()));
+        ASSIGN_OR_RETURN(_hash_table_slice_iterator, _convert_hash_map_to_chunk());
         RETURN_IF_ERROR(_join_builder->append_spill_task(state, _hash_table_slice_iterator));
     }
 
@@ -169,14 +169,15 @@ Status SpillableHashJoinBuildOperator::append_hash_columns(const ChunkPtr& chunk
         ASSIGN_OR_RETURN(auto res, expr_ctx->evaluate(chunk.get()));
         res->fnv_hash(hash_values.data(), 0, num_rows);
     }
-    chunk->append_column(std::move(hash_column), -1);
+    chunk->append_column(std::move(hash_column), Chunk::HASH_JOIN_SPILL_HASH_SLOT_ID);
     return Status::OK();
 }
 
-Status SpillableHashJoinBuildOperator::init_spiller_partitions(RuntimeState* state, JoinHashTable& ht) {
-    if (ht.get_row_count() > 0) {
+Status SpillableHashJoinBuildOperator::init_spiller_partitions(RuntimeState* state, HashJoinBuilder* builder) {
+    if (builder->hash_table_row_count() > 0) {
         // We estimate the size of the hash table to be twice the size of the already input hash table
-        auto num_partitions = ht.mem_usage() * 2 / _join_builder->spiller()->options().spill_mem_table_bytes_size;
+        auto num_partitions =
+                builder->ht_mem_usage() * 2 / _join_builder->spiller()->options().spill_mem_table_bytes_size;
         _join_builder->spiller()->set_partition(state, num_partitions);
     }
     return Status::OK();
@@ -188,7 +189,7 @@ bool SpillableHashJoinBuildOperator::is_finished() const {
 
 Status SpillableHashJoinBuildOperator::push_chunk(RuntimeState* state, const ChunkPtr& chunk) {
     DeferOp update_revocable_bytes{
-            [this]() { set_revocable_mem_bytes(_join_builder->hash_join_builder()->hash_table().mem_usage()); }};
+            [this]() { set_revocable_mem_bytes(_join_builder->hash_join_builder()->ht_mem_usage()); }};
 
     if (spill_strategy() == spill::SpillStrategy::NO_SPILL) {
         return HashJoinBuildOperator::push_chunk(state, chunk);
@@ -198,20 +199,19 @@ Status SpillableHashJoinBuildOperator::push_chunk(RuntimeState* state, const Chu
         return Status::OK();
     }
 
-    auto& ht = _join_builder->hash_join_builder()->hash_table();
     // Estimate the appropriate number of partitions
     if (_is_first_time_spill) {
-        RETURN_IF_ERROR(init_spiller_partitions(state, ht));
+        RETURN_IF_ERROR(init_spiller_partitions(state, _join_builder->hash_join_builder()));
     }
 
-    ASSIGN_OR_RETURN(auto spill_chunk, ht.convert_to_spill_schema(chunk));
+    auto spill_chunk = _join_builder->hash_join_builder()->convert_to_spill_schema(chunk);
     RETURN_IF_ERROR(append_hash_columns(spill_chunk));
 
     RETURN_IF_ERROR(_join_builder->append_chunk_to_spill_buffer(state, spill_chunk));
 
     if (_is_first_time_spill) {
         _is_first_time_spill = false;
-        _hash_table_slice_iterator = _convert_hash_map_to_chunk();
+        ASSIGN_OR_RETURN(_hash_table_slice_iterator, _convert_hash_map_to_chunk());
         RETURN_IF_ERROR(_join_builder->append_spill_task(state, _hash_table_slice_iterator));
     }
 
@@ -224,21 +224,47 @@ void SpillableHashJoinBuildOperator::set_execute_mode(int performance_level) {
     }
 }
 
-std::function<StatusOr<ChunkPtr>()> SpillableHashJoinBuildOperator::_convert_hash_map_to_chunk() {
-    auto build_chunk = _join_builder->hash_join_builder()->hash_table().get_build_chunk();
-    DCHECK_GT(build_chunk->num_rows(), 0);
+void SpillableHashJoinBuildOperator::set_spill_strategy(spill::SpillStrategy strategy) {
+    _join_builder->set_spill_strategy(strategy);
+}
 
-    auto st = build_chunk->upgrade_if_overflow();
-    _hash_table_build_chunk_slice.reset(build_chunk);
+spill::SpillStrategy SpillableHashJoinBuildOperator::spill_strategy() const {
+    return _join_builder->spill_strategy();
+}
+
+StatusOr<std::function<StatusOr<ChunkPtr>()>> SpillableHashJoinBuildOperator::_convert_hash_map_to_chunk() {
+    _hash_tables.clear();
+    _hash_table_iterate_idx = 0;
+
+    _join_builder->hash_join_builder()->visitHt([this](JoinHashTable* ht) { _hash_tables.push_back(ht); });
+
+    for (auto* ht : _hash_tables) {
+        auto build_chunk = ht->get_build_chunk();
+        DCHECK_GT(build_chunk->num_rows(), 0);
+        RETURN_IF_ERROR(build_chunk->upgrade_if_overflow());
+    }
+
+    _hash_table_build_chunk_slice.reset(_hash_tables[_hash_table_iterate_idx]->get_build_chunk());
     _hash_table_build_chunk_slice.skip(kHashJoinKeyColumnOffset);
 
-    return [this, st]() -> StatusOr<ChunkPtr> {
-        RETURN_IF_ERROR(st);
+    return [this]() -> StatusOr<ChunkPtr> {
         if (_hash_table_build_chunk_slice.empty()) {
-            _join_builder->hash_join_builder()->reset(_join_builder->hash_table_param());
-            return Status::EndOfFile("eos");
+            _hash_table_iterate_idx++;
+            for (; _hash_table_iterate_idx < _hash_tables.size(); _hash_table_iterate_idx++) {
+                auto build_chunk = _hash_tables[_hash_table_iterate_idx]->get_build_chunk();
+                if (build_chunk->num_rows() > 0) {
+                    _hash_table_build_chunk_slice.reset(build_chunk);
+                    _hash_table_build_chunk_slice.skip(kHashJoinKeyColumnOffset);
+                    break;
+                }
+            }
+            if (_hash_table_build_chunk_slice.empty()) {
+                _join_builder->hash_join_builder()->reset(_join_builder->hash_table_param());
+                return Status::EndOfFile("eos");
+            }
         }
-        auto chunk = _hash_table_build_chunk_slice.cutoff(runtime_state()->chunk_size());
+
+        ChunkPtr chunk = _hash_table_build_chunk_slice.cutoff(runtime_state()->chunk_size());
         RETURN_IF_ERROR(chunk->downgrade());
         RETURN_IF_ERROR(append_hash_columns(chunk));
         _join_builder->update_build_rows(chunk->num_rows());
@@ -266,6 +292,9 @@ Status SpillableHashJoinBuildOperatorFactory::prepare(RuntimeState* state) {
             _hash_joiner_factory->hash_join_param()._distribution_mode == TJoinDistributionMode::BROADCAST ||
             _hash_joiner_factory->hash_join_param()._distribution_mode == TJoinDistributionMode::LOCAL_HASH_BUCKET ||
             state->fragment_ctx()->enable_adaptive_dop();
+
+    _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
+    _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
 
     const auto& param = _hash_joiner_factory->hash_join_param();
 

@@ -38,48 +38,27 @@
 
 #include "agent/master_info.h"
 #include "common/status.h"
+#include "util/thrift_rpc_helper.h"
 
 using std::map;
 using std::string;
 using std::stringstream;
 using std::vector;
-using apache::thrift::TException;
-using apache::thrift::transport::TTransportException;
 
 namespace starrocks {
-
-MasterServerClient::MasterServerClient(FrontendServiceClientCache* client_cache) : _client_cache(client_cache) {}
 
 AgentStatus MasterServerClient::finish_task(const TFinishTaskRequest& request, TMasterResult* result) {
     Status client_status;
     TNetworkAddress network_address = get_master_address();
-    FrontendServiceConnection client(_client_cache, network_address, config::thrift_rpc_timeout_ms, &client_status);
+
+    client_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+            network_address.hostname, network_address.port,
+            [&result, &request](FrontendServiceConnection& client) { client->finishTask(*result, request); });
 
     if (!client_status.ok()) {
-        LOG(WARNING) << "Fail to get master client from cache. "
-                     << "host=" << network_address.hostname << ", port=" << network_address.port
-                     << ", code=" << client_status.code();
-        return STARROCKS_ERROR;
-    }
-
-    try {
-        try {
-            client->finishTask(*result, request);
-        } catch (TTransportException& e) {
-            client_status = client.reopen(config::thrift_rpc_timeout_ms);
-            if (!client_status.ok()) {
-                LOG(WARNING) << "Fail to get master client from cache. "
-                             << "host=" << network_address.hostname << ", port=" << network_address.port
-                             << ", code=" << client_status.code();
-                return STARROCKS_ERROR;
-            }
-            client->finishTask(*result, request);
-        }
-    } catch (TException& e) {
-        (void)client.reopen(config::thrift_rpc_timeout_ms);
         LOG(WARNING) << "Fail to finish_task. "
                      << "host=" << network_address.hostname << ", port=" << network_address.port
-                     << ", error=" << e.what();
+                     << ", error=" << client_status;
         return STARROCKS_ERROR;
     }
 
@@ -89,43 +68,15 @@ AgentStatus MasterServerClient::finish_task(const TFinishTaskRequest& request, T
 AgentStatus MasterServerClient::report(const TReportRequest& request, TMasterResult* result) {
     Status client_status;
     TNetworkAddress network_address = get_master_address();
-    FrontendServiceConnection client(_client_cache, network_address, config::thrift_rpc_timeout_ms, &client_status);
+
+    client_status = ThriftRpcHelper::rpc<FrontendServiceClient>(
+            network_address.hostname, network_address.port,
+            [&result, &request](FrontendServiceConnection& client) { client->report(*result, request); });
 
     if (!client_status.ok()) {
-        LOG(WARNING) << "Fail to get master client from cache. "
-                     << "host=" << network_address.hostname << " port=" << network_address.port
-                     << " code=" << client_status.code();
-        return STARROCKS_ERROR;
-    }
-
-    try {
-        try {
-            client->report(*result, request);
-        } catch (TTransportException& e) {
-            TTransportException::TTransportExceptionType type = e.getType();
-            if (type != TTransportException::TTransportExceptionType::TIMED_OUT) {
-                // if not TIMED_OUT, retry
-                client_status = client.reopen(config::thrift_rpc_timeout_ms);
-                if (!client_status.ok()) {
-                    LOG(WARNING) << "Fail to get master client from cache. "
-                                 << "host=" << network_address.hostname << ", port=" << network_address.port
-                                 << ", code=" << client_status.code();
-                    return STARROCKS_ERROR;
-                }
-
-                client->report(*result, request);
-            } else {
-                // TIMED_OUT exception. do not retry
-                // actually we don't care what FE returns.
-                LOG(WARNING) << "Fail to report to master: " << e.what();
-                return STARROCKS_ERROR;
-            }
-        }
-    } catch (TException& e) {
-        (void)client.reopen(config::thrift_rpc_timeout_ms);
         LOG(WARNING) << "Fail to report to master. "
                      << "host=" << network_address.hostname << ", port=" << network_address.port
-                     << ", code=" << client_status.code();
+                     << ", error=" << client_status;
         return STARROCKS_ERROR;
     }
 

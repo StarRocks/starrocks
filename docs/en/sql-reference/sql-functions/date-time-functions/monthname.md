@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # monthname
 
-## Description
+
 
 Returns the name of the month for a given date.  
 

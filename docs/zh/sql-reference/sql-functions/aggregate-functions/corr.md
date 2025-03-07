@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # corr
 
-## 功能
+
 
 返回两个随机变量的皮尔逊相关系数（correlation coefficient）。该函数从 2.5.10 版本开始支持，也可用作窗口函数。
 
@@ -26,7 +26,7 @@ CORR(expr1, expr2)
 
 返回值为 DOUBLE 类型。计算公式如下，其中 `n` 为该表的行数：
 
-![corr_formula](../../../assets/corr_formula.png)
+![corr_formula](../../../_assets/corr_formula.png)
 
 <!--$$
 \frac{\sum_{i=1}^{n}((x_i - \bar{x})(y_i - \bar{y}))}{\sqrt{\sum_{i=1}^{n}((x_i - \bar{x})^2) \cdot \sum_{i=1}^{n}((y_i - \bar{y})^2)}}

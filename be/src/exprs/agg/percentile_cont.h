@@ -18,14 +18,21 @@
 #include <limits>
 #include <type_traits>
 
+#include "column/column_hash.h"
 #include "column/column_helper.h"
 #include "column/object_column.h"
+#include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
 #include "util/orlp/pdqsort.h"
+#include "util/phmap/phmap.h"
+#include "util/phmap/phmap_fwd_decl.h"
+#include "util/slice.h"
+#include "util/unaligned_access.h"
 
 namespace starrocks {
 
@@ -36,28 +43,39 @@ inline constexpr LogicalType PercentileResultLT = LT;
 template <LogicalType LT>
 inline constexpr LogicalType PercentileResultLT<LT, true, ArithmeticLTGuard<LT>> = TYPE_DOUBLE;
 
+template <LogicalType LT>
+struct PercentileStateTypes {
+    using CppType = RunTimeCppType<LT>;
+    using ItemType = VectorWithAggStateAllocator<CppType>;
+    using GridType = VectorWithAggStateAllocator<ItemType>;
+};
+
 template <LogicalType LT, typename = guard::Guard>
 struct PercentileState {
-    using CppType = RunTimeCppType<LT>;
+    using CppType = typename PercentileStateTypes<LT>::CppType;
+    using ItemType = typename PercentileStateTypes<LT>::ItemType;
+    using GridType = typename PercentileStateTypes<LT>::GridType;
+
     void update(CppType item) { items.emplace_back(item); }
-    void update_batch(const std::vector<CppType>& vec) {
+    void update_batch(const Buffer<CppType>& vec) {
         size_t old_size = items.size();
         items.resize(old_size + vec.size());
         memcpy(items.data() + old_size, vec.data(), vec.size() * sizeof(CppType));
     }
-    std::vector<CppType> items;
-    std::vector<std::vector<CppType>> grid;
+    ItemType items;
+    GridType grid;
     double rate = 0.0;
 };
 
 template <LogicalType LT, typename CppType, bool reverse>
-void kWayMergeSort(const std::vector<std::vector<CppType>>& grid, std::vector<CppType>& b, std::vector<int>& ls,
-                   std::map<int, int>& mp, size_t goal, int k, CppType& junior_elm, CppType& senior_elm) {
+void kWayMergeSort(const typename PercentileStateTypes<LT>::GridType& grid, std::vector<CppType>& b,
+                   std::vector<int>& ls, std::vector<int>& mp, size_t goal, int k, CppType& junior_elm,
+                   CppType& senior_elm) {
     CppType minV = RunTimeTypeLimits<LT>::min_value();
     CppType maxV = RunTimeTypeLimits<LT>::max_value();
-
     b.resize(k + 1);
     ls.resize(k);
+    mp.resize(k);
     for (int i = 0; i < k; ++i) {
         if constexpr (reverse) {
             mp[i] = grid[i].size() - 2;
@@ -191,9 +209,9 @@ public:
         double rate = *reinterpret_cast<double*>(slice.data);
         size_t items_size = *reinterpret_cast<size_t*>(slice.data + sizeof(double));
         auto data_ptr = slice.data + sizeof(double) + sizeof(size_t);
-        std::vector<std::vector<InputCppType>>& grid = this->data(state).grid;
+        auto& grid = this->data(state).grid;
 
-        std::vector<InputCppType> vec;
+        typename PercentileStateTypes<LT>::ItemType vec;
         vec.resize(items_size + 2);
         memcpy(vec.data() + 1, data_ptr, items_size * sizeof(InputCppType));
         vec[0] = RunTimeTypeLimits<LT>::min_value();
@@ -382,13 +400,13 @@ class PercentileContAggregateFunction final : public PercentileContDiscAggregate
     using ResultColumnType = RunTimeColumnType<ResultLT>;
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        const std::vector<std::vector<InputCppType>>& grid = this->data(state).grid;
+        const auto& grid = this->data(state).grid;
         const double& rate = this->data(state).rate;
 
         // for group by
         if (grid.size() == 0) {
             ResultColumnType* column = down_cast<ResultColumnType*>(to);
-            auto& items = const_cast<std::vector<InputCppType>&>(this->data(state).items);
+            auto& items = const_cast<typename PercentileStateTypes<LT>::ItemType&>(this->data(state).items);
             std::sort(items.begin(), items.end());
 
             if (items.size() == 0) {
@@ -409,7 +427,7 @@ class PercentileContAggregateFunction final : public PercentileContDiscAggregate
 
         std::vector<InputCppType> b;
         std::vector<int> ls;
-        std::map<int, int> mp;
+        std::vector<int> mp;
 
         size_t k = grid.size();
         size_t rowsNum = 0;
@@ -428,8 +446,8 @@ class PercentileContAggregateFunction final : public PercentileContDiscAggregate
             goal = 0;
         }
 
-        InputCppType junior_elm;
-        InputCppType senior_elm;
+        InputCppType junior_elm{};
+        InputCppType senior_elm{};
 
         if (reverse) {
             kWayMergeSort<LT, InputCppType, true>(grid, b, ls, mp, goal, k, junior_elm, senior_elm);
@@ -463,7 +481,7 @@ class PercentileDiscAggregateFunction final : public PercentileContDiscAggregate
     using ResultColumnType = RunTimeColumnType<ResultLT>;
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        std::vector<InputCppType> new_vector = std::move(this->data(state).items);
+        typename PercentileStateTypes<LT>::ItemType new_vector = std::move(this->data(state).items);
         for (auto& innerData : this->data(state).grid) {
             std::move(innerData.begin() + 1, innerData.end() - 1, std::back_inserter(new_vector));
         }
@@ -497,6 +515,197 @@ class PercentileDiscAggregateFunction final : public PercentileContDiscAggregate
     }
 
     std::string get_name() const override { return "percentile_disc"; }
+};
+
+template <LogicalType LT, typename = guard::Guard>
+struct LowCardPercentileState {
+    using CppType = RunTimeCppType<LT>;
+    constexpr int static ser_header = 0x3355 | LT << 16;
+    void update(CppType item) { items[item]++; }
+
+    void update_batch(const Buffer<CppType>& vec) {
+        for (const auto& item : vec) {
+            items[item]++;
+        }
+    }
+
+    size_t serialize_size() const {
+        size_t size = 0;
+        // serialize header
+        size += sizeof(ser_header);
+        for (size_t i = 0; i < items.size(); ++i) {
+            size += sizeof(CppType) + sizeof(size_t);
+        }
+        return size;
+    }
+
+    void serialize(Slice result) const {
+        char* cur = result.data;
+        // serialize header
+        unaligned_store<int>(cur, ser_header);
+        cur += sizeof(ser_header);
+        // serialize
+        for (const auto& [key, value] : items) {
+            unaligned_store<CppType>(cur, key);
+            cur += sizeof(CppType);
+            unaligned_store<size_t>(cur, value);
+            cur += sizeof(size_t);
+        }
+    }
+
+    void merge(Slice slice) {
+        char* cur = slice.data;
+        char* ed = slice.data + slice.size;
+        // skip header
+        if (cur + sizeof(ser_header) >= ed || unaligned_load<int>(cur) != ser_header) {
+            throw std::runtime_error("Invalid LowCardPercentileState data for " + type_to_string(LT));
+        }
+        cur += sizeof(ser_header);
+        while (cur < ed) {
+            CppType key = unaligned_load<CppType>(cur);
+            cur += sizeof(CppType);
+            size_t value = unaligned_load<size_t>(cur);
+            cur += sizeof(size_t);
+            items[key] += value;
+        }
+    }
+
+    CppType build_result(double rate) const {
+        std::vector<CppType> data;
+        for (auto [key, _] : items) {
+            data.push_back(key);
+        }
+        pdqsort(data.begin(), data.end());
+
+        size_t accumulate = 0;
+        for (auto key : data) {
+            accumulate += items.at(key);
+        }
+        size_t target = accumulate * rate;
+
+        accumulate = 0;
+        auto res = data[data.size() - 1];
+        for (auto key : data) {
+            accumulate += items.at(key);
+            if (accumulate > target) {
+                res = key;
+                break;
+            }
+        }
+        return res;
+    }
+
+    using HashFunc = typename HashTypeTraits<CppType>::HashFunc;
+    phmap::flat_hash_map<CppType, size_t, HashFunc> items;
+};
+
+template <LogicalType LT, class DetailFunction>
+class LowCardPercentileBuildAggregateFunction
+        : public AggregateFunctionBatchHelper<LowCardPercentileState<LT>, DetailFunction> {
+public:
+    using InputCppType = RunTimeCppType<LT>;
+    using InputColumnType = RunTimeColumnType<LT>;
+
+    void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
+                size_t row_num) const override {
+        const auto& column = down_cast<const InputColumnType&>(*columns[0]);
+        this->data(state).update(column.get_data()[row_num]);
+    }
+
+    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
+                                   AggDataPtr __restrict state) const override {
+        const auto& column = down_cast<const InputColumnType&>(*columns[0]);
+        this->data(state).update_batch(column.get_data());
+    }
+
+    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
+        const Slice slice = column->get(row_num).get_slice();
+        this->data(state).merge(slice);
+    }
+
+    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        size_t serialize_size = this->data(state).serialize_size();
+
+        auto* column = down_cast<BinaryColumn*>(to);
+        Bytes& bytes = column->get_bytes();
+        size_t old_size = bytes.size();
+        size_t new_size = old_size + serialize_size;
+        bytes.resize(new_size);
+
+        this->data(state).serialize(Slice(bytes.data() + old_size, serialize_size));
+
+        column->get_offset().emplace_back(new_size);
+    }
+
+    void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
+                                     ColumnPtr* dst) const override {
+        size_t serialize_row = (sizeof(int) + sizeof(InputCppType) + sizeof(int64_t));
+        size_t serialize_size = serialize_row * chunk_size;
+
+        auto* column = down_cast<BinaryColumn*>(dst->get());
+        Bytes& bytes = column->get_bytes();
+        size_t old_size = bytes.size();
+        size_t new_size = old_size + serialize_size;
+        bytes.resize(new_size);
+        unsigned char* cur = bytes.data() + old_size;
+
+        auto src_column = *down_cast<const InputColumnType*>(src[0].get());
+        InputCppType* src_data = src_column.get_data().data();
+
+        size_t cur_size = old_size;
+        for (size_t i = 0; i < chunk_size; ++i) {
+            unaligned_store<int>(cur, LowCardPercentileState<LT>::ser_header);
+            cur += sizeof(int);
+            unaligned_store<InputCppType>(cur, src_data[i]);
+            cur += sizeof(InputCppType);
+            unaligned_store<size_t>(cur, 1);
+            cur += sizeof(size_t);
+            cur_size += serialize_row;
+            column->get_offset().emplace_back(cur_size);
+        }
+    }
+};
+
+template <LogicalType LT>
+class LowCardPercentileBinAggregateFunction final
+        : public LowCardPercentileBuildAggregateFunction<LT, LowCardPercentileBinAggregateFunction<LT>> {
+    using Base = LowCardPercentileBuildAggregateFunction<LT, LowCardPercentileBinAggregateFunction<LT>>;
+
+public:
+    std::string get_name() const override { return "lc_percentile_bin"; }
+
+    // return to binary
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        Base::serialize_to_column(ctx, state, to);
+    }
+};
+
+template <LogicalType LT>
+class LowCardPercentileCntAggregateFunction final
+        : public LowCardPercentileBuildAggregateFunction<LT, LowCardPercentileCntAggregateFunction<LT>> {
+public:
+    using InputCppType = RunTimeCppType<LT>;
+    using InputColumnType = RunTimeColumnType<LT>;
+
+    std::string get_name() const override { return "lc_percentile_cnt"; }
+
+    // input/output will be the same type
+    void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
+        double rate = 0;
+        DCHECK_EQ(ctx->get_num_args(), 2);
+        if (ctx->get_num_args() == 2) {
+            const auto* rate_column = down_cast<const ConstColumn*>(ctx->get_constant_column(1).get());
+            rate = rate_column->get(0).get_double();
+        }
+        DCHECK(rate >= 0 && rate <= 1);
+        auto& result = this->data(state);
+        if (result.items.empty()) {
+            to->append_default();
+            return;
+        }
+        auto res = result.build_result(rate);
+        down_cast<InputColumnType*>(to)->append(res);
+    }
 };
 
 } // namespace starrocks

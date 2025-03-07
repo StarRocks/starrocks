@@ -37,6 +37,8 @@ import com.starrocks.sql.optimizer.operator.DataSkewInfo;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalExceptOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalIntersectOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
@@ -172,6 +174,7 @@ public class CostModel {
                     return adjustCostForMV(context);
                 }
             }
+
             return CostEstimate.of(statistics.getComputeSize(), 0, 0);
         }
 
@@ -462,6 +465,20 @@ public class CostModel {
             return CostEstimate.zero();
         }
 
+        @Override
+        public CostEstimate visitLogicalExcept(LogicalExceptOperator node, ExpressionContext context) {
+            double computeSize = context.getChildrenStatistics().stream().mapToDouble(Statistics::getComputeSize).sum();
+            double memoryCost = context.getChildStatistics(0).getComputeSize();
+            return CostEstimate.of(computeSize, memoryCost, 0);
+        }
+
+        @Override
+        public CostEstimate visitLogicalIntersect(LogicalIntersectOperator node, ExpressionContext context) {
+            double computeSize = context.getChildrenStatistics().stream().mapToDouble(Statistics::getComputeSize).sum();
+            double memoryCost = context.getChildStatistics(0).getComputeSize();
+            return CostEstimate.of(computeSize, memoryCost, 0);
+        }
+
         // if there exists a skew hint factor use it
         // if this is an enforcer above a local agg set 0.1 to reduce this exchange cost.
         // The reason is as below:
@@ -495,7 +512,6 @@ public class CostModel {
         private Optional<CostEstimate> invalidOneStageAggCost(PhysicalHashAggregateOperator node, ExpressionContext context) {
             boolean mustMultiStageAgg = Utils.mustGenerateMultiStageAggregate(node, context.getChildOperator(0));
             if (mustMultiStageAgg && !node.isSplit() && node.getType().isGlobal()) {
-
                 return Optional.of(CostEstimate.infinite());
             }
             return Optional.empty();

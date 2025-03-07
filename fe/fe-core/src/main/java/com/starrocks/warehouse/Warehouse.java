@@ -15,12 +15,10 @@
 package com.starrocks.warehouse;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.common.proc.ProcResult;
 
-import java.io.DataOutput;
-import java.io.IOException;
+import java.util.List;
 
 public abstract class Warehouse implements Writable {
     @SerializedName(value = "name")
@@ -48,9 +46,15 @@ public abstract class Warehouse implements Writable {
         return comment;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+    public abstract long getResumeTime();
+
+    public abstract Long getAnyWorkerGroupId();
+
+    public abstract List<Long> getWorkerGroupIds();
+
+    public abstract List<String> getWarehouseInfo();
+
+    public abstract List<List<String>> getWarehouseNodesInfo();
+
+    public abstract ProcResult fetchResult();
 }

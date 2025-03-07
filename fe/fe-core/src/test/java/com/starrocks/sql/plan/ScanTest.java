@@ -336,11 +336,11 @@ public class ScanTest extends PlanTestBase {
     @Test
     public void testScalarReuseIsNull() throws Exception {
         String plan =
-                getFragmentPlan("SELECT (abs(1) IS NULL) = true AND ((abs(1) IS NULL) IS NOT NULL) as count FROM t1;");
+                getFragmentPlan("SELECT (abs(v4) IS NULL) = true AND ((abs(v4) IS NULL) IS NOT NULL) as count FROM t1;");
         Assert.assertTrue(plan, plan.contains("1:Project\n" +
                 "  |  <slot 4> : (6: expr) AND (6: expr IS NOT NULL)\n" +
                 "  |  common expressions:\n" +
-                "  |  <slot 5> : abs(1)\n" +
+                "  |  <slot 5> : abs(1: v4)\n" +
                 "  |  <slot 6> : 5: abs IS NULL"));
     }
 
@@ -419,37 +419,35 @@ public class ScanTest extends PlanTestBase {
     public void testMetaScanWithCount() throws Exception {
         String sql = "select count(*),count(),count(t1a),count(t1b),count(t1c) from test_all_type[_META_]";
         String plan = getFragmentPlan(sql);
-        assertContains(plan, "  1:AGGREGATE (update serialize)\n" +
-                "  |  output: sum(count_t1a), sum(count_t1a), sum(count_t1a), sum(count_t1a)\n" +
+        assertContains(plan, "1:AGGREGATE (update serialize)\n" +
+                "  |  output: sum(rows_t1a), sum(count_t1a), sum(count_t1b), sum(count_t1c)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:MetaScan\n" +
                 "     Table: test_all_type\n" +
-                "     <id 16> : count_t1a");
+                "     <id 16> : rows_t1a");
         // compatibility test
         // we should keep nullable attribute of columns consistent with previous version,
         // see more detail in the description of https://github.com/StarRocks/starrocks/pull/17619
         // without count, all columns should be not null
-        sql = "select min(t1a),max(t1a),dict_merge(t1a) from test_all_type_not_null[_META_]";
+        sql = "select min(t1a),max(t1a),dict_merge(t1a, 255) from test_all_type_not_null[_META_]";
         plan = getVerboseExplain(sql);
         assertContains(plan, "aggregate: " +
-                "min[([min_t1a, VARCHAR, false]); args: VARCHAR; result: VARCHAR; " +
-                "args nullable: false; result nullable: true], " +
-                "max[([max_t1a, VARCHAR, false]); args: VARCHAR; result: VARCHAR; " +
-                "args nullable: false; result nullable: true], " +
-                "dict_merge[([dict_merge_t1a, ARRAY<VARCHAR>, false]); args: INVALID_TYPE; " +
-                "result: VARCHAR; args nullable: false; result nullable: true]");
+                "min[([min_t1a, VARCHAR, true]); args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true], " +
+                "max[([max_t1a, VARCHAR, true]); args: VARCHAR; result: VARCHAR; args nullable: true; result nullable: true], " +
+                "dict_merge[([dict_merge_t1a, ARRAY<VARCHAR>, true], 255); args: INVALID_TYPE,INT; " +
+                "result: VARCHAR; args nullable: true; result nullable: true]");
 
         // with count, all columns should be nullable
-        sql = "select min(t1a),max(t1a),dict_merge(t1a),count() from test_all_type_not_null[_META_]";
+        sql = "select min(t1a),max(t1a),dict_merge(t1a, 255),count() from test_all_type_not_null[_META_]";
         plan = getVerboseExplain(sql);
         assertContains(plan, "min[([min_t1a, VARCHAR, true]); args: VARCHAR; result: VARCHAR; " +
                 "args nullable: true; result nullable: true], " +
                 "max[([max_t1a, VARCHAR, true]); args: VARCHAR; result: VARCHAR; " +
                 "args nullable: true; result nullable: true], " +
-                "dict_merge[([dict_merge_t1a, ARRAY<VARCHAR>, true]); args: INVALID_TYPE; result: VARCHAR; " +
+                "dict_merge[([dict_merge_t1a, ARRAY<VARCHAR>, true], 255); args: INVALID_TYPE,INT; result: VARCHAR; " +
                 "args nullable: true; result nullable: true], " +
-                "sum[([count_t1a, BIGINT, true]); args: BIGINT; result: BIGINT; " +
+                "sum[([rows_t1a, BIGINT, true]); args: BIGINT; result: BIGINT; " +
                 "args nullable: true; result nullable: true]");
     }
 
@@ -468,7 +466,7 @@ public class ScanTest extends PlanTestBase {
         Collection<Partition> partitions = tb.getPartitions();
         acquireReplica:
         for (Partition partition : partitions) {
-            MaterializedIndex index = partition.getIndex(tb.getBaseIndexId());
+            MaterializedIndex index = partition.getDefaultPhysicalPartition().getIndex(tb.getBaseIndexId());
             for (Tablet tablet : index.getTablets()) {
                 replicaId = ((LocalTablet) tablet).getImmutableReplicas().get(0).getId();
                 break acquireReplica;
@@ -528,5 +526,27 @@ public class ScanTest extends PlanTestBase {
             List<ScanNode> scanNodeList = plan.getScanNodes();
             Assert.assertEquals(expexted, scanNodeList.get(0).getScanOptimzeOption().getCanUseMinMaxCountOpt());
         }
+    }
+
+    @Test
+    public void testMetaScanPartition() throws Exception {
+        String sql = "select max(L_LINESTATUS) from lineitem_partition partitions(p1993)[_META_]";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:MetaScan\n" +
+                "     Table: lineitem_partition\n" +
+                "     <id 19> : max_L_LINESTATUS\n" +
+                "     Partitions: [p1993]");
+    }
+
+    @Test
+    public void testMetaAggregate() throws Exception {
+        String sql = "select max(v1), min(v2), count(v3), count(*) from t0 [_META_];";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "0:MetaScan\n" +
+                "     Table: t0\n" +
+                "     <id 8> : max_v1\n" +
+                "     <id 9> : min_v2\n" +
+                "     <id 10> : count_v3\n" +
+                "     <id 11> : rows_v1");
     }
 }

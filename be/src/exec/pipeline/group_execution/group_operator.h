@@ -40,7 +40,7 @@ public:
 
     bool has_output() const override { return false; }
     bool need_input() const override;
-    bool is_finished() const override { return _is_finished; }
+    bool is_finished() const override { return _is_finished || _exchanger->is_all_sources_finished(); }
     Status set_finishing(RuntimeState* state) override;
 
     Status prepare(RuntimeState* state) override;
@@ -64,6 +64,7 @@ public:
               _exchanger(std::move(exchanger)) {}
 
     ~GroupedExecutionSinkFactory() override = default;
+    bool support_event_scheduler() const override { return true; }
 
     Status prepare(RuntimeState* state) override;
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;

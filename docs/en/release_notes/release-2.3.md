@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # StarRocks version 2.3
@@ -288,7 +288,7 @@ Release date: November 10, 2022
 
 ### Improvements
 
-- The error message provides a solution when StarRocks fails to create a Routine Load job because the number of running Routine Load job exceeds the limit. [#12204]( https://github.com/StarRocks/starrocks/pull/12204)
+- The error message provides a solution when StarRocks fails to create a Routine Load job because the number of running Routine Load job exceeds the limit. [#12204](https://github.com/StarRocks/starrocks/pull/12204)
 - The query fails when StarRocks queries data from Hive and fails to parse CSV files. [#13013](https://github.com/StarRocks/starrocks/pull/13013)
 
 ### Bug Fixes

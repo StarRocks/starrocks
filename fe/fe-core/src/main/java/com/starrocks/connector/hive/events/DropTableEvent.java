@@ -17,8 +17,8 @@ package com.starrocks.connector.hive.events;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
-import com.starrocks.connector.hive.CacheUpdateProcessor;
-import com.starrocks.connector.hive.HiveTableName;
+import com.starrocks.connector.DatabaseTableName;
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.hadoop.hive.metastore.messaging.json.JSONDropTableMessage;
 import org.apache.logging.log4j.LogManager;
@@ -38,7 +38,7 @@ public class DropTableEvent extends MetastoreTableEvent {
     private final String tableName;
 
     private DropTableEvent(NotificationEvent event,
-                           CacheUpdateProcessor cacheProcessor, String catalogName) {
+                           HiveCacheUpdateProcessor cacheProcessor, String catalogName) {
         super(event, cacheProcessor, catalogName);
         Preconditions.checkArgument(DROP_TABLE.equals(getEventType()));
         JSONDropTableMessage dropTableMessage =
@@ -56,13 +56,13 @@ public class DropTableEvent extends MetastoreTableEvent {
     }
 
     public static List<MetastoreEvent> getEvents(NotificationEvent event,
-                                                 CacheUpdateProcessor cacheProcessor, String catalogName) {
+                                                 HiveCacheUpdateProcessor cacheProcessor, String catalogName) {
         return Lists.newArrayList(new DropTableEvent(event, cacheProcessor, catalogName));
     }
 
     @Override
     protected boolean existInCache() {
-        return cache.isTablePresent(HiveTableName.of(dbName, tableName));
+        return cache.isTablePresent(DatabaseTableName.of(dbName, tableName));
     }
 
     @Override

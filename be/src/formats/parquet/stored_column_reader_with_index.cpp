@@ -14,7 +14,14 @@
 
 #include "formats/parquet/stored_column_reader_with_index.h"
 
+#include <glog/logging.h>
+
+#include "gen_cpp/parquet_types.h"
 #include "util/defer_op.h"
+
+namespace starrocks {
+class Column;
+} // namespace starrocks
 
 namespace starrocks::parquet {
 

@@ -14,25 +14,19 @@
 
 package com.starrocks.catalog;
 
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
+// Record ColumnRefOperator's each ComplexTypeAccessPaths
+// We have to use HashSet to deduplicate same ComplexTypeAccessPaths, it can avoid oom problem
 public class ComplexTypeAccessGroup {
-    private final List<ComplexTypeAccessPaths> accessPaths = new ArrayList<>();
-
-    public int size() {
-        return accessPaths.size();
-    }
-
-    public ComplexTypeAccessPaths get(int idx) {
-        return accessPaths.get(idx);
-    }
+    private final Set<ComplexTypeAccessPaths> accessPaths = new HashSet<>();
 
     public void addAccessPaths(ComplexTypeAccessPaths complexTypeAccessPaths) {
         accessPaths.add(complexTypeAccessPaths);
     }
 
-    public List<ComplexTypeAccessPaths> getAccessGroup() {
+    public Set<ComplexTypeAccessPaths> getAccessGroup() {
         return accessPaths;
     }
 }

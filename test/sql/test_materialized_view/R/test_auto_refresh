@@ -1,0 +1,83 @@
+-- name: test_auto_refresh
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (
+    __time datetime,
+    c1 int
+)
+PARTITION BY date_trunc('DAY', __time);
+-- result:
+-- !result
+INSERT INTO t1 VALUES 
+    ('2024-04-01', 1),
+    ('2024-04-02', 1),
+    ('2024-04-03', 1),
+    ('2024-04-04', 1),
+    ('2024-04-05', 1);
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW `mv1`
+PARTITION BY (`__time`)
+REFRESH ASYNC
+PROPERTIES (
+    "auto_refresh_partitions_limit" = "3",
+    "partition_refresh_number" = "-1"
+)
+AS select * from t1;
+-- result:
+-- !result
+function: wait_mv_refresh_count('db_${uuid0}', 'mv1', 1)
+-- result:
+None
+-- !result
+SELECT count(*) FROM mv1;
+-- result:
+5
+-- !result
+INSERT INTO t1 SELECT * FROM t1;
+-- result:
+-- !result
+function: wait_mv_refresh_count('db_${uuid0}', 'mv1', 2)
+-- result:
+None
+-- !result
+SELECT count(*) FROM mv1;
+-- result:
+8
+-- !result
+REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
+function: wait_mv_refresh_count('db_${uuid0}', 'mv1', 3)
+-- result:
+None
+-- !result
+SELECT count(*) FROM mv1;
+-- result:
+10
+-- !result
+REFRESH MATERIALIZED VIEW mv1 PARTITION start('2024-04-02') end('2024-04-04') WITH SYNC MODE;
+function: wait_mv_refresh_count('db_${uuid0}', 'mv1', 4)
+-- result:
+None
+-- !result
+SELECT count(*) FROM mv1;
+-- result:
+10
+-- !result
+TRUNCATE TABLE t1;
+-- result:
+-- !result
+function: wait_mv_refresh_count('db_${uuid0}', 'mv1', 5)
+-- result:
+None
+-- !result
+SELECT count(*) FROM mv1;
+-- result:
+4
+-- !result
+drop database db_${uuid0};
+-- result:
+-- !result

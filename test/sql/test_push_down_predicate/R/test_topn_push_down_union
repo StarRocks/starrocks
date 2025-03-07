@@ -70,9 +70,6 @@ INSERT INTO tbl_mock_001 (
 );
 -- result:
 -- !result
-SET cbo_push_down_topn_limit=0;
--- result:
--- !result
 SELECT *
 FROM (
 	(SELECT *

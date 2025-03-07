@@ -23,18 +23,18 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaTablesConfigScanner::_s_table_tables_config_columns[] = {
         //   name,       type,          size,     is_null
-        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_ENGINE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_MODEL", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PRIMARY_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PARTITION_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DISTRIBUTE_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DISTRIBUTE_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DISTRIBUTE_BUCKET", TYPE_INT, sizeof(int32_t), false},
-        {"SORT_KEY", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"PROPERTIES", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_ID", TYPE_BIGINT, sizeof(int64_t), false},
+        {"TABLE_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_ENGINE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_MODEL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PRIMARY_KEY", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PARTITION_KEY", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DISTRIBUTE_KEY", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DISTRIBUTE_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DISTRIBUTE_BUCKET", TypeDescriptor::from_logical_type(TYPE_INT), sizeof(int32_t), false},
+        {"SORT_KEY", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
 };
 
 SchemaTablesConfigScanner::SchemaTablesConfigScanner()
@@ -64,12 +64,9 @@ Status SchemaTablesConfigScanner::start(RuntimeState* state) {
     TGetTablesConfigRequest tables_config_req;
     tables_config_req.__set_auth_info(auth_info);
 
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_tables_config(*(_param->ip), _param->port, tables_config_req,
-                                                        &_tables_config_response));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_tables_config(_ss_state, tables_config_req, &_tables_config_response));
     return Status::OK();
 }
 

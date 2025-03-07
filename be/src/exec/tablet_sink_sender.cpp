@@ -14,20 +14,22 @@
 
 #include "exec/tablet_sink_sender.h"
 
+#include <utility>
+
 #include "column/chunk.h"
 #include "common/statusor.h"
 #include "exec/write_combined_txn_log.h"
 #include "exprs/expr.h"
 #include "runtime/runtime_state.h"
 
-namespace starrocks::stream_load {
+namespace starrocks {
 
 TabletSinkSender::TabletSinkSender(PUniqueId load_id, int64_t txn_id, IndexIdToTabletBEMap index_id_to_tablet_be_map,
                                    OlapTablePartitionParam* partition_params, std::vector<IndexChannel*> channels,
                                    std::unordered_map<int64_t, NodeChannel*> node_channels,
                                    std::vector<ExprContext*> output_expr_ctxs, bool enable_replicated_storage,
                                    TWriteQuorumType::type write_quorum_type, int num_repicas)
-        : _load_id(load_id),
+        : _load_id(std::move(load_id)),
           _txn_id(txn_id),
           _index_id_to_tablet_be_map(std::move(index_id_to_tablet_be_map)),
           _partition_params(partition_params),
@@ -368,6 +370,10 @@ bool TabletSinkSender::get_immutable_partition_ids(std::set<int64_t>* partition_
 }
 
 Status TabletSinkSender::_write_combined_txn_log() {
+    if (config::enable_put_combinded_txn_log_parallel) {
+        return write_combined_txn_log_parallel(_txn_log_map);
+    }
+
     for (const auto& [partition_id, logs] : _txn_log_map) {
         (void)partition_id;
         RETURN_IF_ERROR(write_combined_txn_log(logs));
@@ -375,4 +381,4 @@ Status TabletSinkSender::_write_combined_txn_log() {
     return Status::OK();
 }
 
-} // namespace starrocks::stream_load
+} // namespace starrocks

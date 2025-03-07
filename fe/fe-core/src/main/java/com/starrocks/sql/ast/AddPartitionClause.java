@@ -18,19 +18,27 @@ package com.starrocks.sql.ast;
 import com.starrocks.alter.AlterOpType;
 import com.starrocks.sql.parser.NodePosition;
 
+import java.util.List;
 import java.util.Map;
 
 // clause which is used to add partition
 public class AddPartitionClause extends AlterTableClause {
 
-    private final PartitionDesc partitionDesc;
+    private PartitionDesc partitionDesc;
     private final DistributionDesc distributionDesc;
     private final Map<String, String> properties;
     // true if this is to add a temporary partition
     private final boolean isTempPartition;
 
+    //Object Resolved by Analyzer
+    private List<PartitionDesc> resolvedPartitionDescList;
+
     public PartitionDesc getPartitionDesc() {
         return partitionDesc;
+    }
+
+    public void setPartitionDesc(PartitionDesc desc) {
+        this.partitionDesc = desc;
     }
 
     public DistributionDesc getDistributionDesc() {
@@ -57,10 +65,16 @@ public class AddPartitionClause extends AlterTableClause {
         this.distributionDesc = distributionDesc;
         this.properties = properties;
         this.isTempPartition = isTempPartition;
-        this.needTableStable = false;
     }
 
-    @Override
+    public List<PartitionDesc> getResolvedPartitionDescList() {
+        return resolvedPartitionDescList;
+    }
+
+    public void setResolvedPartitionDescList(List<PartitionDesc> resolvedPartitionDescList) {
+        this.resolvedPartitionDescList = resolvedPartitionDescList;
+    }
+
     public Map<String, String> getProperties() {
         return this.properties;
     }

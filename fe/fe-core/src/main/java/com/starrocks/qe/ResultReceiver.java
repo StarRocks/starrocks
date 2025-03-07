@@ -34,12 +34,13 @@
 
 package com.starrocks.qe;
 
+import com.starrocks.common.ErrorCode;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
-import com.starrocks.metric.MetricRepo;
 import com.starrocks.proto.PFetchDataResult;
 import com.starrocks.proto.PUniqueId;
 import com.starrocks.rpc.BackendServiceClient;
+import com.starrocks.rpc.ConfigurableSerDesFactory;
 import com.starrocks.rpc.PFetchDataRequest;
 import com.starrocks.rpc.RpcException;
 import com.starrocks.thrift.TNetworkAddress;
@@ -61,11 +62,11 @@ public class ResultReceiver {
     private volatile boolean isDone = false;
     private volatile boolean isCancel = false;
     private long packetIdx = 0;
-    private final long timeoutTs;
+    private final int timeoutMs;
+    private final long deadlineMs;
     private final TNetworkAddress address;
     private final PUniqueId finstId;
     private final Long backendId;
-    private Thread currentThread;
 
     public ResultReceiver(TUniqueId tid, Long backendId, TNetworkAddress address, int timeoutMs) {
         this.finstId = new PUniqueId();
@@ -73,7 +74,8 @@ public class ResultReceiver {
         this.finstId.lo = tid.lo;
         this.backendId = backendId;
         this.address = address;
-        this.timeoutTs = System.currentTimeMillis() + timeoutMs;
+        this.timeoutMs = timeoutMs;
+        this.deadlineMs = System.currentTimeMillis() + timeoutMs;
     }
 
     public RowBatch getNext(Status status) throws TException {
@@ -85,16 +87,15 @@ public class ResultReceiver {
             while (!isDone && !isCancel) {
                 PFetchDataRequest request = new PFetchDataRequest(finstId);
 
-                currentThread = Thread.currentThread();
                 Future<PFetchDataResult> future = BackendServiceClient.getInstance().fetchDataAsync(address, request);
                 PFetchDataResult pResult = null;
                 while (pResult == null) {
                     long currentTs = System.currentTimeMillis();
-                    if (currentTs >= timeoutTs) {
+                    if (currentTs >= deadlineMs) {
                         throw new TimeoutException("query timeout");
                     }
                     try {
-                        pResult = future.get(timeoutTs - currentTs, TimeUnit.MILLISECONDS);
+                        pResult = future.get(deadlineMs - currentTs, TimeUnit.MILLISECONDS);
                     } catch (InterruptedException e) {
                         // continue to get result
                         LOG.info("future get interrupted Exception");
@@ -124,7 +125,7 @@ public class ResultReceiver {
                 byte[] serialResult = request.getSerializedResult();
                 if (serialResult != null && serialResult.length > 0) {
                     TResultBatch resultBatch = new TResultBatch();
-                    TDeserializer deserializer = new TDeserializer();
+                    TDeserializer deserializer = ConfigurableSerDesFactory.getTDeserializer();
                     deserializer.deserialize(resultBatch, serialResult);
                     rowBatch.setBatch(resultBatch);
                     rowBatch.setEos(pResult.eos);
@@ -139,24 +140,16 @@ public class ResultReceiver {
             LOG.warn("fetch result execution exception, finstId={}", DebugUtil.printId(finstId), e);
             if (e.getMessage().contains("time out")) {
                 // if timeout, we set error code to TIMEOUT, and it will not retry querying.
-                status.setStatus(new Status(TStatusCode.TIMEOUT,
-                        String.format("Query exceeded time limit of %d seconds",
-                                ConnectContext.get().getSessionVariable().getQueryTimeoutS())));
+                status.setStatus(new Status(TStatusCode.TIMEOUT, ErrorCode.ERR_TIMEOUT.formatErrorMsg("Query", timeoutMs / 1000,
+                        String.format("please increase the '%s' session variable and retry", SessionVariable.QUERY_TIMEOUT))));
             } else {
                 status.setRpcStatus(e.getMessage());
                 SimpleScheduler.addToBlocklist(backendId);
             }
         } catch (TimeoutException e) {
             LOG.warn("fetch result timeout, finstId={}", DebugUtil.printId(finstId), e);
-            status.setInternalErrorStatus(String.format("Query exceeded time limit of %d seconds",
-                    ConnectContext.get().getSessionVariable().getQueryTimeoutS()));
-            if (MetricRepo.hasInit) {
-                MetricRepo.COUNTER_QUERY_TIMEOUT.increase(1L);
-            }
-        } finally {
-            synchronized (this) {
-                currentThread = null;
-            }
+            status.setTimeOutStatus(ErrorCode.ERR_TIMEOUT.formatErrorMsg("Query", timeoutMs / 1000,
+                    String.format("please increase the '%s' session variable and retry", SessionVariable.QUERY_TIMEOUT)));
         }
 
         if (isCancel) {
@@ -167,14 +160,13 @@ public class ResultReceiver {
 
     public void cancel() {
         isCancel = true;
-        synchronized (this) {
-            if (currentThread != null) {
-                // TODO(cmy): we cannot interrupt this thread, or we may throw
-                // java.nio.channels.ClosedByInterruptException when we call
-                // MysqlChannel.realNetSend -> SocketChannelImpl.write
-                // And user will lost connection to starrocks
-                // currentThread.interrupt();
-            }
-        }
+    }
+
+    public TNetworkAddress getAddress() {
+        return address;
+    }
+
+    public Long getBackendId() {
+        return backendId;
     }
 }

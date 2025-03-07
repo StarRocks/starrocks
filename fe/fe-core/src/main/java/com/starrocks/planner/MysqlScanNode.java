@@ -45,7 +45,7 @@ import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MysqlTable;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.TMySQLScanNode;
 import com.starrocks.thrift.TPlanNode;
@@ -69,7 +69,7 @@ public class MysqlScanNode extends ScanNode {
      */
     public MysqlScanNode(PlanNodeId id, TupleDescriptor desc, MysqlTable tbl) {
         super(id, desc, "SCAN MYSQL");
-        tblName = "`" + tbl.getMysqlTableName() + "`";
+        tblName = "`" + tbl.getCatalogTableName() + "`";
     }
 
     public void setTemporalClause(String temporalClause) {
@@ -87,7 +87,7 @@ public class MysqlScanNode extends ScanNode {
     }
 
     @Override
-    public void finalizeStats(Analyzer analyzer) throws UserException {
+    public void finalizeStats(Analyzer analyzer) throws StarRocksException {
         computeColumnsAndFilters();
     }
 
@@ -175,10 +175,6 @@ public class MysqlScanNode extends ScanNode {
         return null;
     }
 
-    @Override
-    public int getNumInstances() {
-        return 1;
-    }
 
     @Override
     public void computeStats(Analyzer analyzer) {

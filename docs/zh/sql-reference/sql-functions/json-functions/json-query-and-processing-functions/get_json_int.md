@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # get_json_int
 
-## 功能
+
 
 解析并获取 `json_str` 内 `json_path` 的整型内容。如果 `json_str` 格式不对或 `json_path` 格式不对，或者无法找到匹配项，则返回 NULL。
 
@@ -22,7 +22,7 @@ get_json_int(json_str, json_path)
 
 ## 返回值说明
 
-返回值的数据类型 INT。
+返回值的数据类型 BIGINT。
 
 ## 示例
 

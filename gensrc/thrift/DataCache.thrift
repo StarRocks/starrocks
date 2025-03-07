@@ -16,7 +16,12 @@ namespace cpp starrocks
 namespace java com.starrocks.thrift
 
 struct TDataCacheOptions {
-    1: optional i32 priority
+    // just placeholder, not needed now
+    // 1: optional bool enable_scan_datacache;
+    2: optional bool enable_populate_datacache;
+
+    // not public to user now
+    100: optional i32 priority;
 }
 
 enum TDataCacheStatus {

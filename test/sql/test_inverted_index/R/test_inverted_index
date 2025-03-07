@@ -1,4 +1,7 @@
--- name: test_basic_create_index
+-- name: test_basic_create_index @slow
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -14,7 +17,7 @@ PRIMARY KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -47,7 +50,7 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1 
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -109,12 +112,12 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
 -- result:
-E: (1064, 'Unexpected exception: Getting analyzing error. Detail message: GIN does not support replicated mode.')
+E: (1064, 'Getting analyzing error. Detail message: GIN does not support replicated mode.')
 -- !result
 DROP TABLE t_test_basic_create_index_pk;
 -- result:
@@ -123,6 +126,9 @@ DROP TABLE t_test_basic_create_index_dup;
 -- result:
 -- !result
 -- name: test_query_gin_index
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -142,7 +148,7 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -188,6 +194,9 @@ drop table t_test_gin_index_query;
 -- result:
 -- !result
 -- name: test_gin_index_single_predicate_none
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -203,7 +212,7 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -298,6 +307,9 @@ DROP TABLE t_gin_index_single_predicate_none;
 -- result:
 -- !result
 -- name: test_gin_index_single_predicate_english
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -313,7 +325,7 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -395,6 +407,9 @@ DROP TABLE t_gin_index_single_predicate_english;
 -- result:
 -- !result
 -- name: test_gin_index_multiple_predicate_none
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -410,7 +425,7 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -483,7 +498,7 @@ SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column LIKE "AB%" A
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match "ABC" OR text_column match "ABD";
 -- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_none WHERE text_column match "AB%" AND text_column match "%C";
 -- result:
@@ -493,6 +508,9 @@ DROP TABLE t_gin_index_multiple_predicate_none;
 -- result:
 -- !result
 -- name: test_gin_index_multiple_predicate_english
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -508,7 +526,7 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -524,7 +542,7 @@ INSERT INTO t_gin_index_multiple_predicate_english VALUES
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column match "this" OR text_column match "abc";
 -- result:
-E: (1064, 'Match can only used as a pushdown predicate on column with GIN in a single query.')
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
 -- !result
 SELECT * FROM t_gin_index_multiple_predicate_english WHERE text_column not match "this" AND text_column not match "abc";
 -- result:
@@ -542,6 +560,9 @@ DROP TABLE t_gin_index_multiple_predicate_english;
 -- result:
 -- !result
 -- name: test_gin_index_compaction
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -557,7 +578,7 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -587,7 +608,7 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -641,7 +662,7 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -668,7 +689,7 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -709,6 +730,9 @@ DROP TABLE t_gin_index_compaction_english_cumu;
 -- result:
 -- !result
 -- name: test_gin_index_type
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -724,7 +748,7 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -739,7 +763,7 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -754,7 +778,7 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -769,12 +793,12 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of scalar type..')
+E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type..')
 -- !result
 CREATE TABLE `t_gin_index_type_5` (
   `id1` bigint(20) NOT NULL COMMENT "",
@@ -785,12 +809,12 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of scalar type..')
+E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type..')
 -- !result
 CREATE TABLE `t_gin_index_type_6` (
   `id1` bigint(20) NOT NULL COMMENT "",
@@ -801,12 +825,12 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of scalar type..')
+E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type..')
 -- !result
 CREATE TABLE `t_gin_index_type_7` (
   `id1` bigint(20) NOT NULL COMMENT "",
@@ -817,14 +841,17 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of scalar type..')
+E: (1064, 'Getting analyzing error. Detail message: The inverted index can only be build on column with type of CHAR/STRING/VARCHAR type..')
 -- !result
 -- name: test_clone_for_gin
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -833,26 +860,32 @@ set cbo_enable_low_cardinality_optimize = false;
 -- !result
 CREATE TABLE `t_clone_for_gin` (
   `id1` bigint(20) NOT NULL COMMENT "",
-  `text_column` varchar(255) NULL COMMENT "",
-  INDEX gin_none (`text_column`) USING GIN ("parser" = "none") COMMENT 'whole line index'
+  `text_column_1` varchar(255) NULL COMMENT "",
+  `text_column_2` varchar(255) NULL COMMENT "",
+  `text_column_3` varchar(255) NULL COMMENT "",
+  `text_column_4` varchar(255) NULL COMMENT "",
+  INDEX gin_none_1 (`text_column_1`) USING GIN ("parser" = "none") COMMENT 'whole line index',
+  INDEX gin_none_2 (`text_column_2`) USING BITMAP,
+  INDEX gin_none_3 (`text_column_3`) USING GIN ("parser" = "none") COMMENT 'whole line index',
+  INDEX gin_none_4 (`text_column_4`) USING BITMAP
 ) ENGINE=OLAP
 DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "2",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
 -- result:
 -- !result
-INSERT INTO t_clone_for_gin VALUES (1, "abc"),(2, "ABC");
+INSERT INTO t_clone_for_gin VALUES (1, "abc","abc","abc","abc"),(2, "ABC","ABC","ABC","ABC");
 -- result:
 -- !result
 SELECT * FROM t_clone_for_gin ORDER BY id1;
 -- result:
-1	abc
-2	ABC
+1	abc	abc	abc	abc
+2	ABC	ABC	ABC	ABC
 -- !result
 function: set_first_tablet_bad_and_recover("t_clone_for_gin")
 -- result:
@@ -860,10 +893,13 @@ None
 -- !result
 SELECT * FROM t_clone_for_gin ORDER BY id1;
 -- result:
-1	abc
-2	ABC
+1	abc	abc	abc	abc
+2	ABC	ABC	ABC	ABC
 -- !result
 -- name: test_complex_predicate_for_gin
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -879,7 +915,7 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -894,7 +930,7 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -1027,6 +1063,9 @@ DROP TABLE t_complex_predicate_for_gin_english;
 -- result:
 -- !result
 -- name: test_delete_and_column_prune
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 CREATE TABLE `t_delete_and_column_prune` (
   `id1` bigint(20) NOT NULL COMMENT "",
   `text_column` varchar(255) NULL COMMENT "",
@@ -1036,7 +1075,7 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -1063,6 +1102,9 @@ DROP TABLE t_delete_and_column_prune;
 -- result:
 -- !result
 -- name: test_upper_case_column_name
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 set low_cardinality_optimize_v2 = false;
 -- result:
 -- !result
@@ -1078,7 +1120,7 @@ DUPLICATE KEY(`id1`)
 DISTRIBUTED BY HASH(`id1`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -1115,6 +1157,9 @@ DROP TABLE t_upper_case_column_name;
 -- result:
 -- !result
 -- name: test_alter_replicated_storage
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
 CREATE TABLE `t_alter_replicated_storage` (
   `id` bigint(20) NOT NULL COMMENT "",
   `text` varchar(255) NULL COMMENT "",
@@ -1124,7 +1169,7 @@ DUPLICATE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 1
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "false",
 "compression" = "LZ4"
 );
@@ -1139,7 +1184,7 @@ SHOW CREATE TABLE t_alter_replicated_storage;
 t_alter_replicated_storage	CREATE TABLE `t_alter_replicated_storage` (
   `id` bigint(20) NOT NULL COMMENT "",
   `text` varchar(255) NULL COMMENT "",
-  INDEX gin_none (`text`) USING GIN("parser" = "english") COMMENT ''
+  INDEX gin_none (`text`) USING GIN("imp_lib" = "clucene", "parser" = "english") COMMENT ''
 ) ENGINE=OLAP 
 DUPLICATE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 1 
@@ -1151,5 +1196,496 @@ PROPERTIES (
 );
 -- !result
 DROP TABLE t_alter_replicated_storage;
+-- result:
+-- !result
+-- name: test_disable_global_dict_rewrite
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
+CREATE TABLE `t_disable_global_dict_rewrite` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  `v2` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "english")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_disable_global_dict_rewrite VALUES (1, "abc", "bcd"), (2, "cbd", "dbs");
+-- result:
+-- !result
+SELECT * FROM t_disable_global_dict_rewrite;
+-- result:
+1	abc	bcd
+2	cbd	dbs
+-- !result
+SELECT SLEEP(5);
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" AND v1 = "abc";
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" AND v1 LIKE "%abc%";
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" AND v1 IN ("abc", "ab");
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE upper(v2) = "BCD" AND v1 MATCH "abc";
+-- result:
+1
+-- !result
+SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" GROUP BY v1;
+-- result:
+1
+-- !result
+SELECT sum(id) FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" GROUP BY v2;
+-- result:
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v1 MATCH "abc" ORDER BY v1;
+-- result:
+1
+-- !result
+SELECT id FROM t_disable_global_dict_rewrite WHERE v2 MATCH "abc" ORDER BY v2;
+-- result:
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
+-- !result
+DROP TABLE t_disable_global_dict_rewrite;
+-- result:
+-- !result
+-- name: test_create_mv_with_match
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
+CREATE TABLE `t_create_mv_with_match` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  `v2` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "english")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_create_mv_with_match VALUES (1, "abc", "bcd");
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW mv AS SELECT id, v1, v2 FROM t_create_mv_with_match WHERE v1 MATCH "abc";
+-- result:
+-- !result
+function: wait_materialized_view_cancel()
+-- result:
+None
+-- !result
+DROP TABLE t_create_mv_with_match;
+-- result:
+-- !result
+-- name: test_alter_gin_col_into_other_type
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
+CREATE TABLE `t_alter_gin_col_into_other_type` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "english")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+ALTER TABLE t_alter_gin_col_into_other_type MODIFY COLUMN v1 BIGINT;
+-- result:
+E: (1064, 'Cannot modify a column with GIN into non-string type')
+-- !result
+INSERT INTO t_alter_gin_col_into_other_type VALUES (1, "abc");
+-- result:
+-- !result
+ALTER TABLE t_alter_gin_col_into_other_type MODIFY COLUMN v1 VARCHAR(2000);
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+SHOW CREATE TABLE t_alter_gin_col_into_other_type;
+-- result:
+t_alter_gin_col_into_other_type	CREATE TABLE `t_alter_gin_col_into_other_type` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(2000) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN("imp_lib" = "clucene", "parser" = "english") COMMENT ''
+) ENGINE=OLAP 
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1 
+PROPERTIES (
+"compression" = "LZ4",
+"fast_schema_evolution" = "true",
+"replicated_storage" = "false",
+"replication_num" = "1"
+);
+-- !result
+SELECT * FROM t_alter_gin_col_into_other_type;
+-- result:
+1	abc
+-- !result
+DROP TABLE t_alter_gin_col_into_other_type;
+-- result:
+-- !result
+-- name: test_gin_var @sequential
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
+CREATE TABLE `t_gin_var` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "standard")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_gin_var VALUES (1, "abc bcd");
+-- result:
+-- !result
+SELECT * FROM t_gin_var WHERE v1 MATCH "abc";
+-- result:
+1	abc bcd
+-- !result
+SET enable_gin_filter = false;
+-- result:
+-- !result
+SELECT * FROM t_gin_var WHERE v1 MATCH "abc";
+-- result:
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
+-- !result
+SET enable_gin_filter = true;
+-- result:
+-- !result
+SELECT * FROM t_gin_var WHERE v1 MATCH "abc";
+-- result:
+1	abc bcd
+-- !result
+DROP TABLE t_gin_var;
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "false");
+-- result:
+-- !result
+CREATE TABLE `t_gin_var` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "standard")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true.')
+-- !result
+CREATE TABLE `t_gin_var` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT ""
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+ALTER TABLE t_gin_var add index idx (v1) USING GIN('parser' = 'standard');
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: The inverted index is disabled, enable it by setting FE config `enable_experimental_gin` to true.')
+-- !result
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
+DROP TABLE t_gin_var;
+-- result:
+-- !result
+CREATE TABLE `t_gin_var` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "standard")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+DROP TABLE t_gin_var;
+-- result:
+-- !result
+-- name: test_gin_match_empty
+CREATE TABLE `t_gin_match_empty` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v1` string COMMENT "",
+  `v2` string COMMENT "",
+  `v3` string COMMENT "",
+   INDEX idx1 (v1) USING GIN ('parser' = 'english'),
+   INDEX idx2 (v2) USING GIN ('parser' = 'chinese'),
+   INDEX idx3 (v3) USING GIN ('parser' = 'standard')
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false"
+);
+-- result:
+-- !result
+insert into t_gin_match_empty values (1, "中文50中文", "中文50中文", "中文50中文");
+-- result:
+-- !result
+SELECT count(*) FROM t_gin_match_empty WHERE v1 MATCH "";
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_gin_match_empty WHERE v2 MATCH "";
+-- result:
+0
+-- !result
+SELECT count(*) FROM t_gin_match_empty WHERE v3 MATCH "";
+-- result:
+0
+-- !result
+DROP TABLE t_gin_match_empty;
+-- result:
+-- !result
+-- name: test_gin_view
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
+CREATE TABLE `t_gin_view` (
+  `id` bigint(20) NOT NULL COMMENT "",
+  `v1` varchar(255) NULL COMMENT "",
+  INDEX gin_none (`v1`) USING GIN ("parser" = "english")
+) ENGINE=OLAP
+DUPLICATE KEY(`id`)
+DISTRIBUTED BY HASH(`id`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_gin_view VALUES (1, "abd bcd");
+-- result:
+-- !result
+SELECT * FROM t_gin_view;
+-- result:
+1	abd bcd
+-- !result
+CREATE VIEW test_view1 (column1, column2) AS SELECT * FROM t_gin_view;
+-- result:
+-- !result
+SELECT * FROM test_view1 WHERE column2 MATCH "abd" AND column2 MATCH "bcd";
+-- result:
+1	abd bcd
+-- !result
+SELECT * FROM test_view1 WHERE column2 MATCH "abd" AND column2 MATCH "bcd";
+-- result:
+1	abd bcd
+-- !result
+SELECT * FROM test_view1 WHERE column2 MATCH "abd" AND column2 MATCH "bcd";
+-- result:
+1	abd bcd
+-- !result
+SELECT * FROM test_view1 WHERE column2 MATCH "abd" AND column2 MATCH "bcd";
+-- result:
+1	abd bcd
+-- !result
+SELECT * FROM test_view1 WHERE column2 MATCH "abd" AND column2 MATCH "bcd";
+-- result:
+1	abd bcd
+-- !result
+SELECT * FROM test_view1 WHERE column2 MATCH "abd" AND column2 MATCH "bcd";
+-- result:
+1	abd bcd
+-- !result
+SELECT * FROM test_view1 WHERE column2 MATCH "abd" AND column2 MATCH "bcd";
+-- result:
+1	abd bcd
+-- !result
+SELECT * FROM test_view1 WHERE column2 MATCH "abd" AND column2 MATCH "bcd";
+-- result:
+1	abd bcd
+-- !result
+SELECT * FROM test_view1 WHERE column2 MATCH "abd" AND column2 MATCH "bcd";
+-- result:
+1	abd bcd
+-- !result
+SELECT * FROM test_view1 WHERE column2 MATCH "abd" AND column2 MATCH "bcd";
+-- result:
+1	abd bcd
+-- !result
+DROP TABLE t_gin_view;
+-- result:
+-- !result
+CREATE TABLE duplicate_table_demo_datatype_not_replicated_all_varchar ( AAA DATETIME not NULL COMMENT "", BBB VARCHAR(200) not NULL COMMENT "", CCC VARCHAR(200) not NULL COMMENT "", DDD VARCHAR(20000) COMMENT "", EEE LARGEINT  NULL COMMENT "", FFF DECIMAL(20,10) NULL COMMENT "", GGG VARCHAR(200)  NULL COMMENT "", HHH FLOAT  NULL COMMENT "", III BOOLEAN  NULL COMMENT "", KKK CHAR(20)   NULL COMMENT "", LLL STRING   NULL COMMENT "", MMM VARCHAR(20)   NULL COMMENT "", NNN BINARY  NULL COMMENT "", OOO TINYINT NULL COMMENT "", PPP DATETIME NULL COMMENT "", QQQ ARRAY<INT> NULL COMMENT "", RRR JSON NULL COMMENT "", SSS MAP<INT,INT> NULL COMMENT "", TTT STRUCT<a INT, b INT> NULL COMMENT "", INDEX init_bitmap_index (KKK) USING BITMAP ) duplicate KEY(AAA, BBB, CCC) PARTITION BY RANGE (`AAA`) ( START ("1970-01-01") END ("2030-01-01") EVERY (INTERVAL 30 YEAR) ) DISTRIBUTED BY HASH(`AAA`, `BBB`) BUCKETS 3 ORDER BY(`AAA`,`BBB`,`CCC`,`DDD`) PROPERTIES ( "replicated_storage"="false", "replication_num" = "1", "storage_format" = "v2", "enable_persistent_index" = "true", "bloom_filter_columns" = "MMM", "unique_constraints" = "GGG" );
+-- result:
+-- !result
+create view test_view (AAA, DDD) as select AAA, max(DDD) from duplicate_table_demo_datatype_not_replicated_all_varchar group by AAA;
+-- result:
+-- !result
+CREATE INDEX idx ON duplicate_table_demo_datatype_not_replicated_all_varchar(DDD) USING GIN('parser' = 'english');
+-- result:
+-- !result
+function: wait_alter_table_finish()
+-- result:
+None
+-- !result
+insert into duplicate_table_demo_datatype_not_replicated_all_varchar values ('1974-08-20 23:13:25', 'xIjfSXnegdnZiZGQMaxo', 'syHwIOMctmDLDGCibEun', 'hIbilUEGdLbCnaZASCVL', 6299, 25361.52081, 'QuTsacRyxiIkBjEmjhNu', -11.4812925061712, True, 'QcLRdQJMhtPXojJUjkUd', 'yUeFlbzomaPDwKeaHylx', 'WqQyGEjEYpvLzfBXYUCB', '', 8, '2015-11-03 16:31:47', [2621, 5950, 13171], '{"job": "Administrator, Civil Service", "company": "Morris-Anderson", "ssn": "823-67-5554", "residence": "59688 Hanna Shoal Apt. 586\nWest Waynefort, CO 69652", "current_location": ["-64.3777465", "21.079566"], "blood_group": "O-", "website": ["http://young.biz/", "https://cobb-bell.com/", "http://www.roberts-garrison.com/", "http://jones.com/"], "username": "howardarcher", "name": "John Mccullough", "sex": "M", "address": "1361 Susan Mountain\nJasonbury, MI 85084", "mail": "lovejennifer@gmail.com", "birthdate": "1928-06-25"}', null, null);
+-- result:
+-- !result
+select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
+-- result:
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
+-- !result
+select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
+-- result:
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
+-- !result
+select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
+-- result:
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
+-- !result
+select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
+-- result:
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
+-- !result
+select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
+-- result:
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
+-- !result
+select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
+-- result:
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
+-- !result
+select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
+-- result:
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
+-- !result
+select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
+-- result:
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
+-- !result
+select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
+-- result:
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
+-- !result
+select * from test_view where DDD match 'msrjabmbwkxmjggulkiy';
+-- result:
+[REGEX].*Match can only used as a pushdown predicate on column with GIN in a single query.*
+-- !result
+DROP VIEW test_view;
+-- result:
+-- !result
+DROP TABLE duplicate_table_demo_datatype_not_replicated_all_varchar;
+-- result:
+-- !result
+-- name: test_vertical_compaction
+ADMIN SET FRONTEND CONFIG("enable_experimental_gin" = "true");
+-- result:
+-- !result
+CREATE TABLE `t_vertical_compaction` (
+  `id1` bigint(20) NOT NULL COMMENT "",
+  `text_column` varchar(255) NULL COMMENT "",
+  `col1` varchar(255) DEFAULT "ABC" COMMENT "",
+  `col2` varchar(255) DEFAULT "ABC" COMMENT "",
+  `col3` varchar(255) DEFAULT "ABC" COMMENT "",
+  `col4` varchar(255) DEFAULT "ABC" COMMENT "",
+  `col5` varchar(255) DEFAULT "ABC" COMMENT "",
+  `col6` varchar(255) DEFAULT "ABC" COMMENT "",
+  `col7` varchar(255) DEFAULT "ABC" COMMENT "",
+  `col8` varchar(255) DEFAULT "ABC" COMMENT "",
+  `col9` varchar(255) DEFAULT "ABC" COMMENT "",
+  `col10` varchar(255) DEFAULT "ABC" COMMENT "",
+  INDEX gin_none (`text_column`) USING GIN ("parser" = "none") COMMENT 'whole line index'
+) ENGINE=OLAP
+DUPLICATE KEY(`id1`)
+DISTRIBUTED BY HASH(`id1`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+INSERT INTO t_vertical_compaction (id1, text_column) VALUES (1, "abc");
+-- result:
+-- !result
+INSERT INTO t_vertical_compaction (id1, text_column) VALUES (2, "ABC");
+-- result:
+-- !result
+INSERT INTO t_vertical_compaction (id1, text_column) VALUES (3, "bcd");
+-- result:
+-- !result
+INSERT INTO t_vertical_compaction (id1, text_column) VALUES (4, "BCD");
+-- result:
+-- !result
+ALTER TABLE t_vertical_compaction BASE COMPACT;
+-- result:
+-- !result
+SELECT sleep(10);
+-- result:
+1
+-- !result
+DROP TABLE t_vertical_compaction;
 -- result:
 -- !result

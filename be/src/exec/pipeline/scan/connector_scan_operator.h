@@ -35,8 +35,7 @@ struct ConnectorScanOperatorMemShareArbitrator {
     int64_t scan_mem_limit = 0;
     std::atomic<int64_t> total_chunk_source_mem_bytes = 0;
 
-    ConnectorScanOperatorMemShareArbitrator(int64_t query_mem_limit)
-            : query_mem_limit(query_mem_limit), scan_mem_limit(query_mem_limit) {}
+    ConnectorScanOperatorMemShareArbitrator(int64_t query_mem_limit, int connector_scan_node_number);
 
     int64_t set_scan_mem_ratio(double mem_ratio) {
         scan_mem_limit = std::max<int64_t>(1, query_mem_limit * mem_ratio);
@@ -58,6 +57,8 @@ public:
 
     ~ConnectorScanOperatorFactory() override = default;
 
+    bool support_event_scheduler() const override { return true; }
+
     Status do_prepare(RuntimeState* state) override;
     void do_close(RuntimeState* state) override;
     OperatorPtr do_create(int32_t dop, int32_t driver_sequence) override;
@@ -71,10 +72,19 @@ public:
     void set_mem_share_arb(ConnectorScanOperatorMemShareArbitrator* arb);
     void set_data_source_mem_bytes(int64_t value);
 
+    void attach_shared_input(int32_t operator_seq, int32_t source_index);
+    void detach_shared_input(int32_t operator_seq, int32_t source_index);
+    bool active_inputs_empty_event() {
+        bool val = true;
+        return _active_inputs_empty.compare_exchange_strong(val, false);
+    }
+
 private:
     // TODO: refactor the OlapScanContext, move them into the context
     BalancedChunkBuffer _chunk_buffer;
     ActiveInputSet _active_inputs;
+    std::atomic_int _num_active_inputs{};
+    std::atomic_bool _active_inputs_empty{};
 
 public:
     ConnectorScanOperatorIOTasksMemLimiter* _io_tasks_mem_limiter = nullptr;
@@ -98,24 +108,25 @@ public:
     void attach_chunk_source(int32_t source_index) override;
     void detach_chunk_source(int32_t source_index) override;
     bool has_shared_chunk_source() const override;
-    ChunkPtr get_chunk_from_buffer() override;
-    size_t num_buffered_chunks() const override;
-    size_t buffer_size() const override;
-    size_t buffer_capacity() const override;
-    size_t buffer_memory_usage() const override;
-    size_t default_buffer_capacity() const override;
-    ChunkBufferTokenPtr pin_chunk(int num_chunks) override;
-    bool is_buffer_full() const override;
-    void set_buffer_finished() override;
+    BalancedChunkBuffer& get_chunk_buffer() const override {
+        auto* factory = down_cast<ConnectorScanOperatorFactory*>(_factory);
+        return factory->get_chunk_buffer();
+    }
 
     int available_pickup_morsel_count() override;
     void begin_driver_process() override;
     void end_driver_process(PipelineDriver* driver) override;
     bool is_running_all_io_tasks() const override;
 
-    void append_morsels(std::vector<MorselPtr>&& morsels);
+    Status append_morsels(std::vector<MorselPtr>&& morsels);
     ConnectorScanOperatorAdaptiveProcessor* adaptive_processor() const { return _adaptive_processor; }
     bool enable_adaptive_io_tasks() const { return _enable_adaptive_io_tasks; }
+
+    workgroup::ScanSchedEntityType sched_entity_type() const override {
+        return workgroup::ScanSchedEntityType::CONNECTOR;
+    }
+    std::string get_name() const override;
+    bool need_notify_all() override;
 
 private:
     int64_t _adjust_scan_mem_limit(int64_t old_chunk_source_mem_bytes, int64_t new_chunk_source_mem_bytes);
@@ -126,7 +137,8 @@ private:
 class ConnectorChunkSource : public ChunkSource {
 public:
     ConnectorChunkSource(ScanOperator* op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
-                         ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer);
+                         ConnectorScanNode* scan_node, BalancedChunkBuffer& chunk_buffer,
+                         bool enable_adaptive_io_tasks);
 
     ~ConnectorChunkSource() override;
 
@@ -148,8 +160,6 @@ protected:
 private:
     Status _read_chunk(RuntimeState* state, ChunkPtr* chunk) override;
 
-    const workgroup::WorkGroupScanSchedEntity* _scan_sched_entity(const workgroup::WorkGroup* wg) const override;
-
     ConnectorScanOperatorIOTasksMemLimiter* _get_io_tasks_mem_limiter() const;
 
     const int64_t _limit; // -1: no limit
@@ -168,6 +178,7 @@ private:
     uint64_t _chunk_mem_bytes = 0;
     int64_t _request_mem_tracker_bytes = 0;
     int64_t _mem_alloc_failed_count = 0;
+    bool _enable_adaptive_io_tasks = true;
 };
 
 } // namespace pipeline

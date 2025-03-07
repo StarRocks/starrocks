@@ -25,20 +25,20 @@ namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaTaskRunsScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"QUERY_ID", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TASK_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"FINISH_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"STATE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"CATALOG", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DATABASE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"DEFINITION", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"EXPIRE_TIME", TYPE_DATETIME, sizeof(StringValue), true},
-        {"ERROR_CODE", TYPE_BIGINT, sizeof(StringValue), true},
-        {"ERROR_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"PROGRESS", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"EXTRA_MESSAGE", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"PROPERTIES", TYPE_VARCHAR, sizeof(StringValue), true}};
+        {"QUERY_ID", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TASK_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"FINISH_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"STATE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DATABASE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"DEFINITION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"EXPIRE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(StringValue), true},
+        {"ERROR_CODE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(StringValue), true},
+        {"ERROR_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"PROGRESS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"EXTRA_MESSAGE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"PROPERTIES", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true}};
 
 SchemaTaskRunsScanner::SchemaTaskRunsScanner()
         : SchemaScanner(_s_tbls_columns, sizeof(_s_tbls_columns) / sizeof(SchemaScanner::ColumnDesc)) {}
@@ -47,15 +47,28 @@ SchemaTaskRunsScanner::~SchemaTaskRunsScanner() = default;
 
 Status SchemaTaskRunsScanner::start(RuntimeState* state) {
     RETURN_IF_ERROR(SchemaScanner::start(state));
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    std::string task_name;
+    std::string query_id;
+    std::string task_run_state;
     TGetTasksParams task_params;
+    // task_name
+    if (_parse_expr_predicate("TASK_NAME", task_name)) {
+        task_params.__set_task_name(task_name);
+    }
+    // query_id
+    if (_parse_expr_predicate("QUERY_ID", query_id)) {
+        task_params.__set_query_id(query_id);
+    }
+    // task_run_state
+    if (_parse_expr_predicate("STATE", task_run_state)) {
+        task_params.__set_state(task_run_state);
+    }
     if (nullptr != _param->current_user_ident) {
         task_params.__set_current_user_ident(*(_param->current_user_ident));
     }
-    if (nullptr != _param->ip && 0 != _param->port) {
-        RETURN_IF_ERROR(SchemaHelper::get_task_runs(*(_param->ip), _param->port, task_params, &_task_run_result));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
-    }
+    RETURN_IF_ERROR(SchemaHelper::get_task_runs(_ss_state, task_params, &_task_run_result));
     _task_run_index = 0;
     return Status::OK();
 }

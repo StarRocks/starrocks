@@ -27,7 +27,6 @@
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
-#include "exprs/anyval_util.h"
 #include "exprs/function_context.h"
 #include "gutil/casts.h"
 #include "jni.h"
@@ -45,7 +44,7 @@ struct UDFFunctionCallHelper {
     JavaMethodDescriptor* call_desc;
 
     // Now we don't support logical type function
-    ColumnPtr call(FunctionContext* ctx, Columns& columns, size_t size) {
+    StatusOr<ColumnPtr> call(FunctionContext* ctx, Columns& columns, size_t size) {
         auto& helper = JVMFunctionHelper::getInstance();
         JNIEnv* env = helper.getEnv();
         std::vector<DirectByteBuffer> buffers;
@@ -74,7 +73,9 @@ struct UDFFunctionCallHelper {
         RETURN_IF_UNLIKELY(!st.ok(), ColumnHelper::create_const_null_column(size));
 
         // call UDF method
-        jobject res = helper.batch_call(fn_desc->call_stub.get(), input_col_objs.data(), input_col_objs.size(), size);
+        ASSIGN_OR_RETURN(auto res, helper.batch_call(fn_desc->call_stub.get(), input_col_objs.data(),
+                                                     input_col_objs.size(), size));
+
         RETURN_IF_UNLIKELY_NULL(res, ColumnHelper::create_const_null_column(size));
         // get result
         auto result_cols = get_boxed_result(ctx, res, size);
@@ -103,7 +104,7 @@ StatusOr<ColumnPtr> JavaFunctionCallExpr::evaluate_checked(ExprContext* context,
     for (int i = 0; i < _children.size(); ++i) {
         ASSIGN_OR_RETURN(columns[i], _children[i]->evaluate_checked(context, ptr));
     }
-    ColumnPtr res;
+    StatusOr<ColumnPtr> res;
     auto call_udf = [&]() {
         res = _call_helper->call(context->fn_context(_fn_context_index), columns, ptr != nullptr ? ptr->num_rows() : 1);
         return Status::OK();
@@ -133,11 +134,11 @@ Status JavaFunctionCallExpr::prepare(RuntimeState* state, ExprContext* context) 
         return Status::InternalError("Not Found function id for " + _fn.name.function_name);
     }
 
-    FunctionContext::TypeDesc return_type = AnyValUtil::column_type_to_type_desc(_type);
+    FunctionContext::TypeDesc return_type = _type;
     std::vector<FunctionContext::TypeDesc> args_types;
 
     for (Expr* child : _children) {
-        args_types.push_back(AnyValUtil::column_type_to_type_desc(child->type()));
+        args_types.push_back(child->type());
     }
 
     // todo: varargs use for allocate slice memory, need compute buffer size
@@ -159,7 +160,7 @@ bool JavaFunctionCallExpr::is_constant() const {
 }
 
 StatusOr<std::shared_ptr<JavaUDFContext>> JavaFunctionCallExpr::_build_udf_func_desc(
-        ExprContext* context, FunctionContext::FunctionStateScope scope, const std::string& libpath) {
+        FunctionContext::FunctionStateScope scope, const std::string& libpath) {
     auto desc = std::make_shared<JavaUDFContext>();
     // init class loader and analyzer
     desc->udf_classloader = std::make_unique<ClassLoader>(std::move(libpath));
@@ -202,9 +203,8 @@ StatusOr<std::shared_ptr<JavaUDFContext>> JavaFunctionCallExpr::_build_udf_func_
     ASSIGN_OR_RETURN(auto update_stub_clazz, desc->udf_classloader->genCallStub(stub_clazz, udf_clazz, update_method,
                                                                                 ClassLoader::BATCH_EVALUATE));
     ASSIGN_OR_RETURN(auto method, desc->analyzer->get_method_object(update_stub_clazz.clazz(), stub_method_name));
-    auto function_ctx = context->fn_context(_fn_context_index);
-    desc->call_stub = std::make_unique<BatchEvaluateStub>(
-            function_ctx, desc->udf_handle.handle(), std::move(update_stub_clazz), JavaGlobalRef(std::move(method)));
+    desc->call_stub = std::make_unique<BatchEvaluateStub>(desc->udf_handle.handle(), std::move(update_stub_clazz),
+                                                          JavaGlobalRef(std::move(method)));
 
     if (desc->prepare != nullptr) {
         // we only support fragment local scope to call prepare
@@ -232,10 +232,10 @@ Status JavaFunctionCallExpr::open(RuntimeState* state, ExprContext* context,
     }
     // cacheable
     if (scope == FunctionContext::FRAGMENT_LOCAL) {
-        auto get_func_desc = [this, scope, context, state](const std::string& lib) -> StatusOr<std::any> {
+        auto get_func_desc = [this, scope, state](const std::string& lib) -> StatusOr<std::any> {
             std::any func_desc;
             auto call = [&]() {
-                ASSIGN_OR_RETURN(func_desc, _build_udf_func_desc(context, scope, lib));
+                ASSIGN_OR_RETURN(func_desc, _build_udf_func_desc(scope, lib));
                 return Status::OK();
             };
             RETURN_IF_ERROR(call_function_in_pthread(state, call)->get_future().get());

@@ -247,6 +247,8 @@ std::string Status::code_as_string() const {
         return "Duplicate RPC invocation";
     case TStatusCode::GLOBAL_DICT_ERROR:
         return "Global dictionary error";
+    case TStatusCode::GLOBAL_DICT_NOT_MATCH:
+        return "Global dictionary not match";
     case TStatusCode::UNKNOWN:
         return "Unknown";
     case TStatusCode::TXN_NOT_EXISTS:
@@ -259,6 +261,12 @@ std::string Status::code_as_string() const {
         return "JIT compile error";
     case TStatusCode::CAPACITY_LIMIT_EXCEED:
         return "Capaticy limit exceeded";
+    case TStatusCode::SHUTDOWN:
+        return "Shut down in progress";
+    case TStatusCode::BIG_QUERY_CPU_SECOND_LIMIT_EXCEEDED:
+        return "Big query cpu second limit exceeded";
+    case TStatusCode::BIG_QUERY_SCAN_ROWS_LIMIT_EXCEEDED:
+        return "Big query scan rows limit exceeded";
     }
     return {};
 }
@@ -307,16 +315,14 @@ Status Status::clone_and_prepend(std::string_view msg) const {
     if (ok()) {
         return *this;
     }
-    auto msg2 = message();
-    return {code(), fmt::format("{}: {}", msg, msg2)};
+    return {code(), fmt::format("{}: {}", msg, message())};
 }
 
 Status Status::clone_and_append(std::string_view msg) const {
     if (ok()) {
         return *this;
     }
-    auto msg2 = message();
-    return {code(), fmt::format("{}: {}", msg, msg2)};
+    return {code(), fmt::format("{}: {}", message(), msg)};
 }
 
 Status Status::clone_and_append_context(const char* filename, int line, const char* expr) const {

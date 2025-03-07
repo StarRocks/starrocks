@@ -14,8 +14,8 @@
 
 #pragma once
 
-#include "common/macros.h"
 #include "common/ownership.h"
+#include "gutil/macros.h"
 #include "storage/rowset/column_iterator.h"
 
 namespace starrocks {
@@ -46,10 +46,13 @@ public:
     ordinal_t get_current_ordinal() const override { return _parent->get_current_ordinal(); }
 
     Status get_row_ranges_by_zone_map(const std::vector<const ColumnPredicate*>& predicates,
-                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges) override {
-        return _parent->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges);
+                                      const ColumnPredicate* del_predicate, SparseRange<>* row_ranges,
+                                      CompoundNodeType pred_relation) override {
+        return _parent->get_row_ranges_by_zone_map(predicates, del_predicate, row_ranges, pred_relation);
     }
 
+    bool has_original_bloom_filter_index() const override { return _parent->has_original_bloom_filter_index(); }
+    bool has_ngram_bloom_filter_index() const override { return _parent->has_ngram_bloom_filter_index(); }
     Status get_row_ranges_by_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
                                           SparseRange<>* row_ranges) override {
         return _parent->get_row_ranges_by_bloom_filter(predicates, row_ranges);

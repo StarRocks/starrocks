@@ -18,7 +18,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
-import com.starrocks.common.util.StringUtils;
+import com.starrocks.common.util.SRStringUtils;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.ShowTableStmt;
 import com.starrocks.utframe.StarRocksAssert;
@@ -90,9 +90,9 @@ public class ConcurrentDDLTest {
                 try {
                     System.out.println("start to create table");
                     starRocksAssert.withTable("create table test.test_tbl_" + Thread.currentThread().getId() +
-                            " (id int) duplicate key (id)" +
-                            " distributed by hash(id) buckets 5183 " +
-                            "properties(\"replication_num\"=\"1\", \"colocate_with\"=\"test_cg_001\");");
+                                " (id int) duplicate key (id)" +
+                                " distributed by hash(id) buckets 5183 " +
+                                "properties(\"replication_num\"=\"1\", \"colocate_with\"=\"test_cg_001\");");
                     System.out.println("end to create table");
                 } catch (Exception e) {
                     throw new RuntimeException(e);
@@ -111,19 +111,21 @@ public class ConcurrentDDLTest {
             thread.join();
         }
 
-        Database db = GlobalStateMgr.getServingState().getDb("test");
-        Table table = db.getTable("test_tbl_" + threadIds.get(0));
+        Database db = GlobalStateMgr.getServingState().getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), "test_tbl_" + threadIds.get(0));
 
         List<List<Long>> bucketSeq = GlobalStateMgr.getCurrentState().getColocateTableIndex().getBackendsPerBucketSeq(
-                GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroup(table.getId()));
+                    GlobalStateMgr.getCurrentState().getColocateTableIndex().getGroup(table.getId()));
         // check all created colocate tables has same tablet distribution as the bucket seq in colocate group
         for (long threadId : threadIds) {
-            table = db.getTable("test_tbl_" + threadId);
-            List<Long> tablets = table.getPartitions().stream().findFirst().get().getBaseIndex().getTabletIdsInOrder();
+            table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "test_tbl_" + threadId);
+            List<Long> tablets = table.getPartitions().stream().findFirst().get().getDefaultPhysicalPartition()
+                    .getBaseIndex().getTabletIdsInOrder();
             List<Long> backendIdList = tablets.stream()
-                    .map(id -> GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(id))
-                    .map(replicaList -> replicaList.get(0).getBackendId())
-                    .collect(Collectors.toList());
+                        .map(id -> GlobalStateMgr.getCurrentState().getTabletInvertedIndex().getReplicasByTabletId(id))
+                        .map(replicaList -> replicaList.get(0).getBackendId())
+                        .collect(Collectors.toList());
             Assert.assertEquals(bucketSeq, backendIdList.stream().map(Arrays::asList).collect(Collectors.toList()));
         }
     }
@@ -131,13 +133,13 @@ public class ConcurrentDDLTest {
     @Test
     public void testConcurrentlyDropDbAndCreateTable() throws Exception {
         final String createTableSqlFormat =
-                "CREATE TABLE IF NOT EXISTS concurrent_test_db.test_tbl_RRR(k1 int, k2 int, k3 int)" +
-                        " distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
+                    "CREATE TABLE IF NOT EXISTS concurrent_test_db.test_tbl_RRR(k1 int, k2 int, k3 int)" +
+                                " distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         final String createViewSqlFormat = "CREATE VIEW IF NOT EXISTS concurrent_test_db.test_view_RRR" +
-                " as select k1,k2 from concurrent_test_db.base_t1;";
+                    " as select k1,k2 from concurrent_test_db.base_t1;";
         final String createMVSqlFormat = "CREATE MATERIALIZED VIEW IF NOT EXISTS" +
-                " concurrent_test_db.test_mv_RRR DISTRIBUTED BY HASH(`k2`) REFRESH MANUAL" +
-                " as select k2,k3 from concurrent_test_db.base_t1;";
+                    " concurrent_test_db.test_mv_RRR DISTRIBUTED BY HASH(`k2`) REFRESH MANUAL" +
+                    " as select k2,k3 from concurrent_test_db.base_t1;";
 
         final int NUM_ROUND = 1;
 
@@ -155,16 +157,16 @@ public class ConcurrentDDLTest {
                         System.out.println("creating table and db time: " + times);
                         starRocksAssert.withDatabase("concurrent_test_db");
                         starRocksAssert.withTable(
-                                "CREATE TABLE IF NOT EXISTS concurrent_test_db.base_t1(k1 int, k2 int, k3 int)" +
-                                        " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
+                                    "CREATE TABLE IF NOT EXISTS concurrent_test_db.base_t1(k1 int, k2 int, k3 int)" +
+                                                " distributed by hash(k1) buckets 3 properties('replication_num' = '1');");
                         int time = 300 + random.nextInt(100);
                         // sleep random time before dropping database
                         Thread.sleep(time);
                         System.out.println("dropping table and db");
-                        Database db = GlobalStateMgr.getCurrentState().getDb("concurrent_test_db");
+                        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("concurrent_test_db");
                         ShowTableStmt showTableStmt =
-                                (ShowTableStmt) UtFrameUtils.parseStmtWithNewParser(
-                                        "show tables from concurrent_test_db", connectContext);
+                                    (ShowTableStmt) UtFrameUtils.parseStmtWithNewParser(
+                                                "show tables from concurrent_test_db", connectContext);
                         starRocksAssert.dropDatabase("concurrent_test_db");
                         System.out.println("concurrent_test_db dropped");
                     } catch (Exception e) {
@@ -194,7 +196,7 @@ public class ConcurrentDDLTest {
                         } catch (InterruptedException e) {
                             throw new RuntimeException(e);
                         }
-                        String randomStr = StringUtils.generateRandomString(24);
+                        String randomStr = SRStringUtils.generateRandomString(24);
                         int idx = time % 3;
                         String sql = null;
                         try {
@@ -251,9 +253,9 @@ public class ConcurrentDDLTest {
                     System.out.println("start to create table same_tbl");
                     try {
                         starRocksAssert.withTable("create table test.same_tbl " +
-                                " (id int) duplicate key (id)" +
-                                " distributed by hash(id) buckets 5183 " +
-                                "properties(\"replication_num\"=\"1\", \"colocate_with\"=\"test_cg_001\");");
+                                    " (id int) duplicate key (id)" +
+                                    " distributed by hash(id) buckets 5183 " +
+                                    "properties(\"replication_num\"=\"1\", \"colocate_with\"=\"test_cg_001\");");
                     } catch (Exception e) {
                         errorCount.incrementAndGet();
                     }

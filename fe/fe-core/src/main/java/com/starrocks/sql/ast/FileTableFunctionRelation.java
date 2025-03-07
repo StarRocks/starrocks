@@ -15,15 +15,20 @@
 package com.starrocks.sql.ast;
 
 import com.starrocks.analysis.TableName;
+import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
+import java.util.function.Consumer;
 
 public class FileTableFunctionRelation extends TableRelation {
 
     public static final String IDENTIFIER = "FILES";
 
     private Map<String, String> properties;
+
+    // function of push down target table schema to files, for insert from files()
+    private Consumer<TableFunctionTable> pushDownSchemaFunc;
 
     public FileTableFunctionRelation(Map<String, String> properties, NodePosition pos) {
         super(new TableName("", "table_function_table"));
@@ -32,6 +37,14 @@ public class FileTableFunctionRelation extends TableRelation {
 
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    public Consumer<TableFunctionTable> getPushDownSchemaFunc() {
+        return pushDownSchemaFunc;
+    }
+
+    public void setPushDownSchemaFunc(Consumer<TableFunctionTable> pushDownSchemaFunc) {
+        this.pushDownSchemaFunc = pushDownSchemaFunc;
     }
 
     @Override

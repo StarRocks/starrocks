@@ -17,6 +17,7 @@ package com.starrocks.alter;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PrimitiveType;
@@ -49,20 +50,23 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         connectContext = UtFrameUtils.createDefaultCtx();
         String createDbStmtStr = "create database " + DB_NAME;
         CreateDbStmt createDbStmt = (CreateDbStmt) UtFrameUtils.parseStmtWithNewParser(createDbStmtStr, connectContext);
-        GlobalStateMgr.getCurrentState().getMetadata().createDb(createDbStmt.getFullDbName());
+        GlobalStateMgr.getCurrentState().getLocalMetastore().createDb(createDbStmt.getFullDbName());
         connectContext.setDatabase(DB_NAME);
     }
 
     private static LakeTable createTable(ConnectContext connectContext, String sql) throws Exception {
         CreateTableStmt createTableStmt = (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(createTableStmt);
-        Database db = GlobalStateMgr.getCurrentState().getDb(createTableStmt.getDbName());
-        return (LakeTable) db.getTable(createTableStmt.getTableName());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createTableStmt.getDbName());
+        LakeTable table = (LakeTable) GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(db.getFullName(), createTableStmt.getTableName());
+        table.addRelatedMaterializedView(new MvId(db.getId(), GlobalStateMgr.getCurrentState().getNextId()));
+        return table;
     }
 
     private static void alterTable(ConnectContext connectContext, String sql) throws Exception {
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, connectContext);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(stmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTable(connectContext, stmt);
     }
 
     private LakeTableAsyncFastSchemaChangeJob getAlterJob(Table table) {
@@ -85,6 +89,10 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         alterTable(connectContext, sql);
         AlterJobV2 alterJob = getAlterJob(table);
         alterJob.run();
+        while (alterJob.getJobState() != AlterJobV2.JobState.FINISHED) {
+            alterJob.run();
+            Thread.sleep(100);
+        }
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJob.getJobState());
         return alterJob;
     }
@@ -92,7 +100,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
     @Test
     public void test() throws Exception {
         LakeTable table = createTable(connectContext, "CREATE TABLE t0(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
-                "BUCKETS 2 PROPERTIES('fast_schema_evolution'='true')");
+                    "BUCKETS 2 PROPERTIES('fast_schema_evolution'='true')");
         long oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
 
         {
@@ -133,7 +141,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
     @Test
     public void testGetInfo() throws Exception {
         LakeTable table = createTable(connectContext, "CREATE TABLE t1(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
-                "BUCKETS 2 PROPERTIES('fast_schema_evolution'='true')");
+                    "BUCKETS 2 PROPERTIES('fast_schema_evolution'='true')");
         AlterJobV2 job = mustAlterTable(table, "ALTER TABLE t1 ADD COLUMN c1 BIGINT");
         List<List<Comparable>> infoList = new ArrayList<>();
         job.getInfo(infoList);
@@ -148,7 +156,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         Assert.assertEquals(table.getBaseIndexId(), info.get(5));
         Assert.assertEquals(table.getBaseIndexId(), info.get(6));
         Assert.assertEquals(String.format("%d:0", table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaVersion()),
-                info.get(7));
+                    info.get(7));
         Assert.assertEquals(job.getTransactionId().get(), info.get(8));
         Assert.assertEquals(job.getJobState().name(), info.get(9));
         Assert.assertEquals(job.errMsg, info.get(10));
@@ -158,21 +166,21 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
 
     @Test
     public void testReplay() throws Exception {
-        Database db = GlobalStateMgr.getCurrentState().getDb(DB_NAME);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
         LakeTable table = createTable(connectContext, "CREATE TABLE t3(c0 INT) DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
-                "BUCKETS 2 PROPERTIES('fast_schema_evolution'='true')");
+                    "BUCKETS 2 PROPERTIES('fast_schema_evolution'='true')");
         SchemaChangeHandler handler = GlobalStateMgr.getCurrentState().getAlterJobMgr().getSchemaChangeHandler();
         AlterTableStmt stmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser("ALTER TABLE t3 ADD COLUMN c1 INT",
-                connectContext);
-        LakeTableAsyncFastSchemaChangeJob job = (LakeTableAsyncFastSchemaChangeJob) handler.analyzeAndCreateJob(stmt.getOps(), db,
-                table);
+                    connectContext);
+        LakeTableAsyncFastSchemaChangeJob job = (LakeTableAsyncFastSchemaChangeJob)
+                    handler.analyzeAndCreateJob(stmt.getAlterClauseList(), db, table);
         Assert.assertNotNull(job);
         Assert.assertEquals(AlterJobV2.JobState.PENDING, job.getJobState());
         Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         Partition partition = table.getPartition("t3");
         long baseIndexId = table.getBaseIndexId();
-        long initVisibleVersion = partition.getVisibleVersion();
-        long initNextVersion = partition.getNextVersion();
+        long initVisibleVersion = partition.getDefaultPhysicalPartition().getVisibleVersion();
+        long initNextVersion = partition.getDefaultPhysicalPartition().getNextVersion();
         Assert.assertEquals(initVisibleVersion + 1, initNextVersion);
 
         LakeTableAsyncFastSchemaChangeJob replaySourceJob = new LakeTableAsyncFastSchemaChangeJob(job);
@@ -181,11 +189,12 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         Assert.assertEquals(OlapTable.OlapTableState.SCHEMA_CHANGE, table.getState());
 
         replaySourceJob.setJobState(AlterJobV2.JobState.FINISHED_REWRITING);
-        replaySourceJob.getCommitVersionMap().put(partition.getId(), initNextVersion);
-        replaySourceJob.addDirtyPartitionIndex(partition.getId(), baseIndexId, partition.getIndex(baseIndexId));
+        replaySourceJob.getCommitVersionMap().put(partition.getDefaultPhysicalPartition().getId(), initNextVersion);
+        replaySourceJob.addDirtyPartitionIndex(partition.getDefaultPhysicalPartition().getId(), baseIndexId,
+                partition.getDefaultPhysicalPartition().getIndex(baseIndexId));
         job.replay(replaySourceJob);
-        Assert.assertEquals(initNextVersion + 1, partition.getNextVersion());
-        Assert.assertEquals(initVisibleVersion, partition.getVisibleVersion());
+        Assert.assertEquals(initNextVersion + 1, partition.getDefaultPhysicalPartition().getNextVersion());
+        Assert.assertEquals(initVisibleVersion, partition.getDefaultPhysicalPartition().getVisibleVersion());
 
         replaySourceJob.setJobState(AlterJobV2.JobState.FINISHED);
         replaySourceJob.setFinishedTimeMs(System.currentTimeMillis());
@@ -193,8 +202,9 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
         job.replay(replaySourceJob);
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, job.getJobState());
         Assert.assertEquals(replaySourceJob.getFinishedTimeMs(), job.getFinishedTimeMs());
-        Assert.assertEquals(initVisibleVersion + 1, partition.getVisibleVersion());
-        Assert.assertEquals(partition.getVisibleVersion() + 1, partition.getNextVersion());
+        Assert.assertEquals(initVisibleVersion + 1, partition.getDefaultPhysicalPartition().getVisibleVersion());
+        Assert.assertEquals(partition.getDefaultPhysicalPartition().getVisibleVersion() + 1,
+                partition.getDefaultPhysicalPartition().getNextVersion());
         Assert.assertEquals(OlapTable.OlapTableState.NORMAL, table.getState());
         Assert.assertEquals(2, table.getBaseSchema().size());
         Assert.assertEquals(0, table.getBaseSchema().get(0).getUniqueId());
@@ -206,7 +216,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
     @Test
     public void testSortKey() throws Exception {
         LakeTable table = createTable(connectContext, "CREATE TABLE t_test_sort_key(c0 INT, c1 BIGINT) PRIMARY KEY(c0) " +
-                "DISTRIBUTED BY HASH(c0) BUCKETS 2 ORDER BY(c1)");
+                    "DISTRIBUTED BY HASH(c0) BUCKETS 2 ORDER BY(c1)");
         long oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
 
         {
@@ -239,7 +249,7 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
     @Test
     public void testSortKeyIndexesChanged() throws Exception {
         LakeTable table = createTable(connectContext, "CREATE TABLE t_test_sort_key_index_changed" +
-                "(c0 INT, c1 BIGINT, c2 BIGINT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 2 ORDER BY(c2)");
+                    "(c0 INT, c1 BIGINT, c2 BIGINT) PRIMARY KEY(c0) DISTRIBUTED BY HASH(c0) BUCKETS 2 ORDER BY(c2)");
         long oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
 
         {
@@ -260,13 +270,13 @@ public class LakeTableAsyncFastSchemaChangeJobTest {
     @Test
     public void testModifyColumnType() throws Exception {
         LakeTable table = createTable(connectContext, "CREATE TABLE t_modify_type" +
-                "(c0 INT, c1 INT, c2 VARCHAR(5), c3 DATE)" +
-                "DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
-                "BUCKETS 1 PROPERTIES('fast_schema_evolution'='true')");
+                    "(c0 INT, c1 INT, c2 VARCHAR(5), c3 DATE)" +
+                    "DUPLICATE KEY(c0) DISTRIBUTED BY HASH(c0) " +
+                    "BUCKETS 1 PROPERTIES('fast_schema_evolution'='true')");
         long oldSchemaId = table.getIndexIdToMeta().get(table.getBaseIndexId()).getSchemaId();
         {
             mustAlterTable(table, "ALTER TABLE t_modify_type MODIFY COLUMN c1 BIGINT, MODIFY COLUMN c2 VARCHAR(10)," +
-                    "MODIFY COLUMN c3 DATETIME");
+                        "MODIFY COLUMN c3 DATETIME");
             List<Column> columns = table.getBaseSchema();
             Assert.assertEquals(4, columns.size());
 

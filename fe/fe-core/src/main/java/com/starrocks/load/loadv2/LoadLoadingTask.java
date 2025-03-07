@@ -39,8 +39,8 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.LoadException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.common.UserException;
 import com.starrocks.common.Version;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.LogBuilder;
@@ -58,6 +58,9 @@ import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.LoadPlanner;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.ast.LoadStmt;
+import com.starrocks.sql.common.AuditEncryptionChecker;
 import com.starrocks.thrift.TBrokerFileStatus;
 import com.starrocks.thrift.TLoadJobType;
 import com.starrocks.thrift.TPartialUpdateMode;
@@ -100,10 +103,12 @@ public class LoadLoadingTask extends LoadTask {
 
     private LoadPlanner loadPlanner;
     private final OriginStatement originStmt;
+    private final LoadStmt loadStmt;
     private final List<List<TBrokerFileStatus>> fileStatusList;
     private final int fileNum;
 
     private final LoadJob.JSONOptions jsonOptions;
+    private long warehouseId;
 
     private LoadLoadingTask(Builder builder) {
         super(builder.callback, TaskType.LOADING, builder.priority);
@@ -124,21 +129,24 @@ public class LoadLoadingTask extends LoadTask {
         this.context = builder.context;
         this.loadJobType = builder.loadJobType;
         this.originStmt = builder.originStmt;
+        this.loadStmt = builder.loadStmt;
         this.partialUpdateMode = builder.partialUpdateMode;
         this.failMsg = new FailMsg(FailMsg.CancelType.LOAD_RUN_FAIL);
         this.loadId = builder.loadId;
         this.fileStatusList = builder.fileStatusList;
         this.fileNum = builder.fileNum;
         this.jsonOptions = builder.jsonOptions;
+        this.warehouseId = builder.warehouseId;
     }
 
-    public void prepare() throws UserException {
+    public void prepare() throws StarRocksException {
         loadPlanner = new LoadPlanner(callback.getCallbackId(), loadId, txnId, db.getId(), table, strictMode,
                 timezone, timeoutS, createTimestamp, partialUpdate, context, sessionVariables, execMemLimit, execMemLimit,
                 brokerDesc, fileGroups, fileStatusList, fileNum);
         loadPlanner.setPartialUpdateMode(partialUpdateMode);
         loadPlanner.setMergeConditionStr(mergeConditionStr);
         loadPlanner.setJsonOptions(jsonOptions);
+        loadPlanner.setWarehouseId(warehouseId);
         loadPlanner.plan();
     }
 
@@ -185,8 +193,12 @@ public class LoadLoadingTask extends LoadTask {
                 String.format("%s-%s", Version.STARROCKS_VERSION, Version.STARROCKS_COMMIT_HASH));
         summaryProfile.addInfoString(ProfileManager.USER, context.getQualifiedUser());
         summaryProfile.addInfoString(ProfileManager.DEFAULT_DB, context.getDatabase());
-        summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
-        summaryProfile.addInfoString("Memory Limit", DebugUtil.getPrettyStringBytes(execMemLimit));
+        if (AuditEncryptionChecker.needEncrypt(loadStmt)) {
+            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT,
+                    AstToSQLBuilder.toSQLOrDefault(loadStmt, originStmt.originStmt));
+        } else {
+            summaryProfile.addInfoString(ProfileManager.SQL_STATEMENT, originStmt.originStmt);
+        }
         summaryProfile.addInfoString("Timeout", DebugUtil.getPrettyStringMs(timeoutS * 1000));
         summaryProfile.addInfoString("Strict Mode", String.valueOf(strictMode));
         summaryProfile.addInfoString("Partial Update", String.valueOf(partialUpdate));
@@ -220,6 +232,7 @@ public class LoadLoadingTask extends LoadTask {
     }
 
     private void executeOnce() throws Exception {
+        context.setThreadLocalInfo();
         checkMeta();
 
         // New one query id,
@@ -229,18 +242,19 @@ public class LoadLoadingTask extends LoadTask {
         curCoordinator.setExecPlan(loadPlanner.getExecPlan());
         curCoordinator.setTopProfileSupplier(this::buildRunningTopLevelProfile);
 
+        long beginTimeInNanoSecond = TimeUtils.getStartTime();
         try {
             QeProcessorImpl.INSTANCE.registerQuery(loadId, curCoordinator);
-            long beginTimeInNanoSecond = TimeUtils.getStartTime();
             actualExecute(curCoordinator);
-
-            if (context.getSessionVariable().isEnableProfile()) {
+        } finally {
+            if (context.getSessionVariable().isEnableProfile() || LoadErrorUtils.enableProfileAfterError(curCoordinator)
+                    || ProfileManager.getInstance().hasProfile(DebugUtil.printId(loadId))) {
                 RuntimeProfile profile = buildFinishedTopLevelProfile();
 
                 curCoordinator.getQueryProfile().getCounterTotalTime()
                         .setValue(TimeUtils.getEstimatedTime(beginTimeInNanoSecond));
                 curCoordinator.collectProfileSync();
-                profile.addChild(curCoordinator.buildQueryProfile(context.needMergeProfile()));
+                profile.addChild(curCoordinator.buildQueryProfile(true));
 
                 StringBuilder builder = new StringBuilder();
                 profile.prettyPrint(builder, "");
@@ -250,7 +264,6 @@ public class LoadLoadingTask extends LoadTask {
                     context.getQueryDetail().setProfile(profileContent);
                 }
             }
-        } finally {
             QeProcessorImpl.INSTANCE.unregisterQuery(loadId);
         }
     }
@@ -298,7 +311,7 @@ public class LoadLoadingTask extends LoadTask {
             throw new LoadException(String.format("db: %s-%d has been dropped", db.getFullName(), db.getId()));
         }
 
-        if (database.getTable(table.getId()) == null) {
+        if (GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), table.getId()) == null) {
             throw new LoadException(String.format("table: %s-%d has been dropped from db: %s-%d",
                     table.getName(), table.getId(), db.getFullName(), db.getId()));
         }
@@ -324,10 +337,12 @@ public class LoadLoadingTask extends LoadTask {
         private TPartialUpdateMode partialUpdateMode;
         private ConnectContext context;
         private OriginStatement originStmt;
+        private LoadStmt loadStmt;
         private List<List<TBrokerFileStatus>> fileStatusList;
         private int fileNum = 0;
         private LoadTaskCallback callback;
         private int priority;
+        private long warehouseId;
 
         private LoadJob.JSONOptions jsonOptions = new LoadJob.JSONOptions();
 
@@ -436,6 +451,11 @@ public class LoadLoadingTask extends LoadTask {
             return this;
         }
 
+        public Builder setLoadStmt(LoadStmt loadStmt) {
+            this.loadStmt = loadStmt;
+            return this;
+        }
+
         public Builder setFileStatusList(List<List<TBrokerFileStatus>> fileStatusList) {
             this.fileStatusList = fileStatusList;
             return this;
@@ -448,6 +468,11 @@ public class LoadLoadingTask extends LoadTask {
 
         public Builder setJSONOptions(LoadJob.JSONOptions options) {
             this.jsonOptions = options;
+            return this;
+        }
+
+        public Builder setWarehouseId(long warehouseId) {
+            this.warehouseId = warehouseId;
             return this;
         }
 

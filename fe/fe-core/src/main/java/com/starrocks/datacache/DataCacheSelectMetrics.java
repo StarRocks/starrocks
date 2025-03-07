@@ -22,7 +22,7 @@ import com.starrocks.monitor.unit.TimeValue;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.system.Backend;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 
 import java.util.HashMap;
@@ -32,17 +32,15 @@ import java.util.concurrent.TimeUnit;
 
 public class DataCacheSelectMetrics {
     private static final ShowResultSetMetaData SIMPLE_META_DATA = ShowResultSetMetaData.builder()
-            .addColumn(new Column("STATUS", ScalarType.createVarcharType()))
-            .addColumn(new Column("ALREADY_CACHED_SIZE", ScalarType.createVarcharType()))
+            .addColumn(new Column("READ_CACHE_SIZE", ScalarType.createVarcharType()))
             .addColumn(new Column("WRITE_CACHE_SIZE", ScalarType.createVarcharType()))
             .addColumn(new Column("AVG_WRITE_CACHE_TIME", ScalarType.createVarcharType()))
             .addColumn(new Column("TOTAL_CACHE_USAGE", ScalarType.createVarcharType()))
             .build();
 
     private static final ShowResultSetMetaData VERBOSE_META_DATA = ShowResultSetMetaData.builder()
-            .addColumn(new Column("BE_IP", ScalarType.createVarcharType()))
-            .addColumn(new Column("STATUS", ScalarType.createVarcharType()))
-            .addColumn(new Column("ALREADY_CACHED_SIZE", ScalarType.createVarcharType()))
+            .addColumn(new Column("IP", ScalarType.createVarcharType()))
+            .addColumn(new Column("READ_CACHE_SIZE", ScalarType.createVarcharType()))
             .addColumn(new Column("AVG_READ_CACHE_TIME", ScalarType.createVarcharType()))
             .addColumn(new Column("WRITE_CACHE_SIZE", ScalarType.createVarcharType()))
             .addColumn(new Column("AVG_WRITE_CACHE_TIME", ScalarType.createVarcharType()))
@@ -75,21 +73,23 @@ public class DataCacheSelectMetrics {
             LoadDataCacheMetrics metrics = entry.getValue();
 
             long backendId = entry.getKey();
-            Backend backend = clusterInfoService.getBackend(backendId);
-            if (backend == null) {
+            ComputeNode computeNode = clusterInfoService.getBackendOrComputeNode(backendId);
+            if (computeNode == null) {
                 row.add("N/A");
             } else {
-                row.add(backend.getIP());
+                row.add(computeNode.getIP());
             }
 
-            row.add("SUCCESS");
-
             row.add(metrics.getReadBytes().toString());
-            row.add(new TimeValue(metrics.getReadTimeNs().getNanos() / metrics.getCount(),
-                    TimeUnit.NANOSECONDS).toString());
+            long avgReadTimeNs = 0;
+            long avgWriteTimeNs = 0;
+            if (metrics.getCount() != 0) { // avoid divide by 0
+                avgReadTimeNs = metrics.getReadTimeNs().getNanos() / metrics.getCount();
+                avgWriteTimeNs = metrics.getWriteTimeNs().getNanos() / metrics.getCount();
+            }
+            row.add(new TimeValue(avgReadTimeNs, TimeUnit.NANOSECONDS).toString());
             row.add(metrics.getWriteBytes().toString());
-            row.add(new TimeValue(metrics.getWriteTimeNs().getNanos() / metrics.getCount(),
-                    TimeUnit.NANOSECONDS).toString());
+            row.add(new TimeValue(avgWriteTimeNs, TimeUnit.NANOSECONDS).toString());
             row.add(String.format("%.2f%%", metrics.getLastDataCacheMetrics().getCacheUsage() * 100));
 
             rows.add(row);
@@ -98,7 +98,7 @@ public class DataCacheSelectMetrics {
     }
 
     private ShowResultSet getSimpleShowResultSet() {
-        long alreadyCachedSize = 0;
+        long readCacheSize = 0;
         long writeCacheSize = 0;
         long writeCacheTime = 0;
         long totalCount = 0;
@@ -107,7 +107,7 @@ public class DataCacheSelectMetrics {
 
         for (Map.Entry<Long, LoadDataCacheMetrics> entry : beMetrics.entrySet()) {
             LoadDataCacheMetrics metrics = entry.getValue();
-            alreadyCachedSize += metrics.getReadBytes().getBytes();
+            readCacheSize += metrics.getReadBytes().getBytes();
             writeCacheSize += metrics.getWriteBytes().getBytes();
             writeCacheTime += metrics.getWriteTimeNs().getNanos();
             totalCount += metrics.getCount();
@@ -121,21 +121,69 @@ public class DataCacheSelectMetrics {
         List<String> row = Lists.newArrayList();
         rows.add(row);
 
-        row.add("SUCCESS");
-        row.add(new ByteSizeValue(alreadyCachedSize).toString());
+        row.add(new ByteSizeValue(readCacheSize).toString());
         row.add(new ByteSizeValue(writeCacheSize).toString());
 
         // get avg write cache time
-        long avgWriteCacheTime = writeCacheTime / totalCount;
+        long avgWriteCacheTime = 0;
+        if (totalCount != 0) { // avoid divide by 0
+            avgWriteCacheTime = writeCacheTime / totalCount;
+        }
         row.add(new TimeValue(avgWriteCacheTime, TimeUnit.NANOSECONDS).toString());
 
-        row.add(String.format("%.2f%%", ((double) totalUsedCacheSize / totalCacheSize) * 100));
+        double totalUsedCacheRatio = 0;
+        if (totalCacheSize != 0) { // avoid divide by 0
+            totalUsedCacheRatio = (double) totalUsedCacheSize / totalCacheSize;
+        }
+        row.add(String.format("%.2f%%", totalUsedCacheRatio * 100));
         return new ShowResultSet(SIMPLE_META_DATA, rows);
     }
 
-    @Override
-    public String toString() {
-        long alreadyCachedSize = 0;
+    public String debugString(boolean isVerbose) {
+        if (isVerbose) {
+            return debugVerboseString();
+        } else {
+            return debugSimpleString();
+        }
+    }
+
+    private String debugVerboseString() {
+        final SystemInfoService clusterInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        List<String> rows = Lists.newArrayList();
+        for (Map.Entry<Long, LoadDataCacheMetrics> entry : beMetrics.entrySet()) {
+            LoadDataCacheMetrics metrics = entry.getValue();
+
+            long backendId = entry.getKey();
+            String backendIPStr;
+            ComputeNode computeNode = clusterInfoService.getBackendOrComputeNode(backendId);
+            if (computeNode == null) {
+                backendIPStr = "N/A";
+            } else {
+                backendIPStr = computeNode.getIP();
+            }
+
+            String readCacheSizeStr = metrics.getReadBytes().toString();
+            long avgReadTimeNs = 0;
+            long avgWriteTimeNs = 0;
+            if (metrics.getCount() != 0) { // avoid divide by 0
+                avgReadTimeNs = metrics.getReadTimeNs().getNanos() / metrics.getCount();
+                avgWriteTimeNs = metrics.getWriteTimeNs().getNanos() / metrics.getCount();
+            }
+            String avgReadTimeStr = new TimeValue(avgReadTimeNs, TimeUnit.NANOSECONDS).toString();
+            String writeCacheSizeStr = metrics.getWriteBytes().toString();
+            String avgWriteTimeStr = new TimeValue(avgWriteTimeNs, TimeUnit.NANOSECONDS).toString();
+            String cacheUsageStr = String.format("%.2f%%", metrics.getLastDataCacheMetrics().getCacheUsage() * 100);
+
+            rows.add(String.format(
+                    "[IP: %s, ReadCacheSize: %s, AvgReadCacheTime: %s, WriteCacheSize: %s, AvgWriteCacheTime: %s, " +
+                            "TotalCacheUsage: %s]",
+                    backendIPStr, readCacheSizeStr, avgReadTimeStr, writeCacheSizeStr, avgWriteTimeStr, cacheUsageStr));
+        }
+        return String.join(", ", rows);
+    }
+
+    private String debugSimpleString() {
+        long readCacheSize = 0;
         long readCacheTime = 0;
         long writeCacheSize = 0;
         long writeCacheTime = 0;
@@ -145,7 +193,7 @@ public class DataCacheSelectMetrics {
 
         for (Map.Entry<Long, LoadDataCacheMetrics> entry : beMetrics.entrySet()) {
             LoadDataCacheMetrics metrics = entry.getValue();
-            alreadyCachedSize += metrics.getReadBytes().getBytes();
+            readCacheSize += metrics.getReadBytes().getBytes();
             readCacheTime += metrics.getReadTimeNs().getNanos();
             writeCacheSize += metrics.getWriteBytes().getBytes();
             writeCacheTime += metrics.getWriteTimeNs().getNanos();
@@ -157,13 +205,21 @@ public class DataCacheSelectMetrics {
         }
 
         // get avg read/write cache time
-        long avgReadCacheTime = readCacheTime / totalCount;
-        long avgWriteCacheTime = writeCacheTime / totalCount;
+        long avgReadCacheTime = 0;
+        long avgWriteCacheTime = 0;
+        if (totalCount != 0) { // avoid divide by 0
+            avgReadCacheTime = readCacheTime / totalCount;
+            avgWriteCacheTime = writeCacheTime / totalCount;
+        }
 
+        double totalUsedCacheRatio = 0;
+        if (totalCacheSize != 0) { // avoid divide by 0
+            totalUsedCacheRatio = (double) totalUsedCacheSize / totalCacheSize;
+        }
         return String.format(
-                "AlreadyCachedSize: %s, AvgReadCacheTime: %s, WriteCacheSize: %s, AvgWriteCacheTime: %s, TotalCacheUsage: %.2f%%",
-                new ByteSizeValue(alreadyCachedSize), new TimeValue(avgReadCacheTime, TimeUnit.NANOSECONDS),
+                "ReadCacheSize: %s, AvgReadCacheTime: %s, WriteCacheSize: %s, AvgWriteCacheTime: %s, TotalCacheUsage: %.2f%%",
+                new ByteSizeValue(readCacheSize), new TimeValue(avgReadCacheTime, TimeUnit.NANOSECONDS),
                 new ByteSizeValue(writeCacheSize), new TimeValue(avgWriteCacheTime, TimeUnit.NANOSECONDS),
-                ((double) totalUsedCacheSize / totalCacheSize) * 100);
+                totalUsedCacheRatio * 100);
     }
 }

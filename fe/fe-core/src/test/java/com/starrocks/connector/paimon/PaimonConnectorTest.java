@@ -75,6 +75,15 @@ public class PaimonConnectorTest {
     }
 
     @Test
+    public void testCreateDLFPaimonConnector() {
+        Map<String, String> properties = new HashMap<>();
+        properties.put("paimon.catalog.type", "dlf");
+        properties.put("dlf.catalog.id", "dlf_test");
+
+        new PaimonConnector(new ConnectorContext("paimon_catalog", "paimon", properties));
+    }
+
+    @Test
     public void testCreatePaimonTable(@Mocked Catalog paimonNativeCatalog,
                                       @Mocked FileStoreTable paimonNativeTable) throws Catalog.TableNotExistException {
         Map<String, String> properties = new HashMap<>();
@@ -102,8 +111,8 @@ public class PaimonConnectorTest {
         Assert.assertTrue(metadata instanceof PaimonMetadata);
         com.starrocks.catalog.Table table = metadata.getTable("db1", "tbl1");
         PaimonTable paimonTable = (PaimonTable) table;
-        Assert.assertEquals("db1", paimonTable.getDbName());
-        Assert.assertEquals("tbl1", paimonTable.getTableName());
+        Assert.assertEquals("db1", paimonTable.getCatalogDBName());
+        Assert.assertEquals("tbl1", paimonTable.getCatalogTableName());
         Assert.assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
         Assert.assertEquals("hdfs://127.0.0.1:10000/paimon", paimonTable.getTableLocation());
         Assert.assertEquals(ScalarType.INT, paimonTable.getBaseSchema().get(0).getType());

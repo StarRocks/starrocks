@@ -80,7 +80,7 @@ Status ColumnExprPredicate::evaluate(const Column* column, uint8_t* selection, u
     Chunk chunk;
     // `column` is owned by storage layer
     // we don't have ownership
-    ColumnPtr bits(const_cast<Column*>(column), [](auto p) {});
+    ColumnPtr bits = const_cast<Column*>(column)->as_mutable_ptr();
     chunk.append_column(bits, _slot_desc->id());
 
     // theoretically there will be a chain of expr contexts.
@@ -157,7 +157,7 @@ bool ColumnExprPredicate::zone_map_filter(const ZoneMapDetail& detail) const {
     if (!_monotonic) return true;
     // construct column and chunk by zone map
     TypeDescriptor type_desc = TypeDescriptor::from_storage_type_info(_type_info.get());
-    ColumnPtr col = ColumnHelper::create_column(type_desc, detail.has_null());
+    MutableColumnPtr col = ColumnHelper::create_column(type_desc, detail.has_null());
     // null, min, max
     uint16_t size = 0;
     uint8_t selection[3];
@@ -329,6 +329,11 @@ Status ColumnExprPredicate::seek_inverted_index(const std::string& column_name, 
     DCHECK(like_target != nullptr);
     ASSIGN_OR_RETURN(auto literal_col, like_target->evaluate_checked(_expr_ctxs[0], nullptr));
     Slice padded_value(literal_col->get(0).get_slice());
+    // MATCH a empty string should always return empty set.
+    if (padded_value.empty()) {
+        *row_bitmap -= *row_bitmap;
+        return Status::OK();
+    }
     std::string str_v = padded_value.to_string();
     InvertedIndexQueryType query_type = InvertedIndexQueryType::UNKNOWN_QUERY;
     if (str_v.find('*') == std::string::npos && str_v.find('%') == std::string::npos) {

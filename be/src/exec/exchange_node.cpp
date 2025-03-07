@@ -54,10 +54,7 @@ ExchangeNode::ExchangeNode(ObjectPool* pool, const TPlanNode& tnode, const Descr
           _texchange_node(tnode.exchange_node),
           _num_senders(0),
           _stream_recvr(nullptr),
-          _input_row_desc(
-                  descs, tnode.exchange_node.input_row_tuples,
-                  std::vector<bool>(tnode.nullable_tuples.begin(),
-                                    tnode.nullable_tuples.begin() + tnode.exchange_node.input_row_tuples.size())),
+          _input_row_desc(descs, tnode.exchange_node.input_row_tuples),
           _is_merging(tnode.exchange_node.__isset.sort_info),
           _is_parallel_merge(tnode.exchange_node.__isset.enable_parallel_merge &&
                              tnode.exchange_node.enable_parallel_merge),
@@ -258,10 +255,15 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
         exchange_source_op->set_degree_of_parallelism(context->degree_of_parallelism());
         operators.emplace_back(exchange_source_op);
     } else {
-        if (_is_parallel_merge || _sort_exec_exprs.is_constant_lhs_ordering()) {
+        if ((_is_parallel_merge || _sort_exec_exprs.is_constant_lhs_ordering()) &&
+            !_sort_exec_exprs.lhs_ordering_expr_ctxs().empty()) {
             auto exchange_merge_sort_source_operator = std::make_shared<ExchangeParallelMergeSourceOperatorFactory>(
                     context->next_operator_id(), id(), _num_senders, _input_row_desc, &_sort_exec_exprs, _is_asc_order,
                     _nulls_first, _offset, _limit);
+            if (_texchange_node.__isset.parallel_merge_late_materialize_mode) {
+                exchange_merge_sort_source_operator->set_materialized_mode(
+                        _texchange_node.parallel_merge_late_materialize_mode);
+            }
             exchange_merge_sort_source_operator->set_degree_of_parallelism(context->degree_of_parallelism());
             operators.emplace_back(std::move(exchange_merge_sort_source_operator));
             // This particular exchange source will be executed in a concurrent way, and finally we need to gather them into one
@@ -289,6 +291,7 @@ pipeline::OpFactories ExchangeNode::decompose_to_pipeline(pipeline::PipelineBuil
         may_add_chunk_accumulate_operator(operators, context, id());
     }
 
+    operators = context->maybe_interpolate_debug_ops(runtime_state(), _id, operators);
     operators = context->maybe_interpolate_collect_stats(runtime_state(), id(), operators);
 
     return operators;

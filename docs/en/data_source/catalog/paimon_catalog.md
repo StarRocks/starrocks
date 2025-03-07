@@ -1,5 +1,6 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
+toc_max_heading_level: 5
 ---
 
 # Paimon catalog
@@ -8,7 +9,7 @@ StarRocks supports Paimon catalogs from v3.1 onwards.
 
 A Paimon catalog is a kind of external catalog that enables you to query data from Apache Paimon without ingestion.
 
-Also, you can directly transform and load data from Paimon by using [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) based on Paimon catalogs.
+Also, you can directly transform and load data from Paimon by using [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) based on Paimon catalogs.
 
 To ensure successful SQL workloads on your Paimon cluster, your StarRocks cluster must be able to access the storage system and metastore of your Paimon cluster. StarRocks supports the following storage systems and metastores:
 
@@ -121,7 +122,7 @@ If you choose AWS S3 as storage for your Paimon cluster, take one of the followi
 
   ```SQL
   "aws.s3.use_instance_profile" = "true",
-  "aws.s3.region" = "<aws_s3_region>"
+  "aws.s3.endpoint" = "<aws_s3_endpoint>"
   ```
 
 - To choose the assumed role-based authentication method, configure `StorageCredentialParams` as follows:
@@ -129,7 +130,7 @@ If you choose AWS S3 as storage for your Paimon cluster, take one of the followi
   ```SQL
   "aws.s3.use_instance_profile" = "true",
   "aws.s3.iam_role_arn" = "<iam_role_arn>",
-  "aws.s3.region" = "<aws_s3_region>"
+  "aws.s3.endpoint" = "<aws_s3_endpoint>"
   ```
 
 - To choose the IAM user-based authentication method, configure `StorageCredentialParams` as follows:
@@ -138,7 +139,7 @@ If you choose AWS S3 as storage for your Paimon cluster, take one of the followi
   "aws.s3.use_instance_profile" = "false",
   "aws.s3.access_key" = "<iam_user_access_key>",
   "aws.s3.secret_key" = "<iam_user_secret_key>",
-  "aws.s3.region" = "<aws_s3_region>"
+  "aws.s3.endpoint" = "<aws_s3_endpoint>"
   ```
 
 The following table describes the parameters you need to configure in `StorageCredentialParams`.
@@ -147,7 +148,7 @@ The following table describes the parameters you need to configure in `StorageCr
 | --------------------------- | -------- | ------------------------------------------------------------ |
 | aws.s3.use_instance_profile | Yes      | Specifies whether to enable the instance profile-based authentication method and the assumed role-based authentication method. Valid values: `true` and `false`. Default value: `false`. |
 | aws.s3.iam_role_arn         | No       | The ARN of the IAM role that has privileges on your AWS S3 bucket. If you use the assumed role-based authentication method to access AWS S3, you must specify this parameter. |
-| aws.s3.region               | Yes      | The region in which your AWS S3 bucket resides. Example: `us-west-1`. |
+| aws.s3.endpoint             | Yes      | The endpoint that is used to connect to your AWS S3 bucket. For example, `https://s3.us-west-2.amazonaws.com`. |
 | aws.s3.access_key           | No       | The access key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 | aws.s3.secret_key           | No       | The secret key of your IAM user. If you use the IAM user-based authentication method to access AWS S3, you must specify this parameter. |
 
@@ -375,7 +376,7 @@ The following examples create a Paimon catalog named `paimon_catalog_fs` whose m
       "paimon.catalog.type" = "filesystem",
       "paimon.catalog.warehouse" = "<s3_paimon_warehouse_path>",
       "aws.s3.use_instance_profile" = "true",
-      "aws.s3.region" = "us-west-2"
+      "aws.s3.endpoint" = "<s3_endpoint>"
   );
   ```
 
@@ -390,7 +391,7 @@ The following examples create a Paimon catalog named `paimon_catalog_fs` whose m
       "paimon.catalog.warehouse" = "<s3_paimon_warehouse_path>",
       "aws.s3.use_instance_profile" = "true",
       "aws.s3.iam_role_arn" = "arn:aws:iam::081976408565:role/test_s3_role",
-      "aws.s3.region" = "us-west-2"
+      "aws.s3.endpoint" = "<s3_endpoint>"
   );
   ```
 
@@ -406,7 +407,7 @@ The following examples create a Paimon catalog named `paimon_catalog_fs` whose m
       "aws.s3.use_instance_profile" = "false",
       "aws.s3.access_key" = "<iam_user_access_key>",
       "aws.s3.secret_key" = "<iam_user_secret_key>",
-      "aws.s3.region" = "us-west-2"
+      "aws.s3.endpoint" = "<s3_endpoint>"
   );
   ```
 
@@ -602,13 +603,13 @@ PROPERTIES
 
 ## View Paimon catalogs
 
-You can use [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
+You can use [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) to query all catalogs in the current StarRocks cluster:
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Paimon catalog named `paimon_catalog_fs`:
+You can also use [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) to query the creation statement of an external catalog. The following example queries the creation statement of a Paimon catalog named `paimon_catalog_fs`:
 
 ```SQL
 SHOW CREATE CATALOG paimon_catalog_fs;
@@ -616,7 +617,7 @@ SHOW CREATE CATALOG paimon_catalog_fs;
 
 ## Drop a Paimon catalog
 
-You can use [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) to drop an external catalog.
+You can use [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) to drop an external catalog.
 
 The following example drops a Paimon catalog named `paimon_catalog_fs`:
 
@@ -642,31 +643,31 @@ You can use one of the following syntaxes to view the schema of a Paimon table:
 
 ## Query a Paimon table
 
-1. Use [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) to view the databases in your Paimon cluster:
+1. Use [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) to view the databases in your Paimon cluster:
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>;
    ```
 
-2. Use [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) to switch to the destination catalog in the current session:
+2. Use [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) to switch to the destination catalog in the current session:
 
    ```SQL
    SET CATALOG <catalog_name>;
    ```
 
-   Then, use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to specify the active database in the current session:
+   Then, use [USE](../../sql-reference/sql-statements/Database/USE.md) to specify the active database in the current session:
 
    ```SQL
    USE <db_name>;
    ```
 
-   Or, you can use [USE](../../sql-reference/sql-statements/data-definition/USE.md) to directly specify the active database in the destination catalog:
+   Or, you can use [USE](../../sql-reference/sql-statements/Database/USE.md) to directly specify the active database in the destination catalog:
 
    ```SQL
    USE <catalog_name>.<db_name>;
    ```
 
-3. Use [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) to query the destination table in the specified database:
+3. Use [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) to query the destination table in the specified database:
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10;

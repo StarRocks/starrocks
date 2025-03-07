@@ -691,10 +691,10 @@ LEFT SEMI JOIN (join-predicate [1: v1 = 4: v4 AND 2: v2 = 5: v5 AND 3: v3 = 6: v
 [sql]
 select * from test_all_type where (t1e, t1f) IN (select v4, v5 from t1)
 [result]
-LEFT SEMI JOIN (join-predicate [15: cast = 16: cast AND 6: t1f = 17: cast] post-join-predicate [null])
+LEFT SEMI JOIN (join-predicate [5: t1e = 15: cast AND 6: t1f = 16: cast] post-join-predicate [null])
     SCAN (columns[1: t1a, 2: t1b, 3: t1c, 4: t1d, 5: t1e, 6: t1f, 7: t1g, 8: id_datetime, 9: id_date, 10: id_decimal] predicate[null])
     EXCHANGE BROADCAST
-        SCAN (columns[11: v4, 12: v5] predicate[cast(11: v4 as double) IS NOT NULL AND cast(12: v5 as double) IS NOT NULL])
+        SCAN (columns[11: v4, 12: v5] predicate[cast(11: v4 as float) IS NOT NULL AND cast(12: v5 as double) IS NOT NULL])
 [end]
 
 [sql]
@@ -703,7 +703,8 @@ select t0.v1 from t0 where (v1 + 10, v2 + v2) IN (select t1.v4 + t1.v5, t1.v5 fr
 LEFT SEMI JOIN (join-predicate [9: add = 7: expr AND 10: add = 5: v5] post-join-predicate [null])
     SCAN (columns[1: v1, 2: v2] predicate[null])
     EXCHANGE BROADCAST
-        SCAN (columns[4: v4, 5: v5] predicate[add(4: v4, 5: v5) IS NOT NULL AND 5: v5 IS NOT NULL])
+        PREDICATE 7: expr IS NOT NULL
+            SCAN (columns[4: v4, 5: v5] predicate[5: v5 IS NOT NULL])
 [end]
 
 [sql]
@@ -724,3 +725,4 @@ LEFT SEMI JOIN (join-predicate [15: cast = 16: cast AND 17: cast = 18: cast] pos
         PREDICATE cast(aa as double) IS NOT NULL
             VALUES (null)
 [end]
+

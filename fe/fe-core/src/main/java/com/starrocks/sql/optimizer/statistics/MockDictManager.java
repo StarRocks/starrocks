@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.collect.ImmutableMap;
+import com.starrocks.catalog.ColumnId;
 
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
@@ -37,21 +38,21 @@ public class MockDictManager implements IDictManager {
     }
 
     @Override
-    public boolean hasGlobalDict(long tableId, String columnName, long versionTime) {
+    public boolean hasGlobalDict(long tableId, ColumnId columnName, long versionTime) {
         return true;
     }
 
     @Override
-    public void updateGlobalDict(long tableId, String columnName,  long collectedVersion, long versionTime) {
+    public void updateGlobalDict(long tableId, ColumnId columnName, long collectedVersion, long versionTime) {
     }
 
     @Override
-    public boolean hasGlobalDict(long tableId, String columnName) {
+    public boolean hasGlobalDict(long tableId, ColumnId columnName) {
         return true;
     }
 
     @Override
-    public void removeGlobalDict(long tableId, String columnName) {
+    public void removeGlobalDict(long tableId, ColumnId columnName) {
     }
 
     @Override
@@ -64,7 +65,7 @@ public class MockDictManager implements IDictManager {
     }
 
     @Override
-    public Optional<ColumnDict> getGlobalDict(long tableId, String columnName) {
+    public Optional<ColumnDict> getGlobalDict(long tableId, ColumnId columnName) {
         return Optional.of(COLUMN_DICT);
     }
 }

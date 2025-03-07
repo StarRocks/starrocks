@@ -54,10 +54,10 @@ StatusOr<BlockPtr> HyBirdBlockManager::acquire_block(const AcquireBlockOptions& 
     return remote_block;
 }
 
-Status HyBirdBlockManager::release_block(const BlockPtr& block) {
+Status HyBirdBlockManager::release_block(BlockPtr block) {
     if (block->is_remote()) {
-        return _remote_block_manager->release_block(block);
+        return _remote_block_manager->release_block(std::move(block));
     }
-    return _local_block_manager->release_block(block);
+    return _local_block_manager->release_block(std::move(block));
 }
 } // namespace starrocks::spill

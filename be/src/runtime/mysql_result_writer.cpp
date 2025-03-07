@@ -38,8 +38,10 @@
 
 #include "column/chunk.h"
 #include "column/const_column.h"
+#include "common/statusor.h"
 #include "exprs/expr.h"
 #include "runtime/buffer_control_block.h"
+#include "runtime/buffer_control_result_writer.h"
 #include "runtime/current_thread.h"
 #include "types/logical_type.h"
 #include "util/mysql_row_buffer.h"
@@ -48,11 +50,10 @@ namespace starrocks {
 
 MysqlResultWriter::MysqlResultWriter(BufferControlBlock* sinker, const std::vector<ExprContext*>& output_expr_ctxs,
                                      bool is_binary_format, RuntimeProfile* parent_profile)
-        : _sinker(sinker),
+        : BufferControlResultWriter(sinker, parent_profile),
           _output_expr_ctxs(output_expr_ctxs),
           _row_buffer(nullptr),
-          _is_binary_format(is_binary_format),
-          _parent_profile(parent_profile) {}
+          _is_binary_format(is_binary_format) {}
 
 MysqlResultWriter::~MysqlResultWriter() {
     delete _row_buffer;
@@ -71,13 +72,6 @@ Status MysqlResultWriter::init(RuntimeState* state) {
     }
 
     return Status::OK();
-}
-
-void MysqlResultWriter::_init_profile() {
-    _append_chunk_timer = ADD_TIMER(_parent_profile, "AppendChunkTime");
-    _convert_tuple_timer = ADD_CHILD_TIMER(_parent_profile, "TupleConvertTime", "AppendChunkTime");
-    _result_send_timer = ADD_CHILD_TIMER(_parent_profile, "ResultRendTime", "AppendChunkTime");
-    _sent_rows_counter = ADD_COUNTER(_parent_profile, "NumSentRows", TUnit::UNIT);
 }
 
 Status MysqlResultWriter::append_chunk(Chunk* chunk) {
@@ -105,11 +99,6 @@ Status MysqlResultWriter::append_chunk(Chunk* chunk) {
 
     delete fetch_data;
     return add_status;
-}
-
-Status MysqlResultWriter::close() {
-    COUNTER_SET(_sent_rows_counter, _written_rows);
-    return Status::OK();
 }
 
 StatusOr<TFetchDataResultPtr> MysqlResultWriter::_process_chunk(Chunk* chunk) {
@@ -140,9 +129,13 @@ StatusOr<TFetchDataResultPtr> MysqlResultWriter::_process_chunk(Chunk* chunk) {
             DCHECK_EQ(0, _row_buffer->length());
             if (_is_binary_format) {
                 _row_buffer->start_binary_row(num_columns);
-            };
+            }
+            // TODO: codegen here
             for (auto& result_column : result_columns) {
-                result_column->put_mysql_row_buffer(_row_buffer, i);
+                if (_is_binary_format && !result_column->is_nullable()) {
+                    _row_buffer->update_field_pos();
+                }
+                result_column->put_mysql_row_buffer(_row_buffer, i, _is_binary_format);
             }
             size_t len = _row_buffer->length();
             _row_buffer->move_content(&result_rows[i]);
@@ -187,7 +180,10 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
                 _row_buffer->start_binary_row(num_columns);
             }
             for (auto& result_column : result_columns) {
-                result_column->put_mysql_row_buffer(_row_buffer, i);
+                if (_is_binary_format && !result_column->is_nullable()) {
+                    _row_buffer->update_field_pos();
+                }
+                result_column->put_mysql_row_buffer(_row_buffer, i, _is_binary_format);
             }
             size_t len = _row_buffer->length();
 
@@ -215,27 +211,6 @@ StatusOr<TFetchDataResultPtrs> MysqlResultWriter::process_chunk(Chunk* chunk) {
         TRY_CATCH_ALLOC_SCOPE_END()
     }
     return results;
-}
-
-StatusOr<bool> MysqlResultWriter::try_add_batch(TFetchDataResultPtrs& results) {
-    SCOPED_TIMER(_result_send_timer);
-    size_t num_rows = 0;
-    for (auto& result : results) {
-        num_rows += result->result_batch.rows.size();
-    }
-
-    auto status = _sinker->try_add_batch(results);
-    if (status.ok()) {
-        // success in add result to ResultQueue of _sinker
-        if (status.value()) {
-            _written_rows += num_rows;
-            results.clear();
-        }
-    } else {
-        results.clear();
-        LOG(WARNING) << "Append result batch to sink failed: status=" << status.status().to_string();
-    }
-    return status;
 }
 
 } // namespace starrocks

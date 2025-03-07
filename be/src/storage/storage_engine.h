@@ -43,6 +43,7 @@
 #include <list>
 #include <map>
 #include <mutex>
+#include <queue>
 #include <set>
 #include <string>
 #include <thread>
@@ -67,6 +68,11 @@
 namespace bthread {
 class Executor;
 }
+
+namespace starrocks::lake {
+class LocalPkIndexManager;
+class LoadSpillBlockMergeExecutor;
+} // namespace starrocks::lake
 
 namespace starrocks {
 
@@ -230,13 +236,23 @@ public:
 
     bthread::Executor* async_delta_writer_executor() { return _async_delta_writer_executor.get(); }
 
+    lake::LoadSpillBlockMergeExecutor* load_spill_block_merge_executor() {
+        return _load_spill_block_merge_executor.get();
+    }
+
     MemTableFlushExecutor* memtable_flush_executor() { return _memtable_flush_executor.get(); }
+
+    MemTableFlushExecutor* lake_memtable_flush_executor() { return _lake_memtable_flush_executor.get(); }
 
     SegmentReplicateExecutor* segment_replicate_executor() { return _segment_replicate_executor.get(); }
 
     SegmentFlushExecutor* segment_flush_executor() { return _segment_flush_executor.get(); }
 
     UpdateManager* update_manager() { return _update_manager.get(); }
+
+#ifdef USE_STAROS
+    lake::LocalPkIndexManager* local_pk_index_manager() { return _local_pk_index_manager.get(); }
+#endif
 
     bool check_rowset_id_in_unused_rowsets(const RowsetId& rowset_id);
 
@@ -294,7 +310,18 @@ public:
         _finish_publish_version_cv.notify_one();
     }
 
+    void add_schedule_apply_task(int64_t tablet_id, std::chrono::steady_clock::time_point time_point);
+
+    void wake_schedule_apply_thread() {
+        std::unique_lock<std::mutex> wl(_schedule_apply_mutex);
+        _apply_tablet_changed_cv.notify_one();
+    }
+
+    void start_schedule_apply_thread();
+
     bool is_as_cn() { return !_options.need_write_cluster_id; }
+
+    bool enable_light_pk_compaction_publish();
 
 protected:
     static StorageEngine* _s_instance;
@@ -382,6 +409,8 @@ private:
 
     void* _adjust_pagecache_callback(void* arg);
 
+    void* _schedule_apply_thread_callback(void* arg);
+
     void _start_clean_fd_cache();
     Status _perform_cumulative_compaction(DataDir* data_dir, std::pair<int32_t, int32_t> tablet_shards_range);
     Status _perform_base_compaction(DataDir* data_dir, std::pair<int32_t, int32_t> tablet_shards_range);
@@ -394,7 +423,7 @@ private:
 private:
     EngineOptions _options;
     std::mutex _store_lock;
-    std::map<std::string, DataDir*> _store_map;
+    std::map<std::string, std::unique_ptr<DataDir>> _store_map;
     uint32_t _available_storage_medium_type_count;
     bool _is_all_cluster_id_exist;
 
@@ -468,7 +497,11 @@ private:
 
     std::unique_ptr<bthread::Executor> _async_delta_writer_executor;
 
+    std::unique_ptr<lake::LoadSpillBlockMergeExecutor> _load_spill_block_merge_executor;
+
     std::unique_ptr<MemTableFlushExecutor> _memtable_flush_executor;
+
+    std::unique_ptr<MemTableFlushExecutor> _lake_memtable_flush_executor;
 
     std::unique_ptr<SegmentReplicateExecutor> _segment_replicate_executor;
 
@@ -493,6 +526,17 @@ private:
     std::mutex _delta_column_group_cache_lock;
     std::map<DeltaColumnGroupKey, DeltaColumnGroupList> _delta_column_group_cache;
     std::unique_ptr<MemTracker> _delta_column_group_cache_mem_tracker;
+
+    mutable std::mutex _schedule_apply_mutex;
+    std::condition_variable _apply_tablet_changed_cv;
+    std::thread _schedule_apply_thread;
+    std::priority_queue<std::pair<std::chrono::steady_clock::time_point, int64_t>,
+                        std::vector<std::pair<std::chrono::steady_clock::time_point, int64_t>>, std::greater<>>
+            _schedule_apply_tasks;
+
+#ifdef USE_STAROS
+    std::unique_ptr<lake::LocalPkIndexManager> _local_pk_index_manager;
+#endif
 };
 
 /// Load min_garbage_sweep_interval and max_garbage_sweep_interval from config,

@@ -14,11 +14,9 @@
 
 package com.starrocks.common.util;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.starrocks.common.LoadException;
-import com.starrocks.common.UserException;
-import com.starrocks.lake.LakeTablet;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.proto.PProxyRequest;
 import com.starrocks.proto.PProxyResult;
 import com.starrocks.proto.StatusPB;
@@ -28,11 +26,10 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.Backend;
-import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.utframe.MockedWarehouseManager;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -42,7 +39,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
@@ -53,10 +49,6 @@ public class KafkaUtilTest {
     GlobalStateMgr globalStateMgr;
     @Mocked
     SystemInfoService service;
-    @Mocked
-    WarehouseManager warehouseManager;
-    @Mocked
-    Warehouse warehouse;
     @Mocked
     BackendServiceClient client;
 
@@ -71,57 +63,17 @@ public class KafkaUtilTest {
 
         new Expectations() {
             {
-                GlobalStateMgr.getCurrentState();
-                result = globalStateMgr;
-                globalStateMgr.getWarehouseMgr();
-                result = warehouseManager;
                 BackendServiceClient.getInstance();
                 minTimes = 0;
                 result = client;
             }
         };
 
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public List<Long> getAllComputeNodeIds(long warehouseId) {
-                return Lists.newArrayList(1L);
-            }
-
-            @Mock
-            public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
-                return 1L;
-            }
-
-            @Mock
-            public Long getComputeNodeId(Long warehouseId, LakeTablet tablet) {
-                return 1L;
-            }
-
-            @Mock
-            public ComputeNode getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-
-            @Mock
-            public ComputeNode getAllComputeNodeIdsAssignToTablet(String warehouseName, LakeTablet tablet) {
-                return null;
-            }
-
-            @Mock
-            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
-                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
-            }
-        };
+        UtFrameUtils.mockInitWarehouseEnv();
     }
 
     @Test
-    public void testNoAliveComputeNode() throws UserException {
+    public void testNoAliveComputeNode() throws StarRocksException {
         new Expectations() {
             {
                 service.getBackendOrComputeNode(anyLong);
@@ -136,7 +88,7 @@ public class KafkaUtilTest {
     }
 
     @Test
-    public void testGetInfoRpcException() throws UserException, RpcException {
+    public void testGetInfoRpcException() throws StarRocksException, RpcException {
         Backend backend = new Backend(1L, "127.0.0.1", 9050);
         backend.setBeRpcPort(8060);
         backend.setAlive(true);
@@ -156,7 +108,7 @@ public class KafkaUtilTest {
     }
 
     @Test
-    public void testGetInfoInterruptedException() throws UserException, RpcException {
+    public void testGetInfoInterruptedException() throws StarRocksException, RpcException {
         Backend backend = new Backend(1L, "127.0.0.1", 9050);
         backend.setBeRpcPort(8060);
         backend.setAlive(true);
@@ -177,7 +129,7 @@ public class KafkaUtilTest {
     }
 
     @Test
-    public void testGetInfoValidateObjectException() throws UserException, RpcException {
+    public void testGetInfoValidateObjectException() throws StarRocksException, RpcException {
         Backend backend = new Backend(1L, "127.0.0.1", 9050);
         backend.setBeRpcPort(8060);
         backend.setAlive(true);
@@ -197,7 +149,7 @@ public class KafkaUtilTest {
     }
 
     @Test
-    public void testGetInfoFailed() throws UserException, RpcException {
+    public void testGetInfoFailed() throws StarRocksException, RpcException {
         Backend backend = new Backend(1L, "127.0.0.1", 9050);
         backend.setBeRpcPort(8060);
         backend.setAlive(true);
@@ -247,5 +199,21 @@ public class KafkaUtilTest {
         KafkaUtil.ProxyAPI api = new KafkaUtil.ProxyAPI();
         LoadException e = Assert.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
         Assert.assertTrue(e.getMessage().contains("be process failed"));
+    }
+
+    @Test
+    public void testWarehouseNotExist() {
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
+            }
+        };
+        mockedWarehouseManager.setThrowUnknownWarehouseException();
+
+        KafkaUtil.ProxyAPI api = new KafkaUtil.ProxyAPI();
+        LoadException e = Assert.assertThrows(LoadException.class, () -> api.getBatchOffsets(null));
+        Assert.assertEquals("Failed to send get kafka partition info request. err: Warehouse id: 1 not exist.", e.getMessage());
     }
 }

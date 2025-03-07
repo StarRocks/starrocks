@@ -20,9 +20,12 @@ import com.google.common.cache.LoadingCache;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.starrocks.connector.exception.StarRocksConnectorException;
+import org.apache.hadoop.fs.FileStatus;
+import org.apache.hadoop.fs.Path;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executor;
@@ -52,7 +55,6 @@ public class CachingRemoteFileIO implements RemoteFileIO {
                     @Override
                     public List<RemoteFileDesc> load(RemotePathKey key) throws Exception {
                         List<RemoteFileDesc> res = loadRemoteFiles(key);
-                        key.drop();
                         return res;
                     }
                 }, executor));
@@ -113,7 +115,6 @@ public class CachingRemoteFileIO implements RemoteFileIO {
         } else {
             cache.put(pathKey, loadRemoteFiles(pathKey));
         }
-        pathKey.drop();
     }
 
     public synchronized void invalidateAll() {
@@ -129,7 +130,6 @@ public class CachingRemoteFileIO implements RemoteFileIO {
         } else {
             cache.invalidate(pathKey);
         }
-        pathKey.drop();
     }
 
     private static CacheBuilder<Object, Object> newCacheBuilder(long expiresAfterWriteSec, long refreshSec, long maximumSize) {
@@ -144,5 +144,10 @@ public class CachingRemoteFileIO implements RemoteFileIO {
 
         cacheBuilder.maximumSize(maximumSize);
         return cacheBuilder;
+    }
+
+    @Override
+    public FileStatus[] getFileStatus(Path... files) throws IOException {
+        return fileIO.getFileStatus(files);
     }
 }

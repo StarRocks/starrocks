@@ -62,12 +62,34 @@ import com.google.gson.reflect.TypeToken;
 import com.google.gson.stream.JsonReader;
 import com.google.gson.stream.JsonWriter;
 import com.starrocks.alter.AlterJobV2;
+import com.starrocks.alter.LakeRollupJob;
 import com.starrocks.alter.LakeTableAlterMetaJob;
 import com.starrocks.alter.LakeTableAsyncFastSchemaChangeJob;
 import com.starrocks.alter.LakeTableSchemaChangeJob;
+import com.starrocks.alter.OnlineOptimizeJobV2;
 import com.starrocks.alter.OptimizeJobV2;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
+import com.starrocks.authentication.FileGroupProvider;
+import com.starrocks.authentication.GroupProvider;
+import com.starrocks.authentication.OIDCSecurityIntegration;
+import com.starrocks.authentication.SecurityIntegration;
+import com.starrocks.authentication.UnixGroupProvider;
+import com.starrocks.authorization.CatalogPEntryObject;
+import com.starrocks.authorization.DbPEntryObject;
+import com.starrocks.authorization.FunctionPEntryObject;
+import com.starrocks.authorization.GlobalFunctionPEntryObject;
+import com.starrocks.authorization.MaterializedViewPEntryObject;
+import com.starrocks.authorization.PEntryObject;
+import com.starrocks.authorization.PipePEntryObject;
+import com.starrocks.authorization.PolicyFCEntryObject;
+import com.starrocks.authorization.ResourceGroupPEntryObject;
+import com.starrocks.authorization.ResourcePEntryObject;
+import com.starrocks.authorization.StorageVolumePEntryObject;
+import com.starrocks.authorization.TablePEntryObject;
+import com.starrocks.authorization.UserPEntryObject;
+import com.starrocks.authorization.ViewPEntryObject;
+import com.starrocks.authorization.WarehousePEntryObject;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
@@ -76,6 +98,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.AnyArrayType;
 import com.starrocks.catalog.AnyElementType;
 import com.starrocks.catalog.ArrayType;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.EsTable;
 import com.starrocks.catalog.ExpressionRangePartitionInfo;
@@ -107,6 +130,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.RecycleListPartitionInfo;
 import com.starrocks.catalog.RecyclePartitionInfoV2;
 import com.starrocks.catalog.RecycleRangePartitionInfo;
+import com.starrocks.catalog.RecycleUnPartitionInfo;
 import com.starrocks.catalog.Resource;
 import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.ScalarType;
@@ -116,14 +140,17 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.View;
+import com.starrocks.encryption.EncryptionKeyPBAdapter;
 import com.starrocks.lake.LakeMaterializedView;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.RecycleLakeListPartitionInfo;
 import com.starrocks.lake.RecycleLakeRangePartitionInfo;
+import com.starrocks.lake.RecycleLakeUnPartitionInfo;
 import com.starrocks.lake.backup.LakeBackupJob;
 import com.starrocks.lake.backup.LakeRestoreJob;
 import com.starrocks.lake.backup.LakeTableSnapshotInfo;
+import com.starrocks.lake.compaction.CompactionTxnCommitAttachment;
 import com.starrocks.load.loadv2.BrokerLoadJob;
 import com.starrocks.load.loadv2.InsertLoadJob;
 import com.starrocks.load.loadv2.LoadJob;
@@ -145,21 +172,7 @@ import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.persist.SinglePartitionPersistInfo;
-import com.starrocks.privilege.CatalogPEntryObject;
-import com.starrocks.privilege.DbPEntryObject;
-import com.starrocks.privilege.FunctionPEntryObject;
-import com.starrocks.privilege.GlobalFunctionPEntryObject;
-import com.starrocks.privilege.MaterializedViewPEntryObject;
-import com.starrocks.privilege.PEntryObject;
-import com.starrocks.privilege.PipePEntryObject;
-import com.starrocks.privilege.PolicyFCEntryObject;
-import com.starrocks.privilege.ResourceGroupPEntryObject;
-import com.starrocks.privilege.ResourcePEntryObject;
-import com.starrocks.privilege.StorageVolumePEntryObject;
-import com.starrocks.privilege.TablePEntryObject;
-import com.starrocks.privilege.UserPEntryObject;
-import com.starrocks.privilege.ViewPEntryObject;
-import com.starrocks.privilege.WarehouseFCPEntryObject;
+import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.SharedDataStorageVolumeMgr;
 import com.starrocks.server.SharedNothingStorageVolumeMgr;
@@ -254,8 +267,10 @@ public class GsonUtils {
                     .registerSubtype(RollupJobV2.class, "RollupJobV2")
                     .registerSubtype(SchemaChangeJobV2.class, "SchemaChangeJobV2")
                     .registerSubtype(OptimizeJobV2.class, "OptimizeJobV2")
+                    .registerSubtype(OnlineOptimizeJobV2.class, "OnlineOptimizeJobV2")
                     .registerSubtype(LakeTableSchemaChangeJob.class, "LakeTableSchemaChangeJob")
                     .registerSubtype(LakeTableAlterMetaJob.class, "LakeTableAlterMetaJob")
+                    .registerSubtype(LakeRollupJob.class, "LakeRollupJob")
                     .registerSubtype(LakeTableAsyncFastSchemaChangeJob.class, "LakeTableFastSchemaEvolutionJob");
 
     // runtime adapter for class "LoadJobStateUpdateInfo"
@@ -290,7 +305,9 @@ public class GsonUtils {
             .registerSubtype(RecycleRangePartitionInfo.class, "RecycleRangePartitionInfo")
             .registerSubtype(RecycleLakeRangePartitionInfo.class, "RecycleLakeRangePartitionInfo")
             .registerSubtype(RecycleListPartitionInfo.class, "RecycleListPartitionInfo")
-            .registerSubtype(RecycleLakeListPartitionInfo.class, "RecycleLakeListPartitionInfo");
+            .registerSubtype(RecycleLakeListPartitionInfo.class, "RecycleLakeListPartitionInfo")
+            .registerSubtype(RecycleUnPartitionInfo.class, "RecycleUnPartitionInfo")
+            .registerSubtype(RecycleLakeUnPartitionInfo.class, "RecycleLakeUnPartitionInfo");
 
     private static final RuntimeTypeAdapterFactory<com.starrocks.catalog.Table> TABLE_TYPE_ADAPTER_FACTORY
             = RuntimeTypeAdapterFactory.of(com.starrocks.catalog.Table.class, "clazz")
@@ -326,9 +343,18 @@ public class GsonUtils {
                     .registerSubtype(CatalogPEntryObject.class, "CatalogPEntryObject")
                     .registerSubtype(ResourceGroupPEntryObject.class, "ResourceGroupPEntryObject")
                     .registerSubtype(StorageVolumePEntryObject.class, "StorageVolumePEntryObject")
-                    .registerSubtype(WarehouseFCPEntryObject.class, "WarehousePEntryObject")
+                    .registerSubtype(WarehousePEntryObject.class, "WarehousePEntryObject")
                     .registerSubtype(PipePEntryObject.class, "PipePEntryObject")
                     .registerSubtype(PolicyFCEntryObject.class, "PolicyPEntryObject");
+
+    private static final RuntimeTypeAdapterFactory<SecurityIntegration> SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(SecurityIntegration.class, "clazz")
+                    .registerSubtype(OIDCSecurityIntegration.class, "OIDCSecurityIntegration");
+
+    private static final RuntimeTypeAdapterFactory<GroupProvider> GROUP_PROVIDER_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(GroupProvider.class, "clazz")
+                    .registerSubtype(FileGroupProvider.class, "FileGroupProvider")
+                    .registerSubtype(UnixGroupProvider.class, "UnixGroupProvider");
 
     private static final RuntimeTypeAdapterFactory<Warehouse> WAREHOUSE_TYPE_ADAPTER_FACTORY = RuntimeTypeAdapterFactory
             .of(Warehouse.class, "clazz")
@@ -348,7 +374,8 @@ public class GsonUtils {
                     .registerSubtype(MiniLoadTxnCommitAttachment.class, "MiniLoadTxnCommitAttachment")
                     .registerSubtype(RLTaskTxnCommitAttachment.class, "RLTaskTxnCommitAttachment")
                     .registerSubtype(StreamLoadTxnCommitAttachment.class, "StreamLoadTxnCommitAttachment")
-                    .registerSubtype(ReplicationTxnCommitAttachment.class, "ReplicationTxnCommitAttachment");
+                    .registerSubtype(ReplicationTxnCommitAttachment.class, "ReplicationTxnCommitAttachment")
+                    .registerSubtype(CompactionTxnCommitAttachment.class, "CompactionTxnCommitAttachment");
 
     public static final RuntimeTypeAdapterFactory<RoutineLoadProgress> ROUTINE_LOAD_PROGRESS_TYPE_RUNTIME_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(RoutineLoadProgress.class, "clazz")
@@ -388,7 +415,6 @@ public class GsonUtils {
                     .registerSubtype(NativeAnalyzeJob.class, "NativeAnalyzeJob", true)
                     .registerSubtype(ExternalAnalyzeJob.class, "ExternalAnalyzeJob");
 
-
     private static final JsonSerializer<LocalDateTime> LOCAL_DATE_TIME_TYPE_SERIALIZER =
             (dateTime, type, jsonSerializationContext) -> new JsonPrimitive(dateTime.toEpochSecond(ZoneOffset.UTC));
 
@@ -420,6 +446,7 @@ public class GsonUtils {
             .enableComplexMapKeySerialization()
             .registerTypeHierarchyAdapter(Table.class, new GuavaTableAdapter())
             .registerTypeHierarchyAdapter(Multimap.class, new GuavaMultimapAdapter())
+            .registerTypeHierarchyAdapter(ColumnId.class, new ColumnIdAdapter())
             .registerTypeAdapterFactory(new ProcessHookTypeAdapterFactory())
             // For call constructor with selectedFields
             .registerTypeAdapter(MapType.class, new MapType.MapTypeDeserializer())
@@ -437,6 +464,8 @@ public class GsonUtils {
             .registerTypeAdapterFactory(TABLE_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(SNAPSHOT_INFO_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(P_ENTRY_OBJECT_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(GROUP_PROVIDER_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(WAREHOUSE_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(TXN_COMMIT_ATTACHMENT_TYPE_RUNTIME_ADAPTER_FACTORY)
@@ -451,6 +480,7 @@ public class GsonUtils {
             .registerTypeAdapter(LocalDateTime.class, LOCAL_DATE_TIME_TYPE_DESERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_SERIALIZER)
             .registerTypeAdapter(QueryDumpInfo.class, DUMP_INFO_DESERIALIZER)
+            .registerTypeAdapter(EncryptionKeyPB.class, new EncryptionKeyPBAdapter())
             .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_SERIALIZER)
             .registerTypeAdapter(HiveTableDumpInfo.class, HIVE_TABLE_DUMP_INFO_DESERIALIZER)
             .registerTypeAdapter(PrimitiveType.class, PRIMITIVE_TYPE_DESERIALIZER);
@@ -655,6 +685,20 @@ public class GsonUtils {
         }
     }
 
+    private static class ColumnIdAdapter implements JsonSerializer<ColumnId>,
+            JsonDeserializer<ColumnId> {
+        @Override
+        public ColumnId deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context)
+                throws JsonParseException {
+            return ColumnId.create(json.getAsJsonPrimitive().getAsString());
+        }
+
+        @Override
+        public JsonElement serialize(ColumnId src, Type typeOfSrc, JsonSerializationContext context) {
+            return new JsonPrimitive(src.getId());
+        }
+    }
+
     public static class ProcessHookTypeAdapterFactory implements TypeAdapterFactory {
 
         public ProcessHookTypeAdapterFactory() {
@@ -700,39 +744,5 @@ public class GsonUtils {
                 return PrimitiveType.INVALID_TYPE;
             }
         }
-    }
-
-    /*
-    * For historical reasons, there was a period of time when the code serialized Expr directly in GsonUtils,
-    * which would cause problems for the future expansion of Expr. This class is for code compatibility.
-    * Starting from version 3.2, this compatibility class can be deleted.
-    *
-    *
-    private static class ExpressionSerializer implements JsonSerializer<Expr> {
-        @Override
-        public JsonElement serialize(Expr expr, Type type, JsonSerializationContext context) {
-            JsonObject expressionJson = new JsonObject();
-            expressionJson.addProperty("expr", expr.toSql());
-            return expressionJson;
-        }
-    }
-
-    private static class ExpressionDeserializer implements JsonDeserializer<Expr> {
-        @Override
-        public Expr deserialize(JsonElement jsonElement, Type type, JsonDeserializationContext context)
-                throws JsonParseException {
-            JsonObject expressionObject = jsonElement.getAsJsonObject();
-            String expressionSql = expressionObject.get("expr").getAsString();
-            return SqlParser.parseSqlToExpr(expressionSql, SqlModeHelper.MODE_DEFAULT);
-        }
-    }
-     */
-    public static class ExpressionSerializedObject {
-        public ExpressionSerializedObject(String expressionSql) {
-            this.expressionSql = expressionSql;
-        }
-
-        @SerializedName("expr")
-        public String expressionSql;
     }
 }

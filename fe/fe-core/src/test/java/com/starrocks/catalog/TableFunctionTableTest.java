@@ -17,11 +17,16 @@ package com.starrocks.catalog;
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.fs.HdfsUtil;
+import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
+import com.starrocks.sql.analyzer.SemanticException;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TBrokerFileStatus;
@@ -47,6 +52,7 @@ public class TableFunctionTableTest {
         properties.put("path", "fake://some_bucket/some_path/*");
         properties.put("format", "ORC");
         properties.put("columns_from_path", "col_path1, col_path2,   col_path3");
+        properties.put("strict_mode", "true");
         properties.put("auto_detect_sample_files", "10");
         properties.put("csv.column_separator", ",");
         properties.put("csv.row_delimiter", "\n");
@@ -149,6 +155,7 @@ public class TableFunctionTableTest {
             Assert.assertEquals("ORC", Deencapsulation.getField(table, "format"));
             Assert.assertEquals(Arrays.asList("col_path1", "col_path2", "col_path3"),
                     Deencapsulation.getField(table, "columnsFromPath"));
+            Assert.assertEquals(true, table.isStrictMode());
             Assert.assertEquals(10, (int) Deencapsulation.getField(table, "autoDetectSampleFiles"));
             Assert.assertEquals("\n", table.getCsvRowDelimiter());
             Assert.assertEquals(",", table.getCsvColumnSeparator());
@@ -158,10 +165,27 @@ public class TableFunctionTableTest {
             Assert.assertEquals(true, table.getCsvTrimSpace());
         });
 
+        // csv column separator / row delimiter
+        Assertions.assertDoesNotThrow(() -> {
+            Map<String, String> properties = newProperties();
+            properties.put("format", "csv");
+            properties.put("csv.column_separator", "\\x01");
+            properties.put("csv.row_delimiter", "0x02");
+            TableFunctionTable table = new TableFunctionTable(properties);
+            Assert.assertEquals("csv", Deencapsulation.getField(table, "format"));
+            Assert.assertEquals("\1", table.getCsvColumnSeparator());
+            Assert.assertEquals("\2", table.getCsvRowDelimiter());
+        });
+
         // abnormal case.
         Assertions.assertThrows(DdlException.class, () -> {
             Map<String, String> properties = newProperties();
             properties.put("auto_detect_sample_files", "not_a_number");
+            new TableFunctionTable(properties);
+        });
+        Assertions.assertThrows(SemanticException.class, () -> {
+            Map<String, String> properties = newProperties();
+            properties.put("list_files_only", "not_true_false");
             new TableFunctionTable(properties);
         });
     }
@@ -170,7 +194,8 @@ public class TableFunctionTableTest {
     public void testNoFilesFound() throws DdlException {
         new MockUp<HdfsUtil>() {
             @Mock
-            public void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses) throws UserException {
+            public void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses) throws
+                    StarRocksException {
             }
         };
 
@@ -182,5 +207,69 @@ public class TableFunctionTableTest {
                 "No files were found matching the pattern(s) or path(s): " +
                         "'hdfs://127.0.0.1:9000/file1,hdfs://127.0.0.1:9000/file2'",
                 () -> new TableFunctionTable(properties));
+    }
+
+    @Test
+    public void testIllegalDelimiter() throws DdlException {
+        {
+            Map<String, String> properties = newProperties();
+            properties.put("csv.row_delimiter", "0123456789012345678901234567890123456789012345678901234567890");
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                    "The valid bytes length for 'csv.row_delimiter' is [1, 50]",
+                    () -> new TableFunctionTable(properties));
+            properties.put("csv.row_delimiter", "");
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "Delimiter cannot be empty or null",
+                    () -> new TableFunctionTable(properties));
+        }
+
+        {
+            Map<String, String> properties = newProperties();
+            properties.put("csv.column_separator", "0123456789012345678901234567890123456789" +
+                    "012345678901234567890");
+            ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                    "The valid bytes length for 'csv.column_separator' is [1, 50]",
+                    () -> new TableFunctionTable(properties));
+
+            properties.put("csv.column_separator", "");
+            ExceptionChecker.expectThrowsWithMsg(SemanticException.class,
+                    "Delimiter cannot be empty or null",
+                    () -> new TableFunctionTable(properties));
+        }
+    }
+
+    @Test
+    public void testIllegalCSVTrimSpace() throws DdlException {
+        new MockUp<HdfsUtil>() {
+            @Mock
+            public void parseFile(String path, BrokerDesc brokerDesc, List<TBrokerFileStatus> fileStatuses) throws
+                    StarRocksException {
+            }
+        };
+
+        Map<String, String> properties = newProperties();
+        properties.put("csv.trim_space", "FALSE");
+
+        ExceptionChecker.expectThrowsNoException(() -> new TableFunctionTable(properties));
+
+        properties.put("csv.trim_space", "FALS");
+
+        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
+                "illegal value of csv.trim_space: FALS, only true/false allowed",
+                () -> new TableFunctionTable(properties));
+    }
+
+    @Test
+    public void testFilesCredentialDesensitization() {
+        String sql = "insert into files('path' = 's3://xxx/yyy', 'format' = 'parquet', 'aws.s3.access_key' = 'abc', " +
+                "'aws.s3.secret_key' = 'def', 'aws.s3.region' = 'us-west-2') " +
+                "select * from files('path' = 's3://xxx/zzz', 'format' = 'parquet', 'aws.s3.access_key' = 'ghi', " +
+                "'aws.s3.secret_key' = 'jkl', 'aws.s3.region' = 'us-west-1')";
+        StatementBase stmt = SqlParser.parseSingleStatement(sql, SqlModeHelper.MODE_DEFAULT);
+        String desensitizationSql = AstToSQLBuilder.toSQL(stmt);
+        Assert.assertEquals("INSERT INTO FILES(\"aws.s3.access_key\" = \"***\", \"aws.s3.region\" = \"us-west-2\", " +
+                "\"aws.s3.secret_key\" = \"***\", \"format\" = \"parquet\", \"path\" = \"s3://xxx/yyy\") SELECT *\n" +
+                "FROM FILES(\"aws.s3.access_key\" = \"***\", \"aws.s3.region\" = \"us-west-1\", " +
+                "\"aws.s3.secret_key\" = \"***\", \"format\" = \"parquet\", \"path\" = \"s3://xxx/zzz\")", desensitizationSql);
     }
 }

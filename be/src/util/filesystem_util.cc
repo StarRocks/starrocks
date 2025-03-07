@@ -37,11 +37,11 @@
 #include <fcntl.h>
 #include <sys/resource.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
+#include <cstring>
 #include <filesystem>
 #include <system_error>
-
-#include "util/error_util.h"
 
 using std::exception;
 using std::string;
@@ -100,7 +100,7 @@ Status FileSystemUtil::create_file(const string& file_path) {
     if (fd < 0) {
         std::stringstream error_msg;
         error_msg << "Create file " << file_path.c_str() << " failed with errno=" << errno
-                  << "description=" << get_str_err_msg();
+                  << "description=" << std::strerror(errno);
         return Status::InternalError(error_msg.str());
     }
 
@@ -108,7 +108,7 @@ Status FileSystemUtil::create_file(const string& file_path) {
     if (success < 0) {
         std::stringstream error_msg;
         error_msg << "Close file " << file_path.c_str() << " failed with errno=" << errno
-                  << " description=" << get_str_err_msg();
+                  << " description=" << std::strerror(errno);
         return Status::InternalError(error_msg.str());
     }
 
@@ -120,7 +120,7 @@ Status FileSystemUtil::resize_file(const string& file_path, int64_t trunc_len) {
     if (success != 0) {
         std::stringstream error_msg;
         error_msg << "Truncate file " << file_path << " to length " << trunc_len << " failed with " << errno << " ("
-                  << get_str_err_msg() << ")";
+                  << std::strerror(errno) << ")";
         return Status::InternalError(error_msg.str());
     }
 

@@ -14,93 +14,9 @@
 
 #pragma once
 
-#include "gutil/strings/substitute.h"
-#include "simd/simd.h"
 #include "storage/predicate_tree/predicate_tree.h"
 
 namespace starrocks {
-
-// ------------------------------------------------------------------------------------
-// PredicateCompoundNode
-// ------------------------------------------------------------------------------------
-
-template <CompoundNodeType Type>
-ConstPredicateNodeIterator<PredicateCompoundNode<Type>::DualType> PredicateCompoundNode<Type>::children() const {
-    return {_col_children_map.begin(), _col_children_map.end(), _compound_children.begin(), _compound_children.end()};
-}
-template <CompoundNodeType Type>
-MutablePredicateNodeIterator<PredicateCompoundNode<Type>::DualType> PredicateCompoundNode<Type>::children() {
-    return {_col_children_map.begin(), _col_children_map.end(), _compound_children.begin(), _compound_children.end()};
-}
-
-template <CompoundNodeType Type>
-std::string PredicateCompoundNode<Type>::debug_string() const {
-    std::stringstream ss;
-    if constexpr (Type == CompoundNodeType::AND) {
-        ss << "{\"and\":[";
-    } else {
-        ss << "{\"or\":[";
-    }
-
-    const auto num_total_children = num_children();
-    size_t count_children = 0;
-    for (const auto& child : children()) {
-        ss << child.visit([](const auto& node) { return node.debug_string(); });
-        if (++count_children < num_total_children) {
-            ss << ",";
-        }
-    }
-
-    ss << "]}";
-    return ss.str();
-}
-
-template <CompoundNodeType Type>
-template <CompoundNodeType ChildType>
-void PredicateCompoundNode<Type>::add_child(PredicateCompoundNode<ChildType>&& child) {
-    if constexpr (Type == ChildType) {
-        for (auto grand_child_var : child.children()) {
-            grand_child_var.visit([&](auto& grand_child) { add_child(std::move(grand_child)); });
-        }
-    } else {
-        _compound_children.emplace_back(std::move(child));
-    }
-}
-
-template <CompoundNodeType Type>
-template <CompoundNodeType ChildType>
-void PredicateCompoundNode<Type>::add_child(const PredicateCompoundNode<ChildType>& child) {
-    if constexpr (Type == ChildType) {
-        for (const auto grand_child_var : child.children()) {
-            grand_child_var.visit([&](const auto& grand_child) { add_child(grand_child); });
-        }
-    } else {
-        _compound_children.emplace_back(child);
-    }
-}
-
-template <CompoundNodeType Type>
-void PredicateCompoundNode<Type>::add_child(PredicateColumnNode&& child) {
-    _col_children_map[child.col_pred()->column_id()].emplace_back(std::move(child));
-}
-
-template <CompoundNodeType Type>
-void PredicateCompoundNode<Type>::add_child(const PredicateColumnNode& child) {
-    _col_children_map[child.col_pred()->column_id()].emplace_back(child);
-}
-
-template <CompoundNodeType Type>
-size_t PredicateCompoundNode<Type>::num_children() const {
-    auto cnt = _compound_children.size();
-    for (const auto& [_, col_children] : _col_children_map) {
-        cnt += col_children.size();
-    }
-    return cnt;
-}
-template <CompoundNodeType Type>
-bool PredicateCompoundNode<Type>::empty() const {
-    return _col_children_map.empty() && _compound_children.empty();
-}
 
 template <CompoundNodeType Type>
 template <typename Vistor>

@@ -18,15 +18,9 @@
  */
 package org.apache.iceberg;
 
-import static org.apache.iceberg.expressions.Expressions.alwaysTrue;
-
-import java.io.IOException;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-
 import com.google.common.cache.Cache;
+import com.starrocks.connector.iceberg.DataFileWrapper;
+import com.starrocks.connector.iceberg.DeleteFileWrapper;
 import org.apache.iceberg.avro.Avro;
 import org.apache.iceberg.avro.AvroIterable;
 import org.apache.iceberg.exceptions.RuntimeIOException;
@@ -47,6 +41,14 @@ import org.apache.iceberg.relocated.com.google.common.collect.Lists;
 import org.apache.iceberg.relocated.com.google.common.collect.Sets;
 import org.apache.iceberg.types.Types;
 import org.apache.iceberg.util.PartitionSet;
+
+import java.io.IOException;
+import java.util.Collection;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+import static org.apache.iceberg.expressions.Expressions.alwaysTrue;
 
 // copy from https://github.com/apache/iceberg/blob/apache-iceberg-1.5.0/core/src/main/java/org/apache/iceberg/ManifestReader.java
 public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
@@ -98,6 +100,7 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
     private boolean dataFileCacheWithMetrics = false;
     private Cache<String, Set<DataFile>> dataFileCache;
     private Cache<String, Set<DeleteFile>> deleteFileCache;
+    private Set<Integer> identifierFieldIds = null;
 
     protected ManifestReader(
             InputFile file,
@@ -218,6 +221,11 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         return this;
     }
 
+    ManifestReader<F> identifierFieldIds(Set<Integer> identifierFieldIds) {
+        this.identifierFieldIds = identifierFieldIds;
+        return this;
+    }
+
     CloseableIterable<ManifestEntry<F>> entries() {
         return entries(false /* all entries */);
     }
@@ -252,14 +260,23 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
         }
     }
 
+    // when the identifier field ids is null, it will copy all metrics.
     private CloseableIterable<ManifestEntry<F>> fillCacheIfNeeded(CloseableIterable<ManifestEntry<F>> entries) {
         if (dataFileCache != null && content == FileType.DATA_FILES) {
             entries = CloseableIterable.transform(entries,
                     entry -> {
                         Set<DataFile> dataFiles = dataFileCache.getIfPresent(file.location());
-                        if (dataFiles != null) {
+                        if (dataFiles != null && entry.isLive()) {
+                            Set<Integer> requestedColumnIds = null;
+                            if (identifierFieldIds != null && !identifierFieldIds.isEmpty()) {
+                                requestedColumnIds = identifierFieldIds;
+                            }
+
                             DataFile dataFile = (DataFile) entry.file();
-                            dataFiles.add(dataFileCacheWithMetrics ? dataFile : dataFile.copyWithoutStats());
+                            DataFile copiedDataFile = dataFileCacheWithMetrics ?
+                                    dataFile.copyWithStats(requestedColumnIds) :
+                                    dataFile.copyWithoutStats();
+                            dataFiles.add(DataFileWrapper.wrap(copiedDataFile));
                         }
                         return entry;
                     });
@@ -269,8 +286,8 @@ public class ManifestReader<F extends ContentFile<F>> extends CloseableGroup
             entries = CloseableIterable.transform(entries,
                     entry -> {
                         Set<DeleteFile> deleteFiles = deleteFileCache.getIfPresent(file.location());
-                        if (deleteFiles != null) {
-                            deleteFiles.add((DeleteFile) entry.file().copy());
+                        if (deleteFiles != null && entry.isLive()) {
+                            deleteFiles.add(DeleteFileWrapper.wrap((DeleteFile) entry.file().copy()));
                         }
                         return entry;
                     });

@@ -29,6 +29,8 @@ constexpr static const int kTabletMetadataFilenameLength = 38;
 constexpr static const int kTxnLogFilenameLength = 37;
 constexpr static const int kTabletMetadataLockFilenameLength = 55;
 
+constexpr static const int64 kInitialVersion = 1;
+
 constexpr static const char* const kGCFileName = "GC.json";
 
 inline bool is_segment(std::string_view file_name) {
@@ -59,12 +61,24 @@ inline bool is_tablet_metadata(std::string_view file_name) {
     return HasSuffixString(file_name, ".meta");
 }
 
+inline bool is_tablet_initial_metadata(std::string_view file_name) {
+    return HasPrefixString(file_name, "0000000000000000_");
+}
+
 inline bool is_tablet_metadata_lock(std::string_view file_name) {
     return HasSuffixString(file_name, ".lock");
 }
 
+inline bool is_sst(std::string_view file_name) {
+    return HasSuffixString(file_name, ".sst");
+}
+
 inline std::string tablet_metadata_filename(int64_t tablet_id, int64_t version) {
     return fmt::format("{:016X}_{:016X}.meta", tablet_id, version);
+}
+
+inline std::string tablet_initial_metadata_filename() {
+    return tablet_metadata_filename(0, kInitialVersion);
 }
 
 inline std::string gen_delvec_filename(int64_t txn_id) {
@@ -106,6 +120,10 @@ inline std::string tablet_metadata_lock_filename(int64_t tablet_id, int64_t vers
 
 inline std::string gen_segment_filename(int64_t txn_id) {
     return fmt::format("{:016x}_{}.dat", txn_id, generate_uuid_string());
+}
+
+inline std::string gen_cols_filename(int64_t txn_id) {
+    return fmt::format("{:016x}_{}.cols", txn_id, generate_uuid_string());
 }
 
 inline std::string gen_del_filename(int64_t txn_id) {

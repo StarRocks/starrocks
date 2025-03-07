@@ -16,7 +16,7 @@
 
 #include <gtest/gtest.h>
 
-#include "block_cache/block_cache.h"
+#include "cache/block_cache/block_cache.h"
 #include "fs/fs_util.h"
 #include "testutil/assert.h"
 
@@ -57,8 +57,6 @@ public:
         options.mem_space_size = 100 * 1024 * 1024;
 #ifdef WITH_STARCACHE
         options.engine = "starcache";
-#else
-        options.engine = "cachelib";
 #endif
         options.enable_checksum = false;
         options.max_concurrent_inserts = 1500000;
@@ -76,8 +74,11 @@ public:
         }
     }
 
-    void SetUp() override {}
-    void TearDown() override {}
+    void SetUp() override {
+        _saved_enable_auto_adjust = config::datacache_auto_adjust_enable;
+        config::datacache_auto_adjust_enable = false;
+    }
+    void TearDown() override { config::datacache_auto_adjust_enable = _saved_enable_auto_adjust; }
 
     static void read_stream_data(io::SeekableInputStream* stream, int64_t offset, int64_t size, char* data) {
         ASSERT_OK(stream->seek(offset));
@@ -103,6 +104,9 @@ public:
     }
 
     static const int64_t block_size;
+
+private:
+    bool _saved_enable_auto_adjust = false;
 };
 
 const int64_t CacheInputStreamTest::block_size = 256 * 1024;
@@ -324,9 +328,12 @@ TEST_F(CacheInputStreamTest, test_read_with_zero_range) {
 }
 
 TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
+    const std::string cache_dir = "./cache_input_stream_cache_dir";
+    fs::create_directories(cache_dir);
+
     CacheOptions options = cache_options();
     // Because the cache adaptor only work for disk cache.
-    options.disk_spaces.push_back({.path = "./block_disk_cache", .size = 300 * 1024 * 1024});
+    options.disk_spaces.push_back({.path = cache_dir, .size = 300 * 1024 * 1024});
     options.enable_tiered_cache = false;
     ASSERT_OK(BlockCache::instance()->init(options));
 
@@ -389,6 +396,7 @@ TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
         ASSERT_TRUE(check_data_content(buffer + block_size, block_size, 'b'));
         ASSERT_EQ(stats.read_cache_count, block_count);
     }
+    fs::remove_all(cache_dir);
 }
 
 TEST_F(CacheInputStreamTest, test_read_with_shared_buffer) {

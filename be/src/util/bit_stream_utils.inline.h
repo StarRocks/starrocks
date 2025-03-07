@@ -38,6 +38,7 @@
 #include "glog/logging.h"
 #include "util/alignment.h"
 #include "util/bit_packing.inline.h"
+#include "util/bit_packing_adapter.h"
 #include "util/bit_stream_utils.h"
 
 using starrocks::BitUtil;
@@ -259,10 +260,19 @@ inline bool BatchedBitReader::get_bytes(int num_bytes, T* v) {
     return true;
 }
 
+inline bool BatchedBitReader::skip_bytes(int num_bytes) {
+    if (UNLIKELY(_buffer_pos + num_bytes > _buffer_end)) {
+        return false;
+    }
+    _buffer_pos += num_bytes;
+    return true;
+}
+
 template <typename T>
 inline int BatchedBitReader::unpack_batch(int bit_width, int num_values, T* v) {
     int64_t num_read;
-    std::tie(_buffer_pos, num_read) = BitPacking::UnpackValues(bit_width, _buffer_pos, _bytes_left(), num_values, v);
+    std::tie(_buffer_pos, num_read) =
+            BitPackingAdapter::UnpackValues(bit_width, _buffer_pos, _bytes_left(), num_values, v);
     return static_cast<int>(num_read);
 }
 

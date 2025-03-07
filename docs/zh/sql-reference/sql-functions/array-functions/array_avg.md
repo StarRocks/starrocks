@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # array_avg
 
-## 功能
+
 
 求取一个ARRAY中的所有数据的平均数，返回这个结果。
 

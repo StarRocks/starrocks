@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # host_name
 
-## 功能
+
 
 获取计算所在节点的主机名。该函数从 2.5 版本开始支持。
 

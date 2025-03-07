@@ -101,7 +101,7 @@ public class JsonTypeTest extends PlanTestBase {
     @Test
     public void testPredicateImplicitCast() throws Exception {
         assertPlanContains("select parse_json('1') between 0.5 and 0.9",
-                "CAST(3: parse_json AS DOUBLE)");
+                "CAST(parse_json('1') AS DOUBLE)");
 
         List<String> operators = Arrays.asList("<", "<=", "=", ">=", "!=");
         for (String operator : operators) {
@@ -116,7 +116,8 @@ public class JsonTypeTest extends PlanTestBase {
         }
 
         assertPlanContains("select parse_json('1') in (1, 2, 3)", "IN");
-        assertPlanContains("select parse_json('1') in (parse_json('1'), parse_json('2'))", "OR");
+        assertPlanContains("select parse_json('1') in (parse_json('1'), parse_json('2'))",
+                "parse_json('1') IN (parse_json('1'), parse_json('2'))");
     }
 
     /**
@@ -194,7 +195,7 @@ public class JsonTypeTest extends PlanTestBase {
     public void testCastJsonArray() throws Exception {
         assertPlanContains("select json_array(parse_json('1'), parse_json('2'))",
                 "json_array(parse_json('1'), parse_json('2'))");
-        assertPlanContains("select json_array(1, 1)", "json_array(3: cast, 3: cast)");
+        assertPlanContains("select json_array(1, 1)", "json_array(CAST(1 AS JSON), CAST(1 AS JSON))");
         assertPlanContains("select json_array(1, '1')", "json_array(CAST(1 AS JSON), CAST('1' AS JSON))");
         assertPlanContains("select json_array(1.1)", "json_array(CAST(1.1 AS JSON))");
         assertPlanContains("select json_array(NULL)", "NULL");

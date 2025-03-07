@@ -267,10 +267,9 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
     }
 
     // return map of (BE id -> path hash) of normal replicas
-    public Multimap<Replica, Long> getNormalReplicaBackendPathMap() {
+    public Multimap<Replica, Long> getNormalReplicaBackendPathMap(SystemInfoService infoService) {
         Multimap<Replica, Long> map = LinkedHashMultimap.create();
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
-            SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
             for (Replica replica : replicas) {
                 if (replica.isBad()) {
                     continue;
@@ -292,7 +291,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                                      long visibleVersion, long localBeId, int schemaHash) {
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
-                if (replica.isBad()) {
+                if (replica.isBad() || replica.isErrorState()) {
                     continue;
                 }
 
@@ -327,7 +326,7 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
         int size = 0;
         try (CloseableLock ignored = CloseableLock.lock(this.rwLock.readLock())) {
             for (Replica replica : replicas) {
-                if (replica.isBad()) {
+                if (replica.isBad() || replica.isErrorState()) {
                     continue;
                 }
 
@@ -515,6 +514,17 @@ public class LocalTablet extends Tablet implements GsonPostProcessable {
                 if (replica.checkVersionCatchUp(version, false) && replica.getRowCount() > tabletRowCount) {
                     tabletRowCount = replica.getRowCount();
                 }
+            }
+        }
+        return tabletRowCount;
+    }
+
+    @Override
+    public long getFuzzyRowCount() {
+        long tabletRowCount = 0L;
+        for (Replica replica : immutableReplicas) {
+            if (replica.getRowCount() > tabletRowCount) {
+                tabletRowCount = replica.getRowCount();
             }
         }
         return tabletRowCount;

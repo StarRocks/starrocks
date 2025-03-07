@@ -15,6 +15,7 @@
 package com.starrocks.sql.ast;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.parser.NodePosition;
@@ -27,13 +28,21 @@ public class DataCacheSelectStatement extends DdlStmt {
 
     private final Map<String, String> properties;
 
+    // =================================================================================
+    // Below properties will set after DataCacheAnalyzer analyze properties
+    private boolean isVerbose = false;
+    // real catalog of cache select table
+    private String catalog = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
+    private long ttlSeconds = 0;
+    private int priority = 0;
+    // =================================================================================
 
     public DataCacheSelectStatement(InsertStmt insertStmt, Map<String, String> properties, NodePosition pos) {
         super(pos);
         this.insertStmt = insertStmt;
         this.properties = properties;
         Preconditions.checkNotNull(properties, "properties can't be null");
-        insertStmt.setOrigStmt(new OriginStatement("CACHE SELECT " + AstToSQLBuilder.toSQL(insertStmt.getQueryStatement())));
+        insertStmt.setOrigStmt(new OriginStatement("CACHE " + AstToSQLBuilder.toSQL(insertStmt.getQueryStatement())));
     }
 
     public InsertStmt getInsertStmt() {
@@ -42,6 +51,38 @@ public class DataCacheSelectStatement extends DdlStmt {
 
     public Map<String, String> getProperties() {
         return properties;
+    }
+
+    public void setVerbose(boolean verbose) {
+        isVerbose = verbose;
+    }
+
+    public boolean isVerbose() {
+        return isVerbose;
+    }
+
+    public void setCatalog(String catalog) {
+        this.catalog = catalog;
+    }
+
+    public String getCatalog() {
+        return this.catalog;
+    }
+
+    public void setPriority(int priority) {
+        this.priority = priority;
+    }
+
+    public int getPriority() {
+        return priority;
+    }
+
+    public void setTTLSeconds(long ttlSeconds) {
+        this.ttlSeconds = ttlSeconds;
+    }
+
+    public long getTTLSeconds() {
+        return ttlSeconds;
     }
 
     @Override

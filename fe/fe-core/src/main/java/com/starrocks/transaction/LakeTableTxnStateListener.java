@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
@@ -30,7 +31,6 @@ import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.compaction.CompactionMgr;
 import com.starrocks.proto.AbortTxnRequest;
 import com.starrocks.proto.TxnInfoPB;
-import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
@@ -57,8 +57,8 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
     private final OlapTable table;
 
     private Set<Long> dirtyPartitionSet;
-    private Set<String> invalidDictCacheColumns;
-    private Map<String, Long> validDictCacheColumns;
+    private Set<ColumnId> invalidDictCacheColumns;
+    private Map<ColumnId, Long> validDictCacheColumns;
     private final CompactionMgr compactionMgr;
 
     public LakeTableTxnStateListener(@NotNull DatabaseTransactionMgr dbTxnMgr, @NotNull OlapTable table) {
@@ -103,11 +103,11 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
             if (tabletMeta.getTableId() != table.getId()) {
                 continue;
             }
-            if (table.getPhysicalPartition(tabletMeta.getPartitionId()) == null) {
+            if (table.getPhysicalPartition(tabletMeta.getPhysicalPartitionId()) == null) {
                 // this can happen when partitionId == -1 (tablet being dropping) or partition really not exist.
                 continue;
             }
-            dirtyPartitionSet.add(tabletMeta.getPartitionId());
+            dirtyPartitionSet.add(tabletMeta.getPhysicalPartitionId());
 
             // Invalid column set should union
             invalidDictCacheColumns.addAll(finishedTablets.get(i).getInvalidDictCacheColumns());
@@ -118,7 +118,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
                     !finishedTablets.get(i).getValidDictCacheColumns().isEmpty()) {
                 TabletCommitInfo tabletCommitInfo = finishedTablets.get(i);
                 List<Long> validDictCollectedVersions = tabletCommitInfo.getValidDictCollectedVersions();
-                List<String> validDictCacheColumns = tabletCommitInfo.getValidDictCacheColumns();
+                List<ColumnId> validDictCacheColumns = tabletCommitInfo.getValidDictCacheColumns();
                 for (int j = 0; j < validDictCacheColumns.size(); j++) {
                     long version = 0;
                     // validDictCollectedVersions != validDictCacheColumns means be has not upgrade
@@ -137,7 +137,12 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
 
         if (enableIngestSlowdown()) {
             long currentTimeMs = System.currentTimeMillis();
-            new CommitRateLimiter(compactionMgr, txnState, table.getId()).check(dirtyPartitionSet, currentTimeMs);
+            Set<Long> partitionIds = Sets.newHashSet();
+            for (Long partitionId : dirtyPartitionSet) {
+                PhysicalPartition partition = table.getPhysicalPartition(partitionId);
+                partitionIds.add(partition.getParentId());
+            }
+            new CommitRateLimiter(compactionMgr, txnState, table.getId()).check(partitionIds, currentTimeMs);
         }
 
         List<Long> unfinishedTablets = null;
@@ -172,9 +177,8 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         boolean isFirstPartition = true;
         for (long partitionId : dirtyPartitionSet) {
             PartitionCommitInfo partitionCommitInfo;
-            long version = -1;
             if (isFirstPartition) {
-                List<String> validDictCacheColumnNames = Lists.newArrayList();
+                List<ColumnId> validDictCacheColumnNames = Lists.newArrayList();
                 List<Long> validDictCacheColumnVersions = Lists.newArrayList();
 
                 validDictCacheColumns.forEach((name, dictVersion) -> {
@@ -182,25 +186,15 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
                     validDictCacheColumnVersions.add(dictVersion);
                 });
 
-                partitionCommitInfo = new PartitionCommitInfo(partitionId, version, 0,
+                partitionCommitInfo = new PartitionCommitInfo(partitionId, -1, 0,
                         Lists.newArrayList(invalidDictCacheColumns),
                         validDictCacheColumnNames,
                         validDictCacheColumnVersions);
             } else {
-                partitionCommitInfo = new PartitionCommitInfo(partitionId, version, 0);
+                partitionCommitInfo = new PartitionCommitInfo(partitionId, -1, 0);
             }
             tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
             isFirstPartition = false;
-        }
-
-        // The new versions in a replication transaction depend on the versions in ReplicationTxnCommitAttachment
-        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
-            ReplicationTxnCommitAttachment attachment = (ReplicationTxnCommitAttachment) txnState
-                    .getTxnCommitAttachment();
-            Map<Long, Long> partitionVersions = attachment.getPartitionVersions();
-            for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
-                partitionCommitInfo.setVersion(partitionVersions.get(partitionCommitInfo.getPartitionId()));
-            }
         }
 
         txnState.putIdToTableCommitInfo(table.getId(), tableCommitInfo);
@@ -272,7 +266,7 @@ public class LakeTableTxnStateListener implements TransactionStateListener {
         try {
             BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort()).abortTxn(request);
         } catch (Throwable e) {
-            LOG.error(e);
+            LOG.error(e.getMessage(), e);
         }
     }
 

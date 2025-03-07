@@ -16,7 +16,12 @@ package com.starrocks.scheduler;
 
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.ast.AstTraverser;
+import com.starrocks.sql.ast.Relation;
+import com.starrocks.sql.ast.StatementBase;
+import com.starrocks.sql.parser.SqlParser;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -38,11 +43,29 @@ public class SqlTaskRunProcessor extends BaseTaskRunProcessor {
                     .setDb(ctx.getDatabase())
                     .setCatalog(ctx.getCurrentCatalog());
             Tracers.register(ctx);
-            executor = ctx.executeSql(context.getDefinition());
+            Tracers.init(ctx, Tracers.Mode.TIMER, null);
+
+            StatementBase sqlStmt = SqlParser.parse(context.getDefinition(), ctx.getSessionVariable()).get(0);
+            sqlStmt.setOrigStmt(new OriginStatement(context.getDefinition(), 0));
+            //Build View SQL without Policy Rewrite
+            new AstTraverser<Void, Void>() {
+                @Override
+                public Void visitRelation(Relation relation, Void context) {
+                    relation.setNeedRewrittenByPolicy(true);
+                    return null;
+                }
+            }.visit(sqlStmt);
+
+            executor = StmtExecutor.newInternalExecutor(ctx, sqlStmt);
+            ctx.setExecutor(executor);
+            ctx.setThreadLocalInfo();
+            executor.addRunningQueryDetail(sqlStmt);
+            executor.execute();
         } finally {
             Tracers.close();
             if (executor != null) {
                 auditAfterExec(context, executor.getParsedStmt(), executor.getQueryStatisticsForAuditLog());
+                executor.addFinishedQueryDetail();
             } else {
                 // executor can be null if we encounter analysis error.
                 auditAfterExec(context, null, null);

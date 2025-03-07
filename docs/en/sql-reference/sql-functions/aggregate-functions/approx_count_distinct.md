@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # approx_count_distinct
 
-## Description
+
 
 Returns the approximate value of aggregate function similar to the result of COUNT(DISTINCT col).
 

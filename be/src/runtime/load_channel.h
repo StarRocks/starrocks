@@ -50,6 +50,7 @@
 #include "gen_cpp/internal_service.pb.h"
 #include "gutil/macros.h"
 #include "runtime/mem_tracker.h"
+#include "runtime/tablets_channel.h"
 #include "serde/protobuf_serde.h"
 #include "util/uid_util.h"
 
@@ -101,7 +102,7 @@ public:
 
     void abort();
 
-    void abort(int64_t index_id, const std::vector<int64_t>& tablet_ids, const std::string& reason);
+    void abort(const TabletsChannelKey& key, const std::vector<int64_t>& tablet_ids, const std::string& reason);
 
     time_t last_updated_time() const { return _last_updated_time.load(std::memory_order_relaxed); }
 
@@ -111,9 +112,9 @@ public:
 
     int64_t timeout() const { return _timeout_s; }
 
-    std::shared_ptr<TabletsChannel> get_tablets_channel(int64_t index_id);
+    std::shared_ptr<TabletsChannel> get_tablets_channel(const TabletsChannelKey& key);
 
-    void remove_tablets_channel(int64_t index_id);
+    void remove_tablets_channel(const TabletsChannelKey& key);
 
     MemTracker* mem_tracker() { return _mem_tracker.get(); }
 
@@ -121,10 +122,16 @@ public:
 
     void report_profile(PTabletWriterAddBatchResult* result, bool print_profile);
 
+    void diagnose(const PLoadDiagnoseRequest* request, PLoadDiagnoseResult* response);
+
 private:
-    void _add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response);
+    void _add_chunk(Chunk* chunk, const MonotonicStopWatch* watch, const PTabletWriterAddChunkRequest& request,
+                    PTabletWriterAddBatchResult* response);
     Status _build_chunk_meta(const ChunkPB& pb_chunk);
     Status _deserialize_chunk(const ChunkPB& pchunk, Chunk& chunk, faststring* uncompressed_buffer);
+    bool _should_enable_profile();
+    std::vector<std::shared_ptr<TabletsChannel>> _get_all_channels();
+    Status _update_and_serialize_profile(std::string* serialized_profile, bool print_profile);
 
     LoadChannelMgr* _load_mgr;
     LakeTabletManager* _lake_tablet_mgr;
@@ -148,8 +155,8 @@ private:
 
     // lock protect the tablets channel map
     bthread::Mutex _lock;
-    // index id -> tablets channel
-    std::unordered_map<int64_t, std::shared_ptr<TabletsChannel>> _tablets_channels;
+    // key -> tablets channel
+    std::map<TabletsChannelKey, std::shared_ptr<TabletsChannel>> _tablets_channels;
     std::atomic<bool> _closed{false};
 
     Span _span;
@@ -162,9 +169,15 @@ private:
     int64_t _runtime_profile_report_interval_ns = std::numeric_limits<int64_t>::max();
     std::atomic<int64_t> _last_report_time_ns{0};
     std::atomic<bool> _final_report{false};
+    std::atomic<bool> _is_reporting_profile{false};
 
     RuntimeProfile::Counter* _index_num = nullptr;
     RuntimeProfile::Counter* _peak_memory_usage = nullptr;
+    RuntimeProfile::Counter* _deserialize_chunk_count = nullptr;
+    RuntimeProfile::Counter* _deserialize_chunk_timer = nullptr;
+    RuntimeProfile::Counter* _profile_report_count = nullptr;
+    RuntimeProfile::Counter* _profile_report_timer = nullptr;
+    RuntimeProfile::Counter* _profile_serialized_size = nullptr;
 };
 
 inline std::ostream& operator<<(std::ostream& os, const LoadChannel& load_channel) {

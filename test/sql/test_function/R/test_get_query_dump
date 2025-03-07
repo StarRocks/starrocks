@@ -1,0 +1,106 @@
+-- name: test_get_query_dump
+CREATE TABLE __row_util_base (
+  k1 bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util_base select generate_series from TABLE(generate_series(0, 10000 - 1));
+-- result:
+-- !result
+insert into __row_util_base select * from __row_util_base; -- 20000
+insert into __row_util_base select * from __row_util_base; -- 40000
+
+CREATE TABLE __row_util (
+  idx bigint NULL
+) ENGINE=OLAP
+DUPLICATE KEY(`idx`)
+DISTRIBUTED BY HASH(`idx`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into __row_util select row_number() over() as idx from __row_util_base;
+-- result:
+-- !result
+CREATE TABLE t1 (
+  k1 bigint NULL,
+  c_int_1_seq bigint NULL,
+  c_int_2_seq string NULL
+
+) ENGINE=OLAP
+DUPLICATE KEY(`k1`)
+DISTRIBUTED BY HASH(`k1`) BUCKETS 32
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t1
+select 
+    idx,
+    idx,
+    concat('abc1-', idx)
+from __row_util;
+-- result:
+-- !result
+select get_query_dump('');
+-- result:
+E: (6013, 'SemanticException: Getting analyzing error. Detail message: Invalid parameter get_query_dump: query is empty.')
+-- !result
+select get_query_dump('invalid-query');
+-- result:
+E: (6013, "SemanticException: Getting analyzing error. Detail message: Invalid parameter get_query_dump: execute query failed. Getting syntax error at line 1, column 0. Detail message: Unexpected input 'invalid', the most similar input is {'INSTALL', 'UNINSTALL', 'KILL', 'LOAD', 'ADMIN', '(', ';'}..")
+-- !result
+select get_query_dump(rtrim('select * from t1'));
+-- result:
+E: (1064, 'Getting analyzing error. Detail message: Meta function get_query_dump does not support non-constant arguments.')
+-- !result
+with 
+    query_dump as (select get_query_dump('select * from t1') as x),
+    w1 as (
+        select 'statement' as k, length(get_json_string(x, '$.statement')) > 2 as not_empty from query_dump
+        UNION ALL
+        select 'table_meta' as k, length(get_json_string(x, '$.table_meta')) > 2  as not_empty from query_dump
+        UNION ALL
+        select 'table_row_count' as k, length(get_json_string(x, '$.table_row_count')) > 2  as not_empty from query_dump
+        UNION ALL
+        select 'column_statistics' as k, length(get_json_string(x, '$.column_statistics')) > 2  as not_empty from query_dump
+    ) 
+select * from w1 order by k;
+-- result:
+column_statistics	1
+statement	1
+table_meta	1
+table_row_count	1
+-- !result
+with 
+    query_dump as (select get_query_dump(concat('select *', ' from t1')) as x),
+    w1 as (
+        select 'statement' as k, length(get_json_string(x, '$.statement')) > 2 as not_empty from query_dump
+        UNION ALL
+        select 'table_meta' as k, length(get_json_string(x, '$.table_meta')) > 2  as not_empty from query_dump
+        UNION ALL
+        select 'table_row_count' as k, length(get_json_string(x, '$.table_row_count')) > 2  as not_empty from query_dump
+        UNION ALL
+        select 'column_statistics' as k, length(get_json_string(x, '$.column_statistics')) > 2  as not_empty from query_dump
+    ) 
+select * from w1 order by k;
+-- result:
+column_statistics	1
+statement	1
+table_meta	1
+table_row_count	1
+-- !result
+with 
+    query_dump as (select get_query_dump('select * from t1', true) as x)
+select get_json_string(x, '$.statement') from query_dump;
+-- result:
+SELECT *
+FROM db_mock_000.tbl_mock_001
+-- !result

@@ -110,7 +110,7 @@ public class ShowCreateViewStmtTest {
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"in_memory\" = \"false\",\n" +
-                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"enable_persistent_index\" = \"true\",\n" +
                         "\"replicated_storage\" = \"true\",\n" +
                         "\"compression\" = \"LZ4\"\n" +
                         ");")
@@ -127,7 +127,7 @@ public class ShowCreateViewStmtTest {
                         "PROPERTIES (\n" +
                         "\"replication_num\" = \"1\",\n" +
                         "\"in_memory\" = \"false\",\n" +
-                        "\"enable_persistent_index\" = \"false\",\n" +
+                        "\"enable_persistent_index\" = \"true\",\n" +
                         "\"replicated_storage\" = \"true\",\n" +
                         "\"compression\" = \"LZ4\", \n" +
                         "\"storage_type\" = \"column_with_row\"\n" +
@@ -152,32 +152,38 @@ public class ShowCreateViewStmtTest {
         testCases.add(new String[]{"test_view_0",
                 "create view test_view_0 AS SELECT " +
                         " *, concat('', null) FROM `test`.`tbl1`",
-                "CREATE VIEW `test_view_0` (`k1`, `k2`, `v1`, `concat('', NULL)`) AS SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`, `test`.`tbl1`.`v1`, concat('', NULL) AS `concat('', NULL)`\n" +
+                "CREATE VIEW `test_view_0` (`k1`, `k2`, `v1`, `concat('', NULL)`) SECURITY NONE AS SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`, `test`.`tbl1`.`v1`, concat('', NULL) AS `concat('', NULL)`\n" +
                         "FROM `test`.`tbl1`;"
         });
         testCases.add(new String[]{"test_view_1",
                 "create view test_view_1 AS SELECT " +
                         "concat(`test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`) FROM `test`.`tbl1`",
-                "CREATE VIEW `test_view_1` (`concat(test.tbl1.k1, test.tbl1.k2)`) AS SELECT concat(`test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`) AS `concat(test.tbl1.k1, test.tbl1.k2)`\n" +
+                "CREATE VIEW `test_view_1` (`concat(test.tbl1.k1, test.tbl1.k2)`) SECURITY NONE AS SELECT concat(`test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`) AS `concat(test.tbl1.k1, test.tbl1.k2)`\n" +
                         "FROM `test`.`tbl1`;"
         });
         testCases.add(new String[]{"test_view_2",
                 "create view test_view_2 AS SELECT " +
                         "`test`.`tbl1`.`k1`, `test`.`tbl1`.`k2` FROM `test`.`tbl1`",
-                "CREATE VIEW `test_view_2` (`k1`, `k2`) AS SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`\n" +
+                "CREATE VIEW `test_view_2` (`k1`, `k2`) SECURITY NONE AS SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`\n" +
                         "FROM `test`.`tbl1`;"
         });
         testCases.add(new String[]{"test_view_3",
                 "create view test_view_3 AS SELECT " +
                         "*, `test`.`tbl1`.`k2` as k3 FROM `test`.`tbl1`",
-                "CREATE VIEW `test_view_3` (`k1`, `k2`, `v1`, `k3`) AS " +
+                "CREATE VIEW `test_view_3` (`k1`, `k2`, `v1`, `k3`) SECURITY NONE AS " +
                         "SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`, `test`.`tbl1`.`v1`, `test`.`tbl1`.`k2` AS `k3`\n" +
                         "FROM `test`.`tbl1`;"
         });
         testCases.add(new String[]{"test_view_4",
                 "create view test_view_4 AS " +
                         "SELECT  `test`.`tbl1`.`k1` as c1, `test`.`tbl1`.`k2` as c2 FROM `test`.`tbl1`",
-                "CREATE VIEW `test_view_4` (`c1`, `c2`) AS SELECT `test`.`tbl1`.`k1` AS `c1`, `test`.`tbl1`.`k2` AS `c2`\n" +
+                "CREATE VIEW `test_view_4` (`c1`, `c2`) SECURITY NONE AS SELECT `test`.`tbl1`.`k1` AS `c1`, `test`.`tbl1`.`k2` AS `c2`\n" +
+                        "FROM `test`.`tbl1`;"
+        });
+        testCases.add(new String[]{"test_view_5",
+                "create view test_view_5 SECURITY INVOKER AS " +
+                        "SELECT  `test`.`tbl1`.`k1` as c1, `test`.`tbl1`.`k2` as c2 FROM `test`.`tbl1`",
+                "CREATE VIEW `test_view_5` (`c1`, `c2`) SECURITY INVOKER AS SELECT `test`.`tbl1`.`k1` AS `c1`, `test`.`tbl1`.`k2` AS `c2`\n" +
                         "FROM `test`.`tbl1`;"
         });
 
@@ -189,14 +195,14 @@ public class ShowCreateViewStmtTest {
             CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(testcase[1], ctx);
             GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createViewStmt);
 
-            List<Table> views = GlobalStateMgr.getCurrentState().getDb(createViewStmt.getDbName()).getViews();
+            List<Table> views = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createViewStmt.getDbName()).getViews();
             List<String> res = Lists.newArrayList();
             AstToStringBuilder.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
                     null, null, false, false, false);
 
             Assert.assertEquals(testcase[2], res.get(0));
 
-            GlobalStateMgr.getCurrentState().getDb(createViewStmt.getDbName()).dropTable(createViewStmt.getTable());
+            GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createViewStmt.getDbName()).dropTable(createViewStmt.getTable());
         }
     }
 
@@ -208,12 +214,12 @@ public class ShowCreateViewStmtTest {
         CreateViewStmt createViewStmt = (CreateViewStmt) UtFrameUtils.parseStmtWithNewParser(createViewSql, ctx);
         GlobalStateMgr.getCurrentState().getLocalMetastore().createView(createViewStmt);
 
-        List<Table> views = GlobalStateMgr.getCurrentState().getDb(createViewStmt.getDbName()).getViews();
+        List<Table> views = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(createViewStmt.getDbName()).getViews();
         List<String> res = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt(createViewStmt.getDbName(), views.get(0), res,
                 null, null, false, false, false);
         Assert.assertEquals("CREATE VIEW `test_view` (`k1` COMMENT \"dt\", `k2`, `v1`)\n" +
-                "COMMENT \"view comment\" AS SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`, `test`.`tbl1`.`v1`\n" +
+                "COMMENT \"view comment\" SECURITY NONE AS SELECT `test`.`tbl1`.`k1`, `test`.`tbl1`.`k2`, `test`.`tbl1`.`v1`\n" +
                 "FROM `test`.`tbl1`;", res.get(0));
     }
 
@@ -276,7 +282,7 @@ public class ShowCreateViewStmtTest {
 
     @Test
     public void testDdlComment() {
-        List<Table> tables = GlobalStateMgr.getCurrentState().getDb("test").getTables();
+        List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTables();
         Table commentTest = tables.stream().filter(table -> table.getName().equals("comment_test")).findFirst().get();
         List<String> res = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt("test", commentTest, res,
@@ -287,7 +293,7 @@ public class ShowCreateViewStmtTest {
 
     @Test
     public void testDdlStorageType() {
-        List<Table> tables = GlobalStateMgr.getCurrentState().getDb("test").getTables();
+        List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test").getTables();
         Table storageTest = tables.stream().filter(table -> table.getName().equals("storage_test")).findFirst().get();
         List<String> res = Lists.newArrayList();
         AstToStringBuilder.getDdlStmt("storage_test", storageTest, res,

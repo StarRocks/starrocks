@@ -19,6 +19,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.backup.BackupJobInfo;
 import com.starrocks.backup.Status;
 import com.starrocks.catalog.BaseTableInfo;
@@ -27,7 +28,6 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -55,7 +55,7 @@ public class MVRestoreUpdater {
     public static Pair<Status, Boolean> checkMvDefinedQuery(MaterializedView mv,
                                                             Map<TableName, TableName> remoteToLocalTableName,
                                                             Pair<String, String> newDefineQueries) {
-        ConnectContext context = new ConnectContext();
+        ConnectContext context = ConnectContext.buildInner();
         context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         context.setQualifiedUser(AuthenticationMgr.ROOT_USER);
         context.setCurrentUserIdentity(UserIdentity.ROOT);
@@ -213,13 +213,14 @@ public class MVRestoreUpdater {
 
         String remoteDbName = baseTableInfo.getDbName();
         String remoteTableName = baseTableInfo.getTableName();
-        Database baseTableDb = GlobalStateMgr.getCurrentState().getDb(remoteDbName);
+        Database baseTableDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(remoteDbName);
         if (baseTableDb == null) {
             LOG.warn(String.format("Materialized view %s can not find old base table's db name:%s.%s",
                     mv.getName(), remoteDbName, remoteTableName));
             return false;
         }
-        Table baseTable = baseTableDb.getTable(remoteTableName);
+        Table baseTable = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(baseTableDb.getFullName(), remoteTableName);
         if (baseTable == null) {
             LOG.warn(String.format("Materialized view %s can not find old base table:%s.%s",
                     mv.getName(), remoteDbName, remoteTableName));
@@ -249,14 +250,14 @@ public class MVRestoreUpdater {
         }
 
         String localDbName = mvBaseTableBackupInfo.getLocalDbName();
-        Database db = GlobalStateMgr.getCurrentState().getDb(localDbName);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(localDbName);
         String localTableName = mvBaseTableBackupInfo.getLocalTableName();
         if (db == null) {
             LOG.warn("BaseTable(local) {}'s db {} is not found, remote db/table: {}/{}",
                     localTableName, localDbName, remoteDbName, remoteTableName);
             return Pair.create(false, Optional.empty());
         }
-        Table localTable = db.getTable(localTableName);
+        Table localTable = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), localTableName);
         remoteToLocalTableName.put(remoteDbTblName, new TableName(db.getFullName(), localTableName));
         if (localTable == null) {
             LOG.warn("Materialized view {} can not find the base table {}, old base table name:{}",

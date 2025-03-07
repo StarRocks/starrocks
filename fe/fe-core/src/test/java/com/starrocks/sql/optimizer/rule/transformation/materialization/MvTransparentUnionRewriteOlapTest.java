@@ -19,22 +19,19 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.schema.MTable;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.utframe.StarRocksAssert;
-import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import java.time.Instant;
 import java.util.Set;
 
-public class MvTransparentUnionRewriteOlapTest extends MvRewriteTestBase {
+public class MvTransparentUnionRewriteOlapTest extends MVTestBase {
     private static MTable m1;
     private static MTable m2;
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
 
         m1 = new MTable("m1", "k1",
                 ImmutableList.of(
@@ -64,17 +61,7 @@ public class MvTransparentUnionRewriteOlapTest extends MvRewriteTestBase {
                         "PARTITION `p3` VALUES LESS THAN ('9')"
                 )
         );
-        connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(MVUnionRewriteMode.TRANSPARENT.getOrdinal());
-    }
-
-    @Before
-    public void before() {
-        startCaseTime = Instant.now().getEpochSecond();
-    }
-
-    @After
-    public void after() throws Exception {
-        PlanTestBase.cleanupEphemeralMVs(starRocksAssert, startCaseTime);
+        connectContext.getSessionVariable().setEnableMaterializedViewTransparentUnionRewrite(true);
     }
 
     private void withPartialScanMv(StarRocksAssert.ExceptionRunnable runner) {
@@ -117,7 +104,7 @@ public class MvTransparentUnionRewriteOlapTest extends MvRewriteTestBase {
     }
 
     private void withPartialJoinMv(StarRocksAssert.ExceptionRunnable runner) {
-        starRocksAssert.withTables(ImmutableList.of(m1, m2), () -> {
+        starRocksAssert.withMTables(ImmutableList.of(m1, m2), () -> {
             cluster.runSql("test", "insert into m1 values (1,1,1,1), (4,2,1,1);");
             cluster.runSql("test", "insert into m2 values (1,1,1,1), (4,2,1,1);");
             starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
@@ -189,9 +176,7 @@ public class MvTransparentUnionRewriteOlapTest extends MvRewriteTestBase {
                         "     TABLE: m1\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 1: k1 = 6, 2: k2 LIKE 'a%'\n" +
-                                "     partitions=1/3\n" +
-                                "     rollup: m1\n" +
-                                "     tabletRatio=1/3",
+                                "     partitions=1/3",
                         "     TABLE: m1\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 1: k1 = 5, 2: k2 LIKE 'a%'\n" +
@@ -200,7 +185,7 @@ public class MvTransparentUnionRewriteOlapTest extends MvRewriteTestBase {
                                 "     tabletRatio=1/3",
                         "     TABLE: m1\n" +
                                 "     PREAGGREGATION: ON\n" +
-                                "     PREDICATES: 1: k1 > 3, 2: k2 LIKE 'a%'\n" +
+                                "     PREDICATES: 1: k1 > 3, 1: k1 < 6, 2: k2 LIKE 'a%'\n" +
                                 "     partitions=1/3\n" +
                                 "     rollup: m1\n" +
                                 "     tabletRatio=3/3",
@@ -212,6 +197,7 @@ public class MvTransparentUnionRewriteOlapTest extends MvRewriteTestBase {
                                 "     tabletRatio=3/3",
                 };
                 for (int i = 0; i < sqls.length; i++) {
+                    System.out.println("start to test " + i);
                     String query = sqls[i];
                     String plan = getFragmentPlan(query);
                     PlanTestBase.assertNotContains(plan, "mv0");
@@ -230,27 +216,20 @@ public class MvTransparentUnionRewriteOlapTest extends MvRewriteTestBase {
                         "     TABLE: m1\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 13: k1 < 6, 14: k2 LIKE 'a%'\n" +
-                                "     partitions=1/3\n" +
-                                "     rollup: m1\n" +
-                                "     tabletRatio=3/3",
+                                "     partitions=1/3",
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 9: k1 < 6, 10: k2 LIKE 'a%'\n" +
-                                "     partitions=1/1\n" +
-                                "     rollup: mv0\n" +
-                                "     tabletRatio=3/3",
+                                "     partitions=1/1", // case 1
                         "     TABLE: m1\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 13: k1 > 0, 13: k1 < 6, 14: k2 LIKE 'a%'\n" +
-                                "     partitions=1/3\n" +
-                                "     rollup: m1\n" +
-                                "     tabletRatio=3/3",
+                                "     partitions=1/3",
                         "     TABLE: mv0\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 9: k1 > 0, 9: k1 < 6, 10: k2 LIKE 'a%'\n" +
                                 "     partitions=1/1\n" +
-                                "     rollup: mv0\n" +
-                                "     tabletRatio=3/3",
+                                "     rollup: mv0", // case 2
                         "     TABLE: m1\n" +
                                 "     PREAGGREGATION: ON\n" +
                                 "     PREDICATES: 13: k1 > 1, 13: k1 < 6, 14: k2 LIKE 'a%'\n" +
@@ -262,9 +241,10 @@ public class MvTransparentUnionRewriteOlapTest extends MvRewriteTestBase {
                                 "     PREDICATES: 9: k1 > 1, 9: k1 < 6, 10: k2 LIKE 'a%'\n" +
                                 "     partitions=1/1\n" +
                                 "     rollup: mv0\n" +
-                                "     tabletRatio=3/3",
+                                "     tabletRatio=3/3", // case 3
                 };
                 for (int i = 0; i < sqls.length; i++) {
+                    System.out.println("start to test " + i);
                     String query = sqls[i];
                     String plan = getFragmentPlan(query);
                     PlanTestBase.assertContains(plan, ":UNION", ": mv0", ": m1");
@@ -519,5 +499,264 @@ public class MvTransparentUnionRewriteOlapTest extends MvRewriteTestBase {
                 }
             }
         });
+    }
+
+    @Test
+    public void testTransparentRewriteWithNestedMVs() {
+        starRocksAssert.withMTables(ImmutableList.of(m1, m2), () -> {
+            cluster.runSql("test", "insert into m1 values (1,1,1,1), (4,2,1,1);");
+            cluster.runSql("test", "insert into m2 values (1,1,1,1), (4,2,1,1);");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
+                    " PARTITION BY (k1) " +
+                    " DISTRIBUTED BY HASH(k1) " +
+                    " REFRESH DEFERRED MANUAL " +
+                    " PROPERTIES ('transparent_mv_rewrite_mode' = 'true')\n" +
+                    " AS SELECT k1, k2, v1, v2 from m1;");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 " +
+                    " PARTITION BY (k1) " +
+                    " DISTRIBUTED BY HASH(k1) " +
+                    " REFRESH DEFERRED MANUAL " +
+                    " PROPERTIES ('transparent_mv_rewrite_mode' = 'true')\n" +
+                    " AS SELECT k1, k2, v1, v2 from m2;");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 " +
+                    " PARTITION BY (k1) " +
+                    " DISTRIBUTED BY HASH(k1) " +
+                    " REFRESH DEFERRED MANUAL " +
+                    " PROPERTIES ('transparent_mv_rewrite_mode' = 'true')\n" +
+                    " AS SELECT a.k1, a.k2, a.v1, b.v2 from mv0 a join mv1 b on a.k1 = b.k1;");
+            starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv0 \n" +
+                    "PARTITION START ('%s') END ('%s')", "1", "3"));
+            starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv1 \n" +
+                    "PARTITION START ('%s') END ('%s')", "1", "3"));
+            starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv2 \n" +
+                    "PARTITION START ('%s') END ('%s')", "1", "3"));
+            String[] mvs = {"mv0", "mv1", "mv2"};
+            for (String mv : mvs) {
+                MaterializedView mv1 = getMv("test", mv);
+                Set<String> mvNames = mv1.getPartitionNames();
+                Assert.assertEquals("[p1]", mvNames.toString());
+            }
+
+            // compensate rewrite: no compensation
+            {
+                String[] sqls = {
+                        "SELECT * from mv2 as a where a.k1=1",
+                        "SELECT * from mv2 as a where a.k1<3",
+                        "SELECT * from mv2 as a where a.k1 >=1 and a.k1 < 3",
+                };
+                for (int i = 0; i < sqls.length; i++) {
+                    String query = sqls[i];
+                    System.out.println("start to check:" + query);
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertContains(plan, "mv2");
+                }
+            }
+
+            {
+                // TODO: For now we cannot detect the timeliness of nested mv directly
+                String[] sqls = {
+                        "SELECT * from mv2",
+                };
+                for (int i = 0; i < sqls.length; i++) {
+                    String query = sqls[i];
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertContains(plan,  "mv2");
+                }
+            }
+            starRocksAssert.dropMaterializedView("mv0");
+            starRocksAssert.dropMaterializedView("mv1");
+            starRocksAssert.dropMaterializedView("mv2");
+        });
+    }
+
+    @Test
+    public void testRewriteWithNestedMVs() {
+        starRocksAssert.withMTables(ImmutableList.of(m1, m2), () -> {
+            cluster.runSql("test", "insert into m1 values (1,1,1,1), (4,2,1,1);");
+            cluster.runSql("test", "insert into m2 values (1,1,1,1), (4,2,1,1);");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
+                    " PARTITION BY (k1) " +
+                    " DISTRIBUTED BY HASH(k1) " +
+                    " REFRESH DEFERRED MANUAL " +
+                    " AS SELECT k1, k2, v1, v2 from m1;");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv1 " +
+                    " PARTITION BY (k1) " +
+                    " DISTRIBUTED BY HASH(k1) " +
+                    " REFRESH DEFERRED MANUAL " +
+                    " AS SELECT k1, k2, v1, v2 from m2;");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv2 " +
+                    " PARTITION BY (k1) " +
+                    " DISTRIBUTED BY HASH(k1) " +
+                    " REFRESH DEFERRED MANUAL " +
+                    " AS SELECT a.k1, a.k2, a.v1, b.v2 from mv0 a join mv1 b on a.k1 = b.k1;");
+            starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv0 \n" +
+                    "PARTITION START ('%s') END ('%s')", "1", "3"));
+            starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv1 \n" +
+                    "PARTITION START ('%s') END ('%s')", "1", "3"));
+            starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv2 \n" +
+                    "PARTITION START ('%s') END ('%s')", "1", "3"));
+            String[] mvs = {"mv0", "mv1", "mv2"};
+            for (String mv : mvs) {
+                MaterializedView mv1 = getMv("test", mv);
+                Set<String> mvNames = mv1.getPartitionNames();
+                Assert.assertEquals("[p1]", mvNames.toString());
+            }
+
+            // compensate rewrite: no compensation
+            {
+                String[] sqls = {
+                        "SELECT a.k1, a.k2, a.v1, b.v2 from mv0 a join mv1 b on a.k1 = b.k1 where a.k1=1",
+                        "SELECT a.k1, a.k2, a.v1, b.v2 from mv0 a join mv1 b on a.k1 = b.k1 where a.k1<3",
+                        "SELECT a.k1, a.k2, a.v1, b.v2 from mv0 a join mv1 b on a.k1 = b.k1 where a.k1 >=1 and a.k1 < 3",
+                };
+                for (int i = 0; i < sqls.length; i++) {
+                    String query = sqls[i];
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertNotContains(plan, ":UNION");
+                    PlanTestBase.assertContains(plan, "mv2");
+                }
+            }
+
+            {
+                String[] sqls = {
+                        "SELECT a.k1, a.k2, a.v1, b.v2 from m1 a join m2 b on a.k1 = b.k1 ",
+                };
+                for (int i = 0; i < sqls.length; i++) {
+                    String query = sqls[i];
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertContains(plan, ":UNION");
+                    PlanTestBase.assertContains(plan, "mv0");
+                    PlanTestBase.assertContains(plan, "mv1");
+                }
+            }
+
+            {
+                // TODO: For now we cannot detect the timeliness of nested mv directly
+                String[] sqls = {
+                        "SELECT a.k1, a.k2, a.v1, b.v2 from mv0 a join mv1 b on a.k1 = b.k1 ",
+                };
+                for (int i = 0; i < sqls.length; i++) {
+                    String query = sqls[i];
+                    String plan = getFragmentPlan(query);
+                    PlanTestBase.assertNotContains(plan, ":UNION");
+                    PlanTestBase.assertContains(plan, "mv2");
+                }
+            }
+
+            starRocksAssert.dropMaterializedView("mv0");
+            starRocksAssert.dropMaterializedView("mv1");
+            starRocksAssert.dropMaterializedView("mv2");
+        });
+    }
+
+    @Test
+    public void testTextBasedMVRewriteWithPartialUpdate1() {
+        connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(true);
+        starRocksAssert.withTable(m1, () -> {
+            cluster.runSql("test", "insert into m1 values (1,1,1,1), (4,2,1,1);");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
+                            " PARTITION BY (k1) " +
+                            " DISTRIBUTED BY HASH(k1) " +
+                            " REFRESH DEFERRED MANUAL " +
+                            " AS SELECT k1, k2, sum(v1), count(v2) from m1 group by k1, k2 order by k1, k2;",
+                    () -> {
+                        starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv0 \n" +
+                                "PARTITION START ('%s') END ('%s')", "1", "3"));
+                        MaterializedView mv1 = getMv("test", "mv0");
+                        Set<String> mvNames = mv1.getPartitionNames();
+                        Assert.assertEquals("[p1]", mvNames.toString());
+
+                        String query = "SELECT k1, k2, sum(v1), count(v2) from m1 group by k1, k2 order by k1, k2";
+                        String plan = getFragmentPlan(query, "MV");
+                        System.out.println(plan);
+                    });
+        });
+        connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(false);
+    }
+
+    @Test
+    public void testTextBasedMVRewriteWithPartialUpdate2() {
+        connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(true);
+        starRocksAssert.withTable(m1, () -> {
+            cluster.runSql("test", "insert into m1 values (1,1,1,1), (4,2,1,1);");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
+                            " PARTITION BY (k1) " +
+                            " DISTRIBUTED BY HASH(k1) " +
+                            " REFRESH DEFERRED MANUAL " +
+                            " AS select *from m1;",
+                    () -> {
+                        starRocksAssert.refreshMvPartition(String.format("REFRESH MATERIALIZED VIEW mv0 \n" +
+                                "PARTITION START ('%s') END ('%s')", "1", "3"));
+                        MaterializedView mv1 = getMv("test", "mv0");
+                        Set<String> mvNames = mv1.getPartitionNames();
+                        Assert.assertEquals("[p1]", mvNames.toString());
+
+                        String query = "select * from m1;";
+                        String plan = getFragmentPlan(query, "MV");
+                        System.out.println(plan);
+                    });
+        });
+        connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(false);
+    }
+
+    @Test
+    public void testTextBasedMVRewriteWithPartialUpdate3() {
+        connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(true);
+        starRocksAssert.withTable(m1, () -> {
+            starRocksAssert.withTable("CREATE TABLE `t1` (\n" +
+                    "  `k1` date NULL COMMENT \"\",\n" +
+                    "  `k2` datetime NULL COMMENT \"\",\n" +
+                    "  `k3` char(20) NULL COMMENT \"\",\n" +
+                    "  `k4` varchar(20) NULL COMMENT \"\",\n" +
+                    "  `k5` boolean NULL COMMENT \"\",\n" +
+                    "  `v1` tinyint(4) NULL COMMENT \"\",\n" +
+                    "  `v2` smallint(6) NULL COMMENT \"\",\n" +
+                    "  `v3` int(11) NULL COMMENT \"\",\n" +
+                    "  `v4` bigint(20) NULL COMMENT \"\",\n" +
+                    "  `v5` largeint(40) NULL COMMENT \"\",\n" +
+                    "  `v6` float NULL COMMENT \"\",\n" +
+                    "  `v7` double NULL COMMENT \"\",\n" +
+                    "  `v8` decimal(27, 9) NULL COMMENT \"\"\n" +
+                    ") ENGINE=OLAP\n" +
+                    "UNIQUE KEY(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
+                    "COMMENT \"OLAP\"\n" +
+                    "PARTITION BY RANGE(`k1`)\n" +
+                    "(\n" +
+                    "  PARTITION p1 VALUES [(\"0000-01-01\"), (\"2020-01-01\")),\n" +
+                    "  PARTITION p2 VALUES [(\"2020-01-01\"), (\"2023-01-01\")),\n" +
+                    "  PARTITION p3 VALUES [(\"2023-01-01\"), (\"2025-01-01\"))\n" +
+                    ")\n" +
+                    "DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`)\n" +
+                    "PROPERTIES (\n" +
+                    "  \"replication_num\" = \"1\"\n" +
+                    ");");
+            cluster.runSql("test", "insert into t1 values ('2020-01-01', '2020-01-01 01:00:00', '1', '1', " +
+                    "1, 1, 1, 1, 1, 1, 1, 1, 1.0);");
+            starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW mv0 " +
+                            " PARTITION BY (k1) " +
+                            " DISTRIBUTED BY HASH(k1) " +
+                            " REFRESH DEFERRED MANUAL " +
+                            " AS select * from t1;",
+                    () -> {
+                        starRocksAssert.refreshMV("REFRESH MATERIALIZED VIEW mv0 with sync mode");
+
+                        String query = "select * from t1;";
+                        {
+
+                            String plan = getFragmentPlan(query, "MV");
+                            PlanTestBase.assertContains(plan, "mv0");
+                            PlanTestBase.assertNotContains(plan, "UNION");
+                        }
+
+                        // update
+                        cluster.runSql("test", "insert into t1 values ('2023-01-02', '2020-01-01 01:00:00', " +
+                                "'1', '1', 1, 1, 1, 1, 1, 1, 1, 1, 1.0);");
+                        {
+                            String plan = getFragmentPlan(query);
+                            PlanTestBase.assertContains(plan, "mv0", "UNION");
+                        }
+                    });
+        });
+        connectContext.getSessionVariable().setEnableMaterializedViewTextMatchRewrite(false);
     }
 }

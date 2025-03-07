@@ -30,6 +30,8 @@
 
 #pragma once
 
+#include <sys/resource.h>
+
 #include <cstdint>
 
 namespace base {
@@ -49,6 +51,8 @@ extern double CyclesPerSecond();
 // * "2,4-127,128-143\n" -> 143
 // Ref: https://www.kernel.org/doc/Documentation/cputopology.txt
 // Exposed for testing.
-extern int ParseMaxCpuIndex(const char* str);
+int ParseMaxCpuIndex(const char* str);
+
+int get_cur_core_file_limit();
 
 } // namespace base

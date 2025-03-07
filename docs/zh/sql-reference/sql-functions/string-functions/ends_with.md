@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # ends_with
 
-## 功能
+
 
 如果字符串以指定后缀结尾，返回 true，否则返回 false。任意参数为 NULL 则返回 NULL。
 

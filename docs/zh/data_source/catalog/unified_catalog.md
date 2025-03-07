@@ -1,13 +1,14 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+toc_max_heading_level: 5
 ---
 
 # Unified catalog
 
-Unified Catalog 是一种 External Catalog，自 3.2 版本起支持。通过 Unified Catalog，您可以把 Apache Hive™、Apache Iceberg、Apache Hudi 和 Delta Lake 数据源作为一个融合的数据源，不需要执行导入就可以直接操作其中的表数据，包括：
+Unified Catalog 是一种 External Catalog，自 3.2 版本起支持。通过 Unified Catalog，您可以把 Apache Hive™、Apache Iceberg、Apache Hudi、 Delta Lake 和 Apache Kudu 数据源作为一个融合的数据源，不需要执行导入就可以直接操作其中的表数据，包括：
 
-- 无需手动建表，通过 Unified Catalog 直接查询 Hive、Iceberg、Hudi 和 Delta Lake 数据源里的数据。
-- 通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 或异步物化视图（2.5 版本及以上）将 Hive、Iceberg、Hudi 和 Delta Lake 数据源里的数据进行加工建模，并导入至 StarRocks。
+- 无需手动建表，通过 Unified Catalog 直接查询 Hive、Iceberg、Hudi、Delta Lake 和 Kudu 数据源里的数据。
+- 通过 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 或异步物化视图（2.5 版本及以上）将 Hive、Iceberg、Hudi、Delta Lake 和 Kudu 数据源里的数据进行加工建模，并导入至 StarRocks。
 - 在 StarRocks 侧创建或删除 Hive、Iceberg 库表。
 
 为保证正常访问融合数据源内的数据，StarRocks 集群必须能够访问融合数据源的存储系统和元数据服务。目前 StarRocks 支持以下存储系统和元数据服务：
@@ -26,11 +27,11 @@ Unified Catalog 是一种 External Catalog，自 3.2 版本起支持。通过 Un
 
 ## 使用说明
 
-- 有关 Unified Catalog 支持的文件格式和数据类型，请参见 [Hive catalog](../catalog/hive_catalog.md)、[Iceberg catalog](../catalog/iceberg_catalog.md)、[Hudi catalog](../catalog/hudi_catalog.md) 和 [Delta Lake catalog](../catalog/deltalake_catalog.md) 文档中“使用说明”部分。
+- 有关 Unified Catalog 支持的文件格式和数据类型，请参见 [Hive catalog](../catalog/hive_catalog.md)、[Iceberg catalog](./iceberg/iceberg_catalog.md)、[Hudi catalog](../catalog/hudi_catalog.md)、[Delta Lake catalog](../catalog/deltalake_catalog.md) 和 [Kudu catalog](../catalog/kudu_catalog.md) 文档中“使用说明”部分。
 
-- 部分操作只能用于特定的表格式。例如，[CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 和 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 当前只支持 Hive 和 Iceberg 表，[REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/data-definition/REFRESH_EXTERNAL_TABLE.md) 只支持 Hive 和 Hudi 表。
+- 部分操作只能用于特定的表格式。例如，[CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 和 [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) 当前只支持 Hive 和 Iceberg 表，[REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/table_bucket_part_index/REFRESH_EXTERNAL_TABLE.md) 只支持 Hive 和 Hudi 表。
 
-  当您通过 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 在 Unified Catalog 中创建表时，必须通过 `ENGINE` 参数来指定表格式（Hive 或 Iceberg）。
+  当您通过 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 在 Unified Catalog 中创建表时，必须通过 `ENGINE` 参数来指定表格式（Hive 或 Iceberg）。
 
 ## 准备工作
 
@@ -72,7 +73,8 @@ PROPERTIES
     "type" = "unified",
     MetastoreParams,
     StorageCredentialParams,
-    MetadataUpdateParams
+    MetadataUpdateParams,
+    KuduCatalogParams
 )
 ```
 
@@ -449,6 +451,16 @@ StarRocks 默认采用自动异步更新策略，开箱即用。因此，一般�
 | metastore_cache_ttl_sec                | 否       | StarRocks 自动淘汰缓存的 Hive、Hudi、或 Delta Lake 表或分区的元数据的时间间隔。单位：秒。默认值：`86400`，即 24 小时。 |
 | remote_file_cache_ttl_sec              | 否       | StarRocks 自动淘汰缓存的 Hive、Hudi、或 Delta Lake 表或分区的数据文件的元数据的时间间隔。单位：秒。默认值：`129600`，即 36 小时。 |
 
+#### KuduCatalogParams
+
+指定 Kudu Catalog 连接的一组参数。此组参数为可选。
+
+| 参数                                   | 是否必须 | 说明                                                                                     |
+| -------------------------------------- | -------- |----------------------------------------------------------------------------------------|
+| kudu.master                 | 否       | 指定 `Kudu Master` 连接地址，默认为：`localhost:7051`。                                            |
+| kudu.schema-emulation.enabled               | 否       | 是否启用模拟 `schema` 功能，默认处于关闭状态（`false`），即所有表都属于 `default` `schema`。                       |
+| kudu.schema-emulation.prefix   | 否       | 仅在 `kudu.schema-emulation.enabled` = `true` 即启用模拟 `schema` 功能时，需设置匹配前缀，默认采用前缀空字符串：` `。 |
+
 ### 示例
 
 以下示例创建了一个名为 `unified_catalog_hms` 或 `unified_catalog_glue` 的 Unified Catalog，用于查询融合数据源里的数据。
@@ -766,13 +778,13 @@ PROPERTIES
 
 ## 查看 Unified Catalog
 
-您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/data-manipulation/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
+您可以通过 [SHOW CATALOGS](../../sql-reference/sql-statements/Catalog/SHOW_CATALOGS.md) 查询当前所在 StarRocks 集群里所有 Catalog：
 
 ```SQL
 SHOW CATALOGS;
 ```
 
-您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/data-manipulation/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Unified Catalog `unified_catalog_glue` 的创建语句：
+您也可以通过 [SHOW CREATE CATALOG](../../sql-reference/sql-statements/Catalog/SHOW_CREATE_CATALOG.md) 查询某个 External Catalog 的创建语句。例如，通过如下命令查询 Unified Catalog `unified_catalog_glue` 的创建语句：
 
 ```SQL
 SHOW CREATE CATALOG unified_catalog_glue;
@@ -782,7 +794,7 @@ SHOW CREATE CATALOG unified_catalog_glue;
 
 您可以通过如下方法切换至目标 Unified Catalog 和数据库：
 
-- 先通过 [SET CATALOG](../../sql-reference/sql-statements/data-definition/SET_CATALOG.md) 指定当前会话生效的 Unified Catalog，然后再通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 指定数据库：
+- 先通过 [SET CATALOG](../../sql-reference/sql-statements/Catalog/SET_CATALOG.md) 指定当前会话生效的 Unified Catalog，然后再通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 指定数据库：
 
   ```SQL
   -- 切换当前会话生效的 Catalog：
@@ -791,7 +803,7 @@ SHOW CREATE CATALOG unified_catalog_glue;
   USE <db_name>
   ```
 
-- 通过 [USE](../../sql-reference/sql-statements/data-definition/USE.md) 直接将会话切换到目标 Unified Catalog 下的指定数据库：
+- 通过 [USE](../../sql-reference/sql-statements/Database/USE.md) 直接将会话切换到目标 Unified Catalog 下的指定数据库：
 
   ```SQL
   USE <catalog_name>.<db_name>
@@ -799,7 +811,7 @@ SHOW CREATE CATALOG unified_catalog_glue;
 
 ## 删除 Unified Catalog
 
-您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/data-definition/DROP_CATALOG.md) 删除某个 External Catalog。
+您可以通过 [DROP CATALOG](../../sql-reference/sql-statements/Catalog/DROP_CATALOG.md) 删除某个 External Catalog。
 
 例如，通过如下命令删除 Unified Catalog `unified_catalog_glue`：
 
@@ -827,7 +839,7 @@ DROP CATALOG unified_catalog_glue;
 
  您可以通过如下操作查询 Unified Catalog 内的数据：
 
-1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/data-manipulation/SHOW_DATABASES.md) 查看指定 Unified Catalog 所属的数据源中的数据库：
+1. 通过 [SHOW DATABASES](../../sql-reference/sql-statements/Database/SHOW_DATABASES.md) 查看指定 Unified Catalog 所属的数据源中的数据库：
 
    ```SQL
    SHOW DATABASES FROM <catalog_name>
@@ -835,15 +847,15 @@ DROP CATALOG unified_catalog_glue;
 
 2. [切换至目标 Unified Catalog 和数据库](#切换-unified-catalog-和数据库)。
 
-3. 通过 [SELECT](../../sql-reference/sql-statements/data-manipulation/SELECT.md) 查询目标数据库中的目标表：
+3. 通过 [SELECT](../../sql-reference/sql-statements/table_bucket_part_index/SELECT.md) 查询目标数据库中的目标表：
 
    ```SQL
    SELECT count(*) FROM <table_name> LIMIT 10
    ```
 
-## 从 Hive、Iceberg、Hudi 或 Delta Lake 导入数据
+## 从 Hive、Iceberg、Hudi、Delta Lake 或 Kudu 导入数据
 
-您可以通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 Hive、Iceberg、Hudi 或 Delta Lake 表中的数据导入 StarRocks 中 Unified Catalog 下的表。
+您可以通过 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 将 Hive、Iceberg、Hudi、Delta Lake 或 Kudu 表中的数据导入 StarRocks 中 Unified Catalog 下的表。
 
 例如，通过如下命令将 Hive 表 `hive_table` 的数据导入到 StarRocks 中 Unified Catalog `unified_catalog` 下数据库`test_database` 里的表 `test_table`：
 
@@ -853,7 +865,7 @@ INSERT INTO unified_catalog.test_database.test_table SELECT * FROM hive_table
 
 ## 在 Unified Catalog 内创建数据库
 
-同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Unified Catalog 的 [CREATE DATABASE](../../administration/user_privs/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../sql-reference/sql-statements/data-definition/CREATE_DATABASE.md) 在该 Unified Catalog 内创建数据库。
+同 StarRocks 内部数据目录 (Internal Catalog) 一致，如果您拥有 Unified Catalog 的 [CREATE DATABASE](../../administration/user_privs/privilege_item.md#数据目录权限-catalog) 权限，那么您可以使用 [CREATE DATABASE](../../sql-reference/sql-statements/Database/CREATE_DATABASE.md) 在该 Unified Catalog 内创建数据库。
 
 > **说明**
 >
@@ -889,7 +901,7 @@ CREATE DATABASE <database_name>
 
 ## 从 Unified Catalog 内删除数据库
 
-同 StarRocks 内部数据库一致，如果您拥有 Unified Catalog 内数据库的 [DROP](../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../sql-reference/sql-statements/data-definition/DROP_DATABASE.md) 来删除该数据库。仅支持删除空数据库。
+同 StarRocks 内部数据库一致，如果您拥有 Unified Catalog 内数据库的 [DROP](../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [DROP DATABASE](../../sql-reference/sql-statements/Database/DROP_DATABASE.md) 来删除该数据库。仅支持删除空数据库。
 
 > **说明**
 >
@@ -907,7 +919,7 @@ DROP DATABASE <database_name>
 
 ## 在 Unified Catalog 内创建表
 
-同 StarRocks 内部数据库一致，如果您拥有 Unified Catalog 内数据库的 [CREATE TABLE](../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/data-definition/CREATE_TABLE_AS_SELECT.md) 在该数据库下创建表。
+同 StarRocks 内部数据库一致，如果您拥有 Unified Catalog 内数据库的 [CREATE TABLE](../../administration/user_privs/privilege_item.md#数据库权限-database) 权限，那么您可以使用 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 或 [CREATE TABLE AS SELECT (CTAS)](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE_AS_SELECT.md) 在该数据库下创建表。
 
 > **说明**
 >
@@ -915,7 +927,7 @@ DROP DATABASE <database_name>
 
 注意当前仅支持创建 Hive 表和 Iceberg 表。
 
-[切换至目标 Unified Catalog 和数据库](#切换-unified-catalog-和数据库)，然后通过 [CREATE TABLE](../../sql-reference/sql-statements/data-definition/CREATE_TABLE.md) 创建 Hive 表或 Iceberg 表：
+[切换至目标 Unified Catalog 和数据库](#切换-unified-catalog-和数据库)，然后通过 [CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) 创建 Hive 表或 Iceberg 表：
 
 ```SQL
 CREATE TABLE <table_name>
@@ -924,7 +936,7 @@ ENGINE = {|hive|iceberg}
 [partition_desc]
 ```
 
-有关创建 Hive 表和 Iceberg 表的详细信息，请参见[创建 Hive 表](../catalog/hive_catalog.md#创建-hive-表)和[创建 Iceberg 表](../catalog/iceberg_catalog.md#创建-iceberg-表)。
+有关创建 Hive 表和 Iceberg 表的详细信息，请参见[创建 Hive 表](../catalog/hive_catalog.md#创建-hive-表)和[创建 Iceberg 表](./iceberg/iceberg_catalog.md#创建-iceberg-表)。
 
 例如，通过如下语句，创建一张 Hive 表 `hive_table`：
 
@@ -941,7 +953,7 @@ PARTITION BY (id,dt);
 
 ## 向 Unified Catalog 内的表中插入数据
 
-同 StarRocks 内表一致，如果您拥有 Unified Catalog 内表的 [INSERT](../../administration/user_privs/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 将 StarRocks 表数据写入到该表（当前仅支持写入到 Parquet 格式的 Unified Catalog 表）。
+同 StarRocks 内表一致，如果您拥有 Unified Catalog 内表的 [INSERT](../../administration/user_privs/privilege_item.md#表权限-table) 权限，那么您可以使用 [INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 将 StarRocks 表数据写入到该表（当前仅支持写入到 Parquet 格式的 Unified Catalog 表）。
 
 > **说明**
 >
@@ -949,7 +961,7 @@ PARTITION BY (id,dt);
 
 注意当前仅支持向 Hive 表和 Iceberg 表中插入数据。
 
-[切换至目标 Unified Catalog 和数据库](#切换-unified-catalog-和数据库)，然后通过 [INSERT INTO](../../sql-reference/sql-statements/data-manipulation/INSERT.md) 向 Hive 表或 Iceberg 表中插入数据：
+[切换至目标 Unified Catalog 和数据库](#切换-unified-catalog-和数据库)，然后通过 [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) 向 Hive 表或 Iceberg 表中插入数据：
 
 ```SQL
 INSERT {INTO | OVERWRITE} <table_name>
@@ -962,7 +974,7 @@ PARTITION (par_col1=<value> [, par_col2=<value>...])
 { VALUES ( { expression | DEFAULT } [, ...] ) [, ...] | query }
 ```
 
-有关向 Hive 表和 Iceberg 表中插入数据的详细信息，请参见[向 Hive 表中插入数据](../catalog/hive_catalog.md#向-hive-表中插入数据)和[向 Iceberg 表中插入数据](../catalog/iceberg_catalog.md#向-iceberg-表中插入数据)。
+有关向 Hive 表和 Iceberg 表中插入数据的详细信息，请参见[向 Hive 表中插入数据](../catalog/hive_catalog.md#向-hive-表中插入数据)和[向 Iceberg 表中插入数据](./iceberg/iceberg_catalog.md#向-iceberg-表中插入数据)。
 
 例如，通过如下语句，向 Hive 表 `hive_table` 中写入如下数据：
 
@@ -976,7 +988,7 @@ VALUES
 
 ## 从 Unified Catalog 内删除表
 
-同 StarRocks 内表一致，如果您拥有 Unified Catalog 内表的 [DROP](../../administration/user_privs/privilege_item.md#表权限-table) 权限，那么您可以使用 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 来删除该表。
+同 StarRocks 内表一致，如果您拥有 Unified Catalog 内表的 [DROP](../../administration/user_privs/privilege_item.md#表权限-table) 权限，那么您可以使用 [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) 来删除该表。
 
 > **说明**
 >
@@ -984,13 +996,13 @@ VALUES
 
 注意当前仅支持删除 Hive 表和 Iceberg 表。
 
-[切换至目标 Unified Catalog 和数据库](#切换-unified-catalog-和数据库)，然后通过 [DROP TABLE](../../sql-reference/sql-statements/data-definition/DROP_TABLE.md) 删除 Hive 表或 Iceberg 表。
+[切换至目标 Unified Catalog 和数据库](#切换-unified-catalog-和数据库)，然后通过 [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) 删除 Hive 表或 Iceberg 表。
 
 ```SQL
 DROP TABLE <table_name>
 ```
 
-有关删除 Hive 表和 Iceberg 表的详细信息，请参见[删除 Hive 表](../catalog/hive_catalog.md#删除-hive-表)和[删除 Iceberg 表](../catalog/iceberg_catalog.md#删除-iceberg-表)。
+有关删除 Hive 表和 Iceberg 表的详细信息，请参见[删除 Hive 表](../catalog/hive_catalog.md#删除-hive-表)和[删除 Iceberg 表](./iceberg/iceberg_catalog.md#删除-iceberg-表)。
 
 例如，通过如下语句，删除 Hive 表 `hive_table`：
 

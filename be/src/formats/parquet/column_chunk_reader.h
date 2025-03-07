@@ -14,25 +14,37 @@
 
 #pragma once
 
+#include <stddef.h>
+
 #include <cstdint>
 #include <memory>
 #include <unordered_map>
 #include <vector>
 
 #include "column/column.h"
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
 #include "formats/parquet/encoding.h"
 #include "formats/parquet/level_codec.h"
 #include "formats/parquet/page_reader.h"
+#include "formats/parquet/types.h"
+#include "formats/parquet/utils.h"
 #include "fs/fs.h"
 #include "gen_cpp/parquet_types.h"
 #include "util/compression/block_compression.h"
 #include "util/runtime_profile.h"
+#include "util/slice.h"
+#include "util/stopwatch.hpp"
 
 namespace starrocks {
 class BlockCompressionCodec;
+class NullableColumn;
+
+namespace io {
+class SeekableInputStream;
+} // namespace io
 } // namespace starrocks
 
 namespace starrocks::parquet {
@@ -71,9 +83,14 @@ public:
     LevelDecoder& def_level_decoder() { return _def_level_decoder; }
     LevelDecoder& rep_level_decoder() { return _rep_level_decoder; }
 
-    Status decode_values(size_t n, const uint16_t* is_nulls, ColumnContentType content_type, Column* dst) {
+    Status decode_values(size_t n, const uint16_t* is_nulls, ColumnContentType content_type, Column* dst,
+                         const FilterData* filter = nullptr) {
         SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
+        if (_current_row_group_no_null || _current_page_no_null) {
+            return _cur_decoder->next_batch(n, content_type, dst, filter);
+        }
         size_t idx = 0;
+        size_t off = 0;
         while (idx < n) {
             bool is_null = is_nulls[idx++];
             size_t run = 1;
@@ -84,15 +101,17 @@ public:
             if (is_null) {
                 dst->append_nulls(run);
             } else {
-                RETURN_IF_ERROR(_cur_decoder->next_batch(run, content_type, dst));
+                const FilterData* forward_filter = filter ? filter + off : filter;
+                RETURN_IF_ERROR(_cur_decoder->next_batch(run, content_type, dst, forward_filter));
             }
+            off += run;
         }
         return Status::OK();
     }
 
-    Status decode_values(size_t n, ColumnContentType content_type, Column* dst) {
+    Status decode_values(size_t n, ColumnContentType content_type, Column* dst, const FilterData* filter = nullptr) {
         SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
-        return _cur_decoder->next_batch(n, content_type, dst);
+        return _cur_decoder->next_batch(n, content_type, dst, filter);
     }
 
     const tparquet::ColumnMetaData& metadata() const { return _chunk_metadata->meta_data; }
@@ -102,7 +121,7 @@ public:
         return _cur_decoder->get_dict_values(column);
     }
 
-    Status get_dict_values(const std::vector<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) {
+    Status get_dict_values(const Buffer<int32_t>& dict_codes, const NullableColumn& nulls, Column* column) {
         RETURN_IF_ERROR(_try_load_dictionary());
         return _cur_decoder->get_dict_values(dict_codes, nulls, column);
     }
@@ -141,6 +160,8 @@ private:
 
     level_t _max_def_level = 0;
     level_t _max_rep_level = 0;
+    bool _current_row_group_no_null = false;
+    bool _current_page_no_null = false;
     int32_t _type_length = 0;
     const tparquet::ColumnChunk* _chunk_metadata = nullptr;
     const ColumnReaderOptions& _opts;

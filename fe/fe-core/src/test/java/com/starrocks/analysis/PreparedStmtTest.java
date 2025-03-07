@@ -18,7 +18,10 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.PrepareStmtContext;
 import com.starrocks.qe.StmtExecutor;
+import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.PrepareStmt;
+import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.parser.SqlParser;
@@ -27,6 +30,8 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.HashSet;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
@@ -47,7 +52,7 @@ public class PreparedStmtTest{
             "\"replication_num\" = \"1\",\n" +
             "\"in_memory\" = \"false\",\n" +
             "\"storage_format\" = \"DEFAULT\",\n" +
-            "\"enable_persistent_index\" = \"false\",\n" +
+            "\"enable_persistent_index\" = \"true\",\n" +
             "\"replicated_storage\" = \"true\",\n" +
             "\"compression\" = \"LZ4\"\n" +
             "); ";
@@ -80,6 +85,21 @@ public class PreparedStmtTest{
     }
 
     @Test
+    public void testIsQuery() throws Exception {
+        String selectSql = "select * from demo.prepare_stmt";
+        QueryStatement queryStatement = (QueryStatement) UtFrameUtils.parseStmtWithNewParser(selectSql, ctx);
+        Assert.assertEquals(true, ctx.isQueryStmt(queryStatement));
+
+        String prepareSql = "PREPARE stmt FROM select * from demo.prepare_stmt";
+        PrepareStmt prepareStmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(prepareSql, ctx);
+        Assert.assertEquals(false, ctx.isQueryStmt(prepareStmt));
+
+        ctx.putPreparedStmt("stmt", new PrepareStmtContext(prepareStmt, ctx, null));
+        Assert.assertEquals(true, ctx.isQueryStmt(new ExecuteStmt("stmt", null)));
+        Assert.assertEquals(false, ctx.isQueryStmt(new ExecuteStmt("stmt1", null)));
+    }
+
+    @Test
     public void testPrepareEnable() {
         ctx.getSessionVariable().setEnablePrepareStmt(false);
         String prepareSql = "PREPARE stmt1 FROM insert into demo.prepare_stmt values (?, ?, ?, ?);";
@@ -96,10 +116,62 @@ public class PreparedStmtTest{
     }
 
     @Test
+    public void testPrepareWithSelectConst() throws Exception {
+        String sql = "PREPARE stmt1 FROM select ?, ?, ?;";
+        PrepareStmt stmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        Assert.assertEquals(3, stmt.getParameters().size());
+
+        HashSet<Integer> idSet = new HashSet<Integer>();
+        for (Expr expr : stmt.getParameters()) {
+            Assert.assertEquals(true, idSet.add(expr.hashCode()));
+        }
+
+        Assert.assertEquals(false, stmt.getParameters().get(0).equals(stmt.getParameters().get(1)));
+        Assert.assertEquals(false, stmt.getParameters().get(1).equals(stmt.getParameters().get(2)));
+        Assert.assertEquals(false, stmt.getParameters().get(0).equals(stmt.getParameters().get(2)));
+    }
+
+    @Test
     public void testPrepareStatementParser() {
         String sql = "PREPARE stmt1 FROM insert into demo.prepare_stmt values (?, ?, ?, ?);";
         Exception e = assertThrows(AnalysisException.class, () -> UtFrameUtils.parseStmtWithNewParser(sql, ctx));
         assertEquals("Getting analyzing error. Detail message: This command is not supported in the " +
                 "prepared statement protocol yet.", e.getMessage());
     }
+
+    @Test
+    public void testPrepareStatementParserWithHavingClause() {
+        String sql = "PREPARE stmt1 FROM SELECT prepare_stmt.c0 from prepare_stmt GROUP BY prepare_stmt.c0 HAVING COUNT(*) = ?";
+        try {
+            PrepareStmt stmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        } catch (Exception e) {
+            Assert.fail("should not reach here");
+        }
+
+        sql = "PREPARE stmt1 FROM SELECT prepare_stmt.c0 from prepare_stmt GROUP BY prepare_stmt.c0 HAVING c0 > ?";
+        try {
+            PrepareStmt stmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        } catch (Exception e) {
+            Assert.fail("should not reach here");
+        }
+    }
+
+    @Test
+    public void testPrepareStmtWithCte() throws Exception {
+        String sql = "PREPARE stmt FROM with cte as (select * from prepare_stmt where c0 = ?) select * from cte where c1 = ?";
+        PrepareStmt stmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        QueryStatement queryStmt = (QueryStatement) stmt.getInnerStmt();
+        Assert.assertTrue(stmt.getParameters().get(1) ==
+                ((SelectRelation) queryStmt.getQueryRelation()).getPredicate().getChild(1));
+
+        sql = "PREPARE stmt FROM select *, ? from (with cte as " +
+                "(select * from prepare_stmt where c0 = ?) select * from cte where c1 = ?) t where c2 = ?";
+        stmt = (PrepareStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        queryStmt = (QueryStatement) stmt.getInnerStmt();
+        Assert.assertTrue(stmt.getParameters().get(0) ==
+                ((SelectRelation) queryStmt.getQueryRelation()).getSelectList().getItems().get(1).getExpr());
+        Assert.assertTrue(stmt.getParameters().get(3) ==
+                ((SelectRelation) queryStmt.getQueryRelation()).getPredicate().getChild(1));
+    }
+
 }

@@ -16,7 +16,6 @@ package com.starrocks.sql.optimizer.rewrite;
 
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
@@ -52,10 +51,9 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
 
     private final ColumnRefSet partitionColumnSet;
 
-    public PartitionColPredicateExtractor(RangePartitionInfo rangePartitionInfo,
-                                          Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
+    public PartitionColPredicateExtractor(List<Column> partitionColumns, Map<Column, ColumnRefOperator> columnMetaToColRefMap) {
         List<ColumnRefOperator> columnRefOperators = Lists.newArrayList();
-        Column partitionColumn = rangePartitionInfo.getPartitionColumns().get(0);
+        Column partitionColumn = partitionColumns.get(0);
         for (ColumnRefOperator columnRefOperator : columnMetaToColRefMap.values()) {
             if (partitionColumn.getName().equals(columnRefOperator.getName())) {
                 columnRefOperators.add(columnRefOperator);
@@ -256,5 +254,4 @@ public class PartitionColPredicateExtractor extends ScalarOperatorVisitor<Scalar
         }
         return false;
     }
-
 }

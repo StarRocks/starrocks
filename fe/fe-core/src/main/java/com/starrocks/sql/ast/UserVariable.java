@@ -95,7 +95,7 @@ public class UserVariable extends SetListItem {
         QueryStatement queryStatement = ((Subquery) unevaluatedExpression).getQueryStatement();
         ExecPlan execPlan = StatementPlanner.plan(queryStatement,
                 ConnectContext.get(), TResultSinkType.MYSQL_PROTOCAL);
-        StmtExecutor executor = new StmtExecutor(ctx, queryStatement);
+        StmtExecutor executor = StmtExecutor.newInternalExecutor(ctx, queryStatement);
         Pair<List<TResultBatch>, Status> sqlResult = executor.executeStmtWithExecPlan(ctx, execPlan);
         if (!sqlResult.second.ok()) {
             throw new SemanticException(sqlResult.second.getErrorMsg());
@@ -145,7 +145,7 @@ public class UserVariable extends SetListItem {
             }
         } else if (targetType.isArrayType()) {
             //build a cast(string to array) expr
-            return TypeManager.addCastExpr(new StringLiteral(value), targetType);
+            return TypeManager.addCastExpr(new StringLiteral(removeEscapeCharacter(value)), targetType);
         } else {
             throw new SemanticException("Unsupported type: %s in user variable", targetType);
         }
@@ -177,4 +177,24 @@ public class UserVariable extends SetListItem {
                 return 1;
         }
     }
+
+    // remove escape character added in BE
+    // like [\"a\"] -> ["a"]
+    public static String removeEscapeCharacter(String strValue) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < strValue.length(); i++) {
+            char c = strValue.charAt(i);
+            if (c == '\\' && i < strValue.length() - 1 && (strValue.charAt(i + 1) == '"' || strValue.charAt(i + 1) == '\'')) {
+                // just skip
+            } else if (c == '\\' && i < strValue.length() - 1 && strValue.charAt(i + 1) == '\\') {
+                i++;
+                sb.append('\\');
+            } else {
+                sb.append(c);
+            }
+
+        }
+        return sb.toString();
+    }
+
 }

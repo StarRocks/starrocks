@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Contribute to StarRocks
@@ -18,7 +18,7 @@ Contributing to StarRocks is cordially welcome from everyone. Contributing to St
 > **NOTE**
 >
 > To contribute documentation, remember to **sign off** your commit using `git commit -s`. Otherwise, the Developer Certificate of Origin (DCO) check will fail and the PR may be blocked. In addition, prefix `[Doc]` to your PR title and select the **Doc** check box.
-> ![Doc title](../assets/doctitle.png)
+> ![Doc title](../_assets/doctitle.png)
 
 ## Community resources
 
@@ -32,7 +32,7 @@ Our community strictly adheres to the [code of conduct](https://github.com/StarR
 
 ## Community roles
 
-![Community roles](../assets/contri-1.png)
+![Community roles](../_assets/contri-1.png)
 
 Everyone is encouraged to participate in the StarRocks project. Anyone can make an impact by simply being involved in the discussions about new features, project roadmap, architecture, and even reporting issues you are facing.
 

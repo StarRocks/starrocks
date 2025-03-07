@@ -39,7 +39,8 @@
 namespace starrocks::lake {
 
 StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* tablet_mgr, int64_t tablet_id,
-                                                        int64_t new_version, int64_t txn_id);
+                                                        int64_t new_version, int64_t txn_id,
+                                                        bool rebuild_pindex = false);
 
 Status TEST_publish_single_log_version(TabletManager* tablet_mgr, int64_t tablet_id, int64_t txn_id,
                                        int64_t log_version);
@@ -70,10 +71,10 @@ protected:
     explicit TestBase(std::string test_dir, int64_t cache_limit = 1024 * 1024)
             : _test_dir(std::move(test_dir)),
               _parent_tracker(std::make_unique<MemTracker>(-1)),
-              _mem_tracker(std::make_unique<MemTracker>(1024 * 1024, "", _parent_tracker.get())),
-              _lp(std::make_unique<FixedLocationProvider>(_test_dir)),
-              _update_mgr(std::make_unique<UpdateManager>(_lp.get(), _mem_tracker.get())),
-              _tablet_mgr(std::make_unique<TabletManager>(_lp.get(), _update_mgr.get(), cache_limit)) {}
+              _mem_tracker(std::make_unique<MemTracker>(10 * 1024 * 1024, "", _parent_tracker.get())),
+              _lp(std::make_shared<FixedLocationProvider>(_test_dir)),
+              _update_mgr(std::make_unique<UpdateManager>(_lp, _mem_tracker.get())),
+              _tablet_mgr(std::make_unique<TabletManager>(_lp, _update_mgr.get(), cache_limit)) {}
 
     void remove_test_dir_or_die() { ASSERT_OK(fs::remove_all(_test_dir)); }
 
@@ -93,7 +94,8 @@ protected:
         ASSERT_TRUE(index_meta.version().major_number() == expected_version);
     }
 
-    StatusOr<TabletMetadataPtr> publish_single_version(int64_t tablet_id, int64_t new_version, int64_t txn_id);
+    StatusOr<TabletMetadataPtr> publish_single_version(int64_t tablet_id, int64_t new_version, int64_t txn_id,
+                                                       bool rebuild_pindex = false);
 
     Status publish_single_log_version(int64_t tablet_id, int64_t txn_id, int64_t log_version);
 
@@ -103,7 +105,7 @@ protected:
     std::string _test_dir;
     std::unique_ptr<MemTracker> _parent_tracker;
     std::unique_ptr<MemTracker> _mem_tracker;
-    std::unique_ptr<LocationProvider> _lp;
+    std::shared_ptr<LocationProvider> _lp;
     std::unique_ptr<UpdateManager> _update_mgr;
     std::unique_ptr<TabletManager> _tablet_mgr;
 };
@@ -111,10 +113,13 @@ protected:
 struct PrimaryKeyParam {
     bool enable_persistent_index = false;
     PersistentIndexTypePB persistent_index_type = PersistentIndexTypePB::LOCAL;
+    PartialUpdateMode partial_update_mode = PartialUpdateMode::ROW_MODE;
+    bool enable_transparent_data_encryption = false;
 };
 
 inline StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* tablet_mgr, int64_t tablet_id,
-                                                               int64_t new_version, int64_t txn_id) {
+                                                               int64_t new_version, int64_t txn_id,
+                                                               bool rebuild_pindex) {
     PublishVersionRequest request;
     PublishVersionResponse response;
 
@@ -123,6 +128,9 @@ inline StatusOr<TabletMetadataPtr> TEST_publish_single_version(TabletManager* ta
     request.set_base_version(new_version - 1);
     request.set_new_version(new_version);
     request.set_commit_time(time(nullptr));
+    if (rebuild_pindex) {
+        request.add_rebuild_pindex_tablet_ids(tablet_id);
+    }
 
     auto lake_service = LakeServiceImpl(ExecEnv::GetInstance(), tablet_mgr);
     lake_service.publish_version(nullptr, &request, &response, nullptr);
@@ -182,8 +190,8 @@ inline Status TEST_publish_single_log_version(TabletManager* tablet_mgr, int64_t
 }
 
 inline StatusOr<TabletMetadataPtr> TestBase::publish_single_version(int64_t tablet_id, int64_t new_version,
-                                                                    int64_t txn_id) {
-    return TEST_publish_single_version(_tablet_mgr.get(), tablet_id, new_version, txn_id);
+                                                                    int64_t txn_id, bool rebuild_pindex) {
+    return TEST_publish_single_version(_tablet_mgr.get(), tablet_id, new_version, txn_id, rebuild_pindex);
 }
 
 inline Status TestBase::publish_single_log_version(int64_t tablet_id, int64_t txn_id, int64_t log_version) {
@@ -268,13 +276,11 @@ inline DescriptorTbl* create_table_desc(RuntimeState* runtime_state, const std::
 
 inline std::shared_ptr<TPlanNode> create_tplan_node_cloud() {
     std::vector<::starrocks::TTupleId> tuple_ids{0};
-    std::vector<bool> nullable_tuples{true};
 
     auto tnode = std::make_shared<TPlanNode>();
     tnode->__set_node_id(1);
     tnode->__set_node_type(TPlanNodeType::LAKE_SCAN_NODE);
     tnode->__set_row_tuples(tuple_ids);
-    tnode->__set_nullable_tuples(nullable_tuples);
     tnode->__set_limit(-1);
 
     TConnectorScanNode connector_scan_node;

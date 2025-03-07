@@ -38,13 +38,14 @@
 #include "common/status.h"
 #include "exprs/binary_function.h"
 #include "exprs/math_functions.h"
+#include "exprs/regexp_split.h"
 #include "exprs/unary_function.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/strip.h"
 #include "gutil/strings/substitute.h"
-#include "runtime/large_int_value.h"
 #include "runtime/runtime_state.h"
 #include "storage/olap_define.h"
+#include "types/large_int_value.h"
 #include "util/raw_container.h"
 #include "util/sm3.h"
 #include "util/utf8.h"
@@ -55,7 +56,7 @@ namespace starrocks {
 static const RE2 SUBSTRING_RE(R"((?:\.\*)*([^\.\^\{\[\(\|\)\]\}\+\*\?\$\\]+)(?:\.\*)*)", re2::RE2::Quiet);
 
 #define THROW_RUNTIME_ERROR_IF_EXCEED_LIMIT(col, func_name)                          \
-    if (UNLIKELY(col->capacity_limit_reached())) {                                   \
+    if (UNLIKELY(!col->capacity_limit_reached().ok())) {                             \
         col->reset_column();                                                         \
         throw std::runtime_error("binary column exceed 4G in function " #func_name); \
     }
@@ -235,7 +236,7 @@ static inline void binary_column_non_empty_op(uint8_t* begin, uint8_t* end, Byte
 }
 
 template <bool off_is_negative, bool allow_out_of_left_bound>
-static inline void ascii_substr(BinaryColumn* src, Bytes* bytes, Offsets* offsets, int off, int len) {
+static inline void ascii_substr(const BinaryColumn* src, Bytes* bytes, Offsets* offsets, int off, int len) {
     const auto size = src->size();
     size_t i = 0;
     for (; i < size; ++i) {
@@ -245,7 +246,7 @@ static inline void ascii_substr(BinaryColumn* src, Bytes* bytes, Offsets* offset
     }
 }
 
-static inline void utf8_substr_from_left(BinaryColumn* src, Bytes* bytes, Offsets* offsets, int off, int len) {
+static inline void utf8_substr_from_left(const BinaryColumn* src, Bytes* bytes, Offsets* offsets, int off, int len) {
     const auto size = src->size();
     size_t i = 0;
     for (; i < size; ++i) {
@@ -256,7 +257,7 @@ static inline void utf8_substr_from_left(BinaryColumn* src, Bytes* bytes, Offset
 }
 
 template <bool allow_out_of_left_bound>
-static inline void utf8_substr_from_right(BinaryColumn* src, Bytes* bytes, Offsets* offsets, int off, int len) {
+static inline void utf8_substr_from_right(const BinaryColumn* src, Bytes* bytes, Offsets* offsets, int off, int len) {
     const auto size = src->size();
     size_t i = 0;
     for (; i < size; ++i) {
@@ -405,8 +406,8 @@ static inline void column_builder_non_empty_op(uint8_t* begin, uint8_t* end, Nul
     builder->append(begin, end, i);
 }
 
-ColumnPtr substr_const_not_null(const Columns& columns, BinaryColumn* src, SubstrState* state) {
-    ColumnPtr result = BinaryColumn::create();
+ColumnPtr substr_const_not_null(const Columns& columns, const BinaryColumn* src, SubstrState* state) {
+    MutableColumnPtr result = BinaryColumn::create();
     auto* binary = down_cast<BinaryColumn*>(result.get());
     Bytes& bytes = binary->get_bytes();
     Offsets& offsets = binary->get_offset();
@@ -436,10 +437,8 @@ ColumnPtr substr_const_not_null(const Columns& columns, BinaryColumn* src, Subst
         bytes.reserve(reserved);
     }
 
-    raw::RawVector<Offsets::value_type> raw_offsets;
-    raw_offsets.resize(size + 1);
-    raw_offsets[0] = 0;
-    offsets.swap(reinterpret_cast<Offsets&>(raw_offsets));
+    raw::make_room(&offsets, size + 1);
+    offsets[0] = 0;
 
     auto& src_bytes = src->get_bytes();
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
@@ -464,8 +463,8 @@ ColumnPtr substr_const_not_null(const Columns& columns, BinaryColumn* src, Subst
     return result;
 }
 
-ColumnPtr right_const_not_null(const Columns& columns, BinaryColumn* src, SubstrState* state) {
-    ColumnPtr result = BinaryColumn::create();
+ColumnPtr right_const_not_null(const Columns& columns, const BinaryColumn* src, SubstrState* state) {
+    MutableColumnPtr result = BinaryColumn::create();
     auto* binary = down_cast<BinaryColumn*>(result.get());
     Bytes& bytes = binary->get_bytes();
     Offsets& offsets = binary->get_offset();
@@ -486,10 +485,8 @@ ColumnPtr right_const_not_null(const Columns& columns, BinaryColumn* src, Substr
     }
 
     bytes.reserve(reserved);
-    raw::RawVector<Offsets::value_type> raw_offsets;
-    raw_offsets.resize(size + 1);
-    raw_offsets[0] = 0;
-    offsets.swap(reinterpret_cast<Offsets&>(raw_offsets));
+    raw::make_room(&offsets, size + 1);
+    offsets[0] = 0;
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes_size);
     if (is_ascii) {
         // off_is_negative=true, off=-len
@@ -505,11 +502,11 @@ ColumnPtr right_const_not_null(const Columns& columns, BinaryColumn* src, Substr
 template <typename StringConstFuncType, typename... Args>
 ColumnPtr string_func_const(StringConstFuncType func, const Columns& columns, Args&&... args) {
     if (columns[0]->is_nullable()) {
-        auto* src_nullable = down_cast<NullableColumn*>(columns[0].get());
+        auto* src_nullable = down_cast<const NullableColumn*>(columns[0].get());
         if (src_nullable->has_null()) {
-            auto* src_binary = down_cast<BinaryColumn*>(src_nullable->data_column().get());
+            auto* src_binary = down_cast<const BinaryColumn*>(src_nullable->data_column().get());
             ColumnPtr binary = func(columns, src_binary, std::forward<Args>(args)...);
-            NullColumnPtr src_null = NullColumn::create(*(src_nullable->null_column()));
+            NullColumn::MutablePtr src_null = NullColumn::create(*(src_nullable->null_column()));
 
             // - if binary is null ConstColumn, just return it.
             // - if binary is non-null ConstColumn, unfold it and wrap with src_null.
@@ -521,7 +518,7 @@ ColumnPtr string_func_const(StringConstFuncType func, const Columns& columns, Ar
             if (binary->is_constant()) {
                 auto* dst_const = down_cast<ConstColumn*>(binary.get());
                 dst_const->data_column()->assign(dst_const->size(), 0);
-                return NullableColumn::create(dst_const->data_column(), src_null);
+                return NullableColumn::create(dst_const->data_column(), std::move(src_null));
             }
             if (binary->is_nullable()) {
                 auto* binary_nullable = down_cast<NullableColumn*>(binary.get());
@@ -529,31 +526,31 @@ ColumnPtr string_func_const(StringConstFuncType func, const Columns& columns, Ar
                     // case 2: some rows are nulls and some rows are non-nulls, merge the column
                     // inside original result and the null column inside the columns[0].
                     NullColumnPtr binary_null = binary_nullable->null_column();
-                    auto union_null = FunctionHelper::union_null_column(src_null, binary_null);
-                    return NullableColumn::create(binary_nullable->data_column(), union_null);
+                    auto union_null = FunctionHelper::union_null_column(std::move(src_null), binary_null);
+                    return NullableColumn::create(binary_nullable->data_column(), std::move(union_null));
                 } else {
                     // case 3: any of the result rows is not null, so return the original result.
                     // no merge is needed.
-                    return NullableColumn::create(binary_nullable->data_column(), src_null);
+                    return NullableColumn::create(binary_nullable->data_column(), std::move(src_null));
                 }
             } else {
-                return NullableColumn::create(binary, src_null);
+                return NullableColumn::create(std::move(binary), std::move(src_null));
             }
         } else {
-            auto* src = down_cast<BinaryColumn*>(src_nullable->data_column().get());
+            auto* src = down_cast<const BinaryColumn*>(src_nullable->data_column().get());
             return func(columns, src, std::forward<Args>(args)...);
         }
     } else if (columns[0]->is_constant()) {
-        auto* src_constant = down_cast<ConstColumn*>(columns[0].get());
-        auto* src_binary = down_cast<BinaryColumn*>(src_constant->data_column().get());
+        auto* src_constant = down_cast<const ConstColumn*>(columns[0].get());
+        auto* src_binary = down_cast<const BinaryColumn*>(src_constant->data_column().get());
         ColumnPtr binary = func(columns, src_binary, std::forward<Args>(args)...);
         if (binary->is_constant()) {
             return binary;
         } else {
-            return ConstColumn::create(binary, src_constant->size());
+            return ConstColumn::create(std::move(binary), src_constant->size());
         }
     } else {
-        auto* src = down_cast<BinaryColumn*>(columns[0].get());
+        auto* src = down_cast<const BinaryColumn*>(columns[0].get());
         return func(columns, src, std::forward<Args>(args)...);
     }
 }
@@ -673,14 +670,14 @@ static inline ColumnPtr substr_not_const(FunctionContext* context, const starroc
 
     ColumnViewer<TYPE_INT> len_viewer(len_column);
 
-    auto data_column = ColumnHelper::get_data_column(columns[0].get());
-    auto* src = down_cast<BinaryColumn*>(data_column);
+    const auto data_column = ColumnHelper::get_data_column(columns[0].get());
+    const auto* src = down_cast<const BinaryColumn*>(data_column);
 
     const auto rows_num = columns[0]->size();
     NullableBinaryColumnBuilder result;
     result.resize(rows_num, src->byte_size());
 
-    Bytes& src_bytes = src->get_bytes();
+    const Bytes& src_bytes = src->get_bytes();
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
     if (is_ascii) {
         ascii_substr_not_const(rows_num, &str_viewer, &off_viewer, &len_viewer, &result);
@@ -694,13 +691,13 @@ static inline ColumnPtr right_not_const(FunctionContext* context, const starrock
     ColumnViewer<TYPE_VARCHAR> str_viewer(columns[0]);
     ColumnViewer<TYPE_INT> len_viewer(columns[1]);
 
-    auto data_column = ColumnHelper::get_data_column(columns[0].get());
-    auto* src = down_cast<BinaryColumn*>(data_column);
+    const auto data_column = ColumnHelper::get_data_column(columns[0].get());
+    auto* src = down_cast<const BinaryColumn*>(data_column);
     const auto rows_num = columns[0]->size();
 
     NullableBinaryColumnBuilder result;
 
-    Bytes& src_bytes = src->get_bytes();
+    const Bytes& src_bytes = src->get_bytes();
     auto is_ascii = validate_ascii_fast((const char*)src_bytes.data(), src_bytes.size());
     result.resize(rows_num, src->byte_size());
 
@@ -779,7 +776,7 @@ struct SpaceFunction {
 public:
     template <LogicalType Type, LogicalType ResultType>
     static ColumnPtr evaluate(const ColumnPtr& v1) {
-        auto len_column = down_cast<Int32Column*>(v1.get());
+        const auto* len_column = down_cast<const Int32Column*>(v1.get());
         auto& len_array = len_column->get_data();
         const auto num_rows = len_column->size();
         NullableBinaryColumnBuilder builder;
@@ -1180,7 +1177,7 @@ Status StringFunctions::translate_close(FunctionContext* context, FunctionContex
  * @param state stores the ASCII map.
  * @return The translated column, which is a non-nullable BinaryColumn.
  */
-static inline ColumnPtr translate_with_ascii_const_nonnull_from_and_to(const Columns& columns, BinaryColumn* src,
+static inline ColumnPtr translate_with_ascii_const_nonnull_from_and_to(const Columns& columns, const BinaryColumn* src,
                                                                        const TranslateState* state) {
     DCHECK(state->is_from_and_to_const);
     DCHECK(state->is_ascii_map);
@@ -1229,7 +1226,7 @@ static inline ColumnPtr translate_with_ascii_const_nonnull_from_and_to(const Col
  * @return the translated column, which may be a nullable BinaryColumn.
  *  The row will be null, if it exceeds get_olap_string_max_length() after translated.
  */
-static inline ColumnPtr translate_with_utf8_const_nonnull_from_and_to(const Columns& columns, BinaryColumn* src,
+static inline ColumnPtr translate_with_utf8_const_nonnull_from_and_to(const Columns& columns, const BinaryColumn* src,
                                                                       const TranslateState* state) {
     DCHECK(state->is_from_and_to_const);
     DCHECK(!state->is_ascii_map);
@@ -1433,7 +1430,7 @@ Status StringFunctions::pad_close(FunctionContext* context, FunctionContext::Fun
 
 enum PadType { PAD_TYPE_LEFT, PAD_TYPE_RIGHT };
 template <PadType pad_type>
-static inline ColumnPtr ascii_pad_ascii_const(Columns const& columns, BinaryColumn* src, const uint8_t* fill,
+static inline ColumnPtr ascii_pad_ascii_const(Columns const& columns, const BinaryColumn* src, const uint8_t* fill,
                                               const size_t fill_size, const size_t len) {
     DCHECK(0 < len && len <= get_olap_string_max_length());
     DCHECK(fill_size > 0);
@@ -1486,7 +1483,7 @@ static inline ColumnPtr ascii_pad_ascii_const(Columns const& columns, BinaryColu
 }
 
 template <bool src_is_utf8, bool fill_is_utf8, PadType pad_type>
-static inline ColumnPtr pad_utf8_const(Columns const& columns, BinaryColumn* src, const uint8_t* fill,
+static inline ColumnPtr pad_utf8_const(Columns const& columns, const BinaryColumn* src, const uint8_t* fill,
                                        const size_t fill_size, const size_t len,
                                        std::vector<size_t> const& fill_utf8_index) {
     static_assert(src_is_utf8 || fill_is_utf8);
@@ -1578,7 +1575,7 @@ static inline ColumnPtr pad_utf8_const(Columns const& columns, BinaryColumn* src
 }
 
 template <PadType pad_type>
-static inline ColumnPtr pad_const_not_null(const Columns& columns, BinaryColumn* src, const PadState* pad_state) {
+static inline ColumnPtr pad_const_not_null(const Columns& columns, const BinaryColumn* src, const PadState* pad_state) {
     auto len = ColumnHelper::get_const_value<TYPE_INT>(columns[1]);
     auto fill = ColumnHelper::get_const_value<TYPE_VARCHAR>(columns[2]);
 
@@ -1967,9 +1964,9 @@ struct StringCaseToggleFunction {
 public:
     template <LogicalType Type, LogicalType ResultType>
     static ColumnPtr evaluate(const ColumnPtr& v1) {
-        auto* src = down_cast<BinaryColumn*>(v1.get());
-        Bytes& src_bytes = src->get_bytes();
-        Offsets& src_offsets = src->get_offset();
+        const auto* src = down_cast<const BinaryColumn*>(v1.get());
+        const Bytes& src_bytes = src->get_bytes();
+        const Offsets& src_offsets = src->get_offset();
         auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
         auto& dst_offsets = dst->get_offset();
         auto& dst_bytes = dst->get_bytes();
@@ -2037,7 +2034,7 @@ static inline void utf8_reverse_per_slice(const char* src_begin, const char* src
 }
 
 template <bool is_ascii>
-static inline void reverse(BinaryColumn* src, Bytes* dst_bytes) {
+static inline void reverse(const BinaryColumn* src, Bytes* dst_bytes) {
     const auto num_rows = src->size();
     char* dst_curr = (char*)dst_bytes->data();
     for (auto i = 0; i < num_rows; ++i) {
@@ -2056,9 +2053,9 @@ static inline void reverse(BinaryColumn* src, Bytes* dst_bytes) {
 struct ReverseFunction {
     template <LogicalType Type, LogicalType ResultType>
     static inline ColumnPtr evaluate(const ColumnPtr& column) {
-        auto* src = down_cast<BinaryColumn*>(column.get());
-        auto& src_bytes = src->get_bytes();
-        auto& src_offsets = src->get_offset();
+        const auto* src = down_cast<const BinaryColumn*>(column.get());
+        const auto& src_bytes = src->get_bytes();
+        const auto& src_offsets = src->get_offset();
 
         auto result = BinaryColumn::create();
         auto& dst_bytes = result->get_bytes();
@@ -2222,7 +2219,7 @@ template <TrimType trim_type, size_t simd_threshold, bool trim_single, bool trim
 struct AdaptiveTrimFunction {
     template <LogicalType Type, LogicalType ResultType, class RemoveArg, class Utf8Index>
     static ColumnPtr evaluate(const ColumnPtr& column, RemoveArg&& remove, Utf8Index&& utf8_index) {
-        auto* src = down_cast<BinaryColumn*>(column.get());
+        const auto* src = down_cast<const BinaryColumn*>(column.get());
 
         auto dst = RunTimeColumnType<TYPE_VARCHAR>::create();
         auto& dst_offsets = dst->get_offset();
@@ -2632,7 +2629,8 @@ StatusOr<ColumnPtr> StringFunctions::ascii(FunctionContext* context, const Colum
 }
 
 DEFINE_UNARY_FN_WITH_IMPL(get_charImpl, value) {
-    return std::string((char*)&value, 1);
+    char* p = (char*)&value;
+    return std::string(p, 1);
 }
 
 StatusOr<ColumnPtr> StringFunctions::get_char(FunctionContext* context, const Columns& columns) {
@@ -2652,7 +2650,8 @@ StatusOr<ColumnPtr> StringFunctions::strcmp(FunctionContext* context, const Colu
     return VectorizedStrictBinaryFunction<strcmpImpl>::evaluate<TYPE_VARCHAR, TYPE_INT>(columns[0], columns[1]);
 }
 
-static inline ColumnPtr concat_const_not_null(Columns const& columns, BinaryColumn* src, const ConcatState* state) {
+static inline ColumnPtr concat_const_not_null(Columns const& columns, const BinaryColumn* src,
+                                              const ConcatState* state) {
     NullableBinaryColumnBuilder builder;
     auto* binary = down_cast<BinaryColumn*>(builder.data_column().get());
     auto& nulls = builder.get_null_data();
@@ -2765,7 +2764,7 @@ static inline ColumnPtr concat_not_const(Columns const& columns) {
     std::vector<ColumnViewer<TYPE_VARCHAR>> list;
     list.reserve(columns.size());
     for (const ColumnPtr& col : columns) {
-        list.emplace_back(ColumnViewer<TYPE_VARCHAR>(col));
+        list.emplace_back(col);
     }
     const auto num_rows = columns[0]->size();
     auto dst_bytes_max_size = ColumnHelper::compute_bytes_size(columns.begin(), columns.end());
@@ -2918,7 +2917,7 @@ StatusOr<ColumnPtr> StringFunctions::concat_ws(FunctionContext* context, const C
     // skip only null
     for (int i = 1; i < columns.size(); ++i) {
         if (!columns[i]->only_null()) {
-            list.emplace_back(ColumnViewer<TYPE_VARCHAR>(columns[i]));
+            list.emplace_back(columns[i]);
         }
     }
 
@@ -3300,9 +3299,9 @@ static ColumnPtr regexp_extract_all_general(FunctionContext* context, re2::RE2::
         offset_col->append(index);
     }
 
-    auto array =
-            ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(str_col->size(), 0)), offset_col);
-    return NullableColumn::create(array, nl_col);
+    auto array = ArrayColumn::create(NullableColumn::create(std::move(str_col), NullColumn::create(str_col->size(), 0)),
+                                     std::move(offset_col));
+    return NullableColumn::create(std::move(array), std::move(nl_col));
 }
 
 static ColumnPtr regexp_extract_all_const_pattern(re2::RE2* const_re, const Columns& columns) {
@@ -3355,12 +3354,12 @@ static ColumnPtr regexp_extract_all_const_pattern(re2::RE2* const_re, const Colu
         offset_col->append(index);
     }
 
-    auto array =
-            ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(str_col->size(), 0)), offset_col);
+    auto array = ArrayColumn::create(NullableColumn::create(std::move(str_col), NullColumn::create(str_col->size(), 0)),
+                                     std::move(offset_col));
     if (ColumnHelper::is_all_const(columns)) {
-        return ConstColumn::create(array, columns[0]->size());
+        return ConstColumn::create(std::move(array), columns[0]->size());
     }
-    return NullableColumn::create(array, nl_col);
+    return NullableColumn::create(std::move(array), std::move(nl_col));
 }
 
 static ColumnPtr regexp_extract_all_const(re2::RE2* const_re, const Columns& columns) {
@@ -3373,10 +3372,10 @@ static ColumnPtr regexp_extract_all_const(re2::RE2* const_re, const Columns& col
     auto offset_col = UInt32Column::create();
     offset_col->append(0);
 
-    NullColumnPtr nl_col;
+    NullColumn::MutablePtr nl_col;
     if (columns[0]->is_nullable()) {
-        auto x = down_cast<NullableColumn*>(columns[0].get())->null_column();
-        nl_col = ColumnHelper::as_column<NullColumn>(x->clone_shared());
+        auto x = down_cast<const NullableColumn*>(columns[0].get())->null_column();
+        nl_col = NullColumn::static_pointer_cast(x->clone());
     } else {
         nl_col = NullColumn::create(size, 0);
     }
@@ -3385,12 +3384,13 @@ static ColumnPtr regexp_extract_all_const(re2::RE2* const_re, const Columns& col
     int max_matches = 1 + const_re->NumberOfCapturingGroups();
     if (group <= 0 || group >= max_matches) {
         offset_col->append_value_multiple_times(&index, size);
-        auto array = ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(0, 0)), offset_col);
+        auto array = ArrayColumn::create(NullableColumn::create(std::move(str_col), NullColumn::create(0, 0)),
+                                         std::move(offset_col));
 
         if (ColumnHelper::is_all_const(columns)) {
-            return ConstColumn::create(array, columns[0]->size());
+            return ConstColumn::create(std::move(array), columns[0]->size());
         }
-        return NullableColumn::create(array, nl_col);
+        return NullableColumn::create(std::move(array), std::move(nl_col));
     }
 
     re2::StringPiece find[group];
@@ -3417,13 +3417,13 @@ static ColumnPtr regexp_extract_all_const(re2::RE2* const_re, const Columns& col
         offset_col->append(index);
     }
 
-    auto array =
-            ArrayColumn::create(NullableColumn::create(str_col, NullColumn::create(str_col->size(), 0)), offset_col);
+    auto array = ArrayColumn::create(NullableColumn::create(std::move(str_col), NullColumn::create(str_col->size(), 0)),
+                                     std::move(offset_col));
 
     if (ColumnHelper::is_all_const(columns)) {
-        return ConstColumn::create(array, columns[0]->size());
+        return ConstColumn::create(std::move(array), columns[0]->size());
     }
-    return NullableColumn::create(array, nl_col);
+    return NullableColumn::create(std::move(array), std::move(nl_col));
 }
 
 StatusOr<ColumnPtr> StringFunctions::regexp_extract_all(FunctionContext* context, const Columns& columns) {
@@ -3558,7 +3558,7 @@ static StatusOr<ColumnPtr> hyperscan_vec_evaluate(const BinaryColumn* src, Strin
 
     // no match in row
     if (match_info_chain_in_one_row.info_chain.empty()) {
-        return src->clone_shared();
+        return src->clone();
     }
 
     auto data_count = [&]() {
@@ -3631,8 +3631,8 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace_use_hyperscan_vec(StringFunc
     ASSIGN_OR_RETURN(auto res, hyperscan_vec_evaluate(binary, state, rpl_value));
     if (columns[0]->is_nullable()) {
         return NullableColumn::create(
-                std::move(res), std::static_pointer_cast<NullColumn>(
-                                        down_cast<NullableColumn*>(columns[0].get())->null_column()->clone_shared()));
+                std::move(res), NullColumn::static_pointer_cast(
+                                        down_cast<const NullableColumn*>(columns[0].get())->null_column()->clone()));
     } else if (columns[0]->is_constant()) {
         return ConstColumn::create(std::move(res), columns[0]->size());
     }
@@ -3730,6 +3730,204 @@ StatusOr<ColumnPtr> StringFunctions::regexp_replace(FunctionContext* context, co
 
     re2::RE2::Options* options = state->options.get();
     return regexp_replace_general(context, options, columns);
+}
+
+static StatusOr<ColumnPtr> regexp_split_const(re2::RE2* const_re, const Columns& columns, int32_t max_split = -1) {
+    auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+
+    auto size = ColumnHelper::is_all_const(columns) ? 1 : columns[0]->size();
+
+    auto str_col = BinaryColumn::create();
+    auto offset_col = UInt32Column::create();
+    offset_col->append(0);
+
+    NullColumn::MutablePtr nl_col;
+    if (columns[0]->is_nullable()) {
+        auto x = down_cast<const NullableColumn*>(columns[0].get())->null_column();
+        nl_col = NullColumn::static_pointer_cast(x->clone());
+    } else {
+        nl_col = NullColumn::create(size, 0);
+    }
+
+    const char* token_begin = nullptr;
+    const char* token_end = nullptr;
+
+    uint32_t index = 0;
+
+    RegexpSplit regexpSplit;
+    for (int row = 0; row < size; ++row) {
+        if (content_viewer.is_null(row)) {
+            offset_col->append(index);
+            continue;
+        }
+
+        auto str_value = content_viewer.value(row);
+
+        regexpSplit.init(const_re, max_split);
+        regexpSplit.set(str_value.get_data(), str_value.get_data() + str_value.get_size());
+
+        while (regexpSplit.get(token_begin, token_end)) {
+            size_t token_size = token_end - token_begin;
+            str_col->append(Slice(token_begin, token_size));
+            index += 1;
+        }
+        offset_col->append(index);
+    }
+
+    auto array = ArrayColumn::create(NullableColumn::create(std::move(str_col), NullColumn::create(str_col->size(), 0)),
+                                     std::move(offset_col));
+
+    if (ColumnHelper::is_all_const(columns)) {
+        return ConstColumn::create(std::move(array), columns[0]->size());
+    }
+    return NullableColumn::create(std::move(array), std::move(nl_col));
+}
+
+static StatusOr<ColumnPtr> regexp_split_const_pattern(re2::RE2* const_re, const Columns& columns) {
+    auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    ColumnPtr max_split_column;
+    if (columns.size() > 2) {
+        max_split_column = columns[2];
+    } else {
+        max_split_column = ColumnHelper::create_const_column<TYPE_INT>(-1, columns[0]->size());
+    }
+    ColumnViewer<TYPE_INT> max_split_viewer(max_split_column);
+
+    auto size = ColumnHelper::is_all_const(columns) ? 1 : columns[0]->size();
+
+    auto str_col = BinaryColumn::create();
+    auto offset_col = UInt32Column::create();
+    offset_col->append(0);
+
+    NullColumn::MutablePtr nl_col;
+    if (columns[0]->is_nullable()) {
+        auto x = down_cast<const NullableColumn*>(columns[0].get())->null_column();
+        nl_col = NullColumn::static_pointer_cast(x->clone());
+    } else {
+        nl_col = NullColumn::create(size, 0);
+    }
+
+    const char* token_begin = nullptr;
+    const char* token_end = nullptr;
+
+    uint32_t index = 0;
+
+    RegexpSplit RegexpSplit;
+
+    for (int row = 0; row < size; ++row) {
+        if (content_viewer.is_null(row)) {
+            offset_col->append(index);
+            continue;
+        }
+
+        auto max_split = max_split_viewer.value(row);
+        auto str_value = content_viewer.value(row);
+
+        RegexpSplit.init(const_re, max_split);
+        RegexpSplit.set(str_value.get_data(), str_value.get_data() + str_value.get_size());
+
+        while (RegexpSplit.get(token_begin, token_end)) {
+            size_t token_size = token_end - token_begin;
+            str_col->append(Slice(token_begin, token_size));
+            index += 1;
+        }
+        offset_col->append(index);
+    }
+
+    auto array = ArrayColumn::create(NullableColumn::create(std::move(str_col), NullColumn::create(str_col->size(), 0)),
+                                     std::move(offset_col));
+
+    if (ColumnHelper::is_all_const(columns)) {
+        return ConstColumn::create(std::move(array), columns[0]->size());
+    }
+    return NullableColumn::create(std::move(array), std::move(nl_col));
+}
+
+static StatusOr<ColumnPtr> regexp_split_general(FunctionContext* context, re2::RE2::Options* options,
+                                                const Columns& columns) {
+    auto content_viewer = ColumnViewer<TYPE_VARCHAR>(columns[0]);
+    auto ptn_viewer = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    ColumnPtr max_split_column;
+    if (columns.size() > 2) {
+        max_split_column = columns[2];
+    } else {
+        max_split_column = ColumnHelper::create_const_column<TYPE_INT>(-1, columns[0]->size());
+    }
+    ColumnViewer<TYPE_INT> max_split_viewer(max_split_column);
+    auto size = columns[0]->size();
+
+    auto str_col = BinaryColumn::create();
+    auto offset_col = UInt32Column::create();
+    auto nl_col = NullColumn::create();
+    offset_col->append(0);
+    uint32_t index = 0;
+
+    const char* token_begin = nullptr;
+    const char* token_end = nullptr;
+
+    RegexpSplit regexpSplit;
+
+    for (int row = 0; row < size; ++row) {
+        if (content_viewer.is_null(row) || ptn_viewer.is_null(row)) {
+            offset_col->append(index);
+            nl_col->append(1);
+            continue;
+        }
+
+        std::string ptn_value = ptn_viewer.value(row).to_string();
+        std::unique_ptr<re2::RE2> local_re;
+
+        if (ptn_value.size()) {
+            local_re = std::make_unique<re2::RE2>(ptn_value, *options);
+            if (!local_re.get()->ok()) {
+                context->set_error(strings::Substitute("Invalid regex: $0", ptn_value).c_str());
+                offset_col->append(index);
+                nl_col->append(1);
+                continue;
+            }
+        }
+
+        nl_col->append(0);
+        auto max_split = max_split_viewer.value(row);
+        auto str_value = content_viewer.value(row);
+
+        regexpSplit.init(local_re.get(), max_split);
+        regexpSplit.set(str_value.get_data(), str_value.get_data() + str_value.get_size());
+
+        while (regexpSplit.get(token_begin, token_end)) {
+            size_t token_size = token_end - token_begin;
+            str_col->append(Slice(token_begin, token_size));
+            index += 1;
+        }
+        offset_col->append(index);
+    }
+
+    auto array = ArrayColumn::create(NullableColumn::create(std::move(str_col), NullColumn::create(str_col->size(), 0)),
+                                     std::move(offset_col));
+    return NullableColumn::create(std::move(array), std::move(nl_col));
+}
+
+StatusOr<ColumnPtr> StringFunctions::regexp_split(FunctionContext* context, const Columns& columns) {
+    RETURN_IF_COLUMNS_ONLY_NULL(columns);
+    auto state = reinterpret_cast<StringFunctionsState*>(context->get_function_state(FunctionContext::THREAD_LOCAL));
+    if (state->const_pattern) {
+        re2::RE2* const_re = nullptr;
+        if (!state->pattern.empty()) {
+            const_re = state->regex.get();
+        }
+        if (columns.size() > 2) {
+            if (columns[2]->is_constant()) {
+                return regexp_split_const(const_re, columns, ColumnHelper::get_const_value<TYPE_INT>(columns[2]));
+            } else {
+                return regexp_split_const_pattern(const_re, columns);
+            }
+        } else {
+            return regexp_split_const(const_re, columns);
+        }
+    }
+
+    re2::RE2::Options* options = state->options.get();
+    return regexp_split_general(context, options, columns);
 }
 
 struct ReplaceState {

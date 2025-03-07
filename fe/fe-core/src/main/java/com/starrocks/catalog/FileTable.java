@@ -18,13 +18,9 @@ import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.connector.ColumnTypeConverter;
 import com.starrocks.connector.HdfsEnvironment;
@@ -42,12 +38,8 @@ import com.starrocks.thrift.TTableDescriptor;
 import com.starrocks.thrift.TTableType;
 import org.apache.hadoop.conf.Configuration;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 public class FileTable extends Table {
@@ -107,6 +99,7 @@ public class FileTable extends Table {
         fileProperties.put(AzureCloudConfigurationProvider.AZURE_PATH_KEY, path);
     }
 
+    @Override
     public String getTableLocation() {
         return fileProperties.get(JSON_KEY_FILE_PATH);
     }
@@ -129,7 +122,7 @@ public class FileTable extends Table {
         Configuration configuration = hdfsEnvironment.getConfiguration();
         HiveRemoteFileIO remoteFileIO = new HiveRemoteFileIO(configuration);
         boolean recursive = Boolean.parseBoolean(fileProperties.getOrDefault(JSON_RECURSIVE_DIRECTORIES, "false"));
-        RemotePathKey pathKey = new RemotePathKey(getTableLocation(), recursive, Optional.empty());
+        RemotePathKey pathKey = new RemotePathKey(getTableLocation(), recursive);
         boolean enableWildCards = Boolean.parseBoolean(fileProperties.getOrDefault(JSON_ENABLE_WILDCARDS, "false"));
 
         try {
@@ -209,36 +202,6 @@ public class FileTable extends Table {
         tFileTable.setTime_zone(TimeUtils.getSessionTimeZone());
 
         return tTableDescriptor;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-
-        JsonObject jsonObject = new JsonObject();
-        if (!fileProperties.isEmpty()) {
-            JsonObject jfileProperties = new JsonObject();
-            for (Map.Entry<String, String> entry : fileProperties.entrySet()) {
-                jfileProperties.addProperty(entry.getKey(), entry.getValue());
-            }
-            jsonObject.add(JSON_KEY_FILE_PROPERTIES, jfileProperties);
-        }
-        Text.writeString(out, jsonObject.toString());
-    }
-
-    @Override
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-
-        String json = Text.readString(in);
-        JsonObject jsonObject = JsonParser.parseString(json).getAsJsonObject();
-
-        if (jsonObject.has(JSON_KEY_FILE_PROPERTIES)) {
-            JsonObject jHiveProperties = jsonObject.getAsJsonObject(JSON_KEY_FILE_PROPERTIES);
-            for (Map.Entry<String, JsonElement> entry : jHiveProperties.entrySet()) {
-                fileProperties.put(entry.getKey(), entry.getValue().getAsString());
-            }
-        }
     }
 
     @Override

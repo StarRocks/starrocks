@@ -21,10 +21,12 @@ import com.staros.metrics.MetricsSystem;
 import com.starrocks.common.Config;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecution;
+import com.starrocks.journal.CheckpointWorker;
+import com.starrocks.journal.StarMgrCheckpointWorker;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.lake.StarOSAgent;
-import com.starrocks.leader.Checkpoint;
+import com.starrocks.leader.CheckpointController;
 import com.starrocks.metric.MetricVisitor;
 import com.starrocks.metric.PrometheusRegistryHelper;
 import com.starrocks.persist.Storage;
@@ -48,7 +50,9 @@ public class StarMgrServer {
     private static final Logger LOG = LogManager.getLogger(StarMgrServer.class);
 
     private static StarMgrServer CHECKPOINT = null;
-    private Checkpoint checkpointer = null;
+    private CheckpointController checkpointController = null;
+    private CheckpointWorker checkpointWorker = null;
+    private boolean checkpointWorkerStarted = false;
     private static long checkpointThreadId = -1;
     private String imageDir;
     private StateChangeExecution execution;
@@ -78,6 +82,10 @@ public class StarMgrServer {
         } else {
             return SingletonHolder.INSTANCE;
         }
+    }
+
+    public static StarMgrServer getServingState() {
+        return SingletonHolder.INSTANCE;
     }
 
     private StarManagerServer starMgrServer;
@@ -135,6 +143,8 @@ public class StarMgrServer {
         com.staros.util.Config.WORKER_HEARTBEAT_INTERVAL_SEC = Config.heartbeat_timeout_second;
         com.staros.util.Config.WORKER_HEARTBEAT_RETRY_COUNT = Config.heartbeat_retry_times;
         com.staros.util.Config.GRPC_RPC_TIME_OUT_SEC = Config.starmgr_grpc_timeout_seconds;
+        com.staros.util.Config.ENABLE_BALANCE_SHARD_NUM_BETWEEN_WORKERS = Config.lake_enable_balance_tablets_between_workers;
+        com.staros.util.Config.BALANCE_WORKER_SHARDS_THRESHOLD_IN_PERCENT = Config.lake_balance_tablets_threshold;
 
         // sync the mutable configVar to StarMgr in case any changes
         GlobalStateMgr.getCurrentState().getConfigRefreshDaemon().registerListener(() -> {
@@ -142,6 +152,8 @@ public class StarMgrServer {
             com.staros.util.Config.WORKER_HEARTBEAT_INTERVAL_SEC = Config.heartbeat_timeout_second;
             com.staros.util.Config.WORKER_HEARTBEAT_RETRY_COUNT = Config.heartbeat_retry_times;
             com.staros.util.Config.GRPC_RPC_TIME_OUT_SEC = Config.starmgr_grpc_timeout_seconds;
+            com.staros.util.Config.ENABLE_BALANCE_SHARD_NUM_BETWEEN_WORKERS = Config.lake_enable_balance_tablets_between_workers;
+            com.staros.util.Config.BALANCE_WORKER_SHARDS_THRESHOLD_IN_PERCENT = Config.lake_balance_tablets_threshold;
         });
         // set the following config, in order to provide a customized worker group definition
         // com.staros.util.Config.RESOURCE_MANAGER_WORKER_GROUP_SPEC_RESOURCE_FILE = "";
@@ -172,17 +184,27 @@ public class StarMgrServer {
 
     private void becomeLeader() {
         getStarMgr().becomeLeader();
+    }
 
+    public void startCheckpointController() {
         // start checkpoint thread after everything is ready
-        checkpointer = new Checkpoint("star mgr LeaderCheckpointer", getJournalSystem().getJournal(), IMAGE_SUBDIR,
-                false /* belongToGlobalStateMgr */);
-        checkpointThreadId = checkpointer.getId();
-        checkpointer.start();
-        LOG.info("star mgr checkpointer thread started. thread id is {}.", checkpointThreadId);
+        checkpointController = new CheckpointController(
+                "star_os_checkpoint_controller", getJournalSystem().getJournal(), IMAGE_SUBDIR);
+        checkpointController.start();
     }
 
     private void becomeFollower() {
         getStarMgr().becomeFollower();
+    }
+
+    public void startCheckpointWorker() {
+        if (!checkpointWorkerStarted) {
+            checkpointWorker = new StarMgrCheckpointWorker(getJournalSystem().getJournal());
+            checkpointThreadId = checkpointWorker.getId();
+            checkpointWorker.start();
+            checkpointWorkerStarted = true;
+            LOG.info("star mgr checkpoint worker thread started. thread id is {}.", checkpointThreadId);
+        }
     }
 
     private void loadImage(String imageDir) throws IOException {
@@ -203,16 +225,15 @@ public class StarMgrServer {
         }
     }
 
-    public boolean replayAndGenerateImage(String imageDir, long checkPointVersion) throws IOException {
+    public void replayAndGenerateImage(String imageDir, long checkPointVersion) throws IOException {
         // 1. load base image
         loadImage(imageDir);
 
         // 2. replay incremental journal
         getJournalSystem().replayTo(checkPointVersion);
         if (getJournalSystem().getReplayId() != checkPointVersion) {
-            LOG.error("star mgr checkpoint version should be {}, actual replayed journal id is {}",
-                    checkPointVersion, getJournalSystem().getReplayId());
-            return false;
+            throw new IOException(String.format("star mgr checkpoint version should be %d, actual replayed journal id is %d",
+                    checkPointVersion, getJournalSystem().getReplayId()));
         }
 
         // 3. write new image
@@ -224,8 +245,10 @@ public class StarMgrServer {
             if (!ckpt.getParentFile().exists()) {
                 LOG.info("create image dir for star mgr, {}.", ckpt.getParentFile().getAbsolutePath());
                 if (!ckpt.getParentFile().mkdir()) {
-                    LOG.warn("fail to create image dir {} for star mgr." + ckpt.getAbsolutePath());
-                    throw new IOException();
+                    String errorMessage = String.format("fail to create image dir %s for star mgr.",
+                            ckpt.getAbsolutePath());
+                    LOG.warn(errorMessage);
+                    throw new IOException(errorMessage);
                 }
             }
             if (!ckpt.createNewFile()) {
@@ -238,13 +261,12 @@ public class StarMgrServer {
         // Move image.ckpt to image.dataVersion
         LOG.info("move star mgr " + ckpt.getAbsolutePath() + " to " + imageFile.getAbsolutePath());
         if (!ckpt.renameTo(imageFile)) {
-            if (ckpt.delete()) {
+            if (!ckpt.delete()) {
                 LOG.warn("rename failed, fail to delete middle star mgr image " + ckpt.getAbsolutePath() + ".");
             }
-            throw new IOException();
+            throw new IOException(String.format("failed to remove file %s to %s",
+                    ckpt.getAbsolutePath(), imageFile.getAbsolutePath()));
         }
-
-        return true;
     }
 
     public void visitMetrics(MetricVisitor visitor) {
@@ -260,5 +282,17 @@ public class StarMgrServer {
 
     public long getReplayId() {
         return getJournalSystem().getReplayId();
+    }
+
+    public CheckpointController getCheckpointController() {
+        return checkpointController;
+    }
+
+    public CheckpointWorker getCheckpointWorker() {
+        return checkpointWorker;
+    }
+
+    public void triggerNewImage() {
+        journalSystem.getJournalWriter().setForceRollJournal();
     }
 }

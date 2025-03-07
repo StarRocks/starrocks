@@ -63,7 +63,6 @@ static std::string k_default_storage_root_path = "";
 
 static void set_up(const std::string& sub_path) {
     config::mem_limit = "10g";
-    CHECK(GlobalEnv::GetInstance()->init().ok());
     k_default_storage_root_path = config::storage_root_path;
     config::storage_root_path = std::filesystem::current_path().string() + "/" + sub_path;
     fs::remove_all(config::storage_root_path);

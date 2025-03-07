@@ -387,7 +387,7 @@ public class SimpleExpressionAnalyzer {
             Type type1 = node.getChild(0).getType();
             Type type2 = node.getChild(1).getType();
 
-            Type compatibleType = TypeManager.getCompatibleTypeForBinary(node.getOp(), type1, type2);
+            Type compatibleType = TypeManager.getCompatibleTypeForBinary(node.getOp().isRange(), type1, type2);
             // check child type can be cast
             final String ERROR_MSG = "Column type %s does not support binary predicate operation.";
             if (!Type.canCastTo(type1, compatibleType)) {
@@ -660,9 +660,6 @@ public class SimpleExpressionAnalyzer {
             if (node.getChildren().size() < 1) {
                 throw new SemanticException("GROUPING functions required at least one parameters");
             }
-            if (node.getChildren().stream().anyMatch(e -> !(e instanceof SlotRef))) {
-                throw new SemanticException("grouping functions only support column.");
-            }
 
             Type[] childTypes = new Type[1];
             childTypes[0] = Type.BIGINT;
@@ -745,7 +742,7 @@ public class SimpleExpressionAnalyzer {
         }
 
         @Override
-        public Void visitSubquery(Subquery node, Scope context) {
+        public Void visitSubqueryExpr(Subquery node, Scope context) {
             SimpleQueryAnalyzer queryAnalyzer = new SimpleQueryAnalyzer();
             queryAnalyzer.analyze(node.getQueryStatement());
             // Do not know the subquery type, use string as default

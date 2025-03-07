@@ -1,0 +1,44 @@
+-- name: test_broker_load_parquet_column_not_found
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE t1 (k1 int, k2 int, k3 int) DUPLICATE KEY(k1) DISTRIBUTED BY HASH(k2) BUCKETS 1 PROPERTIES("replication_num" = "3");
+-- result:
+-- !result
+insert into t1 values(1, 2, 3);
+-- result:
+-- !result
+insert into files (
+    "path" = "oss://${oss_bucket}/test_broker_load/test_parquet/${uuid0}/",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+) select k1, k2 from t1;
+-- result:
+-- !result
+LOAD LABEL label0_${uuid0} (
+    DATA INFILE("oss://${oss_bucket}/test_broker_load/test_parquet/${uuid0}/*") INTO TABLE t1 FORMAT AS "parquet" (k1, k2, k3)
+) WITH BROKER (
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}"
+);
+-- result:
+-- !result
+function: wait_load_finish("label0_${uuid0}")
+-- result:
+None
+-- !result
+select error_msg from information_schema.loads where label="label0_${uuid0}";
+-- result:
+[REGEX]type:LOAD_RUN_FAIL; msg:Column: k3 is not found in file:.*
+-- !result
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_broker_load/test_parquet/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+-- result:
+0
+
+-- !result

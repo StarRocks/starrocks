@@ -14,6 +14,8 @@
 
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 
+#include "exec/hash_joiner.h"
+#include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "runtime/current_thread.h"
 
 namespace starrocks::pipeline {
@@ -45,6 +47,7 @@ Status HashJoinProbeOperator::prepare(RuntimeState* state) {
     }
 
     RETURN_IF_ERROR(_join_prober->prepare_prober(state, _unique_metrics.get()));
+    _join_builder->attach_probe_observer(state, observer());
 
     return Status::OK();
 }
@@ -58,7 +61,7 @@ bool HashJoinProbeOperator::need_input() const {
         return true;
     }
 
-    if (_join_prober != _join_builder && is_ready()) {
+    if (is_ready()) {
         // If hasn't referenced hash table, return true to reference hash table in push_chunk.
         return !_join_prober->has_referenced_hash_table();
     }
@@ -80,10 +83,14 @@ Status HashJoinProbeOperator::push_chunk(RuntimeState* state, const ChunkPtr& ch
 }
 
 StatusOr<ChunkPtr> HashJoinProbeOperator::pull_chunk(RuntimeState* state) {
+    RETURN_IF_ERROR(_reference_builder_hash_table_once());
     return _join_prober->pull_chunk(state);
 }
 
 Status HashJoinProbeOperator::set_finishing(RuntimeState* state) {
+    // TODO: notify one will be ok
+    auto notify = _join_builder->defer_notify_build();
+    RETURN_IF_ERROR(_join_prober->probe_input_finished(state));
     _join_prober->enter_post_probe_phase();
     return Status::OK();
 }
@@ -95,12 +102,6 @@ Status HashJoinProbeOperator::set_finished(RuntimeState* state) {
 }
 
 Status HashJoinProbeOperator::_reference_builder_hash_table_once() {
-    // non-broadcast join directly return as _join_prober == _join_builder,
-    // but broadcast should refer to the shared join builder
-    if (_join_prober == _join_builder) {
-        return Status::OK();
-    }
-
     if (!is_ready()) {
         return Status::OK();
     }
@@ -122,6 +123,22 @@ Status HashJoinProbeOperator::reset_state(RuntimeState* state, const vector<Chun
         RETURN_IF_ERROR(_join_prober->reset_probe(state));
     }
     return Status::OK();
+}
+
+void HashJoinProbeOperator::update_exec_stats(RuntimeState* state) {
+    auto ctx = state->query_ctx();
+    if (ctx != nullptr) {
+        ctx->update_pull_rows_stats(_plan_node_id, _pull_row_num_counter->value());
+        if (_conjuncts_input_counter != nullptr && _conjuncts_output_counter != nullptr) {
+            ctx->update_pred_filter_stats(_plan_node_id,
+                                          _conjuncts_input_counter->value() - _conjuncts_output_counter->value());
+        }
+        if (_bloom_filter_eval_context.join_runtime_filter_input_counter != nullptr) {
+            int64_t input_rows = _bloom_filter_eval_context.join_runtime_filter_input_counter->value();
+            int64_t output_rows = _bloom_filter_eval_context.join_runtime_filter_output_counter->value();
+            ctx->update_rf_filter_stats(_plan_node_id, input_rows - output_rows);
+        }
+    }
 }
 
 HashJoinProbeOperatorFactory::HashJoinProbeOperatorFactory(int32_t id, int32_t plan_node_id,

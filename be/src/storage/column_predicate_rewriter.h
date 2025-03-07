@@ -22,6 +22,7 @@
 #include "storage/column_predicate.h"
 #include "storage/conjunctive_predicates.h"
 #include "storage/olap_common.h"
+#include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/rowset/column_decoder.h"
 #include "storage/rowset/column_reader.h"
 
@@ -41,18 +42,19 @@ public:
     using ColumnIterators = std::vector<std::unique_ptr<ColumnIterator>>;
     using ColumnPredicateMap = std::unordered_map<ColumnId, PredicateList>;
 
-    ColumnPredicateRewriter(const ColumnIterators& column_iterators, ColumnPredicateMap& pred_map, const Schema& schema,
+    ColumnPredicateRewriter(const ColumnIterators& column_iterators, const Schema& schema,
                             std::vector<uint8_t>& need_rewrite, int column_size, SparseRange<>& scan_range)
             : _column_iterators(column_iterators),
-              _pred_map(pred_map),
               _schema(schema),
               _need_rewrite(need_rewrite),
               _column_size(column_size),
               _scan_range(scan_range) {}
 
-    Status rewrite_predicate(ObjectPool* pool);
+    Status rewrite_predicate(ObjectPool* pool, PredicateTree& pred_tree);
 
 private:
+    friend struct RewritePredicateTreeVisitor;
+
     // TODO: use pair<slice,int>
     using SortedDicts = std::vector<std::pair<std::string, int>>;
     using DictAndCodes = std::pair<ColumnPtr, ColumnPtr>;
@@ -75,7 +77,6 @@ private:
                                   bool field_nullable);
 
     const ColumnIterators& _column_iterators;
-    ColumnPredicateMap& _pred_map;
     const Schema& _schema;
     std::vector<uint8_t>& _need_rewrite;
     const int _column_size;
@@ -99,7 +100,11 @@ public:
 
     Status rewrite_predicate(ObjectPool* pool, ConjunctivePredicates& predicates);
 
+    Status rewrite_predicate(ObjectPool* pool, PredicateTree& pred_tree);
+
 private:
+    friend struct GlobalDictPredicateTreeVisitor;
+
     /// Rewrites a single predicate.
     /// Returns the rewritten predicate or an error status.
     /// If the pred needn't be rewritten, return nullptr.
@@ -123,11 +128,15 @@ public:
     using ColumnPredicates = std::vector<const ColumnPredicate*>;
     using ColumnPredicateMap = std::unordered_map<ColumnId, ColumnPredicates>;
 
-    static Status rewrite_predicate_map(ObjectPool* pool, const ColumnPredicateMap& src_pred_map,
-                                        ColumnPredicateMap* dst_pred_map);
+    static Status rewrite_predicate_tree(ObjectPool* pool, const PredicateTree& src_pred_tree,
+                                         PredicateTree& dst_pred_tree);
 
 private:
-    static Status _rewrite_predicate(ObjectPool* pool, const ColumnPredicate* src_pred, ColumnPredicates& dst_preds);
+    friend struct ZonemapPredicatesRewriterVisitor;
+
+    template <CompoundNodeType ParentType>
+    static Status _rewrite_predicate(ObjectPool* pool, const ColumnPredicate* src_pred,
+                                     PredicateCompoundNode<ParentType>& dst_node);
     static Status _rewrite_column_expr_predicate(ObjectPool* pool, const ColumnPredicate* src_pred,
                                                  std::vector<const ColumnExprPredicate*>& dst_preds);
 };

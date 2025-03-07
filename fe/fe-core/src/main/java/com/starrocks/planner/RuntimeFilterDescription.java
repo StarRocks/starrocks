@@ -75,6 +75,8 @@ public class RuntimeFilterDescription {
 
     private boolean onlyLocal;
 
+    private long topn;
+
     // ExecGroupInfo. used for check build colocate runtime filter
     private boolean isBuildFromColocateGroup = false;
     private int execGroupId = -1;
@@ -149,10 +151,19 @@ public class RuntimeFilterDescription {
         this.sortInfo = sortInfo;
     }
 
+    public void setTopN(long value) {
+        this.topn = value;
+    }
+
+    public long getTopN() {
+        return this.topn;
+    }
+
     public boolean canProbeUse(PlanNode node, RuntimeFilterPushDownContext rfPushCtx) {
         if (!canAcceptFilter(node, rfPushCtx)) {
             return false;
         }
+
         if (RuntimeFilterType.TOPN_FILTER.equals(runtimeFilterType()) && node instanceof OlapScanNode) {
             ((OlapScanNode) node).setOrderHint(isAscFilter());
         }
@@ -196,7 +207,8 @@ public class RuntimeFilterDescription {
                 return false;
             }
         }
-        if (isBuildFromColocateGroup) {
+        // colocate runtime filter couldn't apply to other exec groups
+        if (isBuildFromColocateGroup && joinMode.equals(COLOCATE)) {
             int probeExecGroupId = rfPushCtx.getExecGroup(node.getId().asInt()).getGroupId().asInt();
             if (execGroupId != probeExecGroupId) {
                 return false;
@@ -347,6 +359,11 @@ public class RuntimeFilterDescription {
     public void setExecGroupInfo(boolean buildFromColocateGroup, int buildExecGroupId) {
         this.isBuildFromColocateGroup = buildFromColocateGroup;
         this.execGroupId = buildExecGroupId;
+    }
+
+    public void clearExecGroupInfo() {
+        this.isBuildFromColocateGroup = false;
+        this.execGroupId = -1;
     }
 
     public boolean canPushAcrossExchangeNode() {

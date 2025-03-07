@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # json_object
 
-## 功能
+
 
 接收键值集合，并返回一个包含这些键值对的 JSON 类型的对象（以下简称JSON对象），并按照键的字典序排列。
 

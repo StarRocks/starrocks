@@ -1,10 +1,11 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+keywords: ['fuzai', 'ziyuan'] 
 ---
 
 # 中间结果落盘
 
-本文介绍如何将大算子的中间计算结果落盘 (Spill to disk)。
+本文介绍如何将大算子的中间计算结果落盘 (Spill to disk) 至本地磁盘或对象存储。
 
 ## 概述
 
@@ -19,12 +20,13 @@ displayed_sidebar: "Chinese"
 - 聚合算子
 - 排序算子
 - Hash join（LEFT JOIN、RIGHT JOIN、FULL JOIN、OUTER JOIN、SEMI JOIN 以及 INNER JOIN）算子
+- CTE 算子（自 v3.3.4 起支持）
 
 ## 开启中间结果落盘
 
 根据以下步骤开启中间结果落盘：
 
-1. 在 BE 配置文件 **be.conf** 中指定落盘路径 `spill_local_storage_dir`，并重启集群使修改生效。
+1. 在 BE 配置文件 **be.conf** 或 CN 配置文件 **cn.conf** 中指定落盘路径 `spill_local_storage_dir`，并重启集群使修改生效。
 
    ```Properties
    spill_local_storage_dir=/<dir_1>[;/<dir_2>]
@@ -56,7 +58,30 @@ displayed_sidebar: "Chinese"
    | enable_spill | false      | 是否启用中间结果落盘。如果将其设置为 `true`，StarRocks 会将中间结果落盘，以减少在查询中处理聚合、排序或连接算子时的内存使用量。 |
    | spill_mode   | auto       | 中间结果落盘的执行方式。有效值：`auto`：达到内存使用阈值时，会自动触发落盘。`force`：无论内存使用情况如何，StarRocks 都会强制落盘所有相关算子的中间结果。此变量仅在变量 `enable_spill` 设置为 `true` 时生效。 |
 
+## [Preview] 将中间结果落盘至对象存储
+
+自 v3.3.0 起，StarRocks 支持将中间结果落盘至对象存储。
+
+:::tip
+在启用将对象存储落盘功能之前，您必须创建一个存储卷来指定您想要使用的对象存储。有关创建存储卷的详细说明，请参阅 [CREATE STORAGE VOLUME](../../../sql-reference/sql-statements/cluster-management/storage_volume/CREATE_STORAGE_VOLUME.md)。
+:::
+
+在上一步中开启落盘之后，您可以进一步设置以下系统变量，以允许将中间结果落盘至对象存储：
+
+```SQL
+SET enable_spill_to_remote_storage = true;
+
+-- 将 <storage_volume_name> 替换为您想要使用的存储卷的名称。
+SET spill_storage_volume = '<storage_volume_name>';
+```
+
+启用将中间结果落盘至对象存储后，触发落盘的查询的中间结果将首先存储在 BE 或 CN 节点的本地磁盘上，如果本地磁盘的容量限制已达到上限，中间结果将会存储至对象存储。
+
+请注意，如果您在 `spill_storage_volume` 中指定的存储卷不存在，则不会启用将对象存储落盘。
+
 ## 使用限制
 
 - 中间结果落盘无法解决所有内存不足问题。例如，StarRocks 无法释放用于表达式计算的内存。
 - 通常，涉及中间结果落盘的查询可能表明其查询时间有数量级的增长。建议您通过设置 Session 变量 `query_timeout` 适当延长这些查询的超时时间。
+- 相较于落盘至本地磁盘，将中间结果落盘至对象存储存的性能有所下降。
+- 每个 BE 或 CN 节点的 `spill_local_storage_dir` 由该节点上运行的所有查询共享。目前，StarRocks 不支持为单个查询单独设置本地磁盘落盘的数据量上限。因此，多个触发落盘的并发查询可能会相互影响。

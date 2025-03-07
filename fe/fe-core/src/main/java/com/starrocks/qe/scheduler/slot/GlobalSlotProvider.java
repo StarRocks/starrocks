@@ -14,13 +14,13 @@
 
 package com.starrocks.qe.scheduler.slot;
 
-import com.starrocks.common.Config;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.qe.scheduler.RecoverableException;
-import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.thrift.TReleaseSlotRequest;
@@ -89,7 +89,7 @@ public class GlobalSlotProvider implements SlotProvider {
             slotRequest.onFinished(pipelineDop);
         } else {
             LOG.warn("[Slot] finishSlotRequirement receives a failed response [slot={}] [status={}]", slotRequest, status);
-            slotRequest.onFailed(new UserException(status.getErrorMsg()));
+            slotRequest.onFailed(new StarRocksException(status.getErrorMsg()));
         }
 
         return new Status();
@@ -136,9 +136,9 @@ public class GlobalSlotProvider implements SlotProvider {
         TRequireSlotRequest request = new TRequireSlotRequest();
         request.setSlot(slotRequest.getSlot().toThrift());
 
-        FrontendServiceProxy.call(slotRequest.getLeaderEndpoint(),
-                Config.thrift_rpc_timeout_ms,
-                Config.thrift_rpc_retry_times,
+        ThriftRPCRequestExecutor.call(
+                ThriftConnectionPool.frontendPool,
+                slotRequest.getLeaderEndpoint(),
                 client -> {
                     try {
                         return client.requireSlotAsync(request);
@@ -165,10 +165,9 @@ public class GlobalSlotProvider implements SlotProvider {
         slotRequest.setSlot_id(slot.getSlotId());
 
         try {
-            TReleaseSlotResponse res = FrontendServiceProxy.call(
+            TReleaseSlotResponse res = ThriftRPCRequestExecutor.call(
+                    ThriftConnectionPool.frontendPool,
                     leaderEndpoint,
-                    Config.thrift_rpc_timeout_ms,
-                    Config.thrift_rpc_retry_times,
                     client -> client.releaseSlot(slotRequest));
             if (res.getStatus().getStatus_code() != TStatusCode.OK) {
                 String errMsg = "";

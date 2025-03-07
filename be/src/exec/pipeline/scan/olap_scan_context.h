@@ -21,8 +21,11 @@
 #include "column/column_access_path.h"
 #include "exec/olap_scan_prepare.h"
 #include "exec/pipeline/context_with_dependency.h"
+#include "exec/pipeline/operator.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "runtime/global_dict/parser.h"
+#include "storage/rowset/rowset.h"
 #include "util/phmap/phmap_fwd_decl.h"
 
 namespace starrocks {
@@ -100,7 +103,7 @@ public:
                            RuntimeFilterProbeCollector* runtime_bloom_filters, int32_t driver_sequence);
 
     OlapScanNode* scan_node() const { return _scan_node; }
-    OlapScanConjunctsManager& conjuncts_manager() { return _conjuncts_manager; }
+    ScanConjunctsManager& conjuncts_manager() { return *_conjuncts_manager; }
     const std::vector<ExprContext*>& not_push_down_conjuncts() const { return _not_push_down_conjuncts; }
     const std::vector<std::unique_ptr<OlapScanRange>>& key_ranges() const { return _key_ranges; }
     BalancedChunkBuffer& get_chunk_buffer() { return _chunk_buffer; }
@@ -115,18 +118,31 @@ public:
 
     Status capture_tablet_rowsets(const std::vector<TInternalScanRange*>& olap_scan_ranges);
     const std::vector<TabletSharedPtr>& tablets() const { return _tablets; }
-    const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets() const { return _tablet_rowsets; };
+    const std::vector<std::vector<RowsetSharedPtr>>& tablet_rowsets() const {
+        return _rowset_release_guard.tablet_rowsets();
+    };
 
     const std::vector<ColumnAccessPathPtr>* column_access_paths() const;
 
     int64_t get_scan_table_id() const { return _scan_table_id; }
+
+    void attach_observer(RuntimeState* state, PipelineObserver* observer) { _observable.add_observer(state, observer); }
+    void notify_observers() { _observable.notify_source_observers(); }
+    size_t only_one_observer() const { return _observable.num_observers() == 1; }
+    bool active_inputs_empty_event() {
+        if (!_active_inputs_empty.load(std::memory_order_acquire)) {
+            return false;
+        }
+        bool val = true;
+        return _active_inputs_empty.compare_exchange_strong(val, false);
+    }
 
 private:
     OlapScanNode* _scan_node;
     int64_t _scan_table_id;
 
     std::vector<ExprContext*> _conjunct_ctxs;
-    OlapScanConjunctsManager _conjuncts_manager;
+    std::unique_ptr<ScanConjunctsManager> _conjuncts_manager = nullptr;
     // The conjuncts couldn't push down to storage engine
     std::vector<ExprContext*> _not_push_down_conjuncts;
     std::vector<std::unique_ptr<OlapScanRange>> _key_ranges;
@@ -139,7 +155,9 @@ private:
             typename std::allocator<ActiveInputKey>, NUM_LOCK_SHARD_LOG, std::mutex, true>;
     BalancedChunkBuffer& _chunk_buffer; // Shared Chunk buffer for all scan operators, owned by OlapScanContextFactory.
     ActiveInputSet _active_inputs;      // Maintain the active chunksource
-    bool _shared_scan;                  // Enable shared_scan
+    std::atomic_int _num_active_inputs{};
+    std::atomic_bool _active_inputs_empty{};
+    bool _shared_scan; // Enable shared_scan
 
     std::atomic<bool> _is_prepare_finished{false};
 
@@ -148,8 +166,11 @@ private:
     // of the left table are compacted at building the right hash table. Therefore, reference
     // the row sets into _tablet_rowsets in the preparation phase to avoid the row sets being deleted.
     std::vector<TabletSharedPtr> _tablets;
-    std::vector<std::vector<RowsetSharedPtr>> _tablet_rowsets;
+    MultiRowsetReleaseGuard _rowset_release_guard;
     ConcurrentJitRewriter& _jit_rewriter;
+
+    // the scan operator observe when task finished
+    Observable _observable;
 };
 
 // OlapScanContextFactory creates different contexts for each scan operator, if _shared_scan is false.

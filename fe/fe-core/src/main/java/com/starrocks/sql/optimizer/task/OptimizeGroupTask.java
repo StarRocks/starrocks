@@ -43,7 +43,7 @@ public class OptimizeGroupTask extends OptimizerTask {
     public void execute() {
         // 1 Group Cost LB > Context Cost UB
         // 2 Group has optimized given the context
-        if (group.getCostLowerBound() >= context.getUpperBoundCost() ||
+        if (group.getCostLowerBound(context.getRequiredProperty()) >= context.getUpperBoundCost() ||
                 group.hasBestExpression(context.getRequiredProperty())) {
             return;
         }

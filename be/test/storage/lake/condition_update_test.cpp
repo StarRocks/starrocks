@@ -97,7 +97,7 @@ public:
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
         c2->append_numbers(v2.data(), v2.size() * sizeof(int));
 
-        return Chunk({c0, c1, c2}, _schema);
+        return Chunk({std::move(c0), std::move(c1), std::move(c2)}, _schema);
     }
 
     int64_t check(int64_t version, std::function<bool(int c0, int c1, int c2)> check_fn) {
@@ -159,7 +159,7 @@ TEST_P(ConditionUpdateTest, test_condition_update) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -193,7 +193,7 @@ TEST_P(ConditionUpdateTest, test_condition_update) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunks[i], indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -231,7 +231,7 @@ TEST_P(ConditionUpdateTest, test_condition_update_multi_segment) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(chunk0, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -259,7 +259,7 @@ TEST_P(ConditionUpdateTest, test_condition_update_multi_segment) {
                                                    .build());
         ASSERT_OK(delta_writer->open());
         ASSERT_OK(delta_writer->write(i == 0 ? chunk1 : chunk2, indexes.data(), indexes.size()));
-        ASSERT_OK(delta_writer->finish());
+        ASSERT_OK(delta_writer->finish_with_txnlog());
         delta_writer->close();
         // Publish version
         ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());
@@ -301,7 +301,7 @@ TEST_P(ConditionUpdateTest, test_condition_update_in_memtable) {
     // finish condition merge in one memtable
     ASSERT_OK(delta_writer->write(chunks[0], indexes.data(), indexes.size()));
     ASSERT_OK(delta_writer->write(chunks[1], indexes.data(), indexes.size()));
-    ASSERT_OK(delta_writer->finish());
+    ASSERT_OK(delta_writer->finish_with_txnlog());
     delta_writer->close();
     // Publish version
     ASSERT_OK(publish_single_version(tablet_id, version + 1, txn_id).status());

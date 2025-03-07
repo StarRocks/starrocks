@@ -47,10 +47,10 @@ public class MaterializedViewRuleTest extends PlanTestBase {
     public static void beforeClass() throws Exception {
         PlanTestBase.beforeClass();
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW lo_count_mv as " +
-                "select LO_ORDERDATE,count(LO_LINENUMBER) from lineorder_flat_for_mv group by LO_ORDERDATE;");
+                    "select LO_ORDERDATE,count(LO_LINENUMBER) from lineorder_flat_for_mv group by LO_ORDERDATE;");
         starRocksAssert.withMaterializedView("CREATE MATERIALIZED VIEW lo_count_key_mv as " +
-                "select LO_ORDERDATE, LO_ORDERKEY, count(LO_LINENUMBER) from lineorder_flat_for_mv" +
-                " group by LO_ORDERDATE, LO_ORDERKEY;");
+                    "select LO_ORDERDATE, LO_ORDERKEY, count(LO_LINENUMBER) from lineorder_flat_for_mv" +
+                    " group by LO_ORDERDATE, LO_ORDERKEY;");
     }
 
     @Test
@@ -63,8 +63,9 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         OlapScanNode olapScanNode = (OlapScanNode) plan.getScanNodes().get(0);
         Long selectedIndexid = olapScanNode.getSelectedIndexId();
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
-        Database database = globalStateMgr.getDb("test");
-        Table table = database.getTable("lineorder_flat_for_mv");
+        Database database = globalStateMgr.getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(database.getFullName(), "lineorder_flat_for_mv");
         Assert.assertTrue(table instanceof OlapTable);
         OlapTable baseTable = (OlapTable) table;
         Assert.assertEquals(baseTable.getIndexIdByName("lo_count_mv"), selectedIndexid);
@@ -73,13 +74,14 @@ public class MaterializedViewRuleTest extends PlanTestBase {
     @Test
     public void testKeyColumnsMatch() throws Exception {
         GlobalStateMgr globalStateMgr = starRocksAssert.getCtx().getGlobalStateMgr();
-        Database database = globalStateMgr.getDb("test");
-        Table table = database.getTable("lineorder_flat_for_mv");
+        Database database = globalStateMgr.getLocalMetastore().getDb("test");
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                    .getTable(database.getFullName(), "lineorder_flat_for_mv");
         OlapTable baseTable = (OlapTable) table;
 
         String sql = "select LO_ORDERDATE, sum(case when LO_ORDERKEY=0 then 0 else 1 end) as test, " +
-                "sum(case when LO_ORDERKEY=1 then 1 else 0 end) as nontest " +
-                " from lineorder_flat_for_mv group by LO_ORDERDATE;";
+                    "sum(case when LO_ORDERKEY=1 then 1 else 0 end) as nontest " +
+                    " from lineorder_flat_for_mv group by LO_ORDERDATE;";
         ExecPlan plan = getExecPlan(sql);
         OlapScanNode olapScanNode = (OlapScanNode) plan.getScanNodes().get(0);
         Long selectedIndexid = olapScanNode.getSelectedIndexId();
@@ -91,12 +93,12 @@ public class MaterializedViewRuleTest extends PlanTestBase {
         ColumnRefFactory tmpRefFactory = new ColumnRefFactory();
         ColumnRefOperator queryColumnRef = tmpRefFactory.create("count", Type.INT, false);
         ColumnRefOperator mvColumnRef = tmpRefFactory.create("count", Type.INT, false);
-        Column mvColumn = new Column();
+        Column mvColumn = new Column("k1", Type.INT);
         List<ScalarOperator> arguments = Lists.newArrayList();
         arguments.add(queryColumnRef);
         CallOperator aggCall = new CallOperator(FunctionSet.COUNT, Type.BIGINT, arguments);
         MaterializedViewRule.RewriteContext rewriteContext =
-                new MaterializedViewRule.RewriteContext(aggCall, queryColumnRef, mvColumnRef, mvColumn);
+                    new MaterializedViewRule.RewriteContext(aggCall, queryColumnRef, mvColumnRef, mvColumn);
         ColumnRefOperator dsColumnRef = tmpRefFactory.create("ds", Type.INT, false);
         List<ColumnRefOperator> groupKeys = Lists.newArrayList();
         groupKeys.add(dsColumnRef);

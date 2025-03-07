@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.sql.optimizer.rule.tree.pdagg;
 
 import com.google.common.base.Preconditions;
@@ -27,6 +26,7 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
+import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -46,6 +46,7 @@ import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import org.apache.commons.collections4.CollectionUtils;
+import org.apache.commons.lang3.mutable.MutableInt;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -54,6 +55,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient.SMALL_BROADCAST_JOIN_MAX_NDV_LIMIT;
 
 /*
  * Collect all can be push down aggregate context, to get which aggregation can be
@@ -83,13 +86,28 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
     private final ColumnRefFactory factory;
     private final SessionVariable sessionVariable;
 
+    // Used to assign a unique index to each path from root to leaf node.
+    // For example, in the following tree structure, the index of A#1, Join#3, Join#5 is 0,
+    // the index of B#2 is 1, and the index of C#4 is 2.
+    //      Join#5
+    //    Join#3   C#4
+    // A#1    B#2
+    private final MutableInt nextRootToLeafPathIndex;
+    // OrigAgg -> Map[PathIndex -> List[AggregatePushDownContext]].
+    private final Map<LogicalAggregationOperator, Map<Integer, List<AggregatePushDownContext>>> rewriteContextCandidates =
+            Maps.newHashMap();
     private final Map<LogicalAggregationOperator, List<AggregatePushDownContext>> allRewriteContext = Maps.newHashMap();
 
     public PushDownAggregateCollector(TaskContext taskContext) {
+        this(taskContext, new MutableInt());
+    }
+
+    private PushDownAggregateCollector(TaskContext taskContext, MutableInt nextRootToLeafPathIndex) {
         this.taskContext = taskContext;
-        optimizerContext = taskContext.getOptimizerContext();
-        factory = taskContext.getOptimizerContext().getColumnRefFactory();
-        sessionVariable = taskContext.getOptimizerContext().getSessionVariable();
+        this.optimizerContext = taskContext.getOptimizerContext();
+        this.factory = taskContext.getOptimizerContext().getColumnRefFactory();
+        this.sessionVariable = taskContext.getOptimizerContext().getSessionVariable();
+        this.nextRootToLeafPathIndex = nextRootToLeafPathIndex;
     }
 
     Map<LogicalAggregationOperator, List<AggregatePushDownContext>> getAllRewriteContext() {
@@ -97,7 +115,12 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
     }
 
     public void collect(OptExpression root) {
-        process(root, new AggregatePushDownContext());
+        collect(root, new AggregatePushDownContext(nextRootToLeafPathIndex.getAndIncrement()));
+    }
+
+    private void collect(OptExpression root, AggregatePushDownContext context) {
+        process(root, context);
+        selectPushDownTarget();
     }
 
     @Override
@@ -234,7 +257,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
             return visit(optExpression, context);
         }
 
-        context = new AggregatePushDownContext();
+        context = new AggregatePushDownContext(context.rootToLeafPathIndex);
         context.setAggregator(aggregate);
         return processChild(optExpression, context);
     }
@@ -250,9 +273,15 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
             return visit(optExpression, context);
         }
 
+        boolean isSmallBroadcastJoin = isSmallBroadcastJoin(optExpression);
+        if (isSmallBroadcastJoin && !context.pushPaths.isEmpty() && isAllChildrenSP(optExpression)) {
+            context.targetPosition = optExpression;
+            addCandidateContext(context.origAggregator, context);
+        }
+
         // split aggregate to left/right child
-        AggregatePushDownContext leftContext = splitJoinAggregate(optExpression, context, 0);
-        AggregatePushDownContext rightContext = splitJoinAggregate(optExpression, context, 1);
+        AggregatePushDownContext leftContext = splitJoinAggregate(optExpression, context, 0, isSmallBroadcastJoin);
+        AggregatePushDownContext rightContext = splitJoinAggregate(optExpression, context, 1, false);
         process(optExpression.inputAt(0), leftContext);
         process(optExpression.inputAt(1), rightContext);
         return null;
@@ -278,7 +307,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
      *   1        1               1        1
      */
     private AggregatePushDownContext splitJoinAggregate(OptExpression optExpression, AggregatePushDownContext context,
-                                                        int child) {
+                                                        int child, boolean immediateChildOfSmallBroadcastJoin) {
         LogicalJoinOperator join = (LogicalJoinOperator) optExpression.getOp();
         ColumnRefSet childOutput = optExpression.getChildOutputColumns(child);
 
@@ -289,7 +318,8 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
             return AggregatePushDownContext.EMPTY;
         }
 
-        AggregatePushDownContext childContext = new AggregatePushDownContext();
+        int rootToLeafPathIndex = child == 0 ? context.rootToLeafPathIndex : nextRootToLeafPathIndex.getAndIncrement();
+        AggregatePushDownContext childContext = new AggregatePushDownContext(rootToLeafPathIndex);
         childContext.aggregations.putAll(context.aggregations);
 
         // check group by
@@ -319,6 +349,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
                     .forEach(v -> childContext.groupBys.put(v, v));
         }
 
+        childContext.immediateChildOfSmallBroadcastJoin = immediateChildOfSmallBroadcastJoin;
         childContext.origAggregator = context.origAggregator;
         childContext.pushPaths.addAll(context.pushPaths);
         childContext.pushPaths.add(child);
@@ -342,7 +373,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
             }
 
             ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(rewriteMap);
-            AggregatePushDownContext childContext = new AggregatePushDownContext();
+            AggregatePushDownContext childContext = new AggregatePushDownContext(nextRootToLeafPathIndex.getAndIncrement());
             childContext.origAggregator = context.origAggregator;
             childContext.aggregations.putAll(context.aggregations);
             childContext.aggregations.replaceAll((k, v) -> (CallOperator) rewriter.rewrite(v));
@@ -352,9 +383,9 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
             childContext.pushPaths.addAll(context.pushPaths);
             childContext.pushPaths.add(i);
 
-            PushDownAggregateCollector collector = new PushDownAggregateCollector(this.taskContext);
+            PushDownAggregateCollector collector = new PushDownAggregateCollector(this.taskContext, nextRootToLeafPathIndex);
             collectors.add(collector);
-            collector.process(optExpression.inputAt(i), childContext);
+            collector.collect(optExpression.inputAt(i), childContext);
         }
 
         // collect push down aggregate context
@@ -403,8 +434,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
             }
         }
 
-        List<AggregatePushDownContext> list =
-                allRewriteContext.getOrDefault(context.origAggregator, Lists.newArrayList());
+        List<AggregatePushDownContext> list = allRewriteContext.getOrDefault(context.origAggregator, Lists.newArrayList());
         allChildRewriteContext.forEach(list::addAll);
         allRewriteContext.put(context.origAggregator, list);
         return null;
@@ -419,57 +449,23 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
 
     @Override
     public Void visitLogicalTableScan(OptExpression optExpression, AggregatePushDownContext context) {
-        // least cross join/union/cte
-        if (context.isEmpty() || context.pushPaths.isEmpty()) {
-            return null;
+        if (!isInvalid(optExpression, context)) {
+            context.targetPosition = optExpression;
+            addCandidateContext(context.origAggregator, context);
         }
-
-        if (context.aggregations.isEmpty() && context.groupBys.isEmpty()) {
-            return null;
-        }
-
-        // distinct function, not support function can't push down
-        if (context.aggregations.values().stream()
-                .anyMatch(v -> v.isDistinct() || !WHITE_FNS.contains(v.getFnName()))) {
-            return null;
-        }
-
-        LogicalScanOperator scan = (LogicalScanOperator) optExpression.getOp();
-        ColumnRefSet scanOutput = new ColumnRefSet(scan.getOutputColumns());
-
-        ColumnRefSet allGroupByColumns = new ColumnRefSet();
-        context.groupBys.values().forEach(c -> allGroupByColumns.union(c.getUsedColumns()));
-
-        ColumnRefSet allAggregateColumns = new ColumnRefSet();
-        context.aggregations.values().forEach(c -> allAggregateColumns.union(c.getUsedColumns()));
-
-        Preconditions.checkState(scanOutput.containsAll(allGroupByColumns));
-        Preconditions.checkState(scanOutput.containsAll(allAggregateColumns));
-
-        ExpressionContext expressionContext = new ExpressionContext(optExpression);
-        StatisticsCalculator statisticsCalculator =
-                new StatisticsCalculator(expressionContext, factory, optimizerContext);
-        statisticsCalculator.estimatorStats();
-
-        if (!checkStatistics(context, allGroupByColumns, expressionContext.getStatistics())) {
-            return null;
-        }
-
-        List<AggregatePushDownContext> list =
-                allRewriteContext.getOrDefault(context.origAggregator, Lists.newArrayList());
-        list.add(context);
-        allRewriteContext.put(context.origAggregator, list);
         return null;
     }
 
     private boolean checkStatistics(AggregatePushDownContext context, ColumnRefSet groupBys, Statistics statistics) {
+        final int pushDownMode = sessionVariable.getCboPushDownAggregateMode();
+
         // check force push down flag
         // flag 0: auto. 1: force push down. -1: don't push down. 2: push down medium. 3: push down high
-        if (sessionVariable.getCboPushDownAggregateMode() == PUSH_DOWN_ALL_AGG) {
+        if (pushDownMode == PUSH_DOWN_ALL_AGG) {
             return true;
         }
 
-        if (sessionVariable.getCboPushDownAggregateMode() == DISABLE_PUSH_DOWN_AGG) {
+        if (pushDownMode == DISABLE_PUSH_DOWN_AGG) {
             return false;
         }
 
@@ -479,12 +475,22 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
 
         List<ColumnStatistic>[] cards = new List[] {lower, medium, high};
 
-        groupBys.getStream().map(factory::getColumnRef)
+        Set<ColumnStatistic> columnStatistics = groupBys.getStream()
+                .map(factory::getColumnRef)
                 .map(s -> ExpressionStatisticCalculator.calculate(s, statistics))
-                .forEach(s -> cards[groupByCardinality(s, statistics.getOutputRowCount())].add(s));
+                .collect(Collectors.toSet());
+        columnStatistics.forEach(s -> cards[groupByCardinality(s, statistics.getOutputRowCount())].add(s));
 
         double lowerCartesian = lower.stream().map(ColumnStatistic::getDistinctValuesCount).reduce((a, b) -> a * b)
                 .orElse(Double.MAX_VALUE);
+
+        // target is the immediate child of a small broadcast join
+        // and the ndv of all columns is less than SMALL_BROADCAST_JOIN_MAX_NDV_LIMIT
+        if (pushDownMode == PUSH_DOWN_AGG_AUTO && context.immediateChildOfSmallBroadcastJoin) {
+            if (columnStatistics.stream().anyMatch(x -> x.getDistinctValuesCount() > SMALL_BROADCAST_JOIN_MAX_NDV_LIMIT)) {
+                return false;
+            }
+        }
 
         // pow(row_count/20, a half of lower column size)
         double lowerUpper = Math.max(statistics.getOutputRowCount() / 20, 1);
@@ -501,7 +507,7 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
                 "] mid[" + medium.size() +
                 "] low[" + lower.size() +
                 "] cartesian[" + lowerCartesian +
-                "] upper-cartesian[" + lowerUpper + "], mode[" + sessionVariable.getCboPushDownAggregateMode() + "]");
+                "] upper-cartesian[" + lowerUpper + "], mode[" + pushDownMode + "]");
 
         // 1. white push down rules
         // 1.1 only one lower/medium cardinality columns
@@ -518,11 +524,10 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
             } else if (lower.size() <= 3 && lowerCartesian < lowerUpper) {
                 return true;
             } else {
-                return sessionVariable.getCboPushDownAggregateMode() >= PUSH_DOWN_MEDIUM_CARDINALITY_AGG;
+                return pushDownMode >= PUSH_DOWN_MEDIUM_CARDINALITY_AGG;
             }
         }
 
-        // 2. forbidden rules
         // 2.1 high cardinality >= 2
         // 2.2 medium cardinality > 2
         // 2.3 high cardinality = 1 and medium cardinality > 0
@@ -530,14 +535,21 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
             return false;
         }
 
-        // 3. high cardinality < 2 and lower cardinality < 2
-        if (high.size() == 1 && lower.size() <= 2) {
-            return sessionVariable.getCboPushDownAggregateMode() >= PUSH_DOWN_HIGH_CARDINALITY_AGG;
+        // 3. Extremely low cardinality for lower with at most one medium or high.
+        double lowerCartesianLowerBound =
+                statistics.getOutputRowCount() / StatisticsEstimateCoefficient.LOWER_AGGREGATE_EFFECT_COEFFICIENT;
+        if (high.size() + medium.size() == 1 && lower.size() <= 2 && lowerCartesian <= lowerCartesianLowerBound) {
+            return true;
         }
 
-        // 4. medium cardinality <= 2
+        // 4. high cardinality < 2 and lower cardinality < 2
+        if (high.size() == 1 && lower.size() <= 2) {
+            return pushDownMode >= PUSH_DOWN_HIGH_CARDINALITY_AGG;
+        }
+
+        // 5. medium cardinality <= 2
         if (lower.size() <= 2) {
-            if (sessionVariable.getCboPushDownAggregateMode() >= PUSH_DOWN_MEDIUM_CARDINALITY_AGG) {
+            if (pushDownMode >= PUSH_DOWN_MEDIUM_CARDINALITY_AGG) {
                 return true;
             }
             return statistics.getOutputRowCount() >=
@@ -547,9 +559,9 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
         return false;
     }
 
-    // high(2): cardinality/count > MEDIUM_AGGREGATE
-    // medium(1): cardinality/count <= MEDIUM_AGGREGATE and > LOW_AGGREGATE
-    // lower(0): cardinality/count < LOW_AGGREGATE
+    // high(2): row_count / cardinality < MEDIUM_AGGREGATE_EFFECT_COEFFICIENT
+    // medium(1): row_count / cardinality >= MEDIUM_AGGREGATE_EFFECT_COEFFICIENT and < LOW_AGGREGATE_EFFECT_COEFFICIENT
+    // lower(0): row_count / cardinality >= LOW_AGGREGATE_EFFECT_COEFFICIENT
     private int groupByCardinality(ColumnStatistic statistic, double rowCount) {
         if (statistic.isUnknown()) {
             return 2;
@@ -568,4 +580,104 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
 
         return 2;
     }
+
+    private boolean isSmallBroadcastJoin(OptExpression optExpression) {
+        if (!sessionVariable.isCboPushDownAggregateOnBroadcastJoin()) {
+            return false;
+        }
+
+        Statistics rightStatistics = optExpression.inputAt(1).getStatistics();
+        if (rightStatistics == null) {
+            return false;
+        }
+        double rightRows = rightStatistics.getOutputRowCount();
+        return rightRows <= sessionVariable.getBroadcastRowCountLimit() &&
+                rightRows <= sessionVariable.getCboPushDownAggregateOnBroadcastJoinRowCountLimit();
+    }
+
+    /**
+     * Whether all the children are scan/project/filter.
+     * @return true, if all the children are scan/project/filter.
+     */
+    private static boolean isAllChildrenSP(OptExpression root) {
+        return root.getInputs().stream().allMatch(PushDownAggregateCollector::isAllSP);
+    }
+
+    private static boolean isAllSP(OptExpression root) {
+        if (root.getOp().getOpType() != OperatorType.LOGICAL_PROJECT &&
+                root.getOp().getOpType() != OperatorType.LOGICAL_FILTER &&
+                !(root.getOp() instanceof LogicalScanOperator)) {
+            return false;
+        }
+        return root.getInputs().stream().allMatch(PushDownAggregateCollector::isAllSP);
+    }
+
+    private void addFinalContext(LogicalAggregationOperator origAggregator, AggregatePushDownContext context) {
+        allRewriteContext
+                .computeIfAbsent(origAggregator, k -> Lists.newArrayList())
+                .add(context);
+    }
+
+    private void addCandidateContext(LogicalAggregationOperator origAggregator, AggregatePushDownContext context) {
+        rewriteContextCandidates
+                .computeIfAbsent(origAggregator, k -> Maps.newHashMap())
+                .computeIfAbsent(context.rootToLeafPathIndex, k -> Lists.newArrayList())
+                .add(context);
+    }
+
+    private void selectPushDownTarget() {
+        rewriteContextCandidates.forEach((origAggregator, pathToContexts) -> {
+            // Select a proper context for each root-to-leaf path.
+            pathToContexts.values().forEach(contexts -> {
+                // The order of rewriteContextCandidates.contexts is from top to bottom,
+                // and here we choose the first position that can be pushed down from bottom to top.
+                for (int i = contexts.size() - 1; i >= 0; i--) {
+                    AggregatePushDownContext context = contexts.get(i);
+                    if (canPushDown(context.targetPosition, context)) {
+                        addFinalContext(origAggregator, context);
+                        break;
+                    }
+                }
+            });
+        });
+    }
+
+    private boolean canPushDown(OptExpression optExpression, AggregatePushDownContext context) {
+        // least cross join/union/cte
+        if (context.isEmpty() || context.pushPaths.isEmpty()) {
+            return false;
+        }
+
+        if (context.aggregations.isEmpty() && context.groupBys.isEmpty()) {
+            return false;
+        }
+
+        // distinct function, not support function can't push down
+        if (context.aggregations.values().stream()
+                .anyMatch(v -> v.isDistinct() || !WHITE_FNS.contains(v.getFnName()))) {
+            return false;
+        }
+
+        ColumnRefSet outputColumns = optExpression.getOutputColumns();
+
+        ColumnRefSet allGroupByColumns = new ColumnRefSet();
+        context.groupBys.values().forEach(c -> allGroupByColumns.union(c.getUsedColumns()));
+
+        ColumnRefSet allAggregateColumns = new ColumnRefSet();
+        context.aggregations.values().forEach(c -> allAggregateColumns.union(c.getUsedColumns()));
+
+        Preconditions.checkState(outputColumns.containsAll(allGroupByColumns));
+        Preconditions.checkState(outputColumns.containsAll(allAggregateColumns));
+
+        ExpressionContext expressionContext = new ExpressionContext(optExpression);
+        StatisticsCalculator statisticsCalculator = new StatisticsCalculator(expressionContext, factory, optimizerContext);
+        statisticsCalculator.estimatorStats();
+
+        if (!checkStatistics(context, allGroupByColumns, expressionContext.getStatistics())) {
+            return false;
+        }
+
+        return true;
+    }
+
 }

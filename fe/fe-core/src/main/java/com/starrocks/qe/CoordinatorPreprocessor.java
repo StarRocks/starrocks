@@ -18,8 +18,9 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.ResourceGroup;
 import com.starrocks.catalog.ResourceGroupClassifier;
+import com.starrocks.catalog.ResourceGroupMgr;
 import com.starrocks.common.Config;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.TimeUtils;
 import com.starrocks.lake.qe.scheduler.DefaultSharedDataWorkerProvider;
@@ -36,6 +37,7 @@ import com.starrocks.qe.scheduler.WorkerProvider;
 import com.starrocks.qe.scheduler.assignment.FragmentAssignmentStrategyFactory;
 import com.starrocks.qe.scheduler.dag.ExecutionDAG;
 import com.starrocks.qe.scheduler.dag.ExecutionFragment;
+import com.starrocks.qe.scheduler.dag.FragmentInstance;
 import com.starrocks.qe.scheduler.dag.JobSpec;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
@@ -73,6 +75,7 @@ public class CoordinatorPreprocessor {
     private final ConnectContext connectContext;
 
     private final JobSpec jobSpec;
+    private final boolean enablePhasedSchedule;
     private final ExecutionDAG executionDAG;
 
     private final WorkerProvider.Factory workerProviderFactory;
@@ -80,18 +83,20 @@ public class CoordinatorPreprocessor {
 
     private final FragmentAssignmentStrategyFactory fragmentAssignmentStrategyFactory;
 
-    public CoordinatorPreprocessor(ConnectContext context, JobSpec jobSpec) {
+    public CoordinatorPreprocessor(ConnectContext context, JobSpec jobSpec, boolean enablePhasedSchedule) {
         workerProviderFactory = newWorkerProviderFactory();
         this.coordAddress = new TNetworkAddress(LOCAL_IP, Config.rpc_port);
 
         this.connectContext = Preconditions.checkNotNull(context);
         this.jobSpec = jobSpec;
+        this.enablePhasedSchedule = enablePhasedSchedule;
         this.executionDAG = ExecutionDAG.build(jobSpec);
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         this.workerProvider = workerProviderFactory.captureAvailableWorkers(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
-                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(), jobSpec.getWarehouseId());
+                sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
+                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getWarehouseId());
 
         this.fragmentAssignmentStrategyFactory = new FragmentAssignmentStrategyFactory(connectContext, jobSpec, executionDAG);
 
@@ -104,13 +109,14 @@ public class CoordinatorPreprocessor {
 
         this.connectContext = context;
         this.jobSpec = JobSpec.Factory.mockJobSpec(connectContext, fragments, scanNodes);
+        this.enablePhasedSchedule = false;
         this.executionDAG = ExecutionDAG.build(jobSpec);
 
         SessionVariable sessionVariable = connectContext.getSessionVariable();
         this.workerProvider = workerProviderFactory.captureAvailableWorkers(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
-                jobSpec.getWarehouseId());
+                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getWarehouseId());
 
         Map<PlanFragmentId, PlanFragment> fragmentMap =
                 fragments.stream().collect(Collectors.toMap(PlanFragment::getFragmentId, Function.identity()));
@@ -194,7 +200,7 @@ public class CoordinatorPreprocessor {
         return jobSpec.getResourceGroup();
     }
 
-    public void prepareExec() throws Exception {
+    public void prepareExec() throws StarRocksException {
         resetExec();
         computeFragmentInstances();
         traceInstance();
@@ -208,7 +214,7 @@ public class CoordinatorPreprocessor {
         workerProvider = workerProviderFactory.captureAvailableWorkers(
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo(),
                 sessionVariable.isPreferComputeNode(), sessionVariable.getUseComputeNodes(),
-                jobSpec.getWarehouseId());
+                sessionVariable.getComputationFragmentSchedulingPolicy(), jobSpec.getWarehouseId());
 
         jobSpec.getFragments().forEach(PlanFragment::reset);
     }
@@ -238,7 +244,7 @@ public class CoordinatorPreprocessor {
     }
 
     @VisibleForTesting
-    void computeFragmentInstances() throws UserException {
+    void computeFragmentInstances() throws StarRocksException {
         for (ExecutionFragment execFragment : executionDAG.getFragmentsInPostorder()) {
             fragmentAssignmentStrategyFactory.create(execFragment, workerProvider).assignFragmentToWorker(execFragment);
         }
@@ -250,7 +256,17 @@ public class CoordinatorPreprocessor {
 
         validateExecutionDAG();
 
+        executionDAG.prepareCaptureVersion(enablePhasedSchedule);
         executionDAG.finalizeDAG();
+    }
+
+    public void assignIncrementalScanRangesToFragmentInstances(ExecutionFragment execFragment) throws
+            StarRocksException {
+        execFragment.getScanRangeAssignment().clear();
+        for (FragmentInstance instance : execFragment.getInstances()) {
+            instance.resetAllScanRanges();
+        }
+        fragmentAssignmentStrategyFactory.create(execFragment, workerProvider).assignFragmentToWorker(execFragment);
     }
 
     private void validateExecutionDAG() throws StarRocksPlannerException {
@@ -291,33 +307,31 @@ public class CoordinatorPreprocessor {
         if (connect == null || !connect.getSessionVariable().isEnableResourceGroup()) {
             return null;
         }
-        SessionVariable sessionVariable = connect.getSessionVariable();
+
+        final ResourceGroupMgr resourceGroupMgr = GlobalStateMgr.getCurrentState().getResourceGroupMgr();
+        final SessionVariable sessionVariable = connect.getSessionVariable();
         TWorkGroup resourceGroup = null;
 
         // 1. try to use the resource group specified by the variable
         if (StringUtils.isNotEmpty(sessionVariable.getResourceGroup())) {
             String rgName = sessionVariable.getResourceGroup();
-            resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByName(rgName);
-            if (rgName.equalsIgnoreCase(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME)) {
-                ResourceGroup defaultMVResourceGroup = new ResourceGroup();
-                defaultMVResourceGroup.setId(ResourceGroup.DEFAULT_MV_WG_ID);
-                defaultMVResourceGroup.setName(ResourceGroup.DEFAULT_MV_RESOURCE_GROUP_NAME);
-                defaultMVResourceGroup.setVersion(ResourceGroup.DEFAULT_MV_VERSION);
-                resourceGroup = defaultMVResourceGroup.toThrift();
-            }
+            resourceGroup = resourceGroupMgr.chooseResourceGroupByName(rgName);
         }
 
         // 2. try to use the resource group specified by workgroup_id
         long workgroupId = connect.getSessionVariable().getResourceGroupId();
         if (resourceGroup == null && workgroupId > 0) {
-            resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroupByID(workgroupId);
+            resourceGroup = resourceGroupMgr.chooseResourceGroupByID(workgroupId);
         }
 
         // 3. if the specified resource group not exist try to use the default one
         if (resourceGroup == null) {
             Set<Long> dbIds = connect.getCurrentSqlDbIds();
-            resourceGroup = GlobalStateMgr.getCurrentState().getResourceGroupMgr().chooseResourceGroup(
-                    connect, queryType, dbIds);
+            resourceGroup = resourceGroupMgr.chooseResourceGroup(connect, queryType, dbIds);
+        }
+
+        if (resourceGroup == null) {
+            resourceGroup = resourceGroupMgr.chooseResourceGroupByName(ResourceGroup.DEFAULT_RESOURCE_GROUP_NAME);
         }
 
         if (resourceGroup != null) {

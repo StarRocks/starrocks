@@ -15,6 +15,7 @@
 package com.starrocks.qe.scheduler;
 
 import com.starrocks.analysis.DescriptorTable;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.RuntimeProfile;
 import com.starrocks.datacache.DataCacheSelectMetrics;
@@ -26,7 +27,9 @@ import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStatisticsItem;
 import com.starrocks.qe.RowBatch;
+import com.starrocks.qe.scheduler.slot.DeployState;
 import com.starrocks.qe.scheduler.slot.LogicalSlot;
+import com.starrocks.rpc.RpcException;
 import com.starrocks.sql.LoadPlanner;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.thrift.TDescriptorTable;
@@ -80,16 +83,33 @@ public abstract class Coordinator {
                                                 long warehouseId);
 
         Coordinator createRefreshDictionaryCacheScheduler(ConnectContext context, TUniqueId queryId,
-                                                DescriptorTable descTable, List<PlanFragment> fragments,
-                                                List<ScanNode> scanNodes);
+                                                          DescriptorTable descTable, List<PlanFragment> fragments,
+                                                          List<ScanNode> scanNodes);
     }
 
     // ------------------------------------------------------------------------------------
     // Common methods for scheduling.
     // ------------------------------------------------------------------------------------
+    public static class ScheduleOption {
+        public boolean doDeploy = true;
+        public boolean useQueryDeployExecutor = false;
+    }
 
-    public void exec() throws Exception {
-        startScheduling();
+    public void exec() throws StarRocksException, RpcException, InterruptedException {
+        ScheduleOption option = new ScheduleOption();
+        startScheduling(option);
+    }
+
+    public void execWithoutDeploy() throws Exception {
+        ScheduleOption option = new ScheduleOption();
+        option.doDeploy = false;
+        startScheduling(option);
+    }
+
+    public void execWithQueryDeployExecutor() throws Exception {
+        ScheduleOption option = new ScheduleOption();
+        option.useQueryDeployExecutor = true;
+        startScheduling(option);
     }
 
     /**
@@ -100,17 +120,11 @@ public abstract class Coordinator {
      *     <li> Deploys them to the related workers, if the parameter {@code needDeploy} is true.
      * </ul>
      * <p>
-     *
-     * @param needDeploy Whether deploying fragment instances to workers.
      */
-    public abstract void startScheduling(boolean needDeploy) throws Exception;
+    public abstract void startScheduling(ScheduleOption option) throws StarRocksException, InterruptedException, RpcException;
 
-    public void startScheduling() throws Exception {
-        startScheduling(true);
-    }
-
-    public void startSchedulingWithoutDeploy() throws Exception {
-        startScheduling(false);
+    public Status scheduleNextTurn(TUniqueId fragmentInstanceId) {
+        return Status.OK;
     }
 
     public abstract String getSchedulerExplain();
@@ -124,6 +138,15 @@ public abstract class Coordinator {
     }
 
     public abstract void cancel(PPlanFragmentCancelReason reason, String message);
+
+    public List<DeployState> assignIncrementalScanRangesToDeployStates(Deployer deployer, List<DeployState> deployStates)
+            throws StarRocksException {
+        return List.of();
+    }
+
+    // Release query queue resources
+    public void onReleaseSlots() {
+    }
 
     public abstract void onFinished();
 
@@ -146,6 +169,8 @@ public abstract class Coordinator {
     public abstract boolean isThriftServerHighLoad();
 
     public abstract void setLoadJobType(TLoadJobType type);
+
+    public abstract TLoadJobType getLoadJobType();
 
     public abstract long getLoadJobId();
 
@@ -228,6 +253,14 @@ public abstract class Coordinator {
 
     public abstract void setTimeoutSecond(int timeoutSecond);
 
+    public void setPredictedCost(long memBytes) {
+    }
+
     public abstract boolean isProfileAlreadyReported();
 
+    public abstract String getWarehouseName();
+
+    public abstract String getResourceGroupName();
+
+    public abstract boolean isShortCircuit();
 }

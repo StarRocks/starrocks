@@ -22,17 +22,20 @@
 
 #include "column/array_column.h"
 #include "column/binary_column.h"
+#include "column/column_helper.h"
 #include "column/fixed_length_column.h"
 #include "column/hash_set.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
 #include "exprs/agg/aggregate.h"
+#include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/sum.h"
 #include "exprs/function_context.h"
 #include "gen_cpp/Data_types.h"
 #include "glog/logging.h"
 #include "gutil/casts.h"
 #include "runtime/mem_pool.h"
+#include "runtime/memory/counting_allocator.h"
 #include "thrift/protocol/TJSONProtocol.h"
 #include "util/phmap/phmap_dump.h"
 #include "util/slice.h"
@@ -50,16 +53,11 @@ template <LogicalType LT, LogicalType SumLT>
 struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
     using T = RunTimeCppType<LT>;
     using SumType = RunTimeCppType<SumLT>;
+    using MyHashSet = HashSetWithAggStateAllocator<T>;
 
-    size_t update(T key) {
-        auto pair = set.insert(key);
-        return pair.second * phmap::item_serialize_size<HashSet<T>>::value;
-    }
+    void update(T key) { set.insert(key); }
 
-    size_t update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) {
-        auto pair = set.emplace_with_hash(hash, key);
-        return pair.second * phmap::item_serialize_size<HashSet<T>>::value;
-    }
+    void update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) { set.emplace_with_hash(hash, key); }
 
     void prefetch(T key) { set.prefetch(key); }
 
@@ -77,17 +75,15 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
         DCHECK(output.length() == set.dump_bound());
     }
 
-    size_t deserialize_and_merge(const uint8_t* src, size_t len) {
+    void deserialize_and_merge(const uint8_t* src, size_t len) {
         phmap::InMemoryInput input(reinterpret_cast<const char*>(src));
         auto old_size = set.size();
         if (old_size == 0) {
             set.load(input);
-            return set.size() * phmap::item_serialize_size<HashSet<T>>::value;
         } else {
-            HashSet<T> set_src;
+            MyHashSet set_src;
             set_src.load(input);
             set.merge(set_src);
-            return (set.size() - old_size) * phmap::item_serialize_size<HashSet<T>>::value;
         }
     }
 
@@ -104,7 +100,7 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
         return sum;
     }
 
-    HashSet<T> set;
+    MyHashSet set;
 };
 
 template <LogicalType LT, LogicalType SumLT>
@@ -112,30 +108,32 @@ struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
     DistinctAggregateState() = default;
     using KeyType = typename SliceHashSet::key_type;
 
-    size_t update(MemPool* mem_pool, Slice raw_key) {
-        size_t ret = 0;
+    void update(MemPool* mem_pool, Slice raw_key) {
         KeyType key(raw_key);
+#if defined(__clang__) && (__clang_major__ >= 16)
+        set.lazy_emplace(key, [&](const auto& ctor) {
+#else
         set.template lazy_emplace(key, [&](const auto& ctor) {
-            uint8_t* pos = mem_pool->allocate(key.size);
+#endif
+            uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
             assert(pos != nullptr);
             memcpy(pos, key.data, key.size);
             ctor(pos, key.size, key.hash);
-            ret = phmap::item_serialize_size<SliceHashSet>::value;
         });
-        return ret;
     }
 
-    size_t update_with_hash(MemPool* mem_pool, Slice raw_key, size_t hash) {
-        size_t ret = 0;
+    void update_with_hash(MemPool* mem_pool, Slice raw_key, size_t hash) {
         KeyType key(reinterpret_cast<uint8_t*>(raw_key.data), raw_key.size, hash);
+#if defined(__clang__) && (__clang_major__ >= 16)
+        set.lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
+#else
         set.template lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
-            uint8_t* pos = mem_pool->allocate(key.size);
+#endif
+            uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
             assert(pos != nullptr);
             memcpy(pos, key.data, key.size);
             ctor(pos, key.size, key.hash);
-            ret = phmap::item_serialize_size<SliceHashSet>::value;
         });
-        return ret;
     }
 
     int64_t disctint_count() const { return set.size(); }
@@ -160,8 +158,7 @@ struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
         }
     }
 
-    size_t deserialize_and_merge(MemPool* mem_pool, const uint8_t* src, size_t len) {
-        size_t mem_usage = 0;
+    void deserialize_and_merge(MemPool* mem_pool, const uint8_t* src, size_t len) {
         const uint8_t* end = src + len;
         while (src < end) {
             uint32_t size = 0;
@@ -170,20 +167,22 @@ struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
             Slice raw_key(src, size);
             KeyType key(raw_key);
             // we only memcpy when the key is new
+#if defined(__clang__) && (__clang_major__ >= 16)
+            set.lazy_emplace(key, [&](const auto& ctor) {
+#else
             set.template lazy_emplace(key, [&](const auto& ctor) {
-                uint8_t* pos = mem_pool->allocate(key.size);
+#endif
+                uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
                 assert(pos != nullptr);
                 memcpy(pos, key.data, key.size);
                 ctor(pos, key.size, key.hash);
-                mem_usage += phmap::item_serialize_size<SliceHashSet>::value;
             });
             src += size;
         }
         DCHECK(src == end);
-        return mem_usage;
     }
 
-    SliceHashSet set;
+    SliceHashSetWithAggStateAllocator set;
 };
 
 // use a different way to do serialization to gain performance.
@@ -194,18 +193,11 @@ template <LogicalType LT, LogicalType SumLT>
 struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
     using T = RunTimeCppType<LT>;
     using SumType = RunTimeCppType<SumLT>;
-    using MyHashSet = HashSet<T>;
-    static constexpr size_t item_size = phmap::item_serialize_size<MyHashSet>::value;
+    using MyHashSet = HashSetWithAggStateAllocator<T>;
 
-    size_t update(T key) {
-        auto pair = set.insert(key);
-        return pair.second * item_size;
-    }
+    void update(T key) { set.insert(key); }
 
-    size_t update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) {
-        auto pair = set.emplace_with_hash(hash, key);
-        return pair.second * item_size;
-    }
+    void update_with_hash([[maybe_unused]] MemPool* mempool, T key, size_t hash) { set.emplace_with_hash(hash, key); }
 
     void prefetch(T key) { set.prefetch(key); }
 
@@ -227,12 +219,11 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
         }
     }
 
-    size_t deserialize_and_merge(const uint8_t* src, size_t len) {
+    void deserialize_and_merge(const uint8_t* src, size_t len) {
         size_t size = 0;
         memcpy(&size, src, sizeof(size));
         set.rehash(set.size() + size);
 
-        size_t old_size = set.size();
         src += sizeof(size);
         for (size_t i = 0; i < size; i++) {
             T key;
@@ -240,8 +231,6 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
             set.insert(key);
             src += sizeof(T);
         }
-        size_t new_size = set.size();
-        return (new_size - old_size) * item_size;
     }
 
     SumType sum_distinct() const {
@@ -285,13 +274,11 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         const auto* column = down_cast<const ColumnType*>(columns[0]);
-        size_t mem_usage;
         if constexpr (IsSlice<T>) {
-            mem_usage = this->data(state).update(ctx->mem_pool(), column->get_slice(row_num));
+            this->data(state).update(ctx->mem_pool(), column->get_slice(row_num));
         } else {
-            mem_usage = this->data(state).update(column->get_data()[row_num]);
+            this->data(state).update(column->get_data()[row_num]);
         }
-        ctx->add_mem_usage(mem_usage);
     }
 
     // The following two functions are specialized because of performance issue.
@@ -300,7 +287,6 @@ public:
     void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
                                    AggDataPtr __restrict state) const override {
         const auto* column = down_cast<const ColumnType*>(columns[0]);
-        size_t mem_usage = 0;
         auto& agg_state = this->data(state);
 
         struct CacheEntry {
@@ -322,15 +308,13 @@ public:
                 agg_state.set.prefetch_hash(cache[prefetch_index].hash_value);
                 prefetch_index++;
             }
-            mem_usage += agg_state.update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
+            agg_state.update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
         }
-        ctx->add_mem_usage(mem_usage);
     }
 
     void update_batch(FunctionContext* ctx, size_t chunk_size, size_t state_offset, const Column** columns,
                       AggDataPtr* states) const override {
         const auto* column = down_cast<const ColumnType*>(columns[0]);
-        size_t mem_usage = 0;
 
         // We find that agg_states are scatterd in `states`, we can collect them together with hash value,
         // so there will be good cache locality. We can also collect column data into this `CacheEntry` to
@@ -357,32 +341,28 @@ public:
                 cache[prefetch_index].agg_state->set.prefetch_hash(cache[prefetch_index].hash_value);
                 prefetch_index++;
             }
-            mem_usage += cache[i].agg_state->update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
+            cache[i].agg_state->update_with_hash(mem_pool, container_data[i], cache[i].hash_value);
         }
-        ctx->add_mem_usage(mem_usage);
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_binary());
         const auto* input_column = down_cast<const BinaryColumn*>(column);
         Slice slice = input_column->get_slice(row_num);
-        size_t mem_usage = 0;
         if constexpr (IsSlice<T>) {
-            mem_usage +=
-                    this->data(state).deserialize_and_merge(ctx->mem_pool(), (const uint8_t*)slice.data, slice.size);
+            this->data(state).deserialize_and_merge(ctx->mem_pool(), (const uint8_t*)slice.data, slice.size);
         } else {
             // slice size larger than `MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA`, means which is a hash set
             // that's said, size of hash set serialization data should be larger than `MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA`
             // otherwise this slice could be reinterpreted as a single value going be to inserted into hashset.
             if (slice.size >= MIN_SIZE_OF_HASH_SET_SERIALIZED_DATA) {
-                mem_usage += this->data(state).deserialize_and_merge((const uint8_t*)slice.data, slice.size);
+                this->data(state).deserialize_and_merge((const uint8_t*)slice.data, slice.size);
             } else {
                 T key;
                 memcpy(&key, slice.data, sizeof(T));
-                mem_usage += this->data(state).update(key);
+                this->data(state).update(key);
             }
         }
-        ctx->add_mem_usage(mem_usage);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
@@ -468,18 +448,25 @@ class DecimalDistinctAggregateFunction
 struct DictMergeState : DistinctAggregateStateV2<TYPE_VARCHAR, SumResultLT<TYPE_VARCHAR>> {
     DictMergeState() = default;
 
+    void update_over_limit() { over_limit = set.size() > dict_threshold; }
+
     bool over_limit = false;
+    int dict_threshold = 255;
 };
 
 class DictMergeAggregateFunction final
         : public AggregateFunctionBatchHelper<DictMergeState, DictMergeAggregateFunction> {
 public:
-    static constexpr int DICT_DECODE_MAX_SIZE = 256;
-    static constexpr int FAKE_DICT_SIZE = DICT_DECODE_MAX_SIZE + 1;
+    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
+        AggregateFunctionBatchHelper::create(ctx, ptr);
+        if (ctx->get_num_constant_columns() > 1) {
+            this->data(ptr).dict_threshold = ctx->get_constant_column(1)->get(0).get_int32();
+        }
+    }
 
-    DictMergeState fake_dict_state(FunctionContext* ctx) const {
+    DictMergeState fake_dict_state(FunctionContext* ctx, int dict_threshold) const {
         DictMergeState fake_state;
-        for (int i = 0; i < FAKE_DICT_SIZE; ++i) {
+        for (int i = 0; i < dict_threshold + 1; ++i) {
             fake_state.update(ctx->mem_pool(), std::to_string(i));
         }
         return fake_state;
@@ -487,64 +474,57 @@ public:
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
-        DCHECK(false) << "this method shouldn't be called";
-    }
-
-    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
-                                   AggDataPtr __restrict state) const override {
-        [[maybe_unused]] size_t mem_usage = 0;
         auto& agg_state = this->data(state);
-        const auto* column = down_cast<const ArrayColumn*>(columns[0]);
         MemPool* mem_pool = ctx->mem_pool();
 
-        // if dict size greater than DICT_DECODE_MAX_SIZE. we return a FAKE dictionary
-        if (agg_state.over_limit) {
+        // if dict size greater than threshold. we return a FAKE dictionary
+        if (agg_state.over_limit || columns[0]->is_null(row_num)) {
             return;
         }
 
-        const auto& elements_column = column->elements();
-        if (column->elements().is_nullable()) {
-            const auto& null_column = down_cast<const NullableColumn&>(elements_column);
-            const auto& null_data = null_column.immutable_null_column_data();
-            const auto& binary_column = down_cast<const BinaryColumn&>(null_column.data_column_ref());
+        auto* data_column = ColumnHelper::get_data_column(columns[0]);
 
-            for (size_t i = 0; i < binary_column.size(); ++i) {
-                if (!null_data[i]) {
-                    mem_usage += agg_state.update(mem_pool, binary_column.get_slice(i));
+        if (data_column->is_array()) {
+            const auto* array_column = down_cast<const ArrayColumn*>(data_column);
+            const auto* column = array_column->elements_column().get();
+            const auto& off = array_column->offsets().get_data();
+            const auto* binary_column = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column));
+            for (auto i = off[row_num]; i < off[row_num + 1]; i++) {
+                if (!column->is_null(i)) {
+                    agg_state.update(mem_pool, binary_column->get_slice(i));
                 }
             }
-            agg_state.over_limit = agg_state.set.size() > DICT_DECODE_MAX_SIZE;
         } else {
-            const auto& binary_column = down_cast<const BinaryColumn&>(elements_column);
-            for (size_t i = 0; i < binary_column.size(); ++i) {
-                mem_usage += agg_state.update(mem_pool, binary_column.get_slice(i));
-            }
-            agg_state.over_limit = agg_state.set.size() > DICT_DECODE_MAX_SIZE;
+            const auto& binary_column = down_cast<const BinaryColumn&>(*data_column);
+            agg_state.update(mem_pool, binary_column.get_slice(row_num));
         }
+
+        agg_state.update_over_limit();
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         auto& agg_state = this->data(state);
 
-        if (agg_state.over_limit) {
+        if (agg_state.over_limit || column->is_null(row_num)) {
             return;
         }
 
-        const auto* input_column = down_cast<const BinaryColumn*>(column);
+        const auto* input_column = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(column));
         Slice slice = input_column->get_slice(row_num);
 
-        size_t mem_usage = 0;
-        mem_usage += this->data(state).deserialize_and_merge(ctx->mem_pool(), (const uint8_t*)slice.data, slice.size);
-        ctx->add_mem_usage(mem_usage);
+        this->data(state).deserialize_and_merge(ctx->mem_pool(), (const uint8_t*)slice.data, slice.size);
 
-        agg_state.over_limit = agg_state.set.size() > DICT_DECODE_MAX_SIZE;
+        agg_state.update_over_limit();
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto& agg_state = this->data(state);
 
         auto serialize = [=](const DictMergeState& dict_state) {
-            auto* column = down_cast<BinaryColumn*>(to);
+            auto* column = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(to));
+            if (to->is_nullable()) {
+                down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
+            }
             size_t old_size = column->get_bytes().size();
             size_t new_size = old_size + dict_state.serialize_size();
             column->get_bytes().resize(new_size);
@@ -553,7 +533,7 @@ public:
         };
 
         if (agg_state.over_limit) {
-            serialize(fake_dict_state(ctx));
+            serialize(fake_dict_state(ctx, agg_state.dict_threshold));
         } else {
             serialize(this->data(state));
         }
@@ -575,7 +555,10 @@ public:
             std::vector<int32_t> dict_ids;
             dict_ids.resize(agg_state.set.size());
 
-            auto* binary_column = down_cast<BinaryColumn*>(to);
+            auto* binary_column = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(to));
+            if (to->is_nullable()) {
+                down_cast<NullableColumn*>(to)->null_column_data().emplace_back(0);
+            }
 
             // set dict_ids as [1...n]
             for (int i = 0; i < dict_ids.size(); ++i) {
@@ -612,7 +595,7 @@ public:
         };
 
         if (agg_state.over_limit) {
-            finalize(fake_dict_state(ctx), to);
+            finalize(fake_dict_state(ctx, agg_state.dict_threshold), to);
         } else {
             finalize(agg_state, to);
         }

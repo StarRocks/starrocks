@@ -25,27 +25,27 @@ const int32_t DEF_NULL_NUM = -1;
 
 SchemaScanner::ColumnDesc SchemaTablesScanner::_s_tbls_columns[] = {
         //   name,       type,          size,     is_null
-        {"TABLE_CATALOG", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TABLE_SCHEMA", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_NAME", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TABLE_TYPE", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"ENGINE", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"VERSION", TYPE_BIGINT, sizeof(int64_t), true},
-        {"ROW_FORMAT", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TABLE_ROWS", TYPE_BIGINT, sizeof(int64_t), true},
-        {"AVG_ROW_LENGTH", TYPE_BIGINT, sizeof(int64_t), true},
-        {"DATA_LENGTH", TYPE_BIGINT, sizeof(int64_t), true},
-        {"MAX_DATA_LENGTH", TYPE_BIGINT, sizeof(int64_t), true},
-        {"INDEX_LENGTH", TYPE_BIGINT, sizeof(int64_t), true},
-        {"DATA_FREE", TYPE_BIGINT, sizeof(int64_t), true},
-        {"AUTO_INCREMENT", TYPE_BIGINT, sizeof(int64_t), true},
-        {"CREATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"UPDATE_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"CHECK_TIME", TYPE_DATETIME, sizeof(DateTimeValue), true},
-        {"TABLE_COLLATION", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"CHECKSUM", TYPE_BIGINT, sizeof(int64_t), true},
-        {"CREATE_OPTIONS", TYPE_VARCHAR, sizeof(StringValue), true},
-        {"TABLE_COMMENT", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"TABLE_CATALOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"TABLE_SCHEMA", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_NAME", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TABLE_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"ENGINE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"VERSION", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"ROW_FORMAT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"TABLE_ROWS", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"AVG_ROW_LENGTH", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"DATA_LENGTH", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"MAX_DATA_LENGTH", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"INDEX_LENGTH", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"DATA_FREE", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"AUTO_INCREMENT", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"CREATE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"UPDATE_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"CHECK_TIME", TypeDescriptor::from_logical_type(TYPE_DATETIME), sizeof(DateTimeValue), true},
+        {"TABLE_COLLATION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"CHECKSUM", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), true},
+        {"CREATE_OPTIONS", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
+        {"TABLE_COMMENT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 };
 
 SchemaTablesScanner::SchemaTablesScanner()
@@ -76,13 +76,13 @@ Status SchemaTablesScanner::start(RuntimeState* state) {
     TGetTablesInfoRequest get_tables_info_request;
     get_tables_info_request.__set_auth_info(auth_info);
 
-    if (nullptr != _param->ip && 0 != _param->port) {
-        int timeout_ms = state->query_options().query_timeout * 1000;
-        RETURN_IF_ERROR(SchemaHelper::get_tables_info(*(_param->ip), _param->port, get_tables_info_request,
-                                                      &_tabls_info_response, timeout_ms));
-    } else {
-        return Status::InternalError("IP or port doesn't exists");
+    if (nullptr != _param->table) {
+        get_tables_info_request.__set_table_name(*(_param->table));
     }
+
+    // init schema scanner state
+    RETURN_IF_ERROR(SchemaScanner::init_schema_scanner_state(state));
+    RETURN_IF_ERROR(SchemaHelper::get_tables_info(_ss_state, get_tables_info_request, &_tabls_info_response));
     return Status::OK();
 }
 

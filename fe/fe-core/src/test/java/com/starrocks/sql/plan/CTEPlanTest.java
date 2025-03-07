@@ -42,10 +42,10 @@ public class CTEPlanTest extends PlanTestBase {
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         globalStateMgr.setStatisticStorage(new TestStorage());
 
-        OlapTable t0 = (OlapTable) globalStateMgr.getDb("test").getTable("t0");
+        OlapTable t0 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t0");
         setTableStatistics(t0, 20000000);
 
-        OlapTable t1 = (OlapTable) globalStateMgr.getDb("test").getTable("t1");
+        OlapTable t1 = (OlapTable) globalStateMgr.getLocalMetastore().getDb("test").getTable("t1");
         setTableStatistics(t1, 2000000);
     }
 
@@ -229,8 +229,7 @@ public class CTEPlanTest extends PlanTestBase {
                 "     tabletRatio=0/0\n" +
                 "     tabletList=\n" +
                 "     cardinality=1\n" +
-                "     avgRowSize=24.0\n" +
-                "     limit: 3");
+                "     avgRowSize=24.0\n");
     }
 
     @Test
@@ -719,14 +718,14 @@ public class CTEPlanTest extends PlanTestBase {
     public void testNestCte() throws Exception {
         String sql = "select /*+SET_VAR(cbo_max_reorder_node_use_exhaustive=1)*/* " +
                 "from t0 " +
-                "where (t0.v1 in (with c1 as (select 1 as v2) select x1.v2 from c1 x1 join c1 x2 join c1 x3)) is null;";
+                "where (t0.v1 in (with c1 as (select v4 as v2 from t1) select x1.v2 from c1 x1 join c1 x2 join c1 x3)) is null;";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "  MultiCastDataSinks\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 15\n" +
+                "    EXCHANGE ID: 14\n" +
                 "    RANDOM\n" +
                 "  STREAM DATA SINK\n" +
-                "    EXCHANGE ID: 22\n" +
+                "    EXCHANGE ID: 21\n" +
                 "    RANDOM");
     }
 
@@ -755,6 +754,7 @@ public class CTEPlanTest extends PlanTestBase {
                 "  |  \n" +
                 "  23:SORT\n" +
                 "  |  order by: <slot 14> 14: v3 ASC, <slot 13> 13: v2 ASC\n" +
+                "  |  analytic partition by: 14: v3, 13: v2\n" +
                 "  |  offset: 0");
     }
 
@@ -813,5 +813,120 @@ public class CTEPlanTest extends PlanTestBase {
                 "\n" +
                 "  0:OlapScanNode\n" +
                 "     TABLE: t0");
+    }
+
+    @Test
+    public void testEnableLambdaPushdownFalse() throws Exception {
+        String sql =
+                "with input1 as (\n" +
+                "  select [1,2,3] as x\n" +
+                "),\n" +
+                "input2 AS (\n" +
+                "  SELECT\n" +
+                "    array_min( array_map(x -> coalesce(x, 0), x )) AS x\n" +
+                "  FROM\n" +
+                "    input1\n" +
+                "),\n" +
+                "input3 as (\n" +
+                "  select x+1 as a, x+2 as b, x+3 as c\n" +
+                "  from input2\n" +
+                ")\n" +
+                "SELECT * from input3\n" +
+                "where a + b + c <10";
+
+        connectContext.getSessionVariable().setEnableLambdaPushdown(false);
+        defaultCTEReuse();
+        String plan = getFragmentPlan(sql);
+        connectContext.getSessionVariable().setEnableLambdaPushdown(true);
+        assertContains(plan, "  |  predicates: " +
+                "CAST(CAST(9: cast + 1 AS INT) + CAST(9: cast + 2 AS INT) AS BIGINT) + CAST(9: cast + 3 AS BIGINT) < 10\n" +
+                "  |    common sub expr:\n" +
+                "  |    <slot 9> : CAST(4: array_min AS SMALLINT)");
+    }
+
+    @Test
+    public void testEnableLambdaPushdownTrue() throws Exception {
+        String sql =
+                "with input1 as (\n" +
+                        "  select [1,2,3] as x\n" +
+                        "),\n" +
+                        "input2 AS (\n" +
+                        "  SELECT\n" +
+                        "    array_min( array_map(x -> coalesce(x, 0), x )) AS x\n" +
+                        "  FROM\n" +
+                        "    input1\n" +
+                        "),\n" +
+                        "input3 as (\n" +
+                        "  select x+1 as a, x+2 as b, x+3 as c\n" +
+                        "  from input2\n" +
+                        ")\n" +
+                        "SELECT * from input3\n" +
+                        "where a + b + c <10";
+
+        connectContext.getSessionVariable().setEnableLambdaPushdown(true);
+        defaultCTEReuse();
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "  1:SELECT\n" +
+                "  |  predicates: " +
+                "CAST(CAST(14: cast + 1 AS INT) + CAST(14: cast + 2 AS INT) AS BIGINT) + CAST(14: cast + 3 AS BIGINT) < 10\n" +
+                "  |    common sub expr:\n" +
+                "  |    <slot 12> : array_map(<slot 3> -> coalesce(<slot 3>, 0), [1,2,3])\n" +
+                "  |    <slot 13> : array_min(12: array_map)\n" +
+                "  |    <slot 14> : CAST(13: array_min AS SMALLINT)");
+    }
+
+    @Test
+    public void testConstantCTE() throws Exception {
+        String sql = "with cte as (select 111) select * from cte join (select * from (select * from t1 join cte) t1) t2";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan,
+                "1:Project\n" +
+                        "  |  <slot 4> : 111\n" +
+                        "  |  <slot 5> : 5: v4\n" +
+                        "  |  <slot 6> : 6: v5\n" +
+                        "  |  <slot 7> : 7: v6\n" +
+                        "  |  <slot 9> : 111");
+
+        sql = "with cte1 as (select 222), cte2 as (select 333), cte3 as (select v1 from t0) " +
+                "select * from (select * from cte1 union all select * from cte2 union all" +
+                " select v1 from cte3 union all" +
+                " select * from cte1) tt;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan,
+                "3:UNION\n" +
+                        "     constant exprs: \n" +
+                        "         222\n" +
+                        "         333\n" +
+                        "         222");
+
+        sql = "with x1 as (select 111), x2 as (select * from x1 union all select * from x1) select * from x1 join x2";
+        plan = getFragmentPlan(sql);
+        assertNotContains(plan, "MultiCastDataSinks");
+
+        sql = "with x0 as (select 333), x1 as (select * from x0) " +
+                "select * from (select * from x0 union all select * from x1 union all select * from x0) tt;";
+        plan = getFragmentPlan(sql);
+        assertNotContains(plan, "MultiCastDataSinks");
+
+        sql = "select * from " +
+                "(with xx as (select 444 as v2) select x1.* from xx x1 join xx x2 on x1.v2 = x2.v2) s " +
+                "where s.v2 = 444;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan,
+                "1:Project\n" +
+                        "  |  <slot 4> : 444");
+    }
+
+    @Test
+    public void testCTELimitSelect() throws Exception {
+        alwaysCTEReuse();
+        String sql = "with cte as (select * from t0)" +
+                " select case when not exists (select 1 from cte where v2 = 1) then 'A' else 'B' end," +
+                "        case when not exists (select 1 from cte where v3 = 1) then 'C' else 'D' end " +
+                " from t2;";
+        String plan = getFragmentPlan(sql);
+        defaultCTEReuse();
+        assertNotContains(plan, "1:EXCHANGE\n" +
+                "     limit: 1");
     }
 }

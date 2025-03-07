@@ -39,17 +39,12 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
-import com.starrocks.catalog.MaterializedView;
-import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.PhysicalPartition;
-import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Tablet;
 import com.starrocks.common.Config;
-import com.starrocks.common.DdlException;
-import com.starrocks.common.MetaNotFoundException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.common.UserException;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
@@ -58,10 +53,10 @@ import com.starrocks.lake.TxnInfoHelper;
 import com.starrocks.lake.Utils;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.proto.DeleteTxnLogRequest;
+import com.starrocks.proto.DeleteTxnLogResponse;
 import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
-import com.starrocks.scheduler.Constants;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
@@ -72,6 +67,7 @@ import com.starrocks.task.AgentTaskQueue;
 import com.starrocks.task.PublishVersionTask;
 import com.starrocks.thrift.TTaskType;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -79,12 +75,12 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Future;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.stream.Collectors;
 import javax.validation.constraints.NotNull;
@@ -133,9 +129,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
 
             // TODO: need to refactor after be split into cn + dn
-            List<Long> allBackends = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
+            List<Long> allBackends =
+                    GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendIds(false);
             if (RunMode.isSharedDataMode()) {
-                allBackends.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeIds(false));
+                allBackends.addAll(
+                        GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getComputeNodeIds(false));
             }
 
             if (allBackends.isEmpty()) {
@@ -184,19 +182,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             // DON'T LOG, otherwise the log line will repeat everytime the listener refreshes
             return;
         }
-
-        int oldNumThreads = lakeTaskExecutor.getMaximumPoolSize();
-        if (oldNumThreads == newNumThreads) {
-            return;
-        }
-
-        if (newNumThreads < oldNumThreads) { // scale in
-            lakeTaskExecutor.setCorePoolSize(newNumThreads);
-            lakeTaskExecutor.setMaximumPoolSize(newNumThreads);
-        } else { // scale out
-            lakeTaskExecutor.setMaximumPoolSize(newNumThreads);
-            lakeTaskExecutor.setCorePoolSize(newNumThreads);
-        }
+        ThreadPoolManager.setFixedThreadPoolSize(lakeTaskExecutor, newNumThreads);
     }
 
     /**
@@ -285,11 +271,12 @@ public class PublishVersionDaemon extends FrontendDaemon {
         return publishingLakeTransactionsBatchTableId;
     }
 
-    private void publishVersionForOlapTable(List<TransactionState> readyTransactionStates) throws UserException {
+    private void publishVersionForOlapTable(List<TransactionState> readyTransactionStates) throws StarRocksException {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
 
         // every backend-transaction identified a single task
         AgentBatchTask batchTask = new AgentBatchTask();
+        List<Long> transactionIds = new ArrayList<>();
         // traverse all ready transactions and dispatch the version publish task to all backends
         for (TransactionState transactionState : readyTransactionStates) {
             List<PublishVersionTask> tasks = transactionState.createPublishVersionTask();
@@ -299,9 +286,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             if (!tasks.isEmpty()) {
                 transactionState.setHasSendTask(true);
-                LOG.info("send publish tasks for txn_id: {}", transactionState.getTransactionId());
+                transactionIds.add(transactionState.getTransactionId());
             }
         }
+        LOG.debug("send publish tasks for transactions: {}", transactionIds);
         if (!batchTask.getAllTasks().isEmpty()) {
             AgentTaskExecutor.submit(batchTask);
         }
@@ -354,9 +342,6 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     }
                     // clear publish version tasks to reduce memory usage when state changed to visible.
                     transactionState.clearAfterPublished();
-
-                    // Refresh materialized view when base table update transaction has been visible if necessary
-                    refreshMvIfNecessary(transactionState);
                 }
             }
         } // end for readyTransactionStates
@@ -382,36 +367,11 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     }
                     // clear publish version tasks to reduce memory usage when state changed to visible.
                     transactionState.clearAfterPublished();
-                    // Refresh materialized view when base table update transaction has been visible if necessary
-                    refreshMvIfNecessary(transactionState);
                 }
-            } catch (UserException e) {
+            } catch (StarRocksException e) {
                 LOG.error("errors while publish version to all backends", e);
             }
         }
-    }
-
-    boolean isLakeTableTransaction(TransactionState transactionState) {
-        if (transactionState.getTableIdList().isEmpty()) {
-            return false;
-        }
-        Database db = GlobalStateMgr.getCurrentState().getDb(transactionState.getDbId());
-        if (db == null) {
-            return false;
-        }
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            for (long tableId : transactionState.getTableIdList()) {
-                Table table = db.getTable(tableId);
-                if (table != null) {
-                    return table.isCloudNativeTableOrMaterializedView();
-                }
-            }
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
-        }
-        return false;
     }
 
     void publishVersionForLakeTable(List<TransactionState> readyTransactionStates) {
@@ -423,8 +383,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 // When the `enable_lake_batch_publish_version` switch is just set to false,
                 // it is possible that the result of publish task has not been returned,
                 // we need to wait for the result to return if the same table is involved.
-                if (!txnState.getTableIdList().stream().allMatch(id -> !publishingLakeTransactionsBatchTableId.contains(id))) {
-                    LOG.info("maybe enable_lake_batch_publish_version is set to false just now, txn {} will be published later",
+                if (!txnState.getTableIdList().stream()
+                        .allMatch(id -> !publishingLakeTransactionsBatchTableId.contains(id))) {
+                    LOG.info(
+                            "maybe enable_lake_batch_publish_version is set to false just now, txn {} will be published later",
                             txnState.getTransactionId());
                     continue;
                 }
@@ -462,12 +424,13 @@ public class PublishVersionDaemon extends FrontendDaemon {
         GlobalTransactionMgr globalTransactionMgr = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr();
         long txnId = txnState.getTransactionId();
         long dbId = txnState.getDbId();
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        LOG.info("start publish lake db:{} table:{} txn:{}", dbId, StringUtils.join(txnState.getTableIdList(), ","), txnId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             LOG.info("the database of transaction {} has been deleted", txnId);
             try {
                 globalTransactionMgr.finishTransaction(txnState.getDbId(), txnId, Sets.newHashSet());
-            } catch (UserException ex) {
+            } catch (StarRocksException ex) {
                 LOG.warn("Fail to finish txn " + txnId, ex);
             }
             return CompletableFuture.completedFuture(null);
@@ -492,8 +455,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (success) {
                 try {
                     globalTransactionMgr.finishTransaction(dbId, txnId, null);
-                    refreshMvIfNecessary(txnState);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     throw new RuntimeException(e);
                 }
             }
@@ -514,11 +476,12 @@ public class PublishVersionDaemon extends FrontendDaemon {
         Set<Tablet> normalTablets = null;
 
         Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         // version -> shadowTablets
         long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
         try {
-            OlapTable table = (OlapTable) db.getTable(tableId);
+            OlapTable table =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (table == null) {
                 // table has been dropped
                 return true;
@@ -559,7 +522,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 }
             }
         } finally {
-            locker.unLockTablesWithIntensiveDbLock(db, Lists.newArrayList(tableId), LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         }
 
         long startVersion = versions.get(0);
@@ -598,40 +561,76 @@ public class PublishVersionDaemon extends FrontendDaemon {
         return true;
     }
 
+    private void deleteTxnLogIgnoreError(ComputeNode node, DeleteTxnLogRequest request) {
+        try {
+            LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
+            // just ignore the response, for we don't care the result of delete txn log
+            // and vacuum will clan the txn log finally if it failed.
+            // make sure sync wait for the RPC call to avoid too many RPC call existed in BE/CN side
+            Future<DeleteTxnLogResponse> responseFuture = lakeService.deleteTxnLog(request);
+            DeleteTxnLogResponse response = responseFuture.get();
+            if (response != null && response.status != null && response.status.statusCode != 0) {
+                LOG.warn("delete txn log request return with err: " + response.status.errorMsgs.get(0));
+            }
+        } catch (Exception e) {
+            LOG.warn("delete txn log error: " + e.getMessage());
+        }
+    }
+
+    private Runnable getDeleteTxnLogTask(TransactionStateBatch batch, List<Long> txnIds) {
+        return () -> {
+            // For each partition, send a delete request to all the tablets in the partition
+            for (Map.Entry<Long, Map<ComputeNode, Set<Long>>> entry : batch.getPartitionToTablets().entrySet()) {
+                Map<ComputeNode, Set<Long>> nodeToTablets = entry.getValue();
+                for (Map.Entry<ComputeNode, Set<Long>> entryItem : nodeToTablets.entrySet()) {
+                    ComputeNode node = entryItem.getKey();
+                    DeleteTxnLogRequest request = new DeleteTxnLogRequest();
+                    request.tabletIds = new ArrayList<>(entryItem.getValue());
+                    request.txnIds = txnIds;
+                    deleteTxnLogIgnoreError(node, request);
+                }
+            }
+        };
+    }
+
+    private Runnable getDeleteCombinedTxnLogTask(TransactionStateBatch batch, List<Long> txnIds) {
+        return () -> {
+            List<TxnInfoPB> txnInfoPBList = new ArrayList<>();
+            for (Long txnId : txnIds) {
+                TxnInfoPB txnInfoPB = new TxnInfoPB();
+                txnInfoPB.txnId = txnId;
+                txnInfoPB.combinedTxnLog = true;
+                txnInfoPBList.add(txnInfoPB);
+            }
+            // For each partition, send a delete request to any tablet in the partition
+            for (Map.Entry<Long, Map<ComputeNode, Set<Long>>> entry : batch.getPartitionToTablets().entrySet()) {
+                Map.Entry<ComputeNode, Set<Long>> entryItem = entry.getValue().entrySet().iterator().next();
+                ComputeNode node = entryItem.getKey();
+                DeleteTxnLogRequest request = new DeleteTxnLogRequest();
+                request.tabletIds = new ArrayList<>(entryItem.getValue());
+                request.txnInfos = txnInfoPBList;
+                deleteTxnLogIgnoreError(node, request);
+            }
+        };
+    }
+
     private void submitDeleteTxnLogJob(TransactionStateBatch txnStateBatch) {
         try {
-            // TODO: do not send abortTxn() requests for transactions with combined txn log.
-            List<Long> txnIds = txnStateBatch.getTxnIds();
-            // submit may throw RejectedExecutionException if the task cannot be scheduled for execution
-            getDeleteTxnLogExecutor().submit(() -> {
-                txnStateBatch.getPartitionToTablets().entrySet().stream().forEach(entry -> {
-                    long partitionId = entry.getKey();
-                    Map<ComputeNode, Set<Long>> nodeToTablets = entry.getValue();
-
-                    for (Map.Entry<ComputeNode, Set<Long>> entryItem : nodeToTablets.entrySet()) {
-                        // check whether the node is still alive
-                        ComputeNode node = entryItem.getKey();
-                        if (!node.isAlive()) {
-                            LOG.warn("Backend or computeNode {} been dropped or not alive " +
-                                            "while building publish version request",
-                                    entryItem.getKey());
-                            continue;
-                        }
-
-                        DeleteTxnLogRequest request = new DeleteTxnLogRequest();
-                        request.tabletIds = new ArrayList<>(entryItem.getValue());
-                        request.txnIds = txnIds;
-                        try {
-                            LakeService lakeService = BrpcProxy.getLakeService(node.getHost(), node.getBrpcPort());
-                            // just ignore the response, for we don't care the result of delete txn log
-                            // and vacuum will clan the txn log finally if it failed.
-                            lakeService.deleteTxnLog(request);
-                        } catch (Exception e) {
-                            LOG.warn("delete txn log error: " + e.getMessage());
-                        }
-                    }
-                });
-            });
+            List<Long> txnIdsWithNormalTxnLog = new ArrayList<>();
+            List<Long> txnIdsWithCombinedTxnLog = new ArrayList<>();
+            for (TransactionState state : txnStateBatch.getTransactionStates()) {
+                if (state.isUseCombinedTxnLog()) {
+                    txnIdsWithCombinedTxnLog.add(state.getTransactionId());
+                } else {
+                    txnIdsWithNormalTxnLog.add(state.getTransactionId());
+                }
+            }
+            if (!txnIdsWithNormalTxnLog.isEmpty()) {
+                getDeleteTxnLogExecutor().submit(getDeleteTxnLogTask(txnStateBatch, txnIdsWithNormalTxnLog));
+            }
+            if (!txnIdsWithCombinedTxnLog.isEmpty()) {
+                getDeleteTxnLogExecutor().submit(getDeleteCombinedTxnLogTask(txnStateBatch, txnIdsWithCombinedTxnLog));
+            }
         } catch (Exception e) {
             LOG.warn("delete txn log error: " + e.getMessage());
         }
@@ -659,8 +658,10 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 publishVersionData.addTransaction(state);
             }
         }
+        LOG.info("start publish lake batch db:{} table:{} txns:{}", dbId, tableId,
+                StringUtils.join(states.stream().map(TransactionState::getTransactionId).toArray(), ","));
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
 
         if (db == null) {
             LOG.info("the database of transaction batch {} has been deleted", txnStateBatch);
@@ -669,7 +670,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                     globalTransactionMgr.finishTransaction(state.getDbId(), state.getTransactionId(),
                             Sets.newHashSet());
                 }
-            } catch (UserException ex) {
+            } catch (StarRocksException ex) {
                 LOG.warn("Fail to finish txn Batch " + txnStateBatch, ex);
             }
             return CompletableFuture.completedFuture(null);
@@ -704,13 +705,9 @@ public class PublishVersionDaemon extends FrontendDaemon {
             if (success) {
                 try {
                     globalTransactionMgr.finishTransactionBatch(dbId, txnStateBatch, null);
-                    for (TransactionState state : txnStateBatch.getTransactionStates()) {
-                        refreshMvIfNecessary(state);
-                    }
-
                     // here create the job to drop txnLog, for the visibleVersion has been updated
                     submitDeleteTxnLogJob(txnStateBatch);
-                } catch (UserException e) {
+                } catch (StarRocksException e) {
                     throw new RuntimeException(e);
                 }
             }
@@ -775,15 +772,16 @@ public class PublishVersionDaemon extends FrontendDaemon {
         List<Tablet> shadowTablets = null;
 
         Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
+        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         try {
-            OlapTable table = (OlapTable) db.getTable(tableId);
+            OlapTable table =
+                    (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
             if (table == null) {
                 txnState.removeTable(tableCommitInfo.getTableId());
                 LOG.info("Removed non-exist table {} from transaction {}. txn_id={}", tableId, txnLabel, txnId);
                 return true;
             }
-            long partitionId = partitionCommitInfo.getPartitionId();
+            long partitionId = partitionCommitInfo.getPhysicalPartitionId();
             PhysicalPartition partition = table.getPhysicalPartition(partitionId);
             if (partition == null) {
                 LOG.info("Ignore non-exist partition {} of table {} in txn {}", partitionId, table.getName(), txnLabel);
@@ -809,7 +807,7 @@ public class PublishVersionDaemon extends FrontendDaemon {
                 }
             }
         } finally {
-            locker.unLockDatabase(db, LockType.READ);
+            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(tableId), LockType.READ);
         }
 
         TxnInfoPB txnInfo = TxnInfoHelper.fromTransactionState(txnState);
@@ -827,55 +825,14 @@ public class PublishVersionDaemon extends FrontendDaemon {
             }
             return true;
         } catch (Throwable e) {
-            LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPartitionId(),
+            // prevent excessive logging
+            if (partitionCommitInfo.getVersionTime() < 0 &&
+                    Math.abs(partitionCommitInfo.getVersionTime()) + 10000 < System.currentTimeMillis()) {
+                return false;
+            }
+            LOG.error("Fail to publish partition {} of txn {}: {}", partitionCommitInfo.getPhysicalPartitionId(),
                     txnId, e.getMessage());
             return false;
-        }
-    }
-
-    /**
-     * Refresh the materialized view if it should be triggered after base table was loaded.
-     *
-     * @param transactionState
-     * @throws DdlException
-     * @throws MetaNotFoundException
-     */
-    private void refreshMvIfNecessary(TransactionState transactionState)
-            throws DdlException, MetaNotFoundException {
-        // Refresh materialized view when base table update transaction has been visible
-        long dbId = transactionState.getDbId();
-        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-        for (long tableId : transactionState.getTableIdList()) {
-            Table table = db.getTable(tableId);
-            if (table == null) {
-                LOG.warn("failed to get transaction tableId {} when pending refresh.", tableId);
-                return;
-            }
-            Set<MvId> relatedMvs = table.getRelatedMaterializedViews();
-            Iterator<MvId> mvIdIterator = relatedMvs.iterator();
-            while (mvIdIterator.hasNext()) {
-                MvId mvId = mvIdIterator.next();
-                Database mvDb = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(mvId.getDbId());
-                MaterializedView materializedView = (MaterializedView) mvDb.getTable(mvId.getId());
-                if (materializedView == null) {
-                    LOG.warn("materialized view {} does not exists.", mvId.getId());
-                    mvIdIterator.remove();
-                    continue;
-                }
-                Locker locker = new Locker();
-                locker.lockTablesWithIntensiveDbLock(mvDb, Lists.newArrayList(mvId.getId()), LockType.READ);
-                try {
-                    if (materializedView.shouldTriggeredRefreshBy(db.getFullName(), table.getName())) {
-                        LOG.info("Trigger auto materialized view refresh because of base table {} has changed, " +
-                                "db:{}, mv:{}", table.getName(), mvDb.getFullName(), materializedView.getName());
-                        GlobalStateMgr.getCurrentState().getLocalMetastore().refreshMaterializedView(
-                                mvDb.getFullName(), mvDb.getTable(mvId.getId()).getName(), false, null,
-                                Constants.TaskRunPriority.NORMAL.value(), true, false);
-                    }
-                } finally {
-                    locker.unLockTablesWithIntensiveDbLock(mvDb, Lists.newArrayList(mvId.getId()), LockType.READ);
-                }
-            }
         }
     }
 }

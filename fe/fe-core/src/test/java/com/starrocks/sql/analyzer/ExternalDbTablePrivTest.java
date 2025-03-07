@@ -15,14 +15,14 @@
 package com.starrocks.sql.analyzer;
 
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.InternalCatalog;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.DdlException;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.server.MetadataMgr;
@@ -164,7 +164,7 @@ public class ExternalDbTablePrivTest {
         // 1. before grant: access denied
         ctxToTestUser();
         try {
-            Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+            Authorizer.checkTableAction(ctx,
                     "hive0", "tpch", "region", PrivilegeType.SELECT);
             Assert.fail();
         } catch (Exception e) {
@@ -175,7 +175,7 @@ public class ExternalDbTablePrivTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
 
         ctxToTestUser();
-        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+        Authorizer.checkTableAction(ctx,
                 "hive0", "tpch", "region", PrivilegeType.SELECT);
 
         ctxToRoot();
@@ -183,7 +183,7 @@ public class ExternalDbTablePrivTest {
 
         ctxToTestUser();
         try {
-            Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+            Authorizer.checkTableAction(ctx,
                     "hive0", "tpch", "region", PrivilegeType.SELECT);
             Assert.fail();
         } catch (Exception e) {
@@ -197,7 +197,7 @@ public class ExternalDbTablePrivTest {
         // 1. before grant: access denied
         ctxToTestUser();
         try {
-            Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+            Authorizer.checkTableAction(ctx,
                     "hive0", "tpch", "region", PrivilegeType.DROP);
             Assert.fail();
         } catch (Exception e) {
@@ -208,7 +208,7 @@ public class ExternalDbTablePrivTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
 
         ctxToTestUser();
-        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+        Authorizer.checkTableAction(ctx,
                 "hive0", "tpch", "region", PrivilegeType.DROP);
 
         ctxToRoot();
@@ -216,7 +216,7 @@ public class ExternalDbTablePrivTest {
 
         ctxToTestUser();
         try {
-            Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+            Authorizer.checkTableAction(ctx,
                     "hive0", "tpch", "region", PrivilegeType.DROP);
             Assert.fail();
         } catch (Exception e) {

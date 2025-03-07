@@ -1,13 +1,14 @@
 ---
-displayed_sidebar: "English"
-unlisted: true
+displayed_sidebar: docs
 ---
 
 # url_extract_host
 
-## Description
+
 
 Extracts the host section from a URL.
+
+This function is supported from v3.3 onwards.
 
 ## Syntax
 

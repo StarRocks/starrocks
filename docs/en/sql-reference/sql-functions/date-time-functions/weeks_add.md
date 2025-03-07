@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # weeks_add
 
-## Description
+
 
 Returns the value with the number of weeks added to date.
 

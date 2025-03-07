@@ -42,15 +42,15 @@ public:
             auto offset_column = col_array->offsets_column();
             auto copy_count_column = UInt32Column::create();
             copy_count_column->append(0);
-
             ColumnPtr unnested_array_elements = col_array->elements_column()->clone_empty();
-
             uint32_t offset = 0;
             for (int row_idx = 0; row_idx < arg0->size(); ++row_idx) {
                 if (arg0->is_null(row_idx)) {
                     if (state->get_is_left_join()) {
                         // to support unnest with null.
-                        unnested_array_elements->append_nulls(1);
+                        if (state->is_required()) {
+                            unnested_array_elements->append_nulls(1);
+                        }
                         offset += 1;
                     }
                     copy_count_column->append(offset);
@@ -58,13 +58,17 @@ public:
                     if (offset_column->get(row_idx + 1).get_int32() == offset_column->get(row_idx).get_int32() &&
                         state->get_is_left_join()) {
                         // to support unnest with null.
-                        unnested_array_elements->append_nulls(1);
+                        if (state->is_required()) {
+                            unnested_array_elements->append_nulls(1);
+                        }
                         offset += 1;
                     } else {
                         auto length =
                                 offset_column->get(row_idx + 1).get_int32() - offset_column->get(row_idx).get_int32();
-                        unnested_array_elements->append(*(col_array->elements_column()),
-                                                        offset_column->get(row_idx).get_int32(), length);
+                        if (state->is_required()) {
+                            unnested_array_elements->append(*(col_array->elements_column()),
+                                                            offset_column->get(row_idx).get_int32(), length);
+                        }
                         offset += length;
                     }
                     copy_count_column->append(offset);
@@ -72,10 +76,10 @@ public:
             }
 
             result.emplace_back(unnested_array_elements);
-            return std::make_pair(result, copy_count_column);
+            return std::make_pair(std::move(result), std::move(copy_count_column));
         } else {
             result.emplace_back(col_array->elements_column());
-            return std::make_pair(result, col_array->offsets_column());
+            return std::make_pair(std::move(result), col_array->offsets_column());
         }
     }
 
@@ -86,7 +90,7 @@ public:
          */
     };
 
-    [[nodiscard]] Status init(const TFunction& fn, TableFunctionState** state) const override {
+    Status init(const TFunction& fn, TableFunctionState** state) const override {
         *state = new UnnestState();
         const auto& table_fn = fn.table_fn;
         if (table_fn.__isset.is_left_join) {
@@ -95,13 +99,11 @@ public:
         return Status::OK();
     }
 
-    [[nodiscard]] Status prepare(TableFunctionState* state) const override { return Status::OK(); }
+    Status prepare(TableFunctionState* state) const override { return Status::OK(); }
 
-    [[nodiscard]] Status open(RuntimeState* runtime_state, TableFunctionState* state) const override {
-        return Status::OK();
-    };
+    Status open(RuntimeState* runtime_state, TableFunctionState* state) const override { return Status::OK(); };
 
-    [[nodiscard]] Status close(RuntimeState* runtime_state, TableFunctionState* state) const override {
+    Status close(RuntimeState* runtime_state, TableFunctionState* state) const override {
         delete state;
         return Status::OK();
     }

@@ -65,6 +65,9 @@ public class OffHeapColumnVector {
 
     private OffHeapColumnVector[] childColumns;
 
+    // Only for test，record the size of the NULL indicator
+    private int nullsLength = 0;
+
     public OffHeapColumnVector(int capacity, ColumnType type) {
         this.capacity = capacity;
         this.type = type;
@@ -142,18 +145,31 @@ public class OffHeapColumnVector {
             this.data = Platform.reallocateMemory(data, oldCapacity * typeSize, newCapacity * typeSize);
         } else if (type.isByteStorageType()) {
             this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
-            int childCapacity = newCapacity * DEFAULT_STRING_LENGTH;
-            this.childColumns = new OffHeapColumnVector[1];
-            this.childColumns[0] = new OffHeapColumnVector(childCapacity, new ColumnType(type.name + "#data",
-                    ColumnType.TypeValue.BYTE));
+            // Just create a new object at the first time, otherwise the data will be lost during expansion,
+            // and because the OFFSET record is continuous, the new offset address starts from 0 during the 
+            // expansion, which will cause the offset records to be negatively numbered. After being passed
+            // to BE, it becomes a non-sign number. This is a very huge number. When processing, the array 
+            // will cross the boundary, which may cause crash.
+            //
+            // The child's capacity is not expanded here because the child's appendValue function is used 
+            // to add data to it will automatically expand.
+            if (this.childColumns == null) {
+                int childCapacity = newCapacity * DEFAULT_STRING_LENGTH;
+                this.childColumns = new OffHeapColumnVector[1];
+                this.childColumns[0] = new OffHeapColumnVector(childCapacity, new ColumnType(type.name + "#data",
+                        ColumnType.TypeValue.BYTE));
+            }
         } else if (type.isArray() || type.isMap() || type.isStruct()) {
             if (type.isArray() || type.isMap()) {
                 this.offsetData = Platform.reallocateMemory(offsetData, oldOffsetSize, newOffsetSize);
             }
-            int size = type.childTypes.size();
-            this.childColumns = new OffHeapColumnVector[size];
-            for (int i = 0; i < size; i++) {
-                this.childColumns[i] = new OffHeapColumnVector(newCapacity, type.childTypes.get(i));
+            // Same as the above
+            if (this.childColumns == null) {
+                int size = type.childTypes.size();
+                this.childColumns = new OffHeapColumnVector[size];
+                for (int i = 0; i < size; i++) {
+                    this.childColumns[i] = new OffHeapColumnVector(newCapacity, type.childTypes.get(i));
+                }
             }
         } else {
             throw new RuntimeException("Unhandled type: " + type);
@@ -161,7 +177,7 @@ public class OffHeapColumnVector {
         this.nulls = Platform.reallocateMemory(nulls, oldCapacity, newCapacity);
         Platform.setMemory(nulls + oldCapacity, (byte) 0, newCapacity - oldCapacity);
         capacity = newCapacity;
-
+        this.nullsLength = capacity;
         if (offsetData != 0) {
             // offsetData[0] == 0 always.
             // we have to set it explicitly otherwise it's undefined value here.
@@ -211,6 +227,12 @@ public class OffHeapColumnVector {
         if (offsetData != 0) {
             int offset = getArrayOffset(elementsAppended);
             putArrayOffset(elementsAppended, offset, 0);
+        }
+
+        if (type.isStruct()) {
+            for (int i = 0; i < childColumns.length; i++) {
+                childColumns[i].appendValue(null);
+            }
         }
 
         return elementsAppended++;
@@ -439,6 +461,8 @@ public class OffHeapColumnVector {
         for (int i = 0; i < childColumns.length; i++) {
             childColumns[i].appendValue(values.get(i));
         }
+        // for nulls indicator
+        reserve(elementsAppended + 1);
         return elementsAppended++;
     }
 
@@ -480,13 +504,6 @@ public class OffHeapColumnVector {
         ColumnType.TypeValue typeValue = type.getTypeValue();
         if (o == null) {
             appendNull();
-            if (type.isStruct()) {
-                List<ColumnValue> nulls = new ArrayList<>();
-                for (int i = 0; i < type.childTypes.size(); i++) {
-                    nulls.add(null);
-                }
-                appendStruct(nulls);
-            }
             return;
         }
 
@@ -609,11 +626,13 @@ public class OffHeapColumnVector {
                 sb.append("<binary>");
                 break;
             case STRING:
-            case DATE:
+                sb.append(getUTF8String(i));
+                break;
             case DATETIME:
             case DATETIME_MICROS:
             case DATETIME_MILLIS:
-                sb.append(getUTF8String(i));
+                // using long
+                sb.append(getLong(i));
                 break;
             case DECIMALV2:
             case DECIMAL32:
@@ -698,6 +717,21 @@ public class OffHeapColumnVector {
             }
             for (OffHeapColumnVector c : childColumns) {
                 c.checkMeta(checker);
+                if (type.isStruct()) {
+                    // For example
+                    // struct<a: null>
+                    // struct<a: null>
+                    // struct<a: null>
+                    // numNulls for struct level = 0
+                    // c.numNulls for a level = 3
+                    // numNulls must always <= c.numNulls
+                    if (numNulls <= c.numNulls && elementsAppended != c.elementsAppended) {
+                        throw new RuntimeException(
+                                "struct type check failed, root numNulls=" + numNulls + ", elementsAppended=" +
+                                elementsAppended + "; however, child " + c.type.name + " numNulls=" + c.numNulls +
+                                ", elementsAppended=" + c.elementsAppended);
+                    }
+                }
             }
         } else {
             checker.check(context + "#data", data);
@@ -748,5 +782,46 @@ public class OffHeapColumnVector {
         long timestamp = (((((hour * minsPerHour) + minute) * secsPerMinute) + second) * usecsPerSec)
                 + microsecond;
         return julianDate << timeStampBits | timestamp;
+    }
+
+    // for test only
+    public boolean checkNullsLength() {
+        ColumnType.TypeValue typeValue = type.getTypeValue();
+        switch (typeValue) {
+            case TINYINT:
+            case BOOLEAN:
+            case SHORT:
+            case INT:
+            case FLOAT:
+            case LONG:
+            case DOUBLE:
+            case DECIMALV2:
+            case DECIMAL32:
+            case DECIMAL64:
+            case DECIMAL128:
+                return nullsLength >= elementsAppended;
+            case BINARY:
+            case STRING:
+            case DATE:
+            case DATETIME:
+            case DATETIME_MICROS:
+            case DATETIME_MILLIS:
+            case ARRAY:
+                return nullsLength >= elementsAppended && childColumns[0].checkNullsLength();
+            case MAP:
+                return nullsLength >= elementsAppended && childColumns[0].checkNullsLength()
+                        && childColumns[1].checkNullsLength();
+            case STRUCT: {
+                List<String> names = type.getChildNames();
+                for (int c = 0; c < names.size(); c++) {
+                    if (!childColumns[c].checkNullsLength()) {
+                        return false;
+                    }
+                }
+                return nullsLength >= elementsAppended;
+            }
+            default:
+                throw new RuntimeException("Unknown type value: " + typeValue);
+        }
     }
 }

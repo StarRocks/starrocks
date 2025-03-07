@@ -1,0 +1,75 @@
+-- name: test_csv_files_merge
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/csv_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic0_column_mismatch.csv oss://${oss_bucket}/test_files/csv_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+shell: ossutil64 cp --force ./sql/test_files/csv_format/basic1.csv oss://${oss_bucket}/test_files/csv_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+
+-- query
+desc files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "csv.column_separator" = ",",
+    "csv.row_delimiter" = "\n",
+    "auto_detect_sample_files" = "1");
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "csv.column_separator" = ",",
+    "csv.row_delimiter" = "\n",
+    "auto_detect_sample_files" = "1",
+    "fill_mismatch_column_with" = "null");
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "csv.column_separator" = ",",
+    "csv.row_delimiter" = "\n",
+    "auto_detect_sample_files" = "1",
+    "fill_mismatch_column_with" = "none");
+
+
+-- load
+create table t1 (k1 bigint, k2 varchar(256), k3 double, k4 boolean);
+
+insert into t1 
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "csv.column_separator" = ",",
+    "csv.row_delimiter" = "\n",
+    "auto_detect_sample_files" = "1",
+    "fill_mismatch_column_with" = "none");
+
+insert into t1 properties ("max_filter_ratio" = "0.5") 
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "csv.column_separator" = ",",
+    "csv.row_delimiter" = "\n",
+    "auto_detect_sample_files" = "1",
+    "fill_mismatch_column_with" = "none");
+select * from t1;
+truncate table t1;
+
+insert into t1 
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "csv.column_separator" = ",",
+    "csv.row_delimiter" = "\n",
+    "auto_detect_sample_files" = "1",
+    "fill_mismatch_column_with" = "null");
+select * from t1;
+
+-- error property
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/csv_format/${uuid0}/*",
+    "format" = "csv",
+    "csv.column_separator" = ",",
+    "csv.row_delimiter" = "\n",
+    "auto_detect_sample_files" = "1",
+    "fill_mismatch_column_with" = "xxx");
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/csv_format/${uuid0}/ > /dev/null

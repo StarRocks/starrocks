@@ -189,7 +189,7 @@ public class DomainResolver extends FrontendDaemon {
                     bufferedReader.close();
                 }
             } catch (IOException e) {
-                LOG.error("Close bufferedReader error! " + e);
+                LOG.error("Close bufferedReader error! ", e);
             }
         }
     }

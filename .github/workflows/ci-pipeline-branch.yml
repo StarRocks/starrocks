@@ -43,6 +43,12 @@ jobs:
           rm -rf ./ci-tool && cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull >/dev/null
           ./scripts/check-blacklist.sh
 
+      - name: Check Feature Issue
+        id: check_issue
+        run: |
+          cd ci-tool
+          python3 scripts/get_pr_issue.py check_issue ${GITHUB_REPOSITORY} ${PR_NUMBER}
+
   be-checker:
     runs-on: ubuntu-latest
     needs: basic-checker
@@ -132,18 +138,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        build_type: [ Release, ASAN ]
+        linux: [ centos7, ubuntu ]
     steps:
       - name: clean
         run: |
           rm -rf ${{ github.workspace }}
           mkdir -p ${{ github.workspace }}
 
-      - name: Update Image (${{ matrix.build_type }})
+      - name: Update Image (${{ matrix.linux }})
         id: update-image
         if: needs.be-checker.outputs.output2  == 'true'
         env:
-          linux_distro: ${{ matrix.build_type }}
+          linux_distro: ${{ matrix.linux }}
         run: |
           cp -rf /var/lib/ci-tool ./ci-tool && cd ci-tool && git pull && source lib/init.sh
           ./bin/run-pr-update-image.sh
@@ -151,10 +157,11 @@ jobs:
       - name: Upload Thirdparty Result
         uses: actions/upload-artifact@v4
         with:
-          name: THIRDPARTY-RESULT-${{ matrix.build_type }}
+          name: THIRDPARTY-RESULT-${{ matrix.linux }}
           path: image_cache.info
           retention-days: 1
           overwrite: true
+          if-no-files-found: ignore
 
       - name: Clean ENV
         if: always()
@@ -339,6 +346,7 @@ jobs:
     needs: fe-checker
     if: needs.fe-checker.outputs.output1 == 'true' && github.repository == 'StarRocks/starrocks'
     name: FE Sonarcloud Check
+    timeout-minutes: 60
     env:
       PR_NUMBER: ${{ github.event.number }}
       CODE_PATH: ${{ github.workspace }}
@@ -375,14 +383,14 @@ jobs:
           distribution: 'adopt'
 
       - name: Cache SonarCloud packages
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.sonar/cache
           key: ${{ runner.os }}-sonar
           restore-keys: ${{ runner.os }}-sonar
 
       - name: Cache Maven packages
-        uses: actions/cache@v3
+        uses: actions/cache@v4
         with:
           path: ~/.m2
           key: ${{ runner.os }}-maven-${{ hashFiles('**/pom.xml') }}
@@ -411,7 +419,11 @@ jobs:
           mkdir -p thirdparty/installed/bin/
           cd thirdparty/installed/bin/ && ln -s /usr/local/bin/thrift thrift
           cd ${{ github.workspace }}/fe
-          mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
+          export SONAR_SCANNER_OPTS="-Xms3072m -Xmx12288m"
+          export MAVEN_OPTS="-Xms3072m -Xmx12288m"
+          mvn -B -DskipTests verify org.sonarsource.scanner.maven:sonar-maven-plugin:4.0.0.4121:sonar \
+            -Dsonar.projectKey=StarRocks_starrocks -Dsonar.pullrequest.key=${{ github.event.number }} \
+            -Dsonar.pullrequest.base=${{ github.base_ref }} -Dsonar.pullrequest.branch=${{ github.head_ref }}
 
   fe-ut:
     runs-on: [self-hosted, normal]
@@ -497,6 +509,7 @@ jobs:
           name: head_sha
           path: ./head_sha.txt
           retention-days: 3
+          overwrite: true
 
       - name: Clean
         run: |

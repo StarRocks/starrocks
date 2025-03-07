@@ -36,6 +36,7 @@ package com.starrocks.system;
 
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Writable;
+import com.starrocks.thrift.TStatusCode;
 
 import java.io.DataInput;
 import java.io.DataOutput;
@@ -54,6 +55,8 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
     private int httpPort;
     @SerializedName(value = "brpcPort")
     private int brpcPort;
+    @SerializedName(value = "arrowFlightPort")
+    private int arrowFlightPort;
 
     @SerializedName(value = "starletPort")
     private int starletPort;
@@ -61,8 +64,14 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
     private String version = "";
     @SerializedName(value = "cpuCores")
     private int cpuCores;
+    @SerializedName(value = "mlb")
+    private long memLimitBytes;
     @SerializedName(value = "rebootTime")
     private long rebootTime = -1L;
+
+    @SerializedName(value = "statusCode")
+    private TStatusCode statusCode = TStatusCode.OK;
+
     private boolean isSetStoragePath = false;
 
     public BackendHbResponse() {
@@ -70,13 +79,15 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
     }
 
     public BackendHbResponse(long beId, int bePort, int httpPort, int brpcPort,
-                             int starletPort, long hbTime, String version, int cpuCores, boolean isSetStoragePath) {
-        this(beId, bePort, httpPort, brpcPort, starletPort, hbTime, version, cpuCores);
+                             int starletPort, long hbTime, String version, int cpuCores, long memLimitBytes,
+                             boolean isSetStoragePath, int arrowFlightPort) {
+        this(beId, bePort, httpPort, brpcPort, starletPort, hbTime, version, cpuCores, memLimitBytes);
+        this.arrowFlightPort = arrowFlightPort;
         this.isSetStoragePath = isSetStoragePath;
     }
 
     public BackendHbResponse(long beId, int bePort, int httpPort, int brpcPort,
-                             int starletPort, long hbTime, String version, int cpuCores) {
+                             int starletPort, long hbTime, String version, int cpuCores, long memLimitBytes) {
         super(HeartbeatResponse.Type.BACKEND);
         this.beId = beId;
         this.status = HbStatus.OK;
@@ -87,13 +98,17 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
         this.hbTime = hbTime;
         this.version = version;
         this.cpuCores = cpuCores;
+        this.memLimitBytes = memLimitBytes;
     }
 
-    public BackendHbResponse(long beId, String errMsg) {
+    public BackendHbResponse(long beId, TStatusCode statusCode, String errMsg) {
         super(HeartbeatResponse.Type.BACKEND);
         this.status = HbStatus.BAD;
         this.beId = beId;
+        this.statusCode = statusCode;
         this.msg = errMsg;
+        // still record the current timestamp as the heartbeat time
+        this.hbTime = System.currentTimeMillis();
     }
 
     public long getRebootTime() {
@@ -120,6 +135,10 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
         return brpcPort;
     }
 
+    public int getArrowFlightPort() {
+        return arrowFlightPort;
+    }
+
     public int getStarletPort() {
         return starletPort;
     }
@@ -132,8 +151,20 @@ public class BackendHbResponse extends HeartbeatResponse implements Writable {
         return cpuCores;
     }
 
+    public long getMemLimitBytes() {
+        return memLimitBytes;
+    }
+
     public boolean isSetStoragePath() {
         return isSetStoragePath;
+    }
+
+    public TStatusCode getStatusCode() {
+        return statusCode;
+    }
+
+    public void setStatusCode(TStatusCode statusCode) {
+        this.statusCode = statusCode;
     }
 
     public static BackendHbResponse read(DataInput in) throws IOException {

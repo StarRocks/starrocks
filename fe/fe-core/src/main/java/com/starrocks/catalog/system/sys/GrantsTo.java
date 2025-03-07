@@ -15,6 +15,22 @@ package com.starrocks.catalog.system.sys;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
+import com.starrocks.authorization.ActionSet;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.CatalogPEntryObject;
+import com.starrocks.authorization.DbPEntryObject;
+import com.starrocks.authorization.FunctionPEntryObject;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PipePEntryObject;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.authorization.PrivilegeEntry;
+import com.starrocks.authorization.PrivilegeType;
+import com.starrocks.authorization.ResourceGroupPEntryObject;
+import com.starrocks.authorization.ResourcePEntryObject;
+import com.starrocks.authorization.StorageVolumePEntryObject;
+import com.starrocks.authorization.TablePEntryObject;
+import com.starrocks.authorization.UserPEntryObject;
+import com.starrocks.authorization.WarehousePEntryObject;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalCatalog;
@@ -28,31 +44,18 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
-import com.starrocks.privilege.ActionSet;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.CatalogPEntryObject;
-import com.starrocks.privilege.DbPEntryObject;
-import com.starrocks.privilege.FunctionPEntryObject;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PipePEntryObject;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
-import com.starrocks.privilege.PrivilegeEntry;
-import com.starrocks.privilege.PrivilegeType;
-import com.starrocks.privilege.ResourceGroupPEntryObject;
-import com.starrocks.privilege.ResourcePEntryObject;
-import com.starrocks.privilege.StorageVolumePEntryObject;
-import com.starrocks.privilege.TablePEntryObject;
-import com.starrocks.privilege.UserPEntryObject;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.StorageVolumeMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserItem;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGrantsToType;
 import com.starrocks.thrift.TSchemaTableType;
+import com.starrocks.warehouse.Warehouse;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -66,8 +69,11 @@ import static com.starrocks.catalog.system.SystemTable.NAME_CHAR_LEN;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class GrantsTo {
+    private static final String GRANTS_TO_ROLES = "grants_to_roles";
+    private static final String GRANTS_TO_USERS = "grants_to_users";
+
     public static SystemTable createGrantsToRoles() {
-        return new SystemTable(SystemId.GRANTS_TO_ROLES_ID, "grants_to_roles", Table.TableType.SCHEMA,
+        return new SystemTable(SystemId.GRANTS_TO_ROLES_ID, GRANTS_TO_ROLES, Table.TableType.SCHEMA,
                 builder()
                         .column("GRANTEE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("OBJECT_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))
@@ -81,7 +87,7 @@ public class GrantsTo {
     }
 
     public static SystemTable createGrantsToUsers() {
-        return new SystemTable(SystemId.GRANTS_TO_USERS_ID, "grants_to_users", Table.TableType.SCHEMA,
+        return new SystemTable(SystemId.GRANTS_TO_USERS_ID, GRANTS_TO_USERS, Table.TableType.SCHEMA,
                 builder()
                         .column("GRANTEE", ScalarType.createVarchar(NAME_CHAR_LEN))
                         .column("OBJECT_CATALOG", ScalarType.createVarchar(NAME_CHAR_LEN))
@@ -193,7 +199,8 @@ public class GrantsTo {
                         } else {
                             Database database;
                             if (CatalogMgr.isInternalCatalog(catalogName)) {
-                                database = GlobalStateMgr.getCurrentState().getDb(Long.parseLong(dbPEntryObject.getUUID()));
+                                database = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                            .getDb(Long.parseLong(dbPEntryObject.getUUID()));
                             } else {
                                 String dbName = ExternalCatalog.getDbNameFromUUID(dbPEntryObject.getUUID());
                                 database = metadataMgr.getDb(catalogName, dbName);
@@ -241,7 +248,7 @@ public class GrantsTo {
                         } else {
                             Database database;
                             if (CatalogMgr.isInternalCatalog(tablePEntryObject.getCatalogId())) {
-                                database = GlobalStateMgr.getCurrentState()
+                                database = GlobalStateMgr.getCurrentState().getLocalMetastore()
                                         .getDb(Long.parseLong(tablePEntryObject.getDatabaseUUID()));
                             } else {
                                 String dbName = ExternalCatalog.getDbNameFromUUID(tablePEntryObject.getDatabaseUUID());
@@ -261,7 +268,8 @@ public class GrantsTo {
                                 objects.addAll(expandAllTables(metadataMgr, catalogName, dbName, privEntry.getKey()));
                             } else {
                                 if (CatalogMgr.isInternalCatalog(tablePEntryObject.getCatalogId())) {
-                                    Table table = database.getTable((Long.parseLong(tablePEntryObject.getTableUUID())));
+                                    Table table = GlobalStateMgr.getCurrentState().getLocalMetastore()
+                                                .getTable(database.getId(), (Long.parseLong(tablePEntryObject.getTableUUID())));
                                     if (table == null) {
                                         continue;
                                     }
@@ -319,7 +327,7 @@ public class GrantsTo {
                     if (databaseId == PrivilegeBuiltinConstants.ALL_DATABASE_ID) {
                         List<String> dbNames = metadataMgr.listDbNames(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME);
                         for (String dbName : dbNames) {
-                            Database database = GlobalStateMgr.getCurrentState().getDb(dbName);
+                            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
                             if (database == null) {
                                 continue;
                             }
@@ -333,7 +341,7 @@ public class GrantsTo {
                             }
                         }
                     } else {
-                        Database database = GlobalStateMgr.getCurrentState().getDb(databaseId);
+                        Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(databaseId);
                         if (database == null) {
                             continue;
                         }
@@ -394,6 +402,24 @@ public class GrantsTo {
                 } else if (ObjectType.PIPE.equals(privEntry.getKey())) {
                     PipePEntryObject pipePEntryObject = (PipePEntryObject) privilegeEntry.getObject();
                     objects.addAll(pipePEntryObject.expandObjectNames());
+                } else if (ObjectType.WAREHOUSE.equals(privEntry.getKey())) {
+                    WarehousePEntryObject warehousePEntryObject =
+                            (WarehousePEntryObject) privilegeEntry.getObject();
+                    long warehouseId = warehousePEntryObject.getId();
+                    if (warehouseId == PrivilegeBuiltinConstants.ALL_WAREHOUSES_ID) {
+                        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                        Set<String> allWarehouseNames = warehouseManager.getAllWarehouseNames();
+                        for (String warehouseName : allWarehouseNames) {
+                            objects.add(Lists.newArrayList(null, null, warehouseName));
+                        }
+                    } else {
+                        Warehouse warehouse =
+                                GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouseAllowNull(warehouseId);
+                        if (warehouse == null) {
+                            continue;
+                        }
+                        objects.add(Lists.newArrayList(null, null, warehouse.getName()));
+                    }
                 }
 
                 ActionSet actionSet = privilegeEntry.getActionSet();

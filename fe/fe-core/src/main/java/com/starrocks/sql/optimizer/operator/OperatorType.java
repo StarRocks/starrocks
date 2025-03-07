@@ -15,6 +15,10 @@
 
 package com.starrocks.sql.optimizer.operator;
 
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
+
 public enum OperatorType {
     /**
      * Logical operator
@@ -25,10 +29,13 @@ public enum OperatorType {
     LOGICAL_HIVE_SCAN,
     LOGICAL_FILE_SCAN,
     LOGICAL_ICEBERG_SCAN,
+    LOGICAL_ICEBERG_EQUALITY_DELETE_SCAN,
     LOGICAL_HUDI_SCAN,
     LOGICAL_DELTALAKE_SCAN,
     LOGICAL_PAIMON_SCAN,
     LOGICAL_ODPS_SCAN,
+    LOGICAL_ICEBERG_METADATA_SCAN,
+    LOGICAL_KUDU_SCAN,
     LOGICAL_SCHEMA_SCAN,
     LOGICAL_MYSQL_SCAN,
     LOGICAL_ES_SCAN,
@@ -54,6 +61,7 @@ public enum OperatorType {
     LOGICAL_CTE_ANCHOR,
     LOGICAL_CTE_PRODUCE,
     LOGICAL_CTE_CONSUME,
+    LOGICAL_SPJG_PIECES,
 
     /**
      * Physical operator
@@ -64,19 +72,25 @@ public enum OperatorType {
     PHYSICAL_HASH_JOIN,
     PHYSICAL_MERGE_JOIN,
     PHYSICAL_NESTLOOP_JOIN,
+
+    // TODO: collapse these verbose scans
     PHYSICAL_OLAP_SCAN,
     PHYSICAL_HIVE_SCAN,
     PHYSICAL_FILE_SCAN,
     PHYSICAL_ICEBERG_SCAN,
+    PHYSICAL_ICEBERG_EQUALITY_DELETE_SCAN,
     PHYSICAL_HUDI_SCAN,
     PHYSICAL_DELTALAKE_SCAN,
     PHYSICAL_PAIMON_SCAN,
     PHYSICAL_ODPS_SCAN,
+    PHYSICAL_ICEBERG_METADATA_SCAN,
+    PHYSICAL_KUDU_SCAN,
     PHYSICAL_SCHEMA_SCAN,
     PHYSICAL_MYSQL_SCAN,
     PHYSICAL_META_SCAN,
     PHYSICAL_ES_SCAN,
     PHYSICAL_JDBC_SCAN,
+
     PHYSICAL_PROJECT,
     PHYSICAL_SORT,
     PHYSICAL_TOPN,
@@ -126,6 +140,8 @@ public enum OperatorType {
     SUBQUERY,
     SUBFIELD,
     MULTI_IN,
+    DICTIONARY_GET,
+    MATCH_EXPR,
 
     /**
      * PATTERN
@@ -141,7 +157,14 @@ public enum OperatorType {
     //  join   table
     //  /  \
     // table table
-    PATTERN_MULTIJOIN,
-    DICTIONARY_GET,
-    MATCH_EXPR
+    PATTERN_MULTIJOIN;
+
+    private static final Set<OperatorType> PHYSICAL_SCANS =
+            Arrays.stream(OperatorType.values())
+                    .filter(x -> x.name().startsWith("PHYSICAL") && x.name().endsWith("SCAN"))
+                    .collect(Collectors.toUnmodifiableSet());
+
+    public boolean isPhysicalScan() {
+        return PHYSICAL_SCANS.contains(this);
+    }
 }

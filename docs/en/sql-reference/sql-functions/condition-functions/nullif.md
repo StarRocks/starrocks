@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # nullif
 
-## Description
+
 
 Returns NULL if `expr1` is equal to `expr2`. Otherwise, returns `expr1`.
 

@@ -18,9 +18,9 @@ package com.starrocks.connector.hive.events;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.connector.hive.CacheUpdateProcessor;
+import com.starrocks.connector.DatabaseTableName;
+import com.starrocks.connector.hive.HiveCacheUpdateProcessor;
 import com.starrocks.connector.hive.HivePartitionName;
-import com.starrocks.connector.hive.HiveTableName;
 import org.apache.hadoop.hive.metastore.api.NotificationEvent;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -53,7 +53,7 @@ public class MetastoreEventFactory implements EventFactory {
      * It is convenient for creating batch tasks to parallel processing.
      */
     @Override
-    public List<MetastoreEvent> get(NotificationEvent event, CacheUpdateProcessor cacheProcessor,
+    public List<MetastoreEvent> get(NotificationEvent event, HiveCacheUpdateProcessor cacheProcessor,
                                     String catalogName) {
         Preconditions.checkNotNull(event.getEventType());
         MetastoreEventType metastoreEventType = MetastoreEventType.from(event.getEventType());
@@ -77,7 +77,7 @@ public class MetastoreEventFactory implements EventFactory {
     }
 
     List<MetastoreEvent> getFilteredEvents(List<NotificationEvent> events,
-                                           CacheUpdateProcessor cacheProcessor, String catalogName) {
+                                           HiveCacheUpdateProcessor cacheProcessor, String catalogName) {
         List<MetastoreEvent> metastoreEvents = Lists.newArrayList();
 
         // Currently, the hive external table needs to be manually created in StarRocks to map with the hms table.
@@ -93,7 +93,7 @@ public class MetastoreEventFactory implements EventFactory {
                     continue;
                 }
             } else {
-                if (!cacheProcessor.isTablePresent(HiveTableName.of(dbName, tableName))) {
+                if (!cacheProcessor.isTablePresent(DatabaseTableName.of(dbName, tableName))) {
                     LOG.warn("Table is null on catalog [{}], table [{}.{}]. Skipping notification event {}",
                             catalogName, event.getDbName(), event.getTableName(), event);
                     continue;

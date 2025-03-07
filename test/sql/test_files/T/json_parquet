@@ -1,0 +1,18 @@
+-- name: test_json_parquet
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/parquet_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ./sql/test_files/parquet_format/json.parquet oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+
+select * from files('path' = 'oss://${oss_bucket}/test_files/parquet_format/${uuid0}/*', 'format' = 'parquet');
+
+create table t1 as select * from files('path' = 'oss://${oss_bucket}/test_files/parquet_format/${uuid0}/*', 'format' = 'parquet');
+desc t1;
+
+create table t2 (id bigint, array_col array<varchar(100)>);
+insert into t2 select * from files('path' = 'oss://${oss_bucket}/test_files/parquet_format/${uuid0}/*', 'format' = 'parquet');
+select * from t2;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ > /dev/null

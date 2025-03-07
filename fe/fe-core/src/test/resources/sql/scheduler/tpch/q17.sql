@@ -134,6 +134,7 @@ PLAN FRAGMENT 1
   |  
   7:SORT
   |  order by: <slot 18> 18: p_partkey ASC
+  |  analytic partition by: 18: p_partkey
   |  offset: 0
   |  
   6:Project

@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # week
 
-## 功能
+
 
 计算指定日期属于一年中的第几周。该函数与 MySQL 中的 WEEK 函数语义相同。该函数从 2.3 版本开始支持。
 
@@ -17,7 +17,6 @@ INT WEEK(DATETIME/DATE date, INT mode)
 ## 参数说明
 
 - `date`: 支持的数据类型为 DATETIME 和 DATE。
-
 - `mode`: 可选，支持的数据类型为 INT。用于确定周数计算逻辑，即一周起始于周日还是周一，以及返回值的范围是 0 到 53 还是 1 到 53。该参数取值范围 0~7，默认值为 `0`。如果未指定该参数，默认按照模式 `0` 对应的规则计算。具体的语义如下：
 
 ```Plain Text

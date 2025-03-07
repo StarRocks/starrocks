@@ -37,7 +37,7 @@ Status Chunk::upgrade_if_overflow() {
         if (!ret.ok()) {
             return ret.status();
         } else if (ret.value() != nullptr) {
-            column = ret.value();
+            column = std::move(ret.value());
         } else {
             continue;
         }
@@ -114,8 +114,7 @@ void Chunk::set_num_rows(size_t count) {
 void Chunk::update_rows(const Chunk& src, const uint32_t* indexes) {
     DCHECK(_columns.size() == src.num_columns());
     for (int i = 0; i < _columns.size(); i++) {
-        ColumnPtr& c = _columns[i];
-        c->update_rows(*src.columns()[i], indexes);
+        _columns[i]->update_rows(*src.columns()[i], indexes);
     }
 }
 
@@ -132,7 +131,20 @@ void Chunk::append_column(ColumnPtr column, const FieldPtr& field) {
     check_or_die();
 }
 
+void Chunk::append_vector_column(ColumnPtr column, const FieldPtr& field, SlotId slot_id) {
+    DCHECK(!_cid_to_index.contains(field->id()));
+    _cid_to_index[field->id()] = _columns.size();
+    _slot_id_to_index[slot_id] = _columns.size();
+    _columns.emplace_back(std::move(column));
+    _schema->append(field);
+    check_or_die();
+}
+
 void Chunk::append_column(ColumnPtr column, SlotId slot_id) {
+    DCHECK(!_slot_id_to_index.contains(slot_id)) << "slot_id:" + std::to_string(slot_id) << std::endl;
+    if (UNLIKELY(_slot_id_to_index.contains(slot_id))) {
+        throw std::runtime_error(fmt::format("slot_id {} already exists", slot_id));
+    }
     _slot_id_to_index[slot_id] = _columns.size();
     _columns.emplace_back(std::move(column));
     check_or_die();
@@ -168,7 +180,7 @@ void Chunk::insert_column(size_t idx, ColumnPtr column, const FieldPtr& field) {
 }
 
 void Chunk::append_default() {
-    for (const auto& column : _columns) {
+    for (auto& column : _columns) {
         column->append_default();
     }
 }
@@ -182,7 +194,25 @@ void Chunk::remove_column_by_index(size_t idx) {
     }
 }
 
-[[maybe_unused]] void Chunk::remove_columns_by_index(const std::vector<size_t>& indexes) {
+void Chunk::remove_column_by_slot_id(SlotId slot_id) {
+    auto iter = _slot_id_to_index.find(slot_id);
+    if (iter != _slot_id_to_index.end()) {
+        auto idx = iter->second;
+        _columns.erase(_columns.begin() + idx);
+        if (_schema != nullptr) {
+            _schema->remove(idx);
+            rebuild_cid_index();
+        }
+        _slot_id_to_index.erase(iter);
+        for (auto& tmp_iter : _slot_id_to_index) {
+            if (tmp_iter.second > idx) {
+                tmp_iter.second--;
+            }
+        }
+    }
+}
+
+void Chunk::remove_columns_by_index(const std::vector<size_t>& indexes) {
     DCHECK(std::is_sorted(indexes.begin(), indexes.end()));
     for (size_t i = indexes.size(); i > 0; i--) {
         _columns.erase(_columns.begin() + indexes[i - 1]);
@@ -244,7 +274,7 @@ std::unique_ptr<Chunk> Chunk::clone_empty_with_schema(size_t size) const {
 std::unique_ptr<Chunk> Chunk::clone_unique() const {
     std::unique_ptr<Chunk> chunk = clone_empty(0);
     for (size_t idx = 0; idx < _columns.size(); idx++) {
-        ColumnPtr column = _columns[idx]->clone_shared();
+        ColumnPtr column = _columns[idx]->clone();
         chunk->_columns[idx] = std::move(column);
     }
     chunk->_owner_info = _owner_info;

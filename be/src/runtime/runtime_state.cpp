@@ -46,8 +46,10 @@
 #include "common/status.h"
 #include "exec/exec_node.h"
 #include "exec/pipeline/query_context.h"
-#include "exprs/jit/jit_engine.h"
 #include "fs/fs_util.h"
+#ifdef USE_STAROS
+#include "fslib/star_cache_handler.h"
+#endif
 #include "runtime/datetime_value.h"
 #include "runtime/descriptors.h"
 #include "runtime/exec_env.h"
@@ -58,6 +60,10 @@
 #include "util/pretty_printer.h"
 #include "util/timezone_utils.h"
 #include "util/uid_util.h"
+
+#ifdef STARROCKS_JIT_ENABLE
+#include "exprs/jit/jit_engine.h"
+#endif
 
 namespace starrocks {
 
@@ -152,6 +158,9 @@ void RuntimeState::_init(const TUniqueId& fragment_instance_id, const TQueryOpti
                          const TQueryGlobals& query_globals, ExecEnv* exec_env) {
     _fragment_instance_id = fragment_instance_id;
     _query_options = query_options;
+    if (_query_options.__isset.spill_options) {
+        _spill_options = _query_options.spill_options;
+    }
     if (query_globals.__isset.time_zone) {
         _timezone = query_globals.time_zone;
         if (query_globals.__isset.timestamp_us) {
@@ -203,7 +212,7 @@ void RuntimeState::init_mem_trackers(const TUniqueId& query_id, MemTracker* pare
     }
 
     _query_mem_tracker =
-            std::make_shared<MemTracker>(MemTracker::QUERY, bytes_limit, runtime_profile()->name(), parent);
+            std::make_shared<MemTracker>(MemTrackerType::QUERY, bytes_limit, runtime_profile()->name(), parent);
     _instance_mem_tracker = std::make_shared<MemTracker>(_profile.get(), std::make_tuple(true, true, true), "Instance",
                                                          -1, runtime_profile()->name(), _query_mem_tracker.get());
     _instance_mem_pool = std::make_unique<MemPool>();
@@ -235,56 +244,12 @@ ObjectPool* RuntimeState::global_obj_pool() const {
     return _query_ctx->object_pool();
 }
 
-std::string RuntimeState::error_log() {
-    std::lock_guard<std::mutex> l(_error_log_lock);
-    return boost::algorithm::join(_error_log, "\n");
-}
-
-bool RuntimeState::log_error(std::string_view error) {
-    std::lock_guard<std::mutex> l(_error_log_lock);
-
-    if (_error_log.size() < _query_options.max_errors) {
-        _error_log.emplace_back(error);
-        return true;
-    }
-
-    return false;
-}
-
-void RuntimeState::log_error(const Status& status) {
-    if (status.ok()) {
-        return;
-    }
-
-    log_error(status);
-}
-
-void RuntimeState::get_unreported_errors(std::vector<std::string>* new_errors) {
-    std::lock_guard<std::mutex> l(_error_log_lock);
-
-    if (_unreported_error_idx < _error_log.size()) {
-        new_errors->assign(_error_log.begin() + _unreported_error_idx, _error_log.end());
-        _unreported_error_idx = _error_log.size();
-    }
-}
-
 bool RuntimeState::use_page_cache() {
     if (config::disable_storage_page_cache) {
         return false;
     }
     if (_query_options.__isset.use_page_cache) {
         return _query_options.use_page_cache;
-    }
-    return true;
-}
-
-bool RuntimeState::use_column_pool() const {
-    if (config::disable_column_pool) {
-        return false;
-    }
-
-    if (_query_options.__isset.use_column_pool) {
-        return _query_options.use_column_pool;
     }
     return true;
 }
@@ -313,7 +278,6 @@ Status RuntimeState::set_mem_limit_exceeded(MemTracker* tracker, int64_t failed_
            << PrettyPrinter::print(failed_allocation_size, TUnit::BYTES) << " without exceeding limit." << std::endl;
     }
 
-    log_error(ss.str());
     DCHECK(_process_status.is_mem_limit_exceeded());
     return _process_status;
 }
@@ -517,8 +481,46 @@ Status RuntimeState::reset_epoch() {
 }
 
 bool RuntimeState::is_jit_enabled() const {
+#ifdef STARROCKS_JIT_ENABLE
     return JITEngine::get_instance()->support_jit() && _query_options.__isset.jit_level &&
            _query_options.jit_level != 0;
+#else
+    return false;
+#endif
+}
+
+void RuntimeState::update_load_datacache_metrics(TReportExecStatusParams* load_params) const {
+    if (!_query_options.__isset.catalog) {
+        return;
+    }
+
+    TLoadDataCacheMetrics metrics{};
+    metrics.__set_read_bytes(_num_datacache_read_bytes.load(std::memory_order_relaxed));
+    metrics.__set_read_time_ns(_num_datacache_read_time_ns.load(std::memory_order_relaxed));
+    metrics.__set_write_bytes(_num_datacache_write_bytes.load(std::memory_order_relaxed));
+    metrics.__set_write_time_ns(_num_datacache_write_time_ns.load(std::memory_order_relaxed));
+    metrics.__set_count(_num_datacache_count.load(std::memory_order_relaxed));
+
+    if (_query_options.catalog == "default_catalog") {
+#ifdef USE_STAROS
+        if (config::starlet_use_star_cache) {
+            TDataCacheMetrics t_metrics{};
+            starcache::CacheMetrics cache_metrics;
+            staros::starlet::fslib::star_cache_get_metrics(&cache_metrics);
+            DataCacheUtils::set_metrics_from_thrift(t_metrics, cache_metrics);
+            metrics.__set_metrics(t_metrics);
+            load_params->__set_load_datacache_metrics(metrics);
+        }
+#endif // USE_STAROS
+    } else {
+        if (config::datacache_enable) {
+            const BlockCache* cache = BlockCache::instance();
+            TDataCacheMetrics t_metrics{};
+            DataCacheUtils::set_metrics_from_thrift(t_metrics, cache->cache_metrics());
+            metrics.__set_metrics(t_metrics);
+            load_params->__set_load_datacache_metrics(metrics);
+        }
+    }
 }
 
 } // end namespace starrocks

@@ -25,13 +25,13 @@
 
 #include "common/status.h"
 #include "common/tracer.h"
-#include "exec/data_sink.h"
+#include "exec/async_data_sink.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/Types_types.h"
-#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "runtime/mem_tracker.h"
 #include "util/compression/block_compression.h"
+#include "util/internal_service_recoverable_stub.h"
 #include "util/raw_container.h"
 #include "util/ref_count_closure.h"
 #include "util/reusable_closure.h"
@@ -43,10 +43,11 @@ class MemTracker;
 class TupleDescriptor;
 class TxnLogPB;
 
-namespace stream_load {
-
 class OlapTableSink;    // forward declaration
 class TabletSinkSender; // forward declaration
+
+template <typename T>
+void serialize_to_iobuf(T& proto_obj, butil::IOBuf* iobuf);
 
 // The counter of add_batch rpc of a single node
 struct AddBatchCounter {
@@ -95,6 +96,7 @@ struct TabletSinkProfile {
     RuntimeProfile::Counter* server_rpc_timer = nullptr;
     RuntimeProfile::Counter* alloc_auto_increment_timer = nullptr;
     RuntimeProfile::Counter* server_wait_flush_timer = nullptr;
+    RuntimeProfile::Counter* update_load_channel_profile_timer = nullptr;
 };
 
 // map index_id to TabletBEMap(map tablet_id to backend id)
@@ -184,6 +186,13 @@ private:
     Status _filter_indexes_with_where_expr(Chunk* input, const std::vector<uint32_t>& indexes,
                                            std::vector<uint32_t>& filtered_indexes);
 
+    void _reset_cur_chunk(Chunk* input);
+    void _append_data_to_cur_chunk(const Chunk& src, const uint32_t* indexes, uint32_t from, uint32_t size);
+
+    void _try_diagnose(const std::string& error_text);
+    bool _is_diagnose_done();
+    void _wait_diagnose(RuntimeState* state);
+
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
 
     OlapTableSink* _parent = nullptr;
@@ -214,7 +223,7 @@ private:
 
     std::unique_ptr<RowDescriptor> _row_desc;
 
-    PInternalService_Stub* _stub = nullptr;
+    std::shared_ptr<PInternalService_RecoverableStub> _stub;
     std::vector<RefCountClosure<PTabletWriterOpenResult>*> _open_closures;
 
     std::map<int64_t, std::vector<PTabletWithPartition>> _index_tablets_map;
@@ -234,6 +243,7 @@ private:
     size_t _max_parallel_request_size = 1;
     std::vector<ReusableClosure<PTabletWriterAddBatchResult>*> _add_batch_closures;
     std::unique_ptr<Chunk> _cur_chunk;
+    int64_t _cur_chunk_mem_usage = 0;
 
     PTabletWriterAddChunksRequest _rpc_request;
     using AddMultiChunkReq = std::pair<std::unique_ptr<Chunk>, PTabletWriterAddChunksRequest>;
@@ -259,6 +269,7 @@ private:
     ExprContext* _where_clause = nullptr;
 
     bool _has_primary_replica = false;
+    std::unique_ptr<RefCountClosure<PLoadDiagnoseResult>> _diagnose_closure;
 };
 
 class IndexChannel {
@@ -322,5 +333,4 @@ private:
     bool _has_intolerable_failure = false;
 };
 
-} // namespace stream_load
 } // namespace starrocks

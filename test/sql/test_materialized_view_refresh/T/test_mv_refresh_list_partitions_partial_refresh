@@ -1,0 +1,261 @@
+-- name: test_mv_refresh_list_partitions_partial_refresh
+
+create database db_${uuid0};
+use db_${uuid0};
+
+CREATE TABLE t3 (
+      id BIGINT,
+      province VARCHAR(64) not null,
+      age SMALLINT,
+      dt VARCHAR(10) not null
+)
+DUPLICATE KEY(id)
+PARTITION BY LIST (province, dt) (
+     PARTITION p1 VALUES IN (("beijing", "2024-01-01"))  ,
+     PARTITION p2 VALUES IN (("guangdong", "2024-01-01")), 
+     PARTITION p3 VALUES IN (("beijing", "2024-01-02"))  ,
+     PARTITION p4 VALUES IN (("guangdong", "2024-01-02")) 
+)
+DISTRIBUTED BY RANDOM;
+INSERT INTO t3 VALUES (1, 'beijing', 20, '2024-01-01'), (2, 'guangdong', 20, '2024-01-01'), (3, 'guangdong', 20, '2024-01-02');
+
+CREATE TABLE t4 (
+      id BIGINT,
+      province VARCHAR(64) not null,
+      age SMALLINT,
+      dt VARCHAR(10)
+)
+DUPLICATE KEY(id)
+PARTITION BY (province) 
+DISTRIBUTED BY RANDOM;
+INSERT INTO t4 VALUES (1, 'beijing', 20, '2024-01-01'), (2, 'guangdong', 20, '2024-01-01'), (3, 'guangdong', 20, '2024-01-02');
+
+CREATE TABLE t5 (
+      id BIGINT,
+      province VARCHAR(64) not null,
+      age SMALLINT,
+      dt VARCHAR(10) not null
+)
+DUPLICATE KEY(id)
+PARTITION BY (province, dt) 
+DISTRIBUTED BY RANDOM;
+INSERT INTO t5 VALUES (1, 'beijing', 20, '2024-01-01'), (2, 'guangdong', 20, '2024-01-01'), (3, 'guangdong', 20, '2024-01-02');
+
+--------- t3 ---------
+-- test sync refresh & partition_refresh_number= -1
+create materialized view test_mv1
+partition by dt
+REFRESH DEFERRED MANUAL
+distributed by hash(dt, province) buckets 10 
+PROPERTIES (
+'partition_refresh_number' = '1',
+"replication_num" = "1"
+) 
+as select dt, province, sum(age) from t3 group by dt, province;
+refresh materialized view  test_mv1 partition ('2024-01-01') with sync mode;
+select * from test_mv1 order by 1, 2;
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t3 where dt='2024-01-01'  group by dt, province order by 1, 2;
+INSERT INTO t3 VALUES (2, 'beijing', 20, '2024-01-01');
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 where dt='2024-01-02' group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t3 where dt='2024-01-01' group by dt, province order by 1, 2;
+
+drop materialized view test_mv1;
+
+-- test sync refresh & partition_refresh_number= 1
+create materialized view test_mv1
+partition by province
+REFRESH DEFERRED MANUAL
+distributed by hash(dt, province) buckets 10 
+PROPERTIES (
+"replication_num" = "1"
+) 
+as select dt, province, sum(age) from t3 group by dt, province;
+refresh materialized view test_mv1 partition ('beijing') with sync mode;
+select * from test_mv1 order by 1, 2;
+function: print_hit_materialized_view("select dt, province, sum(age) from t3 where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t3  where province='beijing' group by dt, province order by 1, 2;
+INSERT INTO t3 VALUES (2, 'beijing', 20, '2024-01-01');
+function: print_hit_materialized_view("select dt, province, sum(age) from t3  where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t3  where province='beijing' group by dt, province order by 1, 2;
+drop materialized view test_mv1;
+
+-- test async refresh & partition_refresh_number= 1
+create materialized view test_mv1
+partition by dt
+REFRESH DEFERRED MANUAL
+distributed by hash(dt, province) buckets 10 
+PROPERTIES (
+"replication_num" = "1"
+) 
+as select dt, province, sum(age) from t3 group by dt, province;
+refresh materialized view test_mv1 partition ('2024-01-01');
+function: wait_async_materialized_view_finish("db_${uuid0}",'test_mv1')
+select * from test_mv1 order by 1, 2;
+function: print_hit_materialized_view("select dt, province, sum(age) from t3  where dt='2024-01-01'  group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t3  where dt='2024-01-01'  group by dt, province order by 1, 2;
+INSERT INTO t3 VALUES (2, 'beijing', 20, '2024-01-01');
+function: print_hit_materialized_view("select dt, province, sum(age) from t3  where dt='2024-01-01'  group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t3  where dt='2024-01-01' group by dt, province order by 1, 2;
+drop materialized view test_mv1;
+
+--------- t4 ---------
+-- test sync refresh & partition_refresh_number= -1
+create materialized view test_mv1
+partition by province
+REFRESH DEFERRED MANUAL
+distributed by hash(dt, province) buckets 10 
+PROPERTIES (
+'partition_refresh_number' = '-1',
+"replication_num" = "1"
+) 
+as select dt, province, sum(age) from t4 group by dt, province;
+refresh materialized view  test_mv1 partition ('beijing') with sync mode;
+select * from test_mv1 order by 1, 2;
+function: print_hit_materialized_view("select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;
+INSERT INTO t4 VALUES (2, 'beijing', 20, '2024-01-01');
+function: print_hit_materialized_view("select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;
+drop materialized view test_mv1;
+
+-- test sync refresh & partition_refresh_number= 1
+create materialized view test_mv1
+partition by province
+REFRESH DEFERRED MANUAL
+distributed by hash(dt, province) buckets 10 
+PROPERTIES (
+"replication_num" = "1"
+) 
+as select dt, province, sum(age) from t4 group by dt, province;
+refresh materialized view  test_mv1 partition ('beijing') with sync mode;
+select * from test_mv1 order by 1, 2;
+function: print_hit_materialized_view("select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;
+INSERT INTO t4 VALUES (2, 'beijing', 20, '2024-01-01');
+function: print_hit_materialized_view("select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;
+drop materialized view test_mv1;
+
+-- test async refresh & partition_refresh_number= 1
+create materialized view test_mv1
+partition by province
+REFRESH DEFERRED MANUAL
+distributed by hash(dt, province) buckets 10 
+PROPERTIES (
+"replication_num" = "1"
+) 
+as select dt, province, sum(age) from t4 group by dt, province;
+refresh materialized view  test_mv1 partition ('beijing');
+function: wait_async_materialized_view_finish("db_${uuid0}",'test_mv1')
+select * from test_mv1 order by 1, 2;
+function: print_hit_materialized_view("select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;
+INSERT INTO t4 VALUES (2, 'beijing', 20, '2024-01-01');
+function: print_hit_materialized_view("select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t4 where province='beijing' group by dt, province order by 1, 2;
+drop materialized view test_mv1;
+
+--------- t5 ---------
+-- test sync refresh & partition_refresh_number= -1
+create materialized view test_mv1
+partition by dt
+REFRESH DEFERRED MANUAL
+distributed by hash(dt, province) buckets 10 
+PROPERTIES (
+'partition_refresh_number' = '-1',
+"replication_num" = "1"
+) 
+as select dt, province, sum(age) from t5 group by dt, province;
+refresh materialized view  test_mv1 partition ('2024-01-01') with sync mode;
+select * from test_mv1 order by 1, 2;
+function: print_hit_materialized_view("select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;
+INSERT INTO t5 VALUES (2, 'beijing', 20, '2024-01-01');
+function: print_hit_materialized_view("select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;
+drop materialized view test_mv1;
+
+-- test sync refresh & partition_refresh_number= 1
+create materialized view test_mv1
+partition by province
+REFRESH DEFERRED MANUAL
+distributed by hash(dt, province) buckets 10 
+PROPERTIES (
+"replication_num" = "1"
+) 
+as select dt, province, sum(age) from t5 group by dt, province;
+refresh materialized view  test_mv1 partition ('beijing') with sync mode;
+select * from test_mv1 order by 1, 2;
+function: print_hit_materialized_view("select dt, province, sum(age) from t5  where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t5  where province='beijing' group by dt, province order by 1, 2;
+INSERT INTO t5 VALUES (2, 'beijing', 20, '2024-01-01');
+function: print_hit_materialized_view("select dt, province, sum(age) from t5  where province='beijing' group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t5  where province='beijing' group by dt, province order by 1, 2;
+drop materialized view test_mv1;
+
+-- test async refresh & partition_refresh_number= 1
+create materialized view test_mv1
+partition by dt
+REFRESH DEFERRED MANUAL
+distributed by hash(dt, province) buckets 10 
+PROPERTIES (
+"replication_num" = "1"
+) 
+as select dt, province, sum(age) from t5 group by dt, province;
+refresh materialized view  test_mv1 partition ('2024-01-01');
+function: wait_async_materialized_view_finish("db_${uuid0}",'test_mv1')
+select * from test_mv1 order by 1, 2;
+function: print_hit_materialized_view("select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t5  where dt='2024-01-01' group by dt, province order by 1, 2;
+INSERT INTO t5 VALUES (2, 'beijing', 20, '2024-01-01');
+function: print_hit_materialized_view("select dt, province, sum(age) from t5  where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t5  where dt='2024-01-01' group by dt, province order by 1, 2;
+drop materialized view test_mv1;
+
+--------- t6 ---------
+-- test sync refresh & partition_refresh_number= -1 && partition_ttl_number =1
+create materialized view test_mv1
+partition by dt
+REFRESH DEFERRED MANUAL
+distributed by hash(dt, province) buckets 10 
+PROPERTIES (
+      'partition_refresh_number' = '-1',
+      "replication_num" = "1",
+      "partition_retention_condition" = "dt > '2024-01-01'"
+) 
+as select dt, province, sum(age) from t5 group by dt, province;
+refresh materialized view test_mv1 with sync mode;
+select * from test_mv1 order by 1, 2;
+function: print_table_partitions_num("test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;
+INSERT INTO t5 VALUES (2, 'beijing', 20, '2024-01-01');
+function: check_no_hit_materialized_view("select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t5 where dt='2024-01-01' group by dt, province order by 1, 2;
+drop materialized view test_mv1;
+
+-- test async refresh & partition_refresh_number= 1
+create materialized view test_mv1
+partition by dt
+REFRESH DEFERRED MANUAL
+distributed by hash(dt, province) buckets 10 
+PROPERTIES (
+      "replication_num" = "1",
+      "partition_retention_condition" = "dt > '2024-01-01'"
+) 
+as select dt, province, sum(age) from t5 group by dt, province;
+refresh materialized view test_mv1;
+function: wait_async_materialized_view_finish("db_${uuid0}",'test_mv1')
+select * from test_mv1 order by 1, 2;
+function: print_table_partitions_num("test_mv1")
+function: print_hit_materialized_view("select dt, province, sum(age) from t5  where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t5  where dt='2024-01-01' group by dt, province order by 1, 2;
+INSERT INTO t5 VALUES (2, 'beijing', 20, '2024-01-01');
+function: check_no_hit_materialized_view("select dt, province, sum(age) from t5  where dt='2024-01-01' group by dt, province order by 1, 2;", "test_mv1")
+select dt, province, sum(age) from t5  where dt='2024-01-01' group by dt, province order by 1, 2;
+drop materialized view test_mv1;
+
+drop table t3;
+drop table t4;
+drop table t5;

@@ -1,0 +1,77 @@
+-- name: test_clear_stats
+CREATE DATABASE test_clear_stats;
+-- result:
+-- !result
+use test_clear_stats;
+-- result:
+-- !result
+CREATE TABLE tbl (
+  `c1` int(11) NOT NULL COMMENT " ",
+  `c2` int(11) NULL COMMENT " "
+) ENGINE=OLAP
+PRIMARY KEY(`c1`)
+COMMENT " "
+DISTRIBUTED BY HASH(`c1`)
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"storage_format" = "DEFAULT",
+"enable_persistent_index" = "true",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into tbl values (1, 1);
+-- result:
+-- !result
+analyze table test_clear_stats.tbl WITH SYNC MODE;
+-- result:
+test_clear_stats.tbl	analyze	status	OK
+-- !result
+insert into _statistics_.column_statistics
+select
+table_id, 1 , column_name, db_id, table_name, partition_name, row_count, data_size, ndv, null_count,max, min, '2024-05-01', collection_size  
+from _statistics_.column_statistics where table_name = 'test_clear_stats.tbl' limit 1;
+-- result:
+-- !result
+select sleep(2);
+-- result:
+1
+-- !result
+select count(*) > 2 from _statistics_.column_statistics where table_name = 'test_clear_stats.tbl';
+-- result:
+1
+-- !result
+ADMIN SET FRONTEND CONFIG ("clear_stale_stats_interval_sec" = "20");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("statistic_manager_sleep_time_sec" = "2");
+-- result:
+-- !result
+insert into tbl values (4, 4), (5, 5), (6, 6), (7, 7), (8, 8), (9, 9);
+-- result:
+-- !result
+analyze table test_clear_stats.tbl WITH SYNC MODE;
+-- result:
+test_clear_stats.tbl	analyze	status	OK
+-- !result
+truncate table tbl;
+-- result:
+-- !result
+insert into tbl values (1, 1), (2, 2), (3, 3), (4, 4);
+-- result:
+-- !result
+analyze table test_clear_stats.tbl WITH SYNC MODE;
+-- result:
+test_clear_stats.tbl	analyze	status	OK
+-- !result
+function: assert_clear_stale_stats("select count(*) from _statistics_.column_statistics where table_name = 'test_clear_stats.tbl'", 3)
+-- result:
+None
+-- !result
+ADMIN SET FRONTEND CONFIG ("clear_stale_stats_interval_sec" = "43200");
+-- result:
+-- !result
+ADMIN SET FRONTEND CONFIG ("statistic_manager_sleep_time_sec" = "60");
+-- result:
+-- !result

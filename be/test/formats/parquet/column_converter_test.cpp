@@ -76,15 +76,16 @@ protected:
                const std::string& expected_value, const size_t expected_rows, bool is_failed = false) {
         auto file = _create_file(filepath);
         auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
-                                                        std::filesystem::file_size(filepath), 0);
+                                                        std::filesystem::file_size(filepath));
 
         // --------------init context---------------
         auto ctx = _create_scan_context();
 
         Utils::SlotDesc slot_descs[] = {{col_name, col_type}, {""}};
 
-        ctx->tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
-        Utils::make_column_info_vector(ctx->tuple_desc, &ctx->materialized_columns);
+        TupleDescriptor* tuple_desc = Utils::create_tuple_descriptor(_runtime_state, &_pool, slot_descs);
+        Utils::make_column_info_vector(tuple_desc, &ctx->materialized_columns);
+        ctx->slot_descs = tuple_desc->slots();
         ctx->scan_range = (_create_scan_range(filepath));
         // --------------finish init context---------------
 

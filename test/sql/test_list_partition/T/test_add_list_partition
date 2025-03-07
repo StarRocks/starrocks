@@ -1,0 +1,57 @@
+-- name: test_add_list_partition
+create database test_db_${uuid0};
+use test_db_${uuid0};
+
+CREATE TABLE t_p_error (
+  calendar_day varchar(65533) NOT NULL COMMENT "",
+  calendar_year varchar(65533) NOT NULL COMMENT "",
+  calendar_id varchar(65533) NOT NULL COMMENT ""
+) ENGINE=OLAP 
+PARTITION BY (calendar_year)
+DISTRIBUTED BY HASH(calendar_day) BUCKETS 2 
+PROPERTIES ( "replication_num" = "1");
+
+
+-- INSERT VALUES auto add partitions
+insert into t_p_error values ('2022-01-01','2011','104979534377373696');
+SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partitions_meta WHERE DB_NAME='test_db_${uuid0}' AND table_name = 't_p_error' ORDER BY PARTITION_ID;
+
+-- INSERT-SELECT 
+insert into t_p_error 
+select calendar_day, cast(calendar_year as int) + 1, calendar_id from t_p_error;
+
+insert into t_p_error values 
+    ('2022-01-01','2011','104979534377373696'),
+    ('2022-01-01','2012','104979534377373696');
+SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partitions_meta WHERE DB_NAME='test_db_${uuid0}' AND table_name = 't_p_error' ORDER BY PARTITION_ID;
+
+-- add partition
+ALTER TABLE t_p_error ADD PARTITION IF NOT EXISTS p2024 VALUES IN ('2024');
+insert into t_p_error values ('2022-01-01','2024','abc');
+SELECT * FROM t_p_error WHERE calendar_year = '2024';
+SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partitions_meta WHERE DB_NAME='test_db_${uuid0}' AND table_name = 't_p_error' ORDER BY PARTITION_ID;
+
+-- add partition like multi-column format
+ALTER TABLE t_p_error ADD PARTITION IF NOT EXISTS p2024 VALUES IN (('2030'));
+insert into t_p_error values ('2022-01-01','2030','abc');
+SELECT * FROM t_p_error WHERE calendar_year = '2030';
+SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partitions_meta WHERE DB_NAME='test_db_${uuid0}' AND table_name = 't_p_error' ORDER BY PARTITION_ID;
+
+-- add temp partition
+ALTER TABLE t_p_error ADD TEMPORARY PARTITION IF NOT EXISTS p2024_tmp VALUES IN ('2024');
+insert into t_p_error TEMPORARY PARTITION(p2024_tmp) values ('2022-01-01','2024','xyz');
+SELECT * FROM t_p_error WHERE calendar_year = '2024';
+SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partitions_meta WHERE DB_NAME='test_db_${uuid0}' AND table_name = 't_p_error' ORDER BY PARTITION_ID;
+
+-- replace temp partition
+ALTER TABLE t_p_error REPLACE PARTITION (p2024) WITH TEMPORARY PARTITION (p2024_tmp);
+SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partitions_meta WHERE DB_NAME='test_db_${uuid0}' AND table_name = 't_p_error' ORDER BY PARTITION_ID;
+SELECT * FROM t_p_error WHERE calendar_year = '2024';
+
+-- INSERT-SELECT again
+insert into t_p_error select calendar_day, cast(calendar_year as int) + 1, calendar_id from t_p_error;
+SELECT IS_TEMP, PARTITION_KEY, PARTITION_VALUE FROM information_schema.partitions_meta WHERE DB_NAME='test_db_${uuid0}' AND  table_name = 't_p_error' ORDER BY PARTITION_ID;
+SELECT * FROM t_p_error WHERE calendar_year = '2024';
+SELECT * FROM t_p_error WHERE calendar_year = '2012';
+SELECT * FROM t_p_error WHERE calendar_year = '2011';
+DROP database test_db_${uuid0} FORCE;

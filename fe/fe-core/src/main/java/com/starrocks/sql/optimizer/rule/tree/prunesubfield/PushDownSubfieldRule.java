@@ -21,12 +21,16 @@ import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.Ordering;
+import com.starrocks.sql.optimizer.operator.Operator;
+import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEAnchorOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTableFunctionOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalUnionOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalWindowOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
@@ -42,6 +46,7 @@ import com.starrocks.sql.optimizer.task.TaskContext;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 /*
  * Push down subfield expression to scan node
@@ -142,14 +147,15 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
 
         @Override
         public OptExpression visit(OptExpression optExpression, Context context) {
-            optExpression = generatePushDownProject(optExpression, EMPTY_COLUMN_SET, context);
-            return visitChildren(optExpression, new Context());
+            Optional<Operator> project = generatePushDownProject(optExpression, EMPTY_COLUMN_SET, context);
+            OptExpression result = visitChildren(optExpression, new Context());
+            return project.map(operator -> OptExpression.create(operator, result)).orElse(result);
         }
 
-        private OptExpression generatePushDownProject(OptExpression optExpression, ColumnRefSet subfieldRefs,
-                                                      Context context) {
+        private Optional<Operator> generatePushDownProject(OptExpression optExpression, ColumnRefSet subfieldRefs,
+                                                           Context context) {
             if (context.pushDownExprRefs.isEmpty()) {
-                return optExpression;
+                return Optional.empty();
             }
 
             hasRewrite = true;
@@ -159,8 +165,41 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
             subfieldRefs.getStream().map(o -> factory.getColumnRef(o)).forEach(k -> newProjectMap.put(k, k));
             newProjectMap.putAll(context.pushDownExprRefs);
 
-            return OptExpression.create(new LogicalProjectOperator(newProjectMap, optExpression.getOp().getLimit()),
-                    optExpression);
+            return Optional.of(new LogicalProjectOperator(newProjectMap, optExpression.getOp().getLimit()));
+        }
+
+        @Override
+        public OptExpression visitLogicalTopN(OptExpression optExpression, Context context) {
+            if (context.pushDownExprRefs.isEmpty()) {
+                return visit(optExpression, context);
+            }
+
+            LogicalTopNOperator topN = optExpression.getOp().cast();
+
+            ColumnRefSet topNColumns = new ColumnRefSet();
+            topN.getOrderByElements().stream().map(Ordering::getColumnRef).forEach(topNColumns::union);
+            if (topN.getPartitionByColumns() != null) {
+                topN.getPartitionByColumns().forEach(topNColumns::union);
+            }
+
+            Context localContext = new Context();
+            Context childContext = new Context();
+            ColumnRefSet childSubfieldOutputs = new ColumnRefSet();
+            for (Map.Entry<ScalarOperator, ColumnRefSet> entry : context.pushDownExprUseColumns.entrySet()) {
+                ScalarOperator expr = entry.getKey();
+                ColumnRefSet useColumns = entry.getValue();
+
+                if (topNColumns.isIntersect(useColumns)) {
+                    localContext.put(context.pushDownExprRefsIndex.get(expr), expr);
+                } else {
+                    childContext.put(context.pushDownExprRefsIndex.get(expr), expr);
+                    childSubfieldOutputs.union(context.pushDownExprRefsIndex.get(expr));
+                }
+            }
+
+            Optional<Operator> project = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
+            OptExpression result = visitChildren(optExpression, childContext);
+            return project.map(operator -> OptExpression.create(operator, result)).orElse(result);
         }
 
         @Override
@@ -170,60 +209,76 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
             }
 
             LogicalProjectOperator lpo = optExpression.getOp().cast();
+            Map<ColumnRefOperator, ScalarOperator> pushDownProject = lpo.getColumnRefMap();
+            ColumnRefSet pushDownExprUsedColumns = new ColumnRefSet();
 
-            Map<ColumnRefOperator, ScalarOperator> projectMap = lpo.getColumnRefMap();
-            // rewrite push down expressions
             if (!context.pushDownExprRefs.isEmpty()) {
-                context.pushDownExprRefsIndex.clear();
-                context.pushDownExprUseColumns.clear();
+                // has push down expression, generate new project node first
+                hasRewrite = true;
+                pushDownProject = Maps.newHashMap();
+
+                Map<ColumnRefOperator, ScalarOperator> projectMap = lpo.getColumnRefMap();
                 ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(projectMap);
                 for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.pushDownExprRefs.entrySet()) {
-                    context.put(entry.getKey(), rewriter.rewrite(entry.getValue()));
+                    ScalarOperator op = rewriter.rewrite(entry.getValue());
+                    pushDownProject.put(entry.getKey(), op);
+                    pushDownExprUsedColumns.union(op.getUsedColumns());
                 }
+                pushDownProject.putAll(lpo.getColumnRefMap());
             }
 
-            // collect & push down expressions
-            ColumnRefSet allUsedColumns = new ColumnRefSet();
-            context.pushDownExprUseColumns.values().forEach(allUsedColumns::union);
-
-            SubfieldExpressionCollector collector = new SubfieldExpressionCollector();
-            for (ScalarOperator value : lpo.getColumnRefMap().values()) {
+            // collect push down expression
+            SubfieldExpressionCollector collector = SubfieldExpressionCollector.buildPushdownCollector();
+            for (ScalarOperator value : pushDownProject.values()) {
                 // check repeat put complex column, like that
                 //      project( columnB: structA.b.c.d )
                 //         |
                 //      project( structA: structA ) -- structA use for `structA.b.c.d`, so we don't need put it again
                 //         |
                 //       .....
-                if (value.isColumnRef() && allUsedColumns.contains((ColumnRefOperator) value)) {
+                if (value.isColumnRef() && pushDownExprUsedColumns.contains((ColumnRefOperator) value)) {
                     continue;
                 }
                 value.accept(collector, null);
             }
 
+            Context childContext = new Context();
             for (ScalarOperator expr : collector.getComplexExpressions()) {
-                if (context.pushDownExprRefsIndex.containsKey(expr)) {
+                if (childContext.pushDownExprRefsIndex.containsKey(expr)) {
                     continue;
                 }
-
-                ColumnRefOperator index = factory.create(expr, expr.getType(), expr.isNullable());
-                context.put(index, expr);
+                if (context.pushDownExprRefsIndex.containsKey(expr)) {
+                    // push down expression is from parent, reuse parent rewrite column
+                    childContext.put(context.pushDownExprRefsIndex.get(expr), expr);
+                    continue;
+                }
+                if (expr.isColumnRef()) {
+                    childContext.put(expr.cast(), expr);
+                } else {
+                    ColumnRefOperator index = factory.create(expr, expr.getType(), expr.isNullable());
+                    childContext.put(index, expr);
+                }
             }
 
-            if (context.pushDownExprRefs.isEmpty()) {
-                return visitChildren(optExpression, context);
+            if (childContext.pushDownExprRefs.isEmpty()) {
+                if (!context.pushDownExprRefs.isEmpty()) {
+                    // parent has push down expression, must rewrite project node
+                    optExpression = OptExpression.create(LogicalProjectOperator.builder().withOperator(lpo)
+                            .setColumnRefMap(pushDownProject)
+                            .build(), optExpression.getInputs());
+                }
+                return visitChildren(optExpression, childContext);
             }
 
             // rewrite project node
-            ExpressionReplacer replacer = new ExpressionReplacer(context.pushDownExprRefsIndex);
+            ExpressionReplacer replacer = new ExpressionReplacer(childContext.pushDownExprRefsIndex);
             Map<ColumnRefOperator, ScalarOperator> newProjectMap = Maps.newHashMap();
-            lpo.getColumnRefMap().forEach((k, v) -> newProjectMap.put(k, v.accept(replacer, null)));
-            context.pushDownExprRefs.forEach((k, v) -> newProjectMap.put(k, k));
+            pushDownProject.forEach((k, v) -> newProjectMap.put(k, v.accept(replacer, null)));
 
             optExpression = OptExpression.create(LogicalProjectOperator.builder().withOperator(lpo)
                     .setColumnRefMap(newProjectMap)
                     .build(), optExpression.getInputs());
-
-            return visitChildren(optExpression, context);
+            return visitChildren(optExpression, childContext);
         }
 
         @Override
@@ -251,17 +306,8 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
 
                 onPredicate = pushDownExpression(join.getOnPredicate(), context, checkColumns);
             }
-
             // handle predicate
             Optional<ScalarOperator> predicate = pushDownPredicate(optExpression, context, checkColumns);
-            if (predicate.isPresent() || onPredicate.isPresent()) {
-                LogicalJoinOperator.Builder builder = LogicalJoinOperator.builder().withOperator(join);
-                predicate.ifPresent(builder::setPredicate);
-                onPredicate.ifPresent(builder::setOnPredicate);
-
-                join = builder.build();
-                optExpression = OptExpression.create(join, optExpression.getInputs());
-            }
 
             // split push down expressions to left and right child accord by child's output columns
             Context leftContext = new Context();
@@ -285,14 +331,22 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                 }
             }
 
-            if (!leftContext.pushDownExprRefs.isEmpty()) {
-                visitChild(optExpression, 0, leftContext);
+            // recursively visit children no matter this node can push down something
+            visitChild(optExpression, 0, leftContext);
+            visitChild(optExpression, 1, rightContext);
+
+            Optional<Operator> project = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
+            if (predicate.isPresent() || onPredicate.isPresent()) {
+                LogicalJoinOperator.Builder builder = LogicalJoinOperator.builder().withOperator(join);
+                predicate.ifPresent(builder::setPredicate);
+                onPredicate.ifPresent(builder::setOnPredicate);
+
+                join = builder.build();
+                optExpression = OptExpression.create(join, optExpression.getInputs());
             }
-            if (!rightContext.pushDownExprRefs.isEmpty()) {
-                visitChild(optExpression, 1, rightContext);
-            }
-            if (!localContext.pushDownExprRefs.isEmpty()) {
-                optExpression = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
+
+            if (project.isPresent()) {
+                optExpression = OptExpression.create(project.get(), optExpression);
             }
             return optExpression;
         }
@@ -308,11 +362,16 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
             // rewrite union node, put all push down column
             LogicalUnionOperator union = optExpression.getOp().cast();
             List<ColumnRefOperator> newOutputColumns = Lists.newArrayList(union.getOutputColumnRefOp());
+            ColumnRefSet alreadyExistsColumnRefs = ColumnRefSet.of();
+            alreadyExistsColumnRefs.union(newOutputColumns);
+
             List<List<ColumnRefOperator>> childOutputColumns = Lists.newArrayList();
 
             for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.pushDownExprRefs.entrySet()) {
                 ColumnRefOperator key = entry.getKey();
-                newOutputColumns.add(key);
+                if (!alreadyExistsColumnRefs.contains(key)) {
+                    newOutputColumns.add(key);
+                }
             }
 
             List<Context> childContexts = Lists.newArrayList();
@@ -331,6 +390,10 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                 // add child's output expression column
                 for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : context.pushDownExprRefs.entrySet()) {
                     ColumnRefOperator key = entry.getKey();
+                    if (alreadyExistsColumnRefs.contains(key)) {
+                        continue;
+                    }
+
                     ColumnRefOperator newChildOutputRef = factory.create(key, key.getType(), key.isNullable());
                     newChild.add(newChildOutputRef);
                     childContext.put(newChildOutputRef, rewriter.rewrite(entry.getValue()));
@@ -381,9 +444,7 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                 }
             }
 
-            if (!localContext.pushDownExprRefs.isEmpty()) {
-                optExpression = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
-            }
+            Optional<Operator> project = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
 
             Optional<ScalarOperator> predicate = pushDownPredicate(optExpression, context, windowUseColumns);
 
@@ -394,7 +455,8 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
                 optExpression = OptExpression.create(window, optExpression.getInputs());
             }
 
-            return visitChildren(optExpression, childContext);
+            OptExpression result = visitChildren(optExpression, childContext);
+            return project.map(operator -> OptExpression.create(operator, result)).orElse(result);
         }
 
         @Override
@@ -478,6 +540,46 @@ public class PushDownSubfieldRule implements TreeRewriteRule {
         @Override
         public OptExpression visitLogicalAssertOneRow(OptExpression optExpression, Context context) {
             return visitChildren(optExpression, context);
+        }
+
+        @Override
+        public OptExpression visitLogicalTableFunction(OptExpression optExpression, Context context) {
+            LogicalTableFunctionOperator tableFuncOp = optExpression.getOp().cast();
+            ColumnRefSet outerColRefSet = ColumnRefSet.of();
+            List<ColumnRefOperator> outerColRefs = tableFuncOp.getOuterColRefs();
+            outerColRefSet.union(outerColRefs);
+            Context localContext = new Context();
+            Context childContext = new Context();
+            ColumnRefSet childSubfieldOutputs = new ColumnRefSet();
+            List<ColumnRefOperator> newOuterColRefs = Lists.newArrayList();
+            ColumnRefSet allUsedColumns = ColumnRefSet.of();
+            for (Map.Entry<ScalarOperator, ColumnRefSet> entry : context.pushDownExprUseColumns.entrySet()) {
+                ScalarOperator expr = entry.getKey();
+                ColumnRefSet useColumns = entry.getValue();
+                allUsedColumns.union(useColumns);
+                if (outerColRefSet.containsAll(useColumns)) {
+                    ColumnRefOperator columnRef = context.pushDownExprRefsIndex.get(expr);
+                    childContext.put(columnRef, expr);
+                    childSubfieldOutputs.union(columnRef);
+                    newOuterColRefs.add(columnRef);
+                } else {
+                    localContext.put(context.pushDownExprRefsIndex.get(expr), expr);
+                }
+            }
+            newOuterColRefs.addAll(outerColRefs.stream().filter(colRef -> !allUsedColumns.contains(colRef)).collect(
+                    Collectors.toList()));
+            Optional<Operator> project = generatePushDownProject(optExpression, childSubfieldOutputs, localContext);
+            OptExpression result = visitChildren(optExpression, childContext);
+            if (!newOuterColRefs.isEmpty()) {
+                LogicalTableFunctionOperator.Builder newTableFuncOpBuilder =
+                        (LogicalTableFunctionOperator.Builder) OperatorBuilderFactory
+                                .build(tableFuncOp)
+                                .withOperator(tableFuncOp);
+                Operator newTableFuncOp = newTableFuncOpBuilder.setOuterColRefs(newOuterColRefs).build();
+                result = OptExpression.create(newTableFuncOp, result.getInputs());
+            }
+            OptExpression finalResult = result;
+            return project.map(operator -> OptExpression.create(operator, finalResult)).orElse(finalResult);
         }
     }
 

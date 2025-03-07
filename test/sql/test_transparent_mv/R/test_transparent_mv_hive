@@ -1,4 +1,4 @@
--- name: test_transparent_mv_hive
+-- name: test_transparent_mv_hive @slow
 create external catalog mv_hive_${uuid0}
 properties
 (
@@ -8,7 +8,10 @@ properties
 );
 -- result:
 -- !result
-set materialized_view_union_rewrite_mode = 3;
+set new_planner_optimize_timeout=10000;
+-- result:
+-- !result
+set enable_materialized_view_transparent_union_rewrite = true;
 -- result:
 -- !result
 set catalog mv_hive_${uuid0};
@@ -68,77 +71,77 @@ AS
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt!='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt!='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and num > 10 order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and num > 10 order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and 1 < num < 10 order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and 1 < num < 10 order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
 SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
 -- result:
@@ -240,77 +243,77 @@ SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;
 INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 VALUES (3, "2020-06-15");
 -- result:
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt!='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt!='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and num > 10 order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and num > 10 order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and 1 < num < 10 order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and 1 < num < 10 order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-02') GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
 SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
 -- result:
@@ -377,11 +380,11 @@ SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GR
 2020-06-21	7
 2020-06-24	9
 -- !result
-SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;
+SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-02' GROUP BY dt order by 1, 2 limit 3;
 -- result:
 2020-06-18	5
 2020-06-21	7
-2020-07-02	3
+2020-07-05	5
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt order by 1, 2 limit 3;
 -- result:
@@ -424,77 +427,77 @@ REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 VALUES (3, "2020-06-15");
 -- result:
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt!='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt!='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and num > 10 order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and num > 10 order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and 1 < num < 10 order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and 1 < num < 10 order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-02') GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
 SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
 -- result:
@@ -567,9 +570,10 @@ SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') 
 2020-06-21	7
 2020-07-02	3
 -- !result
-SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt order by 1, 2 limit 3;
+SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-02') GROUP BY dt order by 1, 2 limit 3;
 -- result:
 2020-06-15	9
+2020-07-02	3
 -- !result
 SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;
 -- result:
@@ -608,77 +612,77 @@ REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 VALUES (3, "2020-06-16");
 -- result:
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt!='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt!='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and num > 10 order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and num > 10 order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and 1 < num < 10 order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and 1 < num < 10 order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
 SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
 -- result:
@@ -787,80 +791,80 @@ PROPERTIES ("transparent_mv_rewrite_mode" = "true")
 AS  select * from (
 SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t1 GROUP BY dt 
 UNION ALL
-SELECT dt, sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 GROUP BY dt) t order by 1, 2;
+SELECT  str2date(dt, '%Y-%m-%d'), sum(num) as num FROM mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 GROUP BY dt) t order by 1, 2;
 -- result:
 -- !result
 REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 VALUES (3, "2020-06-18");
 -- result:
 -- !result
-function: check_no_hit_materialized_view("SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt!='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt!='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and num > 10 order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and num > 10 order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and 1 < num < 10 order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and 1 < num < 10 order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
-function: check_no_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+False
 -- !result
 SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
 -- result:
@@ -992,77 +996,77 @@ REFRESH MATERIALIZED VIEW test_mv1 WITH SYNC MODE;
 INSERT INTO mv_hive_${uuid0}.mv_hive_db_${uuid0}.t2 VALUES (3, "2020-06-18");
 -- result:
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt!='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt!='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and num > 10 order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and num > 10 order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and 1 < num < 10 order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt, num FROM test_mv1 where dt>='2020-06-15' and 1 < num < 10 order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt !='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt < '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt>'2020-06-15' and dt <= '2020-07-22' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where (dt>'2020-06-15' and dt <= '2020-06-22') or dt>'2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where dt in ('2020-06-15', '2020-06-22', '2020-07-01') GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('day', dt) ='2020-06-15' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-06-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 where date_trunc('month', dt) ='2020-07-01' GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM test_mv1 GROUP BY dt order by 1, 2 limit 3;", "test_mv1")
 -- result:
-None
+True
 -- !result
 SELECT dt, num FROM test_mv1 order by 1, 2 limit 3;
 -- result:

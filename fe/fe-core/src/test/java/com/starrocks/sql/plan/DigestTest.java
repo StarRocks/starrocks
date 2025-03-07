@@ -15,7 +15,11 @@
 
 package com.starrocks.sql.plan;
 
+import com.starrocks.sql.analyzer.AstToStringBuilder;
+import com.starrocks.sql.ast.NormalizedTableFunctionRelation;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -126,5 +130,19 @@ public class DigestTest extends PlanTestBase {
         String digest2 = UtFrameUtils.getStmtDigest(connectContext, sql2);
 
         Assert.assertEquals(digest1, digest2);
+    }
+
+    @Test
+    public void testAnalyzeError() throws Exception {
+        new MockUp<AstToStringBuilder.AST2StringBuilderVisitor>() {
+            @Mock
+            public String visitNormalizedTableFunction(NormalizedTableFunctionRelation node, Void scope) {
+                throw new NullPointerException();
+            }
+        };
+
+        String originStmt = "SELECT ltrim(rand(), '0.') from TABLE(generate_series(0, 100000000))";
+        String digest1 = UtFrameUtils.getStmtDigest(connectContext, originStmt);
+        Assert.assertEquals(digest1, "");
     }
 }

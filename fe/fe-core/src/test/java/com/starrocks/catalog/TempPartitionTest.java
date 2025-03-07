@@ -44,6 +44,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
@@ -99,6 +100,16 @@ public class TempPartitionTest {
 
     }
 
+    private static void waitAllPartitionClearFinished(long time) {
+        while (!GlobalStateMgr.getCurrentState().getRecycleBin().recyclePartitionInfoIsEmpty()) {
+            GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(time);
+            try {
+                Thread.sleep(100);
+            } catch (Exception ignore) {
+            }
+        }
+    }
+
     private List<List<String>> checkShowPartitionsResultNum(String tbl, boolean isTemp, int expected) throws Exception {
         String showStr = "show " + (isTemp ? "temporary" : "") + " partitions from " + tbl;
         ShowPartitionsStmt showStmt = (ShowPartitionsStmt) UtFrameUtils.parseStmtWithNewParser(showStr, ctx);
@@ -111,7 +122,7 @@ public class TempPartitionTest {
     private void alterTableWithNewAnalyzer(String sql, boolean expectedException) throws Exception {
         try {
             AlterTableStmt alterTableStmt = (AlterTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
-            GlobalStateMgr.getCurrentState().getAlterJobMgr().processAlterTable(alterTableStmt);
+            DDLStmtExecutor.execute(alterTableStmt, ctx);
             if (expectedException) {
                 Assert.fail("expected exception not thrown");
             }
@@ -142,7 +153,7 @@ public class TempPartitionTest {
         if (tabletMeta == null) {
             return -1;
         }
-        return tabletMeta.getPartitionId();
+        return tabletMeta.getPhysicalPartitionId();
     }
 
     private void getPartitionNameToTabletIdMap(String tbl, boolean isTemp, Map<String, Long> partNameToTabletId)
@@ -378,10 +389,8 @@ public class TempPartitionTest {
                         "distributed by hash(k2) buckets 1\n" +
                         "properties('replication_num' = '1');");
 
-        Database db2 = GlobalStateMgr.getCurrentState().getDb("db2");
+        Database db2 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2");
         OlapTable tbl2 = (OlapTable) db2.getTable("tbl2");
-
-        testSerializeOlapTable(tbl2);
 
         Map<String, Long> originPartitionTabletIds = Maps.newHashMap();
         getPartitionNameToTabletIdMap("db2.tbl2", false, originPartitionTabletIds);
@@ -420,8 +429,6 @@ public class TempPartitionTest {
 
         System.out.println("partition tablets: " + originPartitionTabletIds);
         System.out.println("temp partition tablets: " + tempPartitionTabletIds);
-
-        testSerializeOlapTable(tbl2);
 
         // drop non exist temp partition
         stmtStr = "alter table db2.tbl2 drop temporary partition tp4;";
@@ -496,6 +503,7 @@ public class TempPartitionTest {
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
 
         GlobalStateMgr.getCurrentState().getRecycleBin().erasePartition(System.currentTimeMillis());
+        waitAllPartitionClearFinished(System.currentTimeMillis());
 
         checkTabletExists(tempPartitionTabletIds2.values(), true);
         checkTabletExists(Lists.newArrayList(originPartitionTabletIds2.get("p3")), true);
@@ -504,7 +512,7 @@ public class TempPartitionTest {
 
         String truncateStr = "truncate table db2.tbl2 partition (p3);";
         TruncateTableStmt truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(truncateStr, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt, ctx);
         checkShowPartitionsResultNum("db2.tbl2", true, 1);
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
         checkPartitionExist(tbl2, "tp1", false, true);
@@ -588,7 +596,7 @@ public class TempPartitionTest {
 
         truncateStr = "truncate table db2.tbl2";
         truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(truncateStr, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt, ctx);
         checkShowPartitionsResultNum("db2.tbl2", false, 3);
         checkShowPartitionsResultNum("db2.tbl2", true, 0);
 
@@ -611,7 +619,7 @@ public class TempPartitionTest {
         }
 
         OlapTable olapTable =
-                (OlapTable) GlobalStateMgr.getCurrentState().getDb("db2").getTable("tbl2");
+                (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db2").getTable("tbl2");
 
         // waiting table state to normal
         int retryTimes = 5;
@@ -678,7 +686,7 @@ public class TempPartitionTest {
                 "distributed by hash(k2) buckets 1\n" +
                 "properties('replication_num' = '1');");
 
-        Database db3 = GlobalStateMgr.getCurrentState().getDb("db3");
+        Database db3 = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("db3");
         OlapTable tbl3 = (OlapTable) db3.getTable("tbl3");
 
         // base range is [min, 10), [10, 20), [20, 30)
@@ -696,7 +704,7 @@ public class TempPartitionTest {
         // now base range is [min, 10), [10, 15), [15, 25), [25, 30) -> p1,tp1,tp2,tp3
         stmtStr = "truncate table db3.tbl3";
         TruncateTableStmt truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt, ctx);
         // 2. add temp ranges: [10, 31), and replace the [10, 15), [15, 25), [25, 30)
         stmtStr = "alter table db3.tbl3 add temporary partition tp4 values [('10'), ('31'))";
         alterTableWithNewAnalyzer(stmtStr, false);
@@ -713,7 +721,7 @@ public class TempPartitionTest {
         // now base range is [min, 10), [10, 30) -> p1,tp4
         stmtStr = "truncate table db3.tbl3";
         truncateTableStmt = (TruncateTableStmt) UtFrameUtils.parseStmtWithNewParser(stmtStr, ctx);
-        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().truncateTable(truncateTableStmt, ctx);
         // 3. add temp partition tp5 [50, 60) and replace partition tp4
         stmtStr = "alter table db3.tbl3 add temporary partition tp5 values [('50'), ('60'))";
         alterTableWithNewAnalyzer(stmtStr, false);
@@ -766,25 +774,6 @@ public class TempPartitionTest {
 
     }
 
-    private void testSerializeOlapTable(OlapTable tbl) throws IOException, AnalysisException {
-        // 1. Write objects to file
-        File file = new File(tempPartitionFile);
-        file.createNewFile();
-        DataOutputStream out = new DataOutputStream(new FileOutputStream(file));
-
-        tbl.write(out);
-        out.flush();
-        out.close();
-
-        // 2. Read objects from file
-        DataInputStream in = new DataInputStream(new FileInputStream(file));
-
-        OlapTable readTbl = (OlapTable) Table.read(in);
-        Assert.assertEquals(tbl.getId(), readTbl.getId());
-        Assert.assertEquals(tbl.getTempPartitions().size(), readTbl.getTempPartitions().size());
-        file.delete();
-    }
-
     private void testSerializeTempPartitions(TempPartitions tempPartitionsInstance)
             throws IOException, AnalysisException {
         // 1. Write objects to file
@@ -802,6 +791,7 @@ public class TempPartitionTest {
         TempPartitions readTempPartition = TempPartitions.read(in);
         List<Partition> partitions = readTempPartition.getAllPartitions();
         Assert.assertEquals(1, partitions.size());
-        Assert.assertEquals(2, partitions.get(0).getMaterializedIndices(IndexExtState.VISIBLE).size());
+        Assert.assertEquals(2, partitions.get(0).getDefaultPhysicalPartition()
+                .getMaterializedIndices(IndexExtState.VISIBLE).size());
     }
 }

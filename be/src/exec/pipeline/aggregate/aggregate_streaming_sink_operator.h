@@ -38,32 +38,33 @@ public:
         return !is_finished() && !_aggregator->is_streaming_all_states() && !_aggregator->is_chunk_buffer_full();
     }
     bool is_finished() const override { return _is_finished || _aggregator->is_finished(); }
-    [[nodiscard]] Status set_finishing(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
 
-    [[nodiscard]] Status prepare(RuntimeState* state) override;
+    Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
 
-    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
-    [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
-    [[nodiscard]] Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+    StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
     bool releaseable() const override { return true; }
     void set_execute_mode(int performance_level) override;
 
+    std::string get_name() const override;
+
 private:
     // Invoked by push_chunk if current mode is TStreamingPreaggregationMode::FORCE_STREAMING
-    [[nodiscard]] Status _push_chunk_by_force_streaming(const ChunkPtr& chunk);
+    Status _push_chunk_by_force_streaming(const ChunkPtr& chunk);
 
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::FORCE_PREAGGREGATION
-    [[nodiscard]] Status _push_chunk_by_force_preaggregation(const ChunkPtr& chunk, const size_t chunk_size);
+    Status _push_chunk_by_force_preaggregation(const ChunkPtr& chunk, const size_t chunk_size);
 
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::AUTO
-    [[nodiscard]] Status _push_chunk_by_auto(const ChunkPtr& chunk, const size_t chunk_size);
+    Status _push_chunk_by_auto(const ChunkPtr& chunk, const size_t chunk_size);
 
-    [[nodiscard]] Status _push_chunk_by_selective_preaggregation(const ChunkPtr& chunk, const size_t chunk_size,
-                                                                 bool need_build);
+    Status _push_chunk_by_selective_preaggregation(const ChunkPtr& chunk, const size_t chunk_size, bool need_build);
 
     // Invoked by push_chunk  if current mode is TStreamingPreaggregationMode::LIMITED
-    [[nodiscard]] Status _push_chunk_by_limited_memory(const ChunkPtr& chunk, const size_t chunk_size);
+    Status _push_chunk_by_limited_memory(const ChunkPtr& chunk, const size_t chunk_size);
 
     // It is used to perform aggregation algorithms shared by
     // AggregateStreamingSourceOperator. It is
@@ -76,6 +77,7 @@ private:
     AggrAutoState _auto_state{};
     AggrAutoContext _auto_context;
     LimitedMemAggState _limited_mem_state;
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };
 
 class AggregateStreamingSinkOperatorFactory final : public OperatorFactory {
@@ -85,6 +87,8 @@ public:
               _aggregator_factory(std::move(aggregator_factory)) {}
 
     ~AggregateStreamingSinkOperatorFactory() override = default;
+
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<AggregateStreamingSinkOperator>(this, _id, _plan_node_id, driver_sequence,

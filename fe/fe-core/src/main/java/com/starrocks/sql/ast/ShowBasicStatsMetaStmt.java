@@ -18,12 +18,12 @@ import com.google.common.collect.Lists;
 import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.MetaNotFoundException;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -56,21 +56,22 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
                     .addColumn(new Column("UpdateTime", ScalarType.createVarchar(60)))
                     .addColumn(new Column("Properties", ScalarType.createVarchar(200)))
                     .addColumn(new Column("Healthy", ScalarType.createVarchar(5)))
+                    .addColumn(new Column("ColumnStats", ScalarType.createVarcharType(128)))
                     .build();
 
     public static List<String> showBasicStatsMeta(ConnectContext context,
                                                   BasicStatsMeta basicStatsMeta) throws MetaNotFoundException {
-        List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "");
+        List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "", "");
         long dbId = basicStatsMeta.getDbId();
         long tableId = basicStatsMeta.getTableId();
         List<String> columns = basicStatsMeta.getColumns();
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         if (db == null) {
             throw new MetaNotFoundException("No found database: " + dbId);
         }
         row.set(0, db.getOriginName());
-        Table table = db.getTable(tableId);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), tableId);
         if (table == null) {
             throw new MetaNotFoundException("No found table: " + tableId);
         }
@@ -78,8 +79,7 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
 
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
         try {
-            Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), db.getFullName(), table);
+            Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
         } catch (AccessDeniedException e) {
             return null;
         }
@@ -93,13 +93,14 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
         row.set(4, basicStatsMeta.getUpdateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         row.set(5, basicStatsMeta.getProperties() == null ? "{}" : basicStatsMeta.getProperties().toString());
         row.set(6, (int) (basicStatsMeta.getHealthy() * 100) + "%");
+        row.set(7, basicStatsMeta.getColumnStatsString());
 
         return row;
     }
 
     public static List<String> showExternalBasicStatsMeta(ConnectContext context,
                                                           ExternalBasicStatsMeta basicStatsMeta) throws MetaNotFoundException {
-        List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "");
+        List<String> row = Lists.newArrayList("", "", "ALL", "", "", "", "", "", "");
         String catalogName = basicStatsMeta.getCatalogName();
         String dbName = basicStatsMeta.getDbName();
         String tableName = basicStatsMeta.getTableName();
@@ -119,8 +120,7 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
 
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
         try {
-            Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), new TableName(catalogName, db.getOriginName(), table.getName()));
+            Authorizer.checkAnyActionOnTable(context, new TableName(catalogName, db.getOriginName(), table.getName()));
         } catch (AccessDeniedException e) {
             return null;
         }
@@ -133,6 +133,7 @@ public class ShowBasicStatsMetaStmt extends ShowStmt {
         row.set(3, basicStatsMeta.getType().name());
         row.set(4, basicStatsMeta.getUpdateTime().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")));
         row.set(5, basicStatsMeta.getProperties() == null ? "{}" : basicStatsMeta.getProperties().toString());
+        row.set(7, basicStatsMeta.getColumnStatsString());
 
         return row;
     }

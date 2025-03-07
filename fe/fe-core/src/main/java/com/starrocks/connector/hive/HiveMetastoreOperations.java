@@ -12,14 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.connector.hive;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
-import com.starrocks.catalog.HiveMetaStoreTable;
 import com.starrocks.catalog.HiveTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
@@ -52,6 +50,7 @@ import static com.starrocks.connector.PartitionUtil.executeInNewThread;
 import static com.starrocks.connector.hive.HiveWriteUtils.checkLocationProperties;
 import static com.starrocks.connector.hive.HiveWriteUtils.createDirectory;
 import static com.starrocks.connector.hive.HiveWriteUtils.isDirectory;
+import static com.starrocks.connector.hive.HiveWriteUtils.isEmpty;
 import static com.starrocks.connector.hive.HiveWriteUtils.pathExists;
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.toResourceName;
 
@@ -85,13 +84,11 @@ public class HiveMetastoreOperations {
 
     public void createDb(String dbName, Map<String, String> properties) {
         properties = properties == null ? new HashMap<>() : properties;
-        String dbLocation = null;
         for (Map.Entry<String, String> entry : properties.entrySet()) {
             String key = entry.getKey();
             String value = entry.getValue();
             if (key.equalsIgnoreCase(LOCATION_PROPERTY)) {
                 try {
-                    dbLocation = value;
                     URI uri = new Path(value).toUri();
                     FileSystem fileSystem = FileSystem.get(uri, hadoopConf);
                     fileSystem.exists(new Path(value));
@@ -102,12 +99,6 @@ public class HiveMetastoreOperations {
             } else {
                 throw new IllegalArgumentException("Unrecognized property: " + key);
             }
-        }
-
-        if (dbLocation == null && metastoreType == MetastoreType.GLUE) {
-            throw new StarRocksConnectorException("The database location must be set when using glue. " +
-                    "you could execute command like " +
-                    "'CREATE DATABASE <db_name> properties('location'='s3://<bucket>/<your_db_path>')'");
         }
 
         metastore.createDb(dbName, properties);
@@ -153,8 +144,33 @@ public class HiveMetastoreOperations {
         String dbName = stmt.getDbName();
         String tableName = stmt.getTableName();
         Map<String, String> properties = stmt.getProperties() != null ? stmt.getProperties() : new HashMap<>();
-        checkLocationProperties(properties);
-        Path tablePath = getDefaultLocation(dbName, tableName);
+        Path tablePath = null;
+        boolean tableLocationExists = false;
+        if (!stmt.isExternal()) {
+            checkLocationProperties(properties);
+            if (!Strings.isNullOrEmpty(properties.get(LOCATION_PROPERTY))) {
+                String tableLocationWithUserAssign = properties.get(LOCATION_PROPERTY);
+                tablePath = new Path(tableLocationWithUserAssign);
+                if (pathExists(tablePath, hadoopConf)) {
+                    tableLocationExists = true;
+                    if (!isEmpty(tablePath, hadoopConf)) {
+                        throw new StarRocksConnectorException("not support creating table under non-empty directory: %s",
+                                tableLocationWithUserAssign);
+                    }
+                }
+            } else {
+                tablePath = getDefaultLocation(dbName, tableName);
+            }
+        } else {
+            // checkExternalLocationProperties(properties);
+            if (properties.containsKey(EXTERNAL_LOCATION_PROPERTY)) {
+                tablePath = new Path(properties.get(EXTERNAL_LOCATION_PROPERTY));
+            } else if (properties.containsKey(LOCATION_PROPERTY)) {
+                tablePath = new Path(properties.get(LOCATION_PROPERTY));
+            }
+            tableLocationExists = true;
+        }
+
         HiveStorageFormat.check(properties);
 
         List<String> partitionColNames;
@@ -165,6 +181,11 @@ public class HiveMetastoreOperations {
             partitionColNames = partitionColumns.stream().map(Column::getName).collect(Collectors.toList());
         }
 
+        // default is managed table
+        HiveTable.HiveTableType tableType = HiveTable.HiveTableType.MANAGED_TABLE;
+        if (stmt.isExternal()) {
+            tableType = HiveTable.HiveTableType.EXTERNAL_TABLE;
+        }
         HiveTable.Builder builder = HiveTable.builder()
                 .setId(ConnectorTableId.CONNECTOR_ID_GENERATOR.getNextId().asInt())
                 .setTableName(tableName)
@@ -177,20 +198,28 @@ public class HiveMetastoreOperations {
                         .map(Column::getName)
                         .collect(Collectors.toList()).subList(0, stmt.getColumns().size() - partitionColNames.size()))
                 .setFullSchema(stmt.getColumns())
-                .setTableLocation(tablePath.toString())
+                .setTableLocation(tablePath == null ? null : tablePath.toString())
                 .setProperties(stmt.getProperties())
                 .setStorageFormat(HiveStorageFormat.get(properties.getOrDefault(FILE_FORMAT, "parquet")))
-                .setCreateTime(System.currentTimeMillis());
+                .setCreateTime(System.currentTimeMillis())
+                .setHiveTableType(tableType);
         Table table = builder.build();
         try {
-            createDirectory(tablePath, hadoopConf);
+            if (!tableLocationExists) {
+                createDirectory(tablePath, hadoopConf);
+            }
             metastore.createTable(dbName, table);
         } catch (Exception e) {
             LOG.error("Failed to create table {}.{}", dbName, tableName);
             boolean shouldDelete;
             try {
+                if (tableExists(dbName, tableName)) {
+                    LOG.warn("Table {}.{} already exists. But some error occur such as accessing meta service timeout",
+                            dbName, table, e);
+                    return true;
+                }
                 FileSystem fileSystem = FileSystem.get(URI.create(tablePath.toString()), hadoopConf);
-                shouldDelete = !fileSystem.listLocatedStatus(tablePath).hasNext();
+                shouldDelete = !fileSystem.listLocatedStatus(tablePath).hasNext() && !tableLocationExists;
                 if (shouldDelete) {
                     fileSystem.delete(tablePath);
                 }
@@ -251,9 +280,9 @@ public class HiveMetastoreOperations {
     }
 
     public Map<String, Partition> getPartitionByPartitionKeys(Table table, List<PartitionKey> partitionKeys) {
-        String dbName = ((HiveMetaStoreTable) table).getDbName();
-        String tblName = ((HiveMetaStoreTable) table).getTableName();
-        List<String> partitionColumnNames = ((HiveMetaStoreTable) table).getPartitionColumnNames();
+        String dbName = (table).getCatalogDBName();
+        String tblName = (table).getCatalogTableName();
+        List<String> partitionColumnNames = (table).getPartitionColumnNames();
         List<String> partitionNames = partitionKeys.stream()
                 .map(partitionKey -> PartitionUtil.toHivePartitionName(partitionColumnNames, partitionKey))
                 .collect(Collectors.toList());
@@ -262,8 +291,8 @@ public class HiveMetastoreOperations {
     }
 
     public Map<String, Partition> getPartitionByNames(Table table, List<String> partitionNames) {
-        String dbName = ((HiveMetaStoreTable) table).getDbName();
-        String tblName = ((HiveMetaStoreTable) table).getTableName();
+        String dbName = (table).getCatalogDBName();
+        String tblName = (table).getCatalogTableName();
         return metastore.getPartitionsByNames(dbName, tblName, partitionNames);
     }
 
@@ -272,9 +301,9 @@ public class HiveMetastoreOperations {
     }
 
     public Map<String, HivePartitionStats> getPartitionStatistics(Table table, List<String> partitionNames) {
-        String catalogName = ((HiveMetaStoreTable) table).getCatalogName();
-        String dbName = ((HiveMetaStoreTable) table).getDbName();
-        String tblName = ((HiveMetaStoreTable) table).getTableName();
+        String catalogName = (table).getCatalogName();
+        String dbName = (table).getCatalogDBName();
+        String tblName = (table).getCatalogTableName();
         List<HivePartitionName> hivePartitionNames = partitionNames.stream()
                 .map(partitionName -> HivePartitionName.of(dbName, tblName, partitionName))
                 .peek(hivePartitionName -> checkState(hivePartitionName.getPartitionNames().isPresent(),
@@ -318,7 +347,10 @@ public class HiveMetastoreOperations {
             throw new StarRocksConnectorException("Database '%s' not found", dbName);
         }
         if (Strings.isNullOrEmpty(database.getLocation())) {
-            throw new StarRocksConnectorException("Database '%s' location is not set", dbName);
+            throw new StarRocksConnectorException("Failed to find location in database '%s'. Please define the location" +
+                    " when you create table or recreate another database with location." +
+                    " You could execute the SQL command like 'CREATE TABLE <table_name> <columns> " +
+                    "PROPERTIES('location' = '<location>')", dbName);
         }
 
         String dbLocation = database.getLocation();

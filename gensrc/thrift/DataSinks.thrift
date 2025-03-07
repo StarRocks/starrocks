@@ -56,7 +56,8 @@ enum TDataSinkType {
     HIVE_TABLE_SINK,
     TABLE_FUNCTION_TABLE_SINK,
     BLACKHOLE_TABLE_SINK,
-    DICTIONARY_CACHE_SINK
+    DICTIONARY_CACHE_SINK,
+    MULTI_OLAP_TABLE_SINK
 }
 
 enum TResultSinkType {
@@ -64,7 +65,10 @@ enum TResultSinkType {
     FILE,
     STATISTIC,
     VARIABLE,
-    HTTP_PROTOCAL
+    HTTP_PROTOCAL,
+    METADATA_ICEBERG,
+    CUSTOMIZED,
+    ARROW_FLIGHT_PROTOCAL
 }
 
 enum TResultSinkFormatType {
@@ -228,6 +232,9 @@ struct TOlapTableSink {
     27: optional bool enable_colocate_mv_index 
     28: optional i64 automatic_bucket_size
     29: optional bool write_txn_log
+    30: optional bool ignore_out_of_partition
+    31: optional binary encryption_meta;
+    32: optional bool dynamic_overwrite
 }
 
 struct TSchemaTableSink {
@@ -276,4 +283,6 @@ struct TDataSink {
   12: optional THiveTableSink hive_table_sink
   13: optional TTableFunctionTableSink table_function_table_sink
   14: optional TDictionaryCacheSink dictionary_cache_sink
+  15: optional list<TDataSink> multi_olap_table_sinks
+  16: optional i64 sink_id
 }

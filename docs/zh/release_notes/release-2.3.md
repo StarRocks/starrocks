@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # StarRocks version 2.3
@@ -288,7 +288,7 @@ displayed_sidebar: "Chinese"
 
 ### 功能优化
 
-- 优化 Routine Load 创建失败时的报错提示。[#12204]( https://github.com/StarRocks/starrocks/pull/12204)
+- 优化 Routine Load 创建失败时的报错提示。[#12204](https://github.com/StarRocks/starrocks/pull/12204)
 - 查询 Hive 时解析 CSV 数据失败后会直接报错。[#13013](https://github.com/StarRocks/starrocks/pull/13013)
 
 ### 问题修复

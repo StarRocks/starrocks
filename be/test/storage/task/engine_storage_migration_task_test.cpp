@@ -17,10 +17,10 @@
 #include <gtest/gtest.h>
 
 #include "butil/file_util.h"
-#include "column/column_pool.h"
 #include "common/config.h"
 #include "exec/pipeline/query_context.h"
 #include "fs/fs_util.h"
+#include "fs/key_cache.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptor_helper.h"
 #include "runtime/exec_env.h"
@@ -29,6 +29,7 @@
 #include "runtime/user_function_cache.h"
 #include "storage/chunk_helper.h"
 #include "storage/delta_writer.h"
+#include "storage/lake/tablet_manager.h"
 #include "storage/options.h"
 #include "storage/rowset/rowset_factory.h"
 #include "storage/rowset/rowset_writer.h"
@@ -129,6 +130,21 @@ public:
 
     static void init() {
         config::enable_event_based_compaction_framework = false;
+        config::enable_transparent_data_encryption = true;
+        // add encryption keys
+        EncryptionKeyPB pb;
+        pb.set_id(EncryptionKey::DEFAULT_MASTER_KYE_ID);
+        pb.set_type(EncryptionKeyTypePB::NORMAL_KEY);
+        pb.set_algorithm(EncryptionAlgorithmPB::AES_128);
+        pb.set_plain_key("0000000000000000");
+        std::unique_ptr<EncryptionKey> root_encryption_key = EncryptionKey::create_from_pb(pb).value();
+        auto val_st = root_encryption_key->generate_key();
+        EXPECT_TRUE(val_st.ok());
+        std::unique_ptr<EncryptionKey> encryption_key = std::move(val_st.value());
+        encryption_key->set_id(2);
+        KeyCache::instance().add_key(root_encryption_key);
+        KeyCache::instance().add_key(encryption_key);
+
         /*
             create duplicated key tablet
         */
@@ -273,11 +289,10 @@ public:
         tuple_builder.build(&table_builder);
 
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-        std::vector<bool> nullable_tuples = std::vector<bool>{false};
         DescriptorTbl* tbl = nullptr;
         DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
-        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
         auto* tuple_desc = row_desc->tuple_descriptors()[0];
 
         return tuple_desc;
@@ -306,11 +321,10 @@ public:
         tuple_builder.build(&table_builder);
 
         std::vector<TTupleId> row_tuples = std::vector<TTupleId>{0};
-        std::vector<bool> nullable_tuples = std::vector<bool>{false};
         DescriptorTbl* tbl = nullptr;
         DescriptorTbl::create(&_runtime_state, &_pool, table_builder.desc_tbl(), &tbl, config::vector_chunk_size);
 
-        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples, nullable_tuples));
+        auto* row_desc = _pool.add(new RowDescriptor(*tbl, row_tuples));
         auto* tuple_desc = row_desc->tuple_descriptors()[0];
 
         return tuple_desc;
@@ -575,7 +589,6 @@ TEST_F(EngineStorageMigrationTaskTest, test_migrate_empty_pk_tablet) {
     ASSERT_TRUE(tablet != nullptr);
     ASSERT_EQ(tablet->tablet_id(), empty_tablet_id);
     DataDir* source_path = tablet->data_dir();
-    tablet.reset();
     DataDir* dest_path = nullptr;
     DataDir* data_dir_1 = starrocks::StorageEngine::instance()->get_stores()[0];
     DataDir* data_dir_2 = starrocks::StorageEngine::instance()->get_stores()[1];
@@ -584,6 +597,11 @@ TEST_F(EngineStorageMigrationTaskTest, test_migrate_empty_pk_tablet) {
     } else {
         dest_path = data_dir_1;
     }
+    tablet->set_tablet_state(TabletState::TABLET_NOTREADY);
+    EngineStorageMigrationTask migration_task_not_ready(empty_tablet_id, empty_schema_hash, dest_path);
+    ASSERT_ERROR(migration_task_not_ready.execute());
+    tablet->set_tablet_state(TabletState::TABLET_RUNNING);
+    tablet.reset();
     EngineStorageMigrationTask migration_task(empty_tablet_id, empty_schema_hash, dest_path);
     ASSERT_OK(migration_task.execute());
 }
@@ -625,7 +643,8 @@ int main(int argc, char** argv) {
     starrocks::UserFunctionCache::instance()->init(starrocks::config::user_function_dir);
 
     starrocks::date::init_date_cache();
-    starrocks::TimezoneUtils::init_time_zones();
+    // Disable time zone cache, save time for unit test
+    // starrocks::TimezoneUtils::init_time_zones();
 
     // first create the starrocks::config::storage_root_path ahead
     std::vector<starrocks::StorePath> paths;
@@ -661,13 +680,17 @@ int main(int argc, char** argv) {
     // clear some trash objects kept in tablet_manager so mem_tracker checks will not fail
     starrocks::StorageEngine::instance()->tablet_manager()->start_trash_sweep();
     starrocks::fs::remove_all(storage_root.value());
-    starrocks::TEST_clear_all_columns_this_thread();
     // delete engine
     engine->stop();
     delete engine;
     // destroy exec env
     starrocks::tls_thread_status.set_mem_tracker(nullptr);
     exec_env->stop();
+#ifdef USE_STAROS
+    if (exec_env->lake_tablet_manager() != nullptr) {
+        exec_env->lake_tablet_manager()->stop();
+    }
+#endif
     exec_env->destroy();
     global_env->stop();
 

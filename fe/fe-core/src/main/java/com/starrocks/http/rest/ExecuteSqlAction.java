@@ -39,6 +39,7 @@ import com.google.gson.reflect.TypeToken;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksHttpException;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.util.LogUtil;
@@ -53,7 +54,7 @@ import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.SessionVariable;
-import com.starrocks.qe.VariableMgr;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.sql.ast.KillStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -101,10 +102,13 @@ public class ExecuteSqlAction extends RestBaseAction {
 
     @Override
     protected void executeWithoutPassword(BaseRequest request, BaseResponse response) throws DdlException {
-        TASKSERVICE.submit(() -> realWork(request, response));
+        // Get the content before submitting to executor pool,
+        // because the request body will be released after handleAction.
+        String content = request.getContent();
+        TASKSERVICE.submit(() -> realWork(request, content, response));
     }
 
-    private void realWork(BaseRequest request, BaseResponse response) {
+    private void realWork(BaseRequest request, String requestContent, BaseResponse response) {
         StatementBase parsedStmt;
 
         response.setContentType("application/x-ndjson; charset=utf-8");
@@ -122,10 +126,13 @@ public class ExecuteSqlAction extends RestBaseAction {
         try {
             changeCatalogAndDB(catalogName, databaseName, context);
             try {
-                SqlRequest requestBody = validatePostBody(request.getContent(), context);
+                SqlRequest requestBody = validatePostBody(requestContent, context);
                 // set result format as json,
                 context.setResultSinkFormatType(TResultSinkFormatType.JSON);
                 checkSessionVariable(requestBody.sessionVariables, context);
+                if (Config.enable_print_sql) {
+                    LOG.info("Begin to execute sql, type: query，query id:{}, sql:{}", context.getQueryId(), requestBody.query);
+                }
                 // parse the sql here, for the convenience of verification of http request
                 parsedStmt = parse(requestBody.query, context.getSessionVariable());
                 context.setStatement(parsedStmt);
@@ -233,13 +240,14 @@ public class ExecuteSqlAction extends RestBaseAction {
     private void registerContext(String sql, HttpConnectContext context) throws StarRocksHttpException {
         // now register this request in connectScheduler
         ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
-        connectScheduler.submit(context);
+        context.setConnectionId(connectScheduler.getNextConnectionId());
+        context.resetConnectionStartTime();
 
         context.setConnectScheduler(connectScheduler);
         // mark as registered
-        boolean registered = connectScheduler.registerConnection(context);
-        if (!registered) {
-            throw new StarRocksHttpException(SERVICE_UNAVAILABLE, "Reach limit of connections");
+        Pair<Boolean, String> result = connectScheduler.registerConnection(context);
+        if (!result.first) {
+            throw new StarRocksHttpException(SERVICE_UNAVAILABLE, result.second);
         }
         context.setStartTime();
         LogUtil.logConnectionInfoToAuditLogAndQueryQueue(context, null);
@@ -258,7 +266,7 @@ public class ExecuteSqlAction extends RestBaseAction {
         if (customVariable != null) {
             try {
                 for (String key : customVariable.keySet()) {
-                    VariableMgr.setSystemVariable(context.getSessionVariable(),
+                    GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(context.getSessionVariable(),
                             new SystemVariable(key, new StringLiteral(customVariable.get(key))), true);
                 }
                 context.setThreadLocalInfo();
@@ -283,6 +291,8 @@ public class ExecuteSqlAction extends RestBaseAction {
             // for queryStatement, if some data already sent, we just close the channel
             if (parsedStmt instanceof QueryStatement && context.getSendDate()) {
                 context.getNettyChannel().close();
+                LOG.warn("http sql:Netty channel is closed, query id:{}, query:{}, reason:{}", context.getQueryId(),
+                        parsedStmt.getOrigStmt().getOrigStmt(), context.getState().getErrorMessage());
                 return;
             }
             // send error message

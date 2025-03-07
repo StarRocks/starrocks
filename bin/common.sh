@@ -55,6 +55,15 @@ jvm_arch() {
     echo $jvm_arch
 }
 
+read_var_from_conf() {
+    local var_name=$1
+    local conf_file=$2
+    local var_line=`grep $var_name $conf_file | sed 's/[[:blank:]]*=[[:blank:]]*/=/g' | sed 's/^[[:blank:]]*//g' | grep ^$var_name=`
+    if [[ $var_line == *"="* ]]; then
+        eval "$var_line"
+    fi
+}
+
 export_env_from_conf() {
     while read line; do
         envline=`echo $line | sed 's/[[:blank:]]*=[[:blank:]]*/=/g' | sed 's/^[[:blank:]]*//g' | egrep "^[[:upper:]]([[:upper:]]|_|[[:digit:]])*="`
@@ -86,12 +95,6 @@ export_shared_envvars() {
     # ===================================================================================
 }
 
-# Export cachelib libraries
-export_cachelib_lib_path() {
-    CACHELIB_DIR=$STARROCKS_HOME/lib/cachelib
-    export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$CACHELIB_DIR/lib64
-}
-
 update_submodules()
 {
     pushd ${STARROCKS_HOME} &>/dev/null
@@ -99,10 +102,13 @@ update_submodules()
     popd
 }
 
-# if $FE_ENABLE_AUTO_JVM_XMX_DETECT=true, auto detect the memory limit MEM_LIMIT of the container
-# get $FE_JVM_XMX_PERCENTAGE, if not set, assume it is 70.
-# the xmx value will be $MEM_LIMIT * $FE_JVM_XMX_PERCENTAGE / 100 / 1024 / 1024
-# output string, e.g. -Xmx4096m
+# If $FE_ENABLE_AUTO_JVM_XMX_DETECT=true, auto detect the memory limit MEM_LIMIT of the container
+# - get $FE_JVM_XMX_PERCENTAGE, if not set, assume it is 70.
+# - the -Xmx value will be $MEM_LIMIT * $FE_JVM_XMX_PERCENTAGE / 100 / 1024 / 1024
+# - output string, e.g. -Xmx4096m
+#
+# NOTE: Make sure the implementation is equivalent to
+# https://github.com/StarRocks/starrocks/blob/main/be/src/util/mem_info.cpp#L116
 detect_jvm_xmx() {
     if [[ "$FE_ENABLE_AUTO_JVM_XMX_DETECT" != "true" ]]; then
         return
@@ -113,17 +119,31 @@ detect_jvm_xmx() {
         return
     fi
 
+    mem_limit_procfile=
+    # https://kubernetes.io/docs/concepts/architecture/cgroups/#check-cgroup-version
+    fstype=$(stat -fc %T /sys/fs/cgroup)
+    case $fstype in
+      tmpfs)
+        mem_limit_procfile=/sys/fs/cgroup/memory/memory.limit_in_bytes
+        ;;
+      cgroup2fs)
+        mem_limit_procfile=/sys/fs/cgroup/memory.max
+        if ! test -e $mem_limit_procfile ; then
+            mem_limit_procfile=/sys/fs/cgroup/kubepods/memory.max
+        fi
+        ;;
+      *)
+        return
+        ;;
+    esac
+
     # if resource limit is not set, $MEM_LIMIT will be "max"
     MEM_LIMIT=max
-    # get the cgroup version from /proc/filesystems
-    # if cgroup v2 is enabled, the output will contain "cgroup2"
-    if grep -q cgroup2 /proc/filesystems &>/dev/null; then
-        MEM_LIMIT=$(cat /sys/fs/cgroup/memory.max)
+    if ! test -e $mem_limit_procfile ; then
+        return
     else
-        MEM_LIMIT=$(cat /sys/fs/cgroup/memory/memory.limit_in_bytes)
+        MEM_LIMIT=$(cat $mem_limit_procfile)
     fi
-
-    # check if $MEM_LIMIT is a number.
     if [[ ! "$MEM_LIMIT" =~ ^[0-9]+$ ]]; then
         return
     fi

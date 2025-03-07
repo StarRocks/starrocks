@@ -65,6 +65,19 @@ public class LockType {
         return !CONFLICT_MATRIX[id][requestedType.id];
     }
 
+    public boolean isIntentionLock() throws NotSupportLockException {
+        switch (id) {
+            case 0:
+            case 1:
+                return false;
+            case 2:
+            case 3:
+                return true;
+        }
+
+        throw new NotSupportLockException("Lock Internal Error");
+    }
+
     @Override
     public String toString() {
         if (id == 0) {

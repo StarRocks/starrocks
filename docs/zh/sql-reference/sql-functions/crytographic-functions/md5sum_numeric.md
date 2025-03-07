@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # md5sum_numeric
 
-## 功能
+
 
 计算多个输入参数的 MD5 128-bit 校验和 (checksum), 返回 MD5 值的十进制表示。
 

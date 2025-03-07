@@ -33,6 +33,7 @@ import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.function.MetaFunctions;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CastOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import org.apache.commons.collections4.ListUtils;
@@ -117,7 +118,10 @@ public enum ScalarOperatorEvaluator {
         if (invoker == null || !invoker.isMetaFunction) {
             return null;
         }
-        return new Function(name, Lists.newArrayList(args), Type.VARCHAR, false);
+
+        Function function = new Function(name, Lists.newArrayList(args), Type.VARCHAR, false);
+        function.setMetaFunction(true);
+        return function;
     }
 
     public ScalarOperator evaluation(CallOperator root) {
@@ -190,14 +194,17 @@ public enum ScalarOperatorEvaluator {
         try {
             ConstantOperator operator = invoker.invoke(root.getChildren());
             // check return result type, decimal will change return type
-            if (operator.getType().getPrimitiveType() != fn.getReturnType().getPrimitiveType()) {
+            if (!operator.isNull() &&
+                    operator.getType().getPrimitiveType() != fn.getReturnType().getPrimitiveType()) {
                 Preconditions.checkState(operator.getType().isDecimalOfAnyVersion());
                 Preconditions.checkState(fn.getReturnType().isDecimalOfAnyVersion());
                 operator.setType(fn.getReturnType());
             }
             return operator;
         } catch (Exception e) {
-            LOG.debug("failed to invoke", e);
+            if (LOG.isDebugEnabled()) {
+                LOG.debug("failed to invoke", e);
+            }
             if (invoker.isMetaFunction) {
                 throw new StarRocksPlannerException(ErrorType.USER_ERROR, ExceptionUtils.getRootCauseMessage(e));
             }
@@ -205,13 +212,50 @@ public enum ScalarOperatorEvaluator {
         return root;
     }
 
+    public boolean isMonotonicFunction(CallOperator call) {
+        if (call instanceof CastOperator) {
+            return true;
+        }
+        FunctionSignature signature;
+        if (call.getFunction() != null) {
+            Function fn = call.getFunction();
+            List<Type> argTypes = Arrays.asList(fn.getArgs());
+            signature = new FunctionSignature(fn.functionName().toUpperCase(), argTypes, fn.getReturnType());
+        } else {
+            List<Type> argTypes = call.getArguments().stream().map(ScalarOperator::getType).collect(Collectors.toList());
+            signature = new FunctionSignature(call.getFnName().toUpperCase(), argTypes, call.getType());
+        }
+
+        FunctionInvoker invoker = functions.get(signature);
+
+        return invoker != null && isMonotonicFunc(invoker, call);
+    }
+
+    public boolean isFEConstantFunction(CallOperator call) {
+        FunctionSignature signature;
+        if (call.getFunction() != null) {
+            Function fn = call.getFunction();
+            List<Type> argTypes = Arrays.asList(fn.getArgs());
+            signature = new FunctionSignature(fn.functionName().toUpperCase(), argTypes, fn.getReturnType());
+        } else {
+            List<Type> argTypes = call.getArguments().stream().map(ScalarOperator::getType).collect(Collectors.toList());
+            signature = new FunctionSignature(call.getFnName().toUpperCase(), argTypes, call.getType());
+        }
+
+        FunctionInvoker invoker = functions.get(signature);
+        return invoker != null;
+    }
 
     private boolean isMonotonicFunc(FunctionInvoker invoker, CallOperator operator) {
         if (!invoker.isMonotonic) {
             return false;
         }
 
-        if (FunctionSet.DATE_FORMAT.equalsIgnoreCase(invoker.getSignature().getName())) {
+        if ((FunctionSet.DATE_FORMAT.equalsIgnoreCase(invoker.getSignature().getName())
+                || FunctionSet.STR_TO_DATE.equalsIgnoreCase(invoker.getSignature().getName())
+                || FunctionSet.STR2DATE.equalsIgnoreCase(invoker.getSignature().getName())
+                || FunctionSet.FROM_UNIXTIME.equalsIgnoreCase(invoker.getSignature().getName()))
+                && operator.getChildren().size() == 2) {
             String pattern = operator.getChild(1).toString();
             if (pattern.isEmpty()) {
                 return true;

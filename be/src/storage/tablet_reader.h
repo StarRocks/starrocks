@@ -46,6 +46,8 @@ public:
 
     void set_is_asc_hint(bool is_asc) { _is_asc_hint = is_asc; }
 
+    void set_use_gtid(bool use_gtid) { _use_gtid = use_gtid; }
+
     Status prepare();
 
     // Precondition: the last method called must have been `prepare()`.
@@ -85,6 +87,7 @@ private:
                                  MemPool* mempool);
 
     Status _init_collector_for_pk_index_read();
+    Status _init_compaction_column_paths(const TabletReaderParams& read_params);
 
     TabletSharedPtr _tablet;
     TabletSchemaCSPtr _tablet_schema;
@@ -112,6 +115,8 @@ private:
     // used for pk index based pointer read
     const TabletReaderParams* _reader_params = nullptr;
     bool _is_asc_hint = true;
+
+    bool _use_gtid = false;
 };
 
 } // namespace starrocks

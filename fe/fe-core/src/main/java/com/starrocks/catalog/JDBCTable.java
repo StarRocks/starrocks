@@ -16,13 +16,10 @@ package com.starrocks.catalog;
 
 import com.google.common.base.Splitter;
 import com.google.common.base.Strings;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.analysis.DescriptorTable;
 import com.starrocks.catalog.Resource.ResourceType;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.io.Text;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TJDBCTable;
 import com.starrocks.thrift.TTableDescriptor;
@@ -33,9 +30,6 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.IOException;
 import java.net.URI;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -88,6 +82,7 @@ public class JDBCTable extends Table {
         validate(properties);
     }
 
+    @Override
     public String getResourceName() {
         return resourceName;
     }
@@ -97,11 +92,13 @@ public class JDBCTable extends Table {
         return catalogName;
     }
 
-    public String getDbName() {
+    @Override
+    public String getCatalogDBName() {
         return dbName;
     }
 
-    public String getJdbcTable() {
+    @Override
+    public String getCatalogTableName() {
         return jdbcTable;
     }
 
@@ -251,25 +248,6 @@ public class JDBCTable extends Table {
                 fullSchema.size(), 0, getName(), "");
         tTableDescriptor.setJdbcTable(tJDBCTable);
         return tTableDescriptor;
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        super.write(out);
-
-        JsonObject obj = new JsonObject();
-        obj.addProperty(TABLE, jdbcTable);
-        obj.addProperty(RESOURCE, resourceName);
-        Text.writeString(out, obj.toString());
-    }
-
-    @Override
-    public void readFields(DataInput in) throws IOException {
-        super.readFields(in);
-        String jsonStr = Text.readString(in);
-        JsonObject obj = JsonParser.parseString(jsonStr).getAsJsonObject();
-        jdbcTable = obj.getAsJsonPrimitive(TABLE).getAsString();
-        resourceName = obj.getAsJsonPrimitive(RESOURCE).getAsString();
     }
 
     @Override

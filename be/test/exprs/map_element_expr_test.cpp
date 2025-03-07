@@ -29,13 +29,13 @@
 namespace starrocks {
 namespace {
 
-ColumnPtr const_int_column(int32_t value, size_t size = 1) {
+MutableColumnPtr const_int_column(int32_t value, size_t size = 1) {
     auto data = Int32Column::create();
     data->append(value);
     return ConstColumn::create(std::move(data), size);
 }
 
-ColumnPtr const_varchar_column(const std::string& value, size_t size = 1) {
+MutableColumnPtr const_varchar_column(const std::string& value, size_t size = 1) {
     auto data = BinaryColumn::create();
     data->append_string(value);
     return ConstColumn::create(std::move(data), size);
@@ -95,7 +95,7 @@ TEST_F(MapElementExprTest, test_map_int_int) {
 
     TypeDescriptor type_int(LogicalType::TYPE_INT);
 
-    auto column = ColumnHelper::create_column(type_map_int_int, false);
+    ColumnPtr column = ColumnHelper::create_column(type_map_int_int, false);
 
     DatumMap map;
     map[(int32_t)1] = (int32_t)11;
@@ -253,7 +253,7 @@ TEST_F(MapElementExprTest, test_map_varchar_int) {
 
     TypeDescriptor type_int(LogicalType::TYPE_INT);
 
-    auto column = ColumnHelper::create_column(type_map_varchar_int, true);
+    ColumnPtr column = ColumnHelper::create_column(type_map_varchar_int, true);
 
     DatumMap map;
     map[(Slice) "a"] = (int32_t)11;
@@ -372,7 +372,7 @@ TEST_F(MapElementExprTest, test_map_const) {
 
     TypeDescriptor type_int(LogicalType::TYPE_INT);
 
-    auto column = ColumnHelper::create_column(type_map_int_int, false);
+    ColumnPtr column = ColumnHelper::create_column(type_map_int_int, false);
 
     DatumMap map;
     map[(int32_t)1] = (int32_t)11;
@@ -453,7 +453,7 @@ TEST_F(MapElementExprTest, test_map_const) {
     //   33
 
     {
-        auto const_map = ConstColumn::create(column->clone(), column->size());
+        ColumnPtr const_map = ConstColumn::create(column->clone(), column->size());
         std::unique_ptr<Expr> expr = create_map_element_expr(type_int);
 
         expr->add_child(new_fake_col_expr(const_map, type_map_int_int));
@@ -477,14 +477,14 @@ TEST_F(MapElementExprTest, test_const_map_int_variable_int) {
 
     TypeDescriptor type_int(LogicalType::TYPE_INT);
 
-    auto column = ColumnHelper::create_column(type_map_int_int, false);
+    ColumnPtr column = ColumnHelper::create_column(type_map_int_int, false);
 
     DatumMap map;
     map[(int32_t)1] = (int32_t)11;
     map[(int32_t)2] = (int32_t)22;
     map[(int32_t)3] = (int32_t)33;
     column->append_datum(map);
-    auto const_column = ConstColumn::create(column->clone(), 1);
+    ColumnPtr const_column = ConstColumn::create(column->clone(), 1);
 
     // Inputs:
     //   c0
@@ -502,7 +502,7 @@ TEST_F(MapElementExprTest, test_const_map_int_variable_int) {
     //   11
     //   22
     //   33
-    auto key = RunTimeColumnType<TYPE_INT>::create();
+    RunTimeColumnType<TYPE_INT>::Ptr key = RunTimeColumnType<TYPE_INT>::create();
     key->append(1);
     key->append(2);
     key->append(3);
@@ -540,7 +540,7 @@ TEST_F(MapElementExprTest, test_map_null_key) {
 
     TypeDescriptor type_int(LogicalType::TYPE_INT);
 
-    auto column = ColumnHelper::create_column(type_map_varchar_int, false);
+    ColumnPtr column = ColumnHelper::create_column(type_map_varchar_int, false);
 
     DatumMap map;
     map[(Slice) "a"] = (int32_t)11;

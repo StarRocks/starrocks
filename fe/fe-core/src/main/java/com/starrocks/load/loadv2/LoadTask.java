@@ -35,7 +35,7 @@
 package com.starrocks.load.loadv2;
 
 import com.starrocks.common.LoadException;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.LogBuilder;
 import com.starrocks.common.util.LogKey;
 import com.starrocks.load.FailMsg;
@@ -73,8 +73,13 @@ public abstract class LoadTask extends PriorityLeaderTask {
             // callback on pending task finished
             callback.onTaskFinished(attachment);
             isFinished = true;
-        } catch (UserException e) {
+        } catch (LoadException e) {
             failMsg.setMsg(e.getMessage() == null ? "" : e.getMessage());
+            LOG.warn(new LogBuilder(LogKey.LOAD_JOB, callback.getCallbackId())
+                    .add("error_msg", "Failed to execute load task").build(), e);
+        } catch (StarRocksException e) {
+            failMsg.setMsg(e.getMessage() == null ? "" : e.getMessage());
+            failMsg.setCancelType(FailMsg.CancelType.USER_CANCEL);
             LOG.warn(new LogBuilder(LogKey.LOAD_JOB, callback.getCallbackId())
                     .add("error_msg", "Failed to execute load task").build(), e);
         } catch (Exception e) {
@@ -100,7 +105,7 @@ public abstract class LoadTask extends PriorityLeaderTask {
     /**
      * execute load task
      *
-     * @throws UserException task is failed
+     * @throws StarRocksException task is failed
      */
     abstract void executeTask() throws Exception;
 

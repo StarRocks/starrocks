@@ -186,4 +186,13 @@ public class OffHeapTable {
         }
     }
 
+    // for test only.
+    public boolean checkNullsLength() {
+        for (OffHeapColumnVector c : vectors) {
+            if (!c.checkNullsLength()) {
+                return false;
+            }
+        }
+        return true;
+    }
 }

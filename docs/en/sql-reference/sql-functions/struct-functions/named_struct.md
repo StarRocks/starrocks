@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # named_struct
 
-## Description
+
 
 Creates a struct with the specified field names and values.
 

@@ -27,13 +27,30 @@ import java.util.List;
 public class PhysicalUnionOperator extends PhysicalSetOperation {
     private final boolean isUnionAll;
 
+    // record if this union is derived from IcebergEqualityDeleteRewriteRule
+    private final boolean fromIcebergEqualityDeleteRewrite;
+
     public PhysicalUnionOperator(List<ColumnRefOperator> columnRef, List<List<ColumnRefOperator>> childOutputColumns,
                                  boolean isUnionAll,
                                  long limit,
                                  ScalarOperator predicate,
                                  Projection projection) {
+        this(columnRef, childOutputColumns, isUnionAll, limit, predicate, projection, false);
+    }
+
+    public PhysicalUnionOperator(List<ColumnRefOperator> columnRef, List<List<ColumnRefOperator>> childOutputColumns,
+                                 boolean isUnionAll,
+                                 long limit,
+                                 ScalarOperator predicate,
+                                 Projection projection,
+                                 boolean fromIcebergEqualityDeleteRewrite) {
         super(OperatorType.PHYSICAL_UNION, columnRef, childOutputColumns, limit, predicate, projection);
         this.isUnionAll = isUnionAll;
+        this.fromIcebergEqualityDeleteRewrite = fromIcebergEqualityDeleteRewrite;
+    }
+
+    public boolean isFromIcebergEqualityDeleteRewrite() {
+        return fromIcebergEqualityDeleteRewrite;
     }
 
     public boolean isUnionAll() {

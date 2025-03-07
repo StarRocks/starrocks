@@ -21,17 +21,17 @@ import com.starrocks.credential.CloudConfigurationProvider;
 import java.util.HashMap;
 import java.util.Map;
 
-import static com.starrocks.credential.CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB;
-import static com.starrocks.credential.CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB_CONTENT;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_DEPRECATED;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL_DEPRECATED;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_PASSWORD;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_PASSWORD_DEPRECATED;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USERNAME;
-import static com.starrocks.credential.CloudConfigurationConstants.HDFS_USERNAME_DEPRECATED;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HADOOP_KERBEROS_KEYTAB_CONTENT;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_AUTHENTICATION;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_CONTENT_DEPRECATED;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_KERBEROS_KEYTAB_DEPRECATED;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_KERBEROS_PRINCIPAL_DEPRECATED;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_PASSWORD;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_PASSWORD_DEPRECATED;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_USERNAME;
+import static com.starrocks.connector.share.credential.CloudConfigurationConstants.HDFS_USERNAME_DEPRECATED;
 
 public class HDFSCloudConfigurationProvider implements CloudConfigurationProvider {
 

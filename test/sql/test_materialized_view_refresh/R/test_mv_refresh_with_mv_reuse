@@ -1,0 +1,207 @@
+-- name: test_mv_refresh_with_mv_reuse
+create database db_${uuid0};
+-- result:
+-- !result
+use db_${uuid0};
+-- result:
+-- !result
+CREATE TABLE `t1` (
+    `k1`  date not null, 
+    `k2`  datetime not null, 
+    `k3`  char(20), 
+    `k4`  varchar(20), 
+    `k5`  boolean, 
+    `k6`  tinyint, 
+    `k7`  smallint, 
+    `k8`  int, 
+    `k9`  bigint, 
+    `k10` largeint, 
+    `k11` float, 
+    `k12` double, 
+    `k13` decimal(27,9) ) 
+DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) 
+PARTITION BY date_trunc('day', `k1`) 
+DISTRIBUTED BY RANDOM BUCKETS 3 ;
+-- result:
+-- !result
+INSERT INTO t1 VALUES
+    ('2020-10-11','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-12','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-21','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-22','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-23','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-24','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+-- result:
+-- !result
+CREATE TABLE `t2` (
+    `k1`  date not null, 
+    `k2`  datetime not null, 
+    `k3`  char(20), 
+    `k4`  varchar(20), 
+    `k5`  boolean, 
+    `k6`  tinyint, 
+    `k7`  smallint, 
+    `k8`  int, 
+    `k9`  bigint, 
+    `k10` largeint, 
+    `k11` float, 
+    `k12` double, 
+    `k13` decimal(27,9) ) 
+DUPLICATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) 
+PARTITION BY date_trunc('day', `k1`) 
+DISTRIBUTED BY RANDOM BUCKETS 3 ;
+-- result:
+-- !result
+INSERT INTO t2 VALUES
+    ('2020-10-10','2020-10-23 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-11','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-12','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-21','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),
+    ('2020-10-22','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889);
+-- result:
+-- !result
+set cbo_enable_low_cardinality_optimize = false;   
+CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv0
+PARTITION BY `ak1`
+DISTRIBUTED BY HASH(`ak1`)
+REFRESH DEFERRED MANUAL
+as 
+select a.k1 as ak1, b.k1 as bk1, a.k3 as ak3, b.k3 as bk3, a.k4 as ak4, b.k4 as bk4, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8, sum(b.k9) as sum_k9
+from t1 a join t2 b on a.k1=b.k1 group by a.k1, b.k1, a.k3, b.k3, a.k4, b.k4;
+-- result:
+-- !result
+refresh materialized view  test_mv0 with sync mode;
+[UC] analyze table test_mv0 with sync mode;
+-- result:
+db_a9b5f84a8d2d47419ff72c406d3ca28d.test_mv0	analyze	status	OK
+-- !result
+select * from test_mv0 order by 1, 2, 3, 4, 5, 6;
+-- result:
+2020-10-11	2020-10-11	k3	k3	k4	k4	0	2	3	4
+2020-10-12	2020-10-12	k3	k3	k4	k4	1	2	3	4
+2020-10-21	2020-10-21	k3	k3	k4	k4	0	2	3	4
+2020-10-22	2020-10-22	k3	k3	k4	k4	1	2	3	4
+-- !result
+select a.k1 as ak1, b.k1 as bk1, a.k3 as ak3, b.k3 as bk3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8, sum(b.k9) as sum_k9 from t1 a join t2 b on a.k1=b.k1 group by a.k1, b.k1, a.k3, b.k3 order by 1, 2, 3, 4, 5, 6;
+-- result:
+2020-10-11	2020-10-11	k3	k3	0	2	3	4
+2020-10-12	2020-10-12	k3	k3	1	2	3	4
+2020-10-21	2020-10-21	k3	k3	0	2	3	4
+2020-10-22	2020-10-22	k3	k3	1	2	3	4
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv1
+PARTITION BY `ak1`
+DISTRIBUTED BY HASH(`ak1`)
+REFRESH DEFERRED MANUAL
+as 
+select a.k1 as ak1, b.k1 as bk1, a.k3 as ak3, b.k3 as bk3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8, sum(b.k9) as sum_k9 
+from t1 a join t2 b on a.k1=b.k1 group by a.k1, b.k1, a.k3, b.k3; 
+
+refresh materialized view test_mv1 with sync mode;
+-- result:
+-- !result
+[UC] analyze table test_mv1 with sync mode;
+-- result:
+db_a9b5f84a8d2d47419ff72c406d3ca28d.test_mv1	analyze	status	OK
+-- !result
+select * from test_mv1 order by 1, 2, 3, 4;
+-- result:
+2020-10-11	2020-10-11	k3	k3	0	2	3	4
+2020-10-12	2020-10-12	k3	k3	1	2	3	4
+2020-10-21	2020-10-21	k3	k3	0	2	3	4
+2020-10-22	2020-10-22	k3	k3	1	2	3	4
+-- !result
+select a.k1 as ak1, b.k1 as bk1, a.k3 as ak3, b.k3 as bk3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8, sum(b.k9) as sum_k9 from t1 a join t2 b on a.k1=b.k1 group by a.k1, b.k1, a.k3, b.k3 order by 1, 2, 3, 4;
+-- result:
+2020-10-11	2020-10-11	k3	k3	0	2	3	4
+2020-10-12	2020-10-12	k3	k3	1	2	3	4
+2020-10-21	2020-10-21	k3	k3	0	2	3	4
+2020-10-22	2020-10-22	k3	k3	1	2	3	4
+-- !result
+select a.k1 as ak1, a.k3 as ak3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8 from t1 a join t2 b on a.k1=b.k1 group by a.k1, a.k3 order by 1, 2, 3, 4; 
+
+CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv2
+PARTITION BY `ak1`
+DISTRIBUTED BY HASH(`ak1`)
+REFRESH DEFERRED MANUAL
+as 
+select a.k1 as ak1, a.k3 as ak3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8
+from t1 a join t2 b on a.k1=b.k1 group by a.k1, a.k3; 
+
+refresh materialized view test_mv2 with sync mode;
+-- result:
+2020-10-11	k3	0	2	3
+2020-10-12	k3	1	2	3
+2020-10-21	k3	0	2	3
+2020-10-22	k3	1	2	3
+-- !result
+[UC] analyze table test_mv2 with sync mode;
+-- result:
+db_a9b5f84a8d2d47419ff72c406d3ca28d.test_mv2	analyze	status	OK
+-- !result
+select * from test_mv2 order by 1, 2, 3, 4;
+-- result:
+2020-10-11	k3	0	2	3
+2020-10-12	k3	1	2	3
+2020-10-21	k3	0	2	3
+2020-10-22	k3	1	2	3
+-- !result
+select a.k1 as ak1, a.k3 as ak3, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7, sum(a.k8) as sum_k8 from t1 a join t2 b on a.k1=b.k1 group by a.k1, a.k3 order by 1, 2, 3, 4;
+-- result:
+2020-10-11	k3	0	2	3
+2020-10-12	k3	1	2	3
+2020-10-21	k3	0	2	3
+2020-10-22	k3	1	2	3
+-- !result
+select a.k1 as ak1, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7 from t1 a join t2 b on a.k1=b.k1 group by a.k1 order by 1, 2;
+-- result:
+2020-10-11	0	2
+2020-10-12	1	2
+2020-10-21	0	2
+2020-10-22	1	2
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS test_mv3
+PARTITION BY `ak1`
+DISTRIBUTED BY HASH(`ak1`)
+REFRESH DEFERRED MANUAL
+as 
+select a.k1 as ak1, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7 from t1 a join t2 b on a.k1=b.k1 group by a.k1;
+-- result:
+-- !result
+refresh materialized view test_mv3 with sync mode;
+[UC] analyze table test_mv3 with sync mode;
+-- result:
+db_a9b5f84a8d2d47419ff72c406d3ca28d.test_mv3	analyze	status	OK
+-- !result
+select * from test_mv3 order by 1;
+-- result:
+2020-10-11	0	2
+2020-10-12	1	2
+2020-10-21	0	2
+2020-10-22	1	2
+-- !result
+select a.k1 as ak1, sum(a.k6) as sum_k6, sum(b.k7) as sum_k7 from t1 a join t2 b on a.k1=b.k1 group by a.k1 order by 1, 2;
+-- result:
+2020-10-11	0	2
+2020-10-12	1	2
+2020-10-21	0	2
+2020-10-22	1	2
+-- !result
+drop table t1;
+-- result:
+-- !result
+drop table t2;
+-- result:
+-- !result
+drop materialized view test_mv0;
+-- result:
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+drop materialized view test_mv2;
+-- result:
+-- !result
+drop materialized view test_mv3;
+-- result:
+-- !result

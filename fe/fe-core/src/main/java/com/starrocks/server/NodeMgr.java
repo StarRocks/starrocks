@@ -34,17 +34,15 @@
 
 package com.starrocks.server;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
+import com.google.gson.stream.JsonReader;
 import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.ha.BDBHA;
@@ -52,33 +50,36 @@ import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.LeaderInfo;
 import com.starrocks.http.meta.MetaBaseAction;
 import com.starrocks.leader.MetaHelper;
+import com.starrocks.persist.ImageFormatVersion;
+import com.starrocks.persist.ImageLoader;
+import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.Storage;
 import com.starrocks.persist.StorageInfo;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.qe.ConnectContext;
-import com.starrocks.rpc.FrontendServiceProxy;
+import com.starrocks.qe.QueryStatisticsInfo;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
 import com.starrocks.system.SystemInfoService;
+import com.starrocks.thrift.TGetQueryStatisticsRequest;
+import com.starrocks.thrift.TGetQueryStatisticsResponse;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TSetConfigRequest;
-import com.starrocks.thrift.TSetConfigResponse;
-import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.net.URLEncoder;
@@ -155,6 +156,13 @@ public class NodeMgr {
         this.systemInfo = new SystemInfoService();
 
         this.brokerMgr = new BrokerMgr();
+    }
+
+    // For test
+    protected NodeMgr(FrontendNodeType role, String nodeName, Pair<String, Integer> selfNode) {
+        this.role = role;
+        this.nodeName = nodeName;
+        this.selfNode = selfNode;
     }
 
     public void initialize(String[] args) throws Exception {
@@ -250,6 +258,19 @@ public class NodeMgr {
 
         Storage storage = new Storage(this.imageDir);
 
+        // prepare starmgr dir
+        if (RunMode.isSharedDataMode()) {
+            String subDir = this.imageDir + StarMgrServer.IMAGE_SUBDIR;
+            File dir = new File(subDir);
+            if (!dir.exists()) { // subDir might not exist
+                LOG.info("create image dir for star mgr, {}.", dir.getAbsolutePath());
+                if (!dir.mkdir()) {
+                    LOG.error("create image dir for star mgr failed! exit now.");
+                    System.exit(-1);
+                }
+            }
+        }
+
         // if helper node is point to self, or there is ROLE and VERSION file in local.
         // get the node type from local
         if (isMyself() || (roleFile.exists() && versionFile.exists())) {
@@ -281,7 +302,7 @@ public class NodeMgr {
                 // For compatibility. Because this is the very first time to start, so we arbitrarily choose
                 // a new name for this node
                 role = FrontendNodeType.FOLLOWER;
-                nodeName = GlobalStateMgr.genFeNodeName(selfNode.first, selfNode.second, false /* new style */);
+                nodeName = genFeNodeName(selfNode.first, selfNode.second, false /* new style */);
                 storage.writeFrontendRoleAndNodeName(role, nodeName);
                 LOG.info("very first time to start this node. role: {}, node name: {}", role.name(), nodeName);
             } else {
@@ -292,9 +313,18 @@ public class NodeMgr {
                     // But we will get a empty nodeName after upgrading.
                     // So for forward compatibility, we use the "old-style" way of naming: "ip_port",
                     // and update the ROLE file.
-                    nodeName = GlobalStateMgr.genFeNodeName(selfNode.first, selfNode.second, true/* old style */);
+                    nodeName = genFeNodeName(selfNode.first, selfNode.second, true/* old style */);
                     storage.writeFrontendRoleAndNodeName(role, nodeName);
                     LOG.info("forward compatibility. role: {}, node name: {}", role.name(), nodeName);
+                } else if (Config.bdbje_reset_election_group
+                        && !isFeNodeNameValid(nodeName, selfNode.first, selfNode.second)) {
+                    // Invalid node name, usually happened when the image dir is copied from another node.
+                    // Correct the node name
+                    String oldNodeName = nodeName;
+                    nodeName = genFeNodeName(selfNode.first, selfNode.second, false /* new style */);
+                    storage.writeFrontendRoleAndNodeName(role, nodeName);
+                    LOG.info("correct the node name {} to new node name: {}, role: {}", oldNodeName, nodeName,
+                            role.name());
                 }
             }
             Preconditions.checkNotNull(role);
@@ -338,7 +368,7 @@ public class NodeMgr {
                         Thread.sleep(5000);
                         continue;
                     } catch (InterruptedException e) {
-                        LOG.warn(e);
+                        LOG.warn("Failed to execute sleep", e);
                         System.exit(-1);
                     }
                 }
@@ -434,16 +464,6 @@ public class NodeMgr {
             }
             getNewImageOnStartup(rightHelperNode, "");
             if (RunMode.isSharedDataMode()) { // get star mgr image
-                // subdir might not exist
-                String subDir = this.imageDir + StarMgrServer.IMAGE_SUBDIR;
-                File dir = new File(subDir);
-                if (!dir.exists()) { // subDir might not exist
-                    LOG.info("create image dir for {}.", dir.getAbsolutePath());
-                    if (!dir.mkdir()) {
-                        LOG.error("create image dir for star mgr failed! exit now.");
-                        System.exit(-1);
-                    }
-                }
                 getNewImageOnStartup(rightHelperNode, StarMgrServer.IMAGE_SUBDIR);
             }
         }
@@ -516,7 +536,7 @@ public class NodeMgr {
 
                 if (Strings.isNullOrEmpty(nodeName)) {
                     // For forward compatibility, we use old-style name: "ip_port"
-                    nodeName = GlobalStateMgr.genFeNodeName(selfNode.first, selfNode.second, true /* old style */);
+                    nodeName = genFeNodeName(selfNode.first, selfNode.second, true /* old style */);
                 }
             } catch (Exception e) {
                 LOG.warn("failed to get fe node type from helper node: {}.", helperNode, e);
@@ -558,14 +578,15 @@ public class NodeMgr {
     }
 
     private StorageInfo getStorageInfo(URL url) throws IOException {
-        ObjectMapper mapper = new ObjectMapper();
-
         HttpURLConnection connection = null;
         try {
             connection = (HttpURLConnection) url.openConnection();
             connection.setConnectTimeout(HTTP_TIMEOUT_SECOND * 1000);
             connection.setReadTimeout(HTTP_TIMEOUT_SECOND * 1000);
-            return mapper.readValue(connection.getInputStream(), StorageInfo.class);
+
+            InputStreamReader inputStreamReader = new InputStreamReader(connection.getInputStream());
+            JsonReader jsonReader = new JsonReader(inputStreamReader);
+            return GsonUtils.GSON.fromJson(jsonReader, StorageInfo.class);
         } finally {
             if (connection != null) {
                 connection.disconnect();
@@ -631,7 +652,7 @@ public class NodeMgr {
                 System.exit(-1);
             }
         } catch (UnknownHostException e) {
-            LOG.error(e);
+            LOG.error(e.getMessage(), e);
             System.exit(-1);
         }
         LOG.debug("get self node: {}", selfNode);
@@ -652,7 +673,7 @@ public class NodeMgr {
      * frontend log is deleted because of checkpoint.
      */
     public void checkCurrentNodeExist() {
-        if (Config.bdbje_reset_election_group.equals("true")) {
+        if (Config.bdbje_reset_election_group) {
             return;
         }
 
@@ -689,25 +710,31 @@ public class NodeMgr {
      * Exception are free to raise on initialized phase
      */
     private void getNewImageOnStartup(Pair<String, Integer> helperNode, String subDir) throws IOException {
-        long localImageVersion = 0;
         String dirStr = this.imageDir + subDir;
-        Storage storage = new Storage(dirStr);
-        localImageVersion = storage.getImageJournalId();
+        ImageLoader imageLoader = new ImageLoader(dirStr);
+        long localImageVersion = imageLoader.getImageJournalId();
 
         String accessibleHostPort = NetUtils.getHostPortInAccessibleFormat(helperNode.first, Config.http_port);
         URL infoUrl = new URL("http://" + accessibleHostPort + "/info?subdir=" + subDir);
-        StorageInfo info = getStorageInfo(infoUrl);
-        long version = info.getImageJournalId();
-        if (version > localImageVersion) {
-            String url = "http://" + accessibleHostPort + "/image?version=" + version + "&subdir=" + subDir;
-            LOG.info("start to download image.{} from {}", version, url);
-            String filename = Storage.IMAGE + "." + version;
-            File dir = new File(dirStr);
-            MetaHelper.getRemoteFile(url, HTTP_TIMEOUT_SECOND * 1000, MetaHelper.getOutputStream(filename, dir));
-            MetaHelper.complete(filename, dir);
+        StorageInfo remoteStorageInfo = getStorageInfo(infoUrl);
+        long remoteImageVersion = remoteStorageInfo.getImageJournalId();
+        if (remoteImageVersion > localImageVersion) {
+            String url = "http://" + accessibleHostPort + "/image?"
+                    + "version=" + remoteImageVersion
+                    + "&subdir=" + subDir
+                    + "&image_format_version=" + remoteStorageInfo.getImageFormatVersion();
+            LOG.info("start to download image.{} version:{}, from {}", remoteImageVersion,
+                    remoteStorageInfo.getImageFormatVersion(), url);
+            File dir;
+            if (remoteStorageInfo.getImageFormatVersion() == ImageFormatVersion.v1) {
+                dir = new File(dirStr);
+            } else {
+                dir = new File(dirStr, remoteStorageInfo.getImageFormatVersion().toString());
+            }
+            MetaHelper.downloadImageFile(url, HTTP_TIMEOUT_SECOND * 1000, Long.toString(remoteImageVersion), dir);
         } else {
             LOG.info("skip download image for {}, current version {} >= version {} from {}",
-                    dirStr, localImageVersion, version, helperNode);
+                    dirStr, localImageVersion, remoteImageVersion, helperNode);
         }
     }
 
@@ -725,7 +752,7 @@ public class NodeMgr {
                 throw new DdlException("unknown fqdn host: " + host);
             }
 
-            String nodeName = GlobalStateMgr.genFeNodeName(host, editLogPort, false /* new name style */);
+            String nodeName = genFeNodeName(host, editLogPort, false /* new name style */);
 
             if (removedFrontends.contains(nodeName)) {
                 throw new DdlException("frontend name already exists " + nodeName + ". Try again");
@@ -831,8 +858,17 @@ public class NodeMgr {
             unlock();
 
             if (fe != null) {
-                GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(fe.getNodeName());
+                dropFrontendHook(fe);
             }
+        }
+    }
+
+    private void dropFrontendHook(Frontend fe) {
+        GlobalStateMgr.getCurrentState().getSlotManager().notifyFrontendDeadAsync(fe.getNodeName());
+
+        GlobalStateMgr.getCurrentState().getCheckpointController().cancelCheckpoint(fe.getNodeName(), "FE is dropped");
+        if (RunMode.isSharedDataMode()) {
+            StarMgrServer.getCurrentState().getCheckpointController().cancelCheckpoint(fe.getNodeName(), "FE is dropped");
         }
     }
 
@@ -997,6 +1033,10 @@ public class NodeMgr {
         return frontends.get(name);
     }
 
+    public Frontend getSelfFe() {
+        return frontends.get(nodeName);
+    }
+
     public int getFollowerCnt() {
         int cnt = 0;
         for (Frontend fe : frontends.values()) {
@@ -1073,48 +1113,41 @@ public class NodeMgr {
         leaderChangeListeners.values().forEach(listener -> listener.accept(info));
     }
 
-    public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
-        setFrontendConfig(stmt.getConfig().getMap());
+    public List<QueryStatisticsInfo> getQueryStatisticsInfoFromOtherFEs() {
+        List<QueryStatisticsInfo> statisticsItems = Lists.newArrayList();
+        TGetQueryStatisticsRequest request = new TGetQueryStatisticsRequest();
 
-        List<Frontend> allFrontends = getFrontends(null);
-        int timeout = ConnectContext.get().getSessionVariable().getQueryTimeoutS() * 1000
-                + Config.thrift_rpc_timeout_ms;
-        StringBuilder errMsg = new StringBuilder();
+        List<Frontend> allFrontends = getAllFrontends();
         for (Frontend fe : allFrontends) {
             if (fe.getHost().equals(getSelfNode().first)) {
                 continue;
             }
 
-            TSetConfigRequest request = new TSetConfigRequest();
-            request.setKeys(Lists.newArrayList(stmt.getConfig().getKey()));
-            request.setValues(Lists.newArrayList(stmt.getConfig().getValue()));
             try {
-                TSetConfigResponse response = FrontendServiceProxy
-                        .call(new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
-                                timeout,
+                TGetQueryStatisticsResponse response = ThriftRPCRequestExecutor.call(
+                        ThriftConnectionPool.frontendPool,
+                        new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
+                                Config.thrift_rpc_timeout_ms,
                                 Config.thrift_rpc_retry_times,
-                                client -> client.setConfig(request));
-                TStatus status = response.getStatus();
-                if (status.getStatus_code() != TStatusCode.OK) {
-                    errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ");
-                    if (status.getError_msgs() != null && status.getError_msgs().size() > 0) {
-                        errMsg.append(String.join(",", status.getError_msgs()));
-                    }
-                    errMsg.append(";");
+                                client -> client.getQueryStatistics(request));
+                if (response.getStatus().getStatus_code() != TStatusCode.OK) {
+                    LOG.warn("getQueryStatisticsInfo to remote fe: {} failed", fe.getHost());
+                } else if (response.isSetQueryStatistics_infos()) {
+                    response.getQueryStatistics_infos().stream()
+                            .map(QueryStatisticsInfo::fromThrift)
+                            .forEach(statisticsItems::add);
                 }
             } catch (Exception e) {
-                LOG.warn("set remote fe: {} config failed", fe.getHost(), e);
-                errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ").append(e.getMessage());
+                LOG.warn("getQueryStatisticsInfo to remote fe: {} failed", fe.getHost(), e);
             }
         }
-        if (errMsg.length() > 0) {
-            ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
-        }
+
+        return statisticsItems;
     }
 
-    public void setFrontendConfig(Map<String, String> configs) throws DdlException {
+    public void setFrontendConfig(Map<String, String> configs, boolean isPersisted, String userIdentity) throws DdlException {
         for (Map.Entry<String, String> entry : configs.entrySet()) {
-            ConfigBase.setMutableConfig(entry.getKey(), entry.getValue());
+            ConfigBase.setMutableConfig(entry.getKey(), entry.getValue(), isPersisted, userIdentity);
         }
     }
 
@@ -1126,8 +1159,27 @@ public class NodeMgr {
         return frontends;
     }
 
-    public void save(DataOutputStream dos) throws IOException, SRMetaBlockException {
-        SRMetaBlockWriter writer = new SRMetaBlockWriter(dos, SRMetaBlockID.NODE_MGR, 1);
+    public void resetFrontends() {
+        frontends.clear();
+        Frontend self = new Frontend(role, nodeName, selfNode.first, selfNode.second);
+        frontends.put(self.getNodeName(), self);
+        // reset helper nodes
+        helperNodes.clear();
+        helperNodes.add(selfNode);
+
+        GlobalStateMgr.getCurrentState().getEditLog().logResetFrontends(self);
+    }
+
+    public void replayResetFrontends(Frontend frontend) {
+        frontends.clear();
+        frontends.put(frontend.getNodeName(), frontend);
+        // reset helper nodes
+        helperNodes.clear();
+        helperNodes.add(Pair.create(frontend.getHost(), frontend.getEditLogPort()));
+    }
+
+    public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.NODE_MGR, 1);
         writer.writeJson(this);
         writer.close();
     }
@@ -1172,5 +1224,18 @@ public class NodeMgr {
 
     public void setImageDir(String imageDir) {
         this.imageDir = imageDir;
+    }
+
+    public static String genFeNodeName(String host, int port, boolean isOldStyle) {
+        String name = host + "_" + port;
+        if (isOldStyle) {
+            return name;
+        } else {
+            return name + "_" + System.currentTimeMillis();
+        }
+    }
+
+    public static boolean isFeNodeNameValid(String nodeName, String host, int port) {
+        return nodeName.startsWith(host + "_" + port);
     }
 }

@@ -68,6 +68,23 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     }
 
     @Test
+    public void testComplexExprStats() throws Exception {
+        String sql = "select CONCAT(CONCAT(EXTRACT(YEAR FROM DATE_ADD(CASE WHEN CASE  WHEN DAYOFWEEK(l_shipdate) = 1 THEN 6 " +
+                "ELSE -1 END + DAYOFWEEK(l_shipdate) = 1 THEN DATE_SUB(l_shipdate, INTERVAL 7 DAY) " +
+                "WHEN NOT CASE  WHEN DAYOFWEEK(l_shipdate) = 1 THEN 6 ELSE -1 END + DAYOFWEEK(l_shipdate) = 1 " +
+                "THEN l_shipdate ELSE NULL END, INTERVAL 26 - WEEK(CASE WHEN CASE  WHEN DAYOFWEEK(l_shipdate) = 1 " +
+                "THEN 6 ELSE -1 END + DAYOFWEEK(l_shipdate) = 1 THEN DATE_SUB(l_shipdate, INTERVAL 7 DAY) WHEN NOT CASE  " +
+                "WHEN DAYOFWEEK(l_shipdate) = 1 THEN 6 ELSE -1 END + DAYOFWEEK(l_shipdate) = 1 " +
+                "THEN l_shipdate ELSE NULL END, 3) DAY))), " +
+                "CASE WHEN 2 >= 0 THEN RIGHT(CONCAT('0', CONCAT(WEEK(CASE  WHEN CASE  WHEN DAYOFWEEK(l_shipdate) = 1 THEN 6  " +
+                "ELSE -1 END + DAYOFWEEK(l_shipdate) = 1 THEN DATE_SUB(l_shipdate, INTERVAL 7 DAY)" +
+                " WHEN NOT CASE  WHEN DAYOFWEEK(l_shipdate) = 1 THEN 6  ELSE -1 END + DAYOFWEEK(l_shipdate) = 1 " +
+                "THEN l_shipdate ELSE NULL END, 3))), 2) ELSE NULL END) from lineitem";
+        String plan = getCostExplain(sql);
+        assertContains(plan, "concat-->[-Infinity, Infinity, 0.0, 3.0, 412.0] ESTIMATE");
+    }
+
+    @Test
     public void testCountDistinctWithGroupLowCountLow() throws Exception {
         connectContext.getSessionVariable().setNewPlanerAggStage(2);
         String sql = "select count(distinct P_TYPE) from part group by P_BRAND;";
@@ -733,7 +750,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
                 "  |  join op: LEFT OUTER JOIN (BUCKET_SHUFFLE)\n" +
                 "  |  equal join conjunct: [1: PS_PARTKEY, INT, false] = [7: P_PARTKEY, INT, true]\n" +
                 "  |  other predicates: 7: P_PARTKEY IS NULL\n" +
-                "  |  output columns: 1, 2, 7\n" +
+                "  |  output columns: 1, 2\n" +
                 "  |  cardinality: 8000000");
         // test right outer join
         sql = "select ps_partkey,ps_suppkey from partsupp right outer join part on " +
@@ -932,7 +949,7 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
     @Test
     public void testCastDatePredicate() throws Exception {
         OlapTable lineitem =
-                (OlapTable) connectContext.getGlobalStateMgr().getDb("test").getTable("lineitem");
+                (OlapTable) connectContext.getGlobalStateMgr().getLocalMetastore().getDb("test").getTable("lineitem");
 
         MockTpchStatisticStorage mock = new MockTpchStatisticStorage(connectContext, 100);
         connectContext.getGlobalStateMgr().setStatisticStorage(mock);
@@ -1554,12 +1571,14 @@ public class DistributedEnvPlanWithCostTest extends DistributedEnvPlanTestBase {
         sql = "select * from t0 left outer join t1 on t0.v1 = t1.v4 + t1.v5  and t1.v4 + t1.v5 < t0.v2 and " +
                 "t0.v2 < t1.v4 + t1.v6";
         plan = getFragmentPlan(sql);
-        assertContains(plan, "0:OlapScanNode\n" +
-                "     TABLE: t1\n" +
-                "     PREAGGREGATION: ON\n" +
-                "     PREDICATES: 4: v4 + 5: v5 <= CAST('test_max_v2' AS BIGINT), " +
-                "4: v4 + 6: v6 >= CAST('test_min_v2' AS BIGINT)\n" +
-                "     partitions=1/1");
+        assertContains(plan, "  2:SELECT\n" +
+                "  |  predicates: 7: add <= CAST('test_max_v2' AS BIGINT), 4: v4 + 6: v6 >= CAST('test_min_v2' AS BIGINT)\n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 4> : 4: v4\n" +
+                "  |  <slot 5> : 5: v5\n" +
+                "  |  <slot 6> : 6: v6\n" +
+                "  |  <slot 7> : 4: v4 + 5: v5");
     }
 
     @Test

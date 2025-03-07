@@ -21,8 +21,10 @@ import com.starrocks.connector.CatalogConnector;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.thrift.TExplainLevel;
 import mockit.Expectations;
 import mockit.Mocked;
+import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.HashMap;
@@ -47,5 +49,37 @@ public class DeltaLakeScanNodeTest {
         TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
         desc.setTable(table);
         DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "XXX");
+    }
+
+    @Test
+    public void testNodeExplain(@Mocked GlobalStateMgr globalStateMgr, @Mocked CatalogConnector connector,
+                            @Mocked DeltaLakeTable table) {
+        String catalogName = "delta0";
+        CloudConfiguration cloudConfiguration = CloudConfigurationFactory.
+                buildCloudConfigurationForStorage(new HashMap<>());
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
+                result = connector;
+                minTimes = 0;
+
+                connector.getMetadata().getCloudConfiguration();
+                result = cloudConfiguration;
+                minTimes = 0;
+
+                table.getCatalogName();
+                result = catalogName;
+                minTimes = 0;
+
+                table.getName();
+                result = "table0";
+                minTimes = 0;
+            }
+        };
+        TupleDescriptor desc = new TupleDescriptor(new TupleId(0));
+        desc.setTable(table);
+        DeltaLakeScanNode scanNode = new DeltaLakeScanNode(new PlanNodeId(0), desc, "Delta Scan Node");
+        Assert.assertFalse(scanNode.getNodeExplainString("", TExplainLevel.NORMAL).contains("partitions"));
+        Assert.assertTrue(scanNode.getNodeExplainString("", TExplainLevel.VERBOSE).contains("partitions"));
     }
 }

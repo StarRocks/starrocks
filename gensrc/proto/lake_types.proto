@@ -20,6 +20,7 @@ option java_package = "com.starrocks.proto";
 import "types.proto";
 import "tablet_schema.proto";
 import "olap_file.proto";
+import "olap_common.proto";
 
 message DelvecDataPB {
     optional int64 version = 1;
@@ -53,6 +54,40 @@ message DelvecMetadataPB {
     map<uint32, DelvecPagePB> delvecs = 2;
 }
 
+message DeltaColumnGroupVerPB {
+    repeated DeltaColumnGroupColumnIdsPB unique_column_ids = 1;
+    repeated string column_files = 2;
+    // To do conflict check with compaction task
+    repeated int64 versions = 3;
+    repeated bytes encryption_metas = 4;
+}
+
+message DeltaColumnGroupMetadataPB {
+    // from segment id to delta column group
+    map<uint32, DeltaColumnGroupVerPB> dcgs = 1;
+}
+
+message DelfileWithRowsetId {
+    optional string name = 1;
+    // origin rowset that generate this del file.
+    optional uint32 origin_rowset_id = 2;
+    // Because of historical reason, DELETE don't have its own segment id, we only use
+    // `rowset_id + segment_id` for UPSERT.
+    // So if there is a UPSERT and DELETE mix transaction, we use
+    // `op_offset` to identify the order of deletes, and rssid of DELETE will be
+    // just same as previous UPSERT. And if the Rowset don't have UPSERT, DELETE's rssid
+    // will be same as rowset_id.
+    //
+    // E.g. there are <UPSERT, UPSERT, UPSERT, DELETE, DELETE> in a transaction,
+    //      so the `op_offset` of this DELETE is 2.
+    //      And rssid of them will be rowset_id + [0, 1, 2, 2, 2].
+    //
+    //      there are <DELETE, DELETE> in a transaction, so the `op_offset` of this DELETE is 0.
+    //      And rssid of them will be rowset_id + [0, 0].
+    optional uint32 op_offset = 3;
+    optional bytes encryption_meta = 4;
+}
+
 message RowsetMetadataPB {
     optional uint32 id = 1;
     optional bool overlapped = 2;
@@ -68,6 +103,12 @@ message RowsetMetadataPB {
     optional uint32 max_compact_input_rowset_id = 9;
     // The generated version of rowset.
     optional int64 version = 10;
+    // del_files are generated when pk table handle delete operation.
+    repeated DelfileWithRowsetId del_files = 11;
+    repeated bytes segment_encryption_metas = 12;
+    // set in partial compaction, indicate which segment index next compaction should start from
+    // only be set > 0 if `overlapped` is true
+    optional uint32 next_compaction_offset = 13;
 }
 
 // At present, the lake persistent index reuses the logic of the persistent index,
@@ -104,12 +145,23 @@ message TabletMetadataPB {
     // If the tablet is replicated from another cluster, the source_schema saved the schema in the cluster
     optional TabletSchemaPB source_schema = 14;
     optional PersistentIndexSstableMetaPB sstable_meta = 15;
+    optional DeltaColumnGroupMetadataPB dcg_meta = 16;
+    // Keep the tablet schema before each Alter operation
+    // If no rowset use the tablet schema any more, it will be gc by compaction
+    // The latest schema is also saved here, and it is same with the above schema
+    // It can be removed in future versions
+    map<int64, TabletSchemaPB> historical_schemas = 17;
+    // rowset_id -> schema_id
+    map<uint32, int64> rowset_to_schema = 18;
+    // global transaction id
+    optional int64 gtid = 19 [default=0];
 }
 
 message MetadataUpdateInfoPB {
     // enable persistent index in primary key table
     optional bool enable_persistent_index = 1;
     optional TabletSchemaPB tablet_schema = 2;
+    optional PersistentIndexTypePB persistent_index_type = 3;
 }
 
 message TxnLogPB {
@@ -120,6 +172,7 @@ message TxnLogPB {
         repeated string dels = 3;
         // for partial update, record dest rewrite segment names to avoid gc
         repeated string rewrite_segments = 4;
+        repeated bytes del_encryption_metas = 5;
     }
 
     message OpCompaction {
@@ -127,6 +180,8 @@ message TxnLogPB {
         optional RowsetMetadataPB output_rowset = 2;
         repeated PersistentIndexSstablePB input_sstables = 3;
         optional PersistentIndexSstablePB output_sstable = 4;
+        // Base version of compaction task, used for conflict check with partial update
+        optional int64 compact_version = 5;
     }
 
     message OpSchemaChange {
@@ -178,5 +233,8 @@ message TxnInfoPB {
     // Does the transaction generated a combined txn log
     optional bool combined_txn_log = 3;
     optional TxnTypePB txn_type = 4;
+    optional bool force_publish = 5; // only used for compaction
+    optional bool rebuild_pindex = 6;
+    optional int64 gtid = 7 [default=0];
 };
 

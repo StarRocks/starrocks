@@ -90,7 +90,15 @@ public:
 
     int64_t end_version() const { return _rowset_meta_pb->end_version(); }
 
+    bool has_gtid() const { return _rowset_meta_pb->has_gtid(); }
+
+    int64_t gtid() const { return _rowset_meta_pb->gtid(); }
+
+    void set_gtid(int64_t gtid) { _rowset_meta_pb->set_gtid(gtid); }
+
     int64_t num_rows() const { return _rowset_meta_pb->num_rows(); }
+
+    int64_t num_rows_upt() const { return _rowset_meta_pb->num_rows_upt(); }
 
     void set_num_rows(int64_t num_rows) { _rowset_meta_pb->set_num_rows(num_rows); }
 
@@ -234,14 +242,16 @@ public:
     // new rowset.
     // Before calling it, please confirm if you need a complete `rowset_meta` that includes `tablet_schema_pb`.
     // If not, perhaps `get_meta_pb_without_schema()` is enough.
-    void get_full_meta_pb(RowsetMetaPB* rs_meta_pb, const TabletSchemaCSPtr& tablet_schema = nullptr) const {
+    void get_full_meta_pb(RowsetMetaPB* rs_meta_pb, bool skip_schema = false,
+                          const TabletSchemaCSPtr& tablet_schema = nullptr) const {
         *rs_meta_pb = *_rowset_meta_pb;
-        const TabletSchemaCSPtr& target_schema = (tablet_schema != nullptr) ? tablet_schema : _schema;
-
-        if (target_schema != nullptr) {
-            rs_meta_pb->clear_tablet_schema();
-            TabletSchemaPB* ts_pb = rs_meta_pb->mutable_tablet_schema();
-            target_schema->to_schema_pb(ts_pb);
+        if (!skip_schema) {
+            const TabletSchemaCSPtr& target_schema = (tablet_schema != nullptr) ? tablet_schema : _schema;
+            if (target_schema != nullptr) {
+                rs_meta_pb->clear_tablet_schema();
+                TabletSchemaPB* ts_pb = rs_meta_pb->mutable_tablet_schema();
+                target_schema->to_schema_pb(ts_pb);
+            }
         }
     }
 
@@ -254,7 +264,7 @@ public:
         } else {
             // Only for compatible, in very old versions, there is no schema id.
             // If you fill with the default value, you cannot judge whether it is the same schema through the schema id.
-            _schema = TabletSchemaCSPtr(TabletSchema::copy(tablet_schema_ptr));
+            _schema = TabletSchema::copy(*tablet_schema_ptr);
         }
         _has_tablet_schema_pb = true;
     }
@@ -268,6 +278,20 @@ public:
     bool partial_schema_change() { return _rowset_meta_pb->partial_schema_change(); }
 
     bool has_tablet_schema_pb() { return _has_tablet_schema_pb; }
+
+    void set_skip_tablet_schema(bool skip_tablet_schema) { _skip_tablet_schema = skip_tablet_schema; }
+    bool skip_tablet_schema() { return _skip_tablet_schema; }
+    bool check_schema_id(int64_t latest_tablet_schema_id) {
+        if (_schema != nullptr && _schema->id() != TabletSchema::invalid_id() &&
+            _schema->id() == latest_tablet_schema_id) {
+            return true;
+        }
+        return false;
+    }
+
+    const string& get_segment_encryption_meta(int segment_id) const;
+    const string& get_uptfile_encryption_meta(int upt_file_id) const;
+    const string& get_delfile_encryption_meta(int del_file_id) const;
 
 private:
     bool _deserialize_from_pb(std::string_view value) {
@@ -289,8 +313,8 @@ private:
                 _schema = TabletSchema::create(_rowset_meta_pb->tablet_schema());
             }
         }
-        _has_tablet_schema_pb = _rowset_meta_pb->has_tablet_schema();
 
+        _has_tablet_schema_pb = _rowset_meta_pb->has_tablet_schema();
         // clear does not release memory but only set it to default value, so we need to copy a new _rowset_meta_pb
         _rowset_meta_pb->clear_tablet_schema();
         std::unique_ptr<RowsetMetaPB> ptr = std::make_unique<RowsetMetaPB>(*_rowset_meta_pb);
@@ -324,6 +348,7 @@ private:
     bool _is_removed_from_rowset_meta = false;
     TabletSchemaCSPtr _schema = nullptr;
     bool _has_tablet_schema_pb = false;
+    bool _skip_tablet_schema = false;
 };
 
 } // namespace starrocks

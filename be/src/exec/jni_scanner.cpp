@@ -14,6 +14,8 @@
 
 #include "exec/jni_scanner.h"
 
+#include <utility>
+
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
@@ -43,7 +45,7 @@ Status JniScanner::do_init(RuntimeState* runtime_state, const HdfsScannerParams&
 Status JniScanner::do_open(RuntimeState* state) {
     SCOPED_RAW_TIMER(&_app_stats.reader_init_ns);
     JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
-    update_jni_scanner_params();
+    RETURN_IF_ERROR(update_jni_scanner_params());
     if (env->EnsureLocalCapacity(_jni_scanner_params.size() * 2 + 6) < 0) {
         RETURN_IF_ERROR(_check_jni_exception(env, "Failed to ensure the local capacity."));
     }
@@ -92,8 +94,10 @@ Status JniScanner::_init_jni_table_scanner(JNIEnv* env, RuntimeState* runtime_st
     jclass scanner_factory_class = env->FindClass(_jni_scanner_factory_class.c_str());
     jmethodID scanner_factory_constructor = env->GetMethodID(scanner_factory_class, "<init>", "()V");
     jobject scanner_factory_obj = env->NewObject(scanner_factory_class, scanner_factory_constructor);
-    jmethodID get_scanner_method = env->GetMethodID(scanner_factory_class, "getScannerClass", "()Ljava/lang/Class;");
-    _jni_scanner_cls = (jclass)env->CallObjectMethod(scanner_factory_obj, get_scanner_method);
+    jmethodID get_scanner_method =
+            env->GetMethodID(scanner_factory_class, "getScannerClass", "(Ljava/lang/String;)Ljava/lang/Class;");
+    jstring scanner_type = env->NewStringUTF(_scanner_type().c_str());
+    _jni_scanner_cls = (jclass)env->CallObjectMethod(scanner_factory_obj, get_scanner_method, scanner_type);
     RETURN_IF_ERROR(_check_jni_exception(env, "Failed to init the scanner class."));
     env->DeleteLocalRef(scanner_factory_class);
     env->DeleteLocalRef(scanner_factory_obj);
@@ -338,7 +342,7 @@ Status JniScanner::_fill_column(FillColumnArgs* pargs) {
     return Status::OK();
 }
 
-Status JniScanner::_fill_chunk(JNIEnv* env, ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slot_desc_list) {
+StatusOr<size_t> JniScanner::_fill_chunk(JNIEnv* env, ChunkPtr* chunk) {
     SCOPED_RAW_TIMER(&_app_stats.column_convert_ns);
 
     long num_rows = next_chunk_meta_as_long();
@@ -347,8 +351,8 @@ Status JniScanner::_fill_chunk(JNIEnv* env, ChunkPtr* chunk, const std::vector<S
     }
     _app_stats.raw_rows_read += num_rows;
 
-    for (size_t col_idx = 0; col_idx < slot_desc_list.size(); col_idx++) {
-        SlotDescriptor* slot_desc = slot_desc_list[col_idx];
+    for (size_t col_idx = 0; col_idx < _scanner_ctx.materialized_columns.size(); col_idx++) {
+        SlotDescriptor* slot_desc = _scanner_ctx.materialized_columns[col_idx].slot_desc;
         const std::string& slot_name = slot_desc->col_name();
         const TypeDescriptor& slot_type = slot_desc->type();
         ColumnPtr& column = (*chunk)->get_column_by_slot_id(slot_desc->id());
@@ -363,7 +367,7 @@ Status JniScanner::_fill_chunk(JNIEnv* env, ChunkPtr* chunk, const std::vector<S
         RETURN_IF_ERROR(_check_jni_exception(
                 env, "Failed to call the releaseOffHeapColumnVector method of off-heap table scanner."));
     }
-    return Status::OK();
+    return num_rows;
 }
 
 Status JniScanner::_release_off_heap_table(JNIEnv* env) {
@@ -374,25 +378,23 @@ Status JniScanner::_release_off_heap_table(JNIEnv* env) {
 }
 
 Status JniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
-    // fill chunk with all wanted column(include partition columns)
-    Status status = fill_empty_chunk(chunk, _scanner_params.tuple_desc->slots());
-
+    // fill chunk with all wanted column.
+    ASSIGN_OR_RETURN(size_t chunk_size, fill_empty_chunk(chunk));
     // ====== conjunct evaluation ======
     // important to add columns before evaluation
     // because ctxs_by_slot maybe refers to some non-existed slot or partition slot.
-    size_t chunk_size = (*chunk)->num_rows();
-    _scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, chunk_size);
+    RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, chunk_size));
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, chunk_size);
     RETURN_IF_ERROR(_scanner_ctx.evaluate_on_conjunct_ctxs_by_slot(chunk, &_chunk_filter));
-    return status;
+    return Status::OK();
 }
 
-Status JniScanner::fill_empty_chunk(ChunkPtr* chunk, const std::vector<SlotDescriptor*>& slot_desc_list) {
+StatusOr<size_t> JniScanner::fill_empty_chunk(ChunkPtr* chunk) {
     JNIEnv* env = JVMFunctionHelper::getInstance().getEnv();
     long chunk_meta;
     RETURN_IF_ERROR(_get_next_chunk(env, &chunk_meta));
     reset_chunk_meta(chunk_meta);
-    Status status = _fill_chunk(env, chunk, slot_desc_list);
+    auto status = _fill_chunk(env, chunk);
     RETURN_IF_ERROR(_release_off_heap_table(env));
 
     return status;
@@ -418,21 +420,12 @@ static std::string build_fs_options_properties(const FSOptions& options) {
     static constexpr char PROP_SEPARATOR = 0x2;
     std::string data;
 
-    if (cloud_configuration != nullptr) {
-        if (cloud_configuration->__isset.cloud_properties) {
-            for (const auto& cloud_property : cloud_configuration->cloud_properties) {
-                data += cloud_property.key;
-                data += KV_SEPARATOR;
-                data += cloud_property.value;
-                data += PROP_SEPARATOR;
-            }
-        } else {
-            for (const auto& [key, value] : cloud_configuration->cloud_properties_v2) {
-                data += key;
-                data += KV_SEPARATOR;
-                data += value;
-                data += PROP_SEPARATOR;
-            }
+    if (cloud_configuration != nullptr && cloud_configuration->__isset.cloud_properties) {
+        for (const auto& [key, value] : cloud_configuration->cloud_properties) {
+            data += key;
+            data += KV_SEPARATOR;
+            data += value;
+            data += PROP_SEPARATOR;
         }
     }
 
@@ -442,13 +435,26 @@ static std::string build_fs_options_properties(const FSOptions& options) {
     return data;
 }
 
-void JniScanner::update_jni_scanner_params() {
+Status JniScanner::update_jni_scanner_params() {
+    // update materialized columns.
+    {
+        std::unordered_set<std::string> names;
+        for (const auto& column : _scanner_ctx.materialized_columns) {
+            if (column.name() == "___count___") continue;
+            auto col_name = column.formatted_name(_scanner_ctx.case_sensitive);
+            names.insert(col_name);
+        }
+        RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(names));
+    }
+
     std::string required_fields;
     for (const auto& column : _scanner_ctx.materialized_columns) {
         required_fields.append(column.name());
         required_fields.append(",");
     }
-    required_fields = required_fields.substr(0, required_fields.size() - 1);
+    if (!required_fields.empty()) {
+        required_fields = required_fields.substr(0, required_fields.size() - 1);
+    }
 
     std::string nested_fields;
     for (const auto& column : _scanner_ctx.materialized_columns) {
@@ -463,6 +469,7 @@ void JniScanner::update_jni_scanner_params() {
 
     _jni_scanner_params["required_fields"] = required_fields;
     _jni_scanner_params["nested_fields"] = nested_fields;
+    return Status::OK();
 }
 
 // -------------------------------hive jni scanner-------------------------------
@@ -470,28 +477,18 @@ void JniScanner::update_jni_scanner_params() {
 class HiveJniScanner : public JniScanner {
 public:
     HiveJniScanner(std::string factory_class, std::map<std::string, std::string> params)
-            : JniScanner(factory_class, params) {}
+            : JniScanner(std::move(factory_class), std::move(params)) {}
     Status do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) override;
 };
 
 Status HiveJniScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk) {
     // fill chunk with all wanted column exclude partition columns
-    Status status = fill_empty_chunk(chunk, _scanner_params.materialize_slots);
-    size_t chunk_size = (*chunk)->num_rows();
-    if (!_scanner_params.materialize_slots.empty()) {
-        // when the chunk has partition column and non partition column
-        // fill_empty_chunk will only fill partition column for HiveJniScanner
-        // In this situation, Chunk.num_rows() is not reliable  temporally
-        auto slot_desc = _scanner_params.materialize_slots[0];
-        ColumnPtr& first_non_partition_column = (*chunk)->get_column_by_slot_id(slot_desc->id());
-        chunk_size = first_non_partition_column->size();
-    }
-
-    _scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, chunk_size);
+    ASSIGN_OR_RETURN(size_t chunk_size, fill_empty_chunk(chunk));
+    RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, chunk_size));
     // right now only hive table need append partition columns explictly, paimon and hudi reader will append partition columns in Java side
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, chunk_size);
     RETURN_IF_ERROR(_scanner_ctx.evaluate_on_conjunct_ctxs_by_slot(chunk, &_chunk_filter));
-    return status;
+    return Status::OK();
 }
 
 std::unique_ptr<JniScanner> create_hive_jni_scanner(const JniScanner::CreateOptions& options) {
@@ -629,6 +626,39 @@ std::unique_ptr<JniScanner> create_odps_jni_scanner(const JniScanner::CreateOpti
     jni_scanner_params["access_key"] = aliyun_cloud_credential.secret_key;
 
     std::string scanner_factory_class = "com/starrocks/odps/reader/OdpsSplitScannerFactory";
+    return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
+}
+
+// ---------------iceberg metadata jni scanner------------------
+std::unique_ptr<JniScanner> create_iceberg_metadata_jni_scanner(const JniScanner::CreateOptions& options) {
+    const auto& scan_range = *(options.scan_range);
+
+    const auto* hdfs_table = dynamic_cast<const IcebergMetadataTableDescriptor*>(options.hive_table);
+    std::map<std::string, std::string> jni_scanner_params;
+
+    jni_scanner_params["metadata_column_names"] = hdfs_table->get_hive_column_names();
+    jni_scanner_params["metadata_column_types"] = hdfs_table->get_hive_column_types();
+    jni_scanner_params["time_zone"] = hdfs_table->get_time_zone();
+
+    jni_scanner_params["split_info"] = scan_range.serialized_split;
+    jni_scanner_params["serialized_predicate"] = options.scan_node->serialized_predicate;
+    jni_scanner_params["serialized_table"] = options.scan_node->serialized_table;
+    jni_scanner_params["load_column_stats"] = options.scan_node->load_column_stats ? "true" : "false";
+    jni_scanner_params["scanner_type"] = options.scan_node->metadata_table_type;
+
+    const std::string scanner_factory_class = "com/starrocks/connector/iceberg/IcebergMetadataScannerFactory";
+    return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
+}
+
+// ---------------kudu jni scanner------------------
+std::unique_ptr<JniScanner> create_kudu_jni_scanner(const JniScanner::CreateOptions& options) {
+    const auto& scan_range = *(options.scan_range);
+
+    std::map<std::string, std::string> jni_scanner_params;
+    jni_scanner_params["kudu_scan_token"] = scan_range.kudu_scan_token;
+    jni_scanner_params["kudu_master"] = scan_range.kudu_master;
+
+    std::string scanner_factory_class = "com/starrocks/kudu/reader/KuduSplitScannerFactory";
     return std::make_unique<JniScanner>(scanner_factory_class, jni_scanner_params);
 }
 

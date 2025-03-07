@@ -26,7 +26,6 @@ import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
@@ -199,8 +198,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
             return !couldApplyCtx.canDictOptBeApplied && couldApplyCtx.stopOptPropagateUpward;
         }
 
-        public static boolean isSimpleStrictPredicate(ScalarOperator operator) {
-            return operator.accept(new IsSimpleStrictPredicateVisitor(), null);
+        public static boolean isSimpleStrictPredicate(ScalarOperator operator, boolean enablePushdownOrPredicate) {
+            return operator.accept(new IsSimpleStrictPredicateVisitor(enablePushdownOrPredicate), null);
         }
 
         private void visitProjectionBefore(OptExpression optExpression, DecodeContext context) {
@@ -485,7 +484,8 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                                     scanOperator.getSelectedIndexId(), scanOperator.getSelectedPartitionId(),
                                     scanOperator.getSelectedTabletId(), scanOperator.getHintsReplicaId(),
                                     newPrunedPredicates,
-                                    scanOperator.getProjection(), scanOperator.isUsePkIndex());
+                                    scanOperator.getProjection(), scanOperator.isUsePkIndex(),
+                                    scanOperator.getVectorSearchOptions());
                     newOlapScan.setScanOptimzeOption(scanOperator.getScanOptimzeOption());
                     newOlapScan.setPreAggregation(scanOperator.isPreAggregation());
                     newOlapScan.setGlobalDicts(globalDicts);
@@ -579,7 +579,7 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
             return new PhysicalTopNOperator(newOrderSpec, operator.getLimit(), operator.getOffset(), partitionByColumns,
                     operator.getPartitionLimit(), operator.getSortPhase(), operator.getTopNType(), operator.isSplit(),
-                    operator.isEnforced(), predicate, operator.getProjection());
+                    operator.isEnforced(), predicate, operator.getProjection(), ImmutableMap.of());
         }
 
         private void rewriteOneScalarOperatorForProjection(ColumnRefOperator keyColumn, ScalarOperator valueOperator,
@@ -664,7 +664,9 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 if (canApplyDictDecodeOpt) {
                     CallOperator oldCall = kv.getValue();
                     int columnId = kv.getValue().getUsedColumns().getFirstId();
-                    if (context.needRewriteMultiCountDistinctColumns.contains(columnId)) {
+                    final String fnName = kv.getValue().getFnName();
+                    if (context.needRewriteMultiCountDistinctColumns.contains(columnId)
+                            && fnName.equals(FunctionSet.MULTI_DISTINCT_COUNT)) {
                         // we only need rewrite TFunction
                         Type[] newTypes = new Type[] {ID_TYPE};
                         AggregateFunction newFunction =
@@ -681,7 +683,6 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
                         List<ScalarOperator> newArguments = Collections.singletonList(dictColumn);
                         Type[] newTypes = newArguments.stream().map(ScalarOperator::getType).toArray(Type[]::new);
-                        String fnName = kv.getValue().getFnName();
                         AggregateFunction newFunction =
                                 (AggregateFunction) Expr.getBuiltinFunction(kv.getValue().getFnName(), newTypes,
                                         Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
@@ -930,13 +931,18 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
 
         for (PhysicalOlapScanOperator scanOperator : scanOperators) {
             OlapTable table = (OlapTable) scanOperator.getTable();
-            long version = table.getPartitions().stream().map(Partition::getVisibleVersionTime).max(Long::compareTo)
-                    .orElse(0L);
+            long version = table.getPartitions().stream().map(p -> p.getDefaultPhysicalPartition().getVisibleVersionTime())
+                    .max(Long::compareTo).orElse(0L);
 
             if ((table.getKeysType().equals(KeysType.PRIMARY_KEYS))) {
                 continue;
             }
             if (table.hasForbiddenGlobalDict()) {
+                continue;
+            }
+            // skip low-cardinality optimize for temp partition
+            // our dict collection won't collect temp partition we could support it later
+            if (table.inputHasTempPartition(scanOperator.getSelectedPartitionId())) {
                 continue;
             }
             for (ColumnRefOperator column : scanOperator.getColRefToColumnMetaMap().keySet()) {
@@ -955,9 +961,11 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
                 }
 
                 // Condition 3: the varchar column has collected global dict
-                if (IDictManager.getInstance().hasGlobalDict(table.getId(), column.getName(), version)) {
+                Column columnObj = table.getColumn(column.getName());
+                if (columnObj != null
+                        && IDictManager.getInstance().hasGlobalDict(table.getId(), columnObj.getColumnId(), version)) {
                     Optional<ColumnDict> dict =
-                            IDictManager.getInstance().getGlobalDict(table.getId(), column.getName());
+                            IDictManager.getInstance().getGlobalDict(table.getId(), columnObj.getColumnId());
                     // cache reaches capacity limit, randomly eliminate some keys
                     // then we will get an empty dictionary.
                     if (!dict.isPresent()) {
@@ -1199,12 +1207,28 @@ public class AddDecodeNodeForDictStringRule implements TreeRewriteRule {
     // The predicate no function all, this implementation is consistent with BE olap scan node
     private static class IsSimpleStrictPredicateVisitor extends ScalarOperatorVisitor<Boolean, Void> {
 
-        public IsSimpleStrictPredicateVisitor() {
+        private final boolean enablePushDownOrPredicate;
+
+        public IsSimpleStrictPredicateVisitor(boolean enablePushDownOrPredicate) {
+            this.enablePushDownOrPredicate = enablePushDownOrPredicate;
         }
 
         @Override
         public Boolean visit(ScalarOperator scalarOperator, Void context) {
             return false;
+        }
+
+        @Override
+        public Boolean visitCompoundPredicate(CompoundPredicateOperator predicate, Void context) {
+            if (!enablePushDownOrPredicate) {
+                return false;
+            }
+
+            if (!predicate.isAnd() && !predicate.isOr()) {
+                return false;
+            }
+
+            return predicate.getChildren().stream().allMatch(child -> child.accept(this, context));
         }
 
         @Override

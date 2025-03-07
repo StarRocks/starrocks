@@ -51,6 +51,7 @@ struct DeltaWriterOptions {
     int32_t schema_hash;
     int64_t txn_id;
     int64_t partition_id;
+    int64_t sink_id;
     PUniqueId load_id;
     // slots are in order of tablet's schema
     const std::vector<SlotDescriptor*>* slots;
@@ -65,8 +66,12 @@ struct DeltaWriterOptions {
     ReplicaState replica_state;
     bool miss_auto_increment_column = false;
     PartialUpdateMode partial_update_mode = PartialUpdateMode::UNKNOWN_MODE;
-    POlapTableSchemaParam ptable_schema_param;
+    // `ptable_schema_param` is valid during initialization.
+    // And it will be set to nullptr because we only need to access it during intialization.
+    // If you need to access it after intialization, please make sure the pointer is valid.
+    const POlapTableSchemaParam* ptable_schema_param = nullptr;
     int64_t immutable_tablet_size = 0;
+    std::map<string, string>* column_to_expr_value = nullptr;
 };
 
 enum State {
@@ -75,6 +80,58 @@ enum State {
     kClosed,
     kAborted,
     kCommitted, // committed state can transfer to kAborted state
+};
+
+// Statistics for DeltaWriter
+struct DeltaWriterStat {
+    std::atomic_int32_t task_count = 0;
+    std::atomic_int64_t pending_time_ns = 0;
+
+    // ====== statistics for write()
+
+    // The number of write()
+    std::atomic_int32_t write_count = 0;
+    // The number of rows to write
+    std::atomic_int32_t row_count = 0;
+    // Accumulated time for write()
+    std::atomic_int64_t write_time_ns = 0;
+    // The number that memtable is full
+    std::atomic_int32_t memtable_full_count = 0;
+    // The number that reach memory limit, and each will
+    // trigger memtable flush, and wait for it to finish
+    std::atomic_int32_t memory_exceed_count = 0;
+    // Accumulated time to wait for flush because of reaching memory limit
+    std::atomic_int64_t write_wait_flush_time_ns = 0;
+
+    // ====== statistics for add_segment()
+
+    // The number of add_segment()
+    std::atomic_int32_t add_segment_count = 0;
+    // Accumulated time for add_segment()
+    std::atomic_int32_t add_segment_time_ns = 0;
+    // Accumulated io time for add_segment()
+    std::atomic_int64_t add_segment_io_time_ns = 0;
+    std::atomic_int64_t add_segment_data_size = 0;
+
+    // ====== statistics for close()
+
+    // Time for close()
+    std::atomic_int64_t close_time_ns = 0;
+
+    // ====== statistics for commit()
+
+    // Time for commit()
+    std::atomic_int64_t commit_time_ns = 0;
+    // Time to wait for memtable flush in commit()
+    std::atomic_int64_t commit_wait_flush_time_ns = 0;
+    // Time to build rowset in commit()
+    std::atomic_int64_t commit_rowset_build_time_ns = 0;
+    // Time to deal with primary key in commit() which may load data from disk
+    std::atomic_int64_t commit_pk_preload_time_ns = 0;
+    // Time to wait for replica sync in commit()
+    std::atomic_int64_t commit_wait_replica_time_ns = 0;
+    // Time to commit txn in commit()
+    std::atomic_int64_t commit_txn_commit_time_ns = 0;
 };
 
 // Writer for a particular (load, index, tablet).
@@ -88,24 +145,27 @@ public:
     DISALLOW_COPY(DeltaWriter);
 
     // [NOT thread-safe]
-    [[nodiscard]] Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
+    Status write(const Chunk& chunk, const uint32_t* indexes, uint32_t from, uint32_t size);
 
     // [thread-safe]
-    [[nodiscard]] Status write_segment(const SegmentPB& segment_pb, butil::IOBuf& data);
+    Status write_segment(const SegmentPB& segment_pb, butil::IOBuf& data);
 
     // Flush all in-memory data to disk, without waiting.
     // Subsequent `write()`s to this DeltaWriter will fail after this method returned.
     // [NOT thread-safe]
-    [[nodiscard]] Status close();
+    Status close();
 
     void cancel(const Status& st);
 
     // Wait until all data have been flushed to disk, then create a new Rowset.
     // Prerequite: the DeltaWriter has been successfully `close()`d.
     // [NOT thread-safe]
-    [[nodiscard]] Status commit();
+    Status commit();
 
-    [[nodiscard]] Status flush_memtable_async(bool eos = false);
+    // Manual flush used by stale memtable flush
+    Status manual_flush();
+
+    Status flush_memtable_async(bool eos = false);
 
     // Rollback all writes and delete the Rowset created by 'commit()', if any.
     // [thread-safe]
@@ -162,6 +222,12 @@ public:
 
     int64_t write_buffer_size() const { return _write_buffer_size; }
 
+    void update_task_stat(int32_t num_tasks, int64_t pending_time_ns) {
+        _stats.task_count.fetch_add(num_tasks, std::memory_order_relaxed);
+        _stats.pending_time_ns.fetch_add(pending_time_ns, std::memory_order_relaxed);
+    }
+    const DeltaWriterStat& get_writer_stat() const { return _stats; }
+
     static bool is_partial_update_with_sort_key_conflict(const PartialUpdateMode& partial_update_mode,
                                                          const std::vector<int32_t>& referenced_column_ids,
                                                          const std::vector<ColumnId>& sort_key_idxes,
@@ -172,7 +238,7 @@ private:
 
     Status _init();
     Status _flush_memtable();
-    Status _build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam& table_schema_param,
+    Status _build_current_tablet_schema(int64_t index_id, const POlapTableSchemaParam* table_schema_param,
                                         const TabletSchemaCSPtr& ori_tablet_schema);
 
     const char* _state_name(State state) const;
@@ -219,6 +285,8 @@ private:
     int64_t _last_write_ts = 0;
     // for concurrency issue, we can't get write_buffer_size from memtable directly
     int64_t _write_buffer_size = 0;
+
+    DeltaWriterStat _stats;
 };
 
 } // namespace starrocks

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # JSON
@@ -10,7 +10,7 @@ StarRocks starts to support the JSON data type since v2.2.0. This topic describe
 
 JSON is a lightweight, data-interchange format that is designed for semi-structured data. JSON presents data in a hierarchical tree structure, which is flexible and easy to read and write in a wide range of data storage and analytics scenarios. JSON supports `NULL` values and the following data types: NUMBER, STRING, BOOLEAN, ARRAY, and OBJECT.
 
-For more information about JSON, visit the [JSON website](http://www.json.org/?spm=a2c63.p38356.0.0.50756b9fVEfwCd). For information about the input and output syntax of JSON, see JSON specifications at [RFC 7159](https://tools.ietf.org/html/rfc7159?spm=a2c63.p38356.0.0.14d26b9fcp7fcf#page-4).
+For more information about JSON, visit the [JSON website](https://www.json.org/json-en.html). For information about the input and output syntax of JSON, see JSON specifications at [RFC 7159](https://tools.ietf.org/html/rfc7159?spm=a2c63.p38356.0.0.14d26b9fcp7fcf#page-4).
 
 StarRocks supports both storage and efficient querying and analytics of JSON data. StarRocks does not directly store the input text. Instead, it stores JSON data in a binary format to reduce the cost of parsing and increase query efficiency.
 
@@ -54,7 +54,7 @@ INSERT INTO tj (id, j) VALUES (4, json_object('a', 4, 'b', false));
   - If you want to load a root JSON object, set `jsonpaths` to `$`.
   - If you want to load specific values of a JSON object, set `jsonpaths` to `$.a`, in which `a` specifies a key. For more information about JSON path expressions supported in StarRocks, see [JSON path](../../sql-functions/json-functions/overview-of-json-functions-and-operators.md#json-path-expressions).
 
-- Method 3: Use Broker Load to load a Parquet file and store the file as JSON data. For more information, see [Broker Load](../../sql-statements/data-manipulation/BROKER_LOAD.md).
+- Method 3: Use Broker Load to load a Parquet file and store the file as JSON data. For more information, see [Broker Load](../../sql-statements/loading_unloading/BROKER_LOAD.md).
 
 StarRocks supports the following data type conversions at Parquet file loading.
 
@@ -69,7 +69,7 @@ StarRocks supports the following data type conversions at Parquet file loading.
 | LIST                                                         | ARRAY          |
 | Other data types such as UNION and TIMESTAMP                 | Not supported  |
 
-- Method 4: Use [Routine](../../../loading/RoutineLoad.md) load to continuously load JSON data from Kafka into StarRocks.
+- Method 4: Use [Routine](../../../loading/Loading_intro.md) load to continuously load JSON data from Kafka into StarRocks.
 
 ### Query and process JSON data
 
@@ -155,7 +155,7 @@ Example 5: Sort the data of the table by using the JSON column as a sort key.
 
 ```plaintext
 mysql> select * from tj
-    ->        where j->'a' <= parse_json('3')
+    ->        where j->'a' <= 3
     ->        order by cast(j->'a' as int);
 +------+----------------------+
 | id   | j                    |

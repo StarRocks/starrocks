@@ -21,7 +21,8 @@
 #include "common/statusor.h"
 #include "exec/arrow_type_traits.h"
 #include "exprs/expr.h"
-#include "runtime/large_int_value.h"
+#include "runtime/types.h"
+#include "types/large_int_value.h"
 #include "util/raw_container.h"
 
 namespace starrocks {
@@ -94,8 +95,8 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvFloatAndIntegerGuard<LT, 
         ARROW_RETURN_NOT_OK(check_const(column));
         ArrowBuilderType* builder = down_cast<ArrowBuilderType*>(array_builder);
         if constexpr (is_nullable) {
-            const auto* nullable_column = down_cast<NullableColumn*>(column.get());
-            const auto* data_column = down_cast<StarRocksColumnType*>(nullable_column->data_column().get());
+            const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
+            const auto* data_column = down_cast<const StarRocksColumnType*>(nullable_column->data_column().get());
             const auto& data = data_column->get_data();
             for (auto i = start_idx; i < end_idx; ++i) {
                 if (nullable_column->is_null(i)) {
@@ -105,7 +106,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvFloatAndIntegerGuard<LT, 
                 }
             }
         } else {
-            const auto* data_column = down_cast<StarRocksColumnType*>(column.get());
+            const auto* data_column = down_cast<const StarRocksColumnType*>(column.get());
             const auto* values = data_column->get_data().data() + start_idx;
             ARROW_RETURN_NOT_OK(builder->AppendValues(values, end_idx - start_idx));
         }
@@ -146,8 +147,8 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvDecimalGuard<LT, AT>> {
         ARROW_RETURN_NOT_OK(check_const(column));
         ArrowBuilderType* builder = down_cast<ArrowBuilderType*>(array_builder);
         if constexpr (is_nullable) {
-            const auto* nullable_column = down_cast<NullableColumn*>(column.get());
-            const auto* data_column = down_cast<StarRocksColumnType*>(nullable_column->data_column().get());
+            const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
+            const auto* data_column = down_cast<const StarRocksColumnType*>(nullable_column->data_column().get());
             const auto& data = data_column->get_data();
             for (auto i = start_idx; i < end_idx; ++i) {
                 if (nullable_column->is_null(i)) {
@@ -157,7 +158,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvDecimalGuard<LT, AT>> {
                 }
             }
         } else {
-            const auto* data_column = down_cast<StarRocksColumnType*>(column.get());
+            const auto* data_column = down_cast<const StarRocksColumnType*>(column.get());
             const auto& data = data_column->get_data();
             for (auto i = start_idx; i < end_idx; ++i) {
                 ARROW_RETURN_NOT_OK(builder->Append(convert_datum(data[i])));
@@ -210,8 +211,8 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
         ARROW_RETURN_NOT_OK(check_const(column));
         ArrowBuilderType* builder = down_cast<ArrowBuilderType*>(array_builder);
         if constexpr (is_nullable) {
-            const auto* nullable_column = down_cast<NullableColumn*>(column.get());
-            const auto* data_column = down_cast<StarRocksColumnType*>(nullable_column->data_column().get());
+            const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
+            const auto* data_column = down_cast<const StarRocksColumnType*>(nullable_column->data_column().get());
             if constexpr (lt_is_string<LT>) {
                 const auto& data = data_column->get_proxy_data();
                 for (auto i = start_idx; i < end_idx; ++i) {
@@ -238,7 +239,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvBinaryGuard<LT, AT>> {
                 }
             }
         } else {
-            const auto* data_column = down_cast<StarRocksColumnType*>(column.get());
+            const auto* data_column = down_cast<const StarRocksColumnType*>(column.get());
             if constexpr (lt_is_string<LT>) {
                 const auto& data = data_column->get_proxy_data();
                 for (auto i = start_idx; i < end_idx; ++i) {
@@ -278,11 +279,11 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvArrayGuard<LT, AT>> {
 
         bool element_is_nullable;
         if constexpr (is_nullable) {
-            const auto* nullable_column = down_cast<NullableColumn*>(column.get());
-            const auto* data_column = down_cast<ArrayColumn*>(nullable_column->data_column().get());
+            const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
+            const auto* data_column = down_cast<const ArrayColumn*>(nullable_column->data_column().get());
             element_is_nullable = data_column->elements_column()->is_nullable();
         } else {
-            const auto* data_column = down_cast<ArrayColumn*>(column.get());
+            const auto* data_column = down_cast<const ArrayColumn*>(column.get());
             element_is_nullable = data_column->elements_column()->is_nullable();
         }
 
@@ -294,7 +295,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvArrayGuard<LT, AT>> {
                     "Not support to convert type {} with nullable {} to arrow type {} for array element",
                     type_to_string(element_type_desc.type), element_is_nullable, element_arrow_type->name()));
         }
-        column_context->child_column_contexts.push_back({element_type_desc, element_arrow_type, func});
+        column_context->child_column_contexts.emplace_back(element_type_desc, element_arrow_type, func);
         return arrow::Status::OK();
     }
 
@@ -306,8 +307,8 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvArrayGuard<LT, AT>> {
         arrow::ListBuilder* builder = down_cast<arrow::ListBuilder*>(array_builder);
         auto element_builder = builder->value_builder();
         if constexpr (is_nullable) {
-            const auto* nullable_column = down_cast<NullableColumn*>(column.get());
-            const auto* data_column = down_cast<ArrayColumn*>(nullable_column->data_column().get());
+            const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
+            const auto* data_column = down_cast<const ArrayColumn*>(nullable_column->data_column().get());
             auto& offsets = data_column->offsets().get_data();
             const auto& element_column = data_column->elements_column();
             ARROW_RETURN_NOT_OK(element_builder->Reserve(end_idx - start_idx));
@@ -321,7 +322,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvArrayGuard<LT, AT>> {
                 }
             }
         } else {
-            const auto* data_column = down_cast<ArrayColumn*>(column.get());
+            const auto* data_column = down_cast<const ArrayColumn*>(column.get());
             auto& offsets = data_column->offsets().get_data();
             const auto& child_column = data_column->elements_column();
             ARROW_RETURN_NOT_OK(element_builder->Reserve(end_idx - start_idx));
@@ -352,10 +353,10 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvStructGuard<LT, AT>> {
 
         const StructColumn* data_column;
         if constexpr (is_nullable) {
-            const auto* nullable_column = down_cast<NullableColumn*>(column.get());
-            data_column = down_cast<StructColumn*>(nullable_column->data_column().get());
+            const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
+            data_column = down_cast<const StructColumn*>(nullable_column->data_column().get());
         } else {
-            data_column = down_cast<StructColumn*>(column.get());
+            data_column = down_cast<const StructColumn*>(column.get());
         }
 
         const auto& type_desc = column_context->type_desc;
@@ -371,7 +372,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvStructGuard<LT, AT>> {
                         type_to_string(child_type_desc.type), child_is_nullable, child_arrow_type->name(),
                         type_desc.field_names[i]));
             }
-            column_context->child_column_contexts.push_back({child_type_desc, child_arrow_type, func});
+            column_context->child_column_contexts.emplace_back(child_type_desc, child_arrow_type, func);
         }
         return arrow::Status::OK();
     }
@@ -384,14 +385,14 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvStructGuard<LT, AT>> {
         const StructColumn* data_column;
         // 1. set null bitmap of builder
         if constexpr (is_nullable) {
-            const auto* nullable_column = down_cast<NullableColumn*>(column.get());
-            data_column = down_cast<StructColumn*>(nullable_column->data_column().get());
+            const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
+            data_column = down_cast<const StructColumn*>(nullable_column->data_column().get());
             ARROW_RETURN_NOT_OK(builder->Reserve(end_idx - start_idx));
             for (auto i = start_idx; i < end_idx; ++i) {
                 ARROW_RETURN_NOT_OK(builder->Append(!nullable_column->is_null(i)));
             }
         } else {
-            data_column = down_cast<StructColumn*>(column.get());
+            data_column = down_cast<const StructColumn*>(column.get());
             // Set null bitmap in batch. *nullptr* indicates all values are not null
             ARROW_RETURN_NOT_OK(builder->AppendValues(end_idx - start_idx, nullptr));
         }
@@ -423,10 +424,10 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
 
         const MapColumn* data_column;
         if constexpr (is_nullable) {
-            const auto* nullable_column = down_cast<NullableColumn*>(column.get());
-            data_column = down_cast<MapColumn*>(nullable_column->data_column().get());
+            const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
+            data_column = down_cast<const MapColumn*>(nullable_column->data_column().get());
         } else {
-            data_column = down_cast<MapColumn*>(column.get());
+            data_column = down_cast<const MapColumn*>(column.get());
         }
 
         const auto& type_desc = column_context->type_desc;
@@ -449,7 +450,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
                     fmt::format("Not support to convert type {} with nullable {} to arrow type {} for map key",
                                 type_to_string(key_type_desc.type), key_is_nullable, key_arrow_type->name()));
         }
-        column_context->child_column_contexts.push_back({key_type_desc, key_arrow_type, key_func});
+        column_context->child_column_contexts.emplace_back(key_type_desc, key_arrow_type, key_func);
 
         auto& value_type_desc = type_desc.children[1];
         auto& value_arrow_type = arrow_type->item_field()->type();
@@ -460,7 +461,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
                     fmt::format("Not support to convert type {} with nullable {} to arrow type {} for map value",
                                 type_to_string(value_type_desc.type), value_is_nullable, value_arrow_type->name()));
         }
-        column_context->child_column_contexts.push_back({value_type_desc, value_arrow_type, value_func});
+        column_context->child_column_contexts.emplace_back(value_type_desc, value_arrow_type, value_func);
         return arrow::Status::OK();
     }
 
@@ -475,8 +476,8 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
         auto& value_context = column_context->child_column_contexts[1];
         auto value_builder = builder->item_builder();
         if constexpr (is_nullable) {
-            const auto* nullable_column = down_cast<NullableColumn*>(column.get());
-            const MapColumn* data_column = down_cast<MapColumn*>(nullable_column->data_column().get());
+            const auto* nullable_column = down_cast<const NullableColumn*>(column.get());
+            const MapColumn* data_column = down_cast<const MapColumn*>(nullable_column->data_column().get());
             auto& offsets = data_column->offsets().get_data();
             const auto& key_column = data_column->keys_column();
             const auto& value_column = data_column->values_column();
@@ -493,7 +494,7 @@ struct ColumnToArrowConverter<LT, AT, is_nullable, ConvMapGuard<LT, AT>> {
                 }
             }
         } else {
-            const MapColumn* data_column = down_cast<MapColumn*>(column.get());
+            const MapColumn* data_column = down_cast<const MapColumn*>(column.get());
             auto& offsets = data_column->offsets().get_data();
             const auto& key_column = data_column->keys_column();
             const auto& value_column = data_column->values_column();
@@ -614,6 +615,24 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, std::vector<ExprContext*>& _ou
         }
         auto& array = arrays[i];
         ColumnToArrowArrayConverter converter(column, pool, expr->type(), schema->field(i)->type(), array);
+        auto arrow_st = arrow::VisitTypeInline(*schema->field(i)->type(), &converter);
+        if (!arrow_st.ok()) {
+            return Status::InvalidArgument(arrow_st.ToString());
+        }
+    }
+    *result = arrow::RecordBatch::Make(schema, num_rows, std::move(arrays));
+    return Status::OK();
+}
+
+Status convert_columns_to_arrow_batch(size_t num_rows, const Columns& columns, arrow::MemoryPool* pool,
+                                      const TypeDescriptor* type_descs, const std::shared_ptr<arrow::Schema>& schema,
+                                      std::shared_ptr<arrow::RecordBatch>* result) {
+    size_t num_columns = columns.size();
+    std::vector<std::shared_ptr<arrow::Array>> arrays(num_columns);
+
+    for (size_t i = 0; i < num_columns; ++i) {
+        auto& array = arrays[i];
+        ColumnToArrowArrayConverter converter(columns[i], pool, type_descs[i], schema->field(i)->type(), array);
         auto arrow_st = arrow::VisitTypeInline(*schema->field(i)->type(), &converter);
         if (!arrow_st.ok()) {
             return Status::InvalidArgument(arrow_st.ToString());

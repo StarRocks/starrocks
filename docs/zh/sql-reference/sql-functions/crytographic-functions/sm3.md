@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # sm3
 
-## 功能
+
 
 使用 SM3 摘要算法，将字符串 `str` 加密为 256-bit 的 十六进制字符串，每 32 位用空格分隔。
 

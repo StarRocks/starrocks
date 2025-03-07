@@ -1,0 +1,171 @@
+これらのクエリは、SQL クライアントで実行できます。すべてのクエリは `quickstart` データベースを使用します。
+
+```sql
+USE quickstart;
+```
+
+#### NYC での時間ごとの事故件数は？
+
+```sql
+SELECT COUNT(*),
+       date_trunc("hour", crashdata.CRASH_DATE) AS Time
+FROM crashdata
+GROUP BY Time
+ORDER BY Time ASC
+LIMIT 200;
+```
+
+以下は出力の一部です。1月6日と7日を詳しく見ていることに注意してください。これは祝日ではない週の月曜日と火曜日です。元旦を見ても、通常のラッシュアワーの朝を示しているとは言えないでしょう。
+
+```plaintext
+|       14 | 2014-01-06 06:00:00 |
+|       16 | 2014-01-06 07:00:00 |
+# highlight-start
+|       43 | 2014-01-06 08:00:00 |
+|       44 | 2014-01-06 09:00:00 |
+|       21 | 2014-01-06 10:00:00 |
+# highlight-end
+|       28 | 2014-01-06 11:00:00 |
+|       34 | 2014-01-06 12:00:00 |
+|       31 | 2014-01-06 13:00:00 |
+|       35 | 2014-01-06 14:00:00 |
+|       36 | 2014-01-06 15:00:00 |
+|       33 | 2014-01-06 16:00:00 |
+|       40 | 2014-01-06 17:00:00 |
+|       35 | 2014-01-06 18:00:00 |
+|       23 | 2014-01-06 19:00:00 |
+|       16 | 2014-01-06 20:00:00 |
+|       12 | 2014-01-06 21:00:00 |
+|       17 | 2014-01-06 22:00:00 |
+|       14 | 2014-01-06 23:00:00 |
+|       10 | 2014-01-07 00:00:00 |
+|        4 | 2014-01-07 01:00:00 |
+|        1 | 2014-01-07 02:00:00 |
+|        3 | 2014-01-07 03:00:00 |
+|        2 | 2014-01-07 04:00:00 |
+|        6 | 2014-01-07 06:00:00 |
+|       16 | 2014-01-07 07:00:00 |
+# highlight-start
+|       41 | 2014-01-07 08:00:00 |
+|       37 | 2014-01-07 09:00:00 |
+|       33 | 2014-01-07 10:00:00 |
+# highlight-end
+```
+
+月曜日や火曜日の朝のラッシュアワーでは約40件の事故が発生しており、17:00 時にも同様の件数が見られます。
+
+#### NYC の平均気温は？
+
+```sql
+SELECT avg(HourlyDryBulbTemperature),
+       date_trunc("hour", weatherdata.DATE) AS Time
+FROM weatherdata
+GROUP BY Time
+ORDER BY Time ASC
+LIMIT 100;
+```
+
+出力:
+
+これは2014年のデータであり、最近のNYCはこれほど寒くありません。
+
+```plaintext
++-------------------------------+---------------------+
+| avg(HourlyDryBulbTemperature) | Time                |
++-------------------------------+---------------------+
+|                            25 | 2014-01-01 00:00:00 |
+|                            25 | 2014-01-01 01:00:00 |
+|                            24 | 2014-01-01 02:00:00 |
+|                            24 | 2014-01-01 03:00:00 |
+|                            24 | 2014-01-01 04:00:00 |
+|                            24 | 2014-01-01 05:00:00 |
+|                            25 | 2014-01-01 06:00:00 |
+|                            26 | 2014-01-01 07:00:00 |
+```
+
+#### 視界が悪いときにNYCで運転するのは安全ですか？
+
+視界が悪いとき（0から1.0マイルの間）の事故件数を見てみましょう。この質問に答えるために、2つのテーブルを DATETIME 列で ジョイン します。
+
+```sql
+SELECT COUNT(DISTINCT c.COLLISION_ID) AS Crashes,
+       truncate(avg(w.HourlyDryBulbTemperature), 1) AS Temp_F,
+       truncate(avg(w.HourlyVisibility), 2) AS Visibility,
+       max(w.HourlyPrecipitation) AS Precipitation,
+       date_format((date_trunc("hour", c.CRASH_DATE)), '%d %b %Y %H:%i') AS Hour
+FROM crashdata c
+LEFT JOIN weatherdata w
+ON date_trunc("hour", c.CRASH_DATE)=date_trunc("hour", w.DATE)
+WHERE w.HourlyVisibility BETWEEN 0.0 AND 1.0
+GROUP BY Hour
+ORDER BY Crashes DESC
+LIMIT 100;
+```
+
+視界が悪いときの1時間あたりの事故件数の最高は129件です。考慮すべき点はいくつかあります：
+
+- 2014年2月3日は月曜日
+- 午前8時はラッシュアワー
+- 雨が降っていた（その時間の降水量は0.12インチ）
+- 気温は32度F（水の氷点）
+- 視界は0.25マイルで、NYCの通常は10マイル
+
+```plaintext
++---------+--------+------------+---------------+-------------------+
+| Crashes | Temp_F | Visibility | Precipitation | Hour              |
++---------+--------+------------+---------------+-------------------+
+|     129 |     32 |       0.25 | 0.12          | 03 Feb 2014 08:00 |
+|     114 |     32 |       0.25 | 0.12          | 03 Feb 2014 09:00 |
+|     104 |     23 |       0.33 | 0.03          | 09 Jan 2015 08:00 |
+|      96 |   26.3 |       0.33 | 0.07          | 01 Mar 2015 14:00 |
+|      95 |     26 |       0.37 | 0.12          | 01 Mar 2015 15:00 |
+|      93 |     35 |       0.75 | 0.09          | 18 Jan 2015 09:00 |
+|      92 |     31 |       0.25 | 0.12          | 03 Feb 2014 10:00 |
+|      87 |   26.8 |        0.5 | 0.09          | 01 Mar 2015 16:00 |
+|      85 |     55 |       0.75 | 0.20          | 23 Dec 2015 17:00 |
+|      85 |     20 |       0.62 | 0.01          | 06 Jan 2015 11:00 |
+|      83 |   19.6 |       0.41 | 0.04          | 05 Mar 2015 13:00 |
+|      80 |     20 |       0.37 | 0.02          | 06 Jan 2015 10:00 |
+|      76 |   26.5 |       0.25 | 0.06          | 05 Mar 2015 09:00 |
+|      71 |     26 |       0.25 | 0.09          | 05 Mar 2015 10:00 |
+|      71 |   24.2 |       0.25 | 0.04          | 05 Mar 2015 11:00 |
+```
+
+#### 氷点下の条件での運転はどうでしょうか？
+
+水蒸気は40度Fで氷に昇華することがあります。このクエリは0から40度Fの間の気温を調べます。
+
+```sql
+SELECT COUNT(DISTINCT c.COLLISION_ID) AS Crashes,
+       truncate(avg(w.HourlyDryBulbTemperature), 1) AS Temp_F,
+       truncate(avg(w.HourlyVisibility), 2) AS Visibility,
+       max(w.HourlyPrecipitation) AS Precipitation,
+       date_format((date_trunc("hour", c.CRASH_DATE)), '%d %b %Y %H:%i') AS Hour
+FROM crashdata c
+LEFT JOIN weatherdata w
+ON date_trunc("hour", c.CRASH_DATE)=date_trunc("hour", w.DATE)
+WHERE w.HourlyDryBulbTemperature BETWEEN 0.0 AND 40.5 
+GROUP BY Hour
+ORDER BY Crashes DESC
+LIMIT 100;
+```
+
+氷点下の気温に関する結果は少し驚きました。寒い1月の日曜日の朝に市内であまり交通がないと思っていました。[weather.com](https://weather.com/storms/winter/news/northeast-storm-rain-snow-wind) をざっと見たところ、その日は多くの事故が発生した大きな嵐があったことがわかりました。データにもその様子が見られます。
+
+```plaintext
++---------+--------+------------+---------------+-------------------+
+| Crashes | Temp_F | Visibility | Precipitation | Hour              |
++---------+--------+------------+---------------+-------------------+
+|     192 |     34 |        1.5 | 0.09          | 18 Jan 2015 08:00 |
+|     170 |     21 |       NULL |               | 21 Jan 2014 10:00 |
+|     145 |     19 |       NULL |               | 21 Jan 2014 11:00 |
+|     138 |   33.5 |          5 | 0.02          | 18 Jan 2015 07:00 |
+|     137 |     21 |       NULL |               | 21 Jan 2014 09:00 |
+|     129 |     32 |       0.25 | 0.12          | 03 Feb 2014 08:00 |
+|     114 |     32 |       0.25 | 0.12          | 03 Feb 2014 09:00 |
+|     104 |     23 |        0.7 | 0.04          | 09 Jan 2015 08:00 |
+|      98 |     16 |          8 | 0.00          | 06 Mar 2015 08:00 |
+|      96 |   26.3 |       0.33 | 0.07          | 01 Mar 2015 14:00 |
+```
+
+安全運転を心がけましょう！

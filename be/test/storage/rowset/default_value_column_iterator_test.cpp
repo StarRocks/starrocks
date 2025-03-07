@@ -39,11 +39,11 @@ TEST_F(DefaultValueColumnIteratorTest, delete_after_column) {
     std::vector<const ColumnPredicate*> preds;
     std::unique_ptr<ColumnPredicate> del_pred(new_column_null_predicate(type_info, 1, true));
     SparseRange<> row_ranges;
-    st = iter.get_row_ranges_by_zone_map(preds, del_pred.get(), &row_ranges);
+    st = iter.get_row_ranges_by_zone_map(preds, del_pred.get(), &row_ranges, CompoundNodeType::AND);
     ASSERT_TRUE(st.ok());
 
     TypeDescriptor type_desc(LogicalType::TYPE_INT);
-    ColumnPtr column = ColumnHelper::create_column(type_desc, true);
+    MutableColumnPtr column = ColumnHelper::create_column(type_desc, true);
 
     size_t num_rows = 10;
     st = iter.next_batch(&num_rows, column.get());

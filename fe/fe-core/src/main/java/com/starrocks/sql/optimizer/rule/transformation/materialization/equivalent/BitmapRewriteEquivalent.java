@@ -18,6 +18,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
+import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -127,13 +128,17 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
         CallOperator aggFunc = (CallOperator) newInput;
         String aggFuncName = aggFunc.getFnName();
         boolean isRollup = shuttleContext.isRollup();
-        if (aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct() ||
+        if ((aggFuncName.equals(FunctionSet.COUNT) && aggFunc.isDistinct() && aggFunc.getChildren().size() == 1) ||
                 aggFuncName.equals(MULTI_DISTINCT_COUNT)) {
+            SessionVariable sessionVariable = shuttleContext.getRewriteContext().getOptimizerContext().getSessionVariable();
+            if (!sessionVariable.isEnableCountDistinctRewriteByHllBitmap()) {
+                return null;
+            }
             ScalarOperator arg0 = aggFunc.getChild(0);
             if (!arg0.equals(eqChild)) {
                 return null;
             }
-            return rewriteImpl(shuttleContext, aggFunc, replace, isRollup);
+            return rewriteImpl(shuttleContext, aggFunc, replace);
         } else if (aggFuncName.equals(BITMAP_UNION_COUNT)) {
             ScalarOperator eqArg = aggFunc.getChild(0);
             if (eqArg == null) {
@@ -149,13 +154,13 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
             if (!eqArg.equals(eqChild)) {
                 return null;
             }
-            return rewriteImpl(shuttleContext, aggFunc, replace, isRollup);
+            return rewriteImpl(shuttleContext, aggFunc, replace);
         } else if (aggFuncName.equals(BITMAP_AGG)) {
             ScalarOperator arg0 = aggFunc.getChild(0);
             if (!arg0.equals(eqChild)) {
                 return null;
             }
-            return rewriteImpl(shuttleContext, aggFunc, replace, isRollup);
+            return rewriteImpl(shuttleContext, aggFunc, replace);
         }
         return null;
     }
@@ -173,9 +178,9 @@ public class BitmapRewriteEquivalent extends IAggregateRewriteEquivalent {
     }
 
     @Override
-    public ScalarOperator rewriteAggregateFunc(EquivalentShuttleContext shuttleContext,
-                                               CallOperator aggFunc,
-                                               ColumnRefOperator replace) {
+    public ScalarOperator rewriteAggregateFuncWithoutRollup(EquivalentShuttleContext shuttleContext,
+                                                            CallOperator aggFunc,
+                                                            ColumnRefOperator replace) {
         String aggFuncName = aggFunc.getFnName();
         if (aggFuncName.equals(BITMAP_AGG)) {
             return makeBitmapUnionFunc(replace);

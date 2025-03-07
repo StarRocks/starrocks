@@ -60,7 +60,7 @@ public:
         DCHECK_EQ(TYPE_INT, type_desc.type);
         using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
 
-        ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
+        MutableColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
         auto expr = std::make_unique<ColumnRef>(type_desc, slot_index);
 
         std::random_device dev;
@@ -87,7 +87,7 @@ public:
                                                                           bool nullable) {
         using UniformInt = std::uniform_int_distribution<std::mt19937::result_type>;
         using PoissonInt = std::poisson_distribution<std::mt19937::result_type>;
-        ColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
+        MutableColumnPtr column = ColumnHelper::create_column(type_desc, nullable);
         auto expr = std::make_unique<ColumnRef>(type_desc, slot_index);
 
         std::random_device dev;
@@ -257,8 +257,8 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Logical
         }
         case MergeSort: {
             sorter = std::make_unique<ChunksSorterTopn>(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first,
-                                                        "", 0, limit_rows, TTopNType::ROW_NUMBER,
-                                                        params.max_buffered_chunks);
+                                                        "", 0, limit_rows, TTopNType::ROW_NUMBER, max_buffered_rows,
+                                                        max_buffered_bytes params.max_buffered_chunks);
             expected_rows = limit_rows;
             break;
         }
@@ -277,14 +277,14 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Logical
             // TopN Sorter needs timing when updating
             iteration_data_size += ck->bytes_usage();
             state.ResumeTiming();
-            sorter->update(runtime_state, ck);
+            ASSERT_TRUE(sorter->update(runtime_state, ck).ok());
             state.PauseTiming();
             mem_usage = std::max(mem_usage, sorter->mem_usage());
         }
         data_size = std::max(data_size, iteration_data_size);
 
         state.ResumeTiming();
-        sorter->done(suite._runtime_state.get());
+        ASSERT_TRUE(sorter->done(suite._runtime_state.get()).ok());
         item_processed += total_rows;
         state.PauseTiming();
         mem_usage = std::max(mem_usage, sorter->mem_usage());
@@ -293,13 +293,13 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Logical
         size_t actual_rows = 0;
         while (!eos) {
             ChunkPtr page;
-            sorter->get_next(&page, &eos);
+            ASSERT_TRUE(sorter->get_next(&page, &eos).ok());
             if (eos) break;
             actual_rows += page->num_rows();
         }
         ASSERT_TRUE(eos);
         ASSERT_EQ(expected_rows, actual_rows);
-        sorter->done(suite._runtime_state.get());
+        ASSERT_TRUE(sorter->done(suite._runtime_state.get()).ok());
     }
     state.counters["rows_sorted"] += item_processed;
     state.counters["data_size"] += data_size;
@@ -438,7 +438,7 @@ static void do_merge_columnwise(benchmark::State& state, int num_runs, bool null
             }
         }
         SortedRuns merged;
-        merge_sorted_chunks(sort_desc, &sort_exprs, inputs, &merged);
+        ASSERT_TRUE(merge_sorted_chunks(sort_desc, &sort_exprs, inputs, &merged).ok());
         ASSERT_EQ(input_rows, merged.num_rows());
 
         num_rows += merged.num_rows();

@@ -54,7 +54,7 @@ class StarRocksTableDefinitionParser(object):
                 self._parse_column(line, state)
             # the end of table definition, start of the options
             elif line.startswith(") "):
-                # 'ENGINE=OLAP \nDUPLICATE KEY(`a`, `b`)\nCOMMENT "OLAP"\nDISTRIBUTED BY RANDOM\nPROPERTIES (\n"replication_num" = "1",\n"datacache.enable" = "true",\n"storage_volume" = "plaid_volume",\n"enable_async_write_back" = "false",\n"enable_persistent_index" = "false",\n"compression" = "LZ4"\n);'
+                # 'ENGINE=OLAP \nDUPLICATE KEY(`a`, `b`)\nCOMMENT "OLAP"\nDISTRIBUTED BY RANDOM\nPROPERTIES (\n"replication_num" = "1",\n"datacache.enable" = "true",\n"storage_volume" = "plaid_volume",\n"enable_async_write_back" = "false",\n"enable_persistent_index" = "true",\n"compression" = "LZ4"\n);'
                 self._parse_table_options(re.split(r"\r?\n", show_create.rsplit(') ')[-1]), state)
                 break
 
@@ -261,7 +261,7 @@ class StarRocksTableDefinitionParser(object):
     # '"datacache.enable" = "true",'
     # '"storage_volume" = "plaid_volume",'
     # '"enable_async_write_back" = "false",'
-    # '"enable_persistent_index" = "false",'
+    # '"enable_persistent_index" = "true",'
     # '"compression" = "LZ4"'
     # ');'
 
@@ -570,7 +570,7 @@ class StarRocksTableDefinitionParser(object):
             r"(?:NULL|'(?:''|[^'])*'|[\-\w\.\(\)]+"
             r"(?: +ON UPDATE [\-\w\.\(\)]+)?)"
             r"))?"
-            r"(?: +(?:GENERATED ALWAYS)? ?AS +(?P<generated>\("
+            r"(?: +(?:GENERATED ALWAYS)? ?AS +(?P<generated>"
             r".*\))? ?(?P<persistence>VIRTUAL|STORED)?)?"
             r"(?: +(?P<autoincr>AUTO_INCREMENT))?"
             r"(?: +COMMENT +\"(?P<comment>(?:\"\"|[^\"])*)\")?"
@@ -666,7 +666,7 @@ class StarRocksTableDefinitionParser(object):
         self._re_engine = _re_compile(r"ENGINE%s" r"(?P<val>\w+)\s*" % (self._optional_equals))
         self._re_key_desc = _re_compile(r"(?P<key_type>[A-Z]+)\s*KEY\s*\((?P<columns>.+?)\)\s*")
         self._re_comment = _re_compile(r'COMMENT(?:\s*(?:=\s*)|\s+)"(?P<val>(?:[^"\\]|\\.)*?)"(?!")\s*')
-        self._re_partition = _re_compile(r"(?:.*)?PARTITION(?:.*)")
+        self._re_partition = _re_compile(r"(?:.*)?PARTITION BY (?P<partition>.*)\b(?:DISTRIBUTED|ORDER|PROPERTIRS|BROKER)\b")
 
         self._re_distribution = _re_compile(r"DISTRIBUTED BY (?P<val>.*)")
         # self._re_roll_up_index = _re_compile(r"undefined")

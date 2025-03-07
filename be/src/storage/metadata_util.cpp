@@ -65,6 +65,8 @@ static StorageAggregateType t_aggregation_type_to_field_aggregation_method(TAggr
         return STORAGE_AGGREGATE_SUM;
     case TAggregationType::PERCENTILE_UNION:
         return STORAGE_AGGREGATE_PERCENTILE_UNION;
+    case TAggregationType::AGG_STATE_UNION:
+        return STORAGE_AGGREGATE_AGG_STATE_UNION;
     }
     return STORAGE_AGGREGATE_NONE;
 }
@@ -146,6 +148,9 @@ static Status type_desc_to_pb(const std::vector<TTypeNode>& types, int* index, C
             // All struct fields all nullable now
             RETURN_IF_ERROR(type_desc_to_pb(types, index, field_pb));
             field_pb->set_name(field.name);
+            if (field.__isset.id && field.id >= 0) {
+                field_pb->set_unique_id(field.id);
+            }
         }
         return Status::OK();
     }
@@ -208,7 +213,12 @@ Status t_column_to_pb_column(int32_t unique_id, const TColumn& t_column, ColumnP
     if (t_column.__isset.is_bloom_filter_column) {
         column_pb->set_is_bf_column(t_column.is_bloom_filter_column);
     }
-
+    // agg state type desc
+    if (t_column.__isset.agg_state_desc) {
+        auto& agg_state_desc = t_column.agg_state_desc;
+        auto* agg_state_pb = column_pb->mutable_agg_state_desc();
+        AggStateDesc::thrift_to_protobuf(agg_state_desc, agg_state_pb);
+    }
     return Status::OK();
 }
 
@@ -317,11 +327,11 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
                     LOG(WARNING) << "index " << index_col_name << " can not be found in table columns";
                 }
 
-                std::map<std::string, std::map<std::string, std::string>> properties_map;
-                properties_map.emplace(COMMON_PROPERTIES, index.common_properties);
-                properties_map.emplace(INDEX_PROPERTIES, index.index_properties);
-                properties_map.emplace(SEARCH_PROPERTIES, index.search_properties);
-                properties_map.emplace(EXTRA_PROPERTIES, index.extra_properties);
+                std::map<std::string, std::map<std::string, std::string>> properties_map = {
+                        {COMMON_PROPERTIES, index.common_properties},
+                        {INDEX_PROPERTIES, index.index_properties},
+                        {SEARCH_PROPERTIES, index.search_properties},
+                        {EXTRA_PROPERTIES, index.extra_properties}};
                 index_pb->set_index_properties(to_json(properties_map));
             } else if (index.index_type == TIndexType::type::NGRAMBF) {
                 RETURN_IF(index.columns.size() != 1,
@@ -337,12 +347,34 @@ Status convert_t_schema_to_pb_schema(const TTabletSchema& tablet_schema, uint32_
                     index_pb->add_col_unique_id(mit->second->unique_id());
                 } else {
                     return Status::Cancelled(
-                            strings::Substitute("index column $0 can not be found in table columns", index.columns[0]));
+                            strings::Substitute("index column $0 can not be found in table columns", index_col_name));
                 }
-                std::map<std::string, std::map<std::string, std::string>> properties_map;
-                properties_map.emplace(INDEX_PROPERTIES, index.index_properties);
+                std::map<std::string, std::map<std::string, std::string>> properties_map = {
+                        {INDEX_PROPERTIES, index.index_properties}};
                 std::string str = to_json(properties_map);
                 index_pb->set_index_properties(str);
+            } else if (index.index_type == TIndexType::type::VECTOR) {
+                RETURN_IF(index.columns.size() != 1,
+                          Status::Cancelled("VECTOR index " + index.index_name +
+                                            " do not support to build with more than one column"));
+                index_pb->set_index_type(IndexType::VECTOR);
+
+                const auto& index_col_name = index.columns[0];
+                const auto& mit = column_map.find(boost::to_lower_copy(index_col_name));
+
+                if (mit != column_map.end()) {
+                    index_pb->add_col_unique_id(mit->second->unique_id());
+                } else {
+                    return Status::Cancelled(
+                            strings::Substitute("index column $0 can not be found in table columns", index_col_name));
+                }
+
+                std::map<std::string, std::map<std::string, std::string>> properties_map = {
+                        {COMMON_PROPERTIES, index.common_properties},
+                        {INDEX_PROPERTIES, index.index_properties},
+                        {SEARCH_PROPERTIES, index.search_properties},
+                        {EXTRA_PROPERTIES, index.extra_properties}};
+                index_pb->set_index_properties(to_json(properties_map));
             } else {
                 std::string index_type;
                 EnumToString(TIndexType, index.index_type, index_type);

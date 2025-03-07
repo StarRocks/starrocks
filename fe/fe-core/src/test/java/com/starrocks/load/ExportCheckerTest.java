@@ -14,7 +14,7 @@
 
 package com.starrocks.load;
 
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.load.ExportJob.JobState;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
@@ -37,7 +37,7 @@ public class ExportCheckerTest {
 
         new MockUp<ExportJob>() {
             @Mock
-            public synchronized void cancel(ExportFailMsg.CancelType type, String msg) throws UserException {
+            public synchronized void cancel(ExportFailMsg.CancelType type, String msg) throws StarRocksException {
             }
         };
 
@@ -66,7 +66,7 @@ public class ExportCheckerTest {
         Assert.assertTrue(cancelled);
 
         be.setAlive(true);
-        be.setIsDecommissioned(true);
+        be.setDecommissioned(true);
 
         be.setLastStartTime(1001L);
 

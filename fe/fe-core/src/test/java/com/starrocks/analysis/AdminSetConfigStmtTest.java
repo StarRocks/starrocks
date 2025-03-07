@@ -34,18 +34,33 @@
 
 package com.starrocks.analysis;
 
+import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
+import com.starrocks.common.Pair;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.qe.GlobalVariable;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
+import com.starrocks.server.NodeMgr;
 import com.starrocks.sql.ast.AdminSetConfigStmt;
+import com.starrocks.system.Frontend;
+import com.starrocks.thrift.TSetConfigResponse;
+import com.starrocks.thrift.TStatus;
+import com.starrocks.thrift.TStatusCode;
 import com.starrocks.utframe.UtFrameUtils;
+import mockit.Mock;
+import mockit.MockUp;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+import org.mockito.MockedStatic;
+import org.mockito.Mockito;
+
+import java.util.ArrayList;
+import java.util.List;
 
 public class AdminSetConfigStmtTest {
     private static ConnectContext connectContext;
@@ -66,7 +81,7 @@ public class AdminSetConfigStmtTest {
         String stmt = "admin set frontend config(\"alter_table_timeout_second\" = \"60\");";
         AdminSetConfigStmt adminSetConfigStmt =
                 (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
-        GlobalStateMgr.getCurrentState().getNodeMgr().setConfig(adminSetConfigStmt);
+        ConfigBase.setConfig(adminSetConfigStmt);
     }
 
     @Test
@@ -85,7 +100,43 @@ public class AdminSetConfigStmtTest {
                 (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
         expectedEx.expect(DdlException.class);
         expectedEx.expectMessage("Config 'unknown_config' does not exist or is not mutable");
-        GlobalStateMgr.getCurrentState().getNodeMgr().setConfig(adminSetConfigStmt);
+        ConfigBase.setConfig(adminSetConfigStmt);
+    }
+
+    @Test
+    public void testSetConfigFail() throws Exception {
+        TSetConfigResponse response = new TSetConfigResponse();
+        response.setStatus(new TStatus(TStatusCode.UNKNOWN));
+
+        try (MockedStatic<ThriftRPCRequestExecutor> thriftConnectionPoolMockedStatic =
+                Mockito.mockStatic(ThriftRPCRequestExecutor.class)) {
+            thriftConnectionPoolMockedStatic.when(()
+                            -> ThriftRPCRequestExecutor.call(Mockito.any(), Mockito.any(), Mockito.anyInt(), Mockito.any()))
+                    .thenReturn(response);
+
+            Frontend leader = new Frontend(FrontendNodeType.LEADER, "fe1", "192.168.0.1", 9091);
+            List<Frontend> frontends = new ArrayList<>();
+            frontends.add(leader);
+            frontends.add(new Frontend(FrontendNodeType.FOLLOWER, "fe2", "192.168.0.2", 9092));
+
+            new MockUp<NodeMgr>() {
+                @Mock
+                public List<Frontend> getFrontends(FrontendNodeType nodeType) {
+                    return frontends;
+                }
+
+                @Mock
+                public Pair<String, Integer> getSelfNode() {
+                    return new Pair<>("192.168.0.1", 9091);
+                }
+            };
+
+            String stmt = "admin set frontend config(\"alter_table_timeout_second\" = \"60\");";
+            AdminSetConfigStmt adminSetConfigStmt =
+                    (AdminSetConfigStmt) UtFrameUtils.parseStmtWithNewParser(stmt, connectContext);
+            expectedEx.expect(DdlException.class);
+            ConfigBase.setConfig(adminSetConfigStmt);
+        }
     }
 }
 

@@ -29,7 +29,7 @@ import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.common.ExceptionChecker;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.load.BrokerFileGroup;
 import com.starrocks.qe.ConnectContext;
@@ -50,7 +50,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -98,7 +97,7 @@ public class FileScanNodeTest {
     public void testCreateScanRangeLocations(@Mocked GlobalStateMgr globalStateMgr,
                                              @Mocked SystemInfoService systemInfoService,
                                              @Injectable Database db, @Injectable OlapTable table)
-            throws UserException {
+            throws StarRocksException {
         // table schema
         List<Column> columns = Lists.newArrayList();
         Column c1 = new Column("c1", Type.BIGINT, true);
@@ -477,7 +476,7 @@ public class FileScanNodeTest {
         List<BrokerFileGroup> fileGroups = Lists.newArrayList(brokerFileGroup);
         scanNode.setLoadInfo(jobId, txnId, null, brokerDesc, fileGroups, true, loadParallelInstanceNum);
 
-        ExceptionChecker.expectThrowsWithMsg(UserException.class,
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
                 "No files were found matching the pattern(s) or path(s): " +
                         "'hdfs://127.0.0.1:9001/file1, hdfs://127.0.0.1:9001/file2, hdfs://127.0.0.1:9001/file3, ...'",
                 () -> Deencapsulation.invoke(scanNode, "getFileStatusAndCalcInstance"));
@@ -501,8 +500,99 @@ public class FileScanNodeTest {
         List<BrokerFileGroup> fileGroups = Lists.newArrayList(brokerFileGroup);
         scanNode.setLoadInfo(jobId, txnId, null, brokerDesc, fileGroups, true, loadParallelInstanceNum);
 
-        ExceptionChecker.expectThrowsWithMsg(UserException.class,
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
                 "No files were found matching the pattern(s) or path(s): 'hdfs://127.0.0.1:9001/file*'",
                 () -> Deencapsulation.invoke(scanNode, "getFileStatusAndCalcInstance"));
+    }
+
+    @Test
+    public void testIllegalColumnSeparator(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+                                     @Injectable Database db, @Injectable OlapTable table) {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                result = systemInfoService;
+                systemInfoService.getIdToBackend();
+                result = idToBackend;
+                table.getPartitions();
+                minTimes = 0;
+                result = Arrays.asList(partition);
+                partition.getId();
+                minTimes = 0;
+                result = 0;
+            }
+        };
+
+        // file groups
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList();
+        List<String> files = Lists.newArrayList("hdfs://127.0.0.1:9001/file1", "hdfs://127.0.0.1:9001/file2");
+        DataDescription desc =
+                new DataDescription("testTable", null, files, Lists.newArrayList("c1", "c2"),
+                        null, null, null, false, null);
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "columnSeparator",
+                "012345678901234567890123456789012345678901234567890123456789");
+        Deencapsulation.setField(brokerFileGroup, "rowDelimiter", "\n");
+        fileGroups.add(brokerFileGroup);
+
+        // file status
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
+        fileStatusesList.add(fileStatusList);
+
+        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
+        DescriptorTable descTable = analyzer.getDescTbl();
+        TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+        FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList,
+                2, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "The valid bytes length for 'column separator' is [1, 50]",
+                () -> scanNode.init(analyzer));
+    }
+    @Test
+    public void testIllegalRowDelimiter(@Mocked GlobalStateMgr globalStateMgr, @Mocked SystemInfoService systemInfoService,
+                                           @Injectable Database db, @Injectable OlapTable table) {
+        new Expectations() {
+            {
+                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                result = systemInfoService;
+                systemInfoService.getIdToBackend();
+                result = idToBackend;
+                table.getPartitions();
+                minTimes = 0;
+                result = Arrays.asList(partition);
+                partition.getId();
+                minTimes = 0;
+                result = 0;
+            }
+        };
+
+        // file groups
+        List<BrokerFileGroup> fileGroups = Lists.newArrayList();
+        List<String> files = Lists.newArrayList("hdfs://127.0.0.1:9001/file1", "hdfs://127.0.0.1:9001/file2");
+        DataDescription desc =
+                new DataDescription("testTable", null, files, Lists.newArrayList("c1", "c2"),
+                        null, null, null, false, null);
+        BrokerFileGroup brokerFileGroup = new BrokerFileGroup(desc);
+        Deencapsulation.setField(brokerFileGroup, "rowDelimiter",
+                "012345678901234567890123456789012345678901234567890123456789");
+        Deencapsulation.setField(brokerFileGroup, "columnSeparator", "\t");
+        fileGroups.add(brokerFileGroup);
+
+        // file status
+        List<List<TBrokerFileStatus>> fileStatusesList = Lists.newArrayList();
+        List<TBrokerFileStatus> fileStatusList = Lists.newArrayList();
+        fileStatusesList.add(fileStatusList);
+
+        Analyzer analyzer = new Analyzer(GlobalStateMgr.getCurrentState(), new ConnectContext());
+        DescriptorTable descTable = analyzer.getDescTbl();
+        TupleDescriptor tupleDesc = descTable.createTupleDescriptor("DestTableTuple");
+        FileScanNode scanNode = new FileScanNode(new PlanNodeId(0), tupleDesc, "FileScanNode", fileStatusesList,
+                2, WarehouseManager.DEFAULT_WAREHOUSE_ID);
+        scanNode.setLoadInfo(jobId, txnId, table, brokerDesc, fileGroups, true, loadParallelInstanceNum);
+        ExceptionChecker.expectThrowsWithMsg(StarRocksException.class,
+                "The valid bytes length for 'row delimiter' is [1, 50]",
+                () -> scanNode.init(analyzer));
     }
 }

@@ -41,7 +41,6 @@ import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
-import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.TupleId;
@@ -58,7 +57,6 @@ import org.apache.commons.collections.CollectionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -252,16 +250,6 @@ public abstract class SetOperationNode extends PlanNode {
     }
 
     @Override
-    public int getNumInstances() {
-        int numInstances = 0;
-        for (PlanNode child : children) {
-            numInstances += child.getNumInstances();
-        }
-        numInstances = Math.max(1, numInstances);
-        return numInstances;
-    }
-
-    @Override
     public boolean canDoReplicatedJoin() {
         return false;
     }
@@ -368,15 +356,7 @@ public abstract class SetOperationNode extends PlanNode {
 
     @Override
     public void collectEquivRelation(FragmentNormalizer normalizer) {
-        List<SlotId> slots = normalizer.getExecPlan().getDescTbl().getTupleDesc(tupleId_).getSlots().stream().map(
-                SlotDescriptor::getId).collect(Collectors.toList());
-        for (PlanNode child : getChildren()) {
-            List<SlotId> childSlots =
-                    normalizer.getExecPlan().getDescTbl().getTupleDesc(child.getTupleIds().get(0)).getSlots().stream()
-                            .map(SlotDescriptor::getId).collect(Collectors.toList());
-            for (int i = 0; i < slots.size(); ++i) {
-                normalizer.getEquivRelation().union(slots.get(i), childSlots.get(i));
-            }
-        }
+        this.outputSlotIdToChildSlotIdMaps.forEach(map ->
+                map.forEach((k, v) -> normalizer.getEquivRelation().union(new SlotId(k), new SlotId(v))));
     }
 }

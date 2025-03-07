@@ -38,6 +38,9 @@ struct HLLUnionBuilder {
 
             resolver->add_aggregate_mapping<lt, TYPE_BIGINT, HyperLogLog>(
                     "approx_count_distinct", false, AggregateFactory::MakeHllNdvAggregateFunction<lt>());
+
+            resolver->add_aggregate_mapping_variadic<lt, TYPE_BIGINT, HLLSketchState>(
+                    "ds_hll_count_distinct", false, AggregateFactory::MakeHllSketchAggregateFunction<lt>());
         }
     }
 };

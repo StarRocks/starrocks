@@ -1,0 +1,41 @@
+-- name: test_driver_prepare
+create database test_driver_prepare;
+use test_driver_prepare;
+CREATE TABLE IF NOT EXISTS prepare_stmt (
+    k1 INT,
+    k2 TINYINT Default '20',
+    k3 BIGINT,
+    k4 SMALLINT  Default '4',
+    k5 varchar(10) Default 'k5',
+    k6 BOOLEAN,
+    k7 decimal(10, 2),
+    k8 float,
+    k9 double,
+    v1 date not null,
+    v2 date,
+    v3 datetime not null,
+    v4 datetime,
+    v5 array<int>,
+    v6 array<date>,
+    v7 array<array<datetime>>,
+    v8 STRUCT<a INT, b INT>,
+    v9 MAP<INT,DATETIME>,
+    v10 json)
+    PRIMARY KEY (k1, k2, k3, k4, k5)
+    DISTRIBUTED BY HASH(k1, k2, k3, k4, k5) BUCKETS 8 PROPERTIES("replication_num" = "1");
+
+insert into prepare_stmt values (1, 2, 3, 4, '5', true, 7.2, 8.1, 9.222, '2010-01-01', null, '2010-01-01 01:02:03',
+null, [1, 2, 3, null, 4], [date '2021-01-05', null], [[null, datetime '2021-01-01 01:02:03'], [null, datetime '2021-01-01 01:02:03']],
+row(1, null), map{1:'2021-01-01',3:NULL}, json_object('a', 4, 'b', false));
+
+select * from prepare_stmt;
+
+function: assert_prepare_execute('test_driver_prepare', 'select 1')
+function: assert_prepare_execute('test_driver_prepare', 'select * from prepare_stmt where k1 > 0')
+function: assert_prepare_execute('test_driver_prepare', 'select * from prepare_stmt where k5 = ?', ['5'])
+function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01' as date) from prepare_stmt where k1 > 0")
+function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01' as datetime) from prepare_stmt where k5 = ?", ['5'])
+function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01 12:12:12.123456' as datetime) from prepare_stmt where k5 = ?", ['5'])
+function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01 12:12:12' as datetime) from prepare_stmt where k5 = ?", ['5'])
+function: assert_prepare_execute('test_driver_prepare', "select cast('2021-01-01 12:12:12.123' as datetime), cast('2021-01-01' as date), * from prepare_stmt where k5 = ?", ['5'])
+function: assert_prepare_execute('test_driver_prepare', "select /*+set_var(enable_short_circuit = true)*/ * from prepare_stmt where k1 = 1 and k2 = 2 and k3 = 3 and k4 = 4 and k5 = ?", ['5'])

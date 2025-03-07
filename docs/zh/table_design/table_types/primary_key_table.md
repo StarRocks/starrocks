@@ -1,6 +1,7 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 keywords: ['zhujian']
+sidebar_position: 20
 ---
 
 # 主键表
@@ -15,8 +16,10 @@ import TabItem from '@theme/TabItem';
 
 :::info
 
-- 自 3.1 版本起，存算分离模式支持创建主键表，并且自 3.1.4 版本起，支持持久化主键索引至本地磁盘。
 - 自 3.0 版本起，主键表解耦了排序键与主键，支持单独指定排序键，提供更灵活的建表能力。
+- 自 3.1 版本起，存算分离模式支持创建主键表
+  - 自 3.1.4 版本起，支持持久化主键索引至**本地磁盘**。
+  - 自 3.3.2 版本起，支持持久化主键索引至**对象存储**。
 
 :::
 
@@ -37,10 +40,10 @@ import TabItem from '@theme/TabItem';
 
 - 数据写入是通过 StarRocks 内部的 Loadjob 实现，包含一批数据变更操作（包括 Insert、Update、Delete）。StarRocks 会加载导入数据对应 Tablet 的主键索引至内存中。对于 Delete 操作，StarRocks 先通过主键索引找到数据行原来所在的数据文件以及行号，在 DelVector（用于存储和管理数据导入时生成数据行对应的删除标记）中把该条数据标记为删除。对于 Update 操作，StarRocks 除了在 DelVector 中将原先数据行标记为删除，还会把最新数据写入新的数据文件，相当于把 Update 改写为 Delete+Insert（如下图所示）。并且会更新主键索引中变更的数据行现在所在的数据文件和行号。
 
-   ![pk1](../../assets/table_design/pk1.png)
+   ![pk1](../../_assets/table_design/pk1.png)
 - 读取数据时，由于写入数据时各个数据文件中历史重复数据已经标记为删除，同一个主键值下仅需要读取最新的一条数据，无需在线 Merge 多个版本的数据文件来去重以找到最新的数据。扫描底层数据文件时借助过滤算子和各类索引，可以减少扫描开销（如下图所示），所以查询性能的提升空间更大。并且相对于 Merge-On-Read 策略的更新表，主键表的查询性能能够提升 3~10 倍。
 
-   ![pk2](../../assets/table_design/pk2.png)
+   ![pk2](../../_assets/table_design/pk2.png)
 
 <details>
 <summary>更多原理</summary>
@@ -58,11 +61,11 @@ StarRocks 属于分析型数据库，底层数据采用列式存储。具体来�
 
 - **Tablet**：一张表根据分区和分桶机制被划分成多个 Tablet，是实际的物理存储单元。Tablet 以副本（Replica）的形式分布式存储在不同 BE 节点上。一个 Tablet 主要包含以下 4 个组件：
 
-  ![pk3](../../assets/table_design/pk3.png)
+  ![pk3](../../_assets/table_design/pk3.png)
 
 - **元数据**：保存 Tablet 的版本历史以及每个版本的信息（比如包含哪些 Rowset）。每次 Loadjob 或者 Compaction 的 Commit 阶段都会生成一个新版本。
 
-  ![pk4](../../assets/table_design/pk4.png)
+  ![pk4](../../_assets/table_design/pk4.png)
 
 - **主键索引**：主键索引，用于保存主键标识的数据行与该数据行所在位置之间的映射关系。采用 HashMap 结构，Key 是编码后的主键列值，Value 记录数据行所在的位置（包括 `rowset_id`、`segment_id` 和 `rowid`）。通常只在数据写入时会使用到主键索引，根据主键值查找主键值标识的数据行在哪个 Rowset 的第几行。
 - **DelVector**: 每个 Rowset 中每一个 Segment 文件（列存文件）对应的删除标记。
@@ -103,7 +106,7 @@ DISTRIBUTED BY HASH (order_id)
 
 并且自 3.0 起主键表解耦了主键和排序键，因此您可以选择经常作为查询过滤条件的列去构成排序键。假设经常根据订单日期和商户组合维度查询商品销售情况，则您可以通过 `ORDER BY (dt,merchant_id)` 指定排序键为 `dt` 和 `merchant_id` 。
 
-注意，如果您使用了[数据分布策略](../Data_distribution.md)，由于目前主键表要求主键必须包括分区列和分桶列，假设采用的数据分布策略是将 `dt` 作为分区列并且 `merchant_id` 作为哈希分桶列，则主键还需要包括 `dt` 和 `merchant_id`。
+注意，如果您使用了[数据分布策略](../data_distribution/Data_distribution.md)，由于目前主键表要求主键必须包括分区列和分桶列，假设采用的数据分布策略是将 `dt` 作为分区列并且 `merchant_id` 作为哈希分桶列，则主键还需要包括 `dt` 和 `merchant_id`。
 
 综上所述，该订单表的建表语句可以为：
 
@@ -136,7 +139,7 @@ PROPERTIES (
 - 在建表语句中，主键列必须定义在其他列之前。
 - 主键必须包含分区列和分桶列。
 - 主键列支持以下数据类型：数值（包括整型和布尔）、日期和字符串。
-- 单条主键值编码后的最大长度为 128 字节。
+- 默认设置下，单条主键值编码后的最大长度为 128 字节。
 - 建表后不支持修改主键。
 - 主键列的值不能更新，避免破坏数据一致性。
 
@@ -151,11 +154,7 @@ PROPERTIES (
 
 如果磁盘为固态硬盘 SSD，则建议设置为 `true`。如果磁盘为机械硬盘 HDD，并且导入频率不高，则也可以设置为 `true`。
 
-:::info
-
-自 3.1.4 版本起，支持基于本地磁盘上的持久化索引。
-
-:::
+自 3.1.4 版本起，StarRocks 存算分离集群支持基于本地磁盘上的持久化索引。自 3.3.2 版本起，存算分离集群进一步支持基于对象存储上的持久化索引。您可以通过将主键表 Property `persistent_index_type` 设置为 `CLOUD_NATIVE` 启用该功能。
 
 </TabItem>
 <TabItem value="example2" label="全内存主键索引">
@@ -174,10 +173,10 @@ PROPERTIES (
 
 - **数据有冷热特征**，即最近几天的热数据才经常被修改，老的冷数据很少被修改。例如，MySQL 订单表实时同步到 StarRocks 中提供分析查询。其中，数据按天分区，对订单的修改集中在最近几天新创建的订单，老的订单完成后就不再更新，因此导入时老订单的主键索引就不会加载，也就不会占用内存，内存中仅会加载最近几天的主键索引。如图所示，数据按天分区，最新两个分区的数据更新比较频繁。
 
-   ![pk5](../../assets/table_design/pk5.png)
+   ![pk5](../../_assets/table_design/pk5.png)
 
 - **大宽表**（数百到数千列）。主键只占整个数据的很小一部分，其内存开销比较低。比如用户状态和画像表，虽然列非常多，但总的用户数不大（千万至亿级别），主键索引内存占用相对可控。 如图所示，大宽表中主键只占一小部分，且数据行数不多。
-   ![pk6](../../assets/table_design/pk6.png)
+   ![pk6](../../_assets/table_design/pk6.png)
 
 </TabItem>
   </Tabs>
@@ -197,8 +196,8 @@ PROPERTIES (
 
 ## 更多信息
 
-- 建表后导入数据，您可以参考[导入概览](../../loading/loading_introduction/Loading_intro.md)选择合适的导入方式。
-- 如果需要对主键表中数据进行变更，则可以参考 [通过导入实现数据变更](../../loading/Load_to_Primary_Key_tables.md) 或者 DML 语句（[INSERT](../../sql-reference/sql-statements/data-manipulation/INSERT.md)、[UPDATE](../../sql-reference/sql-statements/data-manipulation/UPDATE.md)、[DELETE](../../sql-reference/sql-statements/data-manipulation/DELETE.md)）。
-- 如果您需要进一步加速查询，则可以参考[查询加速](../../cover_pages/query_acceleration.mdx)。
-- 如果需要修改表结构，则可以参考 [ALTER TABLE](../../sql-reference/sql-statements/data-definition/ALTER_RESOURCE.md)。
+- 建表后导入数据，您可以参考[导入概览](../../loading/Loading_intro.md)选择合适的导入方式。
+- 如果需要对主键表中数据进行变更，则可以参考 [通过导入实现数据变更](../../loading/Load_to_Primary_Key_tables.md) 或者 DML 语句（[INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md)、[UPDATE](../../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md)、[DELETE](../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md)）。
+- 如果您需要进一步加速查询，则可以参考[查询加速](../../using_starrocks/using_starrocks.mdx)。
+- 如果需要修改表结构，则可以参考 [ALTER TABLE](../../sql-reference/sql-statements/Resource/ALTER_RESOURCE.md)。
 - [自增列](../../sql-reference/sql-statements/generated_columns.md)可作为生成主键。

@@ -17,6 +17,7 @@
 
 #include "common/statusor.h"
 #include "fs/credential/cloud_configuration_factory.h"
+#include "fs/encryption.h"
 #include "gen_cpp/PlanNodes_types.h"
 #include "io/input_stream.h"
 #include "io/seekable_input_stream.h"
@@ -32,6 +33,7 @@ struct ResultFileOptions;
 class TUploadReq;
 class TDownloadReq;
 struct WritableFileOptions;
+class FileSystem;
 
 struct SpaceInfo {
     // Total size of the filesystem, in bytes
@@ -46,13 +48,15 @@ struct FSOptions {
 private:
     FSOptions(const TBrokerScanRangeParams* scan_range_params, const TExportSink* export_sink,
               const ResultFileOptions* result_file_options, const TUploadReq* upload, const TDownloadReq* download,
-              const TCloudConfiguration* cloud_configuration)
+              const TCloudConfiguration* cloud_configuration,
+              const std::unordered_map<std::string, std::string>& fs_options = {})
             : scan_range_params(scan_range_params),
               export_sink(export_sink),
               result_file_options(result_file_options),
               upload(upload),
               download(download),
-              cloud_configuration(cloud_configuration) {}
+              cloud_configuration(cloud_configuration),
+              _fs_options(fs_options) {}
 
 public:
     FSOptions() : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr) {}
@@ -72,6 +76,9 @@ public:
     FSOptions(const TCloudConfiguration* cloud_configuration)
             : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, cloud_configuration) {}
 
+    FSOptions(const std::unordered_map<std::string, std::string>& fs_options)
+            : FSOptions(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, fs_options) {}
+
     const THdfsProperties* hdfs_properties() const;
 
     const TBrokerScanRangeParams* scan_range_params;
@@ -80,6 +87,17 @@ public:
     const TUploadReq* upload;
     const TDownloadReq* download;
     const TCloudConfiguration* cloud_configuration;
+    const std::unordered_map<std::string, std::string> _fs_options;
+
+    static constexpr const char* FS_S3_ENDPOINT = "fs.s3a.endpoint";
+    static constexpr const char* FS_S3_ENDPOINT_REGION = "fs.s3a.endpoint.region";
+    static constexpr const char* FS_S3_ACCESS_KEY = "fs.s3a.access.key";
+    static constexpr const char* FS_S3_SECRET_KEY = "fs.s3a.secret.key";
+    static constexpr const char* FS_S3_PATH_STYLE_ACCESS = "fs.s3a.path.style.access";
+    static constexpr const char* FS_S3_CONNECTION_SSL_ENABLED = "fs.s3a.connection.ssl.enabled";
+    static constexpr const char* FS_S3_READ_AHEAD_RANGE = "fs.s3a.readahead.range";
+    static constexpr const char* FS_S3_RETRY_LIMIT = "fs.s3a.retry.limit";
+    static constexpr const char* FS_S3_RETRY_INTERVAL = "fs.s3a.retry.interval";
 };
 
 struct SequentialFileOptions {
@@ -88,6 +106,8 @@ struct SequentialFileOptions {
     bool skip_fill_local_cache = false;
     // Specify different buffer size for different read scenarios
     int64_t buffer_size = -1;
+    FileEncryptionInfo encryption_info;
+    bool skip_disk_cache = false;
 };
 
 struct RandomAccessFileOptions {
@@ -96,6 +116,8 @@ struct RandomAccessFileOptions {
     bool skip_fill_local_cache = false;
     // Specify different buffer size for different read scenarios
     int64_t buffer_size = -1;
+    FileEncryptionInfo encryption_info;
+    bool skip_disk_cache = false;
 };
 
 struct DirEntry {
@@ -108,6 +130,8 @@ struct DirEntry {
 struct FileInfo {
     std::string path;
     std::optional<int64_t> size;
+    std::string encryption_meta;
+    std::shared_ptr<FileSystem> fs;
 };
 
 struct FileWriteStat {
@@ -134,8 +158,10 @@ public:
     FileSystem() = default;
     virtual ~FileSystem() = default;
 
+    static StatusOr<std::shared_ptr<FileSystem>> Create(std::string_view uri, const FSOptions& options);
+
     static StatusOr<std::unique_ptr<FileSystem>> CreateUniqueFromString(std::string_view uri,
-                                                                        FSOptions options = FSOptions());
+                                                                        const FSOptions& options = FSOptions());
 
     static StatusOr<std::shared_ptr<FileSystem>> CreateSharedFromString(std::string_view uri);
 
@@ -312,6 +338,7 @@ struct WritableFileOptions {
 
     // See OpenMode for details.
     FileSystem::OpenMode mode = FileSystem::MUST_CREATE;
+    FileEncryptionInfo encryption_info;
 };
 
 // A `SequentialFile` is an `io::InputStream` with a name.
@@ -325,6 +352,9 @@ public:
     const std::string& filename() const { return _name; }
 
     std::shared_ptr<io::InputStream> stream() { return _stream; }
+
+    static std::unique_ptr<SequentialFile> from(std::unique_ptr<io::SeekableInputStream> stream,
+                                                const std::string& name, const FileEncryptionInfo& info);
 
 private:
     std::shared_ptr<io::InputStream> _stream;
@@ -350,6 +380,10 @@ public:
     const std::string& filename() const override { return _name; }
 
     bool is_cache_hit() const override { return _is_cache_hit; }
+
+    static std::unique_ptr<RandomAccessFile> from(std::unique_ptr<io::SeekableInputStream> stream,
+                                                  const std::string& name, bool is_cache_hit,
+                                                  const FileEncryptionInfo& info);
 
 private:
     std::shared_ptr<io::SeekableInputStream> _stream;

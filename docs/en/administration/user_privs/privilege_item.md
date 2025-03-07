@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Privileges supported by StarRocks
@@ -25,7 +25,7 @@ This section describes privileges that are available on different objects.
 | CREATE EXTERNAL CATALOG | Creates an external catalog.                                 |
 | PLUGIN                  | Installs or uninstalls a plugin.                             |
 | REPOSITORY              | Creates, deletes, or views repositories.                     |
-| BLACKLIST               | Creates, deletes, or displays SQL blacklists.                |
+| BLACKLIST               | Creates, deletes, or displays SQL blacklists and BE Blacklist.     |
 | FILE                    | Creates, deletes, or views files.                            |
 | OPERATE                 | Manages replicas, configuration items, variables, and transactions. |
 | CREATE GLOBAL FUNCTION  | Creates a global UDF.                           |

@@ -66,6 +66,7 @@ public class LogUtil {
         queryDetail.setRemoteIP(ctx.getRemoteIP());
         queryDetail.setDatabase(authPacket == null ? "null" : authPacket.getDb());
         queryDetail.setErrorMessage(ctx.getState().getErrorMessage());
+        queryDetail.setCatalog(ctx.getCurrentCatalog());
         QueryDetailQueue.addQueryDetail(queryDetail);
     }
 
@@ -98,6 +99,12 @@ public class LogUtil {
 
     public static JsonArray getStackTraceToJsonArray(ThreadInfo threadInfo, int trimHeadLevels, int reserveLevels) {
         return strListToJsonArray(getStackTraceToList(threadInfo.getStackTrace(), trimHeadLevels, reserveLevels));
+    }
+
+    public static JsonArray getStackTraceToJsonArray(Thread thread, int reserveLevels) {
+        StackTraceElement[] stackTraceElements = thread.getStackTrace();
+        return strListToJsonArray(getStackTraceToList(stackTraceElements,
+                stackTraceElements.length - reserveLevels, reserveLevels));
     }
 
     public static String getCurrentStackTrace() {

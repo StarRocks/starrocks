@@ -27,7 +27,10 @@ namespace starrocks {
 struct PercentileApproxState {
 public:
     PercentileApproxState() : percentile(new PercentileValue()) {}
+    explicit PercentileApproxState(double compression) : percentile(new PercentileValue(compression)) {}
     ~PercentileApproxState() = default;
+
+    int64_t mem_usage() const { return percentile->mem_usage(); }
 
     std::unique_ptr<PercentileValue> percentile;
     double targetQuantile = -1.0;
@@ -36,7 +39,30 @@ public:
 
 class PercentileApproxAggregateFunction final
         : public AggregateFunctionBatchHelper<PercentileApproxState, PercentileApproxAggregateFunction> {
+private:
+    static constexpr double MIN_COMPRESSION = 2048.0;
+    static constexpr double MAX_COMPRESSION = 10000.0;
+    static constexpr double DEFAULT_COMPRESSION_FACTOR = 10000.0;
+
 public:
+    void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
+        double compression = (ctx == nullptr) ? DEFAULT_COMPRESSION_FACTOR : get_compression_factor(ctx);
+        new (ptr) PercentileApproxState(compression);
+    }
+
+    double get_compression_factor(FunctionContext* ctx) const {
+        double compression = DEFAULT_COMPRESSION_FACTOR;
+        if (ctx->get_num_args() > 2) {
+            compression = ColumnHelper::get_const_value<TYPE_DOUBLE>(ctx->get_constant_column(2));
+            if (compression < MIN_COMPRESSION || compression > MAX_COMPRESSION) {
+                LOG(WARNING) << "Compression factor out of range. Using default compression factor: "
+                             << DEFAULT_COMPRESSION_FACTOR;
+                compression = DEFAULT_COMPRESSION_FACTOR;
+            }
+        }
+        return compression;
+    }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         double column_value;
         if (columns[0]->is_nullable()) {
@@ -48,12 +74,18 @@ public:
             column_value = down_cast<const DoubleColumn*>(columns[0])->get_data()[row_num];
         }
 
-        DCHECK(!columns[1]->only_null());
+        if (columns[1]->only_null()) {
+            ctx->set_error("For percentile_approx the second argument is expected to be non-null.", false);
+            return;
+        }
+
         DCHECK(!columns[1]->is_null(0));
 
+        int64_t prev_memory = data(state).percentile->mem_usage();
         data(state).percentile->add(implicit_cast<float>(column_value));
         data(state).targetQuantile = columns[1]->get(0).get_double();
         data(state).is_null = false;
+        ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
     }
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
@@ -71,13 +103,15 @@ public:
         double quantile;
         memcpy(&quantile, src.data, sizeof(double));
 
-        PercentileApproxState src_percentile;
+        PercentileApproxState src_percentile(get_compression_factor(ctx));
         src_percentile.targetQuantile = quantile;
         src_percentile.percentile->deserialize((char*)src.data + sizeof(double));
 
+        int64_t prev_memory = data(state).percentile->mem_usage();
         data(state).percentile->merge(src_percentile.percentile.get());
         data(state).targetQuantile = quantile;
         data(state).is_null = false;
+        ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
     }
 
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {

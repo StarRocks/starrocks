@@ -22,14 +22,17 @@
 #include "exec/pipeline/adaptive/collect_stats_context.h"
 #include "exec/pipeline/adaptive/collect_stats_sink_operator.h"
 #include "exec/pipeline/adaptive/collect_stats_source_operator.h"
+#include "exec/pipeline/chunk_accumulate_operator.h"
 #include "exec/pipeline/exchange/exchange_source_operator.h"
 #include "exec/pipeline/exchange/local_exchange_source_operator.h"
 #include "exec/pipeline/group_execution/execution_group.h"
 #include "exec/pipeline/group_execution/execution_group_fwd.h"
 #include "exec/pipeline/group_execution/group_operator.h"
+#include "exec/pipeline/limit_operator.h"
 #include "exec/pipeline/noop_sink_operator.h"
 #include "exec/pipeline/pipeline_fwd.h"
 #include "exec/pipeline/spill_process_operator.h"
+#include "exec/pipeline/wait_operator.h"
 #include "exec/query_cache/cache_manager.h"
 #include "exec/query_cache/cache_operator.h"
 #include "exec/query_cache/conjugate_operator.h"
@@ -223,6 +226,7 @@ OpFactories PipelineBuilderContext::_do_maybe_interpolate_local_shuffle_exchange
     }
 
     auto* pred_source_op = source_operator(pred_operators);
+    int64_t limit_size = _prev_limit_size(pred_operators);
 
     // To make sure at least one partition source operator is ready to output chunk before sink operators are full.
     auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(shuffle_partitions_num,
@@ -241,7 +245,9 @@ OpFactories PipelineBuilderContext::_do_maybe_interpolate_local_shuffle_exchange
     pred_operators.emplace_back(std::move(local_shuffle_sink));
     add_pipeline(pred_operators);
 
-    return {std::move(local_shuffle_source)};
+    OpFactories source_operators = {std::move(local_shuffle_source)};
+    _try_interpolate_limit_operator(plan_node_id, source_operators, limit_size);
+    return source_operators;
 }
 
 OpFactories PipelineBuilderContext::maybe_interpolate_local_ordered_partition_exchange(
@@ -260,6 +266,7 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_ordered_partition_ex
     }
 
     auto* pred_source_op = source_operator(pred_operators);
+    int64_t limit_size = _prev_limit_size(pred_operators);
 
     auto mem_mgr = std::make_shared<ChunkBufferMemoryManager>(shuffle_partitions_num,
                                                               config::local_exchange_buffer_mem_limit_per_driver);
@@ -278,7 +285,9 @@ OpFactories PipelineBuilderContext::maybe_interpolate_local_ordered_partition_ex
     pred_operators.emplace_back(std::move(local_shuffle_sink));
     add_pipeline(pred_operators);
 
-    return {std::move(local_shuffle_source)};
+    OpFactories source_operators = {std::move(local_shuffle_source)};
+    _try_interpolate_limit_operator(plan_node_id, source_operators, limit_size);
+    return source_operators;
 }
 
 void PipelineBuilderContext::interpolate_spill_process(size_t plan_node_id,
@@ -299,6 +308,9 @@ OpFactories PipelineBuilderContext::interpolate_grouped_exchange(int32_t plan_no
     auto* source_op = source_operator(pred_operators);
     int logical_dop = source_op->degree_of_parallelism();
 
+    // check should interpolate limit operator
+    int64_t limit_size = _prev_limit_size(pred_operators);
+
     auto mem_mgr =
             std::make_shared<ChunkBufferMemoryManager>(logical_dop, config::local_exchange_buffer_mem_limit_per_driver);
     auto local_shuffle_source =
@@ -316,7 +328,9 @@ OpFactories PipelineBuilderContext::interpolate_grouped_exchange(int32_t plan_no
     // switch to new normal group
     _current_execution_group = _normal_exec_group;
 
-    return {local_shuffle_source};
+    OpFactories source_operators = {std::move(local_shuffle_source)};
+    _try_interpolate_limit_operator(plan_node_id, source_operators, limit_size);
+    return source_operators;
 }
 
 OpFactories PipelineBuilderContext::maybe_interpolate_grouped_exchange(int32_t plan_node_id,
@@ -411,6 +425,26 @@ OpFactories PipelineBuilderContext::maybe_interpolate_collect_stats(RuntimeState
     }
 
     return {std::move(downstream_source_op)};
+}
+
+OpFactories PipelineBuilderContext::maybe_interpolate_debug_ops(RuntimeState* state, int32_t plan_node_id,
+                                                                OpFactories& pred_operators) {
+    auto action_opt = runtime_state()->debug_action_mgr().get_debug_action(plan_node_id);
+    if (action_opt.has_value() && action_opt.value().is_wait_action()) {
+        auto* pred_source_op = source_operator(pred_operators);
+        auto wait_context_factory = std::make_shared<WaitContextFactory>(action_opt->value);
+        auto wait_sink =
+                std::make_shared<WaitOperatorSinkFactory>(next_operator_id(), plan_node_id, wait_context_factory);
+
+        pred_operators.push_back(std::move(wait_sink));
+        add_pipeline(pred_operators);
+
+        auto wait_src =
+                std::make_shared<WaitOperatorSourceFactory>(next_operator_id(), plan_node_id, wait_context_factory);
+        this->inherit_upstream_source_properties(wait_src.get(), pred_source_op);
+        return {std::move(wait_src)};
+    }
+    return pred_operators;
 }
 
 size_t PipelineBuilderContext::dop_of_source_operator(int source_node_id) {
@@ -510,6 +544,25 @@ void PipelineBuilderContext::push_dependent_pipeline(const Pipeline* pipeline) {
 }
 void PipelineBuilderContext::pop_dependent_pipeline() {
     _dependent_pipelines.pop_back();
+}
+
+int64_t PipelineBuilderContext::_prev_limit_size(const OpFactories& pred_operators) {
+    for (auto it = pred_operators.rbegin(); it != pred_operators.rend(); ++it) {
+        if (auto limit = dynamic_cast<LimitOperatorFactory*>(it->get())) {
+            return limit->limit();
+        } else if (dynamic_cast<ChunkAccumulateOperatorFactory*>(it->get()) == nullptr) {
+            return -1;
+        }
+    }
+    return -1;
+}
+
+void PipelineBuilderContext::_try_interpolate_limit_operator(int32_t plan_node_id, OpFactories& pred_operators,
+                                                             int64_t limit_size) {
+    if (limit_size >= 0 && limit_size < config::pipline_limit_max_delivery) {
+        pred_operators.emplace_back(
+                std::make_shared<LimitOperatorFactory>(next_operator_id(), plan_node_id, limit_size));
+    }
 }
 
 void PipelineBuilderContext::_subscribe_pipeline_event(Pipeline* pipeline) {

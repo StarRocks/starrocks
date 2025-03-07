@@ -26,7 +26,8 @@ import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.connector.delta.DeltaDataType;
 import com.starrocks.connector.exception.StarRocksConnectorException;
-import io.delta.standalone.types.DataType;
+import io.delta.kernel.internal.util.ColumnMapping;
+import io.delta.kernel.types.DataType;
 import org.apache.avro.LogicalType;
 import org.apache.avro.LogicalTypes;
 import org.apache.avro.Schema;
@@ -35,6 +36,8 @@ import org.apache.hadoop.hive.common.type.HiveVarchar;
 import org.apache.hadoop.hive.serde2.typeinfo.DecimalTypeInfo;
 import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo;
 import org.apache.iceberg.types.Types;
+import org.apache.kudu.ColumnSchema;
+import org.apache.kudu.ColumnTypeAttributes;
 import org.apache.paimon.types.BigIntType;
 import org.apache.paimon.types.BinaryType;
 import org.apache.paimon.types.BooleanType;
@@ -99,7 +102,7 @@ public class ColumnTypeConverter {
     public static final String STRUCT_PATTERN = "^struct<" + COMPLEX_PATTERN + ">";
     public static final String CHAR_PATTERN = "^char\\(([0-9]+)\\)";
     public static final String VARCHAR_PATTERN = "^varchar\\(([0-9,-1]+)\\)";
-    protected static final List<String> HIVE_UNSUPPORTED_TYPES = Arrays.asList("BINARY", "UNIONTYPE");
+    protected static final List<String> HIVE_UNSUPPORTED_TYPES = Arrays.asList("UNIONTYPE");
 
     public static Type fromHiveType(String hiveType) {
         String typeUpperCase = getTypeKeyword(hiveType).toUpperCase();
@@ -428,7 +431,7 @@ public class ColumnTypeConverter {
         }
     }
 
-    public static Type fromDeltaLakeType(DataType dataType) {
+    public static Type fromDeltaLakeType(DataType dataType, String columnMappingMode) {
         if (dataType == null) {
             return Type.NULL;
         }
@@ -439,7 +442,6 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.BOOLEAN;
                 break;
             case BYTE:
-            case TINYINT:
                 primitiveType = PrimitiveType.TINYINT;
                 break;
             case SMALLINT:
@@ -461,26 +463,24 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DATE;
                 break;
             case TIMESTAMP:
+            case TIMESTAMP_NTZ:
                 primitiveType = PrimitiveType.DATETIME;
                 break;
             case STRING:
                 return ScalarType.createDefaultCatalogString();
             case DECIMAL:
-                int precision = ((io.delta.standalone.types.DecimalType) dataType).getPrecision();
-                int scale = ((io.delta.standalone.types.DecimalType) dataType).getScale();
+                int precision = ((io.delta.kernel.types.DecimalType) dataType).getPrecision();
+                int scale = ((io.delta.kernel.types.DecimalType) dataType).getScale();
                 return ScalarType.createUnifiedDecimalType(precision, scale);
-            case NULL:
-                primitiveType = PrimitiveType.NULL_TYPE;
-                break;
             case BINARY:
                 primitiveType = PrimitiveType.VARBINARY;
                 break;
             case ARRAY:
-                return convertToArrayTypeForDeltaLake((io.delta.standalone.types.ArrayType) dataType);
+                return convertToArrayTypeForDeltaLake((io.delta.kernel.types.ArrayType) dataType, columnMappingMode);
             case MAP:
-                return convertToMapTypeForDeltaLake((io.delta.standalone.types.MapType) dataType);
+                return convertToMapTypeForDeltaLake((io.delta.kernel.types.MapType) dataType, columnMappingMode);
             case STRUCT:
-                return convertToStructTypeForDeltaLake(((io.delta.standalone.types.StructType) dataType));
+                return convertToStructTypeForDeltaLake(((io.delta.kernel.types.StructType) dataType), columnMappingMode);
             default:
                 primitiveType = PrimitiveType.UNKNOWN_TYPE;
         }
@@ -580,6 +580,59 @@ public class ColumnTypeConverter {
         }
     }
 
+    public static Type fromKuduType(ColumnSchema columnSchema) {
+        org.apache.kudu.Type kuduType = columnSchema.getType();
+        if (kuduType == null) {
+            return Type.NULL;
+        }
+
+        PrimitiveType primitiveType;
+
+        switch (kuduType) {
+            case BOOL:
+                primitiveType = PrimitiveType.BOOLEAN;
+                break;
+            case INT8:
+                primitiveType = PrimitiveType.TINYINT;
+                break;
+            case INT16:
+                primitiveType = PrimitiveType.SMALLINT;
+                break;
+            case INT32:
+                primitiveType = PrimitiveType.INT;
+                break;
+            case INT64:
+                primitiveType = PrimitiveType.BIGINT;
+                break;
+            case FLOAT:
+                primitiveType = PrimitiveType.FLOAT;
+                break;
+            case DOUBLE:
+                primitiveType = PrimitiveType.DOUBLE;
+                break;
+            case DATE:
+                primitiveType = PrimitiveType.DATE;
+                break;
+            case UNIXTIME_MICROS:
+                primitiveType = PrimitiveType.DATETIME;
+                break;
+            case STRING:
+                return ScalarType.createDefaultCatalogString();
+            case VARCHAR:
+                return ScalarType.createVarcharType(columnSchema.getTypeAttributes().getLength());
+            case DECIMAL:
+                ColumnTypeAttributes typeAttributes = columnSchema.getTypeAttributes();
+                int precision = typeAttributes.getPrecision();
+                int scale = typeAttributes.getScale();
+                return ScalarType.createUnifiedDecimalType(precision, scale);
+            case BINARY:
+                return Type.VARBINARY;
+            default:
+                primitiveType = PrimitiveType.UNKNOWN_TYPE;
+        }
+        return ScalarType.createType(primitiveType);
+    }
+
     public static Type fromIcebergType(org.apache.iceberg.types.Type icebergType) {
         if (icebergType == null) {
             return Type.NULL;
@@ -610,7 +663,6 @@ public class ColumnTypeConverter {
                 primitiveType = PrimitiveType.DATETIME;
                 break;
             case STRING:
-            case UUID:
                 return ScalarType.createDefaultCatalogString();
             case DECIMAL:
                 int precision = ((Types.DecimalType) icebergType).precision();
@@ -644,6 +696,7 @@ public class ColumnTypeConverter {
                 }
                 return new StructType(structFields);
             case BINARY:
+            case UUID:
                 return Type.VARBINARY;
             case TIME:
                 return Type.TIME;
@@ -671,38 +724,53 @@ public class ColumnTypeConverter {
         return new MapType(keyType, valueType);
     }
 
-    private static Type convertToArrayTypeForDeltaLake(io.delta.standalone.types.ArrayType arrayType) {
-        Type itemType = fromDeltaLakeType(arrayType.getElementType());
+    private static Type convertToArrayTypeForDeltaLake(io.delta.kernel.types.ArrayType arrayType,
+                                                       String columnMappingMode) {
+        Type itemType = fromDeltaLakeType(arrayType.getElementType(), columnMappingMode);
         if (itemType.isUnknown()) {
             return Type.UNKNOWN_TYPE;
         }
         return new ArrayType(itemType);
     }
 
-    private static Type convertToMapTypeForDeltaLake(io.delta.standalone.types.MapType mapType) {
-        Type keyType = fromDeltaLakeType(mapType.getKeyType());
+    private static Type convertToMapTypeForDeltaLake(io.delta.kernel.types.MapType mapType,
+                                                     String columnMappingMode) {
+        Type keyType = fromDeltaLakeType(mapType.getKeyType(), columnMappingMode);
         // do not support complex type as key in map type
         if (keyType.isComplexType() || keyType.isUnknown()) {
             return Type.UNKNOWN_TYPE;
         }
-        Type valueType = fromDeltaLakeType(mapType.getValueType());
+        Type valueType = fromDeltaLakeType(mapType.getValueType(), columnMappingMode);
         if (valueType.isUnknown()) {
             return Type.UNKNOWN_TYPE;
         }
         return new MapType(keyType, valueType);
     }
 
-    private static Type convertToStructTypeForDeltaLake(io.delta.standalone.types.StructType structType) {
-        io.delta.standalone.types.StructField[] fields = structType.getFields();
-        Preconditions.checkArgument(fields.length > 0);
-        ArrayList<StructField> structFields = new ArrayList<>(fields.length);
-        for (io.delta.standalone.types.StructField field : fields) {
+    private static Type convertToStructTypeForDeltaLake(io.delta.kernel.types.StructType structType,
+                                                        String columnMappingMode) {
+        List<io.delta.kernel.types.StructField> fields = structType.fields();
+        Preconditions.checkArgument(!fields.isEmpty());
+        ArrayList<StructField> structFields = new ArrayList<>(fields.size());
+
+        for (io.delta.kernel.types.StructField field : fields) {
             String fieldName = field.getName();
-            Type fieldType = fromDeltaLakeType(field.getDataType());
+            Type fieldType = fromDeltaLakeType(field.getDataType(), columnMappingMode);
             if (fieldType.isUnknown()) {
                 return Type.UNKNOWN_TYPE;
             }
-            structFields.add(new StructField(fieldName, fieldType));
+            int fieldId = -1;
+            String fieldPhysicalName = "";
+            if (columnMappingMode.equalsIgnoreCase(ColumnMapping.COLUMN_MAPPING_MODE_ID) &&
+                    field.getMetadata().contains(ColumnMapping.COLUMN_MAPPING_ID_KEY)) {
+                fieldId = ((Long) field.getMetadata().get(ColumnMapping.COLUMN_MAPPING_ID_KEY)).intValue();
+            }
+
+            if (columnMappingMode.equalsIgnoreCase(ColumnMapping.COLUMN_MAPPING_MODE_NAME) &&
+                    field.getMetadata().contains(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY)) {
+                fieldPhysicalName = (String) field.getMetadata().get(ColumnMapping.COLUMN_MAPPING_PHYSICAL_NAME_KEY);
+            }
+            structFields.add(new StructField(fieldName, fieldId, fieldPhysicalName, fieldType, ""));
         }
         return new StructType(structFields);
     }

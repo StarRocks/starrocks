@@ -29,16 +29,14 @@ public:
     ~JavaFunctionCallExpr() override;
 
     Expr* clone(ObjectPool* pool) const override { return pool->add(new JavaFunctionCallExpr(*this)); }
-    [[nodiscard]] StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
-    [[nodiscard]] Status prepare(RuntimeState* state, ExprContext* context) override;
-    [[nodiscard]] Status open(RuntimeState* state, ExprContext* context,
-                              FunctionContext::FunctionStateScope scope) override;
+    StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override;
+    Status prepare(RuntimeState* state, ExprContext* context) override;
+    Status open(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
     void close(RuntimeState* state, ExprContext* context, FunctionContext::FunctionStateScope scope) override;
     bool is_constant() const override;
 
 private:
-    StatusOr<std::shared_ptr<JavaUDFContext>> _build_udf_func_desc(ExprContext* context,
-                                                                   FunctionContext::FunctionStateScope scope,
+    StatusOr<std::shared_ptr<JavaUDFContext>> _build_udf_func_desc(FunctionContext::FunctionStateScope scope,
                                                                    const std::string& libpath);
     void _call_udf_close();
     RuntimeState* _runtime_state = nullptr;

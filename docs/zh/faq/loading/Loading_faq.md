@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # 导入通用问题
@@ -48,7 +48,7 @@ StarRocks 集群中同一个数据库内已经有一个具有相同标签的导�
 
 ## 3. 发生数据质量错误 "ETL_QUALITY_UNSATISFIED; msg:quality not good enough to cancel" 应该如何处理？
 
-运行 [SHOW LOAD](../../sql-reference/sql-statements/data-manipulation/SHOW_LOAD.md) 语句。在语句返回的信息中，找到 URL，然后查看错误数据。
+运行 [SHOW LOAD](../../sql-reference/sql-statements/loading_unloading/SHOW_LOAD.md) 语句。在语句返回的信息中，找到 URL，然后查看错误数据。
 
 常见的数据质量错误有：
 

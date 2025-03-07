@@ -16,25 +16,19 @@ package com.starrocks.connector.hive;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
+import com.starrocks.connector.metastore.IMetastore;
 
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Function;
 
-public interface IHiveMetastore {
-
-    List<String> getAllDatabaseNames();
+public interface IHiveMetastore extends IMetastore {
 
     void createDb(String dbName, Map<String, String> properties);
 
     void dropDb(String dbName, boolean deleteData);
-
-    Database getDb(String dbName);
-
-    List<String> getAllTableNames(String dbName);
 
     void createTable(String dbName, Table table);
 
@@ -42,7 +36,9 @@ public interface IHiveMetastore {
 
     Table getTable(String dbName, String tableName);
 
-    boolean tableExists(String dbName, String tableName);
+    default List<String> getPartitionKeys(String dbName, String tableName) {
+        return getPartitionKeysByValue(dbName, tableName, HivePartitionValue.ALL_PARTITION_VALUES);
+    }
 
     List<String> getPartitionKeysByValue(String dbName, String tableName, List<Optional<String>> partitionValues);
 

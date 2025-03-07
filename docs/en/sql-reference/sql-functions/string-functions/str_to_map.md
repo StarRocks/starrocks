@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # str_to_map
 
-## Description
+
 
 Splits a given string into key-value pairs using two delimiters and returns a map of the split pairs.
 

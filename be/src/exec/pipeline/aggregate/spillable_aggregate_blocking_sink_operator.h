@@ -35,12 +35,12 @@ public:
 
     bool need_input() const override;
     bool is_finished() const override;
-    [[nodiscard]] Status set_finishing(RuntimeState* state) override;
+    Status set_finishing(RuntimeState* state) override;
 
     void close(RuntimeState* state) override;
 
-    [[nodiscard]] Status prepare(RuntimeState* state) override;
-    [[nodiscard]] Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
+    Status prepare(RuntimeState* state) override;
+    Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
     bool spillable() const override { return true; }
 
@@ -59,7 +59,7 @@ public:
         return 0;
     }
 
-    [[nodiscard]] Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
+    Status reset_state(RuntimeState* state, const std::vector<ChunkPtr>& refill_chunks) override;
 
     // only the prepare/open phase calls are valid.
     SpillProcessChannelPtr spill_channel() { return _aggregator->spill_channel(); }
@@ -68,11 +68,11 @@ private:
     bool spilled() const { return _aggregator->spiller()->spilled(); }
 
 private:
-    [[nodiscard]] Status _try_to_spill_by_force(RuntimeState* state, const ChunkPtr& chunk);
+    Status _try_to_spill_by_force(RuntimeState* state, const ChunkPtr& chunk);
 
-    [[nodiscard]] Status _try_to_spill_by_auto(RuntimeState* state, const ChunkPtr& chunk);
+    Status _try_to_spill_by_auto(RuntimeState* state, const ChunkPtr& chunk);
 
-    [[nodiscard]] Status _spill_all_data(RuntimeState* state, bool should_spill_hash_table);
+    Status _spill_all_data(RuntimeState* state, bool should_spill_hash_table);
 
     void _add_streaming_chunk(ChunkPtr chunk);
 
@@ -106,9 +106,11 @@ public:
 
     ~SpillableAggregateBlockingSinkOperatorFactory() override = default;
 
-    [[nodiscard]] Status prepare(RuntimeState* state) override;
+    Status prepare(RuntimeState* state) override;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
+
+    bool support_event_scheduler() const override { return false; }
 
 private:
     ObjectPool _pool;

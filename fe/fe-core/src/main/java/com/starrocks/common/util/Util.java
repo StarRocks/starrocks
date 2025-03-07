@@ -36,17 +36,26 @@ package com.starrocks.common.util;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.PrimitiveType;
+import com.starrocks.catalog.ScalarType;
+import com.starrocks.catalog.StructField;
+import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.TimeoutException;
+import com.starrocks.http.WebUtils;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -238,22 +247,22 @@ public class Util {
         return tokens;
     }
 
-    private static String columnHashString(Column column) {
-        Type type = column.getType();
+    private static String columnHashString(Type type) {
         if (type.isScalarType()) {
             PrimitiveType primitiveType = type.getPrimitiveType();
             switch (primitiveType) {
                 case CHAR:
                 case VARCHAR:
                     return String.format(
-                            TYPE_STRING_MAP.get(primitiveType), column.getStrLen());
+                            TYPE_STRING_MAP.get(primitiveType), ((ScalarType) type).getLength());
                 case DECIMALV2:
                 case DECIMAL32:
                 case DECIMAL64:
                 case DECIMAL128:
                     return String.format(
-                            TYPE_STRING_MAP.get(primitiveType), column.getPrecision(),
-                            column.getScale());
+                            TYPE_STRING_MAP.get(primitiveType), 
+                            ((ScalarType) type).getScalarPrecision(),
+                            ((ScalarType) type).getScalarScale());
                 default:
                     return TYPE_STRING_MAP.get(primitiveType);
             }
@@ -270,7 +279,7 @@ public class Util {
         // columns
         for (Column column : columns) {
             adler32.update(column.getName().getBytes(StandardCharsets.UTF_8));
-            String typeString = columnHashString(column);
+            String typeString = columnHashString(column.getType());
             if (typeString == null) {
                 throw new SemanticException("Type:%s of column:%s does not support",
                         column.getType().toString(), column.getName());
@@ -311,16 +320,50 @@ public class Util {
         return Math.abs(ThreadLocalRandom.current().nextInt(Integer.MAX_VALUE));
     }
 
+    public static boolean checkTypeSupported(Type type) {
+        if (type.isScalarType()) {
+            if (TYPE_STRING_MAP.get(type.getPrimitiveType()) == null) {
+                return false;
+            }
+        } else if (type.isArrayType()) {
+            return checkTypeSupported(((ArrayType) type).getItemType());
+        } else if (type.isMapType()) {
+            Type keyType = ((MapType) type).getKeyType();
+            Type valueType = ((MapType) type).getValueType();
+            return checkTypeSupported(keyType) && checkTypeSupported(valueType);
+        } else if (type.isStructType()) {
+            for (StructField field : ((StructType) type).getFields()) {
+                if (!checkTypeSupported(field.getType())) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
+    public static boolean checkColumnSupported(List<Column> columns) {
+        for (Column column : columns) {
+            Type type = column.getType();
+            if (!checkTypeSupported(type)) {
+                throw new SemanticException("Type:%s of column:%s does not support",
+                        column.getType().toString(), column.getName());
+            }
+        }
+        return true;
+    }
+
     // get response body as a string from the given url.
     // "encodedAuthInfo", the base64 encoded auth info. like:
     //      Base64.encodeBase64String("user:passwd".getBytes());
     // If no auth info, pass a null.
     public static String getResultForUrl(String urlStr, String encodedAuthInfo, int connectTimeoutMs,
-                                         int readTimeoutMs) {
+                                         int readTimeoutMs) throws Exception {
         StringBuilder sb = new StringBuilder();
         InputStream stream = null;
+        String safeUrl = urlStr;
         try {
             URL url = new URL(urlStr);
+            safeUrl = WebUtils.sanitizeHttpReqUri(urlStr);
             URLConnection conn = url.openConnection();
             if (encodedAuthInfo != null) {
                 conn.setRequestProperty("Authorization", "Basic " + encodedAuthInfo);
@@ -336,14 +379,14 @@ public class Util {
                 sb.append(line);
             }
         } catch (Exception e) {
-            LOG.warn("failed to get result from url: {}. {}", urlStr, e.getMessage());
-            return null;
+            LOG.warn("failed to get result from url: {}. {}", safeUrl, e.getMessage());
+            throw e;
         } finally {
             if (stream != null) {
                 try {
                     stream.close();
                 } catch (IOException e) {
-                    LOG.warn("failed to close stream when get result from url: {}", urlStr, e);
+                    LOG.warn("failed to close stream when get result from url: {}", safeUrl, e);
                 }
             }
         }
@@ -450,5 +493,18 @@ public class Util {
             dos.write(input);
         }
         return outputStream.toByteArray();
+    }
+
+    public static ConnectContext getOrCreateInnerContext() {
+        if (ConnectContext.get() != null) {
+            return ConnectContext.get();
+        }
+        ConnectContext ctx = ConnectContext.buildInner();
+        ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
+        return ctx;
+    }
+
+    public static boolean isRunningInContainer() {
+        return new File("/.dockerenv").exists();
     }
 }

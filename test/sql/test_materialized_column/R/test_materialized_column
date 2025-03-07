@@ -39,7 +39,7 @@ E: (1064, 'Getting analyzing error. Detail message: All generated columns must b
 -- !result
 CREATE TABLE t ( mc INT AS (1) ) PRIMARY KEY (mc) DISTRIBUTED BY HASH(mc) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
-E: (1064, 'Getting analyzing error. Detail message: Generated Column can not be KEY.')
+E: (1064, 'Getting analyzing error. Detail message: Generated Column mc can not be KEY.')
 -- !result
 CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE AS (array_avg(array_data)) ) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 7 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
 -- result:
@@ -49,7 +49,7 @@ SHOW CREATE TABLE t;
 t	CREATE TABLE `t` (
   `id` bigint(20) NOT NULL COMMENT "",
   `array_data` array<int(11)> NOT NULL COMMENT "",
-  `mc` double NULL AS array_avg(array_data) COMMENT ""
+  `mc` double NULL AS array_avg(`array_data`) COMMENT ""
 ) ENGINE=OLAP 
 PRIMARY KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
@@ -79,7 +79,7 @@ CREATE TABLE t ( id BIGINT NOT NULL,  array_data ARRAY<int> NOT NULL, mc DOUBLE 
 -- !result
 INSERT INTO t VALUES (1, [1,2], 0.0);
 -- result:
-E: (1064, "Getting analyzing error. Detail message: Column count doesn't match value count.")
+E: (5604, "Getting analyzing error. Detail message: Inserted target column count: 2 doesn't match select/value column count: 3.")
 -- !result
 INSERT INTO t (id, array_data, mc) VALUES (1, [1,2], 0.0);
 -- result:
@@ -438,7 +438,7 @@ t	CREATE TABLE `t` (
   `name` bigint(20) NOT NULL COMMENT "",
   `job` int(11) NOT NULL COMMENT "",
   `newcol` int(11) NULL DEFAULT "0" COMMENT "",
-  `mc` int(11) NULL AS job COMMENT ""
+  `mc` int(11) NULL AS `job` COMMENT ""
 ) ENGINE=OLAP 
 PRIMARY KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
@@ -507,8 +507,8 @@ SHOW CREATE TABLE t;
 -- result:
 t	CREATE TABLE `t` (
   `id` bigint(20) NOT NULL COMMENT "",
-  `newcol1` bigint(20) NULL AS id * 10 COMMENT "",
-  `newcol2` bigint(20) NULL AS id * 100 COMMENT ""
+  `newcol1` bigint(20) NULL AS `id` * 10 COMMENT "",
+  `newcol2` bigint(20) NULL AS `id` * 100 COMMENT ""
 ) ENGINE=OLAP 
 UNIQUE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
@@ -538,8 +538,8 @@ t	CREATE TABLE `t` (
   `id` bigint(20) NOT NULL COMMENT "",
   `newcol3` bigint(20) NULL DEFAULT "0" COMMENT "",
   `newcol4` bigint(20) NULL DEFAULT "0" COMMENT "",
-  `newcol1` bigint(20) NULL AS id * 10 COMMENT "",
-  `newcol2` bigint(20) NULL AS id * 100 COMMENT ""
+  `newcol1` bigint(20) NULL AS `id` * 10 COMMENT "",
+  `newcol2` bigint(20) NULL AS `id` * 100 COMMENT ""
 ) ENGINE=OLAP 
 UNIQUE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
@@ -756,7 +756,7 @@ DROP TABLE t;
 DROP DATABASE test_schema_change_for_add_optimization;
 -- result:
 -- !result
--- name: test_schema_change_for_constant_expression
+-- name: test_schema_change_for_constant_expression @slow
 CREATE DATABASE test_schema_change_for_constant_expression;
 -- result:
 -- !result
@@ -992,7 +992,7 @@ t0	CREATE TABLE `t0` (
   `v2` bigint(20) NOT NULL COMMENT "",
   `v3` bigint(20) NOT NULL COMMENT "",
   `testcol5` bigint(20) NULL COMMENT "",
-  `testcol6` bigint(20) NULL AS v1 * 10 COMMENT ""
+  `testcol6` bigint(20) NULL AS `v1` * 10 COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`v1`)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
@@ -1062,5 +1062,56 @@ SELECT * FROM t;
 4	4	18
 -- !result
 DROP DATABASE test_compaction_after_adding_generated_column;
+-- result:
+-- !result
+-- name: test_information_schema_generated_column
+CREATE TABLE `t_information_schema_generated_column_1` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT AS k + 10
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false"
+);
+-- result:
+-- !result
+CREATE TABLE `t_information_schema_generated_column_2` (
+  `k` BIGINT NOT NULL COMMENT "",
+  `v` BIGINT AS k + 10
+) ENGINE=OLAP 
+DUPLICATE KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "false"
+);
+-- result:
+-- !result
+select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where TABLE_NAME = 't_information_schema_generated_column_1';
+-- result:
+k	None
+v	k + 10
+-- !result
+select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where TABLE_NAME = 't_information_schema_generated_column_2';
+-- result:
+k	None
+v	k + 10
+-- !result
+DROP TABLE t_information_schema_generated_column_1;
+-- result:
+-- !result
+DROP TABLE t_information_schema_generated_column_2;
+-- result:
+-- !result
+select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where TABLE_NAME = 't_information_schema_generated_column_1';
+-- result:
+-- !result
+select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where TABLE_NAME = 't_information_schema_generated_column_2';
 -- result:
 -- !result

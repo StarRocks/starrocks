@@ -15,10 +15,7 @@
 
 package com.starrocks.sql.ast;
 
-import com.google.common.base.Strings;
 import com.starrocks.alter.AlterOpType;
-import com.starrocks.analysis.Analyzer;
-import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.Map;
@@ -36,17 +33,8 @@ public class DropRollupClause extends AlterTableClause {
         super(AlterOpType.DROP_ROLLUP, pos);
         this.rollupName = rollupName;
         this.properties = properties;
-        this.needTableStable = false;
     }
 
-    @Override
-    public void analyze(Analyzer analyzer) throws AnalysisException {
-        if (Strings.isNullOrEmpty(rollupName)) {
-            throw new AnalysisException("No rollup in delete rollup.");
-        }
-    }
-
-    @Override
     public Map<String, String> getProperties() {
         return this.properties;
     }

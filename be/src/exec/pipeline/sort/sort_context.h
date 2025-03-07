@@ -25,6 +25,7 @@
 #include "exec/chunks_sorter.h"
 #include "exec/pipeline/context_with_dependency.h"
 #include "exec/pipeline/runtime_filter_types.h"
+#include "exec/pipeline/schedule/observer.h"
 #include "exec/sorting/merge.h"
 #include "exec/sorting/sorting.h"
 #include "exprs/runtime_filter_bank.h"
@@ -69,13 +70,22 @@ public:
     bool is_partition_ready() const;
     void cancel();
 
-    [[nodiscard]] StatusOr<ChunkPtr> pull_chunk();
+    StatusOr<ChunkPtr> pull_chunk();
 
     void set_runtime_filter_collector(RuntimeFilterHub* hub, int32_t plan_node_id,
                                       std::unique_ptr<RuntimeFilterCollector>&& collector);
 
+    void attach_sink_observer(RuntimeState* state, PipelineObserver* observer) {
+        _pip_observable.attach_sink_observer(state, observer);
+    }
+    void attach_source_observer(RuntimeState* state, PipelineObserver* observer) {
+        _pip_observable.attach_source_observer(state, observer);
+    }
+    auto defer_notify_source() { return _pip_observable.defer_notify_source(); }
+    auto defer_notify_sink() { return _pip_observable.defer_notify_sink(); }
+
 private:
-    [[nodiscard]] Status _init_merger();
+    Status _init_merger();
 
     RuntimeState* _state;
     const TTopNType::type _topn_type;
@@ -97,6 +107,8 @@ private:
     const std::vector<RuntimeFilterBuildDescriptor*>& _build_runtime_filters;
     // used for set runtime filter collector
     std::once_flag _set_collector_flag;
+
+    PipeObservable _pip_observable;
 };
 
 class SortContextFactory {
@@ -104,8 +116,10 @@ public:
     SortContextFactory(RuntimeState* state, const TTopNType::type topn_type, bool is_merging,
                        std::vector<ExprContext*> sort_exprs, const std::vector<bool>& is_asc_order,
                        const std::vector<bool>& is_null_first, const std::vector<TExpr>& partition_exprs,
-                       int64_t offset, int64_t limit, const std::string& sort_keys,
-                       const std::vector<OrderByType>& order_by_types,
+                       bool enable_pre_agg, const std::vector<TExpr>& t_pre_agg_exprs,
+                       const std::vector<TSlotId>& t_pre_agg_output_slot_id, int64_t offset, int64_t limit,
+                       const std::string& sort_keys, const std::vector<OrderByType>& order_by_types,
+                       bool has_outer_join_child,
                        const std::vector<RuntimeFilterBuildDescriptor*>& build_runtime_filters);
 
     SortContextPtr create(int32_t idx);

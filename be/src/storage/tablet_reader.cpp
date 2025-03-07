@@ -15,8 +15,11 @@
 #include "storage/tablet_reader.h"
 
 #include <algorithm>
+#include <cstddef>
 #include <utility>
+#include <vector>
 
+#include "column/column_access_path.h"
 #include "column/datum_convert.h"
 #include "common/status.h"
 #include "gen_cpp/tablet_schema.pb.h"
@@ -31,13 +34,17 @@
 #include "storage/delete_predicates.h"
 #include "storage/empty_iterator.h"
 #include "storage/merge_iterator.h"
+#include "storage/olap_common.h"
 #include "storage/predicate_parser.h"
+#include "storage/rowset/column_reader.h"
 #include "storage/rowset/rowid_range_option.h"
 #include "storage/seek_range.h"
 #include "storage/tablet.h"
 #include "storage/tablet_updates.h"
 #include "storage/types.h"
 #include "storage/union_iterator.h"
+#include "types/logical_type.h"
+#include "util/json_flattener.h"
 
 namespace starrocks {
 
@@ -95,7 +102,8 @@ Status TabletReader::prepare() {
     SCOPED_RAW_TIMER(&_stats.get_rowsets_ns);
     Status st = Status::OK();
     // Non-empty rowsets indicate that it is captured before creating this TabletReader.
-    if (_rowsets.empty()) {
+    // _use_gtid is used to indicate that the rowsets are captured by gtid.
+    if (_rowsets.empty() && !_use_gtid) {
         std::shared_lock l(_tablet->get_header_lock());
         st = _tablet->capture_consistent_rowsets(_version, &_rowsets);
         if (!st.ok()) {
@@ -126,8 +134,69 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         _reader_params = &read_params;
         return Status::OK();
     }
+
+    RETURN_IF_ERROR(_init_compaction_column_paths(read_params));
     Status st = _init_collector(read_params);
     return st;
+}
+
+Status TabletReader::_init_compaction_column_paths(const TabletReaderParams& read_params) {
+    if (!config::enable_compaction_flat_json || !is_compaction(read_params.reader_type) ||
+        read_params.column_access_paths == nullptr) {
+        return Status::OK();
+    }
+
+    if (!read_params.column_access_paths->empty()) {
+        VLOG(3) << "Compaction flat json paths exists: " << read_params.column_access_paths->size();
+        return Status::OK();
+    }
+
+    DCHECK(is_compaction(read_params.reader_type) && read_params.column_access_paths != nullptr &&
+           read_params.column_access_paths->empty());
+    int num_readers = 0;
+    for (const auto& rowset : _rowsets) {
+        auto segments = rowset->segments();
+        std::for_each(segments.begin(), segments.end(),
+                      [&](const auto& segment) { num_readers += segment->num_rows() > 0 ? 1 : 0; });
+    }
+
+    std::vector<const ColumnReader*> readers;
+    for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
+        const auto& col = _tablet_schema->column(i);
+        auto col_name = std::string(col.name());
+        if (_schema.get_field_by_name(col_name) == nullptr || col.type() != LogicalType::TYPE_JSON) {
+            continue;
+        }
+        readers.clear();
+        for (const auto& rowset : _rowsets) {
+            for (const auto& segment : rowset->segments()) {
+                if (segment->num_rows() == 0) {
+                    continue;
+                }
+                auto reader = segment->column_with_uid(col.unique_id());
+                if (reader != nullptr && reader->column_type() == LogicalType::TYPE_JSON &&
+                    nullptr != reader->sub_readers() && !reader->sub_readers()->empty()) {
+                    readers.emplace_back(reader);
+                }
+            }
+        }
+        if (readers.size() == num_readers) {
+            // must all be flat json type
+            JsonPathDeriver deriver;
+            deriver.derived(readers);
+            auto paths = deriver.flat_paths();
+            auto types = deriver.flat_types();
+
+            VLOG(3) << "Compaction flat json column: " << JsonFlatPath::debug_flat_json(paths, types, true);
+            ASSIGN_OR_RETURN(auto res, ColumnAccessPath::create(TAccessPathType::ROOT, col_name, i));
+            for (size_t j = 0; j < paths.size(); j++) {
+                ColumnAccessPath::insert_json_path(res.get(), types[j], paths[j]);
+            }
+            res->set_from_compaction(true);
+            read_params.column_access_paths->emplace_back(std::move(res));
+        }
+    }
+    return Status::OK();
 }
 
 Status TabletReader::_init_collector_for_pk_index_read() {
@@ -173,7 +242,7 @@ Status TabletReader::_init_collector_for_pk_index_read() {
         return Status::NotSupported(strings::Substitute("should have eq predicates on all pk columns current: $0 < $1",
                                                         num_pk_eq_predicates, tablet_schema->num_key_columns()));
     }
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(*tablet_schema->schema(), &pk_column));
     PrimaryKeyEncoder::encode(*tablet_schema->schema(), *keys, 0, keys->num_rows(), pk_column.get());
 
@@ -217,6 +286,9 @@ Status TabletReader::_init_collector_for_pk_index_read() {
     rs_opts.runtime_range_pruner = _reader_params->runtime_range_pruner;
     // single row fetch, no need to use delvec
     rs_opts.is_primary_keys = false;
+    rs_opts.use_vector_index = _reader_params->use_vector_index;
+    rs_opts.vector_search_option = _reader_params->vector_search_option;
+    rs_opts.enable_join_runtime_filter_pushdown = _reader_params->enable_join_runtime_filter_pushdown;
 
     rs_opts.rowid_range_option = std::make_shared<RowidRangeOption>();
     auto rowid_range = std::make_shared<SparseRange<>>();
@@ -273,9 +345,10 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(parse_seek_range(_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
                                      &rs_opts.ranges, &_mempool));
     rs_opts.pred_tree = params.pred_tree;
-    auto cid_to_preds = rs_opts.pred_tree.get_immediate_column_predicate_map();
-    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, cid_to_preds,
-                                                                     &rs_opts.predicates_for_zone_map));
+    rs_opts.runtime_filter_preds = params.runtime_filter_preds;
+    PredicateTree pred_tree_for_zone_map;
+    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_tree(&_obj_pool, rs_opts.pred_tree,
+                                                                      rs_opts.pred_tree_for_zone_map));
     rs_opts.sorted = (keys_type != DUP_KEYS && keys_type != PRIMARY_KEYS) && !params.skip_aggregation;
     rs_opts.reader_type = params.reader_type;
     rs_opts.chunk_size = params.chunk_size;
@@ -289,6 +362,10 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.unused_output_column_ids = params.unused_output_column_ids;
     rs_opts.runtime_range_pruner = params.runtime_range_pruner;
     rs_opts.column_access_paths = params.column_access_paths;
+    rs_opts.use_vector_index = params.use_vector_index;
+    rs_opts.vector_search_option = params.vector_search_option;
+    rs_opts.sample_options = params.sample_options;
+    rs_opts.enable_join_runtime_filter_pushdown = params.enable_join_runtime_filter_pushdown;
     if (keys_type == KeysType::PRIMARY_KEYS) {
         rs_opts.is_primary_keys = true;
         rs_opts.version = _version.second;
@@ -296,8 +373,18 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     rs_opts.meta = _tablet->data_dir()->get_meta();
     rs_opts.rowid_range_option = params.rowid_range_option;
     rs_opts.short_key_ranges_option = params.short_key_ranges_option;
-    rs_opts.asc_hint = _is_asc_hint;
+    if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS) {
+        rs_opts.asc_hint = _is_asc_hint;
+    }
     rs_opts.prune_column_after_index_filter = params.prune_column_after_index_filter;
+    rs_opts.enable_gin_filter = params.enable_gin_filter;
+    rs_opts.has_preaggregation = true;
+    if ((is_compaction(params.reader_type) || params.sorted_by_keys_per_tablet)) {
+        rs_opts.has_preaggregation = true;
+    } else if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS ||
+               (keys_type == UNIQUE_KEYS && params.skip_aggregation)) {
+        rs_opts.has_preaggregation = false;
+    }
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
     for (auto& rowset : _rowsets) {
@@ -481,7 +568,7 @@ Status TabletReader::_init_predicates(const TabletReaderParams& params) {
 }
 
 Status TabletReader::_init_delete_predicates(const TabletReaderParams& params, DeletePredicates* dels) {
-    PredicateParser pred_parser(_tablet_schema);
+    OlapPredicateParser pred_parser(_tablet_schema);
 
     std::shared_lock header_lock(_tablet->get_header_lock());
     for (const DeletePredicatePB& pred_pb : _tablet->delete_predicates()) {
@@ -565,7 +652,7 @@ Status TabletReader::_to_seek_tuple(const TabletSchemaCSPtr& tablet_schema, cons
         int idx = sort_key_idxes.empty() ? i : sort_key_idxes[i];
         auto f = std::make_shared<Field>(ChunkHelper::convert_field(idx, tablet_schema->column(idx)));
         schema.append(f);
-        values.emplace_back(Datum());
+        values.emplace_back();
         if (input.is_null(i)) {
             continue;
         }

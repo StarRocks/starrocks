@@ -12,10 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-if (CLANG_TIDY_PATH)
-    set(CMAKE_CXX_CLANG_TIDY "${CLANG_TIDY_PATH}")
-endif()
-
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/io")
 
 # where to put generated binaries
@@ -32,5 +28,8 @@ add_library(IO STATIC
         s3_input_stream.cpp
         s3_output_stream.cpp
         cache_input_stream.cpp
+        cache_select_input_stream.hpp
         shared_buffered_input_stream.cpp
+        async_flush_output_stream.cpp
+        direct_s3_output_stream.cpp
         )

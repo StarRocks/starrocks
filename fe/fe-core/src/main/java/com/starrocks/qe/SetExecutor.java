@@ -38,11 +38,15 @@ import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.DdlException;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.SetListItem;
 import com.starrocks.sql.ast.SetPassVar;
 import com.starrocks.sql.ast.SetStmt;
 import com.starrocks.sql.ast.SystemVariable;
 import com.starrocks.sql.ast.UserVariable;
+
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 // Set executor
 public class SetExecutor {
@@ -59,11 +63,13 @@ public class SetExecutor {
             ctx.modifySystemVariable((SystemVariable) var, false);
         } else if (var instanceof UserVariable) {
             UserVariable userVariable = (UserVariable) var;
+            SetStmtAnalyzer.calcuteUserVariable(userVariable);
+
             if (userVariable.getEvaluatedExpression() == null) {
                 userVariable.deriveUserVariableExpressionResult(ctx);
             }
 
-            ctx.modifyUserVariable(userVariable);
+            ctx.modifyUserVariableCopyInWrite(userVariable);
         } else if (var instanceof SetPassVar) {
             // Set password
             SetPassVar setPassVar = (SetPassVar) var;
@@ -79,7 +85,7 @@ public class SetExecutor {
             }
             userAuthenticationInfo.setPassword(setPassVar.getPassword());
             GlobalStateMgr.getCurrentState().getAuthenticationMgr()
-                    .alterUser(setPassVar.getUserIdent(), userAuthenticationInfo);
+                    .alterUser(setPassVar.getUserIdent(), userAuthenticationInfo, null);
         }
     }
 
@@ -89,8 +95,31 @@ public class SetExecutor {
      * @throws DdlException
      */
     public void execute() throws DdlException {
-        for (SetListItem var : stmt.getSetListItems()) {
-            setVariablesOfAllType(var);
+        Map<String, UserVariable> clonedUserVars = new ConcurrentHashMap<>();
+        boolean hasUserVar = stmt.getSetListItems().stream().anyMatch(var -> var instanceof UserVariable);
+        boolean executeSuccess = true;
+        if (hasUserVar) {
+            clonedUserVars.putAll(ctx.getUserVariables());
+            ctx.modifyUserVariablesCopyInWrite(clonedUserVars);
+        }
+        try {
+            for (SetListItem var : stmt.getSetListItems()) {
+                setVariablesOfAllType(var);
+            }
+        } catch (Throwable e) {
+            if (hasUserVar) {
+                executeSuccess = false;
+            }
+            throw e;
+        } finally {
+            //If the set sql contains more than one user variable,
+            //the atomicity of the modification of this set of variables must be ensured.
+            if (hasUserVar) {
+                ctx.resetUserVariableCopyInWrite();
+                if (executeSuccess) {
+                    ctx.modifyUserVariables(clonedUserVars);
+                }
+            }
         }
     }
 }

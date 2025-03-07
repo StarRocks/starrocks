@@ -21,7 +21,6 @@ import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
-import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
@@ -174,19 +173,21 @@ public class SubmitTaskStmtTest {
         };
         new MockUp<WarehouseManager>() {
             @Mock
-            Warehouse getWarehouse(String name) {
+            public Warehouse getWarehouse(String name) {
                 return new DefaultWarehouse(123, name);
+            }
+            @Mock
+            public Warehouse getWarehouse(long id) {
+                return new DefaultWarehouse(123, "w1");
             }
         };
 
         starRocksAssert.ddl("submit task t_warehouse properties('warehouse'='w1') as " +
                 "insert into tbl1 select * from tbl1");
         Task task = tm.getTask("t_warehouse");
-        Assert.assertFalse(task.getProperties().toString(),
-                task.getProperties().containsKey(SessionVariable.WAREHOUSE));
         Assert.assertTrue(task.getProperties().toString(),
-                task.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE_ID));
-        Assert.assertEquals("('warehouse_id'='123')", task.getPropertiesString());
+                task.getProperties().containsKey(PropertyAnalyzer.PROPERTIES_WAREHOUSE));
+        Assert.assertEquals("('warehouse'='w1')", task.getPropertiesString());
     }
 
     @Test
@@ -300,6 +301,36 @@ public class SubmitTaskStmtTest {
             Assert.assertEquals("Getting analyzing error. Detail message: schedule interval is too small, " +
                             "the minimum value is 10 SECONDS.",
                     connectContext.getState().getErrorMessage());
+
+            // year
+            Exception e = Assert.assertThrows(ParsingException.class, () ->
+                    connectContext.executeSql("submit task t_illegal " +
+                            "schedule every(interval 1 year) " +
+                            "as insert overwrite tbl1 select * from tbl1"));
+            Assert.assertEquals("Getting syntax error at line 1, column 48. " +
+                            "Detail message: Unexpected input 'year', " +
+                            "the most similar input is {'DAY', 'HOUR', 'SECOND', 'MINUTE'}.",
+                    e.getMessage());
+
+            // week
+            e = Assert.assertThrows(ParsingException.class, () ->
+                    connectContext.executeSql("submit task t_illegal " +
+                            "schedule every(interval 1 week) " +
+                            "as insert overwrite tbl1 select * from tbl1"));
+            Assert.assertEquals("Getting syntax error at line 1, column 48. " +
+                            "Detail message: Unexpected input 'week', " +
+                            "the most similar input is {'SECOND', 'DAY', 'HOUR', 'MINUTE'}.",
+                    e.getMessage());
+
+            // syntax error
+            e = Assert.assertThrows(ParsingException.class, () ->
+                    connectContext.executeSql("submit task t_illegal " +
+                            "schedule every(interval 1) " +
+                            "as insert overwrite tbl1 select * from tbl1"));
+            Assert.assertEquals("Getting syntax error at line 1, column 47. " +
+                            "Detail message: Unexpected input ')', " +
+                            "the most similar input is {'DAY', 'HOUR', 'MINUTE', 'SECOND'}.",
+                    e.getMessage());
         }
     }
 }

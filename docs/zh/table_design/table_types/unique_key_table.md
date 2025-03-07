@@ -1,10 +1,13 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
+sidebar_position: 50
 ---
 
 # 更新表
 
-建表时，支持定义主键和指标列，查询时返回主键相同的一组数据中的最新数据。相对于明细表，更新表简化了数据导入流程，能够更好地支撑实时和频繁更新的场景。
+建表时需要定义唯一键。当多条数据具有相同的唯一键时，value 列会进行 REPLACE，查询时返回唯一键相同的一组数据中的最新数据。并且支持单独定义排序键，如果查询的过滤条件包含排序键，则 StarRocks 能够快速地过滤数据，提高查询效率。
+
+更新表能够支撑实时和频繁更新的场景，不过目前已经逐渐被[主键表](./primary_key_table.md)代替。
 
 ## 适用场景
 
@@ -12,11 +15,11 @@ displayed_sidebar: "Chinese"
 
 ## 原理
 
-更新表可以视为聚合表的特殊情况，指标列指定的聚合函数为 REPLACE，返回具有相同主键的一组数据中的最新数据。
+更新表可以视为聚合表的特殊情况，value 列指定的聚合函数为 REPLACE，返回具有相同唯一键的一组数据中的最新数据。
 
-数据分批次多次导入至更新表，每一批次数据分配一个版本号，因此同一主键的数据可能有多个版本，查询时返回版本最新（即版本号最大）的数据。相对于明细表，更新表通过简化导入流程，能够更好地支持实时和频繁更新。
+数据分批次多次导入至更新表，每一批次数据分配一个版本号，因此同一唯一键的数据可能有多个版本，查询时返回版本最新（即版本号最大）的数据。
 
-例如下表中，`ID` 是主键，`value` 是指标列，`_version` 是 StarRocks 内部的版本号。其中，`ID` 为 1 的数据有两个导入批次，版本号分别为 `1` 和 `2`；`ID` 为 `2` 的数据有三个导入批次，版本号分别为 `3`、`4`、`5`。
+例如下表中，`ID` 是唯一键，`value` 是指标列，`_version` 是 StarRocks 内部的版本号。其中，`ID` 为 1 的数据有两个导入批次，版本号分别为 `1` 和 `2`；`ID` 为 `2` 的数据有三个导入批次，版本号分别为 `3`、`4`、`5`。
 
 | ID   | value | _version |
 | ---- | ----- | -------- |
@@ -35,44 +38,42 @@ displayed_sidebar: "Chinese"
 
 ## 创建表
 
-在电商订单分析场景中，经常按照日期对订单状态进行统计分析，则可以将经常使用的过滤字段订单创建时间 `create_time`、订单编号 `order_id` 作为主键，其余列订单状态 `order_state` 和订单总价 `total_price` 作为指标列。这样既能够满足实时更新订单状态的需求，又能够在查询中进行快速过滤。
+在电商订单分析场景中，经常按照日期对订单状态进行统计分析，则可以将经常使用的过滤字段订单创建时间 `create_time`、订单编号 `order_id` 作为唯一键，其余列订单状态 `order_state` 和订单总价 `total_price` 作为指标列。这样既能够满足实时更新订单状态的需求，又能够在查询中进行快速过滤。
 
 在该业务场景下，建表语句如下：
 
 ```SQL
-CREATE TABLE IF NOT EXISTS orders (
+CREATE TABLE orders (
     create_time DATE NOT NULL COMMENT "create time of an order",
     order_id BIGINT NOT NULL COMMENT "id of an order",
     order_state INT COMMENT "state of an order",
     total_price BIGINT COMMENT "price of an order"
 )
 UNIQUE KEY(create_time, order_id)
-DISTRIBUTED BY HASH(order_id)
-PROPERTIES (
-"replication_num" = "3"
-); 
+DISTRIBUTED BY HASH(order_id); 
 ```
 
 > **注意**
 >
-> - 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](../Data_distribution.md#分桶)。
-> - 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../Data_distribution.md#设置分桶数量)。
+> - 建表时必须使用 `DISTRIBUTED BY HASH` 子句指定分桶键。分桶键的更多说明，请参见[分桶](../data_distribution/Data_distribution.md#分桶)。
+> - 自 2.5.7 版本起，StarRocks 支持在建表和新增分区时自动设置分桶数量 (BUCKETS)，您无需手动设置分桶数量。更多信息，请参见 [设置分桶数量](../data_distribution/Data_distribution.md#设置分桶数量)。
 
 ## 使用说明
 
-- 主键的相关说明：
-  - 在建表语句中，主键必须定义在其他列之前。
-  - 主键通过 `UNIQUE KEY` 定义。
-  - 主键必须满足唯一性约束，且列的值不会修改。
-  - 设置合理的主键。
-    - 查询时，主键在聚合之前就能进行过滤，而指标列的过滤通常在多版本聚合之后，因此建议将频繁使用的过滤字段作为主键，在聚合前就能过滤数据，从而提升查询性能。
-    - 聚合过程中会比较所有主键，因此需要避免设置过多的主键，以免降低查询性能。如果某个列只是偶尔会作为查询中的过滤条件，则不建议放在主键中。
+- **唯一键**：
+  - 在建表语句中，唯一键必须定义在其他列之前。
+  - 唯一键需要通过 `UNIQUE KEY` 显式定义。
+  - 唯一键必须满足唯一性约束。
+- **排序键**：
 
-- 建表时，不支持为指标列创建 BITMAP、Bloom Filter 等索引。
+  - 自 v3.3.0 起，更新表解耦了排序键和聚合键。更新表支持使用 `ORDER BY` 指定排序键和使用 `UNIQUE KEY` 指定唯一键。排序键和唯一键中的列需要保持一致，但是列的顺序不需要保持一致。
+
+  - 查询时，在聚合之前数据就能基于排序键进行过滤，而通常在多版本聚合之后数据才能基于 value 列进行过滤，因此建议将频繁使用的过滤字段作为排序键，在聚合前就能过滤数据，从而提升查询性能。
+- 建表时，仅支持为 key 列创建 Bitmap 索引、Bloom filter 索引。
 
 ## 下一步
 
-建表完成后，您可以创建多种导入作业，导入数据至表中。具体导入方式，请参见[导入方案](../../loading/loading_introduction/Loading_intro.md)。
+建表完成后，您可以创建多种导入作业，导入数据至表中。具体导入方式，请参见[导入方案](../../loading/Loading_intro.md)。
 
 :::note
 

@@ -1,5 +1,5 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # Setup IDE  for developing StarRocks
@@ -119,7 +119,7 @@ In Ubuntu server, run with `./start_fe.sh --debug`, then use IDEA remote debug t
 
 Debug java parameter: `-agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5005` is just copied from IDEA.
 
-![IDE](../../assets/ide-1.png)
+![IDE](../../_assets/ide-1.png)
 
 ### BE
 
@@ -131,11 +131,11 @@ Use Clion to open `be` folder.
 
 Enter `Settings`, add `Toolchains`. Add a remote server first, then setup Build Tool, C and C++ Compiler separately.
 
-![IDE](../../assets/ide-2.png)
+![IDE](../../_assets/ide-2.png)
 
 In `Settings` / `Deployment`. Change folder `mappings`.
 
-![IDE](../../assets/ide-3.png)
+![IDE](../../_assets/ide-3.png)
 
 In `Settings` / `Cmake`. Change Toolchain to be the remote toolchain just added. Add the following environment variables:
 
@@ -147,9 +147,9 @@ STARROCKS_THIRDPARTY=/root/starrocks/thirdparty
 
 Notice: Be careful not to check `Include system environment variables`.
 
-![IDE](../../assets/ide-4.png)
+![IDE](../../_assets/ide-4.png)
 
-![IDE](../../assets/ide-5.png)
+![IDE](../../_assets/ide-5.png)
 
 From here on, all setup is complete. After Clion and the remote server are synchronized for a while, the code jump will work normally.
 

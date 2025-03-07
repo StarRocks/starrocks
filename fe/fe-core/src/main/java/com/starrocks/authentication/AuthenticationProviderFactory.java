@@ -12,34 +12,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.authentication;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+import com.google.common.collect.ImmutableMap;
+import com.starrocks.common.Config;
 
-import java.util.HashMap;
 import java.util.Map;
 
 public class AuthenticationProviderFactory {
-    private static final Logger LOG = LogManager.getLogger(AuthenticationProviderFactory.class);
-    private static final Map<String, AuthenticationProvider> PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER = new HashMap<>();
+    private static final Map<String, AuthenticationProvider> PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER =
+            ImmutableMap.<String, AuthenticationProvider>builder()
+                    .put(PlainPasswordAuthenticationProvider.PLUGIN_NAME, new PlainPasswordAuthenticationProvider())
+                    .put(LDAPAuthProviderForNative.PLUGIN_NAME, new LDAPAuthProviderForNative())
+                    .put(KerberosAuthenticationProvider.PLUGIN_NAME, new KerberosAuthenticationProvider())
+                    .put(OpenIdConnectAuthenticationProvider.PLUGIN_NAME, new OpenIdConnectAuthenticationProvider(
+                            Config.oidc_jwks_url,
+                            Config.oidc_principal_field,
+                            Config.oidc_required_issuer,
+                            Config.oidc_required_audience))
+                    .build();
 
     private AuthenticationProviderFactory() {}
-
-    public static void installPlugin(String pluginName, AuthenticationProvider provider) {
-        if (PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.containsKey(pluginName)) {
-            LOG.warn("Plugin {} has already been installed!", pluginName);
-        }
-        PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.put(pluginName, provider);
-    }
-
-    public static void uninstallPlugin(String pluginName) {
-        if (!PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.containsKey(pluginName)) {
-            LOG.warn("Cannot find {} from {} ", pluginName, PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.keySet());
-        }
-        PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.remove(pluginName);
-    }
 
     public static AuthenticationProvider create(String plugin) throws AuthenticationException {
         if (!PLUGIN_NAME_TO_AUTHENTICATION_PROVIDER.containsKey(plugin)) {

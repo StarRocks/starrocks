@@ -21,10 +21,10 @@ namespace starrocks::lake {
 
 using KeyIndex = size_t;
 using KeyIndexSet = std::set<KeyIndex>;
-using IndexValueWithVer = std::pair<int64_t, IndexValue>;
 
 class PersistentIndexMemtable {
 public:
+    PersistentIndexMemtable(uint64_t max_rss_rowid = 0) : _max_rss_rowid(max_rss_rowid) {}
     // |version|: version of index values
     Status upsert(size_t n, const Slice* keys, const IndexValue* values, IndexValue* old_values,
                   KeyIndexSet* not_founds, size_t* num_found, int64_t version);
@@ -33,8 +33,18 @@ public:
     Status insert(size_t n, const Slice* keys, const IndexValue* values, int64_t version);
 
     // |version|: version of index values
+    // |rowset_id|: The rowset that keys belong to. Used for setup rebuild point
     Status erase(size_t n, const Slice* keys, IndexValue* old_values, KeyIndexSet* not_founds, size_t* num_found,
-                 int64_t version);
+                 int64_t version, uint32_t rowset_id);
+
+    // Erase from index, used when rebuild index.
+    // |n| : key count
+    // |keys| : key array as raw buffer
+    // |filter| : used for filter keys that need to skip. `True` means need skip.
+    // |version|: version of index values
+    // |rowset_id|: The rowset that keys belong to. Used for setup rebuild point
+    Status erase_with_filter(size_t n, const Slice* keys, const std::vector<bool>& filter, int64_t version,
+                             uint32_t rowset_id);
 
     // |version|: version of index values
     Status replace(const Slice* keys, const IndexValue* values, const std::vector<size_t>& replace_idxes,
@@ -58,13 +68,18 @@ public:
 
     void clear();
 
+    const uint64_t max_rss_rowid() const { return _max_rss_rowid; }
+
+    bool empty() const { return _map.size() == 0; }
+
 private:
-    static void update_index_value(std::list<IndexValueWithVer>* index_value_info, int64_t version,
-                                   const IndexValue& value);
+    static void update_index_value(IndexValueWithVer* index_value_info, int64_t version, const IndexValue& value);
 
 private:
     // The size can be up to 230K. The performance of std::map may be poor.
-    phmap::btree_map<std::string, std::list<IndexValueWithVer>, std::less<>> _map;
+    phmap::btree_map<std::string, IndexValueWithVer, std::less<>> _map;
+    int64_t _keys_size{0};
+    uint64_t _max_rss_rowid{0};
 };
 
 } // namespace starrocks::lake

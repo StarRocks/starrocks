@@ -16,7 +16,6 @@ package com.starrocks.sql.optimizer.rule;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
 import com.starrocks.sql.optimizer.rule.implementation.AssertOneRowImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CTEAnchorImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.CTEAnchorToNoCTEImplementationRule;
@@ -32,9 +31,12 @@ import com.starrocks.sql.optimizer.rule.implementation.HashAggImplementationRule
 import com.starrocks.sql.optimizer.rule.implementation.HashJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HiveScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.HudiScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.IcebergEqualityDeleteScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.IcebergMetadataScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IcebergScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.IntersectImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.JDBCScanImplementationRule;
+import com.starrocks.sql.optimizer.rule.implementation.KuduScanImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.LimitImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MergeJoinImplementationRule;
 import com.starrocks.sql.optimizer.rule.implementation.MetaScanImplementationRule;
@@ -58,8 +60,10 @@ import com.starrocks.sql.optimizer.rule.implementation.stream.StreamScanImplemen
 import com.starrocks.sql.optimizer.rule.transformation.CastToEmptyRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEConsumeRule;
 import com.starrocks.sql.optimizer.rule.transformation.CollectCTEProduceRule;
+import com.starrocks.sql.optimizer.rule.transformation.CombinationRule;
 import com.starrocks.sql.optimizer.rule.transformation.DistributionPruneRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateGroupByConstantRule;
+import com.starrocks.sql.optimizer.rule.transformation.EliminateJoinWithConstantRule;
 import com.starrocks.sql.optimizer.rule.transformation.EliminateLimitZeroRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.ExistentialApply2OuterJoinRule;
@@ -106,6 +110,7 @@ import com.starrocks.sql.optimizer.rule.transformation.PruneScanColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTableFunctionColumnRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTopNColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneTrueFilterRule;
+import com.starrocks.sql.optimizer.rule.transformation.PruneUKFKGroupByKeysRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneUKFKJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneUnionColumnsRule;
 import com.starrocks.sql.optimizer.rule.transformation.PruneValuesColumnsRule;
@@ -145,8 +150,10 @@ import com.starrocks.sql.optimizer.rule.transformation.RewriteBitmapCountDistinc
 import com.starrocks.sql.optimizer.rule.transformation.RewriteCountIfFunction;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteDuplicateAggregateFnRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteHllCountDistinctRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToHDFSScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSimpleAggToMetaScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.RewriteSumByAssociativeRule;
+import com.starrocks.sql.optimizer.rule.transformation.RewriteToVectorPlanRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2AnalyticRule;
 import com.starrocks.sql.optimizer.rule.transformation.ScalarApply2JoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.SplitLimitRule;
@@ -156,27 +163,26 @@ import com.starrocks.sql.optimizer.rule.transformation.SplitTwoPhaseAggRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateJoinPushDownRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.AggregateTimeSeriesRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyJoinRule;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.rule.OnlyScanRule;
 import com.starrocks.sql.optimizer.rule.transformation.pruner.CboTablePruneRule;
 
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 public class RuleSet {
-    private static final Map<RuleSetType, List<Rule>> REWRITE_RULES = Maps.newHashMap();
-
     private static final List<Rule> ALL_IMPLEMENT_RULES = ImmutableList.of(
             new OlapScanImplementationRule(),
             new HiveScanImplementationRule(),
             new FileScanImplementationRule(),
             new IcebergScanImplementationRule(),
+            new IcebergEqualityDeleteScanImplementationRule(),
             new HudiScanImplementationRule(),
             new DeltaLakeScanImplementationRule(),
             new PaimonScanImplementationRule(),
             new OdpsScanImplementationRule(),
+            new IcebergMetadataScanImplementationRule(),
+            new KuduScanImplementationRule(),
             new SchemaScanImplementationRule(),
             new MysqlScanImplementationRule(),
             new EsScanImplementationRule(),
@@ -203,255 +209,216 @@ public class RuleSet {
             new CTEProduceImplementationRule()
     );
 
-    private static final ImmutableList<Rule> MV_IMPLEMENT_RULES = ImmutableList.of(
-            StreamJoinImplementationRule.getInstance(),
-            StreamAggregateImplementationRule.getInstance()
-    );
-
     private final List<Rule> implementRules = Lists.newArrayList(ALL_IMPLEMENT_RULES);
 
     private final List<Rule> transformRules = Lists.newArrayList();
 
-    static {
-        REWRITE_RULES.put(RuleSetType.MERGE_LIMIT, ImmutableList.of(
-                new PushDownProjectLimitRule(),
-                new EliminateLimitZeroRule(), // should before MergeLimitWithSortRule
-                new MergeLimitWithSortRule(),
-                new SplitLimitRule(),
-                new PushDownLimitJoinRule(),
-                new PushDownLimitCTEAnchor(),
-                new PushDownLimitUnionRule(),
-                new MergeLimitWithLimitRule(),
-                PushDownLimitDirectRule.PROJECT,
-                PushDownLimitDirectRule.ASSERT_ONE_ROW,
-                PushDownLimitDirectRule.CTE_CONSUME,
-                MergeLimitDirectRule.AGGREGATE,
-                MergeLimitDirectRule.OLAP_SCAN,
-                MergeLimitDirectRule.VIEW_SCAN,
-                MergeLimitDirectRule.HIVE_SCAN,
-                MergeLimitDirectRule.ICEBERG_SCAN,
-                MergeLimitDirectRule.HUDI_SCAN,
-                MergeLimitDirectRule.DELTALAKE_SCAN,
-                MergeLimitDirectRule.FILE_SCAN,
-                MergeLimitDirectRule.PAIMON_SCAN,
-                MergeLimitDirectRule.ODPS_SCAN,
-                MergeLimitDirectRule.SCHEMA_SCAN,
-                MergeLimitDirectRule.MYSQL_SCAN,
-                MergeLimitDirectRule.ES_SCAN,
-                MergeLimitDirectRule.JDBC_SCAN,
-                MergeLimitDirectRule.WINDOW,
-                MergeLimitDirectRule.INTERSECT,
-                MergeLimitDirectRule.EXCEPT,
-                MergeLimitDirectRule.VALUES,
-                MergeLimitDirectRule.FILTER,
-                MergeLimitDirectRule.TABLE_FUNCTION,
-                MergeLimitDirectRule.TABLE_FUNCTION_TABLE_SCAN
-        ));
+    public static final Rule MERGE_LIMIT_RULES = new CombinationRule(RuleType.GP_MERGE_LIMIT, ImmutableList.of(
+            new PushDownProjectLimitRule(),
+            new EliminateLimitZeroRule(), // should before MergeLimitWithSortRule
+            new MergeLimitWithSortRule(),
+            new SplitLimitRule(),
+            new PushDownLimitJoinRule(),
+            new PushDownLimitCTEAnchor(),
+            new PushDownLimitUnionRule(),
+            new MergeLimitWithLimitRule(),
+            new PushDownLimitDirectRule(),
+            new MergeLimitDirectRule()
+    ));
 
-        REWRITE_RULES.put(RuleSetType.PARTITION_PRUNE, ImmutableList.of(
-                new PartitionPruneRule(),
-                new DistributionPruneRule(),
-                ExternalScanPartitionPruneRule.HIVE_SCAN,
-                ExternalScanPartitionPruneRule.HUDI_SCAN,
-                ExternalScanPartitionPruneRule.ICEBERG_SCAN,
-                ExternalScanPartitionPruneRule.DELTALAKE_SCAN,
-                ExternalScanPartitionPruneRule.FILE_SCAN,
-                ExternalScanPartitionPruneRule.ES_SCAN,
-                ExternalScanPartitionPruneRule.PAIMON_SCAN,
-                ExternalScanPartitionPruneRule.ODPS_SCAN,
-                new LimitPruneTabletsRule()
-        ));
+    public static final Rule PARTITION_PRUNE_RULES = new CombinationRule(RuleType.GP_PARTITION_PRUNE, ImmutableList.of(
+            new PartitionPruneRule(),
+            new DistributionPruneRule(),
+            new ExternalScanPartitionPruneRule(),
+            new LimitPruneTabletsRule()
+    ));
 
-        REWRITE_RULES.put(RuleSetType.PRUNE_COLUMNS, ImmutableList.of(
-                PruneScanColumnRule.OLAP_SCAN,
-                PruneScanColumnRule.SCHEMA_SCAN,
-                PruneScanColumnRule.MYSQL_SCAN,
-                PruneScanColumnRule.ES_SCAN,
-                PruneHDFSScanColumnRule.HIVE_SCAN,
-                PruneHDFSScanColumnRule.ICEBERG_SCAN,
-                PruneHDFSScanColumnRule.DELTALAKE_SCAN,
-                PruneHDFSScanColumnRule.FILE_SCAN,
-                PruneHDFSScanColumnRule.HUDI_SCAN,
-                PruneHDFSScanColumnRule.TABLE_FUNCTION_TABLE_SCAN,
-                PruneHDFSScanColumnRule.PAIMON_SCAN,
-                PruneHDFSScanColumnRule.ODPS_SCAN,
-                PruneScanColumnRule.JDBC_SCAN,
-                PruneScanColumnRule.BINLOG_SCAN,
-                new PruneProjectColumnsRule(),
-                new PruneFilterColumnsRule(),
-                new PruneAggregateColumnsRule(),
-                new PruneGroupByKeysRule(),
-                new PruneTopNColumnsRule(),
-                new PruneJoinColumnsRule(),
-                new PruneWindowColumnsRule(),
-                new PruneUnionColumnsRule(),
-                new PruneIntersectColumnsRule(),
-                new PruneExceptColumnsRule(),
-                new PruneRepeatColumnsRule(),
-                new PruneValuesColumnsRule(),
-                new PruneTableFunctionColumnRule(),
-                new PruneCTEConsumeColumnsRule()
-        ));
+    public static final Rule VECTOR_REWRITE_RULES = new CombinationRule(RuleType.GP_VECTOR_REWRITE, ImmutableList.of(
+            new RewriteToVectorPlanRule()
+    ));
 
-        REWRITE_RULES.put(RuleSetType.PUSH_DOWN_PREDICATE, ImmutableList.of(
-                new CastToEmptyRule(),
-                new PruneTrueFilterRule(),
-                new PushDownPredicateCTEAnchor(),
-                PushDownPredicateScanRule.OLAP_SCAN,
-                PushDownPredicateScanRule.HIVE_SCAN,
-                PushDownPredicateScanRule.ICEBERG_SCAN,
-                PushDownPredicateScanRule.HUDI_SCAN,
-                PushDownPredicateScanRule.DELTALAKE_SCAN,
-                PushDownPredicateScanRule.FILE_SCAN,
-                PushDownPredicateScanRule.PAIMON_SCAN,
-                PushDownPredicateScanRule.SCHEMA_SCAN,
-                PushDownPredicateScanRule.ES_SCAN,
-                PushDownPredicateScanRule.META_SCAN,
-                PushDownPredicateScanRule.BINLOG_SCAN,
-                PushDownPredicateScanRule.TABLE_FUNCTION_TABLE_SCAN,
-                PushDownPredicateScanRule.VIEW_SCAN,
-                new PushDownPredicateAggRule(),
-                new PushDownPredicateWindowRule(),
-                new PushDownPredicateJoinRule(),
-                new PushDownJoinOnClauseRule(),
-                new PushDownPredicateProjectRule(),
-                new PushDownPredicateUnionRule(),
-                new PushDownPredicateExceptRule(),
-                new PushDownPredicateIntersectRule(),
-                new PushDownPredicateTableFunctionRule(),
-                new PushDownPredicateRepeatRule(),
+    public static final Rule PRUNE_COLUMNS_RULES = new CombinationRule(RuleType.GP_PRUNE_COLUMNS, ImmutableList.of(
+            new PruneScanColumnRule(),
+            new PruneHDFSScanColumnRule(),
+            new PruneProjectColumnsRule(),
+            new PruneFilterColumnsRule(),
+            new PruneUKFKGroupByKeysRule(), // Put this before PruneAggregateColumnsRule
+            new PruneAggregateColumnsRule(),
+            new PruneGroupByKeysRule(),
+            new PruneTopNColumnsRule(),
+            new PruneJoinColumnsRule(),
+            new PruneWindowColumnsRule(),
+            new PruneUnionColumnsRule(),
+            new PruneIntersectColumnsRule(),
+            new PruneExceptColumnsRule(),
+            new PruneRepeatColumnsRule(),
+            new PruneValuesColumnsRule(),
+            new PruneTableFunctionColumnRule(),
+            new PruneCTEConsumeColumnsRule()
+    ));
 
-                PushDownPredicateToExternalTableScanRule.MYSQL_SCAN,
-                PushDownPredicateToExternalTableScanRule.JDBC_SCAN,
-                PushDownPredicateToExternalTableScanRule.ODPS_SCAN,
-                new MergeTwoFiltersRule(),
-                new PushDownPredicateCTEConsumeRule()
-        ));
+    public static final Rule PUSH_DOWN_PREDICATE_RULES =
+            new CombinationRule(RuleType.GP_PUSH_DOWN_PREDICATE, ImmutableList.of(
+                    new CastToEmptyRule(),
+                    new PruneTrueFilterRule(),
+                    new PushDownPredicateCTEAnchor(),
+                    new PushDownPredicateScanRule(),
+                    new PushDownPredicateAggRule(),
+                    new PushDownPredicateWindowRule(),
+                    new PushDownPredicateJoinRule(),
+                    new PushDownJoinOnClauseRule(),
+                    new PushDownPredicateProjectRule(),
+                    new PushDownPredicateUnionRule(),
+                    new PushDownPredicateExceptRule(),
+                    new PushDownPredicateIntersectRule(),
+                    new PushDownPredicateTableFunctionRule(),
+                    new PushDownPredicateRepeatRule(),
 
-        REWRITE_RULES.put(RuleSetType.PUSH_DOWN_SUBQUERY, ImmutableList.of(
-                new MergeApplyWithTableFunction(),
-                new PushDownApplyLeftProjectRule(),
-                new PushDownApplyLeftRule()
-        ));
+                    new PushDownPredicateToExternalTableScanRule(),
+                    new MergeTwoFiltersRule(),
+                    new PushDownPredicateCTEConsumeRule()
+            ));
 
-        REWRITE_RULES.put(RuleSetType.SUBQUERY_REWRITE_COMMON, ImmutableList.of(
-                new PushDownApplyProjectRule(),
-                new PushDownApplyFilterRule(),
-                new PushDownApplyAggFilterRule(),
-                new PushDownApplyAggProjectFilterRule()
-        ));
+    public static final Rule PUSH_DOWN_SUBQUERY_RULES =
+            new CombinationRule(RuleType.GP_PUSH_DOWN_SUBQUERY, ImmutableList.of(
+                    new MergeApplyWithTableFunction(),
+                    new PushDownApplyLeftProjectRule(),
+                    new PushDownApplyLeftRule()
+            ));
 
-        REWRITE_RULES.put(RuleSetType.SUBQUERY_REWRITE_TO_WINDOW, ImmutableList.of(
-                new ScalarApply2AnalyticRule()
-        ));
+    public static final Rule SUBQUERY_REWRITE_COMMON_RULES =
+            new CombinationRule(RuleType.GP_SUBQUERY_REWRITE_COMMON, ImmutableList.of(
+                    new PushDownApplyProjectRule(),
+                    new PushDownApplyFilterRule(),
+                    new PushDownApplyAggFilterRule(),
+                    new PushDownApplyAggProjectFilterRule()
+            ));
 
-        REWRITE_RULES.put(RuleSetType.SUBQUERY_REWRITE_TO_JOIN, ImmutableList.of(
-                new QuantifiedApply2JoinRule(),
-                new ExistentialApply2JoinRule(),
-                new ScalarApply2JoinRule(),
-                new ExistentialApply2OuterJoinRule(),
-                new QuantifiedApply2OuterJoinRule()
-        ));
+    public static final Rule SUBQUERY_REWRITE_TO_WINDOW_RULES =
+            new CombinationRule(RuleType.GP_SUBQUERY_REWRITE_TO_WINDOW, ImmutableList.of(
+                    new ScalarApply2AnalyticRule()
+            ));
 
-        REWRITE_RULES.put(RuleSetType.PRUNE_ASSERT_ROW, ImmutableList.of(
-                new PruneAssertOneRowRule()
-        ));
+    public static final Rule SUBQUERY_REWRITE_TO_JOIN_RULES =
+            new CombinationRule(RuleType.GP_SUBQUERY_REWRITE_TO_JOIN, ImmutableList.of(
+                    new QuantifiedApply2JoinRule(),
+                    new ExistentialApply2JoinRule(),
+                    new ScalarApply2JoinRule(),
+                    new ExistentialApply2OuterJoinRule(),
+                    new QuantifiedApply2OuterJoinRule()
+            ));
 
-        REWRITE_RULES.put(RuleSetType.PRUNE_UKFK_JOIN, ImmutableList.of(
-                new PruneUKFKJoinRule()
-        ));
+    public static final Rule PRUNE_ASSERT_ROW_RULES =
+            new CombinationRule(RuleType.GP_PRUNE_ASSERT_ROW, ImmutableList.of(
+                    new PruneAssertOneRowRule()
+            ));
 
-        REWRITE_RULES.put(RuleSetType.AGGREGATE_REWRITE, ImmutableList.of(
-                new RewriteBitmapCountDistinctRule(),
-                new RewriteHllCountDistinctRule(),
-                new RewriteDuplicateAggregateFnRule(),
-                new RewriteSimpleAggToMetaScanRule(),
-                new RewriteSumByAssociativeRule(),
-                new RewriteCountIfFunction()
-        ));
+    public static final Rule PRUNE_UKFK_JOIN_RULES = new CombinationRule(RuleType.GP_PRUNE_UKFK_JOIN, ImmutableList.of(
+            new PruneUKFKJoinRule()
+    ));
 
-        REWRITE_RULES.put(RuleSetType.PRUNE_PROJECT, ImmutableList.of(
-                new PruneProjectRule(),
-                new PruneProjectEmptyRule(),
-                new MergeTwoProjectRule(),
-                new PushDownProjectToCTEAnchorRule()
-        ));
+    public static final Rule AGGREGATE_REWRITE_RULES =
+            new CombinationRule(RuleType.GP_AGGREGATE_REWRITE, ImmutableList.of(
+                    new RewriteBitmapCountDistinctRule(),
+                    new RewriteHllCountDistinctRule(),
+                    new RewriteDuplicateAggregateFnRule(),
+                    new RewriteSimpleAggToMetaScanRule(),
+                    new RewriteSumByAssociativeRule(),
+                    new RewriteCountIfFunction()
+            ));
 
-        REWRITE_RULES.put(RuleSetType.COLLECT_CTE, ImmutableList.of(
-                new CollectCTEProduceRule(),
-                new CollectCTEConsumeRule()
-        ));
+    public static final Rule PRUNE_PROJECT_RULES = new CombinationRule(RuleType.GP_PRUNE_PROJECT, ImmutableList.of(
+            new PruneProjectRule(),
+            new PruneProjectEmptyRule(),
+            new MergeTwoProjectRule(),
+            new PushDownProjectToCTEAnchorRule()
+    ));
 
-        REWRITE_RULES.put(RuleSetType.INLINE_CTE, ImmutableList.of(
-                new InlineOneCTEConsumeRule(),
-                new PruneCTEProduceRule()
-        ));
+    public static final Rule COLLECT_CTE_RULES = new CombinationRule(RuleType.GP_COLLECT_CTE, ImmutableList.of(
+            new CollectCTEProduceRule(),
+            new CollectCTEConsumeRule()
+    ));
 
-        REWRITE_RULES.put(RuleSetType.INTERSECT_REWRITE, ImmutableList.of(
-                new IntersectAddDistinctRule(),
-                new ReorderIntersectRule()
-        ));
+    public static final Rule INLINE_CTE_RULES = new CombinationRule(RuleType.GP_INLINE_CTE, ImmutableList.of(
+            new InlineOneCTEConsumeRule(),
+            new PruneCTEProduceRule()
+    ));
 
-        REWRITE_RULES.put(RuleSetType.SINGLE_TABLE_MV_REWRITE, ImmutableList.of(
-                AggregateScanRule.getInstance(),
-                OnlyScanRule.getInstance()
-        ));
+    public static final Rule INTERSECT_REWRITE_RULES =
+            new CombinationRule(RuleType.GP_INTERSECT_REWRITE, ImmutableList.of(
+                    new IntersectAddDistinctRule(),
+                    new ReorderIntersectRule()
+            ));
 
-        REWRITE_RULES.put(RuleSetType.MULTI_TABLE_MV_REWRITE, ImmutableList.of(
-                AggregateJoinRule.getInstance(),
-                OnlyJoinRule.getInstance(),
-                AggregateJoinPushDownRule.getInstance()
-        ));
+    public static final Rule SINGLE_TABLE_MV_REWRITE_RULES =
+            new CombinationRule(RuleType.GP_SINGLE_TABLE_MV_REWRITE, ImmutableList.of(
+                    AggregateScanRule.getInstance(),
+                    AggregateTimeSeriesRule.getInstance(),
+                    OnlyScanRule.getInstance()
+            ));
 
-        REWRITE_RULES.put(RuleSetType.ALL_MV_REWRITE, Stream.concat(
-                REWRITE_RULES.get(RuleSetType.MULTI_TABLE_MV_REWRITE).stream(),
-                REWRITE_RULES.get(RuleSetType.SINGLE_TABLE_MV_REWRITE).stream())
-                        .collect(Collectors.toList()));
+    public static final Rule MULTI_TABLE_MV_REWRITE_RULES =
+            new CombinationRule(RuleType.GP_MULTI_TABLE_MV_REWRITE, ImmutableList.of(
+                    AggregateJoinRule.getInstance(),
+                    OnlyJoinRule.getInstance(),
+                    AggregateJoinPushDownRule.getInstance()
+            ));
 
-        REWRITE_RULES.put(RuleSetType.PRUNE_EMPTY_OPERATOR, ImmutableList.of(
-                PruneEmptyScanRule.OLAP_SCAN,
-                PruneEmptyScanRule.HIVE_SCAN,
-                PruneEmptyScanRule.HUDI_SCAN,
-                PruneEmptyScanRule.ICEBERG_SCAN,
-                PruneEmptyScanRule.PAIMON_SCAN,
-                PruneEmptyScanRule.ODPS_SCAN,
-                PruneEmptyJoinRule.JOIN_LEFT_EMPTY,
-                PruneEmptyJoinRule.JOIN_RIGHT_EMPTY,
-                new PruneEmptyDirectRule(),
-                new PruneEmptyUnionRule(),
-                new PruneEmptyIntersectRule(),
-                new PruneEmptyExceptRule(),
-                new PruneEmptyWindowRule()
-        ));
+    public static final Rule ALL_MV_REWRITE_RULES = new CombinationRule(RuleType.GP_ALL_MV_REWRITE, ImmutableList.of(
+            AggregateJoinRule.getInstance(),
+            OnlyJoinRule.getInstance(),
+            AggregateJoinPushDownRule.getInstance(),
+            AggregateScanRule.getInstance(),
+            AggregateTimeSeriesRule.getInstance(),
+            OnlyScanRule.getInstance()
+    ));
 
-        REWRITE_RULES.put(RuleSetType.SHORT_CIRCUIT_SET, ImmutableList.of(
-                new PruneTrueFilterRule(),
-                new PushDownPredicateProjectRule(),
-                PushDownPredicateScanRule.OLAP_SCAN,
-                new CastToEmptyRule(),
-                new PruneProjectColumnsRule(),
-                PruneScanColumnRule.OLAP_SCAN,
-                new PruneProjectEmptyRule(),
-                new MergeTwoProjectRule(),
-                new PruneProjectRule(),
-                new PartitionPruneRule(),
-                new DistributionPruneRule()));
+    public static final Rule PRUNE_EMPTY_OPERATOR_RULES =
+            new CombinationRule(RuleType.GP_PRUNE_EMPTY_OPERATOR, ImmutableList.of(
+                    new PruneEmptyScanRule(),
+                    PruneEmptyJoinRule.JOIN_LEFT_EMPTY,
+                    PruneEmptyJoinRule.JOIN_RIGHT_EMPTY,
+                    new PruneEmptyDirectRule(),
+                    new PruneEmptyUnionRule(),
+                    new PruneEmptyIntersectRule(),
+                    new PruneEmptyExceptRule(),
+                    new PruneEmptyWindowRule()
+            ));
 
-        REWRITE_RULES.put(RuleSetType.FINE_GRAINED_RANGE_PREDICATE, ImmutableList.of(
-                FineGrainedRangePredicateRule.INSTANCE,
-                FineGrainedRangePredicateRule.PROJECTION_INSTANCE));
+    public static final Rule SHORT_CIRCUIT_SET_RULES =
+            new CombinationRule(RuleType.GP_SHORT_CIRCUIT_SET, ImmutableList.of(
+                    new PruneTrueFilterRule(),
+                    new PushDownPredicateProjectRule(),
+                    new PushDownPredicateScanRule(),
+                    new CastToEmptyRule(),
+                    new PruneProjectColumnsRule(),
+                    new PruneScanColumnRule(),
+                    new PruneProjectEmptyRule(),
+                    new MergeTwoProjectRule(),
+                    new PruneProjectRule(),
+                    new PartitionPruneRule(),
+                    new DistributionPruneRule()));
 
-        REWRITE_RULES.put(RuleSetType.ELIMINATE_GROUP_BY, ImmutableList.of(
-                EliminateGroupByConstantRule.INSTANCE
-        ));
+    public static final Rule FINE_GRAINED_RANGE_PREDICATE_RULES =
+            new CombinationRule(RuleType.GP_FINE_GRAINED_RANGE_PREDICATE, ImmutableList.of(
+                    FineGrainedRangePredicateRule.INSTANCE,
+                    FineGrainedRangePredicateRule.PROJECTION_INSTANCE));
 
-        REWRITE_RULES.put(RuleSetType.META_SCAN_REWRITE, ImmutableList.of(
-                new PushDownAggToMetaScanRule(),
-                new PushDownFlatJsonMetaToMetaScanRule(),
-                new RewriteSimpleAggToMetaScanRule(),
-                new MinMaxCountOptOnScanRule()
-        ));
-    }
+    public static final Rule ELIMINATE_OP_WITH_CONSTANT_RULES =
+            new CombinationRule(RuleType.GP_ELIMINATE_OP_WITH_CONSTANT, ImmutableList.of(
+                    EliminateGroupByConstantRule.INSTANCE,
+                    EliminateJoinWithConstantRule.ELIMINATE_JOIN_WITH_LEFT_SINGLE_VALUE_RULE,
+                    EliminateJoinWithConstantRule.ELIMINATE_JOIN_WITH_RIGHT_SINGLE_VALUE_RULE
+            ));
+
+    public static final Rule META_SCAN_REWRITE_RULES =
+            new CombinationRule(RuleType.GP_META_SCAN_REWRITE, ImmutableList.of(
+                    new PushDownAggToMetaScanRule(),
+                    new PushDownFlatJsonMetaToMetaScanRule(),
+                    new RewriteSimpleAggToMetaScanRule(),
+                    new RewriteSimpleAggToHDFSScanRule(),
+                    new MinMaxCountOptOnScanRule()
+            ));
 
     public RuleSet() {
         // Add common transform rule
@@ -480,7 +447,9 @@ public class RuleSet {
     }
 
     public void addMultiTableMvRewriteRule() {
-        transformRules.addAll(REWRITE_RULES.get(RuleSetType.MULTI_TABLE_MV_REWRITE));
+        transformRules.add(AggregateJoinRule.getInstance());
+        transformRules.add(OnlyJoinRule.getInstance());
+        transformRules.add(AggregateJoinPushDownRule.getInstance());
     }
 
     public List<Rule> getTransformRules() {
@@ -489,18 +458,6 @@ public class RuleSet {
 
     public List<Rule> getImplementRules() {
         return implementRules;
-    }
-
-    public static List<Rule> getRewriteRulesByType(RuleSetType type) {
-        return REWRITE_RULES.get(type);
-    }
-
-    public static List<Rule> getRewriteRulesByType(List<RuleSetType> types) {
-        List<Rule> allRules = Lists.newArrayList();
-        for (RuleSetType ruleSetType : types) {
-            allRules.addAll(REWRITE_RULES.get(ruleSetType));
-        }
-        return allRules;
     }
 
     public void addRealtimeMVRules() {
@@ -529,7 +486,7 @@ public class RuleSet {
     }
 
     public void addSingleTableMvRewriteRule() {
-        transformRules.addAll(getRewriteRulesByType(RuleSetType.SINGLE_TABLE_MV_REWRITE));
+        transformRules.addAll(SINGLE_TABLE_MV_REWRITE_RULES.predecessorRules());
     }
 
 }

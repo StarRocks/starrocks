@@ -18,7 +18,7 @@ import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Queues;
 import com.google.common.collect.Sets;
 import com.starrocks.qe.GlobalVariable;
-import com.starrocks.system.BackendCoreStat;
+import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TUniqueId;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -175,7 +175,7 @@ public class PipelineDriverAllocator {
         }
 
         int dop = (limit - curNumAllocatedDrivers) / numFragments;
-        dop = Math.min(dop, BackendCoreStat.getDefaultDOP());
+        dop = Math.min(dop, BackendResourceStat.getInstance().getDefaultDOP());
         dop = Math.max(1, dop);
 
         return dop;

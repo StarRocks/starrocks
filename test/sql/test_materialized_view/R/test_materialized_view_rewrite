@@ -558,7 +558,7 @@ from emps right semi join depts using (deptno);
 -- result:
 -- !result
 refresh materialized view mv_right_semi with sync mode;
-explain select deptno 
+[UC]explain select deptno
 from emps right semi join depts using (deptno);
 select deptno 
 from emps right semi join depts using (deptno) order by deptno;
@@ -577,7 +577,7 @@ from emps right anti join depts using (deptno);
 -- result:
 -- !result
 refresh materialized view mv_right_anti with sync mode;
-explain select depts.deptno
+[UC]explain select depts.deptno
 from emps right anti join depts using (deptno);
 select depts.deptno 
 from emps right anti join depts using (deptno);
@@ -621,7 +621,7 @@ group by user_id, user_name;
 -- result:
 -- !result
 refresh materialized view agg_count_mv2 with sync mode;
-explain select user_id, count(1) as cnt
+[UC]explain select user_id, count(1) as cnt
 from user_tags
 group by user_id;
 CREATE TABLE `user_tags_2` (
@@ -636,7 +636,7 @@ PARTITION BY RANGE(`time`)
 DISTRIBUTED BY HASH(`time`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1",
-"enable_persistent_index" = "false",
+"enable_persistent_index" = "true",
 "replicated_storage" = "true",
 "compression" = "LZ4"
 );
@@ -675,7 +675,7 @@ group by user_id, user_name;
 -- result:
 -- !result
 refresh materialized view agg_count_mv4 with sync mode;
-explain select user_id, count(1) as cnt
+[UC]explain select user_id, count(1) as cnt
 from user_tags_2
 group by user_id;
 create materialized view agg_count_mv5
@@ -687,7 +687,7 @@ group by user_id, user_name;
 -- result:
 -- !result
 refresh materialized view agg_count_mv5 with sync mode;
-explain select user_id, user_name, count(1) as cnt
+[UC]explain select user_id, user_name, count(1) as cnt
 from user_tags_2
 group by user_id, user_name;
 -- name: test_count_rollup_with_empty_table

@@ -17,7 +17,6 @@
 #include <atomic>
 #include <memory>
 #include <mutex>
-#include <optional>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -26,6 +25,8 @@
 #include "exec/hash_join_components.h"
 #include "exec/pipeline/hashjoin/hash_join_probe_operator.h"
 #include "exec/spill/partition.h"
+#include "exec/spill/spill_components.h"
+#include "exec/spill/spiller_factory.h"
 #include "runtime/runtime_state.h"
 #include "util/runtime_profile.h"
 
@@ -79,7 +80,7 @@ public:
     void set_probe_spiller(std::shared_ptr<spill::Spiller> spiller) { _probe_spiller = std::move(spiller); }
 
 private:
-    bool spilled() const { return _join_builder->spiller()->spilled(); }
+    bool spilled() const;
 
     SpillableHashJoinProbeOperator* as_mutable() const { return const_cast<SpillableHashJoinProbeOperator*>(this); }
 
@@ -145,6 +146,8 @@ public:
 
     Status prepare(RuntimeState* state) override;
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
+
+    bool support_event_scheduler() const override { return false; }
 
 private:
     std::shared_ptr<spill::SpilledOptions> _spill_options;

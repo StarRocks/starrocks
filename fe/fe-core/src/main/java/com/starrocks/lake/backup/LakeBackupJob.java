@@ -82,7 +82,7 @@ public class LakeBackupJob extends BackupJob {
     protected void checkBackupTables(Database db) {
         for (TableRef tableRef : tableRefs) {
             String tblName = tableRef.getName().getTbl();
-            Table tbl = db.getTable(tblName);
+            Table tbl = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tblName);
             if (tbl == null) {
                 status = new Status(Status.ErrCode.NOT_FOUND, "table " + tblName + " does not exist");
                 return;
@@ -124,7 +124,7 @@ public class LakeBackupJob extends BackupJob {
             lockRequests.put(snapshotInfo, request);
             unfinishedTaskIds.put(tablet.getId(), 1L);
         } catch (Exception e) {
-            LOG.error(e.getMessage());
+            LOG.error(e.getMessage(), e);
             status = new Status(Status.ErrCode.COMMON_ERROR,
                     "failed to choose replica to make snapshot for tablet " + tablet.getId()
                             + ". visible version: " + visibleVersion);

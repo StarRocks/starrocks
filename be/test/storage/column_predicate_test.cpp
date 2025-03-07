@@ -18,7 +18,6 @@
 
 #include "gtest/gtest.h"
 #include "storage/chunk_helper.h"
-#include "storage/column_or_predicate.h"
 #include "testutil/assert.h"
 
 namespace starrocks {
@@ -1641,6 +1640,77 @@ TEST(ColumnPredicateTest, test_in) {
 }
 
 // NOLINTNEXTLINE
+TEST(ColumnPredicateTest, test_dict_in) {
+    {
+        std::unique_ptr<ColumnPredicate> p(
+                new_dictionary_code_in_predicate(get_type_info(TYPE_INT), 0, {3, 4, 6, 8, 10}, 200));
+        auto c = ChunkHelper::column_from_field_type(TYPE_INT, true);
+        c->append_datum(Datum(1));
+        c->append_datum(Datum(2));
+        c->append_datum(Datum(3));
+        (void)c->append_nulls(1);
+        c->append_datum(Datum(4));
+        c->append_datum(Datum(5));
+        c->append_datum(Datum(3));
+        c->append_datum(Datum(4));
+
+        ASSERT_EQ(PredicateType::kInList, p->type());
+        ASSERT_FALSE(p->can_vectorized());
+
+        // ---------------------------------------------
+        // evaluate()
+        // ---------------------------------------------
+        std::vector<uint8_t> buff(8);
+        p->evaluate(c.get(), buff.data(), 0, 8);
+        ASSERT_EQ("0,0,1,0,1,0,1,1", to_string(buff));
+
+        buff.assign(8, 0);
+        p->evaluate(c.get(), buff.data(), 1, 3);
+        ASSERT_EQ("0,0,1,0,0,0,0,0", to_string(buff));
+
+        // ---------------------------------------------
+        // evaluate_and()
+        // ---------------------------------------------
+        buff.assign(8, 1);
+        p->evaluate_and(c.get(), buff.data(), 0, 8);
+        ASSERT_EQ("0,0,1,0,1,0,1,1", to_string(buff));
+
+        p->evaluate_and(c.get(), buff.data(), 1, 3);
+        ASSERT_EQ("0,0,1,0,1,0,1,1", to_string(buff));
+
+        buff.assign(8, 0);
+        p->evaluate_and(c.get(), buff.data(), 0, 8);
+        ASSERT_EQ("0,0,0,0,0,0,0,0", to_string(buff));
+
+        buff[3] = 1;
+        p->evaluate_and(c.get(), buff.data(), 0, 8);
+        ASSERT_EQ("0,0,0,0,0,0,0,0", to_string(buff));
+
+        buff[2] = 1;
+        p->evaluate_and(c.get(), buff.data(), 2, 4);
+        ASSERT_EQ("0,0,1,0,0,0,0,0", to_string(buff));
+
+        // ---------------------------------------------
+        // evaluate_or()
+        // ---------------------------------------------
+        buff.assign(8, 0);
+        p->evaluate_or(c.get(), buff.data(), 0, 8);
+        ASSERT_EQ("0,0,1,0,1,0,1,1", to_string(buff));
+
+        p->evaluate_or(c.get(), buff.data(), 2, 4);
+        ASSERT_EQ("0,0,1,0,1,0,1,1", to_string(buff));
+
+        buff.assign(8, 1);
+        p->evaluate_or(c.get(), buff.data(), 0, 8);
+        ASSERT_EQ("1,1,1,1,1,1,1,1", to_string(buff));
+
+        buff[0] = 0;
+        p->evaluate_or(c.get(), buff.data(), 2, 4);
+        ASSERT_EQ("0,1,1,1,1,1,1,1", to_string(buff));
+    }
+}
+
+// NOLINTNEXTLINE
 TEST(ColumnPredicateTest, test_no_in) {
     {
         std::unique_ptr<ColumnPredicate> p(new_column_not_in_predicate(get_type_info(TYPE_INT), 0, {"3", "4"}));
@@ -1876,75 +1946,6 @@ TEST(ColumnPredicateTest, test_not_null) {
 
         p->evaluate_or(c.get(), buff.data(), 2, 4);
         ASSERT_EQ("1,1,1,0,1", to_string(buff));
-
-        buff.assign(5, 1);
-        p->evaluate_or(c.get(), buff.data(), 0, 5);
-        ASSERT_EQ("1,1,1,1,1", to_string(buff));
-
-        p->evaluate_or(c.get(), buff.data(), 2, 4);
-        ASSERT_EQ("1,1,1,1,1", to_string(buff));
-    }
-}
-
-// NOLINTNEXTLINE
-TEST(ColumnPredicateTest, test_or) {
-    {
-        std::unique_ptr<ColumnPredicate> p1(new_column_eq_predicate(get_type_info(TYPE_INT), 0, "100"));
-        std::unique_ptr<ColumnPredicate> p2(new_column_eq_predicate(get_type_info(TYPE_INT), 0, "200"));
-
-        auto p = std::make_unique<ColumnOrPredicate>(get_type_info(TYPE_INT), 0);
-        p->add_child(p1.get());
-        p->add_child(p2.get());
-
-        auto c = ChunkHelper::column_from_field_type(TYPE_INT, true);
-        c->append_datum(10);
-        c->append_datum(100);
-        c->append_datum(200);
-        (void)c->append_nulls(2);
-
-        ASSERT_EQ(PredicateType::kOr, p->type());
-        ASSERT_FALSE(p->can_vectorized());
-
-        // ---------------------------------------------
-        // evaluate()
-        // ---------------------------------------------
-        std::vector<uint8_t> buff(5);
-        p->evaluate(c.get(), buff.data(), 0, 5);
-        ASSERT_EQ("0,1,1,0,0", to_string(buff));
-
-        p->evaluate(c.get(), buff.data(), 1, 3);
-        ASSERT_EQ("0,1,1,0,0", to_string(buff));
-
-        // ---------------------------------------------
-        // evaluate_and()
-        // ---------------------------------------------
-        buff.assign(5, 1);
-        p->evaluate_and(c.get(), buff.data(), 0, 5);
-        ASSERT_EQ("0,1,1,0,0", to_string(buff));
-
-        p->evaluate_and(c.get(), buff.data(), 1, 3);
-        ASSERT_EQ("0,1,1,0,0", to_string(buff));
-
-        buff.assign(5, 0);
-        p->evaluate_and(c.get(), buff.data(), 0, 5);
-        ASSERT_EQ("0,0,0,0,0", to_string(buff));
-
-        buff[2] = 1;
-        p->evaluate_and(c.get(), buff.data(), 0, 5);
-        ASSERT_EQ("0,0,1,0,0", to_string(buff));
-
-        p->evaluate_and(c.get(), buff.data(), 2, 4);
-        ASSERT_EQ("0,0,1,0,0", to_string(buff));
-
-        // ---------------------------------------------
-        // evaluate_or()
-        // ---------------------------------------------
-        buff.assign(5, 0);
-        p->evaluate_or(c.get(), buff.data(), 0, 5);
-        ASSERT_EQ("0,1,1,0,0", to_string(buff));
-
-        p->evaluate_or(c.get(), buff.data(), 2, 4);
-        ASSERT_EQ("0,1,1,0,0", to_string(buff));
 
         buff.assign(5, 1);
         p->evaluate_or(c.get(), buff.data(), 0, 5);

@@ -23,18 +23,14 @@ import com.starrocks.analysis.OrderByElement;
 import com.starrocks.analysis.RedirectStatus;
 import com.starrocks.analysis.TableName;
 import com.starrocks.catalog.Column;
-import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Replica;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.proc.LakeTabletsProcDir;
 import com.starrocks.common.proc.LocalTabletsProcDir;
 import com.starrocks.common.util.OrderByPair;
-import com.starrocks.common.util.concurrent.lock.LockType;
-import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSetMetaData;
-import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.parser.NodePosition;
 
 import java.util.ArrayList;
@@ -62,6 +58,8 @@ public class ShowTabletStmt extends ShowStmt {
     private ArrayList<OrderByPair> orderByPairs;
 
     private boolean isShowSingleTablet;
+
+    private Table table;
 
     public ShowTabletStmt(TableName dbTableName, long tabletId, NodePosition pos) {
         this(dbTableName, tabletId, null, null, null, null, pos);
@@ -196,6 +194,10 @@ public class ShowTabletStmt extends ShowStmt {
         return limitElement;
     }
 
+    public void setTable(Table table) {
+        this.table = table;
+    }
+
     @Override
     public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
         return visitor.visitShowTabletStatement(this, context);
@@ -206,26 +208,13 @@ public class ShowTabletStmt extends ShowStmt {
             return SINGLE_TABLET_TITLE_NAMES;
         }
 
-        Database db = GlobalStateMgr.getCurrentState().getDb(dbName);
-        if (db == null) {
+        if (table == null || !table.isNativeTableOrMaterializedView()) {
             return ImmutableList.of();
         }
-
-        Locker locker = new Locker();
-        locker.lockDatabase(db, LockType.READ);
-        try {
-            Table table = db.getTable(tableName);
-            if (table == null || !table.isNativeTableOrMaterializedView()) {
-                return ImmutableList.of();
-            }
-
-            if (table.isCloudNativeTableOrMaterializedView()) {
-                return LakeTabletsProcDir.TITLE_NAMES;
-            } else {
-                return LocalTabletsProcDir.TITLE_NAMES;
-            }
-        } finally {
-            locker.unLockDatabase(db, LockType.READ);
+        if (table.isCloudNativeTableOrMaterializedView()) {
+            return LakeTabletsProcDir.TITLE_NAMES;
+        } else {
+            return LocalTabletsProcDir.TITLE_NAMES;
         }
     }
 

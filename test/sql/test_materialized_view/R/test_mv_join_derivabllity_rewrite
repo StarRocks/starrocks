@@ -41,7 +41,7 @@ on lo_custkey = c_custkey;
 
 refresh materialized view mv_left_outer with sync mode;
 
-explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, lo_custkey, c_name
 from lineorder left outer join customer
 on lo_custkey = c_custkey
 where c_name = 'name_1';
@@ -56,7 +56,7 @@ where c_name = 'name_1';
 -- result:
 10001	1	10	1000	1	name_1
 
-explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
 from lineorder left outer join customer
 on lo_custkey = c_custkey
 where c_name = 'name_1';
@@ -84,7 +84,7 @@ refresh materialized view mv_left_outer_2 with sync mode;
 -- result:
 -- !result
 
-explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
 from lineorder inner join customer
 on lo_custkey = c_custkey;
 -- result:
@@ -102,7 +102,7 @@ on lo_custkey = c_custkey order by lo_orderkey;
 -- !result
 
 
-explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue, c_custkey, c_name
 from lineorder inner join customer
 on lo_custkey = c_custkey
 where c_name = 'name_1' and c_custkey = 1;
@@ -117,7 +117,7 @@ where c_name = 'name_1' and c_custkey = 1;
 -- result:
 10001	1	10	1000	1	name_1
 
-explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_revenue
 from lineorder left anti join customer
 on lo_custkey = c_custkey;
 -- result:
@@ -141,7 +141,7 @@ select count() from mv_left_outer_agg;
 -- result:
 4
 
-explain select lo_orderkey, c_name, sum(lo_revenue) as total_revenue
+[UC]explain select lo_orderkey, c_name, sum(lo_revenue) as total_revenue
 from lineorder left outer join customer
 on lo_custkey = c_custkey
 where c_name = 'name_1'
@@ -176,7 +176,7 @@ select count() from mv_right_outer;
 -- result:
 7
 
-explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
 from lineorder right outer join customer
 on lo_custkey = c_custkey
 where lo_orderkey = 10001;
@@ -192,7 +192,7 @@ where lo_orderkey = 10001;
 10001	1	10	1	1	name_1
 10001	2	10	1	1	name_1
 
-explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
 from lineorder inner join customer
 on lo_custkey = c_custkey;
 -- result:
@@ -211,7 +211,7 @@ order by lo_orderkey, lo_linenumber;
 10003	1	30	3	3	name_3
 10003	1	30	3	3	name_3
 
-explain select c_custkey, c_name
+[UC]explain select c_custkey, c_name
 from lineorder right anti join customer
 on lo_custkey = c_custkey;
 -- result:
@@ -235,7 +235,7 @@ select count() from mv_right_outer_2;
 -- result:
 4
 
-explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name, c_id
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name, c_id
 from lineorder inner join customer
 on lo_custkey = c_custkey and lo_linenumber = c_id;
 -- result:
@@ -285,7 +285,7 @@ group by lo_orderkey, lo_custkey;
 -- result:
 10001	1	2400
 
-explain select lo_orderkey, lo_custkey, sum(lo_revenue) as total_revenue
+[UC]explain select lo_orderkey, lo_custkey, sum(lo_revenue) as total_revenue
 from lineorder inner join customer
 on lo_custkey = c_custkey
 group by lo_orderkey, lo_custkey;
@@ -322,7 +322,7 @@ select count() from mv_inner_join;
 -- result:
 6
 
-explain select lo_orderkey, lo_linenumber, lo_quantity
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity
 from lineorder left semi join customer
 on lo_custkey = c_custkey;
 -- result:
@@ -372,7 +372,7 @@ select count() from mv_inner_join_2;
 6
 
 
-explain select lo_orderkey, lo_linenumber, lo_quantity
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity
 from lineorder left semi join customer_primary
 on lo_custkey = c_custkey;
 -- result:
@@ -423,7 +423,7 @@ select count() from mv_inner_join_3;
 6
 
 
-explain select lo_orderkey, lo_linenumber, lo_quantity
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity
 from lineorder left semi join customer_unique
 on lo_custkey = c_custkey;
 -- result:
@@ -457,7 +457,7 @@ select count() from mv_inner_join_4;
 -- result:
 6
 
-explain select lo_orderkey, lo_linenumber, lo_quantity
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity
 from customer right semi join lineorder
 on lo_custkey = c_custkey;
 -- result:
@@ -491,7 +491,7 @@ select count() from mv_inner_join_5;
 -- result:
 6
 
-explain select lo_orderkey, lo_linenumber, lo_quantity
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity
 from customer_primary right semi join lineorder
 on lo_custkey = c_custkey;
 -- result:
@@ -526,7 +526,7 @@ select count() from mv_inner_join_6;
 6
 
 
-explain select lo_orderkey, lo_linenumber, lo_quantity
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity
 from customer_unique right semi join lineorder
 on lo_custkey = c_custkey;
 -- result:
@@ -560,7 +560,7 @@ select count() from mv_full_outer_join;
 -- result:
 8
 
-explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
 from lineorder left outer join customer
 on lo_custkey = c_custkey;
 -- result:
@@ -578,7 +578,7 @@ select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name fr
 10004	1	40	4000	NULL	NULL
 
 
-explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
 from lineorder right outer join customer
 on lo_custkey = c_custkey;
 -- result:
@@ -600,7 +600,7 @@ NULL	NULL	NULL	NULL	NULL	name_null
 
 
 
-explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
+[UC]explain select lo_orderkey, lo_linenumber, lo_quantity, lo_custkey, c_custkey, c_name
 from lineorder inner join customer
 on lo_custkey = c_custkey;
 -- result:

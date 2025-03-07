@@ -14,20 +14,44 @@
 
 package com.starrocks.datacache;
 
-import com.starrocks.thrift.TDataCacheOptions;
-
 public class DataCacheOptions {
+    private final boolean enablePopulate;
+    // todo remove later
     private final int priority;
 
-    public DataCacheOptions(int priority) {
-        this.priority = priority;
+    private DataCacheOptions(DataCacheOptionsBuilder builder) {
+        this.enablePopulate = builder.enablePopulate;
+        this.priority = builder.priority;
     }
 
     public int getPriority() {
         return priority;
     }
 
-    public void toThrift(TDataCacheOptions tDataCacheOptions) {
-        tDataCacheOptions.setPriority(priority);
+    public boolean isEnablePopulate() {
+        return enablePopulate;
+    }
+
+    public static class DataCacheOptionsBuilder {
+        private boolean enablePopulate = false;
+        private int priority = 0;
+
+        public static DataCacheOptionsBuilder builder() {
+            return new DataCacheOptionsBuilder();
+        }
+
+        public DataCacheOptionsBuilder setPriority(int priority) {
+            this.priority = priority;
+            return this;
+        }
+
+        public DataCacheOptionsBuilder setEnablePopulate(boolean enablePopulate) {
+            this.enablePopulate = enablePopulate;
+            return this;
+        }
+
+        public DataCacheOptions build() {
+            return new DataCacheOptions(this);
+        }
     }
 }

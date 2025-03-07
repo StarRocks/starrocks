@@ -296,10 +296,9 @@ Status UnionNode::_move_const_chunk(ChunkPtr& dest_chunk) {
 void UnionNode::_clone_column(ChunkPtr& dest_chunk, const ColumnPtr& src_column, const SlotDescriptor* dest_slot,
                               size_t row_count) {
     if (src_column->is_nullable() || !dest_slot->is_nullable()) {
-        dest_chunk->append_column(src_column->clone_shared(), dest_slot->id());
+        dest_chunk->append_column(src_column->clone(), dest_slot->id());
     } else {
-        ColumnPtr nullable_column =
-                NullableColumn::create(src_column->clone_shared(), NullColumn::create(row_count, 0));
+        ColumnPtr nullable_column = NullableColumn::create(src_column->clone(), NullColumn::create(row_count, 0));
         dest_chunk->append_column(nullable_column, dest_slot->id());
     }
 }
@@ -320,16 +319,17 @@ void UnionNode::_move_column(ChunkPtr& dest_chunk, ColumnPtr& src_column, const 
             auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(src_column);
             // Note: we must create a new column every time here,
             // because VectorizedLiteral always return a same shared_ptr and we will modify it later.
-            ColumnPtr new_column = ColumnHelper::create_column(dest_slot->type(), dest_slot->is_nullable());
+            MutableColumnPtr new_column = ColumnHelper::create_column(dest_slot->type(), dest_slot->is_nullable());
             new_column->append(*const_column->data_column(), 0, 1);
             new_column->assign(row_count, 0);
             dest_chunk->append_column(std::move(new_column), dest_slot->id());
         } else {
             if (dest_slot->is_nullable()) {
-                ColumnPtr nullable_column = NullableColumn::create(src_column, NullColumn::create(row_count, 0));
+                MutableColumnPtr nullable_column = NullableColumn::create(std::move(src_column)->as_mutable_ptr(),
+                                                                          NullColumn::create(row_count, 0));
                 dest_chunk->append_column(std::move(nullable_column), dest_slot->id());
             } else {
-                dest_chunk->append_column(src_column, dest_slot->id());
+                dest_chunk->append_column(std::move(src_column), dest_slot->id());
             }
         }
     }
@@ -420,12 +420,18 @@ pipeline::OpFactories UnionNode::decompose_to_pipeline(pipeline::PipelineBuilder
         this->init_runtime_filter_for_operator(operators_list[i].back().get(), context, rc_rf_probe_collector);
     }
 
+    if (limit() != -1) {
+        for (size_t i = 0; i < operators_list.size(); ++i) {
+            operators_list[i].emplace_back(
+                    std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
+        }
+    }
+
     auto final_operators = context->maybe_gather_pipelines_to_one(runtime_state(), id(), operators_list);
     if (limit() != -1) {
         final_operators.emplace_back(
                 std::make_shared<LimitOperatorFactory>(context->next_operator_id(), id(), limit()));
     }
-
     return final_operators;
 }
 

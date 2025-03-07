@@ -77,10 +77,25 @@ public class CaseWhenOperator extends CallOperator {
         return hasElse;
     }
 
+    /**
+     * Remove the ELSE-clause, but not set the hasElse state
+     */
+    public void removeElseClause() {
+        Preconditions.checkState(hasElse);
+        hasElse = false;
+        arguments.remove(arguments.size() - 1);
+    }
+
     // must after call hasElse
     public void setElseClause(ScalarOperator elseClause) {
         Preconditions.checkState(hasElse);
         arguments.set(arguments.size() - 1, elseClause);
+    }
+
+    public void addElseClause(ScalarOperator elseClause) {
+        Preconditions.checkState(!hasElse);
+        hasElse = true;
+        arguments.add(elseClause);
     }
 
     // must after call hasCase

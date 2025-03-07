@@ -27,6 +27,7 @@ import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -50,6 +51,8 @@ public class LakeTableCleanerTest {
 
     @Before
     public void setup() {
+        UtFrameUtils.mockInitWarehouseEnv();
+
         new MockUp<GlobalStateMgr>() {
             @Mock
             public StarOSAgent getStarOSAgent() {

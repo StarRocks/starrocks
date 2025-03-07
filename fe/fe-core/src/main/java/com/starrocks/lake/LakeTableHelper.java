@@ -20,6 +20,7 @@ import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.starrocks.alter.AlterJobV2Builder;
 import com.starrocks.alter.LakeTableAlterJobV2Builder;
+import com.starrocks.alter.LakeTableRollupBuilder;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -34,6 +35,7 @@ import com.starrocks.rpc.BrpcProxy;
 import com.starrocks.rpc.LakeService;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.thrift.TNetworkAddress;
 import com.starrocks.transaction.TransactionState;
@@ -78,6 +80,11 @@ public class LakeTableHelper {
         return new LakeTableAlterJobV2Builder(table);
     }
 
+    static AlterJobV2Builder rollUp(OlapTable table) {
+        Preconditions.checkState(table.isCloudNativeTableOrMaterializedView());
+        return new LakeTableRollupBuilder(table);
+    }
+
     static boolean removeShardRootDirectory(ShardInfo shardInfo) {
         DropTableRequest request = new DropTableRequest();
         final String path = shardInfo.getFilePath().getFullPath();
@@ -104,7 +111,7 @@ public class LakeTableHelper {
         }
     }
 
-    static Optional<ShardInfo> getAssociatedShardInfo(PhysicalPartition partition) throws StarClientException {
+    static Optional<ShardInfo> getAssociatedShardInfo(PhysicalPartition partition, long warehouseId) throws StarClientException {
         List<MaterializedIndex> allIndices = partition.getMaterializedIndices(MaterializedIndex.IndexExtState.ALL);
         for (MaterializedIndex materializedIndex : allIndices) {
             List<Tablet> tablets = materializedIndex.getTablets();
@@ -116,8 +123,11 @@ public class LakeTableHelper {
                 if (GlobalStateMgr.isCheckpointThread()) {
                     throw new RuntimeException("Cannot call getShardInfo in checkpoint thread");
                 }
+                WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+                long workerGroupId = warehouseManager.selectWorkerGroupByWarehouseId(warehouseId)
+                        .orElse(StarOSAgent.DEFAULT_WORKER_GROUP_ID);
                 ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent().getShardInfo(tablet.getShardId(),
-                        StarOSAgent.DEFAULT_WORKER_GROUP_ID);
+                        workerGroupId);
 
                 return Optional.of(shardInfo);
             } catch (StarClientException e) {
@@ -130,10 +140,10 @@ public class LakeTableHelper {
         return Optional.empty();
     }
 
-    static boolean removePartitionDirectory(Partition partition) throws StarClientException {
+    static boolean removePartitionDirectory(Partition partition, long warehouseId) throws StarClientException {
         boolean ret = true;
         for (PhysicalPartition subPartition : partition.getSubPartitions()) {
-            ShardInfo shardInfo = getAssociatedShardInfo(subPartition).orElse(null);
+            ShardInfo shardInfo = getAssociatedShardInfo(subPartition, warehouseId).orElse(null);
             if (shardInfo == null) {
                 LOG.info("Skipped remove directory of empty partition {}", subPartition.getId());
                 continue;
@@ -150,12 +160,13 @@ public class LakeTableHelper {
         return ret;
     }
 
-    public static boolean isSharedPartitionDirectory(PhysicalPartition partition) throws StarClientException {
-        ShardInfo shardInfo = getAssociatedShardInfo(partition).orElse(null);
+    public static boolean isSharedPartitionDirectory(PhysicalPartition physicalPartition, long warehouseId)
+            throws StarClientException {
+        ShardInfo shardInfo = getAssociatedShardInfo(physicalPartition, warehouseId).orElse(null);
         if (shardInfo == null) {
             return false;
         }
-        return isSharedDirectory(shardInfo.getFilePath().getFullPath(), partition.getId());
+        return isSharedDirectory(shardInfo.getFilePath().getFullPath(), physicalPartition.getId());
     }
 
     /**
@@ -167,8 +178,8 @@ public class LakeTableHelper {
      *
      * @return true if the directory is a shared directory, false otherwise
      */
-    public static boolean isSharedDirectory(String path, long partitionId) {
-        return !path.endsWith(String.format("/%d", partitionId));
+    public static boolean isSharedDirectory(String path, long physicalPartitionId) {
+        return !path.endsWith(String.format("/%d", physicalPartitionId));
     }
 
     /**
@@ -197,11 +208,13 @@ public class LakeTableHelper {
     }
 
     public static boolean supportCombinedTxnLog(TransactionState.LoadJobSourceType sourceType) {
-        return RunMode.isSharedDataMode() && Config.lake_use_combined_txn_log && hasSingleOlapTableSink(sourceType);
+        return RunMode.isSharedDataMode() && Config.lake_use_combined_txn_log && isLoadingTransaction(sourceType);
     }
 
-    private static boolean hasSingleOlapTableSink(TransactionState.LoadJobSourceType sourceType) {
+    private static boolean isLoadingTransaction(TransactionState.LoadJobSourceType sourceType) {
         return sourceType == TransactionState.LoadJobSourceType.BACKEND_STREAMING ||
-                sourceType == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK;
+                sourceType == TransactionState.LoadJobSourceType.ROUTINE_LOAD_TASK ||
+                sourceType == TransactionState.LoadJobSourceType.INSERT_STREAMING ||
+                sourceType == TransactionState.LoadJobSourceType.BATCH_LOAD_JOB;
     }
 }

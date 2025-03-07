@@ -22,16 +22,14 @@
 
 namespace starrocks {
 
-namespace stream_load {
-class OlapTableSink;
-}
+class AsyncDataSink;
 
 namespace pipeline {
 class OlapTableSinkOperator final : public Operator {
 public:
     OlapTableSinkOperator(OperatorFactory* factory, int32_t id, int32_t plan_node_id, int32_t driver_sequence,
-                          int32_t sender_id, starrocks::stream_load::OlapTableSink* sink,
-                          FragmentContext* const fragment_ctx, std::atomic<int32_t>& num_sinkers)
+                          int32_t sender_id, starrocks::AsyncDataSink* sink, FragmentContext* const fragment_ctx,
+                          std::atomic<int32_t>& num_sinkers)
             : Operator(factory, id, "olap_table_sink", plan_node_id, false, driver_sequence),
               _sink(sink),
               _fragment_ctx(fragment_ctx),
@@ -61,7 +59,7 @@ public:
     Status push_chunk(RuntimeState* state, const ChunkPtr& chunk) override;
 
 private:
-    starrocks::stream_load::OlapTableSink* _sink;
+    starrocks::AsyncDataSink* _sink;
     FragmentContext* const _fragment_ctx;
     std::atomic<int32_t>& _num_sinkers;
 
@@ -69,7 +67,6 @@ private:
     mutable bool _is_open_done = false;
     int32_t _sender_id;
     bool _is_cancelled = false;
-    bool _is_audit_report_done = true;
 
     // temporarily save chunk during automatic partition creation
     mutable ChunkPtr _automatic_partition_chunk;
@@ -79,9 +76,9 @@ class OlapTableSinkOperatorFactory final : public OperatorFactory {
 public:
     OlapTableSinkOperatorFactory(int32_t id, starrocks::DataSink* sink, FragmentContext* const fragment_ctx,
                                  int32_t start_sender_id, size_t tablet_sink_dop,
-                                 std::vector<std::unique_ptr<starrocks::stream_load::OlapTableSink>>& tablet_sinks)
+                                 std::vector<std::unique_ptr<starrocks::AsyncDataSink>>& tablet_sinks)
             : OperatorFactory(id, "olap_table_sink", Operator::s_pseudo_plan_node_id_for_final_sink),
-              _sink0(down_cast<starrocks::stream_load::OlapTableSink*>(sink)),
+              _sink0(down_cast<starrocks::AsyncDataSink*>(sink)),
               _fragment_ctx(fragment_ctx),
               _cur_sender_id(start_sender_id),
               _sinks(std::move(tablet_sinks)) {}
@@ -96,11 +93,12 @@ public:
 
 private:
     void _increment_num_sinkers_no_barrier() { _num_sinkers.fetch_add(1, std::memory_order_relaxed); }
-    starrocks::stream_load::OlapTableSink* _sink0;
+
+    starrocks::AsyncDataSink* _sink0;
     FragmentContext* const _fragment_ctx;
     std::atomic<int32_t> _num_sinkers = 0;
     int32_t _cur_sender_id;
-    std::vector<std::unique_ptr<starrocks::stream_load::OlapTableSink>> _sinks;
+    std::vector<std::unique_ptr<starrocks::AsyncDataSink>> _sinks;
 };
 
 } // namespace pipeline

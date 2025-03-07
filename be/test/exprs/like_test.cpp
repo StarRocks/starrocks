@@ -16,8 +16,10 @@
 #include <gtest/gtest.h>
 
 #include "butil/time.h"
+#include "exprs/function_call_expr.h"
 #include "exprs/like_predicate.h"
 #include "exprs/mock_vectorized_expr.h"
+#include "storage/rowset/bloom_filter.h"
 
 namespace starrocks {
 
@@ -49,8 +51,8 @@ TEST_F(LikeTest, startConstPatternLike) {
         str->append("test" + std::to_string(j));
     }
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -88,8 +90,8 @@ TEST_F(LikeTest, endConstPatternLike) {
         null->append(j % 2 == 0);
     }
 
-    columns.push_back(NullableColumn::create(str, null));
-    columns.push_back(pattern);
+    columns.push_back(NullableColumn::create(std::move(str), std::move(null)));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -132,8 +134,8 @@ TEST_F(LikeTest, substringConstPatternLike) {
         str->append(std::to_string(j) + "test" + std::to_string(j));
     }
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -165,8 +167,8 @@ TEST_F(LikeTest, haystackConstantLike) {
     auto haystack = ColumnHelper::create_const_column<TYPE_VARCHAR>("CHINA", 1);
     auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("%IN%", 1);
 
-    columns.push_back(haystack);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(haystack));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -200,8 +202,8 @@ TEST_F(LikeTest, haystackConstantLikeLargerThanHyperscan) {
 
     auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>(large_pattern, 1);
 
-    columns.push_back(haystack);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(haystack));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -236,8 +238,8 @@ TEST_F(LikeTest, haystackNullableLike) {
         }
     }
 
-    columns.push_back(NullableColumn::create(haystack, null));
-    columns.push_back(pattern);
+    columns.push_back(NullableColumn::create(std::move(haystack), std::move(null)));
+    columns.emplace_back(std::move(pattern));
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
@@ -274,8 +276,8 @@ TEST_F(LikeTest, patternEmptyLike) {
         str->append("test");
     }
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -307,8 +309,8 @@ TEST_F(LikeTest, patternStrAndPatternBothEmptyLike) {
         str->append("");
     }
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -341,8 +343,8 @@ TEST_F(LikeTest, patternStrAndPatternBothEmptyExplicitNullPtrLike) {
         str->append(Slice(null_ptr, 0));
     }
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -370,8 +372,8 @@ TEST_F(LikeTest, patternOnlyNullLike) {
     auto str = ColumnHelper::create_const_null_column(1);
     auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("%Test%", 1);
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -404,8 +406,8 @@ TEST_F(LikeTest, rowsPatternLike) {
         }
     }
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -451,8 +453,8 @@ TEST_F(LikeTest, rowsNullablePatternLike) {
         }
     }
 
-    columns.push_back(str);
-    columns.push_back(NullableColumn::create(pattern, null));
+    columns.emplace_back(std::move(str));
+    columns.push_back(NullableColumn::create(std::move(pattern), std::move(null)));
 
     context->set_constant_columns(columns);
 
@@ -492,8 +494,8 @@ TEST_F(LikeTest, rowsPatternRegex) {
         pattern->append(".+\\d\\d");
     }
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -609,8 +611,8 @@ TEST_F(LikeTest, constValueRegexpLargerThanHyperscan) {
 
     auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>(large_pattern, 1);
 
-    columns.push_back(haystack);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(haystack));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -642,8 +644,8 @@ TEST_F(LikeTest, constValueLikeComplicateForHyperscan) {
             "增|毛|胖|牙|奶|肉|毒|暑|总).{0,5}(永)";
     auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>(large_pattern, 1);
 
-    columns.push_back(haystack);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(haystack));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -658,4 +660,38 @@ TEST_F(LikeTest, constValueLikeComplicateForHyperscan) {
                         .ok());
 }
 
+TEST_F(LikeTest, splitLikePatternIntoNgramSet) {
+    // pattern contains special characters
+    std::string pattern = "abc%_abccc\\%e\\\\\\\\";
+    std::vector<std::string> ngram_set;
+    NgramBloomFilterReaderOptions options{4, false};
+    VectorizedFunctionCallExpr::split_like_string_to_ngram(pattern, options, ngram_set);
+    ASSERT_EQ(6, ngram_set.size());
+    ASSERT_EQ("abcc", ngram_set[0]);
+    ASSERT_EQ("bccc", ngram_set[1]);
+    ASSERT_EQ("ccc%", ngram_set[2]);
+    ASSERT_EQ("cc%e", ngram_set[3]);
+    ASSERT_EQ("c%e\\", ngram_set[4]);
+    ASSERT_EQ("%e\\\\", ngram_set[5]);
+
+    // normal case
+    pattern = "abccd";
+    ngram_set.clear();
+    VectorizedFunctionCallExpr::split_like_string_to_ngram(pattern, options, ngram_set);
+    ASSERT_EQ(2, ngram_set.size());
+    ASSERT_EQ("abcc", ngram_set[0]);
+    ASSERT_EQ("bccd", ngram_set[1]);
+
+    // pattern is empty
+    pattern = "";
+    ngram_set.clear();
+    VectorizedFunctionCallExpr::split_like_string_to_ngram(pattern, options, ngram_set);
+    ASSERT_EQ(0, ngram_set.size());
+
+    // pattern is too short
+    pattern = "abc";
+    ngram_set.clear();
+    VectorizedFunctionCallExpr::split_like_string_to_ngram(pattern, options, ngram_set);
+    ASSERT_EQ(0, ngram_set.size());
+}
 } // namespace starrocks

@@ -1,4 +1,4 @@
--- name: test_mv_partition_compensate_mysql
+-- name: test_mv_partition_compensate_mysql @slow
 shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_password} -P${external_mysql_port} -e 'create database mv_mysql_db_${uuid0};'
 -- result:
 0
@@ -14,7 +14,7 @@ shell: mysql -h${external_mysql_ip} -u${external_mysql_user} -p${external_mysql_
 0
 
 -- !result
-set materialized_view_union_rewrite_mode = 3;
+set enable_materialized_view_transparent_union_rewrite = true;
 -- result:
 -- !result
 set catalog default_catalog;
@@ -24,6 +24,9 @@ create database db_${uuid0};
 -- result:
 -- !result
 use db_${uuid0};
+-- result:
+-- !result
+set new_planner_optimize_timeout=10000;
 -- result:
 -- !result
 create external catalog mv_mysql_${uuid0}

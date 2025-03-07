@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # weeks_diff
 
-## 功能
+
 
 计算开始时间和结束时间相差几周（`expr1` - `expr2`），结果精确到周。
 

@@ -18,19 +18,26 @@ import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
+import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.scalar.ArithmeticCommutativeRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.ConsolidateLikesRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ExtractCommonPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.FoldConstantsRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ImplicitCastRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.MvNormalizePredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.NormalizePredicateRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.PruneTediousPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ReduceCastRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.ReplaceScalarOperatorRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.ScalarOperatorRewriteRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedCaseWhenRule;
+import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedDateColumnPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedPredicateRule;
 import com.starrocks.sql.optimizer.rewrite.scalar.SimplifiedScanColumnRule;
 
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 public class ScalarOperatorRewriter {
@@ -45,8 +52,19 @@ public class ScalarOperatorRewriter {
             new NormalizePredicateRule(),
             new FoldConstantsRule(),
             new SimplifiedPredicateRule(),
+            new SimplifiedDateColumnPredicateRule(),
             new ExtractCommonPredicateRule(),
-            new ArithmeticCommutativeRule()
+            new ArithmeticCommutativeRule(),
+            ConsolidateLikesRule.INSTANCE
+    );
+
+    public static final List<ScalarOperatorRewriteRule> FOLD_CONSTANT_RULES = Lists.newArrayList(
+            new FoldConstantsRule()
+    );
+
+    private static final List<ScalarOperatorRewriteRule> CASE_WHEN_PREDICATE_RULE = Lists.newArrayList(
+            SimplifiedCaseWhenRule.INSTANCE,
+            PruneTediousPredicateRule.INSTANCE
     );
     public static final List<ScalarOperatorRewriteRule> DEFAULT_REWRITE_SCAN_PREDICATE_RULES = Lists.newArrayList(
             // required
@@ -57,8 +75,10 @@ public class ScalarOperatorRewriter {
             new FoldConstantsRule(),
             new SimplifiedScanColumnRule(),
             new SimplifiedPredicateRule(),
+            new SimplifiedDateColumnPredicateRule(),
             new ExtractCommonPredicateRule(),
-            new ArithmeticCommutativeRule()
+            new ArithmeticCommutativeRule(),
+            ConsolidateLikesRule.INSTANCE
     );
 
     public static final List<ScalarOperatorRewriteRule> MV_SCALAR_REWRITE_RULES = DEFAULT_REWRITE_SCAN_PREDICATE_RULES.stream()
@@ -137,5 +157,16 @@ public class ScalarOperatorRewriter {
             op.setChild(i, applyRuleTopDown(op.getChild(i), rule));
         }
         return op;
+    }
+
+    public static ScalarOperator simplifyCaseWhen(ScalarOperator predicates) {
+        // simplify case-when
+        return new ScalarOperatorRewriter().rewrite(predicates, CASE_WHEN_PREDICATE_RULE);
+    }
+
+    public static ScalarOperator replaceScalarOperatorByColumnRef(ScalarOperator operator,
+                                                                  Map<ScalarOperator, ColumnRefOperator> translateMap) {
+        ReplaceScalarOperatorRule rule = new ReplaceScalarOperatorRule(translateMap);
+        return new ScalarOperatorRewriter().rewrite(operator, Lists.newArrayList(rule));
     }
 }

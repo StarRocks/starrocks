@@ -44,6 +44,7 @@ import com.starrocks.analysis.Predicate;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.thrift.TBrokerScanRange;
 import com.starrocks.thrift.TColumn;
 import com.starrocks.thrift.TCondition;
@@ -128,11 +129,11 @@ public class PushTask extends AgentTask {
 
     // for load v2 (SparkLoadJob)
     public PushTask(long backendId, long dbId, long tableId, long partitionId, long indexId, long tabletId,
-                    long replicaId, int schemaHash, int timeoutSecond, long loadJobId, TPushType pushType,
+                    long replicaId, int schemaHash, long version, int timeoutSecond, long loadJobId, TPushType pushType,
                     TPriority priority, long transactionId, long signature, TBrokerScanRange tBrokerScanRange,
                     TDescriptorTable tDescriptorTable, String timezone, TTabletType tabletType, List<TColumn> columnsDesc) {
         this(null, backendId, dbId, tableId, partitionId, indexId,
-                tabletId, replicaId, schemaHash, -1, timeoutSecond, loadJobId, pushType, null,
+                tabletId, replicaId, schemaHash, version, timeoutSecond, loadJobId, pushType, null,
                 priority, TTaskType.REALTIME_PUSH, transactionId, signature, columnsDesc);
         this.tBrokerScanRange = tBrokerScanRange;
         this.tDescriptorTable = tDescriptorTable;
@@ -164,7 +165,8 @@ public class PushTask extends AgentTask {
                         String columnName = ((SlotRef) binaryPredicate.getChild(0)).getColumnName();
                         String value = ((LiteralExpr) binaryPredicate.getChild(1)).getStringValue();
                         BinaryType op = binaryPredicate.getOp();
-                        tCondition.setColumn_name(columnName);
+                        tCondition.setColumn_name(MetaUtils.getColumnByColumnName(dbId, tableId, columnName)
+                                .getColumnId().getId());
                         tCondition.setCondition_op(op.toString());
                         conditionValues.add(value);
                     } else if (condition instanceof IsNullPredicate) {
@@ -175,14 +177,16 @@ public class PushTask extends AgentTask {
                         if (isNullPredicate.isNotNull()) {
                             value = "NOT NULL";
                         }
-                        tCondition.setColumn_name(columnName);
+                        tCondition.setColumn_name(MetaUtils.getColumnByColumnName(dbId, tableId, columnName)
+                                .getColumnId().getId());
                         tCondition.setCondition_op(op);
                         conditionValues.add(value);
                     } else if (condition instanceof InPredicate) {
                         InPredicate inPredicate = (InPredicate) condition;
                         String columnName = ((SlotRef) inPredicate.getChild(0)).getColumnName();
                         String op = inPredicate.isNotIn() ? "!*=" : "*=";
-                        tCondition.setColumn_name(columnName);
+                        tCondition.setColumn_name(MetaUtils.getColumnByColumnName(dbId, tableId, columnName)
+                                .getColumnId().getId());
                         tCondition.setCondition_op(op);
                         for (int i = 1; i <= inPredicate.getInElementNum(); i++) {
                             conditionValues.add(((LiteralExpr) inPredicate.getChild(i)).getStringValue());

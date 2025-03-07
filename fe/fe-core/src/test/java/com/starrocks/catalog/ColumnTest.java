@@ -34,15 +34,16 @@
 
 package com.starrocks.catalog;
 
-import com.starrocks.analysis.IndexDef.IndexType;
 import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.jmockit.Deencapsulation;
+import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnDef.DefaultValueDef;
+import com.starrocks.sql.ast.IndexDef.IndexType;
 import com.starrocks.thrift.TColumn;
 import org.junit.Assert;
 import org.junit.Before;
@@ -333,14 +334,14 @@ public class ColumnTest {
 
     @Test
     public void testLscColumn() {
-        Column f0 = new Column("f0", Type.INT, true, AggregateType.NONE, false,
+        Column f0 = new Column("f0", Type.INT, true, AggregateType.NONE, null, false,
                 new DefaultValueDef(true, NullLiteral.create(Type.INT)), "", 0);
 
         Index i0 = new Index("i0",
-                Collections.singletonList("f0"), IndexType.BITMAP, "");
+                Collections.singletonList(ColumnId.create("f0")), IndexType.BITMAP, "");
 
-        Set<String> bfColumns = new HashSet<>();
-        bfColumns.add("f0");
+        Set<ColumnId> bfColumns = new HashSet<>();
+        bfColumns.add(ColumnId.create("f0"));
         TColumn t0 = f0.toThrift();
         f0.setIndexFlag(t0, Collections.singletonList(i0), bfColumns);
 
@@ -352,5 +353,12 @@ public class ColumnTest {
 
         Assert.assertEquals(f0.getUniqueId(), 1);
 
+    }
+
+    @Test
+    public void testColumnDeserialization() {
+        String str = "{\"name\": \"test\"}";
+        Column column = GsonUtils.GSON.fromJson(str, Column.class);
+        Assert.assertEquals("test", column.getColumnId().getId());
     }
 }

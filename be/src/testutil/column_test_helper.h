@@ -22,7 +22,7 @@ namespace starrocks {
 class ColumnTestHelper {
 public:
     template <class T>
-    static ColumnPtr build_column(const std::vector<T>& values) {
+    static MutableColumnPtr build_column(const std::vector<T>& values) {
         if constexpr (std::is_same_v<T, uint8_t>) {
             auto data = UInt8Column::create();
             data->append_numbers(values.data(), values.size() * sizeof(T));
@@ -37,7 +37,7 @@ public:
             return data;
         } else if constexpr (std::is_same_v<T, Slice>) {
             auto data = BinaryColumn::create();
-            data->append_strings(values);
+            data->append_strings(values.data(), values.size());
             return data;
         } else if constexpr (std::is_same_v<T, double>) {
             auto data = DoubleColumn ::create();
@@ -49,7 +49,14 @@ public:
     }
 
     template <class T>
-    static ColumnPtr build_nullable_column(const std::vector<T>& values, const std::vector<uint8_t>& nullflags) {
+    static MutableColumnPtr build_nullable_column(const std::vector<T>& values) {
+        auto null_column = NullColumn::create(values.size(), 0);
+        auto data_column = build_column<T>(values);
+        return NullableColumn::create(std::move(data_column), std::move(null_column));
+    }
+
+    template <class T>
+    static MutableColumnPtr build_nullable_column(const std::vector<T>& values, const std::vector<uint8_t>& nullflags) {
         DCHECK_EQ(values.size(), nullflags.size());
         auto null = NullColumn::create();
         null->append_numbers(nullflags.data(), nullflags.size());
@@ -58,7 +65,7 @@ public:
     }
 
     template <LogicalType TYPE>
-    static ColumnPtr create_nullable_column() {
+    static MutableColumnPtr create_nullable_column() {
         return NullableColumn::create(RunTimeColumnType<TYPE>::create(), RunTimeColumnType<TYPE_NULL>::create());
     }
 };

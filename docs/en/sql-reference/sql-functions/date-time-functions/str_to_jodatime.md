@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "English"
+displayed_sidebar: docs
 ---
 
 # str_to_jodatime
 
-## Description
+
 
 Converts a Joda-formatted string into a DATETIME value in the specified Joda DateTime format like `yyyy-MM-dd HH:mm:ss`.
 

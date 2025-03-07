@@ -18,6 +18,7 @@
 #include <functional>
 #include <ostream>
 
+#include "column/column_access_path.h"
 #include "common/status.h"
 #include "compaction_task_context.h"
 #include "runtime/mem_tracker.h"
@@ -25,28 +26,32 @@
 
 namespace starrocks {
 class TxnLogPB;
-}
+class TxnLogPB_OpCompaction;
+} // namespace starrocks
 
 namespace starrocks::lake {
 
 class Rowset;
+class TabletWriter;
 
 class CompactionTask {
 public:
     // CancelFunc is a function that used to tell the compaction task whether the task
     // should be cancelled.
-    using CancelFunc = std::function<bool()>;
+    using CancelFunc = std::function<Status()>;
 
     explicit CompactionTask(VersionedTablet tablet, std::vector<std::shared_ptr<Rowset>> input_rowsets,
-                            CompactionTaskContext* context);
+                            CompactionTaskContext* context, std::shared_ptr<const TabletSchema> tablet_schema);
     virtual ~CompactionTask() = default;
 
     virtual Status execute(CancelFunc cancel_func, ThreadPool* flush_pool = nullptr) = 0;
 
     Status execute_index_major_compaction(TxnLogPB* txn_log);
 
-    inline static const CancelFunc kNoCancelFn = []() { return false; };
-    inline static const CancelFunc kCancelledFn = []() { return true; };
+    inline static const CancelFunc kNoCancelFn = []() { return Status::OK(); };
+    inline static const CancelFunc kCancelledFn = []() { return Status::Aborted(""); };
+
+    Status fill_compaction_segment_info(TxnLogPB_OpCompaction* op_compaction, TabletWriter* writer);
 
 protected:
     int64_t _txn_id;
@@ -54,6 +59,9 @@ protected:
     std::vector<std::shared_ptr<Rowset>> _input_rowsets;
     std::unique_ptr<MemTracker> _mem_tracker = nullptr;
     CompactionTaskContext* _context;
+    std::shared_ptr<const TabletSchema> _tablet_schema;
+    // for flat json used
+    std::vector<std::unique_ptr<ColumnAccessPath>> _column_access_paths;
 };
 
 } // namespace starrocks::lake

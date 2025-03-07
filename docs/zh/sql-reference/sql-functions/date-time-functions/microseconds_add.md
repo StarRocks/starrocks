@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # microseconds_add
 
-## 功能
+
 
 向 `expr1` 添加指定的时间间隔，单位为微秒。
 

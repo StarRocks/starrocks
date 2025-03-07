@@ -36,11 +36,11 @@ CompactionTask::~CompactionTask() {
 }
 
 void CompactionTask::run() {
-    LOG(INFO) << "start compaction. task_id:" << _task_info.task_id << ", tablet:" << _task_info.tablet_id
-              << ", algorithm:" << CompactionUtils::compaction_algorithm_to_string(_task_info.algorithm)
-              << ", compaction_type:" << starrocks::to_string(_task_info.compaction_type)
-              << ", compaction_score:" << _task_info.compaction_score
-              << ", output_version:" << _task_info.output_version << ", input rowsets size:" << _input_rowsets.size();
+    VLOG(1) << "start compaction. task_id:" << _task_info.task_id << ", tablet:" << _task_info.tablet_id
+            << ", algorithm:" << CompactionUtils::compaction_algorithm_to_string(_task_info.algorithm)
+            << ", compaction_type:" << starrocks::to_string(_task_info.compaction_type)
+            << ", compaction_score:" << _task_info.compaction_score << ", output_version:" << _task_info.output_version
+            << ", input rowsets size:" << _input_rowsets.size();
     _task_info.start_time = UnixMillis();
     scoped_refptr<Trace> trace(new Trace);
     SCOPED_CLEANUP({
@@ -59,8 +59,13 @@ void CompactionTask::run() {
     ss << "output version:" << _task_info.output_version << ", input versions size:" << _input_rowsets.size()
        << ", input versions:";
 
-    for (int i = 0; i < 5 && i < _input_rowsets.size(); ++i) {
-        ss << _input_rowsets[i]->version() << ";";
+    for (int i = 0; i < _input_rowsets.size(); ++i) {
+        if (i < 5) {
+            ss << _input_rowsets[i]->version() << ";";
+        }
+        if (_input_rowsets[i]->rowset_meta()->gtid() > _task_info.gtid) {
+            _task_info.gtid = _input_rowsets[i]->rowset_meta()->gtid();
+        }
     }
     if (_input_rowsets.size() > 5) {
         ss << ".." << (*_input_rowsets.rbegin())->version();
@@ -109,7 +114,7 @@ void CompactionTask::run() {
     DataDir* data_dir = _tablet->data_dir();
     if (data_dir->capacity_limit_reached(input_rowsets_size())) {
         std::ostringstream sstream;
-        sstream << "skip tablet:" << _tablet->tablet_id()
+        sstream << "compaction task:" << _task_info.task_id << " failed, skip tablet:" << _tablet->tablet_id()
                 << " because data dir reaches capacity limit. input rowsets size:" << input_rowsets_size();
         Status st = Status::InternalError(sstream.str());
         _failure_callback(st);
@@ -134,7 +139,13 @@ void CompactionTask::run() {
     // get elapsed_time in us
     _task_info.elapsed_time = _watch.elapsed_time() / 1000;
     is_finished = true;
-    LOG(INFO) << "compaction finish. status:" << status.to_string() << ", task info:" << _task_info.to_string();
+    std::string msg = strings::Substitute("compaction finish. status:$0, task info:$1", status.to_string(),
+                                          _task_info.to_string());
+    if (!status.ok()) {
+        LOG(WARNING) << msg;
+    } else {
+        LOG(INFO) << msg;
+    }
 }
 
 bool CompactionTask::should_stop() const {
@@ -190,7 +201,6 @@ void CompactionTask::_failure_callback(const Status& st) {
         _tablet->set_last_base_compaction_failure_time(UnixMillis());
         StarRocksMetrics::instance()->base_compaction_request_failed.increment(1);
     }
-    LOG(WARNING) << "compaction task:" << _task_info.task_id << ", tablet:" << _task_info.tablet_id << " failed.";
 }
 
 Status CompactionTask::_shortcut_compact(Statistics* statistics) {
@@ -209,16 +219,21 @@ Status CompactionTask::_shortcut_compact(Statistics* statistics) {
         }
     }
 
+    // if there is only one non-overlapping rowset, but the input rowset schema is different with output schema
+    // we can not do shortcut compaction too.
+    // the reason is after we support add/drop field for struct column, we need to make sure the rowset schema is
+    // consistent with segment data because of some compatible issue. so we will skip shortcut compaction when we
+    // found the scheam id is different.
     if (data_rowsets.size() == 1 && !data_rowsets.back()->rowset_meta()->is_segments_overlapping() &&
-        _tablet->enable_shortcut_compaction()) {
+        _tablet->enable_shortcut_compaction() && data_rowsets[0]->schema()->id() == _tablet_schema->id()) {
         TRACE("[Compaction] start shortcut comapction data");
         int64_t max_rows_per_segment = CompactionUtils::get_segment_max_rows(
                 config::max_segment_file_size, _task_info.input_rows_num, _task_info.input_rowsets_size);
 
         std::unique_ptr<RowsetWriter> output_rs_writer;
-        RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(_tablet.get(), max_rows_per_segment,
-                                                                        _task_info.algorithm, _task_info.output_version,
-                                                                        &output_rs_writer, _tablet_schema));
+        RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(
+                _tablet.get(), max_rows_per_segment, _task_info.algorithm, _task_info.output_version,
+                data_rowsets.back()->rowset_meta()->gtid(), &output_rs_writer, _tablet_schema));
         Status status = output_rs_writer->add_rowset(data_rowsets.back());
         if (!status.ok()) {
             LOG(WARNING) << "fail to compact rowset."

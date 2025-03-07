@@ -254,8 +254,9 @@ public class SparkEtlJob {
         try {
             new SparkEtlJob(args[0]).run();
         } catch (Exception e) {
-            System.err.println("spark etl job run failed");
-            LOG.warn(e);
+            String msg = "spark etl job run failed";
+            System.err.println(msg);
+            LOG.warn(msg, e);
             System.exit(-1);
         }
     }

@@ -1,0 +1,824 @@
+-- name: test_mv_refresh_with_multi_union1
+CREATE TABLE `u1` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY date_trunc('day', dt)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `u2` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY RANGE(`dt`)
+(
+  PARTITION p1 VALUES [("2024-03-10"), ("2024-03-11")),
+  PARTITION p2 VALUES [("2024-03-11"), ("2024-03-12")),
+  PARTITION p3 VALUES [("2024-03-12"), ("2024-03-13")),
+  PARTITION p4 VALUES [("2024-03-13"), ("2024-03-14")),
+  PARTITION p5 VALUES [("2024-03-14"), ("2024-03-15")),
+  PARTITION p6 VALUES [("2024-04-01"), ("2024-04-02")),
+  PARTITION p7 VALUES [("2024-04-10"), ("2024-04-11"))
+)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `u3` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY RANGE(`dt`)
+(
+  PARTITION p1 VALUES [("2024-03-10"), ("2024-03-11")),
+  PARTITION p2 VALUES [("2024-03-11"), ("2024-03-12")),
+  PARTITION p3 VALUES [("2024-03-12"), ("2024-03-13")),
+  PARTITION p4 VALUES [("2024-03-13"), ("2024-03-14")),
+  PARTITION p5 VALUES [("2024-03-14"), ("2024-03-15")),
+  PARTITION p6 VALUES [("2024-04-10"), ("2024-04-11"))
+)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `u4` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY RANGE(`dt`)
+(
+  PARTITION p1 VALUES [("2023-01-01"), ("2024-01-01")),
+  PARTITION p2 VALUES [("2024-01-01"), ("2025-01-01"))
+)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `u5` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY RANGE(`dt`)
+(
+  PARTITION p1 VALUES [("2024-01-01"), ("2024-02-01")),
+  PARTITION p2 VALUES [("2024-02-01"), ("2024-03-01")),
+  PARTITION p3 VALUES [("2024-03-01"), ("2024-04-01")),
+  PARTITION p4 VALUES [("2024-04-01"), ("2024-05-01"))
+)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+CREATE TABLE `u6` (
+  `id` int(11) NOT NULL,
+  `dt` date NOT NULL
+) ENGINE=OLAP 
+PRIMARY KEY(`id`, `dt`)
+PARTITION BY RANGE (dt) (
+  START ("2024-01-01") END ("2024-05-01") EVERY (INTERVAL 1 DAY)
+)
+DISTRIBUTED BY HASH(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO u1 (id,dt) VALUES
+	 (131,'2024-04-10'),
+	 (1,'2024-03-10'),
+	 (2,'2024-03-11'),
+	 (4,'2024-03-12'),
+	 (7,'2024-03-13'),
+	 (8,'2024-03-14'),
+	 (11,'2024-03-15'),
+	 (13,'2024-03-16'),
+	 (14,'2024-03-17'),
+	 (16,'2024-03-18');
+-- result:
+-- !result
+INSERT INTO u2 (id,dt) VALUES
+	 (1,'2024-03-10'),
+	 (2,'2024-03-11'),
+	 (4,'2024-03-12'),
+	 (7,'2024-03-13');
+-- result:
+-- !result
+INSERT INTO u3 (id,dt) VALUES
+	 (131,'2024-04-10'),
+	 (1,'2024-03-10'),
+	 (2,'2024-03-11'),
+	 (4,'2024-03-12'),
+	 (7,'2024-03-13'),
+	 (8,'2024-03-14');
+-- result:
+-- !result
+INSERT INTO u4 (id,dt) VALUES
+	 (13,'2024-03-16'),
+	 (14,'2024-03-17'),
+	 (16,'2024-03-18');
+-- result:
+-- !result
+INSERT INTO u5 (id,dt) VALUES
+	 (131,'2024-04-10'),
+	 (1,'2024-03-10'),
+	 (16,'2024-03-18');
+-- result:
+-- !result
+INSERT INTO u6 (id,dt) VALUES
+	 (1,'2024-03-10'),
+	 (2,'2024-03-11'),
+	 (4,'2024-03-12');
+-- result:
+-- !result
+	 
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv1`
+PARTITION BY date_trunc('week', `dt`)
+DISTRIBUTED BY HASH(`dt`)
+REFRESH DEFERRED MANUAL 
+AS select dt, sum(id) as s1 from u1 group by dt;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv2`
+PARTITION BY date_trunc('week', `dt`)
+DISTRIBUTED BY HASH(`dt`)
+REFRESH DEFERRED MANUAL 
+AS select dt, sum(id) as s1 from u2 group by dt;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv3`
+PARTITION BY date_trunc('week', `dt`)
+DISTRIBUTED BY HASH(`dt`)
+REFRESH DEFERRED MANUAL 
+AS select dt, sum(id) as s1 from u3 group by dt;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv4`
+PARTITION BY date_trunc('week', `dt`)
+DISTRIBUTED BY HASH(`dt`)
+REFRESH DEFERRED MANUAL 
+AS select dt, sum(id) as s1 from u4 group by dt;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv5`
+PARTITION BY date_trunc('week', `dt`)
+DISTRIBUTED BY HASH(`dt`)
+REFRESH DEFERRED MANUAL 
+AS select dt, sum(id) as s1 from u5 group by dt;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv6`
+PARTITION BY date_trunc('week', `dt`)
+DISTRIBUTED BY HASH(`dt`)
+REFRESH DEFERRED MANUAL 
+AS select dt, sum(id) as s1 from u6 group by dt;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv11`
+PARTITION BY date_trunc('week', `dt`)
+DISTRIBUTED BY HASH(`dt`)
+REFRESH DEFERRED MANUAL 
+AS 
+    select dt from u1
+    union all
+    select dt from u2;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv12`
+PARTITION BY date_trunc('week', `dt`)
+DISTRIBUTED BY HASH(`dt`)
+REFRESH DEFERRED MANUAL 
+AS 
+    select dt from u1
+    union all
+    select dt from u2
+    union all
+    select dt from u3
+    union all
+    select dt from u4
+    union all
+    select dt from u5
+    union all
+    select dt from u6;
+-- result:
+-- !result
+CREATE MATERIALIZED VIEW IF NOT EXISTS `test_mv13`
+PARTITION BY dt
+DISTRIBUTED BY HASH(`dt`)
+REFRESH DEFERRED MANUAL 
+AS 
+    select dt from test_mv1
+    union all
+    select dt from test_mv2
+    union all
+    select dt from test_mv3
+    union all
+    select dt from test_mv4
+    union all
+    select dt from test_mv5
+    union all
+    select dt from test_mv6;
+-- result:
+-- !result
+refresh materialized view test_mv1 with sync mode;
+refresh materialized view test_mv2 with sync mode;
+refresh materialized view test_mv3 with sync mode;
+refresh materialized view test_mv4 with sync mode;
+refresh materialized view test_mv5 with sync mode;
+refresh materialized view test_mv6 with sync mode;
+refresh materialized view test_mv11 with sync mode;
+refresh materialized view test_mv12 with sync mode;
+refresh materialized view test_mv13 with sync mode;
+select count(1) from test_mv1;
+-- result:
+10
+-- !result
+select count(1) from test_mv2;
+-- result:
+4
+-- !result
+select count(1) from test_mv3;
+-- result:
+6
+-- !result
+select count(1) from test_mv4;
+-- result:
+3
+-- !result
+select count(1) from test_mv5;
+-- result:
+3
+-- !result
+select count(1) from test_mv6;
+-- result:
+3
+-- !result
+select count(1) from test_mv11;
+-- result:
+14
+-- !result
+select count(1) from test_mv12;
+-- result:
+29
+-- !result
+select count(1) from test_mv13;
+-- result:
+29
+-- !result
+function: check_hit_materialized_view("select dt, sum(id) from u1 group by dt;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, sum(id) from u2 group by dt;", "test_mv2")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, sum(id) from u3 group by dt;", "test_mv3")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, sum(id) from u4 group by dt;", "test_mv4")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, sum(id) from u5 group by dt;", "test_mv5")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
+-- result:
+None
+-- !result
+select dt, s1 from test_mv1 order by 1;
+-- result:
+2024-03-10	1
+2024-03-11	2
+2024-03-12	4
+2024-03-13	7
+2024-03-14	8
+2024-03-15	11
+2024-03-16	13
+2024-03-17	14
+2024-03-18	16
+2024-04-10	131
+-- !result
+select dt, s1 from test_mv2 order by 1;
+-- result:
+2024-03-10	1
+2024-03-11	2
+2024-03-12	4
+2024-03-13	7
+-- !result
+select dt, s1 from test_mv3 order by 1;
+-- result:
+2024-03-10	1
+2024-03-11	2
+2024-03-12	4
+2024-03-13	7
+2024-03-14	8
+2024-04-10	131
+-- !result
+select dt, s1 from test_mv4 order by 1;
+-- result:
+2024-03-16	13
+2024-03-17	14
+2024-03-18	16
+-- !result
+select dt, s1 from test_mv5 order by 1;
+-- result:
+2024-03-10	1
+2024-03-18	16
+2024-04-10	131
+-- !result
+select dt, s1 from test_mv6 order by 1;
+-- result:
+2024-03-10	1
+2024-03-11	2
+2024-03-12	4
+-- !result
+select dt, count(1) from test_mv11 group by dt order by 1;
+-- result:
+2024-03-10	2
+2024-03-11	2
+2024-03-12	2
+2024-03-13	2
+2024-03-14	1
+2024-03-15	1
+2024-03-16	1
+2024-03-17	1
+2024-03-18	1
+2024-04-10	1
+-- !result
+select dt, count(1) from test_mv12 group by dt order by 1;
+-- result:
+2024-03-10	5
+2024-03-11	4
+2024-03-12	4
+2024-03-13	3
+2024-03-14	2
+2024-03-15	1
+2024-03-16	2
+2024-03-17	2
+2024-03-18	3
+2024-04-10	3
+-- !result
+select dt, count(1) from test_mv13 group by dt order by 1;
+-- result:
+2024-03-10	5
+2024-03-11	4
+2024-03-12	4
+2024-03-13	3
+2024-03-14	2
+2024-03-15	1
+2024-03-16	2
+2024-03-17	2
+2024-03-18	3
+2024-04-10	3
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+select dt, sum(id) from u1 group by dt order by 1;
+-- result:
+2024-03-10	1
+2024-03-11	2
+2024-03-12	4
+2024-03-13	7
+2024-03-14	8
+2024-03-15	11
+2024-03-16	13
+2024-03-17	14
+2024-03-18	16
+2024-04-10	131
+-- !result
+select dt, sum(id) from u2 group by dt order by 1;
+-- result:
+2024-03-10	1
+2024-03-11	2
+2024-03-12	4
+2024-03-13	7
+-- !result
+select dt, sum(id) from u3 group by dt order by 1;
+-- result:
+2024-03-10	1
+2024-03-11	2
+2024-03-12	4
+2024-03-13	7
+2024-03-14	8
+2024-04-10	131
+-- !result
+select dt, sum(id) from u4 group by dt order by 1;
+-- result:
+2024-03-16	13
+2024-03-17	14
+2024-03-18	16
+-- !result
+select dt, sum(id) from u5 group by dt order by 1;
+-- result:
+2024-03-10	1
+2024-03-18	16
+2024-04-10	131
+-- !result
+select dt, sum(id) from u6 group by dt order by 1;
+-- result:
+2024-03-10	1
+2024-03-11	2
+2024-03-12	4
+-- !result
+select dt, count(1) from (
+    select dt from u1
+    union all
+    select dt from u2
+) t group by dt order by 1;
+-- result:
+2024-03-10	2
+2024-03-11	2
+2024-03-12	2
+2024-03-13	2
+2024-03-14	1
+2024-03-15	1
+2024-03-16	1
+2024-03-17	1
+2024-03-18	1
+2024-04-10	1
+-- !result
+select dt, count(1) from (
+    select dt from u1
+    union all
+    select dt from u2
+    union all
+    select dt from u3
+    union all
+    select dt from u4
+    union all
+    select dt from u5
+    union all
+    select dt from u6
+) t group by dt order by 1;
+-- result:
+2024-03-10	5
+2024-03-11	4
+2024-03-12	4
+2024-03-13	3
+2024-03-14	2
+2024-03-15	1
+2024-03-16	2
+2024-03-17	2
+2024-03-18	3
+2024-04-10	3
+-- !result
+select dt, count(1) from (
+  select dt from test_mv1
+  union all
+  select dt from test_mv2
+  union all
+  select dt from test_mv3
+  union all
+  select dt from test_mv4
+  union all
+  select dt from test_mv5
+  union all
+  select dt from test_mv6
+) t group by dt order by 1;
+-- result:
+2024-03-10	5
+2024-03-11	4
+2024-03-12	4
+2024-03-13	3
+2024-03-14	2
+2024-03-15	1
+2024-03-16	2
+2024-03-17	2
+2024-03-18	3
+2024-04-10	3
+-- !result
+set enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+INSERT INTO u1 (id,dt) VALUES (131,'2024-04-10'), (1,'2024-03-10'), (2,'2024-03-11'), (4,'2024-03-12');
+-- result:
+-- !result
+INSERT INTO u2 (id,dt) VALUES (1,'2024-03-10'), (2,'2024-03-11');
+-- result:
+-- !result
+INSERT INTO u3 (id,dt) VALUES (131,'2024-04-10'), (1,'2024-03-10');
+-- result:
+-- !result
+INSERT INTO u4 (id,dt) VALUES (13,'2024-03-16'), (14,'2024-03-17');
+-- result:
+-- !result
+INSERT INTO u5 (id,dt) VALUES (131,'2024-04-10'), (1,'2024-03-10');
+-- result:
+-- !result
+INSERT INTO u6 (id,dt) VALUES (1,'2024-03-10'), (2,'2024-03-11'), (4,'2024-03-12');
+-- result:
+-- !result
+select count(1) from test_mv1;
+-- result:
+10
+-- !result
+select count(1) from test_mv2;
+-- result:
+4
+-- !result
+select count(1) from test_mv3;
+-- result:
+6
+-- !result
+select count(1) from test_mv4;
+-- result:
+3
+-- !result
+select count(1) from test_mv5;
+-- result:
+3
+-- !result
+select count(1) from test_mv6;
+-- result:
+3
+-- !result
+select count(1) from test_mv11;
+-- result:
+14
+-- !result
+select count(1) from test_mv12;
+-- result:
+29
+-- !result
+select count(1) from test_mv13;
+-- result:
+29
+-- !result
+function: check_no_hit_materialized_view("select dt, sum(id) from u1 group by dt;", "test_mv1")
+-- result:
+None
+-- !result
+function: check_no_hit_materialized_view("select dt, sum(id) from u2 group by dt;", "test_mv2")
+-- result:
+None
+-- !result
+function: check_hit_materialized_view("select dt, sum(id) from u3 group by dt;", "test_mv3")
+-- result:
+None
+-- !result
+function: check_no_hit_materialized_view("select dt, sum(id) from u4 group by dt;", "test_mv4")
+-- result:
+None
+-- !result
+function: check_no_hit_materialized_view("select dt, sum(id) from u5 group by dt;", "test_mv5")
+-- result:
+None
+-- !result
+function: check_no_hit_materialized_view("select dt, sum(id) from u6 group by dt;", "test_mv6")
+-- result:
+None
+-- !result
+select dt, s1 from test_mv1 order by 1;
+-- result:
+2024-03-10	1
+2024-03-11	2
+2024-03-12	4
+2024-03-13	7
+2024-03-14	8
+2024-03-15	11
+2024-03-16	13
+2024-03-17	14
+2024-03-18	16
+2024-04-10	131
+-- !result
+select dt, s1 from test_mv2 order by 1;
+-- result:
+2024-03-10	1
+2024-03-11	2
+2024-03-12	4
+2024-03-13	7
+-- !result
+select dt, s1 from test_mv3 order by 1;
+-- result:
+2024-03-10	1
+2024-03-11	2
+2024-03-12	4
+2024-03-13	7
+2024-03-14	8
+2024-04-10	131
+-- !result
+select dt, s1 from test_mv4 order by 1;
+-- result:
+2024-03-16	13
+2024-03-17	14
+2024-03-18	16
+-- !result
+select dt, s1 from test_mv5 order by 1;
+-- result:
+2024-03-10	1
+2024-03-18	16
+2024-04-10	131
+-- !result
+select dt, s1 from test_mv6 order by 1;
+-- result:
+2024-03-10	1
+2024-03-11	2
+2024-03-12	4
+-- !result
+select dt, count(1) from test_mv11 group by dt order by 1;
+-- result:
+2024-03-10	2
+2024-03-11	2
+2024-03-12	2
+2024-03-13	2
+2024-03-14	1
+2024-03-15	1
+2024-03-16	1
+2024-03-17	1
+2024-03-18	1
+2024-04-10	1
+-- !result
+select dt, count(1) from test_mv12 group by dt order by 1;
+-- result:
+2024-03-10	5
+2024-03-11	4
+2024-03-12	4
+2024-03-13	3
+2024-03-14	2
+2024-03-15	1
+2024-03-16	2
+2024-03-17	2
+2024-03-18	3
+2024-04-10	3
+-- !result
+select dt, count(1) from test_mv13 group by dt order by 1;
+-- result:
+2024-03-10	5
+2024-03-11	4
+2024-03-12	4
+2024-03-13	3
+2024-03-14	2
+2024-03-15	1
+2024-03-16	2
+2024-03-17	2
+2024-03-18	3
+2024-04-10	3
+-- !result
+set enable_materialized_view_rewrite = false;
+-- result:
+-- !result
+select dt, sum(id) from u1 group by dt order by 1;
+-- result:
+2024-03-10	1
+2024-03-11	2
+2024-03-12	4
+2024-03-13	7
+2024-03-14	8
+2024-03-15	11
+2024-03-16	13
+2024-03-17	14
+2024-03-18	16
+2024-04-10	131
+-- !result
+select dt, sum(id) from u2 group by dt order by 1;
+-- result:
+2024-03-10	1
+2024-03-11	2
+2024-03-12	4
+2024-03-13	7
+-- !result
+select dt, sum(id) from u3 group by dt order by 1;
+-- result:
+2024-03-10	1
+2024-03-11	2
+2024-03-12	4
+2024-03-13	7
+2024-03-14	8
+2024-04-10	131
+-- !result
+select dt, sum(id) from u4 group by dt order by 1;
+-- result:
+2024-03-16	13
+2024-03-17	14
+2024-03-18	16
+-- !result
+select dt, sum(id) from u5 group by dt order by 1;
+-- result:
+2024-03-10	1
+2024-03-18	16
+2024-04-10	131
+-- !result
+select dt, sum(id) from u6 group by dt order by 1;
+-- result:
+2024-03-10	1
+2024-03-11	2
+2024-03-12	4
+-- !result
+select dt, count(1) from (
+    select dt from u1
+    union all
+    select dt from u2
+) t group by dt order by 1;
+-- result:
+2024-03-10	2
+2024-03-11	2
+2024-03-12	2
+2024-03-13	2
+2024-03-14	1
+2024-03-15	1
+2024-03-16	1
+2024-03-17	1
+2024-03-18	1
+2024-04-10	1
+-- !result
+select dt, count(1) from (
+    select dt from u1
+    union all
+    select dt from u2
+    union all
+    select dt from u3
+    union all
+    select dt from u4
+    union all
+    select dt from u5
+    union all
+    select dt from u6
+) t group by dt order by 1;
+-- result:
+2024-03-10	5
+2024-03-11	4
+2024-03-12	4
+2024-03-13	3
+2024-03-14	2
+2024-03-15	1
+2024-03-16	2
+2024-03-17	2
+2024-03-18	3
+2024-04-10	3
+-- !result
+select dt, count(1) from (
+  select dt from test_mv1
+  union all
+  select dt from test_mv2
+  union all
+  select dt from test_mv3
+  union all
+  select dt from test_mv4
+  union all
+  select dt from test_mv5
+  union all
+  select dt from test_mv6
+) t group by dt order by 1;
+-- result:
+2024-03-10	5
+2024-03-11	4
+2024-03-12	4
+2024-03-13	3
+2024-03-14	2
+2024-03-15	1
+2024-03-16	2
+2024-03-17	2
+2024-03-18	3
+2024-04-10	3
+-- !result
+set enable_materialized_view_rewrite = true;
+-- result:
+-- !result
+drop materialized view test_mv1;
+-- result:
+-- !result
+drop materialized view test_mv2;
+-- result:
+-- !result
+drop materialized view test_mv3;
+-- result:
+-- !result
+drop materialized view test_mv4;
+-- result:
+-- !result
+drop materialized view test_mv5;
+-- result:
+-- !result
+drop materialized view test_mv6;
+-- result:
+-- !result
+drop materialized view test_mv11;
+-- result:
+-- !result
+drop materialized view test_mv12;
+-- result:
+-- !result
+drop materialized view test_mv13;
+-- result:
+-- !result

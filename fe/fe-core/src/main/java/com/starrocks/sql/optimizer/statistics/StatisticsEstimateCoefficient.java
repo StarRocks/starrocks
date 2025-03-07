@@ -44,8 +44,10 @@ public class StatisticsEstimateCoefficient {
     public static final int DEFAULT_JDBC_OUTPUT_ROWS = 20000;
     // if after aggregate row count * DEFAULT_AGGREGATE_EFFECT_COEFFICIENT < input row count,
     // the aggregate has good effect.
+    public static final double LOWER_AGGREGATE_EFFECT_COEFFICIENT = 10000;
     public static final double LOW_AGGREGATE_EFFECT_COEFFICIENT = 1000;
     public static final double MEDIUM_AGGREGATE_EFFECT_COEFFICIENT = 100;
+    public static final int SMALL_BROADCAST_JOIN_MAX_NDV_LIMIT = 100000;
 
     public static final double EXTREME_HIGH_AGGREGATE_EFFECT_COEFFICIENT = 3;
     // default selectivity for anti join

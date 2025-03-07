@@ -21,7 +21,7 @@ import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.OlapTable;
-import com.starrocks.common.UserException;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.PlanNodeId;
 import com.starrocks.qe.scheduler.DefaultWorkerProvider;
@@ -77,7 +77,7 @@ public class ColocatedBackendSelectorTest {
     }
 
     @Test
-    public void testSingleScanNodeWithSingleReplication() throws UserException {
+    public void testSingleScanNodeWithSingleReplication() throws StarRocksException {
         final int numBuckets = 4;
         final Map<Integer, List<Long>> bucketSeqToBackends = ImmutableMap.of(
                 0, ImmutableList.of(1L),
@@ -127,7 +127,7 @@ public class ColocatedBackendSelectorTest {
     }
 
     @Test
-    public void testSingleScanNode() throws UserException {
+    public void testSingleScanNode() throws StarRocksException {
         final int numBuckets = 4;
         final Map<Integer, List<Long>> bucketSeqToBackends = ImmutableMap.of(
                 0, ImmutableList.of(1L),
@@ -188,7 +188,7 @@ public class ColocatedBackendSelectorTest {
     }
 
     @Test
-    public void testMultipleScanNodes() throws UserException {
+    public void testMultipleScanNodes() throws StarRocksException {
         final int numBuckets = 4;
         final Map<Integer, List<Long>> bucketSeqToBackends0 = ImmutableMap.of(
                 0, ImmutableList.of(1L, 3L),
@@ -259,7 +259,7 @@ public class ColocatedBackendSelectorTest {
 
     private void checkColocatedAssignment(OlapScanNode scanNode, WorkerProvider workerProvider,
                                           int maxBucketsPerBeToUseBalancerAssignment,
-                                          Map<Integer, Long> expectedSeqToBackendId) throws UserException {
+                                          Map<Integer, Long> expectedSeqToBackendId) throws StarRocksException {
         checkColocatedAssignment(Collections.singletonList(scanNode), workerProvider, maxBucketsPerBeToUseBalancerAssignment,
                 expectedSeqToBackendId);
     }
@@ -267,9 +267,10 @@ public class ColocatedBackendSelectorTest {
     private void checkColocatedAssignment(List<OlapScanNode> scanNodes, WorkerProvider workerProvider,
                                           int maxBucketsPerBeToUseBalancerAssignment,
                                           Map<Integer, Long> expectedSeqToBackendId)
-            throws UserException {
+            throws StarRocksException {
         FragmentScanRangeAssignment assignment = new FragmentScanRangeAssignment();
-        ColocatedBackendSelector.Assignment colocatedAssignemnt = new ColocatedBackendSelector.Assignment(scanNodes.get(0));
+        ColocatedBackendSelector.Assignment colocatedAssignemnt =
+                new ColocatedBackendSelector.Assignment(scanNodes.get(0), scanNodes.size());
 
         for (OlapScanNode scanNode : scanNodes) {
             ColocatedBackendSelector backendSelector =

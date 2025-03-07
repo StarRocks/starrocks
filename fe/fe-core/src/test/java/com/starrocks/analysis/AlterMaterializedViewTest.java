@@ -138,6 +138,16 @@ public class AlterMaterializedViewTest {
                     (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
             currentState.getLocalMetastore().alterMaterializedView(stmt);
         }
+        {
+            String alterMvSql = "alter materialized view mv1 set (\"session.not_exists\" = \"10000\")";
+            AlterMaterializedViewStmt stmt =
+                    (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
+            Exception e = Assert.assertThrows(SemanticException.class,
+                    () -> currentState.getLocalMetastore().alterMaterializedView(stmt));
+            Assert.assertEquals("Getting analyzing error. Detail message: " +
+                    "Unknown system variable 'not_exists', the most similar variables are " +
+                    "{'init_connect', 'connector_max_split_size', 'tx_isolation'}.", e.getMessage());
+        }
 
         {
             String alterMvSql = "alter materialized view mv1 set (\"query_timeout\" = \"10000\")";
@@ -242,6 +252,8 @@ public class AlterMaterializedViewTest {
         // create the table and refresh
         starRocksAssert.dropTable("treload_1");
         starRocksAssert.withTable(createBaseTable);
+        checker.runForTest(true);
+        checker.runForTest(true);
         starRocksAssert.refreshMV("refresh materialized view mvreload_1");
         starRocksAssert.refreshMV("refresh materialized view mvreload_2");
         starRocksAssert.refreshMV("refresh materialized view mvreload_3");
@@ -285,7 +297,7 @@ public class AlterMaterializedViewTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"replicated_storage\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ")");
@@ -403,7 +415,7 @@ public class AlterMaterializedViewTest {
         }
 
         // foreground active
-        starRocksAssert.refreshMV("refresh materialized view " + mvName);
+        starRocksAssert.refreshMV("refresh materialized view " + mvName + " with sync mode");
         Assert.assertTrue(mv.isActive());
 
         // clear the grace period and active it again

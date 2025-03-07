@@ -27,14 +27,14 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeCompactionsScanner::_s_columns[] = {
-        {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"CANDIDATES_NUM", TYPE_BIGINT, sizeof(int64_t), false},
-        {"BASE_COMPACTION_CONCURRENCY", TYPE_BIGINT, sizeof(int64_t), false},
-        {"CUMULATIVE_COMPACTION_CONCURRENCY", TYPE_BIGINT, sizeof(int64_t), false},
-        {"LATEST_COMPACTION_SCORE", TYPE_DOUBLE, sizeof(double), false},
-        {"CANDIDATE_MAX_SCORE", TYPE_DOUBLE, sizeof(double), false},
-        {"MANUAL_COMPACTION_CONCURRENCY", TYPE_BIGINT, sizeof(int64_t), false},
-        {"MANUAL_COMPACTION_CANDIDATES_NUM", TYPE_BIGINT, sizeof(int64_t), false}};
+        {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"CANDIDATES_NUM", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"BASE_COMPACTION_CONCURRENCY", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"CUMULATIVE_COMPACTION_CONCURRENCY", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"LATEST_COMPACTION_SCORE", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
+        {"CANDIDATE_MAX_SCORE", TypeDescriptor::from_logical_type(TYPE_DOUBLE), sizeof(double), false},
+        {"MANUAL_COMPACTION_CONCURRENCY", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"MANUAL_COMPACTION_CANDIDATES_NUM", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false}};
 
 SchemaBeCompactionsScanner::SchemaBeCompactionsScanner()
         : SchemaScanner(_s_columns, sizeof(_s_columns) / sizeof(SchemaScanner::ColumnDesc)) {}

@@ -18,6 +18,7 @@
 
 #include "exec/exec_node.h"
 #include "exec/iceberg/iceberg_delete_builder.h"
+#include "exec/paimon/paimon_delete_file_builder.h"
 #include "formats/orc/orc_chunk_reader.h"
 #include "formats/orc/orc_input_stream.h"
 #include "formats/orc/orc_memory_pool.h"
@@ -301,6 +302,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
                                                  filter_ptr);
         if (!status.ok()) {
             LOG(WARNING) << "eval conjuncts fails: " << status.message();
+            _dict_filter_eval_cache.erase(slot_id);
             return false;
         }
 
@@ -320,16 +322,31 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
 Status HdfsOrcScanner::build_iceberg_delete_builder() {
     if (_scanner_params.deletes.empty()) return Status::OK();
     SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
-    const IcebergDeleteBuilder iceberg_delete_builder(_scanner_params.fs, _scanner_params.path,
-                                                      _scanner_params.conjunct_ctxs, _scanner_params.materialize_slots,
-                                                      &_need_skip_rowids);
+    const auto iceberg_delete_builder =
+            std::make_unique<IcebergDeleteBuilder>(_skip_rows_ctx, _runtime_state, _scanner_params);
 
-    for (const auto& tdelete_file : _scanner_params.deletes) {
-        RETURN_IF_ERROR(iceberg_delete_builder.build_orc(_runtime_state->timezone(), *tdelete_file,
-                                                         _scanner_params.mor_params.equality_slots, _runtime_state,
-                                                         _mor_processor));
+    for (const auto& delete_file : _scanner_params.deletes) {
+        if (delete_file->file_content == TIcebergFileContent::POSITION_DELETES) {
+            RETURN_IF_ERROR(iceberg_delete_builder->build_orc(*delete_file));
+        } else {
+            const auto s = strings::Substitute("Unsupported iceberg file content: $0 in the scanner thread",
+                                               delete_file->file_content);
+            LOG(WARNING) << s;
+            return Status::InternalError(s);
+        }
     }
+
     _app_stats.iceberg_delete_files_per_scan += _scanner_params.deletes.size();
+    return Status::OK();
+}
+
+Status HdfsOrcScanner::build_paimon_delete_file_builder() {
+    if (_scanner_params.paimon_deletion_file == nullptr) {
+        return Status::OK();
+    }
+    std::unique_ptr<PaimonDeleteFileBuilder> paimon_delete_file_builder(
+            new PaimonDeleteFileBuilder(_scanner_params.fs, _skip_rows_ctx));
+    RETURN_IF_ERROR(paimon_delete_file_builder->build(_scanner_params.paimon_deletion_file.get()));
     return Status::OK();
 }
 
@@ -342,7 +359,7 @@ Status HdfsOrcScanner::build_stripes(orc::Reader* reader, std::vector<DiskRange>
     size_t scan_end = scan_range->length + scan_start;
 
     for (uint64_t idx = 0; idx < stripe_number; idx++) {
-        auto stripeInfo = reader->getStripeInOrcFormat(idx);
+        const auto& stripeInfo = reader->getStripeInOrcFormat(idx);
         int64_t offset = stripeInfo.offset();
 
         if (offset >= scan_start && offset < scan_end) {
@@ -357,7 +374,7 @@ Status HdfsOrcScanner::build_stripes(orc::Reader* reader, std::vector<DiskRange>
 Status HdfsOrcScanner::build_io_ranges(ORCHdfsFileStream* file_stream, const std::vector<DiskRange>& stripes) {
     bool tiny_stripe_read = true;
     for (const DiskRange& disk_range : stripes) {
-        if (disk_range.length > config::orc_tiny_stripe_threshold_size) {
+        if (disk_range.length() > config::orc_tiny_stripe_threshold_size) {
             tiny_stripe_read = false;
             break;
         }
@@ -365,8 +382,12 @@ Status HdfsOrcScanner::build_io_ranges(ORCHdfsFileStream* file_stream, const std
     // we need to start tiny stripe optimization if all stripe's size smaller than config::orc_tiny_stripe_threshold_size
     if (tiny_stripe_read) {
         std::vector<io::SharedBufferedInputStream::IORange> io_ranges{};
-        DiskRangeHelper::mergeAdjacentDiskRanges(io_ranges, stripes, config::io_coalesce_read_max_distance_size,
-                                                 config::orc_tiny_stripe_threshold_size);
+        std::vector<DiskRange> merged_disk_ranges{};
+        DiskRangeHelper::merge_adjacent_disk_ranges(stripes, config::io_coalesce_read_max_distance_size,
+                                                    config::orc_tiny_stripe_threshold_size, merged_disk_ranges);
+        for (const auto& disk_range : merged_disk_ranges) {
+            io_ranges.emplace_back(disk_range.offset(), disk_range.length());
+        }
         for (const auto& it : io_ranges) {
             _app_stats.orc_total_tiny_stripe_size += it.size;
         }
@@ -379,7 +400,7 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
     std::unordered_set<std::string> known_column_names;
     OrcChunkReader::build_column_name_set(&known_column_names, _scanner_ctx.hive_column_names, reader->getType(),
                                           _scanner_ctx.case_sensitive, _scanner_ctx.orc_use_column_names);
-    _scanner_ctx.update_materialized_columns(known_column_names);
+    RETURN_IF_ERROR(_scanner_ctx.update_materialized_columns(known_column_names));
     ASSIGN_OR_RETURN(auto skip, _scanner_ctx.should_skip_by_evaluating_not_existed_slots());
     if (skip) {
         LOG(INFO) << "HdfsOrcScanner: do_open. skip file for non existed slot conjuncts.";
@@ -389,7 +410,7 @@ Status HdfsOrcScanner::resolve_columns(orc::Reader* reader) {
 
     int src_slot_index = 0;
     for (const auto& column : _scanner_ctx.materialized_columns) {
-        auto col_name = OrcChunkReader::format_column_name(column.name(), _scanner_ctx.case_sensitive);
+        auto col_name = Utils::format_name(column.name(), _scanner_ctx.case_sensitive);
         if (known_column_names.find(col_name) == known_column_names.end()) continue;
         bool is_lazy_slot = _scanner_params.is_lazy_materialization_slot(column.slot_id());
         if (is_lazy_slot) {
@@ -430,8 +451,8 @@ Status HdfsOrcScanner::build_split_tasks(orc::Reader* reader, const std::vector<
     for (const auto& info : stripes) {
         auto ctx = std::make_unique<SplitContext>();
         ctx->footer = footer;
-        ctx->split_start = info.offset;
-        ctx->split_end = info.offset + info.length;
+        ctx->split_start = info.offset();
+        ctx->split_end = info.offset() + info.length();
         _scanner_ctx.split_tasks.emplace_back(std::move(ctx));
     }
     _scanner_ctx.merge_split_tasks();
@@ -520,12 +541,17 @@ Status HdfsOrcScanner::do_open(RuntimeState* runtime_state) {
                 conjuncts.push_back(it2->root());
             }
         }
+        // add scanner's conjunct also, because SearchArgumentBuilder can support it
+        for (const auto& it : _scanner_params.scanner_conjunct_ctxs) {
+            conjuncts.push_back(it->root());
+        }
     }
     const OrcPredicates orc_predicates{&conjuncts, _scanner_ctx.runtime_filter_collector};
     RETURN_IF_ERROR(_orc_reader->init(std::move(reader), &orc_predicates));
 
     // create iceberg delete builder at last
     RETURN_IF_ERROR(build_iceberg_delete_builder());
+    RETURN_IF_ERROR(build_paimon_delete_file_builder());
     return Status::OK();
 }
 
@@ -539,13 +565,45 @@ Status HdfsOrcScanner::do_get_next(RuntimeState* runtime_state, ChunkPtr* chunk)
         return Status::EndOfFile("");
     }
 
-    ASSIGN_OR_RETURN(const size_t rows_read, _do_get_next(chunk));
+    size_t rows_read = 0;
 
-    DCHECK_EQ(rows_read, chunk->get()->num_rows());
+    if (_scanner_ctx.return_count_column) {
+        ASSIGN_OR_RETURN(rows_read, _do_get_next_count(chunk));
+    } else {
+        ASSIGN_OR_RETURN(rows_read, _do_get_next(chunk));
+    }
 
     _scanner_ctx.append_or_update_partition_column_to_chunk(chunk, rows_read);
+    _scanner_ctx.append_or_update_extended_column_to_chunk(chunk, rows_read);
+
+    // check after partition/extended column added
+    DCHECK_EQ(rows_read, chunk->get()->num_rows());
 
     return Status::OK();
+}
+
+StatusOr<size_t> HdfsOrcScanner::_do_get_next_count(ChunkPtr* chunk) {
+    size_t read_num_values = 0;
+    Status st = Status::OK();
+    while (true) {
+        {
+            SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
+            orc::RowReader::ReadPosition position;
+            st = _orc_reader->read_next(&position);
+            if (!st.ok()) {
+                break;
+            }
+        }
+        read_num_values += _orc_reader->get_cvb_size();
+        if (_skip_rows_ctx != nullptr && _skip_rows_ctx->has_skip_rows()) {
+            read_num_values -= _orc_reader->get_row_delete_number(_skip_rows_ctx);
+        }
+    }
+
+    if (!st.is_end_of_file()) return st;
+    if (read_num_values == 0) return Status::EndOfFile("No more rows to read");
+    _scanner_ctx.append_or_update_count_column_to_chunk(chunk, read_num_values);
+    return 1;
 }
 
 StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
@@ -555,13 +613,13 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
         orc::RowReader::ReadPosition position;
         size_t read_num_values = 0;
         bool has_used_dict_filter = false;
-        ColumnPtr row_delete_filter = BooleanColumn::create();
+        MutableColumnPtr row_delete_filter = BooleanColumn::create();
         {
             SCOPED_RAW_TIMER(&_app_stats.column_read_ns);
             RETURN_IF_ERROR(_orc_reader->read_next(&position));
             {
-                SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_filter_ns);
-                row_delete_filter = _orc_reader->get_row_delete_filter(_need_skip_rowids);
+                SCOPED_RAW_TIMER(&_app_stats.build_rowid_filter_ns);
+                ASSIGN_OR_RETURN(row_delete_filter, _orc_reader->get_row_delete_filter(_skip_rows_ctx));
             }
             // read num values is how many rows actually read before doing dict filtering.
             read_num_values = position.num_values;
@@ -591,7 +649,7 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
             }
 
             // we need to append none existed column before do eval, just for count(*) optimization
-            _scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, rows_read);
+            RETURN_IF_ERROR(_scanner_ctx.append_or_update_not_existed_columns_to_chunk(chunk, rows_read));
 
             // do stats before we filter rows which does not match.
             _app_stats.raw_rows_read += rows_read;
@@ -614,8 +672,12 @@ StatusOr<size_t> HdfsOrcScanner::_do_get_next(ChunkPtr* chunk) {
             }
 
             if (rows_read != 0) {
-                ColumnHelper::merge_two_filters(row_delete_filter, &_chunk_filter, nullptr);
+                ColumnHelper::merge_two_filters(std::move(row_delete_filter), &_chunk_filter, nullptr);
                 rows_read = SIMD::count_nonzero(_chunk_filter);
+                if (rows_read == 0) {
+                    // If rows_read = 0, we need to set chunk size = 0 and bypass filter chunk directly
+                    ck->set_num_rows(0);
+                }
             }
 
             if (rows_read != 0 && rows_read != ck->num_rows()) {

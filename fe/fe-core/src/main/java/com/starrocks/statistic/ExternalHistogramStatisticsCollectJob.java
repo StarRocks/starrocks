@@ -21,6 +21,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.velocity.VelocityContext;
 
@@ -28,6 +29,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.starrocks.statistic.StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME;
 
@@ -101,7 +103,7 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
 
     private String buildCollectMCV(Database database, Table table, Long topN, String columnName) {
         VelocityContext context = new VelocityContext();
-        context.put("columnName", StatisticUtils.quoting(columnName));
+        context.put("columnName", StatisticUtils.quoting(table, columnName));
         context.put("catalogName", catalogName);
         context.put("dbName", database.getOriginName());
         context.put("tableName", table.getName());
@@ -113,11 +115,18 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
     private String buildCollectHistogram(Database database, Table table, double sampleRatio,
                                          Long bucketNum, Map<String, String> mostCommonValues, String columnName,
                                          Type columnType) {
-        StringBuilder builder = new StringBuilder("INSERT INTO ").append(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME).append(" ");
+        List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME).stream()
+                .map(ColumnDef::getName)
+                .collect(Collectors.toList());
+        String columnNames = "(" + String.join(", ", targetColumnNames) + ")";
+        StringBuilder builder = new StringBuilder("INSERT INTO ").append(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME)
+                .append(columnNames).append(" ");
+
+        String quoteColumName = StatisticUtils.quoting(table, columnName);
 
         VelocityContext context = new VelocityContext();
         context.put("tableUUID", table.getUUID());
-        context.put("columnName", StatisticUtils.quoting(columnName));
+        context.put("columnName", quoteColumName);
         context.put("columnNameStr", columnName);
         context.put("catalogName", catalogName);
         context.put("dbName", database.getOriginName());
@@ -140,10 +149,10 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
 
         if (!mostCommonValues.isEmpty()) {
             if (columnType.getPrimitiveType().isDateType() || columnType.getPrimitiveType().isCharFamily()) {
-                context.put("MCVExclude", " and " + StatisticUtils.quoting(columnName) + " not in (\"" +
+                context.put("MCVExclude", " and " + quoteColumName + " not in (\"" +
                         Joiner.on("\",\"").join(mostCommonValues.keySet()) + "\")");
             } else {
-                context.put("MCVExclude", " and " + StatisticUtils.quoting(columnName) + " not in (" +
+                context.put("MCVExclude", " and " + quoteColumName + " not in (" +
                         Joiner.on(",").join(mostCommonValues.keySet()) + ")");
             }
         } else {

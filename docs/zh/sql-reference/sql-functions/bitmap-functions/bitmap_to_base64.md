@@ -1,10 +1,10 @@
 ---
-displayed_sidebar: "Chinese"
+displayed_sidebar: docs
 ---
 
 # bitmap_to_base64
 
-## 功能
+
 
 将 bitmap 转换为 Base64 字符串。该函数从 2.5 版本开始支持。
 

@@ -49,6 +49,14 @@ enum KeysType {
     PRIMARY_KEYS = 10;
 }
 
+message AggStateDescPB {
+    optional string agg_func_name = 1;
+    repeated PTypeDesc arg_types = 2;
+    optional PTypeDesc ret_type = 3;
+    optional bool is_result_nullable = 4;
+    optional int32 func_version = 5;
+}
+
 message ColumnPB {
     required int32 unique_id = 1;
     optional string name = 2;
@@ -68,6 +76,8 @@ message ColumnPB {
     optional bool visible = 16 [default=true];
     repeated ColumnPB children_columns = 17;
     optional bool is_auto_increment = 18;
+    // agg_state type
+    optional AggStateDescPB agg_state_desc = 19;
 }
 
 message TabletSchemaPB {
@@ -85,14 +95,8 @@ message TabletSchemaPB {
     optional int32 schema_version = 12;
     repeated uint32 sort_key_unique_ids = 13;
     repeated TabletIndexPB table_indices = 14;
+    optional int32 compression_level = 15 [default=-1];
     optional int64 id = 50;
-}
-
-enum IndexType {
-    BITMAP = 0;
-    GIN = 1;
-    INDEX_UNKNOWN = 2;
-    NGRAMBF = 3;
 }
 
 message TabletIndexPB {

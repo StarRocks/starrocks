@@ -1,0 +1,336 @@
+diff --git a/src/flags.cc b/src/flags.cc
+index c4c2aa4..7329c80 100644
+--- a/src/flags.cc
++++ b/src/flags.cc
+@@ -137,6 +137,10 @@ GLOG_DEFINE_uint32(max_log_size, 1800,
+ GLOG_DEFINE_bool(stop_logging_if_full_disk, false,
+                  "Stop attempting to log to disk if the disk is full.");
+ 
++GLOG_DEFINE_string(log_split_method, "day", "split log by size, day, hour");
++
++GLOG_DEFINE_int32(log_filenum_quota, 10, "max log file num in log dir");
++
+ GLOG_DEFINE_string(log_backtrace_at, "",
+                    "Emit a backtrace when logging at file:linenum.");
+ 
+diff --git a/src/glog/flags.h b/src/glog/flags.h
+index cb542b9..31d5e6e 100644
+--- a/src/glog/flags.h
++++ b/src/glog/flags.h
+@@ -182,6 +182,10 @@ DECLARE_string(logmailer);
+ 
+ DECLARE_bool(symbolize_stacktrace);
+ 
++DECLARE_int32(log_filenum_quota);
++
++DECLARE_string(log_split_method);
++
+ #pragma pop_macro("DECLARE_VARIABLE")
+ #pragma pop_macro("DECLARE_bool")
+ #pragma pop_macro("DECLARE_string")
+diff --git a/src/glog/logging.h b/src/glog/logging.h
+index 88d793f..8b90782 100644
+--- a/src/glog/logging.h
++++ b/src/glog/logging.h
+@@ -52,6 +52,10 @@
+ #include <utility>
+ #include <vector>
+ 
++#ifndef GLOG_USE_GLOG_EXPORT
++#define GLOG_USE_GLOG_EXPORT
++#endif
++
+ #if defined(GLOG_USE_GLOG_EXPORT)
+ #  include "glog/export.h"
+ #endif
+diff --git a/src/logging.cc b/src/logging.cc
+index fc63995..970cba1 100644
+--- a/src/logging.cc
++++ b/src/logging.cc
+@@ -31,6 +31,7 @@
+ 
+ #include "glog/logging.h"
+ 
++#include <list>
+ #include <algorithm>
+ #include <cassert>
+ #include <chrono>
+@@ -443,6 +444,14 @@ class PrefixFormatter {
+ 
+ std::unique_ptr<PrefixFormatter> g_prefix_formatter;
+ 
++typedef struct filetime {
++    std::string name;
++    time_t time;
++    bool operator < (const struct filetime& o) const {
++        return o.time > time;
++    }
++}Filetime;
++
+ // Encapsulates all file-system related state
+ class LogFileObject : public base::Logger {
+  public:
+@@ -474,6 +483,8 @@ class LogFileObject : public base::Logger {
+   // acquiring lock_.
+   void FlushUnlocked(const std::chrono::system_clock::time_point& now);
+ 
++  void CheckFileNumQuota();
++
+  private:
+   static const uint32 kRolloverAttemptFrequency = 0x20;
+ 
+@@ -496,6 +507,10 @@ class LogFileObject : public base::Logger {
+   // optional argument time_pid_string
+   // REQUIRES: lock_ is held
+   bool CreateLogfile(const string& time_pid_string);
++
++  std::list<Filetime> file_list_;
++  bool inited_;
++  struct ::tm tm_time_;
+ };
+ 
+ // Encapsulate all log cleaner related states
+@@ -707,7 +722,7 @@ inline void LogDestination::FlushLogFiles(int min_severity) {
+   // all this stuff.
+   std::lock_guard<std::mutex> l{log_mutex};
+   for (int i = min_severity; i < NUM_SEVERITIES; i++) {
+-    LogDestination* log = log_destination(static_cast<LogSeverity>(i));
++    LogDestination* log = log_destinations_[i].get();
+     if (log != nullptr) {
+       log->logger_->Flush();
+     }
+@@ -903,10 +918,12 @@ inline void LogDestination::LogToAllLogfiles(
+   } else if (FLAGS_logtostderr) {  // global flag: never log to file
+     ColoredWriteToStderr(severity, message, len);
+   } else {
+-    for (int i = severity; i >= 0; --i) {
+-      LogDestination::MaybeLogToLogfile(static_cast<LogSeverity>(i), timestamp,
+-                                        message, len);
+-    }
++    if (severity >= 1) {
++        LogDestination::MaybeLogToLogfile(static_cast<LogSeverity>(1), timestamp, message, len);
++        LogDestination::MaybeLogToLogfile(static_cast<LogSeverity>(0), timestamp, message, len);
++    } else if (severity == 0) {
++        LogDestination::MaybeLogToLogfile(static_cast<LogSeverity>(0), timestamp, message, len);
++    } else {}
+   }
+ }
+ 
+@@ -997,7 +1014,8 @@ LogFileObject::LogFileObject(LogSeverity severity, const char* base_filename)
+       filename_extension_(),
+       severity_(severity),
+       rollover_attempt_(kRolloverAttemptFrequency - 1),
+-      start_time_(std::chrono::system_clock::now()) {}
++      start_time_(std::chrono::system_clock::now()),
++      inited_(false) {}
+ 
+ LogFileObject::~LogFileObject() {
+   std::lock_guard<std::mutex> l{mutex_};
+@@ -1058,14 +1076,9 @@ bool LogFileObject::CreateLogfile(const string& time_pid_string) {
+   }
+   string_filename += filename_extension_;
+   const char* filename = string_filename.c_str();
+-  // only write to files, create if non-existant.
+-  int flags = O_WRONLY | O_CREAT;
+-  if (FLAGS_timestamp_in_logfile_name) {
+-    // demand that the file is unique for our timestamp (fail if it exists).
+-    flags = flags | O_EXCL;
+-  }
+-  FileDescriptor fd{
+-      open(filename, flags, static_cast<mode_t>(FLAGS_logfile_mode))};
++  int fdh = open(filename, O_WRONLY | O_CREAT /* | O_EXCL */ | O_APPEND, 0664);
++  FileDescriptor fd{fdh};
++
+   if (!fd) return false;
+ #ifdef HAVE_FCNTL
+   // Mark the file close-on-exec. We don't really care if this fails
+@@ -1112,6 +1125,9 @@ bool LogFileObject::CreateLogfile(const string& time_pid_string) {
+     }
+   }
+ #endif
++  Filetime ft;
++  ft.name = string_filename;
++  file_list_.push_back(ft);
+   // We try to create a symlink called <program_name>.<severity>,
+   // which is easier to use.  (Every time we create a new logfile,
+   // we destroy the old symlink and create a new one, so it always
+@@ -1155,6 +1171,55 @@ bool LogFileObject::CreateLogfile(const string& time_pid_string) {
+   return true;  // Everything worked
+ }
+ 
++void LogFileObject::CheckFileNumQuota() {
++    struct dirent *entry;
++    DIR *dp;
++    const vector<string> & log_dirs = GetLoggingDirectories();
++    if (log_dirs.size() < 1) return;
++
++    //fprintf(stderr, "log dir: %s\n", log_dirs[0].c_str());
++    // list file in log dir
++
++    dp = opendir(log_dirs[0].c_str());
++    if (dp == NULL) {
++        fprintf(stderr, "open log dir %s fail\n", log_dirs[0].c_str());
++        return;
++    }
++
++    file_list_.clear();
++    while ((entry = readdir(dp)) != NULL) {
++        if (DT_DIR == entry->d_type ||
++                DT_LNK == entry->d_type) {
++            continue;
++        }
++        std::string filename = std::string(entry->d_name);
++        //fprintf(stderr, "filename: %s\n", filename.c_str());
++        if (filename.find(symlink_basename_ + '.' + LogSeverityNames[severity_]) == 0) {
++            std::string filepath = log_dirs[0] + "/" + filename;
++            struct stat fstat;
++            if (::stat(filepath.c_str(), &fstat) < 0) {
++                fprintf(stderr, "state %s fail\n", filepath.c_str());
++                closedir(dp);
++                return;
++            }
++            //fprintf(stderr, "filepath: %s\n", filepath.c_str());
++            Filetime file_time;
++            file_time.time = fstat.st_mtime;
++            file_time.name = filepath;
++            file_list_.push_back(file_time);
++        }
++    }
++
++    closedir(dp);
++    file_list_.sort();
++
++    while (FLAGS_log_filenum_quota > 0 && file_list_.size() >= FLAGS_log_filenum_quota) {
++       // fprintf(stderr, "delete %s\n", file_list_.front().name.c_str());
++        unlink(file_list_.front().name.c_str());
++        file_list_.pop_front();
++    }
++}
++
+ void LogFileObject::Write(
+     bool force_flush, const std::chrono::system_clock::time_point& timestamp,
+     const char* message, size_t message_len) {
+@@ -1171,16 +1236,58 @@ void LogFileObject::Write(
+                       filename_extension_);
+     }
+   };
++  std::time_t t = std::chrono::system_clock::to_time_t(timestamp);
+ 
+   // Remove old logs
+   ScopedExit<decltype(cleanupLogs)> cleanupAtEnd{cleanupLogs};
+ 
+-  if (file_length_ >> 20U >= MaxLogSize() || PidHasChanged()) {
++  struct ::tm tm_time;
++  bool is_split = false;
++  if ("day" == FLAGS_log_split_method) {
++    localtime_r(&t, &tm_time);
++    if (tm_time.tm_year != tm_time_.tm_year
++            || tm_time.tm_mon != tm_time_.tm_mon
++            || tm_time.tm_mday != tm_time_.tm_mday) {
++        is_split = true;
++    }
++  } else if ("hour" == FLAGS_log_split_method) {
++      localtime_r(&t, &tm_time);
++      if (tm_time.tm_year != tm_time_.tm_year
++              || tm_time.tm_mon != tm_time_.tm_mon
++              || tm_time.tm_mday != tm_time_.tm_mday
++              || tm_time.tm_hour != tm_time_.tm_hour) {
++          is_split = true;
++      }
++  } else if (static_cast<int>(file_length_ >> 20) >= MaxLogSize()) {
++      // PidHasChanged()) {
++      is_split = true;
++  }
++
++  if (is_split) {
+     file_ = nullptr;
+     file_length_ = bytes_since_flush_ = dropped_mem_length_ = 0;
+     rollover_attempt_ = kRolloverAttemptFrequency - 1;
+   }
+ 
++    if ((file_ == NULL) && (!inited_) && (FLAGS_log_split_method == "size")) {
++      CheckFileNumQuota();
++      const char* filename = file_list_.back().name.c_str();
++      int fd = open(filename, O_WRONLY | O_CREAT /* | O_EXCL */ | O_APPEND, 0664);
++      if (fd != -1) {
++#ifdef HAVE_FCNTL
++        // Mark the file close-on-exec. We don't really care if this fails
++        fcntl(fd, F_SETFD, FD_CLOEXEC);
++#endif
++      file_.reset(fopen(filename, "a+"));
++      if (file_ == NULL) {      // Man, we're screwed!, try to create new log file
++        close(fd);
++      }
++      fseek(file_.get(), 0, SEEK_END);
++      file_length_ = bytes_since_flush_ = ftell(file_.get());
++      inited_ = true;
++    }
++  }
++
+   // If there's no destination file, make one before outputting
+   if (file_ == nullptr) {
+     // Try to rollover the log file every 32 log messages.  The only time
+@@ -1190,21 +1297,35 @@ void LogFileObject::Write(
+     rollover_attempt_ = 0;
+ 
+     struct ::tm tm_time;
+-    std::time_t t = std::chrono::system_clock::to_time_t(timestamp);
+ 
+-    if (FLAGS_log_utc_time) {
+-      gmtime_r(&t, &tm_time);
++    if (!inited_) {
++      CheckFileNumQuota();
++      inited_ = true;
+     } else {
+-      localtime_r(&t, &tm_time);
++        while (FLAGS_log_filenum_quota > 0 && file_list_.size() >= FLAGS_log_filenum_quota) {
++            unlink(file_list_.front().name.c_str());
++            file_list_.pop_front();
++        }
+     }
++    localtime_r(&t, &tm_time);
+ 
+     // The logfile's filename will have the date/time & pid in it
+     ostringstream time_pid_stream;
+     time_pid_stream.fill('0');
+-    time_pid_stream << 1900 + tm_time.tm_year << setw(2) << 1 + tm_time.tm_mon
+-                    << setw(2) << tm_time.tm_mday << '-' << setw(2)
+-                    << tm_time.tm_hour << setw(2) << tm_time.tm_min << setw(2)
+-                    << tm_time.tm_sec << '.' << GetMainThreadPid();
++    time_pid_stream << 1900 + tm_time.tm_year 
++                    << setw(2) << 1 + tm_time.tm_mon
++                    << setw(2) << tm_time.tm_mday;
++
++    if ("hour" == FLAGS_log_split_method) {
++        time_pid_stream << setw(2) << tm_time.tm_hour;
++    } else if ("day" != FLAGS_log_split_method) {
++        time_pid_stream << '-'
++            << setw(2) << tm_time.tm_hour
++            << setw(2) << tm_time.tm_min
++            << setw(2) << tm_time.tm_sec;
++    }
++    
++    tm_time_ = tm_time;
+     const string& time_pid_string = time_pid_stream.str();
+ 
+     if (base_filename_selected_) {
+@@ -1238,8 +1359,8 @@ void LogFileObject::Write(
+       // deadlock. Simply use a name like invalid-user.
+       if (uidname.empty()) uidname = "invalid-user";
+ 
+-      stripped_filename = stripped_filename + '.' + hostname + '.' + uidname +
+-                          ".log." + LogSeverityNames[severity_] + '.';
++      stripped_filename = stripped_filename + "." + LogSeverityNames[severity_] + ".log.";
++
+       // We're going to (potentially) try to put logs in several different dirs
+       const vector<string>& log_dirs = GetLoggingDirectories();
+ 
+@@ -1263,7 +1384,7 @@ void LogFileObject::Write(
+     }
+ 
+     // Write a header message into the log file
+-    if (FLAGS_log_file_header) {
++    if (false) {
+       ostringstream file_header_stream;
+       file_header_stream.fill('0');
+       file_header_stream << "Log file created at: " << 1900 + tm_time.tm_year

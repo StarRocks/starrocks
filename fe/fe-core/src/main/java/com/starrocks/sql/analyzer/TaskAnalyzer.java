@@ -68,9 +68,9 @@ public class TaskAnalyzer {
         if (MapUtils.isEmpty(properties)) {
             return;
         }
-        String value = properties.get(SessionVariable.WAREHOUSE);
+        String value = properties.get(SessionVariable.WAREHOUSE_NAME);
         if (value != null) {
-            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, SessionVariable.WAREHOUSE);
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INVALID_PARAMETER, SessionVariable.WAREHOUSE_NAME);
         }
     }
 

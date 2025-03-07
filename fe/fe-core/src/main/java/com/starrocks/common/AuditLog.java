@@ -29,6 +29,7 @@ public class AuditLog {
     public static final AuditLog CONNECTION_AUDIT = new AuditLog("audit.connection");
     public static final AuditLog STATISTIC_AUDIT = new AuditLog("internal.statistic");
     public static final AuditLog INTERNAL_AUDIT = new AuditLog("internal.base");
+    public static final AuditLog FEATURES_AUDIT = new AuditLog("features");
 
     private final Logger logger;
 
@@ -54,6 +55,10 @@ public class AuditLog {
 
     public static Logger getInternalAudit() {
         return INTERNAL_AUDIT.logger;
+    }
+
+    public static Logger getFeaturesAudit() {
+        return FEATURES_AUDIT.logger;
     }
 
     public AuditLog(String auditName) {

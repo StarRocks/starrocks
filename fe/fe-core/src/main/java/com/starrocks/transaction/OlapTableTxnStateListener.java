@@ -18,6 +18,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
+import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
@@ -28,7 +29,6 @@ import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.catalog.TabletMeta;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
-import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
 import com.starrocks.task.AgentBatchTask;
@@ -54,9 +54,9 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
     private Set<Long> totalInvolvedBackends;
     private Set<Long> errorReplicaIds;
-    private Set<Long> dirtyPartitionSet;
-    private Set<String> invalidDictCacheColumns;
-    private Map<String, Long> validDictCacheColumns;
+    private Set<Long> dirtyPhysicalPartitionSet;
+    private Set<ColumnId> invalidDictCacheColumns;
+    private Map<ColumnId, Long> validDictCacheColumns;
 
     public OlapTableTxnStateListener(DatabaseTransactionMgr dbTxnMgr, OlapTable table) {
         this.dbTxnMgr = dbTxnMgr;
@@ -78,7 +78,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         }
         totalInvolvedBackends = Sets.newHashSet();
         errorReplicaIds = Sets.newHashSet();
-        dirtyPartitionSet = Sets.newHashSet();
+        dirtyPhysicalPartitionSet = Sets.newHashSet();
         invalidDictCacheColumns = Sets.newHashSet();
         validDictCacheColumns = Maps.newHashMap();
 
@@ -110,14 +110,14 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             if (tableId != table.getId()) {
                 continue;
             }
-            long partitionId = tabletMeta.getPartitionId();
-            if (table.getPhysicalPartition(partitionId) == null) {
+            long physicalPartitionId = tabletMeta.getPhysicalPartitionId();
+            if (table.getPhysicalPartition(physicalPartitionId) == null) {
                 // this can happen when partitionId == -1 (tablet being dropping)
                 // or partition really not exist.
-                LOG.warn("partition {} not exist, ignore tablet {}", partitionId, tabletId);
+                LOG.warn("partition {} not exist, ignore tablet {}", physicalPartitionId, tabletId);
                 continue;
             }
-            dirtyPartitionSet.add(partitionId);
+            dirtyPhysicalPartitionSet.add(physicalPartitionId);
             tabletToBackends.computeIfAbsent(tabletId, id -> new HashSet<>())
                     .add(tabletCommitInfos.get(i).getBackendId());
             allCommittedBackends.add(tabletCommitInfos.get(i).getBackendId());
@@ -131,7 +131,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                     !tabletCommitInfos.get(i).getValidDictCacheColumns().isEmpty()) {
                 TabletCommitInfo tabletCommitInfo = tabletCommitInfos.get(i);
                 List<Long> validDictCollectedVersions = tabletCommitInfo.getValidDictCollectedVersions();
-                List<String> validDictCacheColumns = tabletCommitInfo.getValidDictCacheColumns();
+                List<ColumnId> validDictCacheColumns = tabletCommitInfo.getValidDictCacheColumns();
                 for (int j = 0; j < validDictCacheColumns.size(); j++) {
                     long version = 0;
                     // validDictCollectedVersions != validDictCacheColumns means be has not upgrade
@@ -173,7 +173,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         }
 
         for (PhysicalPartition partition : table.getAllPhysicalPartitions()) {
-            if (!dirtyPartitionSet.contains(partition.getId())) {
+            if (!dirtyPhysicalPartitionSet.contains(partition.getId())) {
                 continue;
             }
 
@@ -196,8 +196,9 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
                         if (replica == null) {
                             Backend backend =
                                     GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackend(tabletBackend);
-                            throw new TransactionCommitFailedException("Not found replicas of tablet. "
-                                    + "tablet_id: " + tabletId + ", backend_id: " + backend.getHost());
+                            LOG.warn("Not found replica of tablet. tablet_id: {}, backend: {}, txn_id: {}", tabletId,
+                                    backend.getHost(), txnState.getTransactionId());
+                            continue;
                         }
                         // if the tablet have no replica's to commit or the tablet is a rolling up tablet, the commit backends maybe null
                         // if the commit backends is null, set all replicas as error replicas
@@ -253,40 +254,30 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         TableCommitInfo tableCommitInfo = new TableCommitInfo(table.getId());
         boolean isFirstPartition = true;
         txnState.getErrorReplicas().addAll(errorReplicaIds);
-        for (long partitionId : dirtyPartitionSet) {
+        for (long physicalPartitionId : dirtyPhysicalPartitionSet) {
             PartitionCommitInfo partitionCommitInfo;
-            long version = -1;
             if (isFirstPartition) {
 
-                List<String> validDictCacheColumnNames = Lists.newArrayList();
+                List<ColumnId> validDictCacheColumnNames = Lists.newArrayList();
                 List<Long> validDictCacheColumnVersions = Lists.newArrayList();
 
                 validDictCacheColumns.forEach((name, dictVersion) -> {
                     validDictCacheColumnNames.add(name);
                     validDictCacheColumnVersions.add(dictVersion);
                 });
-                partitionCommitInfo = new PartitionCommitInfo(partitionId,
-                        version,
+                partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId,
+                        -1,
                         System.currentTimeMillis(),
                         Lists.newArrayList(invalidDictCacheColumns),
                         validDictCacheColumnNames,
                         validDictCacheColumnVersions);
             } else {
-                partitionCommitInfo = new PartitionCommitInfo(partitionId,
-                        version,
+                partitionCommitInfo = new PartitionCommitInfo(physicalPartitionId,
+                        -1,
                         System.currentTimeMillis() /* use as partition visible time */);
             }
             tableCommitInfo.addPartitionCommitInfo(partitionCommitInfo);
             isFirstPartition = false;
-        }
-
-        if (txnState.getSourceType() == TransactionState.LoadJobSourceType.REPLICATION) {
-            ReplicationTxnCommitAttachment attachment = (ReplicationTxnCommitAttachment) txnState
-                    .getTxnCommitAttachment();
-            Map<Long, Long> partitionVersions = attachment.getPartitionVersions();
-            for (PartitionCommitInfo partitionCommitInfo : tableCommitInfo.getIdToPartitionCommitInfo().values()) {
-                partitionCommitInfo.setVersion(partitionVersions.get(partitionCommitInfo.getPartitionId()));
-            }
         }
 
         txnState.putIdToTableCommitInfo(table.getId(), tableCommitInfo);
@@ -300,12 +291,12 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
 
     @Override
     public void postAbort(TransactionState txnState, List<TabletCommitInfo> finishedTablets,
-            List<TabletFailInfo> failedTablets) {
+                          List<TabletFailInfo> failedTablets) {
         txnState.clearAutomaticPartitionSnapshot();
-        Database db = GlobalStateMgr.getCurrentState().getDb(txnState.getDbId());
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(txnState.getDbId());
         if (db != null) {
             Locker locker = new Locker();
-            locker.lockDatabase(db, LockType.READ);
+            locker.lockTablesWithIntensiveDbLock(db.getId(), txnState.getTableIdList(), LockType.READ);
             try {
                 TabletInvertedIndex tabletInvertedIndex = dbTxnMgr.getGlobalStateMgr().getTabletInvertedIndex();
                 // update write failed backend/replica
@@ -329,7 +320,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
             } catch (Exception e) {
                 LOG.warn("Fail to execute postAbort", e);
             } finally {
-                locker.unLockDatabase(db, LockType.READ);
+                locker.unLockTablesWithIntensiveDbLock(db.getId(), txnState.getTableIdList(), LockType.READ);
             }
         }
 
@@ -343,7 +334,7 @@ public class OlapTableTxnStateListener implements TransactionStateListener {
         synchronized (CLEAR_TRANSACTION_TASKS) {
             for (Long beId : allBeIds) {
                 ClearTransactionTask task = new ClearTransactionTask(beId, txnState.getTransactionId(),
-                        Lists.newArrayList(), txnState.getTxnType());
+                        Lists.newArrayList(), txnState.getTransactionType());
                 CLEAR_TRANSACTION_TASKS.add(task);
             }
             // try to group send tasks, not sending every time a txn is aborted. to avoid too many task rpc.

@@ -19,8 +19,10 @@
 #include "common/statusor.h"
 #include "exec/pipeline/scan/balanced_chunk_buffer.h"
 #include "exec/pipeline/scan/scan_operator.h"
+#include "exec/workgroup/scan_task_queue.h"
 #include "exec/workgroup/work_group.h"
 #include "runtime/runtime_state.h"
+
 namespace starrocks::pipeline {
 
 ChunkSource::ChunkSource(ScanOperator* scan_op, RuntimeProfile* runtime_profile, MorselPtr&& morsel,
@@ -59,12 +61,15 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
         {
             SCOPED_RAW_TIMER(&time_spent_ns);
 
+            // TODO: process when buffer full
             if (_chunk_token == nullptr && (_chunk_token = _chunk_buffer.limiter()->pin(1)) == nullptr) {
                 break;
             }
 
             ChunkPtr chunk;
             _status = _read_chunk(state, &chunk);
+            // notify when generate new chunk
+            auto notify = scan_defer_notify(_scan_op);
             // we always output a empty chunk instead of nullptr, because we need set tablet_id and is_last_chunk flag
             // in the chunk.
             if (chunk == nullptr) {
@@ -97,6 +102,15 @@ Status ChunkSource::buffer_next_batch_chunks_blocking(RuntimeState* state, size_
         }
     }
     return _status;
+}
+
+const workgroup::WorkGroupScanSchedEntity* ChunkSource::_scan_sched_entity(const workgroup::WorkGroup* wg) const {
+    DCHECK(wg != nullptr);
+    if (_scan_op->sched_entity_type() == workgroup::ScanSchedEntityType::CONNECTOR) {
+        return wg->connector_scan_sched_entity();
+    } else {
+        return wg->scan_sched_entity();
+    }
 }
 
 } // namespace starrocks::pipeline

@@ -18,6 +18,7 @@
 #include "agent/utils.h"
 #include "common/logging.h"
 #include "runtime/exec_env.h"
+#include "testutil/sync_point.h"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks {
@@ -26,13 +27,15 @@ const uint32_t TASK_FINISH_MAX_RETRY = 3;
 const uint32_t ALTER_FINISH_TASK_MAX_RETRY = 10;
 
 void finish_task(const TFinishTaskRequest& finish_task_request) {
+    TEST_SYNC_POINT_CALLBACK("FinishAgentTask::input",
+                             const_cast<void*>(static_cast<const void*>(&finish_task_request)));
     // Return result to FE
     TMasterResult result;
     uint32_t try_time = 0;
     int32_t sleep_seconds = 1;
     int32_t max_retry_times = TASK_FINISH_MAX_RETRY;
 
-    MasterServerClient client(ExecEnv::GetInstance()->frontend_client_cache());
+    MasterServerClient client;
 
     while (try_time < max_retry_times) {
         StarRocksMetrics::instance()->finish_task_requests_total.increment(1);

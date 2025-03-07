@@ -33,10 +33,10 @@ import java.util.List;
 import java.util.Set;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class MvRewriteUnionTest extends MvRewriteTestBase {
+public class MvRewriteUnionTest extends MVTestBase {
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MvRewriteTestBase.beforeClass();
+        MVTestBase.beforeClass();
 
         starRocksAssert.withTable(cluster, "depts");
         starRocksAssert.withTable(cluster, "emps");
@@ -387,14 +387,14 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                                 "SELECT k1,k2, v1,v2 from mt1 where k1<2",
                         };
                         for (String query : sqls) {
-                            String plan = getFragmentPlan(query, "MV");
+                            String plan = getFragmentPlan(query);
                             PlanTestBase.assertNotContains(plan, ":UNION");
                             PlanTestBase.assertContains(plan, "union_mv0");
                         }
                     }
                     {
                         String query = "SELECT k1,k2, v1,v2 from mt1 where k1<6";
-                        String plan = getFragmentPlan(query, "MV");
+                        String plan = getFragmentPlan(query);
                         PlanTestBase.assertContains(plan, ":UNION");
                         PlanTestBase.assertContains(plan, "union_mv0");
                     }
@@ -404,14 +404,13 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1<6 and k2 like 'a%'",
                                         "     TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +
-                                                "     PREDICATES: 10: k2 LIKE 'a%'\n" +
-                                                "     partitions=2/3\n" +
-                                                "     rollup: mt1\n" +
-                                                "     tabletRatio=6/6"),
+                                                "     PREDICATES: 13: k1 < 6, 14: k2 LIKE 'a%'\n" +
+                                                "     partitions=1/3\n" +
+                                                "     rollup: mt1"),
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1 != 3 and k2 like 'a%'",
                                         "     TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +
-                                                "     PREDICATES: 10: k2 LIKE 'a%', 9: k1 > 3\n" +
+                                                "     PREDICATES: 13: k1 != 3, 14: k2 LIKE 'a%'\n" +
                                                 "     partitions=2/3\n" +
                                                 "     rollup: mt1\n" +
                                                 "     tabletRatio=6/6")
@@ -427,21 +426,26 @@ public class MvRewriteUnionTest extends MvRewriteTestBase {
                     {
                         String query = "SELECT k1,k2, v1,v2 from mt1 where k1 > 0 and k2 like 'a%'";
                         String plan = getFragmentPlan(query);
-                        PlanTestBase.assertNotContains(plan, ":UNION", "union_mv0");
+                        PlanTestBase.assertContains(plan, ":UNION");
+                        PlanTestBase.assertContains(plan, "     TABLE: mt1\n" +
+                                "     PREAGGREGATION: ON\n" +
+                                "     PREDICATES: 13: k1 > 0, 14: k2 LIKE 'a%'\n" +
+                                "     partitions=2/3\n" +
+                                "     rollup: mt1\n" +
+                                "     tabletRatio=6/6");
                     }
                     {
                         connectContext.getSessionVariable().setMaterializedViewUnionRewriteMode(2);
                         List<Pair<String, String>> sqls = List.of(
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>1 and k2 like 'a%'",
-                                        "TABLE: mt1\n" +
+                                        "     TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +
-                                                "     PREDICATES: 1: k1 > 1, 2: k2 LIKE 'a%'\n" +
-                                                "     partitions=3/3"),
+                                                "     PREDICATES: 13: k1 > 1, 14: k2 LIKE 'a%'\n" +
+                                                "     partitions=2/3"),
                                 Pair.create("SELECT k1,k2, v1,v2 from mt1 where k1>0 and k2 like 'a%'",
-                                        "1:OlapScanNode\n" +
-                                                "     TABLE: mt1\n" +
+                                        "     TABLE: mt1\n" +
                                                 "     PREAGGREGATION: ON\n" +
-                                                "     PREDICATES: 9: k1 > 0, 10: k2 LIKE 'a%', (9: k1 >= 3) OR (9: k1 IS NULL)")
+                                                "     PREDICATES: 13: k1 > 0, 14: k2 LIKE 'a%'")
                                 );
                         for (Pair<String, String> p : sqls) {
                             String query = p.first;

@@ -79,9 +79,8 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
     _set_schema(pkey_schema);
 
     // load persistent index if enable persistent index meta
-    size_t fix_size = PrimaryKeyEncoder::get_encoded_fixed_size(pkey_schema);
 
-    if (metadata->enable_persistent_index() && (fix_size <= 128)) {
+    if (metadata->enable_persistent_index()) {
         DCHECK(_persistent_index == nullptr);
 
         switch (metadata->persistent_index_type()) {
@@ -103,13 +102,13 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
             RETURN_IF_ERROR(StorageEngine::instance()
                                     ->get_persistent_index_store(metadata->id())
                                     ->create_dir_if_path_not_exists(path));
-            _persistent_index = std::make_unique<LakeLocalPersistentIndex>(path);
+            _persistent_index = std::make_shared<LakeLocalPersistentIndex>(path);
             set_enable_persistent_index(true);
             return dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get())
                     ->load_from_lake_tablet(tablet_mgr, metadata, base_version, builder);
         }
         case PersistentIndexTypePB::CLOUD_NATIVE: {
-            _persistent_index = std::make_unique<LakePersistentIndex>(tablet_mgr, metadata->id());
+            _persistent_index = std::make_shared<LakePersistentIndex>(tablet_mgr, metadata->id());
             set_enable_persistent_index(true);
             auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
             RETURN_IF_ERROR(lake_persistent_index->init(metadata->sstable_meta()));
@@ -122,7 +121,7 @@ Status LakePrimaryIndex::_do_lake_load(TabletManager* tablet_mgr, const TabletMe
     }
 
     OlapReaderStatistics stats;
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     if (pk_columns.size() > 1) {
         // more than one key column
         RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
@@ -216,15 +215,16 @@ Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuild
         RETURN_IF_ERROR(TabletMetaManager::get_persistent_index_meta(data_dir, _tablet_id, &index_meta));
         RETURN_IF_ERROR(PrimaryIndex::commit(&index_meta));
         RETURN_IF_ERROR(TabletMetaManager::write_persistent_index_meta(data_dir, _tablet_id, index_meta));
+        RETURN_IF_ERROR(on_commited());
+        set_local_pk_index_write_amp_score(PersistentIndex::major_compaction_score(index_meta));
         // Call `on_commited` here, which will be safe to remove old files.
         // Because if version publishing fails after `on_commited`, index will be rebuild.
-        return on_commited();
+        return Status::OK();
     }
     case PersistentIndexTypePB::CLOUD_NATIVE: {
         auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
         if (lake_persistent_index != nullptr) {
-            lake_persistent_index->commit(builder);
-            return Status::OK();
+            return lake_persistent_index->commit(builder);
         } else {
             return Status::InternalError("Persistent index is not a LakePersistentIndex.");
         }
@@ -236,28 +236,66 @@ Status LakePrimaryIndex::commit(const TabletMetadataPtr& metadata, MetaFileBuild
     return Status::OK();
 }
 
-Status LakePrimaryIndex::major_compact(const TabletMetadata& metadata, TxnLogPB* txn_log) {
+double LakePrimaryIndex::get_local_pk_index_write_amp_score() {
     if (!_enable_persistent_index) {
-        return Status::OK();
+        return 0.0;
+    }
+    auto* local_persistent_index = dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get());
+    if (local_persistent_index != nullptr) {
+        return local_persistent_index->get_write_amp_score();
+    }
+    return 0.0;
+}
+
+void LakePrimaryIndex::set_local_pk_index_write_amp_score(double score) {
+    if (!_enable_persistent_index) {
+        return;
+    }
+    auto* local_persistent_index = dynamic_cast<LakeLocalPersistentIndex*>(_persistent_index.get());
+    if (local_persistent_index != nullptr) {
+        local_persistent_index->set_write_amp_score(score);
+    }
+}
+
+static void old_values_to_deletes(const std::vector<uint64_t>& old_values, DeletesMap* deletes) {
+    for (uint64_t old : old_values) {
+        if (old != NullIndexValue) {
+            (*deletes)[(uint32_t)(old >> 32)].push_back((uint32_t)(old & ROWID_MASK));
+        }
+    }
+}
+
+Status LakePrimaryIndex::erase(const TabletMetadataPtr& metadata, const Column& pks, DeletesMap* deletes,
+                               uint32_t rowset_id) {
+    // No need to setup rebuild point for in-memory index and local persistent index,
+    // so keep using previous erase interface.
+    if (!_enable_persistent_index) {
+        return PrimaryIndex::erase(pks, deletes);
     }
 
-    switch (metadata.persistent_index_type()) {
+    switch (metadata->persistent_index_type()) {
     case PersistentIndexTypePB::LOCAL: {
-        return Status::OK();
+        return PrimaryIndex::erase(pks, deletes);
     }
     case PersistentIndexTypePB::CLOUD_NATIVE: {
         auto* lake_persistent_index = dynamic_cast<LakePersistentIndex*>(_persistent_index.get());
         if (lake_persistent_index != nullptr) {
-            return lake_persistent_index->major_compact(metadata, 0 /** min_retain_version **/, txn_log);
+            std::vector<Slice> keys;
+            std::vector<uint64_t> old_values(pks.size(), NullIndexValue);
+            const Slice* vkeys = _build_persistent_keys(pks, 0, pks.size(), &keys);
+            // Cloud native index need to setup rowset id as rebuild point when erase.
+            RETURN_IF_ERROR(lake_persistent_index->erase(pks.size(), vkeys,
+                                                         reinterpret_cast<IndexValue*>(old_values.data()), rowset_id));
+            old_values_to_deletes(old_values, deletes);
+            return Status::OK();
         } else {
             return Status::InternalError("Persistent index is not a LakePersistentIndex.");
         }
     }
     default:
         return Status::InternalError("Unsupported lake_persistent_index_type " +
-                                     PersistentIndexTypePB_Name(metadata.persistent_index_type()));
+                                     PersistentIndexTypePB_Name(metadata->persistent_index_type()));
     }
-    return Status::OK();
 }
 
 } // namespace starrocks::lake

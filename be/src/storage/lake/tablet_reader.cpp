@@ -38,6 +38,7 @@
 #include "storage/tablet_schema_map.h"
 #include "storage/types.h"
 #include "storage/union_iterator.h"
+#include "util/json_flattener.h"
 
 namespace starrocks::lake {
 
@@ -59,18 +60,34 @@ TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const Tabl
           _could_split_physically(could_split_physically) {}
 
 TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
-                           std::vector<RowsetPtr> rowsets)
+                           bool need_split, bool could_split_physically, std::vector<RowsetPtr> rowsets)
         : ChunkIterator(std::move(schema)),
           _tablet_mgr(tablet_mgr),
           _tablet_metadata(std::move(metadata)),
+          _need_split(need_split),
+          _could_split_physically(could_split_physically) {
+    if (!rowsets.empty()) {
+        _rowsets_inited = true;
+        _rowsets = std::move(rowsets);
+    }
+}
+
+TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
+                           std::vector<RowsetPtr> rowsets, std::shared_ptr<const TabletSchema> tablet_schema)
+        : ChunkIterator(std::move(schema)),
+          _tablet_mgr(tablet_mgr),
+          _tablet_metadata(std::move(metadata)),
+          _tablet_schema(std::move(tablet_schema)),
           _rowsets_inited(true),
           _rowsets(std::move(rowsets)) {}
 
 TabletReader::TabletReader(TabletManager* tablet_mgr, std::shared_ptr<const TabletMetadataPB> metadata, Schema schema,
-                           std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer)
+                           std::vector<RowsetPtr> rowsets, bool is_key, RowSourceMaskBuffer* mask_buffer,
+                           std::shared_ptr<const TabletSchema> tablet_schema)
         : ChunkIterator(std::move(schema)),
           _tablet_mgr(tablet_mgr),
           _tablet_metadata(std::move(metadata)),
+          _tablet_schema(std::move(tablet_schema)),
           _rowsets_inited(true),
           _rowsets(std::move(rowsets)),
           _is_vertical_merge(true),
@@ -84,7 +101,9 @@ TabletReader::~TabletReader() {
 }
 
 Status TabletReader::prepare() {
-    _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
+    if (_tablet_schema == nullptr) {
+        _tablet_schema = GlobalTabletSchemaMap::Instance()->emplace(_tablet_metadata->schema()).first;
+    }
     if (UNLIKELY(_tablet_schema == nullptr)) {
         return Status::InternalError("failed to construct tablet schema");
     }
@@ -98,9 +117,11 @@ Status TabletReader::prepare() {
 
 Status TabletReader::open(const TabletReaderParams& read_params) {
     if (read_params.reader_type != ReaderType::READER_QUERY && read_params.reader_type != ReaderType::READER_CHECKSUM &&
-        read_params.reader_type != ReaderType::READER_ALTER_TABLE && !is_compaction(read_params.reader_type)) {
+        read_params.reader_type != ReaderType::READER_ALTER_TABLE && !is_compaction(read_params.reader_type) &&
+        read_params.reader_type != ReaderType::READER_BYPASS_QUERY) {
         return Status::NotSupported("reader type not supported now");
     }
+    RETURN_IF_ERROR(init_compaction_column_paths(read_params));
 
     if (_need_split) {
         std::vector<BaseTabletSharedPtr> tablets;
@@ -120,10 +141,13 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
 
         // not split for data skew between tablet
         if (tablet_num_rows < read_params.splitted_scan_rows * config::lake_tablet_rows_splitted_ratio) {
+            // set _need_split false to make iterator can get data this round if split do not happen,
+            // otherwise, iterator will return empty.
+            _need_split = false;
             return init_collector(read_params);
         }
 
-        std::vector<std::unique_ptr<pipeline::ScanMorsel>> morsels;
+        pipeline::Morsels morsels;
         morsels.emplace_back(
                 std::make_unique<pipeline::ScanMorsel>(read_params.plan_node_id, *(read_params.scan_range)));
 
@@ -143,6 +167,7 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         split_morsel_queue->set_tablet_rowsets(std::move(tablet_rowsets));
         split_morsel_queue->set_key_ranges(read_params.range, read_params.end_range, read_params.start_key,
                                            read_params.end_key);
+        split_morsel_queue->set_tablet_schema(_tablet_schema);
 
         while (true) {
             auto split = split_morsel_queue->try_get().value();
@@ -170,6 +195,64 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
     return Status::OK();
 }
 
+Status TabletReader::init_compaction_column_paths(const TabletReaderParams& read_params) {
+    if (!config::enable_compaction_flat_json || !is_compaction(read_params.reader_type) ||
+        read_params.column_access_paths == nullptr) {
+        return Status::OK();
+    }
+
+    if (!read_params.column_access_paths->empty()) {
+        VLOG(3) << "Lake Compaction flat json paths exists: " << read_params.column_access_paths->size();
+        return Status::OK();
+    }
+
+    DCHECK(is_compaction(read_params.reader_type) && read_params.column_access_paths != nullptr &&
+           read_params.column_access_paths->empty());
+    int num_readers = 0;
+    for (const auto& rowset : _rowsets) {
+        auto segments = rowset->get_segments();
+        std::for_each(segments.begin(), segments.end(),
+                      [&](const auto& segment) { num_readers += segment->num_rows() > 0 ? 1 : 0; });
+    }
+
+    std::vector<const ColumnReader*> readers;
+    for (size_t i = 0; i < _tablet_schema->num_columns(); i++) {
+        const auto& col = _tablet_schema->column(i);
+        auto col_name = std::string(col.name());
+        if (_schema.get_field_by_name(col_name) == nullptr || col.type() != LogicalType::TYPE_JSON) {
+            continue;
+        }
+        readers.clear();
+        for (const auto& rowset : _rowsets) {
+            for (const auto& segment : rowset->get_segments()) {
+                if (segment->num_rows() == 0) {
+                    continue;
+                }
+                auto reader = segment->column_with_uid(col.unique_id());
+                if (reader != nullptr && reader->column_type() == LogicalType::TYPE_JSON &&
+                    nullptr != reader->sub_readers() && !reader->sub_readers()->empty()) {
+                    readers.emplace_back(reader);
+                }
+            }
+        }
+        if (readers.size() == num_readers) {
+            // must all be flat json type
+            JsonPathDeriver deriver;
+            deriver.derived(readers);
+            auto paths = deriver.flat_paths();
+            auto types = deriver.flat_types();
+            VLOG(3) << "Lake Compaction flat json column: " << JsonFlatPath::debug_flat_json(paths, types, true);
+            ASSIGN_OR_RETURN(auto res, ColumnAccessPath::create(TAccessPathType::ROOT, std::string(col.name()), i));
+            for (size_t j = 0; j < paths.size(); j++) {
+                ColumnAccessPath::insert_json_path(res.get(), types[j], paths[j]);
+            }
+            res->set_from_compaction(true);
+            read_params.column_access_paths->emplace_back(std::move(res));
+        }
+    }
+    return Status::OK();
+}
+
 void TabletReader::close() {
     if (_collect_iter != nullptr) {
         _collect_iter->close();
@@ -190,6 +273,10 @@ Status TabletReader::do_get_next(Chunk* chunk) {
     return Status::OK();
 }
 
+Status TabletReader::do_get_next(Chunk* chunk, std::vector<uint64_t>* rssid_rowids) {
+    return _collect_iter->get_next(chunk, rssid_rowids);
+}
+
 Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks) {
     DCHECK(_is_vertical_merge);
     if (_need_split) {
@@ -200,6 +287,15 @@ Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* sourc
     return Status::OK();
 }
 
+Status TabletReader::do_get_next(Chunk* chunk, std::vector<RowSourceMask>* source_masks,
+                                 std::vector<uint64_t>* rssid_rowids) {
+    DCHECK(_is_vertical_merge);
+    RETURN_IF_ERROR(_collect_iter->get_next(chunk, source_masks, rssid_rowids));
+    return Status::OK();
+}
+
+// TODO: support
+//  1. rowid range and short key range
 Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std::vector<ChunkIteratorPtr>* iters) {
     RowsetReadOptions rs_opts;
     KeysType keys_type = _tablet_schema->keys_type();
@@ -208,9 +304,9 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
     RETURN_IF_ERROR(parse_seek_range(*_tablet_schema, params.range, params.end_range, params.start_key, params.end_key,
                                      &rs_opts.ranges, &_mempool));
     rs_opts.pred_tree = params.pred_tree;
-    auto cid_to_preds = rs_opts.pred_tree.get_immediate_column_predicate_map();
-    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_map(&_obj_pool, cid_to_preds,
-                                                                     &rs_opts.predicates_for_zone_map));
+    PredicateTree pred_tree_for_zone_map;
+    RETURN_IF_ERROR(ZonemapPredicatesRewriter::rewrite_predicate_tree(&_obj_pool, rs_opts.pred_tree,
+                                                                      rs_opts.pred_tree_for_zone_map));
     rs_opts.sorted = ((keys_type != DUP_KEYS && keys_type != PRIMARY_KEYS) && !params.skip_aggregation) ||
                      is_compaction(params.reader_type) || params.sorted_by_keys_per_tablet;
     rs_opts.reader_type = params.reader_type;
@@ -230,9 +326,23 @@ Status TabletReader::get_segment_iterators(const TabletReaderParams& params, std
         rs_opts.is_primary_keys = true;
         rs_opts.version = _tablet_metadata->version();
     }
+    rs_opts.reader_type = params.reader_type;
+
+    if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS) {
+        rs_opts.asc_hint = _is_asc_hint;
+    }
 
     rs_opts.rowid_range_option = params.rowid_range_option;
     rs_opts.short_key_ranges_option = params.short_key_ranges_option;
+
+    rs_opts.column_access_paths = params.column_access_paths;
+    rs_opts.has_preaggregation = true;
+    if ((is_compaction(params.reader_type) || params.sorted_by_keys_per_tablet)) {
+        rs_opts.has_preaggregation = true;
+    } else if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS ||
+               (keys_type == UNIQUE_KEYS && params.skip_aggregation)) {
+        rs_opts.has_preaggregation = false;
+    }
 
     SCOPED_RAW_TIMER(&_stats.create_segment_iter_ns);
 
@@ -284,7 +394,7 @@ Status TabletReader::init_delete_predicates(const TabletReaderParams& params, De
     if (UNLIKELY(_tablet_schema == nullptr)) {
         return Status::InternalError("tablet schema is null. forget or fail to call prepare()");
     }
-    PredicateParser pred_parser(_tablet_schema);
+    OlapPredicateParser pred_parser(_tablet_schema);
 
     for (int index = 0, size = _tablet_metadata->rowsets_size(); index < size; ++index) {
         const auto& rowset_metadata = _tablet_metadata->rowsets(index);
@@ -390,7 +500,9 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         if (_is_vertical_merge && !_is_key) {
             _collect_iter = new_mask_merge_iterator(seg_iters, _mask_buffer);
         } else {
-            _collect_iter = new_heap_merge_iterator(seg_iters);
+            _collect_iter = new_heap_merge_iterator(
+                    seg_iters,
+                    (keys_type == PRIMARY_KEYS) && StorageEngine::instance()->enable_light_pk_compaction_publish());
         }
     } else if (params.sorted_by_keys_per_tablet && (keys_type == DUP_KEYS || keys_type == PRIMARY_KEYS) &&
                seg_iters.size() > 1) {
@@ -409,6 +521,9 @@ Status TabletReader::init_collector(const TabletReaderParams& params) {
         }
     } else if (keys_type == PRIMARY_KEYS || keys_type == DUP_KEYS || (keys_type == UNIQUE_KEYS && skip_aggr) ||
                (select_all_keys && seg_iters.size() == 1)) {
+        if (!_is_asc_hint) {
+            std::reverse(seg_iters.begin(), seg_iters.end());
+        }
         //             UnionIterator
         //                   |
         //       +-----------+-----------+

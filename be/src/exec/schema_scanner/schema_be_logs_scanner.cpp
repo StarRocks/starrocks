@@ -24,9 +24,11 @@
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaBeLogsScanner::_s_columns[] = {
-        {"BE_ID", TYPE_BIGINT, sizeof(int64_t), false},     {"LEVEL", TYPE_VARCHAR, sizeof(StringValue), false},
-        {"TIMESTAMP", TYPE_BIGINT, sizeof(int64_t), false}, {"TID", TYPE_BIGINT, sizeof(int64_t), false},
-        {"LOG", TYPE_VARCHAR, sizeof(StringValue), false},
+        {"BE_ID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"LEVEL", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"TIMESTAMP", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"TID", TypeDescriptor::from_logical_type(TYPE_BIGINT), sizeof(int64_t), false},
+        {"LOG", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 };
 
 SchemaBeLogsScanner::SchemaBeLogsScanner()
@@ -46,7 +48,7 @@ Status SchemaBeLogsScanner::start(RuntimeState* state) {
     if (_param->log_end_ts > 0) {
         end_ts = _param->log_end_ts;
     }
-    string level;
+    string level = "I";
     string pattern;
     if (_param->log_level != nullptr) {
         level = *_param->log_level;

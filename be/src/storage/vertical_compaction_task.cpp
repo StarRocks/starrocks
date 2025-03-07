@@ -58,9 +58,9 @@ Status VerticalCompactionTask::_vertical_compaction_data(Statistics* statistics)
             config::max_segment_file_size, _task_info.input_rows_num, _task_info.input_rowsets_size);
 
     std::unique_ptr<RowsetWriter> output_rs_writer;
-    RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(_tablet.get(), max_rows_per_segment,
-                                                                    _task_info.algorithm, _task_info.output_version,
-                                                                    &output_rs_writer, _tablet_schema));
+    RETURN_IF_ERROR(CompactionUtils::construct_output_rowset_writer(
+            _tablet.get(), max_rows_per_segment, _task_info.algorithm, _task_info.output_version, _task_info.gtid,
+            &output_rs_writer, _tablet_schema));
 
     std::vector<std::vector<uint32_t>> column_groups;
     CompactionUtils::split_column_into_groups(_tablet_schema->num_columns(), _tablet_schema->sort_key_idxes(),
@@ -131,13 +131,14 @@ Status VerticalCompactionTask::_compact_column_group(bool is_key, int column_gro
     reader_params.reader_type =
             compaction_type() == BASE_COMPACTION ? READER_BASE_COMPACTION : READER_CUMULATIVE_COMPACTION;
     reader_params.profile = _runtime_profile.create_child("merge_rowsets");
+    reader_params.column_access_paths = &_column_access_paths;
 
     StatusOr<int32_t> ret = _calculate_chunk_size_for_column_group(column_group);
     if (!ret.ok()) {
         return ret.status();
     }
     int32_t chunk_size = ret.value();
-    VLOG(1) << "compaction task_id:" << _task_info.task_id << ", tablet=" << _tablet->tablet_id()
+    VLOG(2) << "compaction task_id:" << _task_info.task_id << ", tablet=" << _tablet->tablet_id()
             << ", column group=" << column_group_index << ", reader chunk size=" << chunk_size;
     reader_params.chunk_size = chunk_size;
     RETURN_IF_ERROR(reader.open(reader_params));

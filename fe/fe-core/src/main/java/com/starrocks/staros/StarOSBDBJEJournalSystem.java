@@ -68,6 +68,7 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
     public StarOSBDBJEJournalSystem(BDBJEJournal journal) {
         bdbjeJournal = journal;
         replayedJournalId = new AtomicLong(0L);
+        editLog = new EditLog(null);
     }
 
     public long getReplayId() {
@@ -185,6 +186,7 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
             Util.stdoutWithTime(e.getMessage());
             System.exit(-1);
         } catch (Exception e) {
+            LOG.warn("got exception when replay star mgr journal", e);
             throw new StarException(ExceptionCode.JOURNAL, e.getMessage());
         } finally {
             if (cursor != null) {
@@ -224,6 +226,10 @@ public class StarOSBDBJEJournalSystem implements JournalSystem {
 
     public BDBJEJournal getJournal() {
         return bdbjeJournal;
+    }
+
+    public JournalWriter getJournalWriter() {
+        return journalWriter;
     }
 }
 
