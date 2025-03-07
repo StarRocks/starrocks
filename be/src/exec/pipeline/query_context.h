@@ -80,7 +80,7 @@ public:
     // now time point pass by deadline point.
     bool is_delivery_expired() const {
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-        return now > _delivery_deadline || _is_cancelled;
+        return now > _delivery_deadline || _cancelled_by_fe;
     }
     bool is_query_expired() const {
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
@@ -94,7 +94,9 @@ public:
         return status == nullptr ? Status::Cancelled("Query has been cancelled") : *status;
     }
 
-    bool is_dead() const { return _num_active_fragments == 0 && (_num_fragments == _total_fragments || _is_cancelled); }
+    bool is_dead() const {
+        return _num_active_fragments == 0 && (_num_fragments == _total_fragments || _cancelled_by_fe);
+    }
     // add expired seconds to deadline
     void extend_delivery_lifetime() {
         _delivery_deadline =
@@ -151,7 +153,7 @@ public:
 
     FragmentContextManager* fragment_mgr();
 
-    void cancel(const Status& status);
+    void cancel(const Status& status, bool cancelled_by_fe);
 
     void set_is_runtime_filter_coordinator(bool flag) { _is_runtime_filter_coordinator = flag; }
 
@@ -316,6 +318,7 @@ private:
     std::shared_ptr<starrocks::debug::QueryTrace> _query_trace;
     std::atomic_bool _is_prepared = false;
     std::atomic_bool _is_cancelled = false;
+    std::atomic_bool _cancelled_by_fe = false;
     std::atomic<Status*> _cancelled_status = nullptr;
     Status _s_status;
 
