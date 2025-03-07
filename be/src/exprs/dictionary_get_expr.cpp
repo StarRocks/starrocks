@@ -42,7 +42,7 @@ StatusOr<ColumnPtr> DictionaryGetExpr::evaluate_checked(ExprContext* context, Ch
             column = ColumnHelper::unpack_and_duplicate_const_column(size, column);
         }
         if (column->is_nullable()) {
-            column = ColumnHelper::update_column_nullable(false, std::move(column), size);
+            column = ColumnHelper::update_column_nullable(false, column, size);
         }
     }
 

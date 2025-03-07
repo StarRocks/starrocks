@@ -611,8 +611,7 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, std::vector<ExprContext*>& _ou
         Expr* expr = _output_expr_ctxs[i]->root();
         if (column->is_constant()) {
             // Don't modify the column of src chunk, otherwise the memory statistics of query is invalid.
-            column = ColumnHelper::copy_and_unfold_const_column(expr->type(), column->is_nullable(), std::move(column),
-                                                                num_rows);
+            column = ColumnHelper::copy_and_unfold_const_column(expr->type(), column->is_nullable(), column, num_rows);
         }
         auto& array = arrays[i];
         ColumnToArrowArrayConverter converter(column, pool, expr->type(), schema->field(i)->type(), array);
@@ -658,8 +657,8 @@ Status convert_chunk_to_arrow_batch(Chunk* chunk, const std::vector<const TypeDe
         auto column = chunk->get_column_by_slot_id(slot_ids[i]);
         if (column->is_constant()) {
             // Don't modify the column of src chunk, otherwise the memory statistics of query is invalid.
-            column = ColumnHelper::copy_and_unfold_const_column(*slot_types[i], column->is_nullable(),
-                                                                std::move(column), num_rows);
+            column =
+                    ColumnHelper::copy_and_unfold_const_column(*slot_types[i], column->is_nullable(), column, num_rows);
         }
         auto& array = arrays[i];
         ColumnToArrowArrayConverter converter(column, pool, *slot_types[i], schema->field(i)->type(), array);
