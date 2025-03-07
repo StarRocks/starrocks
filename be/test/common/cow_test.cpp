@@ -97,10 +97,17 @@ public:
             this->_data = col._data;
         }
 
-        // ConcreteColumn(const ConcreteColumn & col) = delete;
-        ConcreteColumn& operator=(const ConcreteColumn&) = delete;
-        ConcreteColumn(ConcreteColumn&& col) = delete;
-        ConcreteColumn& operator=(ConcreteColumn&&) = delete;
+        ConcreteColumn(ConcreteColumn&& col) : _data(col._data) {
+            std::cout << "ConcreteColumn move constructor" << std::endl;
+        }
+        ConcreteColumn& operator=(const ConcreteColumn&) {
+            std::cout << "ConcreteColumn copy assignment" << std::endl;
+            return *this;
+        }
+        ConcreteColumn& operator=(ConcreteColumn&&) {
+            std::cout << "ConcreteColumn move assignment" << std::endl;
+            return *this;
+        }
 
     private:
         int _data;
@@ -132,10 +139,17 @@ public:
             this->_data = col._data;
         }
 
-        // ConcreteVectorColumn(const ConcreteVectorColumn& col) = delete;
-        ConcreteVectorColumn& operator=(const ConcreteVectorColumn&) = delete;
-        ConcreteVectorColumn(ConcreteVectorColumn&& col) = delete;
-        ConcreteVectorColumn& operator=(ConcreteVectorColumn&&) = delete;
+        ConcreteVectorColumn(ConcreteVectorColumn&& col) : _data(std::move(col._data)) {
+            std::cout << "ConcreteVectorColumn move constructor" << std::endl;
+        }
+        ConcreteVectorColumn& operator=(const ConcreteVectorColumn&) {
+            std::cout << "ConcreteVectorColumn copy assignment" << std::endl;
+            return *this;
+        }
+        ConcreteVectorColumn& operator=(ConcreteVectorColumn&&) {
+            std::cout << "ConcreteVectorColumn move assignment" << std::endl;
+            return *this;
+        }
 
     private:
         std::vector<int> _data;
