@@ -71,16 +71,19 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         schemaInfos = new ArrayList<>();
     }
 
-    // 'forSerialization' means reducing data writing after the first log
-    LakeTableAsyncFastSchemaChangeJob(LakeTableAsyncFastSchemaChangeJob other, boolean forSerialization) {
-        super(other, forSerialization);
-        if (!forSerialization) {
-            schemaInfos = new ArrayList<>();
-            for (IndexSchemaInfo indexSchemaInfo : other.schemaInfos) {
-                setIndexTabletSchema(indexSchemaInfo.indexId, indexSchemaInfo.indexName, indexSchemaInfo.schemaInfo);
-            }
-            partitionsWithSchemaFile.addAll(other.partitionsWithSchemaFile);
+    LakeTableAsyncFastSchemaChangeJob(LakeTableAsyncFastSchemaChangeJob other) {
+        this(other.getJobId(), other.getDbId(), other.getTableId(), other.getTableName(), other.getTimeoutMs());
+        for (IndexSchemaInfo indexSchemaInfo : other.schemaInfos) {
+            setIndexTabletSchema(indexSchemaInfo.indexId, indexSchemaInfo.indexName, indexSchemaInfo.schemaInfo);
         }
+        partitionsWithSchemaFile.addAll(other.partitionsWithSchemaFile);
+    }
+
+    // Only for reducing data writing after the first log, so we don't do deep copy
+    LakeTableAsyncFastSchemaChangeJob getShadowCopy() {
+        LakeTableAsyncFastSchemaChangeJob copied = new LakeTableAsyncFastSchemaChangeJob();
+        copyOnlyForNonFirstLog(copied);
+        return copied;
     }
 
     public void setIndexTabletSchema(long indexId, String indexName, SchemaInfo schemaInfo) {

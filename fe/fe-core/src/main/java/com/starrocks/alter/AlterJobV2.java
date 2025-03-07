@@ -145,28 +145,6 @@ public abstract class AlterJobV2 implements Writable {
         this.span = TraceManager.startNoopSpan();
     }
 
-    AlterJobV2(AlterJobV2 other, boolean forSerialization) {
-        this.jobId = other.getJobId();
-        this.type = other.getType();
-        this.dbId = other.getDbId();
-        this.tableId = other.getTableId();
-        this.tableName = other.getTableName();
-        this.timeoutMs = other.getTimeoutMs();
-
-        this.createTimeMs = forSerialization ? other.getCreateTimeMs() : System.currentTimeMillis();
-        this.jobState = forSerialization ? other.getJobState() : JobState.PENDING;
-
-        if (forSerialization) {
-            this.errMsg = other.getErrMsg();
-            this.finishedTimeMs = other.getFinishedTimeMs();
-            this.warehouseId = other.getWarehouseId();
-        } else {
-            this.span = TraceManager.startSpan(this.type.toString().toLowerCase());
-            span.setAttribute("jobId", this.jobId);
-            span.setAttribute("tabletName", this.tableName);
-        }
-    }
-
     public long getJobId() {
         return jobId;
     }
@@ -193,14 +171,6 @@ public abstract class AlterJobV2 implements Writable {
 
     public String getTableName() {
         return tableName;
-    }
-
-    public String getErrMsg() {
-        return errMsg;
-    }
-
-    public long getCreateTimeMs() {
-        return createTimeMs;
     }
 
     public long getTimeoutMs() {

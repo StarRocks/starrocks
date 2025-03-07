@@ -82,16 +82,6 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         super(jobId, jobType, dbId, tableId, tableName, timeoutMs);
     }
 
-    LakeTableAlterMetaJobBase(LakeTableAlterMetaJobBase other, boolean forSerialization) {
-        super(other, forSerialization);
-        if (forSerialization) {
-            this.watershedTxnId = other.getWatershedTxnId();
-            this.watershedGtid = other.getWatershedGtid();
-            this.physicalPartitionIndexMap = other.getPartitionIndexMap();
-            this.commitVersionMap = other.getCommitVersionMap();
-        }
-    }
-
     @Override
     protected void runPendingJob() throws AlterCancelException {
         // send task to be
@@ -429,15 +419,10 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         return watershedTxnId;
     }
 
-    protected long getWatershedGtid() {
-        return watershedGtid;
-    }
-
     void logAlterJob() {
         if (this instanceof LakeTableAsyncFastSchemaChangeJob) {
-            LakeTableAsyncFastSchemaChangeJob copyJob = new LakeTableAsyncFastSchemaChangeJob(
-                    (LakeTableAsyncFastSchemaChangeJob) this, true);
-            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(copyJob);
+            LakeTableAsyncFastSchemaChangeJob copied = ((LakeTableAsyncFastSchemaChangeJob) this).getShadowCopy();
+            GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(copied);
         } else {
             GlobalStateMgr.getCurrentState().getEditLog().logAlterJob(this);
         }
@@ -541,10 +526,31 @@ public abstract class LakeTableAlterMetaJobBase extends AlterJobV2 {
         }
     }
 
+    void copyOnlyForNonFirstLog(LakeTableAlterMetaJobBase copied) {
+        copied.watershedTxnId = this.watershedTxnId;
+        copied.watershedGtid = this.watershedGtid;
+        copied.physicalPartitionIndexMap = this.physicalPartitionIndexMap;
+        copied.commitVersionMap = this.commitVersionMap;
+
+        copied.type = this.type;
+        copied.jobId = this.jobId;
+        copied.jobState = this.jobState;
+        copied.dbId = this.dbId;
+        copied.tableId = this.tableId;
+        copied.tableName = this.tableName;
+        copied.errMsg = this.errMsg;
+        copied.createTimeMs = this.createTimeMs;
+        copied.finishedTimeMs = this.finishedTimeMs;
+        copied.timeoutMs = this.timeoutMs;
+        copied.warehouseId = this.warehouseId;
+    }
+
+    // for test
     public Table<Long, Long, MaterializedIndex> getPartitionIndexMap() {
         return physicalPartitionIndexMap;
     }
 
+    // for test
     public Map<Long, Long> getCommitVersionMap() {
         return commitVersionMap;
     }
