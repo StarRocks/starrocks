@@ -125,9 +125,13 @@ public class LakeTablet extends Tablet {
         try {
             List<Long> ids = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                     .getAllComputeNodeIdsAssignToTablet(warehouseId, this);
-            return new HashSet<Long>(ids);
+            if (ids == null) {
+                return Sets.newHashSet();
+            } else {
+                return new HashSet<Long>(ids);
+            }
         } catch (Exception e) {
-            LOG.warn("Failed to get backends by shard. tablet id: {}", getId(), e);
+            LOG.warn("Failed to get backends by shard id: {}", getId(), e);
             return Sets.newHashSet();
         }
     }
@@ -153,6 +157,9 @@ public class LakeTablet extends Tablet {
                                      long visibleVersion, long localBeId, int schemaHash, long warehouseId) {
         List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr()
                 .getAllComputeNodeIdsAssignToTablet(warehouseId, this);
+        if (computeNodeIds == null) {
+            return;
+        }
         for (long backendId : computeNodeIds) {
             Replica replica = new Replica(getId(), backendId, visibleVersion, schemaHash, getDataSize(true),
                     getRowCount(visibleVersion), NORMAL, -1, visibleVersion);

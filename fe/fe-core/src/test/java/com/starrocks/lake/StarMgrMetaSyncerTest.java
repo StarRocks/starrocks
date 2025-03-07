@@ -166,7 +166,7 @@ public class StarMgrMetaSyncerTest {
 
         new Expectations() {
             {
-                starOSAgent.getPrimaryComputeNodeIdByShard(anyLong);
+                starOSAgent.getPrimaryComputeNodeIdByShard(anyLong, anyLong);
                 minTimes = 0;
                 result = 1;
 
