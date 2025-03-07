@@ -383,6 +383,10 @@ CONF_mInt64(size_tiered_level_multiple, "5");
 CONF_mInt64(size_tiered_level_multiple_dupkey, "10");
 CONF_mInt64(size_tiered_level_num, "7");
 
+// random compaction strategy is only used for chaos test,
+// should never be true in prodution.
+CONF_mBool(chaos_test_enable_random_compaction_strategy, "false");
+
 CONF_Bool(enable_check_string_lengths, "true");
 
 // Max row source mask memory bytes, default is 200M.

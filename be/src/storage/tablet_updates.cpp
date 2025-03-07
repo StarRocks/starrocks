@@ -2908,6 +2908,10 @@ static std::string int_list_to_string(const std::vector<T>& l) {
 }
 
 Status TabletUpdates::compaction(MemTracker* mem_tracker) {
+    if (config::chaos_test_enable_random_compaction_strategy) {
+        // chaos engineering
+        return compaction_random(mem_tracker);
+    }
     if (config::enable_pk_size_tiered_compaction_strategy) {
         return compaction_for_size_tiered(mem_tracker);
     }
@@ -5761,6 +5765,74 @@ Status TabletUpdates::recover() {
     _error = false;
 
     return Status::OK();
+}
+
+Status TabletUpdates::compaction_random(MemTracker* mem_tracker) {
+    if (_error) {
+        return Status::InternalError(strings::Substitute(
+                "compaction failed, tablet updates is in error state: tablet:$0 $1", _tablet.tablet_id(), _error_msg));
+    }
+    bool was_runing = false;
+    if (!_compaction_running.compare_exchange_strong(was_runing, true)) {
+        return Status::AlreadyExist("illegal state: another compaction is running");
+    }
+    std::unique_ptr<CompactionInfo> info = std::make_unique<CompactionInfo>();
+    vector<uint32_t> rowsets;
+    {
+        std::lock_guard rl(_lock);
+        if (_edit_version_infos.empty()) {
+            string msg = strings::Substitute("tablet deleted when compaction tablet:$0", _tablet.tablet_id());
+            LOG(WARNING) << msg;
+            return Status::InternalError(msg);
+        }
+        // 1. start compaction at current apply version
+        info->start_version = _edit_version_infos[_apply_version_idx]->version;
+        rowsets = _edit_version_infos[_apply_version_idx]->rowsets;
+    }
+
+    // random pick N rowsets from this version.
+    {
+        std::lock_guard lg(_rowset_stats_lock);
+        for (auto rowsetid : rowsets) {
+            auto itr = _rowset_stats.find(rowsetid);
+            if (itr == _rowset_stats.end()) {
+                // should not happen
+                string msg = strings::Substitute("rowset not found in rowset stats tablet=$0 rowset=$1",
+                                                 _tablet.tablet_id(), rowsetid);
+                DCHECK(false) << msg;
+                LOG(WARNING) << msg;
+            } else if (itr->second->compaction_score > 0) {
+                // 30% chance to pick this rowset
+                if (rand() % 100 < 30) {
+                    info->inputs.push_back(rowsetid);
+                    if (info->inputs.size() >= config::max_update_compaction_num_singleton_deltas) {
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    // give 10s time gitter, so same table's compaction don't start at same time
+    _last_compaction_time_ms = UnixMillis() + rand() % 10000;
+    if (info->inputs.empty()) {
+        VLOG(2) << "no candidate rowset to do update compaction, tablet:" << _tablet.tablet_id();
+        _compaction_running = false;
+        return Status::OK();
+    }
+    std::sort(info->inputs.begin(), info->inputs.end());
+
+    MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
+    DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
+
+    Status st = _do_compaction(&info, rowsets);
+    if (!st.ok()) {
+        _compaction_running = false;
+        _last_compaction_failure_millis = UnixMillis();
+    } else {
+        _last_compaction_success_millis = UnixMillis();
+    }
+    return st;
 }
 
 void TabletUpdates::_reset_apply_status(const EditVersionInfo& version_info_apply) {

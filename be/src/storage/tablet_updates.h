@@ -387,6 +387,7 @@ public:
     void stop_and_wait_apply_done();
 
     Status breakpoint_check();
+    Status compaction_random(MemTracker* mem_tracker);
 
 private:
     friend class Tablet;
