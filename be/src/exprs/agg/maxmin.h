@@ -114,7 +114,8 @@ struct MaxElement<LT, State, StringLTGuard<LT>> {
         return !state.has_value() || state.slice().compare(right) <= 0;
     }
     void operator()(State& state, const Slice& right) const {
-        if (!state.has_value() || state.slice().compare(right) < 0) {
+        if (!state.has_value() || memcompare_padded(state.slice().get_data(), state.slice().get_size(),
+                                                    right.get_data(), right.get_size()) < 0) {
             state.buffer.resize(right.size);
             memcpy(state.buffer.data(), right.data, right.size);
             state.size = right.size;
@@ -135,7 +136,8 @@ struct MinElement<LT, State, StringLTGuard<LT>> {
         return !state.has_value() || state.slice().compare(right) >= 0;
     }
     void operator()(State& state, const Slice& right) const {
-        if (!state.has_value() || state.slice().compare(right) > 0) {
+        if (!state.has_value() || memcompare_padded(state.slice().get_data(), state.slice().get_size(),
+                                                    right.get_data(), right.get_size()) > 0) {
             state.buffer.resize(right.size);
             memcpy(state.buffer.data(), right.data, right.size);
             state.size = right.size;
@@ -256,7 +258,8 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         DCHECK((*columns[0]).is_binary());
-        Slice value = columns[0]->get(row_num).get_slice();
+        auto* binary_column = down_cast<const BinaryColumn*>(columns[0]);
+        auto value = binary_column->get_slice(row_num);
         OP()(this->data(state), value);
     }
 
@@ -308,7 +311,8 @@ public:
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_binary());
-        Slice value = column->get(row_num).get_slice();
+        auto* binary_column = down_cast<const BinaryColumn*>(column);
+        auto value = binary_column->get_slice(row_num);
         OP()(this->data(state), value);
     }
 
