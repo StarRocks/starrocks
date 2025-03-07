@@ -83,6 +83,14 @@ Copy the `.env.sample` to `.env` and replace the paths for the three repos to ma
 
 ### Build docs with Docusaurus
 
+> Tip:
+>
+> If you are running this on a cloud server and not your local machine run the buil in `screen` in case you lose connectivity with the machine.
+>
+> ```bash
+> screen -S docusaurus-build
+> ```
+
 ```bash
 ./scripts/docker-build-bare-metal.sh
 ```
@@ -96,6 +104,10 @@ In the output of the Docker container you should see:
 ```bash
 [SUCCESS] Serving "build" directory at: http://0.0.0.0:3000/
 ```
+
+> Tip
+>
+> If you are running this on a remote machine skip the "Open the URL ..." step and instead detach from the `docusaurus-build` sceen session and start a new one (`CTRL-A`, `d`) and then `screen -S pdf-gen`.
 
 Open the URL with a browser and click the **Documentation** link in the top navigation. This will be the starting page, and you will need the starting page URL to generate the PDF.
 
@@ -116,6 +128,7 @@ This command will crawl the docs and list the URLs in order:
 ```bash
 npx docusaurus-prince-pdf --list-only \
   --file URLs.txt \
+  --include-index \
   -u http://0.0.0.0:3000/docs/deployment/get_started/
 ```
 
@@ -125,7 +138,7 @@ npx docusaurus-prince-pdf --list-only \
 Linux only: Add a newline ot the end of the file:
 
 ```bash
-sed -i -e '$a\' file
+sed -i -e '$a\' URLs.txt
 ```
 
 <details>
@@ -168,6 +181,7 @@ This reads the `.env` file and `URLs.txt` generated above and:
 yarn install
 node docusaurus-puppeteer-pdf.js
 ```
+Once `node docusaurus-puppeteer-pdf.js` is running you can detach from that screen (CTRL-A then d) as it takes about 25 minutes to build all of the PDFs.
 
 ### Combine the individual PDFs
 
