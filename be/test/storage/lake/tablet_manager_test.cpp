@@ -739,7 +739,7 @@ TEST_F(LakeTabletManagerTest, collect_tablet_storage_size) {
 
     auto res5 = _tablet_manager->collect_tablet_storage_size(12345, 4, 2, 3);
     ASSERT_TRUE(res5.ok());
-    ASSERT_EQ(res5.value(), 7168);
+    ASSERT_EQ(res5.value(), 10240);
 }
 
 #ifdef USE_STAROS
