@@ -61,6 +61,7 @@ import static com.starrocks.statistic.StatsConstants.EXTERNAL_FULL_STATISTICS_TA
 import static com.starrocks.statistic.StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME;
+import static com.starrocks.statistic.StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
@@ -131,6 +132,10 @@ public class StatisticsMetaManager extends FrontendDaemon {
 
     private static final List<String> FULL_STATISTICS_COMPATIBLE_COLUMNS = ImmutableList.of(
             "collection_size"
+    );
+
+    private static final List<String> MULTI_COLUMN_STATISTICS_KEY_COLUMNS = ImmutableList.of(
+            "table_id", "column_ids"
     );
 
     private boolean createSampleStatisticsTable(ConnectContext context) {
@@ -298,6 +303,35 @@ public class StatisticsMetaManager extends FrontendDaemon {
         return checkTableExist(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
     }
 
+    private boolean createMultiColumnStatisticsTable(ConnectContext context) {
+        LOG.info("create multi column statistics table start");
+        TableName tableName = new TableName(STATISTICS_DB_NAME, MULTI_COLUMN_STATISTICS_TABLE_NAME);
+        Map<String, String> properties = Maps.newHashMap();
+
+        try {
+            int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
+            properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            CreateTableStmt stmt = new CreateTableStmt(false, false,
+                    tableName,
+                    StatisticUtils.buildStatsColumnDef(MULTI_COLUMN_STATISTICS_TABLE_NAME),
+                    EngineType.defaultEngine().name(),
+                    new KeysDesc(KeysType.PRIMARY_KEYS, MULTI_COLUMN_STATISTICS_KEY_COLUMNS),
+                    null,
+                    new HashDistributionDesc(10, MULTI_COLUMN_STATISTICS_KEY_COLUMNS),
+                    properties,
+                    null,
+                    "");
+
+            Analyzer.analyze(stmt, context);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
+        } catch (StarRocksException e) {
+            LOG.warn("Failed to create multi column statistics table", e);
+            return false;
+        }
+        LOG.info("create multi column statistics table done");
+        return checkTableExist(MULTI_COLUMN_STATISTICS_TABLE_NAME);
+    }
+
     private void refreshAnalyzeJob() {
         for (Map.Entry<Long, BasicStatsMeta> entry :
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().entrySet()) {
@@ -333,6 +367,8 @@ public class StatisticsMetaManager extends FrontendDaemon {
                 return createExternalFullStatisticsTable(context);
             } else if (tableName.equals(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME)) {
                 return createExternalHistogramStatisticsTable(context);
+            } else if (tableName.equals(MULTI_COLUMN_STATISTICS_TABLE_NAME)) {
+                return createMultiColumnStatisticsTable(context);
             } else {
                 throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
             }
@@ -437,6 +473,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         refreshStatisticsTable(HISTOGRAM_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(EXTERNAL_FULL_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
+        refreshStatisticsTable(MULTI_COLUMN_STATISTICS_TABLE_NAME);
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedPartition();
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedTable();

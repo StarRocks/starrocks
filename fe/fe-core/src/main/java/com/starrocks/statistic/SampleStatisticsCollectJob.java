@@ -45,7 +45,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
     @Override
     public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
         TabletSampleManager tabletSampleManager = TabletSampleManager.init(properties, table);
-        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo(db.getFullName(), table.getName());
+        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo();
 
         ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, table,
                 sampleInfo);

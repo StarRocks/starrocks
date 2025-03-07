@@ -74,6 +74,10 @@ public class SampleInfo {
         return totalRowCount;
     }
 
+    public double getRowSampleRatio() {
+        return rowSampleRatio;
+    }
+
     public List<TabletStats> getHighWeightTablets() {
         return highWeightTablets;
     }
@@ -138,8 +142,6 @@ public class SampleInfo {
         }
         return joiner.toString();
     }
-
-
 
     public String generatePrimitiveTypeColumnTask(long tableId, long dbId, String tableName, String dbName,
                                                   List<ColumnStats> primitiveTypeStats,

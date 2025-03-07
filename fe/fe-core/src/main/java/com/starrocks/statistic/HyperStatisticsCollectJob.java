@@ -53,13 +53,20 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
     private final List<Long> partitionIdList;
 
     private final int batchRowsLimit;
-    private final List<String> sqlBuffer = Lists.newArrayList();
-    private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
+    protected final List<String> sqlBuffer = Lists.newArrayList();
+    protected final List<List<Expr>> rowsBuffer = Lists.newArrayList();
 
     public HyperStatisticsCollectJob(Database db, Table table, List<Long> partitionIdList, List<String> columnNames,
                                      List<Type> columnTypes, StatsConstants.AnalyzeType type,
                                      StatsConstants.ScheduleType scheduleType, Map<String, String> properties) {
-        super(db, table, columnNames, columnTypes, type, scheduleType, properties);
+        this(db, table, partitionIdList, columnNames, columnTypes, type, scheduleType, properties, List.of(), List.of());
+    }
+
+    public HyperStatisticsCollectJob(Database db, Table table, List<Long> partitionIdList, List<String> columnNames,
+                                     List<Type> columnTypes, StatsConstants.AnalyzeType type,
+                                     StatsConstants.ScheduleType scheduleType, Map<String, String> properties,
+                                     List<StatsConstants.StatisticsType> statisticsTypes, List<List<String>> columnGroups) {
+        super(db, table, columnNames, columnTypes, type, scheduleType, properties, statisticsTypes, columnGroups);
         this.partitionIdList = partitionIdList;
         this.batchRowsLimit = (int) Math.max(1, Config.statistic_full_collect_buffer / 33 / 1024);
     }
@@ -74,13 +81,18 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
 
         int splitSize = Math.max(1, batchRowsLimit / columnNames.size());
         List<HyperQueryJob> queryJobs;
-        if (type == StatsConstants.AnalyzeType.FULL) {
-            queryJobs = HyperQueryJob.createFullQueryJobs(context, db, table, columnNames, columnTypes,
-                    partitionIdList, splitSize);
+        if (statisticsTypes.isEmpty()) {
+            if (analyzeType == StatsConstants.AnalyzeType.FULL) {
+                queryJobs = HyperQueryJob.createFullQueryJobs(context, db, table, columnNames, columnTypes,
+                            partitionIdList, splitSize);
+            } else {
+                PartitionSampler sampler = PartitionSampler.create(table, partitionIdList, properties);
+                queryJobs = HyperQueryJob.createSampleQueryJobs(context, db, table, columnNames, columnTypes,
+                        partitionIdList, splitSize, sampler);
+            }
         } else {
-            PartitionSampler sampler = PartitionSampler.create(table, partitionIdList, properties);
-            queryJobs = HyperQueryJob.createSampleQueryJobs(context, db, table, columnNames, columnTypes,
-                    partitionIdList, splitSize, sampler);
+            queryJobs = HyperQueryJob.createMultiColumnQueryJobs(context, db, table, columnGroups, analyzeType,
+                    statisticsTypes, properties);
         }
 
         long queryTotals = 0;
@@ -165,7 +177,7 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         throw new DdlException(context.getState().getErrorMessage());
     }
 
-    private StatementBase createInsertStmt() {
+    protected StatementBase createInsertStmt() {
         List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(FULL_STATISTICS_TABLE_NAME).stream()
                 .map(ColumnDef::getName)
                 .collect(Collectors.toList());
@@ -181,7 +193,7 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
 
     @Override
     public String toString() {
-        return "HyperStatisticsCollectJob{" + "type=" + type +
+        return "HyperStatisticsCollectJob{" + "type=" + analyzeType +
                 ", scheduleType=" + scheduleType +
                 ", db=" + db +
                 ", table=" + table +
