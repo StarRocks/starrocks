@@ -10,6 +10,39 @@ After upgrading StarRocks to v3.3, DO NOT downgrade it directly to v3.2.0, v3.2.
 
 :::
 
+## 3.3.11
+
+Release date: March 7, 2025
+
+### Improvements
+
+- `Files` supports exporting JSON type data into Parquet files. [#56406](https://github.com/StarRocks/starrocks/pull/56406)
+- Optimized Data Cache WarmUp performance for cloud-native tables in shared-data clusters. [#56190](https://github.com/StarRocks/starrocks/pull/56190)
+- Supports parsing `AT TIME ZONE` expressions and the `from_iso8601_timestamp` function in Trino. [#56311](https://github.com/StarRocks/starrocks/pull/56311) [#55573](https://github.com/StarRocks/starrocks/pull/55573)
+- Partial Updates for Primary Key tables within shared-data clusters supports Condition Updates. [#56132](https://github.com/StarRocks/starrocks/pull/56132)
+- Extended support for statistics collection across all types of SQL statements. [#56257](https://github.com/StarRocks/starrocks/pull/56257)
+- Supports configuring the maximum number of returned rows for `SHOW PROC '/transaction'`. [#55933](https://github.com/StarRocks/starrocks/pull/55933)
+- Supports creating asynchronous materialized views on Oracle-type JDBC Catalog tables. [#55372](https://github.com/StarRocks/starrocks/pull/55372)
+- MemTracker on BE WebUI supports pagination with 25 rows per page. [#56206](https://github.com/StarRocks/starrocks/pull/56206)
+
+### Bug Fixes
+
+Fixed the following issues:
+
+- FE does not support casting constant TIME data types into DATETIME. [#55804](https://github.com/StarRocks/starrocks/pull/55804)
+- Stream Load transaction interface does not support the `starrocks_fe_table_load_rows` and `starrocks_fe_table_load_bytes` metrics. [#44991](https://github.com/StarRocks/starrocks/pull/44991)
+- Changes to automatic statistics collection do not take effect. [#56173](https://github.com/StarRocks/starrocks/pull/56173)
+- Materialized views in abnormal states caused issues with `SHOW MATERIALIZED VIEWS`. [#55995](https://github.com/StarRocks/starrocks/pull/55995)
+- Text-based materialized view rewrite does not work across different databases. [#56001](https://github.com/StarRocks/starrocks/pull/56001)
+- Metadata compatibility issues in JDBC Catalogs. [#55993](https://github.com/StarRocks/starrocks/pull/55993)
+- Issues of handling the JSON data type in JDBC Catalogs. [#56008](https://github.com/StarRocks/starrocks/pull/56008)
+- Incorrect Sort Key settings during Schema Change. [#55902](https://github.com/StarRocks/starrocks/pull/55902)
+- Credential information leak issue in Broker Load. [#55358](https://github.com/StarRocks/starrocks/pull/55358)
+
+### Behavior Changes
+
+- Added authentication to the `query_detail` interface in FE. [#55919](https://github.com/StarRocks/starrocks/pull/55919)
+
 ## 3.3.10 (Yanked)
 
 Release date: February 21, 2025
