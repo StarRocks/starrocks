@@ -1553,13 +1553,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         return refBaseTablePartitionSlotsOpt.map(this::refreshBaseTable).get();
     }
 
-    private Map<Table, List<Column>> getRefBaseTablePartitionColumns(boolean isRefreshBaseTable) {
-        if (!isRefreshBaseTable) {
-            return refBaseTablePartitionColumnsOpt.map(this::refreshBaseTable).orElse(Maps.newHashMap());
-        } else {
-            return refreshBaseTable(refBaseTablePartitionColumnsOpt.orElse(Maps.newHashMap()));
-        }
-    }
     /**
      * According base table and materialized view's partition range, we can define those mappings from base to mv:
      * <p>
