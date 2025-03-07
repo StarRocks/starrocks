@@ -14,11 +14,13 @@
 
 package com.starrocks.sql.ast;
 
+import com.google.common.collect.Maps;
 import com.starrocks.catalog.Column;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.AfterClass;
@@ -27,12 +29,12 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.List;
+import java.util.Map;
 
 public class DescribeStmtTest {
 
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
-
 
     @BeforeClass
     public static void beforeClass() throws Exception {
@@ -234,5 +236,18 @@ public class DescribeStmtTest {
         Assert.assertEquals("sale_amt", resultRows.get(1).get(2));
         Assert.assertEquals("bigint", resultRows.get(1).get(3));
         Assert.assertEquals("YES", resultRows.get(1).get(4));
+    }
+
+    @Test
+    public void testDescFilesMask() throws Exception {
+        Map<String, String> properties = Maps.newHashMap();
+        properties.put("path", "aaa");
+        properties.put("aws.s3.access_key", "root");
+        properties.put("aws.s3.secret_key", "password");
+        DescribeStmt describeStmt = new DescribeStmt(properties, null);
+        String text = AstToSQLBuilder.toSQL(describeStmt);
+        Assert.assertTrue(text.contains("(\"aws.s3.access_key\" = \"***\""));
+        Assert.assertTrue(text.contains(" \"aws.s3.secret_key\" = \"***\""));
+        Assert.assertTrue(text.contains("\"path\" = \"aaa\""));
     }
 }
