@@ -24,6 +24,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "util/orlp/pdqsort.h"
+#include "util/runtime_profile.h"
 #include "util/stopwatch.hpp"
 
 namespace starrocks {
@@ -58,6 +59,7 @@ void ChunksSorter::setup_runtime(RuntimeState* state, RuntimeProfile* profile, M
     _sort_timer = ADD_TIMER(profile, "SortingTime");
     _merge_timer = ADD_TIMER(profile, "MergingTime");
     _output_timer = ADD_TIMER(profile, "OutputTime");
+    _sort_cnt = ADD_COUNTER(profile, "SortingCnt", TUnit::UNIT);
     profile->add_info_string("SortKeys", _sort_keys);
     profile->add_info_string("SortType", _is_topn ? "TopN" : "All");
 }
