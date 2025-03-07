@@ -87,7 +87,7 @@ public class TaskRunScheduler {
         if (taskRun == null) {
             return;
         }
-        LOG.info("remove pending task run: {}", taskRun);
+        LOG.debug("remove pending task run: {}", taskRun);
         pendingTaskRunQueue.remove(taskRun, state);
     }
 
@@ -95,7 +95,7 @@ public class TaskRunScheduler {
         if (task == null) {
             return;
         }
-        LOG.info("remove pending task: {}", task);
+        LOG.debug("remove pending task: {}", task);
         pendingTaskRunQueue.remove(task.getId());
     }
 
