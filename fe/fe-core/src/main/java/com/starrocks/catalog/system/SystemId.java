@@ -104,6 +104,8 @@ public class SystemId {
 
     public static final long TEMP_TABLES_ID = 43L;
 
+    public static final long KEYWORDS_ID = 44L;
+
     public static final long SYS_DB_ID = 100L;
 
     public static final long ROLE_EDGES_ID = 101L;
