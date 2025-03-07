@@ -837,7 +837,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
         long mvStaleness = (baseTableRefreshTimestamp - mvRefreshTimestamp) / 1000;
         if (mvStaleness > this.maxMVRewriteStaleness) {
             ZoneId currentTimeZoneId = TimeUtils.getTimeZone().toZoneId();
-            LOG.info("MV is outdated because MV's staleness {} (baseTables' lastRefreshTime {} - " +
+            LOG.debug("MV is outdated because MV's staleness {} (baseTables' lastRefreshTime {} - " +
                             "MV's lastRefreshTime {}) is greater than the staleness config {}",
                     DateUtils.formatTimeStampInMill(baseTableRefreshTimestamp, currentTimeZoneId),
                     DateUtils.formatTimeStampInMill(mvRefreshTimestamp, currentTimeZoneId),
@@ -1025,6 +1025,7 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
      * @return active or not
      */
     private boolean onReloadImpl() {
+        long startTime = System.currentTimeMillis();
         Database db = GlobalStateMgr.getCurrentState().getDb(dbId);
         if (db == null) {
             LOG.warn("db:{} do not exist. materialized view id:{} name:{} should not exist", dbId, id, name);
@@ -1107,7 +1108,10 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
                 );
             }
         }
+        // analyze partition info
         analyzePartitionInfo();
+
+        LOG.info("finish to reload mv:{} cost:{}(ms)", getName(), System.currentTimeMillis() - startTime);
         return res;
     }
 
