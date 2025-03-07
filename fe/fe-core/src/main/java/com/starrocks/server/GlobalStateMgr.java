@@ -1190,12 +1190,6 @@ public class GlobalStateMgr {
             // 6. start task cleaner thread
             createTaskCleaner();
             createTableKeeper();
-
-            // 7. init starosAgent
-            if (RunMode.isSharedDataMode() && !starOSAgent.init(null)) {
-                LOG.error("init starOSAgent failed");
-                System.exit(-1);
-            }
         } catch (Exception e) {
             try {
                 if (isFirstTimeStart) {
