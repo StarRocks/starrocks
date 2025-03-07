@@ -615,7 +615,7 @@ TEST_F(CowTest, TestConcreteVectorColumnMutate1) {
     ConcreteVectorColumn::MutablePtr x = ConcreteVectorColumn::create({1, 2, 3});
     // ensure x is not used again.
     auto y = (std::move(*x)).mutate();
-    y->set(1, 2);
+    y->set(0, 2);
 
     EXPECT_EQ(2, x->get(0));
     EXPECT_EQ(2, y->get(0));
@@ -631,7 +631,7 @@ TEST_F(CowTest, TestConcreteVectorColumnMutate1) {
     z->set(2, 4);
     EXPECT_EQ(3, x->get(2));
     EXPECT_EQ(3, y->get(2));
-    EXPECT_EQ(4, z->get(3));
+    EXPECT_EQ(4, z->get(2));
     EXPECT_EQ(2, x->use_count());
     EXPECT_EQ(2, y->use_count());
     EXPECT_EQ(1, z->use_count());
@@ -651,7 +651,7 @@ TEST_F(CowTest, TestConcreteVectorColumnMutate2) {
     // x->set(3);
 
     auto z = (std::move(*x)).mutate();
-    z->set(2, 3);
+    z->set(1, 3);
     EXPECT_EQ(2, x->get(1));
     EXPECT_EQ(2, y->get(1));
     EXPECT_EQ(3, z->get(1));
