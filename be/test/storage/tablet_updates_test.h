@@ -799,7 +799,7 @@ public:
     void test_compaction_score_enough_duplicate(bool enable_persistent_index);
     void test_compaction_score_enough_normal(bool enable_persistent_index);
     void test_horizontal_compaction(bool enable_persistent_index, bool show_status = false,
-                                    bool skip_rowset_cnt_check = false);
+                                    bool random_compaction = false);
     void test_vertical_compaction(bool enable_persistent_index);
     void test_horizontal_compaction_with_rows_mapper(bool enable_persistent_index);
     void test_vertical_compaction_with_rows_mapper(bool enable_persistent_index);
