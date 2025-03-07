@@ -2546,6 +2546,8 @@ public class StmtExecutor {
                 } else if (targetTable.isExternalTableWithFileSystem()) {
                     GlobalStateMgr.getCurrentState().getMetadataMgr().abortSink(
                             catalogName, dbName, tableName, coord.getSinkCommitInfos());
+                } else if (targetTable.isBlackHoleTable()) {
+                    // black hole table does not need txn
                 } else {
                     transactionMgr.abortTransaction(database.getId(), transactionId, errMsg,
                             Coordinator.getCommitInfos(coord), Coordinator.getFailInfos(coord), null);
