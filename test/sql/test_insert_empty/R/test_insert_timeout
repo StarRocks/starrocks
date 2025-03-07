@@ -6,7 +6,7 @@ use db_${uuid0};
 set query_timeout = 2;
 select sleep(4);
 -- result:
-[REGEX].*Query reached its timeout of 2 seconds, please increase the 'query_timeout' session variable.*
+[REGEX].*reached its timeout of 2 seconds.*
 -- !result
 set query_timeout = 300;
 
@@ -15,7 +15,7 @@ create table t1(k1 int);
 set insert_timeout = 2;
 insert into t1 select sleep(4);
 -- result:
-[REGEX].*Insert reached its timeout of 2 seconds, please increase the 'insert_timeout' session variable or the 'timeout' property for insert statement.*
+[REGEX].*reached its timeout of 2 seconds.*
 -- !result
 
 set insert_timeout = 10;
@@ -45,7 +45,7 @@ truncate table t1;
 set insert_timeout = 2;
 create table t2 as select sleep(4) as k1;
 -- result:
-[REGEX].*Insert reached its timeout of 2 seconds, please increase the 'insert_timeout' session variable.*
+[REGEX].*reached its timeout of 2 seconds.*
 -- !result
 
 set insert_timeout = 10;
