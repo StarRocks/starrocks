@@ -178,7 +178,7 @@ public class CatalogMgr {
             newConnector = connectorMgr.createHiddenConnector(
                     new ConnectorContext(catalogName, type, newProperties), isReplay);
             if (null == newConnector) {
-                throw new DdlException("create hidden connector failed");
+                throw new DdlException("Create connector failed");
             }
 
             // drop old connector
@@ -187,15 +187,17 @@ public class CatalogMgr {
             // replace old connector with new connector
             connectorMgr.addConnector(catalogName, newConnector);
 
-            String serviceName = newProperties.get("ranger.plugin.hive.service.name");
-            if (StringUtils.isEmpty(serviceName)) {
-                if (Config.access_control.equals("ranger")) {
-                    Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
+            if (newProperties.containsKey("ranger.plugin.hive.service.name")) {
+                String serviceName = newProperties.get("ranger.plugin.hive.service.name");
+                if (StringUtils.isEmpty(serviceName)) {
+                    if ("ranger".equals(Config.access_control)) {
+                        Authorizer.getInstance().setAccessControl(catalogName, new RangerStarRocksAccessController());
+                    } else {
+                        Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
+                    }
                 } else {
-                    Authorizer.getInstance().setAccessControl(catalogName, new NativeAccessController());
+                    Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
                 }
-            } else {
-                Authorizer.getInstance().setAccessControl(catalogName, new RangerHiveAccessController(serviceName));
             }
 
             catalog.getConfig().putAll(alterProperties);
@@ -206,7 +208,7 @@ public class CatalogMgr {
                 newConnector.shutdown();
             }
 
-            throw new DdlException(String.format("Recreate catalog failed, msg: [%s]", e.getMessage()), e);
+            throw new DdlException(String.format("Alter catalog failed, msg: [%s]", e.getMessage()), e);
         } finally {
             writeUnLock();
         }
