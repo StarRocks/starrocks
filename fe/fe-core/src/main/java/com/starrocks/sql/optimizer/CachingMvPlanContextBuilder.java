@@ -226,7 +226,7 @@ public class CachingMvPlanContextBuilder {
             MV_PLAN_CONTEXT_CACHE.synchronous().invalidate(mv);
             invalidateAstFromCache(mv);
         } catch (Throwable e) {
-            LOG.warn("updateMvPlanContextCache invalidate cache failed: {}", mv.getName(), e);
+            LOG.warn("invalidate mv plan caches failed, mv:{}", mv.getName(), e);
         }
 
         // if transfer to active, put it into cache
@@ -239,10 +239,10 @@ public class CachingMvPlanContextBuilder {
                 future.whenComplete((result, e) -> {
                     long duration = System.currentTimeMillis() - startTime;
                     if (e == null) {
-                        LOG.info("updateMvPlanContextCache success: {}, cost: {}ms", mv.getName(),
+                        LOG.info("finish adding mv plan into cache success: {}, cost: {}ms", mv.getName(),
                                 duration);
                     } else {
-                        LOG.warn("updateMvPlanContextCache failed: {}, cost: {}ms", mv.getName(), duration, e);
+                        LOG.warn("adding mv plan into cache failed: {}, cost: {}ms", mv.getName(), duration, e);
                     }
                 });
             }
@@ -270,7 +270,7 @@ public class CachingMvPlanContextBuilder {
                     }
                 }
             }
-            LOG.info("Remove mv {} from ast cache", mv.getName());
+            LOG.debug("Remove mv {} from ast cache", mv.getName());
         } catch (Exception e) {
             LOG.warn("invalidateAstFromCache failed: {}", mv.getName(), e);
         }
@@ -283,6 +283,7 @@ public class CachingMvPlanContextBuilder {
         if (!Config.enable_materialized_view_text_based_rewrite || mv == null || !mv.isEnableRewrite()) {
             return;
         }
+        long startTime = System.currentTimeMillis();
         try {
             // cache by ast
             List<AstKey> astKeys = getAstKeysOfMV(mv);
@@ -294,9 +295,11 @@ public class CachingMvPlanContextBuilder {
                     AST_TO_MV_MAP.computeIfAbsent(astKey, ignored -> Sets.newHashSet()).add(mv);
                 }
             }
-            LOG.info("Add mv {} input ast cache", mv.getName());
+            LOG.info("finish to put mv into ast cache: {}, cost:{}(ms)", mv.getName(),
+                    System.currentTimeMillis() - startTime);
         } catch (Exception e) {
-            LOG.warn("putAstIfAbsent failed: {}", mv.getName(), e);
+            LOG.warn("put to mv into ast cache failed: {}, cost:{}(ms)", mv.getName(),
+                    System.currentTimeMillis() - startTime, e);
         }
     }
 
