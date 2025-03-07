@@ -52,6 +52,8 @@ public class PushDownPredicateScanRule extends TransformationRule {
             new PushDownPredicateScanRule(OperatorType.LOGICAL_FILE_SCAN);
     public static final PushDownPredicateScanRule PAIMON_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_PAIMON_SCAN);
+    public static final PushDownPredicateScanRule ODPS_SCAN =
+            new PushDownPredicateScanRule(OperatorType.LOGICAL_ODPS_SCAN);
     public static final PushDownPredicateScanRule ICEBERG_METADATA_SCAN =
             new PushDownPredicateScanRule(OperatorType.LOGICAL_ICEBERG_METADATA_SCAN);
 
