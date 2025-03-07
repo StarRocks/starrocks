@@ -81,8 +81,7 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
             if (table == null) {
                 throw new SemanticException("Table %s is not found", analyzeStatus.getTableName());
             }
-            Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), analyzeStatus.getDbName(), table);
+            Authorizer.checkAnyActionOnTableLikeObject(context, analyzeStatus.getDbName(), table);
         } catch (Exception e) {
             LOG.warn("Failed to check privilege for show analyze status for table {}.", analyzeStatus.getTableName(), e);
             return null;

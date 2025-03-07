@@ -164,7 +164,7 @@ public class ExternalDbTablePrivTest {
         // 1. before grant: access denied
         ctxToTestUser();
         try {
-            Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+            Authorizer.checkTableAction(ctx,
                     "hive0", "tpch", "region", PrivilegeType.SELECT);
             Assert.fail();
         } catch (Exception e) {
@@ -175,7 +175,7 @@ public class ExternalDbTablePrivTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
 
         ctxToTestUser();
-        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+        Authorizer.checkTableAction(ctx,
                 "hive0", "tpch", "region", PrivilegeType.SELECT);
 
         ctxToRoot();
@@ -183,7 +183,7 @@ public class ExternalDbTablePrivTest {
 
         ctxToTestUser();
         try {
-            Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+            Authorizer.checkTableAction(ctx,
                     "hive0", "tpch", "region", PrivilegeType.SELECT);
             Assert.fail();
         } catch (Exception e) {
@@ -197,7 +197,7 @@ public class ExternalDbTablePrivTest {
         // 1. before grant: access denied
         ctxToTestUser();
         try {
-            Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+            Authorizer.checkTableAction(ctx,
                     "hive0", "tpch", "region", PrivilegeType.DROP);
             Assert.fail();
         } catch (Exception e) {
@@ -208,7 +208,7 @@ public class ExternalDbTablePrivTest {
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(grantSql, ctx), ctx);
 
         ctxToTestUser();
-        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+        Authorizer.checkTableAction(ctx,
                 "hive0", "tpch", "region", PrivilegeType.DROP);
 
         ctxToRoot();
@@ -216,7 +216,7 @@ public class ExternalDbTablePrivTest {
 
         ctxToTestUser();
         try {
-            Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+            Authorizer.checkTableAction(ctx,
                     "hive0", "tpch", "region", PrivilegeType.DROP);
             Assert.fail();
         } catch (Exception e) {

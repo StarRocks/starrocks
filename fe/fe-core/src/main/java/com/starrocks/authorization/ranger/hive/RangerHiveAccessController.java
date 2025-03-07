@@ -22,12 +22,10 @@ import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.authorization.ranger.RangerAccessController;
 import com.starrocks.catalog.Column;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.sql.ast.UserIdentity;
 
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Set;
 
 public class RangerHiveAccessController extends RangerAccessController {
     public RangerHiveAccessController(String serviceName) {
@@ -35,56 +33,62 @@ public class RangerHiveAccessController extends RangerAccessController {
     }
 
     @Override
-    public void checkDbAction(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db,
+    public void checkDbAction(ConnectContext context, String catalogName, String db,
                               PrivilegeType privilegeType) throws AccessDeniedException {
         hasPermission(RangerHiveResource.builder()
                         .setDatabase(db)
                         .build(),
-                currentUser,
+                context.getCurrentUserIdentity(),
+                context.getGroups(),
                 privilegeType);
     }
 
     @Override
-    public void checkAnyActionOnDb(UserIdentity currentUser, Set<Long> roleIds, String catalogName, String db)
+    public void checkAnyActionOnDb(ConnectContext context, String catalogName, String db)
             throws AccessDeniedException {
         hasPermission(RangerHiveResource.builder()
                         .setDatabase(db)
                         .build(),
-                currentUser,
+                context.getCurrentUserIdentity(),
+                context.getGroups(),
                 PrivilegeType.ANY);
     }
 
     @Override
-    public void checkTableAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName, PrivilegeType privilegeType)
+    public void checkTableAction(ConnectContext context, TableName tableName, PrivilegeType privilegeType)
             throws AccessDeniedException {
         hasPermission(RangerHiveResource.builder()
                         .setDatabase(tableName.getDb())
                         .setTable(tableName.getTbl())
                         .build(),
-                currentUser,
+                context.getCurrentUserIdentity(),
+                context.getGroups(),
                 privilegeType);
     }
 
     @Override
-    public void checkAnyActionOnTable(UserIdentity currentUser, Set<Long> roleIds, TableName tableName)
+    public void checkAnyActionOnTable(ConnectContext context, TableName tableName)
             throws AccessDeniedException {
         hasPermission(RangerHiveResource.builder()
                         .setDatabase(tableName.getDb())
                         .setTable(tableName.getTbl())
                         .build(),
-                currentUser,
+                context.getCurrentUserIdentity(),
+                context.getGroups(),
                 PrivilegeType.ANY);
     }
 
     @Override
-    public void checkColumnAction(UserIdentity currentUser, Set<Long> roleIds, TableName tableName,
+    public void checkColumnAction(ConnectContext context, TableName tableName,
                                   String column, PrivilegeType privilegeType) throws AccessDeniedException {
         hasPermission(RangerHiveResource.builder()
                         .setDatabase(tableName.getDb())
                         .setTable(tableName.getTbl())
                         .setColumn(column)
                         .build(),
-                currentUser, privilegeType);
+                context.getCurrentUserIdentity(),
+                context.getGroups(),
+                privilegeType);
     }
 
     @Override

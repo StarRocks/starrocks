@@ -20,8 +20,8 @@ import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.memory.MemoryStat;
 import com.starrocks.memory.MemoryUsageTracker;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TFeMemoryReq;
 import mockit.Expectations;
@@ -30,7 +30,6 @@ import org.apache.thrift.TException;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
-import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -47,7 +46,7 @@ public class SysFeMemoryUsageTest {
         AccessControlProvider accessControlProvider = Authorizer.getInstance();
         new Expectations(accessControlProvider) {
             {
-                Authorizer.checkSystemAction((UserIdentity) any, (Set<Long>) any, (PrivilegeType) any);
+                Authorizer.checkSystemAction((ConnectContext) any, (PrivilegeType) any);
                 result = null;
                 minTimes = 0;
             }

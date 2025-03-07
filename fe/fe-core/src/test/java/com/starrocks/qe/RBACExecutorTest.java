@@ -221,26 +221,26 @@ public class RBACExecutorTest {
         ctx.setCurrentUserIdentity(new UserIdentity("u1", "%"));
         SetRoleExecutor.execute((SetRoleStmt) UtFrameUtils.parseStmtWithNewParser(
                 "set role r1", ctx), ctx);
-        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+        Authorizer.checkTableAction(ctx,
                 "db", "tbl0", PrivilegeType.SELECT);
-        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+        Authorizer.checkTableAction(ctx,
                 "db", "tbl1", PrivilegeType.SELECT);
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke r2 from role r1", ctx), ctx);
-        Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+        Authorizer.checkTableAction(ctx,
                 "db", "tbl0", PrivilegeType.SELECT);
         Assert.assertThrows(AccessDeniedException.class, () ->
-                Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                Authorizer.checkTableAction(ctx,
                         "db", "tbl1", PrivilegeType.SELECT));
 
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "revoke r1 from u1", ctx), ctx);
         Assert.assertThrows(AccessDeniedException.class, () ->
-                Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                Authorizer.checkTableAction(ctx,
                         "db", "tbl0", PrivilegeType.SELECT));
         Assert.assertThrows(AccessDeniedException.class, () ->
-                Authorizer.checkTableAction(ctx.getCurrentUserIdentity(), ctx.getCurrentRoleIds(),
+                Authorizer.checkTableAction(ctx,
                         "db", "tbl1", PrivilegeType.SELECT));
     }
 

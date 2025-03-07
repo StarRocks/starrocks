@@ -47,7 +47,6 @@ import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import io.netty.handler.codec.http.HttpMethod;
 import io.netty.handler.codec.http.HttpResponseStatus;
 
@@ -85,8 +84,7 @@ public class GetLogFileAction extends RestBaseAction {
 
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response) throws AccessDeniedException {
-        UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
-        Authorizer.checkSystemAction(currentUser, null, PrivilegeType.OPERATE);
+        Authorizer.checkSystemAction(ConnectContext.get(), PrivilegeType.OPERATE);
 
         String logType = request.getSingleParameter("type");
         String logFile = request.getSingleParameter("file");

@@ -229,8 +229,7 @@ public class AnalyzerUtils {
 
         if (fn != null) {
             try {
-                Authorizer.checkFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), db, fn,
-                        PrivilegeType.USAGE);
+                Authorizer.checkFunctionAction(context, db, fn, PrivilegeType.USAGE);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(
                         InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -248,8 +247,7 @@ public class AnalyzerUtils {
                 .getFunction(search, Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
         if (fn != null) {
             try {
-                Authorizer.checkGlobalFunctionAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                        fn, PrivilegeType.USAGE);
+                Authorizer.checkGlobalFunctionAction(context, fn, PrivilegeType.USAGE);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(
                         InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,

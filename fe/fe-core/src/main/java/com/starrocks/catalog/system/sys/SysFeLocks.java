@@ -32,6 +32,7 @@ import com.starrocks.common.util.concurrent.lock.LockInfo;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.consistency.LockChecker;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.UserIdentity;
@@ -82,7 +83,10 @@ public class SysFeLocks {
         // authorize
         try {
             if (authenticate) {
-                Authorizer.checkSystemAction(currentUser, null, PrivilegeType.OPERATE);
+                ConnectContext context = new ConnectContext();
+                context.setCurrentUserIdentity(currentUser);
+                context.setCurrentRoleIds(currentUser);
+                Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
             }
         } catch (AccessDeniedException e) {
             throw new TException(e.getMessage(), e);

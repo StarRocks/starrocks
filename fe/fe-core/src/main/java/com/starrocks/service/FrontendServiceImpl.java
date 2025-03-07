@@ -432,7 +432,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<String> dbs = new ArrayList<>();
         for (String fullName : dbNames) {
             try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser, null, catalogName, fullName);
+                ConnectContext context = new ConnectContext();
+                context.setCurrentUserIdentity(currentUser);
+                context.setCurrentRoleIds(currentUser);
+                Authorizer.checkAnyActionOnOrInDb(context, catalogName, fullName);
             } catch (AccessDeniedException e) {
                 continue;
             }
@@ -496,8 +499,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
 
                 try {
-                    Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                            null, params.db, tbl);
+                    ConnectContext context = new ConnectContext();
+                    context.setCurrentUserIdentity(currentUser);
+                    context.setCurrentRoleIds(currentUser);
+                    Authorizer.checkAnyActionOnTableLikeObject(context, params.db, tbl);
                 } catch (AccessDeniedException e) {
                     continue;
                 }
@@ -546,8 +551,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 OUTER:
                 for (Table table : tables) {
                     try {
-                        Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                                null, params.db, table);
+                        ConnectContext context = new ConnectContext();
+                        context.setCurrentUserIdentity(currentUser);
+                        context.setCurrentRoleIds(currentUser);
+                        Authorizer.checkAnyActionOnTableLikeObject(context, params.db, table);
                     } catch (AccessDeniedException e) {
                         continue;
                     }
@@ -579,8 +586,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                         .getTable(db.getFullName(), tableName.getTbl());
                                 if (tbl != null) {
                                     try {
-                                        Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                                                null, db.getFullName(), tbl);
+                                        ConnectContext context = new ConnectContext();
+                                        context.setCurrentUserIdentity(currentUser);
+                                        context.setCurrentRoleIds(currentUser);
+                                        Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), tbl);
                                     } catch (AccessDeniedException e) {
                                         continue OUTER;
                                     }
@@ -735,7 +744,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TColumnStatsUsageRes result = ColumnStatsUsageSystemTable.query(request);
         result.getItems().removeIf(item -> {
             try {
-                Authorizer.checkTableAction(currentUser, null, item.getTable_database(), item.getTable_name(),
+                ConnectContext context = new ConnectContext();
+                context.setCurrentUserIdentity(currentUser);
+                context.setCurrentRoleIds(currentUser);
+                Authorizer.checkTableAction(context, item.getTable_database(), item.getTable_name(),
                         PrivilegeType.SELECT);
                 return false;
             } catch (AccessDeniedException e) {
@@ -752,7 +764,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         UserIdentity currentUser = UserIdentity.fromThrift(request.getAuth_info().getCurrent_user_ident());
         res.getItems().removeIf(item -> {
             try {
-                Authorizer.checkTableAction(currentUser, null, item.getDatabase_name(), item.getTable_name(),
+                ConnectContext context = new ConnectContext();
+                context.setCurrentUserIdentity(currentUser);
+                context.setCurrentRoleIds(currentUser);
+                Authorizer.checkTableAction(context, item.getDatabase_name(), item.getTable_name(),
                         PrivilegeType.SELECT);
                 return false;
             } catch (AccessDeniedException e) {
@@ -795,8 +810,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         try {
-            Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                    null, dbName, mv);
+            ConnectContext context = new ConnectContext();
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
+            Authorizer.checkAnyActionOnTableLikeObject(context, dbName, mv);
         } catch (AccessDeniedException e) {
             return;
         }
@@ -994,8 +1011,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     return result;
                 }
                 try {
-                    Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                            null, params.db, table);
+                    ConnectContext context = new ConnectContext();
+                    context.setCurrentUserIdentity(currentUser);
+                    context.setCurrentRoleIds(currentUser);
+                    Authorizer.checkAnyActionOnTableLikeObject(context, params.db, table);
                 } catch (AccessDeniedException e) {
                     return result;
                 }
@@ -1015,7 +1034,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         boolean reachLimit;
         for (String fullName : dbNames) {
             try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser, null,
+                ConnectContext context = new ConnectContext();
+                context.setCurrentUserIdentity(currentUser);
+                context.setCurrentRoleIds(currentUser);
+                Authorizer.checkAnyActionOnOrInDb(context,
                         InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, fullName);
             } catch (AccessDeniedException e) {
                 continue;
@@ -1032,8 +1054,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         }
 
                         try {
-                            Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                                    null, fullName, table);
+                            ConnectContext context = new ConnectContext();
+                            context.setCurrentUserIdentity(currentUser);
+                            context.setCurrentRoleIds(currentUser);
+                            Authorizer.checkAnyActionOnTableLikeObject(context, fullName, table);
                         } catch (AccessDeniedException e) {
                             continue;
                         }
@@ -1220,7 +1244,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 passwd.getBytes(StandardCharsets.UTF_8), null);
         // check INSERT action on table
         try {
-            Authorizer.checkTableAction(currentUser, null, db, tbl, PrivilegeType.INSERT);
+            ConnectContext context = new ConnectContext();
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
+            Authorizer.checkTableAction(context, db, tbl, PrivilegeType.INSERT);
         } catch (AccessDeniedException e) {
             throw new AuthenticationException(
                     "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
@@ -1884,7 +1911,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             String dbName = authParams.getDb_name();
             for (String tableName : authParams.getTable_names()) {
-                Authorizer.checkTableAction(userIdentity, null, dbName, tableName, PrivilegeType.INSERT);
+                ConnectContext context = new ConnectContext();
+                context.setCurrentUserIdentity(userIdentity);
+                context.setCurrentRoleIds(userIdentity);
+                Authorizer.checkTableAction(context, dbName, tableName, PrivilegeType.INSERT);
             }
             return new TStatus(TStatusCode.OK);
         } catch (Exception e) {

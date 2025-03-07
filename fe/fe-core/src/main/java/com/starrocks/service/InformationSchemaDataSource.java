@@ -45,6 +45,7 @@ import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
@@ -119,7 +120,10 @@ public class InformationSchemaDataSource {
         for (String fullName : dbNames) {
 
             try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser, null, catalogName, fullName);
+                ConnectContext context = new ConnectContext();
+                context.setCurrentUserIdentity(currentUser);
+                context.setCurrentRoleIds(currentUser);
+                Authorizer.checkAnyActionOnOrInDb(context, catalogName, fullName);
             } catch (AccessDeniedException e) {
                 continue;
             }
@@ -161,8 +165,10 @@ public class InformationSchemaDataSource {
                     List<Table> allTables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
                     for (Table table : allTables) {
                         try {
-                            Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
-                                    null, dbName, table);
+                            ConnectContext context = new ConnectContext();
+                            context.setCurrentUserIdentity(result.currentUser);
+                            context.setCurrentRoleIds(result.currentUser);
+                            Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
                         } catch (AccessDeniedException e) {
                             LOG.warn("failed to check db: {} table: {} authorization", dbName, table, e);
                             continue;
@@ -294,8 +300,10 @@ public class InformationSchemaDataSource {
                 continue;
             }
             try {
-                Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
-                        null, ele.dbName, table);
+                ConnectContext context = new ConnectContext();
+                context.setCurrentUserIdentity(result.currentUser);
+                context.setCurrentRoleIds(result.currentUser);
+                Authorizer.checkAnyActionOnTableLikeObject(context, ele.dbName, table);
             } catch (AccessDeniedException e) {
                 LOG.warn("failed to check db: {} table: {} authorization", ele.dbName, table, e);
                 continue;
@@ -454,7 +462,10 @@ public class InformationSchemaDataSource {
                     }
 
                     try {
-                        Authorizer.checkAnyActionOnTableLikeObject(result.currentUser, null, dbName, table);
+                        ConnectContext context = new ConnectContext();
+                        context.setCurrentUserIdentity(result.currentUser);
+                        context.setCurrentRoleIds(result.currentUser);
+                        Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
                     } catch (AccessDeniedException e) {
                         continue;
                     }

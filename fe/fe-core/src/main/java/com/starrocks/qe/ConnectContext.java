@@ -459,6 +459,10 @@ public class ConnectContext {
         this.currentRoleIds = roleIds;
     }
 
+    public Set<String> getGroups() {
+        return Set.of();
+    }
+
     public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
         GlobalStateMgr.getCurrentState().getVariableMgr().setSystemVariable(sessionVariable, setVar, onlySetSessionVar);
         if (!SetType.GLOBAL.equals(setVar.getType()) && GlobalStateMgr.getCurrentState().getVariableMgr()
@@ -1156,8 +1160,7 @@ public class ConnectContext {
         }
         if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
             try {
-                Authorizer.checkAnyActionOnCatalog(this.getCurrentUserIdentity(),
-                        this.getCurrentRoleIds(), newCatalogName);
+                Authorizer.checkAnyActionOnCatalog(this, newCatalogName);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(newCatalogName, this.getCurrentUserIdentity(), this.getCurrentRoleIds(),
                         PrivilegeType.ANY.name(), ObjectType.CATALOG.name(), newCatalogName);
@@ -1191,8 +1194,7 @@ public class ConnectContext {
             }
             if (!CatalogMgr.isInternalCatalog(newCatalogName)) {
                 try {
-                    Authorizer.checkAnyActionOnCatalog(this.getCurrentUserIdentity(),
-                            this.getCurrentRoleIds(), newCatalogName);
+                    Authorizer.checkAnyActionOnCatalog(this, newCatalogName);
                 } catch (AccessDeniedException e) {
                     AccessDeniedException.reportAccessDenied(newCatalogName,
                             this.getCurrentUserIdentity(), this.getCurrentRoleIds(),
@@ -1211,8 +1213,7 @@ public class ConnectContext {
         // Here we check the request permission that sent by the mysql client or jdbc.
         // So we didn't check UseDbStmt permission in PrivilegeCheckerV2.
         try {
-            Authorizer.checkAnyActionOnOrInDb(this.getCurrentUserIdentity(),
-                    this.getCurrentRoleIds(), this.getCurrentCatalog(), dbName);
+            Authorizer.checkAnyActionOnOrInDb(this, this.getCurrentCatalog(), dbName);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(this.getCurrentCatalog(),
                     this.getCurrentUserIdentity(), this.getCurrentRoleIds(),

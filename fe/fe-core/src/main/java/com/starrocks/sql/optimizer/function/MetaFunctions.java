@@ -88,9 +88,7 @@ public class MetaFunctions {
                 .orElseThrow(() -> ErrorReport.buildSemanticException(ErrorCode.ERR_BAD_TABLE_ERROR, tableName));
         ConnectContext connectContext = ConnectContext.get();
         try {
-            Authorizer.checkAnyActionOnTable(connectContext.getCurrentUserIdentity(),
-                    connectContext.getCurrentRoleIds(),
-                    tableName);
+            Authorizer.checkAnyActionOnTable(connectContext, tableName);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     tableName.getCatalog(),
@@ -108,8 +106,7 @@ public class MetaFunctions {
         ConnectContext connectContext = ConnectContext.get();
         try {
             Authorizer.checkAnyActionOnTable(
-                    connectContext.getCurrentUserIdentity(),
-                    connectContext.getCurrentRoleIds(),
+                    connectContext,
                     tableName);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
@@ -124,8 +121,7 @@ public class MetaFunctions {
         ConnectContext connectContext = ConnectContext.get();
         try {
             Authorizer.checkSystemAction(
-                    connectContext.getCurrentUserIdentity(),
-                    connectContext.getCurrentRoleIds(),
+                    connectContext,
                     PrivilegeType.OPERATE);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
@@ -203,8 +199,7 @@ public class MetaFunctions {
     public static ConstantOperator inspectMvRelationships() {
         ConnectContext context = ConnectContext.get();
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeType.OPERATE);
+            Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     "", context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
