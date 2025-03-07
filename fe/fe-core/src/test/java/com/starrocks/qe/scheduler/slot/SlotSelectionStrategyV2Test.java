@@ -288,6 +288,44 @@ public class SlotSelectionStrategyV2Test {
         assertThat(slotTracker.getNumAllocatedSlots()).isEqualTo(slot1.getNumPhysicalSlots());
     }
 
+    @Test
+    public void testUpdateOptionsChangeQueueStrategyOnline() throws InterruptedException {
+        QueryQueueOptions opts = QueryQueueOptions.createFromEnv();
+        SlotSelectionStrategyV2 strategy = new SlotSelectionStrategyV2();
+        SlotTracker slotTracker = new SlotTracker(ImmutableList.of(strategy));
+
+        LogicalSlot slot1 = generateSlot(opts.v2().getTotalSlots() / 2 + 1);
+        LogicalSlot slot2 = generateSlot(opts.v2().getTotalSlots() / 2 - 1);
+        LogicalSlot slot3 = generateSlot(2);
+
+        // 1. Require slot1, slot2, slot3.
+        assertThat(slotTracker.requireSlot(slot1)).isTrue();
+        assertThat(slotTracker.requireSlot(slot2)).isTrue();
+        assertThat(slotTracker.requireSlot(slot3)).isTrue();
+        assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactly(slot3, slot2);
+
+        // update query queue strategy
+        Config.query_queue_v2_schedule_strategy = QueryQueueOptions.SchedulePolicy.SJF.name();
+        Thread.sleep(1200);
+        assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactly(slot3, slot2);
+        assertThat(strategy.getCurrentOptions()).isNotEqualTo(opts);
+        assertThat(strategy.getCurrentOptions().hashCode()).isNotEqualTo(opts.hashCode());
+        assertThat(strategy.getCurrentOptions().getPolicy()).isEqualTo(QueryQueueOptions.SchedulePolicy.SJF);
+        opts = strategy.getCurrentOptions();
+        slotTracker.allocateSlot(slot2);
+        slotTracker.allocateSlot(slot3);
+        assertThat(slotTracker.releaseSlot(slot2.getSlotId())).isSameAs(slot2);
+        assertThat(slotTracker.releaseSlot(slot3.getSlotId())).isSameAs(slot3);
+
+        // change it back
+        Config.query_queue_v2_schedule_strategy = QueryQueueOptions.SchedulePolicy.SWRR.name();
+        Thread.sleep(1200);
+        assertThat(strategy.peakSlotsToAllocate(slotTracker)).containsExactly(slot1);
+        assertThat(strategy.getCurrentOptions()).isNotEqualTo(opts);
+        assertThat(strategy.getCurrentOptions().hashCode()).isNotEqualTo(opts.hashCode());
+        assertThat(strategy.getCurrentOptions().getPolicy()).isEqualTo(QueryQueueOptions.SchedulePolicy.SWRR);
+    }
+
     private static LogicalSlot generateSlot(int numSlots) {
         return new LogicalSlot(UUIDUtil.genTUniqueId(), "fe", LogicalSlot.ABSENT_GROUP_ID, numSlots, 0, 0, 0, 0, 0);
     }

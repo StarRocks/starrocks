@@ -72,6 +72,7 @@ public class ShortJobFirstAlgoTest {
         algo.add(slots[1]);  // 200ms
         algo.add(slots[4]);  // 5s
         algo.add(slots[2]);  // 500ms
+        Assertions.assertEquals(6, algo.size());
 
         algo.updateBaseTime(startTime);
 
@@ -91,6 +92,7 @@ public class ShortJobFirstAlgoTest {
                     "Score mismatch for wait time " + waitTimes[i] + "ms");
         }
 
+        Assertions.assertEquals(slots[5], algo.peak(), "Should poll 10s wait task first");
         Assertions.assertEquals(slots[5], algo.poll(), "Should poll 10s wait task first");
         Assertions.assertEquals(slots[4], algo.poll(), "Should poll 5s wait task second");
         Assertions.assertEquals(slots[3], algo.poll(), "Should poll 1s wait task third");

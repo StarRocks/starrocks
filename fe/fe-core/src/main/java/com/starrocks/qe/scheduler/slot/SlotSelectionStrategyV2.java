@@ -150,6 +150,11 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
         return slotsToAllocate;
     }
 
+    @VisibleForTesting
+    protected QueryQueueOptions getCurrentOptions() {
+        return opts;
+    }
+
     private void updateOptionsPeriodically() {
         long now = System.currentTimeMillis();
         if (now - lastUpdateOptionsTime < UPDATE_OPTIONS_INTERVAL_MS) {
@@ -181,7 +186,7 @@ public class SlotSelectionStrategyV2 implements SlotSelectionStrategy {
                     .filter(slotContext -> slotContext.getSlot().getState() == LogicalSlot.State.REQUIRING)
                     .forEach(slotContext -> requiringQueue.add(slotContext));
 
-            LOG.info("updated SlotSelectionStrategy to {}", newOpts);
+            LOG.info("updated SlotSelectionStrategy to {}", newOpts.toString());
 
         }
     }
