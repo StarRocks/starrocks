@@ -39,6 +39,10 @@ public class TransactionLoadActionOnSharedDataClusterTest extends TransactionLoa
     private static HttpServer beServer;
     private static int TEST_HTTP_PORT = 0;
 
+    public TransactionLoadActionOnSharedDataClusterTest() {
+        super(RunMode.SHARED_DATA.getName());
+    }
+
     @Override
     protected void doSetUp() {
         new MockUp<RunMode>() {
