@@ -38,11 +38,11 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.information.InfoSchemaDb;
 import com.starrocks.catalog.system.information.PartitionsMetaSystemTable;
 import com.starrocks.common.Pair;
-import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.qe.SqlModeHelper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AnalyzeState;
@@ -608,7 +608,7 @@ public class PartitionSelector {
         String newWhereSql = newExpr.toSql();
         String sql = String.format(PARTITIONS_META_TEMPLATE, dbName, olapTable.getName(), newWhereSql);
         LOG.info("Get partition ids by sql: {}", sql);
-        List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
+        List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
         List<String> partitionNames = deserializeLookupResult(batch);
         // multi items in the single partition is not supported yet since `JSON_QUERY_TEMPLATE` is constructed the first element.
         Set<Long> excludedPartitionIds = Sets.newHashSet();

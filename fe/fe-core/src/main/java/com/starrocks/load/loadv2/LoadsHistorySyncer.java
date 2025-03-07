@@ -21,7 +21,7 @@ import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.FrontendDaemon;
-import com.starrocks.load.pipe.filelist.RepoExecutor;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
@@ -103,7 +103,7 @@ public class LoadsHistorySyncer extends FrontendDaemon {
         }
 
         try {
-            RepoExecutor.getInstance().executeDML(SQLBuilder.buildSyncSql());
+            SimpleExecutor.getRepoExecutor().executeDML(SQLBuilder.buildSyncSql());
         } catch (Exception e) {
             LOG.error("Failed to sync loads history", e); 
         }

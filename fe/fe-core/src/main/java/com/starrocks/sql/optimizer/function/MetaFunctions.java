@@ -39,12 +39,12 @@ import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.PartitionUtil;
 import com.starrocks.connector.hive.Partition;
-import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.memory.MemoryTrackable;
 import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.monitor.unit.ByteSizeValue;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.TaskRunManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -443,7 +443,7 @@ public class MetaFunctions {
         String sql = String.format("select cast(`%s` as string) from %s where `%s` = '%s' limit 1",
                 returnColumn.getVarchar(), tableNameValue.toString(), keyColumn.getName(), lookupKey.getVarchar());
         try {
-            List<TResultBatch> result = RepoExecutor.getInstance().executeDQL(sql);
+            List<TResultBatch> result = SimpleExecutor.getRepoExecutor().executeDQL(sql);
             return deserializeLookupResult(result);
         } catch (Throwable e) {
             final String notFoundMessage = "query failed if record not exist in dict table";

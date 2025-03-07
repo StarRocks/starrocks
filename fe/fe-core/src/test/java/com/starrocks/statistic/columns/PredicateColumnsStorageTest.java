@@ -19,8 +19,8 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Table;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.plan.PlanTestBase;
@@ -59,7 +59,7 @@ class PredicateColumnsStorageTest extends PlanTestBase {
                 PredicateColumnsStorage.TABLE_NAME));
         ConnectContext.ScopeGuard guard = connectContext.bindScope();
 
-        RepoExecutor repo = Mockito.mock(RepoExecutor.class);
+        SimpleExecutor repo = Mockito.mock(SimpleExecutor.class);
         PredicateColumnsStorage instance = new PredicateColumnsStorage(repo);
 
         // restore

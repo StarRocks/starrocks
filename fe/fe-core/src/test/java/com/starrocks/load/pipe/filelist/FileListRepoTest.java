@@ -23,6 +23,7 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.PipeFileRecord;
 import com.starrocks.load.pipe.PipeId;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.plan.ExecPlan;
@@ -182,7 +183,7 @@ public class FileListRepoTest {
     }
 
     private void mockExecutor() {
-        new MockUp<RepoExecutor>() {
+        new MockUp<SimpleExecutor>() {
             private boolean ddlExecuted = false;
 
             @Mock
@@ -213,11 +214,11 @@ public class FileListRepoTest {
                 return true;
             }
         };
-        RepoExecutor executor = RepoExecutor.getInstance();
+        SimpleExecutor executor = SimpleExecutor.getRepoExecutor();
         RepoCreator creator = RepoCreator.getInstance();
 
         // failed for the first time
-        new MockUp<RepoExecutor>() {
+        new MockUp<SimpleExecutor>() {
             @Mock
             public void executeDDL(String sql) {
                 throw new RuntimeException("ddl failed");
@@ -235,7 +236,7 @@ public class FileListRepoTest {
             }
         };
         AtomicInteger changed = new AtomicInteger(0);
-        new MockUp<RepoExecutor>() {
+        new MockUp<SimpleExecutor>() {
             @Mock
             public void executeDDL(String sql) {
                 changed.addAndGet(1);
@@ -264,7 +265,7 @@ public class FileListRepoTest {
         FileListTableRepo repo = new FileListTableRepo();
         repo.setPipeId(new PipeId(1, 1));
         RepoAccessor accessor = RepoAccessor.getInstance();
-        RepoExecutor executor = RepoExecutor.getInstance();
+        SimpleExecutor executor = SimpleExecutor.getRepoExecutor();
         new Expectations(executor) {
             {
                 executor.executeDQL(anyString);
@@ -381,7 +382,7 @@ public class FileListRepoTest {
             }
         };
 
-        RepoExecutor executor = RepoExecutor.getInstance();
+        SimpleExecutor executor = SimpleExecutor.getRepoExecutor();
         new Expectations(executor) {
             {
                 executor.executeDML(
@@ -409,7 +410,7 @@ public class FileListRepoTest {
             }
         };
 
-        RepoExecutor executor = RepoExecutor.getInstance();
+        SimpleExecutor executor = SimpleExecutor.getRepoExecutor();
 
         Assert.assertTrue(executor.executeDQL("select now()").isEmpty());
 
@@ -422,7 +423,7 @@ public class FileListRepoTest {
         FileListTableRepo repo = new FileListTableRepo();
         repo.setPipeId(new PipeId(1, 1));
         RepoAccessor accessor = RepoAccessor.getInstance();
-        RepoExecutor executor = RepoExecutor.getInstance();
+        SimpleExecutor executor = SimpleExecutor.getRepoExecutor();
 
         new Expectations(executor) {
             {
