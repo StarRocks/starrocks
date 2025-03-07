@@ -5814,7 +5814,7 @@ Status TabletUpdates::compaction_random(MemTracker* mem_tracker) {
     MemTracker* prev_tracker = tls_thread_status.set_mem_tracker(mem_tracker);
     DeferOp op([&] { tls_thread_status.set_mem_tracker(prev_tracker); });
 
-    Status st = _do_compaction(&info);
+    Status st = _do_compaction(&info, rowsets);
     if (!st.ok()) {
         _compaction_running = false;
         _last_compaction_failure_millis = UnixMillis();
