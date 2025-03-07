@@ -166,7 +166,7 @@ public:
     }
 
     static ColumnPtr copy_and_unfold_const_column(const TypeDescriptor& dst_type_desc, bool dst_nullable,
-                                                  const ColumnPtr& src_column, int num_rows) {
+                                                  ColumnPtr&& src_column, int num_rows) {
         auto dst_column = create_column(dst_type_desc, dst_nullable);
         dst_column->reserve(num_rows);
 
@@ -210,7 +210,7 @@ public:
     }
 
     // Update column according to whether the dest column and source column are nullable or not.
-    static ColumnPtr update_column_nullable(bool dst_nullable, const ColumnPtr& src_column, int num_rows) {
+    static ColumnPtr update_column_nullable(bool dst_nullable, ColumnPtr&& src_column, int num_rows) {
         if (src_column->is_nullable()) {
             if (dst_nullable) {
                 // 1. Src column and dest column are both nullable.
@@ -227,8 +227,8 @@ public:
                 return src_column;
             } else {
                 // 4. src column is non-nullable, and dest column is nullable.
-                ColumnPtr nullable_column =
-                        NullableColumn::create(src_column->as_mutable_ptr(), NullColumn::create(num_rows, 0));
+                ColumnPtr nullable_column = NullableColumn::create(std::move(src_column)->as_mutable_ptr(),
+                                                                   NullColumn::create(num_rows, 0));
                 return nullable_column;
             }
         }
@@ -243,20 +243,20 @@ public:
     }
 
     // Move the source column according to the specific dest type and nullable.
-    static ColumnPtr move_column(const TypeDescriptor& dst_type_desc, bool dst_nullable, const ColumnPtr& src_column,
+    static ColumnPtr move_column(const TypeDescriptor& dst_type_desc, bool dst_nullable, ColumnPtr&& src_column,
                                  int num_rows) {
         if (src_column->is_constant()) {
-            return copy_and_unfold_const_column(dst_type_desc, dst_nullable, src_column, num_rows);
+            return copy_and_unfold_const_column(dst_type_desc, dst_nullable, std::move(src_column), num_rows);
         }
 
-        return update_column_nullable(dst_nullable, src_column, num_rows);
+        return update_column_nullable(dst_nullable, std::move(src_column), num_rows);
     }
 
     // Copy the source column according to the specific dest type and nullable.
     static MutableColumnPtr clone_column(const TypeDescriptor& dst_type_desc, bool dst_nullable,
                                          const ColumnPtr& src_column, int num_rows) {
-        auto dst_column = update_column_nullable(dst_nullable, src_column, num_rows);
-        return dst_column->clone();
+        auto cloned = src_column->clone();
+        return update_column_nullable(dst_nullable, std::move(cloned), num_rows)->as_mutable_ptr();
     }
 
     // Create an empty column
