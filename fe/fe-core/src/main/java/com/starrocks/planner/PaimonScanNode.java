@@ -214,7 +214,6 @@ public class PaimonScanNode extends ScanNode {
         }
     }
 
-    @VisibleForTesting
     public void splitScanRangeLocations(RawFile rawFile,
                                         long offset,
                                         long length,
@@ -268,7 +267,6 @@ public class PaimonScanNode extends ScanNode {
         scanRangeLocationsList.add(scanRangeLocations);
     }
 
-    @VisibleForTesting
     public void addSplitScanRangeLocations(Split split, String predicateInfo, long totalFileLength) {
         TScanRangeLocations scanRangeLocations = new TScanRangeLocations();
 
@@ -278,6 +276,7 @@ public class PaimonScanNode extends ScanNode {
         hdfsScanRange.setPaimon_predicate_info(predicateInfo);
         hdfsScanRange.setFile_length(totalFileLength);
         hdfsScanRange.setLength(totalFileLength);
+        hdfsScanRange.setFile_format(THdfsFileFormat.UNKNOWN);
         // Only uses for hasher in HDFSBackendSelector to select BE
         if (split instanceof DataSplit) {
             DataSplit dataSplit = (DataSplit) split;
