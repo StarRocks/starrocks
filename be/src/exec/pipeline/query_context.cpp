@@ -103,8 +103,12 @@ FragmentContextManager* QueryContext::fragment_mgr() {
     return _fragment_mgr.get();
 }
 
-void QueryContext::cancel(const Status& status) {
+void QueryContext::cancel(const Status& status, bool cancelled_by_fe) {
     _is_cancelled = true;
+    if (cancelled_by_fe) {
+        // only update when confirm cancelled from fe
+        _cancelled_by_fe = true;
+    }
     if (_cancelled_status.load() != nullptr) {
         return;
     }
