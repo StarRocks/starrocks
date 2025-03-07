@@ -10,6 +10,39 @@ StarRocks を v3.3 にアップグレードした後、直接 v3.2.0、v3.2.1、
 
 :::
 
+## 3.3.11
+
+リリース日: 2025年3月7日
+
+### 改善点
+
+- `Files` 関数を使用してデータをエクスポートする際、Parquet ファイルへの JSON データ型のエクスポートをサポートしました。 [#56406](https://github.com/StarRocks/starrocks/pull/56406)
+- 共有データモードのクラスタ環境で、クラウドネイティブテーブルのデータキャッシュのウォームアップ性能を向上しました。 [#56190](https://github.com/StarRocks/starrocks/pull/56190)
+- Trino の構文に `AT TIME ZONE` 式および `from_iso8601_timestamp` 関数のサポートを追加しました。 [#56311](https://github.com/StarRocks/starrocks/pull/56311) [#55573](https://github.com/StarRocks/starrocks/pull/55573)
+- 共有データモードのクラスタ環境において、主キー（Primary Key）テーブルの Partial Update が Condition Update をサポートしました。 [#56132](https://github.com/StarRocks/starrocks/pull/56132)
+- すべての種類の SQL ステートメントに対する統計情報の収集をサポートしました。 [#56257](https://github.com/StarRocks/starrocks/pull/56257)
+- `SHOW PROC '/transaction'` ステートメントで、返される最大行数を設定できるようになりました。 [#55933](https://github.com/StarRocks/starrocks/pull/55933)
+- Oracle タイプの JDBC Catalog テーブルに対する非同期マテリアライズドビューの作成をサポートしました。 [#55372](https://github.com/StarRocks/starrocks/pull/55372)
+- BE の WebUI の MemTracker において、25 行ごとのページネーションをサポートしました。 [#56206](https://github.com/StarRocks/starrocks/pull/56206)
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- FE において、定数 TIME データ型を DATETIME にキャストできない問題を修正しました。 [#55804](https://github.com/StarRocks/starrocks/pull/55804)
+- Stream Load トランザクションインターフェースが `starrocks_fe_table_load_rows` および `starrocks_fe_table_load_bytes` 指標をサポートしていなかった問題を修正しました。 [#44991](https://github.com/StarRocks/starrocks/pull/44991)
+- 自動統計情報収集の方式を変更しても適用されない問題を修正しました。 [#56173](https://github.com/StarRocks/starrocks/pull/56173)
+- マテリアライズドビューの状態が異常な場合に、`SHOW MATERIALIZED VIEWS` が正しく動作しない問題を修正しました。 [#55995](https://github.com/StarRocks/starrocks/pull/55995)
+- テキストベースのマテリアライズドビューのリライトが異なるデータベース間で適用されない問題を修正しました。 [#56001](https://github.com/StarRocks/starrocks/pull/56001)
+- JDBC Catalog のメタデータ互換性に関する問題を修正しました。 [#55993](https://github.com/StarRocks/starrocks/pull/55993)
+- JDBC Catalog における JSON 型データの処理に関する問題を修正しました。 [#56008](https://github.com/StarRocks/starrocks/pull/56008)
+- スキーマ変更（Schema Change）時に Sort Key の設定が誤っていた問題を修正しました。 [#55902](https://github.com/StarRocks/starrocks/pull/55902)
+- Broker Load における機密情報の漏洩問題を修正しました。 [#55358](https://github.com/StarRocks/starrocks/pull/55358)
+
+### 動作の変更
+
+- FE の `query_detail` インターフェースに認証プロセスを追加しました。 [#55919](https://github.com/StarRocks/starrocks/pull/55919)
+
 ## 3.3.10
 
 リリース日: 2025年2月21日
