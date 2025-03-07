@@ -244,4 +244,6 @@ private:
     bool _curr_ready = false;
 };
 
+std::string format_json_parse_error_msg(const std::string& raw_error_msg);
+
 } // namespace starrocks

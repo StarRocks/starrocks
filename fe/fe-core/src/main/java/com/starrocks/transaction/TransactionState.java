@@ -132,42 +132,6 @@ public class TransactionState implements Writable, GsonPreProcessable {
         }
     }
 
-    public enum TxnStatusChangeReason {
-        DB_DROPPED,
-        TIMEOUT,
-        OFFSET_OUT_OF_RANGE,
-        PAUSE,
-        NO_PARTITIONS,
-        FILTERED_ROWS;
-
-        public static TxnStatusChangeReason fromString(String reasonString) {
-            if (Strings.isNullOrEmpty(reasonString)) {
-                return null;
-            }
-
-            for (TxnStatusChangeReason txnStatusChangeReason : TxnStatusChangeReason.values()) {
-                if (reasonString.contains(txnStatusChangeReason.toString())) {
-                    return txnStatusChangeReason;
-                }
-            }
-            return null;
-        }
-
-        @Override
-        public String toString() {
-            switch (this) {
-                case OFFSET_OUT_OF_RANGE:
-                    return "Offset out of range";
-                case NO_PARTITIONS:
-                    return "No partitions have data available for loading";
-                case FILTERED_ROWS:
-                    return "too many filtered rows";
-                default:
-                    return this.name();
-            }
-        }
-    }
-
     public enum TxnSourceType {
         FE(1),
         BE(2);
