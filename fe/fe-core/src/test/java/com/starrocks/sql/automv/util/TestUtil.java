@@ -48,6 +48,7 @@ import static com.starrocks.sql.optimizer.statistics.CachedStatisticStorageTest.
 
 public class TestUtil {
     private static List<Pair<String, String>> cachedTPCDSQueryList = null;
+    private static List<Pair<String, String>> cachedFlatTPCDSQueryList = null;
     private static List<Pair<String, String>> cachedClickBenchQueryList = null;
     private static List<Pair<String, String>> cachedSsbQueryList = null;
     private static List<Pair<String, String>> ssbLineorderFlatQueryList = null;
@@ -104,6 +105,13 @@ public class TestUtil {
         return getSqlList("sql/flat_tpcds/", "catalog_returns_flat_table", "catalog_sales_flat_table",
                 "customer_flat_table", "inventory_flat_table", "item_flat_table", "store_returns_flat_table",
                 "store_sales_flat_table", "web_returns_flat_table", "web_sales_flat_table");
+    }
+
+    public static List<Pair<String, String>> getFlatTpcdsSqlList() {
+        if (cachedFlatTPCDSQueryList == null) {
+            cachedFlatTPCDSQueryList = getQueryList("sql/flat_tpcds_query", Pattern.compile("(Q\\d+)\\.sql"));
+        }
+        return cachedFlatTPCDSQueryList;
     }
 
     public static List<Pair<String, String>> getClickBenchQueryList() {

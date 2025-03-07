@@ -16,10 +16,11 @@ package com.starrocks.sql.automv.generator;
 
 import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
-import com.google.common.base.Predicates;
+import com.google.common.collect.Maps;
 import com.starrocks.analysis.TableName;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.automv.column.ColumnAlias;
+import com.starrocks.sql.automv.column.DerivedColumn;
 import com.starrocks.sql.automv.column.GenericColumn;
 import com.starrocks.sql.automv.pieces.PieceColumnPruner;
 import com.starrocks.sql.automv.pieces.PlanPiece;
@@ -35,6 +36,7 @@ import com.starrocks.sql.automv.util.TieredMap;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -46,75 +48,73 @@ import java.util.stream.Stream;
 
 public class OneOneMVGenerator {
 
-    private static Optional<ColumnRefSet> tryToInferBucketKey(
-            Map<Integer, Long> keyColumnReps, int nColumn,
-            Function<ColumnRefSet, Long> hitCount,
-            Predicate<ColumnRefSet> isGoodKey) {
-
-        if (keyColumnReps.size() < nColumn) {
-            return Optional.empty();
-        }
-        if (keyColumnReps.size() == nColumn) {
-            ColumnRefSet key = ColumnRefSet.createByIds(keyColumnReps.keySet());
-            if (isGoodKey.test(key)) {
-                return Optional.of(key);
-            } else {
-                return Optional.empty();
-            }
-        }
-
-        List<Integer> keyColumnsDescending = keyColumnReps.entrySet().stream()
-                .map(e -> Pair.create(e.getKey(), e.getValue()))
-                .sorted(Collections.reverseOrder(Pair.comparingBySecond()))
-                .map(p -> p.first)
-                .collect(Collectors.toList())
-                .subList(0, Math.min(nColumn + 1, keyColumnReps.size()));
-
-        ColumnRefSet candidateSuperKey = ColumnRefSet.createByIds(keyColumnsDescending);
-        return keyColumnsDescending.stream()
-                .map(id -> {
-                    ColumnRefSet key = candidateSuperKey.clone();
-                    key.except(ColumnRefSet.createByIds(Collections.singletonList(id)));
-                    return key;
-                })
-                .filter(isGoodKey)
-                .map(key -> Pair.create(key, hitCount.apply(key)))
-                .sorted(Collections.reverseOrder(Pair.comparingBySecond()))
-                .map(p -> p.first)
-                .findFirst();
-    }
-
     private static Optional<ColumnRefSet> inferBucketKey(TableUsage tableUsage) {
-        Map<Integer, Long> keyColumnReps =
+        Map<ColumnRefSet, Long> keyColumnReps =
                 Stream.concat(tableUsage.getGroupByKeys().stream(), tableUsage.getJoinKeys().stream())
-                        .filter(key -> key.size() >= 2)
-                        .flatMap(ColumnRefSet::getStream)
+                        .filter(key -> !key.isEmpty())
                         .collect(Collectors.groupingBy(Function.identity(), Collectors.counting()));
 
-        Function<ColumnRefSet, Long> hitCount = key ->
-                tableUsage.getJoinKeys().stream().filter(joinKey -> joinKey.containsAll(key)).count() +
-                        tableUsage.getGroupByKeys().stream().filter(groupByKey -> groupByKey.containsAll(key)).count();
+        Map<ColumnRefSet, Long> keyColumnAccReps = Maps.newHashMap();
 
-        Predicate<ColumnRefSet> isHighNdvKey =
-                key -> tableUsage.getRowCount() > 1000000.0 && key.getStream().anyMatch(id ->
-                        tableUsage.getColumnIdToNdvRatio().getOrDefault(id, 0.0) > 0.5);
-
-        for (int i = 1; i < 4; ++i) {
-            Optional<ColumnRefSet> optKey = tryToInferBucketKey(keyColumnReps, i, hitCount, isHighNdvKey);
-            if (optKey.isPresent()) {
-                return optKey;
+        for (Map.Entry<ColumnRefSet, Long> keyRep : keyColumnReps.entrySet()) {
+            ColumnRefSet key = keyRep.getKey();
+            Long reps = keyRep.getValue();
+            Long accReps = reps + keyColumnReps.entrySet().stream()
+                    .filter(e -> e.getKey().size() > key.size() && e.getKey().containsAll(key))
+                    .map(Map.Entry::getValue).reduce(0L, Long::sum);
+            keyColumnAccReps.put(key, accReps);
+        }
+        Map<ColumnRefSet, Long> extraKeyColumnAccReps = Maps.newHashMap();
+        ColumnRefSet[] keys = keyColumnReps.keySet().toArray(new ColumnRefSet[0]);
+        for (int i = 0; i < keys.length; ++i) {
+            for (int j = i + 1; j < keys.length; ++j) {
+                ColumnRefSet key1 = keys[i];
+                ColumnRefSet key2 = keys[j];
+                ColumnRefSet intersectKey = key1.clone();
+                intersectKey.intersect(key2);
+                if (intersectKey.isEmpty() || keyColumnAccReps.containsKey(intersectKey)) {
+                    continue;
+                }
+                extraKeyColumnAccReps.put(intersectKey, keyColumnAccReps.get(key1) + keyColumnAccReps.get(key2));
             }
         }
-        return tryToInferBucketKey(keyColumnReps, 4, hitCount, Predicates.alwaysTrue());
+
+        keyColumnAccReps.putAll(extraKeyColumnAccReps);
+
+        Long thirdsTotalAccReps = keyColumnReps.values().stream().reduce(0L, Long::sum) / 3;
+        Predicate<Pair<ColumnRefSet, Long>> isHighNdvKey =
+                keyRep -> (tableUsage.getRowCount() == -1 && keyRep.first.size() >= 2 &&
+                        keyRep.second >= thirdsTotalAccReps) ||
+                        (tableUsage.getRowCount() > 1000000.0 && keyRep.first.getStream().anyMatch(id ->
+                                tableUsage.getColumnIdToNdvRatio().getOrDefault(id, 0.0) > 0.5));
+
+        return keyColumnAccReps.entrySet().stream()
+                .filter(keyRep -> isHighNdvKey.test(Pair.create(keyRep.getKey(), keyRep.getValue())))
+                .max(Comparator.comparingLong(Map.Entry::getValue))
+                .map(Map.Entry::getKey);
     }
 
-    public static TablePiece addPartitionColumns(TablePiece tablePiece, PartitionExtractor extractor) {
+    public static TablePiece adjustColumns(TablePiece tablePiece, PartitionExtractor extractor) {
         List<PartitionPlus> partitions = tablePiece.getPartitionColumns(extractor);
         Preconditions.checkState(partitions.size() == 1);
         List<Pair<Integer, GenericColumn>> partitionColumns = partitions.get(0).getPartitionColumns();
+        ColumnRefSet partitionColumnIds = ColumnRefSet.of();
         ColumnRefSet newUsedColumns = tablePiece.getUsedColumns();
-        partitionColumns.forEach(p -> newUsedColumns.union(p.first));
-        TieredMap.Builder<Integer, GenericColumn> newColumnsBuilder = tablePiece.getColumns().newTier();
+        partitionColumns.forEach(p -> partitionColumnIds.union(p.first));
+
+        newUsedColumns.union(partitionColumnIds);
+        TieredMap.Builder<Integer, GenericColumn> newColumnsBuilder = TieredMap.newGenesisTier();
+        tablePiece.getColumns().forEach((id, column) -> {
+            boolean shouldRetain = column.cast(DerivedColumn.class).map(GenericColumn::getOp)
+                    .map(op -> !op.isVal() && !partitionColumnIds.containsAll(op.getIds()))
+                    .orElse(true);
+            if (shouldRetain) {
+                newColumnsBuilder.put(id, column);
+            } else {
+                newUsedColumns.except(ColumnRefSet.createByIds(Collections.singleton(id)));
+            }
+        });
+
         partitionColumns.forEach(p -> {
             if (!tablePiece.getColumns().containsKey(p.first)) {
                 newColumnsBuilder.put(p.first, p.second);
@@ -130,7 +130,7 @@ public class OneOneMVGenerator {
     public static Optional<QueryGenerateResult> generate(TableUsage tableUsage, MVGenerateContext context) {
         QueryGenerateContext queryGenerateContext = QueryGenerateContext.of11MV(tableUsage);
         PartitionExtractor partitionExtractor = context.getOptions().getPartitionExtractor();
-        PlanPiece tablePiece = addPartitionColumns(tableUsage.getTablePiece(), partitionExtractor)
+        PlanPiece tablePiece = adjustColumns(tableUsage.getTablePiece(), partitionExtractor)
                 .setConjuncts(TieredList.<Op>genesis());
         tablePiece = PieceColumnPruner.prune(tablePiece).cast();
         QueryGenerateResult result = QueryGenerator.generate(tablePiece, queryGenerateContext);

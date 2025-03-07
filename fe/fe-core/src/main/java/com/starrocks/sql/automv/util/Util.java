@@ -216,7 +216,8 @@ public class Util {
     }
 
     public static Stream<OptExpression> getOptExprStream(OptExpression optExpression) {
-        return Stream.concat(Stream.of(optExpression), optExpression.getInputs().stream());
+        return Stream.concat(Stream.of(optExpression), optExpression.getInputs().stream().flatMap(
+                Util::getOptExprStream));
     }
 
     public static boolean isSPJG(OptExpression root) {

@@ -17,6 +17,7 @@ package com.starrocks.sql.automv.generator;
 import com.google.common.collect.ImmutableList;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.sql.automv.column.ColumnRefToIdConverter;
 import com.starrocks.sql.automv.options.AutoMVOptions;
 import com.starrocks.sql.automv.pieces.PlanPiece;
@@ -150,6 +151,7 @@ public class OneOneMVGeneratorTest {
                 .stream()
                 .filter(p -> p.first.compareTo("query01") >= 0 && p.first.compareTo("query30") < 0)
                 .collect(Collectors.toList());
+        GlobalVariable.setAutoMVEnable11mvSelectivityEvaluation(false);
         for (int i = 0; i < 1; ++i) {
             testHelper(queryList, results -> {
                 List<String> mvs = results.stream()
@@ -163,7 +165,7 @@ public class OneOneMVGeneratorTest {
                 Assert.assertTrue(mv, mv.contains("INDEX i_category_bitmap_index (i_category) USING BITMAP"));
                 Assert.assertTrue(mv, mv.contains(", INDEX i_color_bitmap_index (i_color) USING BITMAP"));
                 Assert.assertTrue(mv, mv.contains("ORDER BY (i_current_price, i_manufact_id, i_manager_id)"));
-                Assert.assertTrue(mv, mv.contains("colocate_with"));
+                Assert.assertFalse(mv, mv.contains("colocate_with"));
             });
         }
     }

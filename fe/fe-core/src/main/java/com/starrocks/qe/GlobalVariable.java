@@ -253,7 +253,8 @@ public final class GlobalVariable {
     private static String autoMVStringTimeFormats = "%Y%m%d,%Y-%m-%d";
 
     @VariableMgr.VarAttr(name = AUTOMV_ENABLE_11MV_SELECTIVITY_EVALUATION)
-    private static boolean autoMVEnable11mvSelectivityEvaluation = false;
+    private static boolean autoMVEnable11mvSelectivityEvaluation = true;
+
     public static boolean isEnableQueryQueueSelect() {
         return enableQueryQueueSelect;
     }
@@ -393,6 +394,7 @@ public final class GlobalVariable {
     public static void setEnableAutoMVLifecycleKeeper(boolean value) {
         enableAutoMVLifecycleKeeper = value;
     }
+
     public static void setAutoMVLifecycleInfantAbortionMaxTime(long value) {
         autoMVLifecycleInfantAbortionMaxTime = value;
     }
@@ -428,6 +430,7 @@ public final class GlobalVariable {
     public static boolean isEnableAutoMVLifecycleKeeper() {
         return enableAutoMVLifecycleKeeper;
     }
+
     public static long getAutoMVLifecycleInfantAbortionMaxTime() {
         return autoMVLifecycleInfantAbortionMaxTime;
     }
@@ -483,6 +486,7 @@ public final class GlobalVariable {
     public static double getAutoMVPartitionedMVCardMax() {
         return autoMVPartitionedMVCardMax;
     }
+
     public static void setAutoMVPerLatticeMVLimit(int value) {
         autoMVPerLatticeMVLimit = value;
     }
@@ -526,6 +530,7 @@ public final class GlobalVariable {
     public static void setAutoMVPreferRangePartition(boolean on) {
         autoMVPreferRangePartition = on;
     }
+
     public static boolean isAutoMVPreferRangePartition() {
         return autoMVPreferRangePartition;
     }

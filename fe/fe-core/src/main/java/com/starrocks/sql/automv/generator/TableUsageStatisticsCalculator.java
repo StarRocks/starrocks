@@ -14,6 +14,7 @@
 
 package com.starrocks.sql.automv.generator;
 
+import com.google.api.client.util.Lists;
 import com.google.common.base.Preconditions;
 import com.starrocks.common.Pair;
 import com.starrocks.qe.ConnectContext;
@@ -65,8 +66,10 @@ public class TableUsageStatisticsCalculator {
         OptExpression scanOptExpr = scanOptExprList.get(0);
 
         // Evaluate each column statistics of LogicalScanOperator after its conjuncts removed
-        Operator bareScanOp = OperatorBuilderFactory.build(scanOptExpr.getOp()).setPredicate(null).build();
-        OptExpression bareScanOptExpr = OptExpression.builder().setOp(bareScanOp).build();
+        Operator bareScanOp = OperatorBuilderFactory.build(scanOptExpr.getOp())
+                .withOperator(scanOptExpr.getOp()).setPredicate(null).build();
+        OptExpression bareScanOptExpr = OptExpression.builder()
+                .setOp(bareScanOp).setInputs(Lists.newArrayList()).build();
         ExpressionContext expressionContext = new ExpressionContext(bareScanOptExpr);
         StatisticsCalculator statCalculator =
                 new StatisticsCalculator(expressionContext, optimizer.getOptimizerContext().getColumnRefFactory(),
@@ -110,6 +113,7 @@ public class TableUsageStatisticsCalculator {
 
         Map<String, Double> columnToNdvRatio = statistics.getColumnStatistics().entrySet()
                 .stream()
+                .filter(e -> scanOp.getColRefToColumnMetaMap().containsKey(e.getKey()))
                 .collect(Collectors.toMap(
                         e -> scanOp.getColRefToColumnMetaMap().get(e.getKey()).getName(),
                         e -> {

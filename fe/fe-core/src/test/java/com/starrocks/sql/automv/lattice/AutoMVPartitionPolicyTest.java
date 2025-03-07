@@ -549,5 +549,4 @@ public class AutoMVPartitionPolicyTest {
         }
     }
 
-
 }

@@ -16,6 +16,7 @@ package com.starrocks.sql.automv.qe;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.analysis.HintNode;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.common.DdlException;
@@ -57,10 +58,27 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalTreeAnchorOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleSet;
+import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.join.JoinReorderFactory;
 import com.starrocks.sql.optimizer.rule.join.ReorderJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.CombinationRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeProjectWithChildRule;
+import com.starrocks.sql.optimizer.rule.transformation.MergeTwoFiltersRule;
 import com.starrocks.sql.optimizer.rule.transformation.MergeTwoProjectRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownJoinOnClauseRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateAggRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateCTEAnchor;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateCTEConsumeRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateExceptRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateIntersectRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateJoinRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateProjectRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateRepeatRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateTableFunctionRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateToExternalTableScanRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateUnionRule;
+import com.starrocks.sql.optimizer.rule.transformation.PushDownPredicateWindowRule;
 import com.starrocks.sql.optimizer.task.RewriteTreeTask;
 import com.starrocks.sql.optimizer.task.TaskContext;
 import com.starrocks.sql.optimizer.task.TaskScheduler;
@@ -85,6 +103,25 @@ import java.util.stream.Collectors;
 //    damage performance of multi-column cardinality estimation.
 // 4. {Project,Filter}Operator must be fold into its' child operator.
 public class RboOptimizer {
+    // remove CastToEmptyRule and PruneTrueFilterRule
+    private static final Rule PUSH_DOWN_PREDICATE_RULES =
+            new CombinationRule(RuleType.GP_PUSH_DOWN_PREDICATE, ImmutableList.of(
+                    new PushDownPredicateCTEAnchor(),
+                    new PushDownPredicateScanRule(),
+                    new PushDownPredicateAggRule(),
+                    new PushDownPredicateWindowRule(),
+                    new PushDownPredicateJoinRule(),
+                    new PushDownJoinOnClauseRule(),
+                    new PushDownPredicateProjectRule(),
+                    new PushDownPredicateUnionRule(),
+                    new PushDownPredicateExceptRule(),
+                    new PushDownPredicateIntersectRule(),
+                    new PushDownPredicateTableFunctionRule(),
+                    new PushDownPredicateRepeatRule(),
+                    new PushDownPredicateToExternalTableScanRule(),
+                    new MergeTwoFiltersRule(),
+                    new PushDownPredicateCTEConsumeRule()
+            ));
     private final OptimizerOptions optimizerOptions;
     private final OptimizerContext optimizerContext;
     private final TaskContext taskContext;
@@ -121,7 +158,8 @@ public class RboOptimizer {
         QueryRelation query = stmt.getQueryRelation();
         LogicalPlan logicalPlan =
                 new RelationTransformer(columnRefFactory, connectContext).transformWithSelectLimit(query);
-        RboOptimizer optimizer = new RboOptimizer(logicalPlan, columnRefFactory, connectContext);
+        RboOptimizer optimizer =
+                new RboOptimizer(logicalPlan, columnRefFactory, connectContext);
         optimizer.optimize();
         return optimizer;
     }
@@ -131,14 +169,14 @@ public class RboOptimizer {
         return getOptimizer(stmtPlus.getQueryStatement(), connectContext);
     }
 
-    public static OptExpression getLogicalPlan(QueryStatement queryStmt, ConnectContext connectContext) {
-        return getOptimizer(queryStmt, connectContext).getPlan();
-    }
-
     public static String getLogicalPlan(String query, ConnectContext ctx) {
         OptExpression plan =
                 RboOptimizer.getLogicalPlan(RboOptimizer.getQueryStatement(ctx, query).getQueryStatement(), ctx);
         return LogicalPlanPrinter.print(plan, true);
+    }
+
+    public static OptExpression getLogicalPlan(QueryStatement queryStmt, ConnectContext connectContext) {
+        return getOptimizer(queryStmt, connectContext).getPlan();
     }
 
     public static List<OptExpression> getSubPlans(QueryStatement queryStmt, ConnectContext connectContext,
@@ -327,8 +365,7 @@ public class RboOptimizer {
         applyRules(RuleSet.SUBQUERY_REWRITE_COMMON_RULES);
         applyRules(RuleSet.SUBQUERY_REWRITE_TO_WINDOW_RULES);
         applyRules(RuleSet.SUBQUERY_REWRITE_TO_JOIN_RULES);
-        applyRules(RuleSet.PUSH_DOWN_PREDICATE_RULES);
-
+        applyRules(PUSH_DOWN_PREDICATE_RULES);
         applyRulesOnlyOnce(RuleSet.PRUNE_COLUMNS_RULES);
         applyRules(new MergeTwoProjectRule());
         applyRules(new MergeProjectWithChildRule());

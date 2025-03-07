@@ -15,6 +15,8 @@
 package com.starrocks.sql.automv.lattice;
 
 import com.starrocks.common.FeConstants;
+import com.starrocks.common.Pair;
+import com.starrocks.qe.GlobalVariable;
 import com.starrocks.sql.automv.pn.TimeGranule;
 import com.starrocks.sql.automv.util.AutoMVUtil;
 import com.starrocks.sql.automv.util.TestUtil;
@@ -24,6 +26,9 @@ import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.Arrays;
+import java.util.List;
 
 public class AutoMVFlatTPCDSTest {
     private static final ThreadLocal<StarRocksAssert> STARROCKS_ASSERT = new ThreadLocal<>();
@@ -78,5 +83,63 @@ public class AutoMVFlatTPCDSTest {
             String mv = results.get(0).get(2);
             Assert.assertTrue(mv, mv.contains("PARTITION BY cs_sold_date"));
         });
+    }
+
+    @Test
+    public void test1() {
+        List<Pair<String, String>> queryList = TestUtil.getFlatTpcdsSqlList();
+        AutoMVUtil.testOneOneMVHelper(getStarRocksAssert().getCtx(), queryList,
+                sv -> {
+                    sv.setAutoMVDefaultPartitionByTimeGranule("month");
+                    sv.setOptimizerExecuteTimeout(300000);
+                },
+                gv -> {
+                },
+                (pieces, results) -> {
+                    Assert.assertEquals(results.size(), results.size(), 7);
+                    return null;
+                });
+    }
+
+    @Test
+    public void testCollocated11MV() {
+        String q = "select\n" +
+                "  ws.bill_cd_gender,\n" +
+                "  ws.bill_cd_marital_status,\n" +
+                "  wr.returning_cd_education_status,\n" +
+                "  count(1),\n" +
+                "  avg(wr_refunded_cash),\n" +
+                "  sum(wr_return_quantity)\n" +
+                "from\n" +
+                "  web_sales_flat ws\n" +
+                "  left join web_returns_flat wr on ws.ws_item_sk = wr.wr_item_sk\n" +
+                "  and ws.ws_order_number = wr.wr_order_number\n" +
+                "where\n" +
+                "  ws.web_name = 'site_0'\n" +
+                "group by\n" +
+                "  ws.bill_cd_gender,\n" +
+                "  ws.bill_cd_marital_status,\n" +
+                "  wr.returning_cd_education_status";
+        AutoMVUtil.testOneOneMVHelper(getStarRocksAssert().getCtx(), Arrays.asList(Pair.create("q", q)),
+                sv -> {
+                    sv.setAutoMVDefaultPartitionByTimeGranule("month");
+                },
+                gv -> {
+                    GlobalVariable.setAutoMVEnable11mvSelectivityEvaluation(false);
+                },
+                (pieces, results) -> {
+                    String mv0 = results.get(0).get(2);
+                    String mv1 = results.get(1).get(2);
+                    if (!mv1.contains("web_sales_flat")) {
+                        String tmp = mv0;
+                        mv0 = mv1;
+                        mv1 = tmp;
+                    }
+                    Assert.assertTrue(mv0, mv0.contains("PARTITION BY date_trunc(\"month\""));
+                    Assert.assertTrue(mv1, mv1.contains("PARTITION BY date_trunc(\"month\""));
+                    Assert.assertTrue(mv0, mv0.contains("DISTRIBUTED BY HASH (wr_item_sk, wr_order_number)"));
+                    Assert.assertTrue(mv1, mv1.contains("DISTRIBUTED BY HASH (ws_item_sk, ws_order_number)"));
+                    return null;
+                });
     }
 }
