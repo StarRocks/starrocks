@@ -245,11 +245,6 @@ public class PseudoCluster {
         }
 
         @Override
-        public long getPrimaryComputeNodeIdByShard(long shardId) throws StarRocksException {
-            return workers.isEmpty() ? -1 : workers.get((int) (shardId % workers.size())).backendId;
-        }
-
-        @Override
         public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
             return workers.isEmpty() ? -1 : workers.get((int) (shardId % workers.size())).backendId;
         }

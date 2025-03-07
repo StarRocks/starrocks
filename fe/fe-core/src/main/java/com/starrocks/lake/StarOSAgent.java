@@ -34,7 +34,6 @@ import com.staros.proto.PlacementPreference;
 import com.staros.proto.PlacementRelationship;
 import com.staros.proto.QuitMetaGroupInfo;
 import com.staros.proto.ReplicaInfo;
-import com.staros.proto.ReplicaRole;
 import com.staros.proto.ReplicationType;
 import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardGroupInfo;
@@ -614,12 +613,8 @@ public class StarOSAgent {
         return result;
     }
 
-    public long getPrimaryComputeNodeIdByShard(long shardId) throws StarRocksException {
-        return getPrimaryComputeNodeIdByShard(shardId, DEFAULT_WORKER_GROUP_ID);
-    }
-
     public long getPrimaryComputeNodeIdByShard(long shardId, long workerGroupId) throws StarRocksException {
-        List<Long> backendIds = getAllNodeIdsByShard(shardId, workerGroupId, true);
+        List<Long> backendIds = getAllNodeIdsByShard(shardId, workerGroupId);
         if (backendIds.isEmpty()) {
             // If BE stops, routine load task may catch UserException during load plan,
             // and the job state will changed to PAUSED.
@@ -631,22 +626,31 @@ public class StarOSAgent {
         return backendIds.iterator().next();
     }
 
-    public List<Long> getAllNodeIdsByShard(long shardId, long workerGroupId, boolean onlyPrimary)
+    public long getPrimaryComputeNodeIdByShard(ShardInfo shardInfo) throws StarRocksException {
+        List<Long> ids = getAllNodeIdsByShard(shardInfo);
+        if (ids.isEmpty()) {
+            // If BE stops, routine load task may catch UserException during load plan,
+            // and the job state will changed to PAUSED.
+            // The job will automatically recover from PAUSED to RUNNING if the error code is REPLICA_FEW_ERR
+            // when all BEs become alive.
+            throw new StarRocksException(InternalErrorCode.REPLICA_FEW_ERR,
+                    "Failed to get primary backend. shard id: " + shardInfo.getShardId());
+        }
+        return ids.iterator().next();
+    }
+
+    public List<Long> getAllNodeIdsByShard(long shardId, long workerGroupId)
             throws StarRocksException {
         try {
             ShardInfo shardInfo = getShardInfo(shardId, workerGroupId);
-            return getAllNodeIdsByShard(shardInfo, onlyPrimary);
+            return getAllNodeIdsByShard(shardInfo);
         } catch (StarClientException e) {
             throw new StarRocksException(e);
         }
     }
 
-    public List<Long> getAllNodeIdsByShard(ShardInfo shardInfo, boolean onlyPrimary) {
+    private List<Long> getAllNodeIdsByShard(ShardInfo shardInfo) {
         List<ReplicaInfo> replicas = shardInfo.getReplicaInfoList();
-        if (onlyPrimary) {
-            replicas = replicas.stream().filter(x -> x.getReplicaRole() == ReplicaRole.PRIMARY)
-                    .collect(Collectors.toList());
-        }
         List<Long> nodeIds = new ArrayList<>();
         replicas.stream()
                 .map(x -> getOrUpdateNodeIdByWorkerInfo(x.getWorkerInfo()))

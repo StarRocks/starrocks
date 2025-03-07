@@ -53,9 +53,10 @@ public class Utils {
     }
 
     public static Long chooseNodeId(ShardInfo shardInfo) {
-        List<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent().getAllNodeIdsByShard(shardInfo, true);
-        if (!ids.isEmpty()) {
-            return ids.iterator().next();
+        try {
+            return GlobalStateMgr.getCurrentState().getStarOSAgent().getPrimaryComputeNodeIdByShard(shardInfo);
+        } catch (StarRocksException e) {
+            // do nothing
         }
         try {
             return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()
