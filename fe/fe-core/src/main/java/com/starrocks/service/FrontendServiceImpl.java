@@ -102,6 +102,7 @@ import com.starrocks.common.ThriftServerEventProcessor;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.ProfileManager;
+import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.Util;
 import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockTimeoutException;
@@ -2585,7 +2586,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TGetTablesInfoResponse getTablesInfo(TGetTablesInfoRequest request) throws TException {
-        return InformationSchemaDataSource.generateTablesInfoResponse(request);
+        ConnectContext connectContext = new ConnectContext();
+        connectContext.setQueryId(UUIDUtil.genUUID());
+        try {
+            connectContext.setThreadLocalInfo();
+            return InformationSchemaDataSource.generateTablesInfoResponse(request);
+        } finally {
+            ConnectContext.remove();
+        }
     }
 
     /**

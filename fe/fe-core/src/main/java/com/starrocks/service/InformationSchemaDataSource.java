@@ -427,10 +427,6 @@ public class InformationSchemaDataSource {
 
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
 
-        ConnectContext connectContext = new ConnectContext();
-        connectContext.setQueryId(UUIDUtil.genUUID());
-        connectContext.setThreadLocalInfo();
-
         for (String dbName : result.authorizedDbs) {
             Database db = metadataMgr.getDb(catalogName, dbName);
             if (db == null) {
@@ -527,6 +523,7 @@ public class InformationSchemaDataSource {
                 }
             }
         }
+
         response.setTables_infos(infos);
         return response;
     }
