@@ -12,21 +12,16 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.statistic;
 
 import com.google.gson.annotations.SerializedName;
-import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
-import com.starrocks.persist.gson.GsonUtils;
-import org.apache.commons.collections4.MapUtils;
 
-import java.io.DataInput;
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Map;
+import java.util.Set;
 
-public class HistogramStatsMeta implements Writable {
+public class MultiColumnStatsMeta implements Writable {
     @SerializedName("dbId")
     private long dbId;
 
@@ -34,10 +29,13 @@ public class HistogramStatsMeta implements Writable {
     private long tableId;
 
     @SerializedName("column")
-    private String column;
+    private Set<Integer> columnIds;
 
-    @SerializedName("type")
-    private StatsConstants.AnalyzeType type;
+    @SerializedName("analyzeType")
+    private StatsConstants.AnalyzeType analyzeType;
+
+    @SerializedName("statisticsType")
+    private StatsConstants.StatisticsType statisticsType;
 
     @SerializedName("updateTime")
     private LocalDateTime updateTime;
@@ -45,22 +43,16 @@ public class HistogramStatsMeta implements Writable {
     @SerializedName("properties")
     private Map<String, String> properties;
 
-    public HistogramStatsMeta(long dbId, long tableId, String column,
-                              StatsConstants.AnalyzeType type,
-                              LocalDateTime updateTime,
-                              Map<String, String> properties) {
+    public MultiColumnStatsMeta(long dbId, long tableId, Set<Integer> columnIds,
+                                StatsConstants.AnalyzeType analyzeType, StatsConstants.StatisticsType statisticsType,
+                                LocalDateTime updateTime, Map<String, String> properties) {
         this.dbId = dbId;
         this.tableId = tableId;
-        this.column = column;
-        this.type = type;
+        this.columnIds = columnIds;
+        this.analyzeType = analyzeType;
+        this.statisticsType = statisticsType;
         this.updateTime = updateTime;
         this.properties = properties;
-    }
-
-    public static HistogramStatsMeta read(DataInput in) throws IOException {
-        String s = Text.readString(in);
-        HistogramStatsMeta histogramStatsMeta = GsonUtils.GSON.fromJson(s, HistogramStatsMeta.class);
-        return histogramStatsMeta;
     }
 
     public long getDbId() {
@@ -71,12 +63,16 @@ public class HistogramStatsMeta implements Writable {
         return tableId;
     }
 
-    public String getColumn() {
-        return column;
+    public Set<Integer> getColumnIds() {
+        return columnIds;
     }
 
-    public StatsConstants.AnalyzeType getType() {
-        return type;
+    public StatsConstants.AnalyzeType getAnalyzeType() {
+        return analyzeType;
+    }
+
+    public StatsConstants.StatisticsType getStatsType() {
+        return statisticsType;
     }
 
     public LocalDateTime getUpdateTime() {
@@ -85,9 +81,5 @@ public class HistogramStatsMeta implements Writable {
 
     public Map<String, String> getProperties() {
         return properties;
-    }
-
-    public boolean isInitJobMeta() {
-        return MapUtils.isNotEmpty(properties) && properties.containsKey(StatsConstants.INIT_SAMPLE_STATS_JOB);
     }
 }

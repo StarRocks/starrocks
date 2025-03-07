@@ -36,6 +36,7 @@ const int STATISTIC_EXTERNAL_QUERY_VERSION = 6;
 const int STATISTIC_EXTERNAL_HISTOGRAM_VERSION = 7;
 const int STATISTIC_EXTERNAL_QUERY_VERSION_V2 = 8;
 const int STATISTIC_BATCH_V5_VERSION = 9;
+const int STATISTIC_MULTI_COLUMN_VERSION = 12;
 
 StatisticResultWriter::StatisticResultWriter(BufferControlBlock* sinker,
                                              const std::vector<ExprContext*>& output_expr_ctxs,
@@ -155,6 +156,9 @@ StatusOr<TFetchDataResultPtr> StatisticResultWriter::_process_chunk(Chunk* chunk
     } else if (version == STATISTIC_EXTERNAL_QUERY_VERSION_V2) {
         RETURN_IF_ERROR_WITH_WARN(_fill_full_statistic_query_external_v2(version, result_columns, chunk, result.get()),
                                   "Fill table statistic data failed");
+    } else if (version == STATISTIC_MULTI_COLUMN_VERSION) {
+        RETURN_IF_ERROR_WITH_WARN(_fill_multi_columns_statistics_data(version, result_columns, chunk, result.get()),
+                                  "Fill multi columns statistic data failed");
     }
     return result;
 }
@@ -630,6 +634,35 @@ Status StatisticResultWriter::_fill_full_statistic_query_external_v2(int version
         data_list[i].__set_max(maxColumn.value(i).to_string());
         data_list[i].__set_min(minColumn.value(i).to_string());
         data_list[i].__set_updateTime(updateTime.value(i).to_string());
+    }
+
+    result->result_batch.rows.resize(num_rows);
+    result->result_batch.__set_statistic_version(version);
+
+    ThriftSerializer serializer(true, chunk->memory_usage());
+    for (int i = 0; i < num_rows; ++i) {
+        RETURN_IF_ERROR(serializer.serialize(&data_list[i], &result->result_batch.rows[i]));
+    }
+    return Status::OK();
+}
+
+Status StatisticResultWriter::_fill_multi_columns_statistics_data(int version, const Columns& columns,
+                                                                  const Chunk* chunk, TFetchDataResult* result) {
+    SCOPED_TIMER(_serialize_timer);
+
+    // mapping with Data.thrift.TStatisticData
+    DCHECK(columns.size() == 3);
+
+    auto column_name = ColumnViewer<TYPE_VARCHAR>(columns[1]);
+    auto ndv = ColumnViewer<TYPE_BIGINT>(columns[2]);
+
+    std::vector<TStatisticData> data_list;
+    int num_rows = chunk->num_rows();
+
+    data_list.resize(num_rows);
+    for (int i = 0; i < num_rows; ++i) {
+        data_list[i].__set_countDistinct(ndv.value(i));
+        data_list[i].__set_columnName(column_name.value(i).to_string());
     }
 
     result->result_batch.rows.resize(num_rows);

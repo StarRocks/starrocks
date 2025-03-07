@@ -32,6 +32,7 @@ import java.util.stream.Collectors;
 
 import static com.starrocks.statistic.StatsConstants.EXTERNAL_FULL_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
+import static com.starrocks.statistic.StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_DATA_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_DATA_VERSION_V2;
@@ -223,6 +224,10 @@ public class StatisticSQLBuilder {
         }
 
         return "DELETE FROM " + tableName + " WHERE TABLE_ID = " + tableId;
+    }
+
+    public static String buildDropMultipleStatisticsSQL(Long tableId) {
+        return "DELETE FROM " + MULTI_COLUMN_STATISTICS_TABLE_NAME + " WHERE TABLE_ID = " + tableId;
     }
 
     public static String buildDropExternalStatSQL(String tableUUID) {

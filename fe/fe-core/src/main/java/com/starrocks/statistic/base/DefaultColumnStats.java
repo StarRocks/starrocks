@@ -17,44 +17,45 @@ package com.starrocks.statistic.base;
 import com.starrocks.catalog.Type;
 import com.starrocks.statistic.sample.SampleInfo;
 
-public class ComplexTypeColumnStats extends BaseColumnStats {
+public class DefaultColumnStats extends BaseColumnStats {
+    private final int columnId;
 
-    public ComplexTypeColumnStats(String columnName, Type columnType) {
+    public DefaultColumnStats(String columnName, Type columnType, int columnId) {
         super(columnName, columnType);
+        this.columnId = columnId;
     }
 
-    @Override
-    public String getFullDataSize() {
-        return "COUNT(*) * " + columnType.getTypeSize();
-    }
-
-    @Override
-    public String getSampleDateSize(SampleInfo info) {
-        return columnType.getTypeSize() + " * " + info.getTotalRowCount();
-    }
-
-    @Override
-    public String getSampleNullCount(SampleInfo info) {
-        return "0";
+    public int getColumnId() {
+        return columnId;
     }
 
     @Override
     public String getMax() {
-        return "''";
+        return "";
     }
 
     @Override
     public String getMin() {
-        return "''";
+        return "";
     }
 
     @Override
-    public String getFullNullCount() {
-        return "0";
+    public String getFullDataSize() {
+        return "";
     }
 
     @Override
     public String getNDV() {
-        return "00";
+        return "";
+    }
+
+    @Override
+    public String getSampleDateSize(SampleInfo info) {
+        return "";
+    }
+
+    @Override
+    public String getSampleNullCount(SampleInfo info) {
+        return "";
     }
 }
