@@ -217,7 +217,7 @@ Status RowsetColumnUpdateState::_prepare_partial_update_states(Tablet* tablet, R
     }
     int64_t t_end = MonotonicMillis();
 
-    LOG(INFO) << strings::Substitute(
+    VLOG(1) << strings::Substitute(
             "prepare ColumnPartialUpdateState tablet:$0 segment:[$1, $2) "
             "time:$3ms(src_rss:$4)",
             _tablet_id, start_idx, end_idx, t_end - t_start, t_read_rss - t_start);
@@ -829,8 +829,13 @@ Status RowsetColumnUpdateState::finalize(Tablet* tablet, Rowset* rowset, uint32_
             rss_upt_id_to_rowid_pairs.size(), _partial_update_states.size(), update_column_ids.size(), update_rows,
             handle_cnt, insert_rows);
 
-    LOG(INFO) << "RowsetColumnUpdateState tablet_id: " << tablet->tablet_id() << ", txn_id: " << rowset->txn_id()
-              << ", finalize cost:" << cost_str.str();
+    if (total_do_update_time > config::apply_version_slow_log_sec * 1000) {
+        LOG(INFO) << "RowsetColumnUpdateState tablet_id: " << tablet->tablet_id() << ", txn_id: " << rowset->txn_id()
+                  << ", finalize cost:" << cost_str.str();
+    } else {
+        LOG(INFO) << "RowsetColumnUpdateState tablet_id: " << tablet->tablet_id() << ", txn_id: " << rowset->txn_id()
+                  << ", cost_time: " << total_do_update_time;
+    }
     _finalize_finished = true;
     return Status::OK();
 }
