@@ -83,24 +83,21 @@ public class CatalogLevelTest {
 
         AnalyzeTestUtil.getConnectContext().setCurrentUserIdentity(new UserIdentity("u1", "%"));
         Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
-                AnalyzeTestUtil.getConnectContext().getCurrentUserIdentity(),
-                AnalyzeTestUtil.getConnectContext().getCurrentRoleIds(), "hive_catalog", "hive_db"));
+                AnalyzeTestUtil.getConnectContext(), "hive_catalog", "hive_db"));
 
         String grantSql = "grant all on CATALOG hive_catalog to u1";
         GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql,
                 AnalyzeTestUtil.getConnectContext());
         DDLStmtExecutor.execute(grantPrivilegeStmt,  AnalyzeTestUtil.getConnectContext());
         Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
-                AnalyzeTestUtil.getConnectContext().getCurrentUserIdentity(),
-                AnalyzeTestUtil.getConnectContext().getCurrentRoleIds(), "hive_catalog", "hive_db"));
+                AnalyzeTestUtil.getConnectContext(), "hive_catalog", "hive_db"));
 
         grantSql = "grant ALL on DATABASE hive_catalog.hive_db to u1";
         grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql,
                 AnalyzeTestUtil.getConnectContext());
         DDLStmtExecutor.execute(grantPrivilegeStmt,  AnalyzeTestUtil.getConnectContext());
         Authorizer.checkAnyActionOnOrInDb(
-                AnalyzeTestUtil.getConnectContext().getCurrentUserIdentity(),
-                AnalyzeTestUtil.getConnectContext().getCurrentRoleIds(), "hive_catalog", "hive_db");
+                AnalyzeTestUtil.getConnectContext(), "hive_catalog", "hive_db");
     }
 
     @Test

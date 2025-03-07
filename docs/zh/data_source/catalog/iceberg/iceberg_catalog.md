@@ -238,6 +238,42 @@ mysql> select * from smith_polaris.`ns1.ns2.tpch_namespace`.tbl;
 3 rows in set (0.34 sec)
 ```
 
+##### JDBC
+
+如果选择 JDBC 作为 Iceberg 集群的元数据服务，请按如下配置 `MetastoreParams`：
+
+```SQL
+"iceberg.catalog.type" = "jdbc",
+"iceberg.catalog.uri" = "<jdbc_uri>",
+"iceberg.catalog.warehouse" = "<warehouse_location>"
+```
+
+`MetastoreParams` 包含如下参数。
+
+| 参数                                 | 是否必须 | 说明                                                                  |
+| ----------------------------------- |---------|------------------------------------------------------------------------- |
+| iceberg.catalog.type                | 是      | Iceberg 集群所使用的元数据服务的类型。设置为 `jdbc`。                           |
+| iceberg.catalog.uri                 | 是      | 数据库的 URI。格式：`jdbc:[mysql\|postgresql]://<DB IP 地址>:<DB 端口>/<库名>`。 |
+| iceberg.catalog.warehouse.          | 是      | Catalog 的仓库位置或标志符，如 `s3://my_bucket/warehouse_location`。           |
+| iceberg.catalog.jdbc.user           | 否      | 数据库对应的账号                                                            |
+| iceberg.catalog.jdbc.password       | 否      | 数据库对应的密码                                                            |
+
+
+例如，创建一个名为 `iceberg_jdbc` 的 Iceberg Catalog，以 JDBC 为元数据服务：
+
+```SQL
+CREATE EXTERNAL CATALOG iceberg_jdbc
+PROPERTIES
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "jdbc",
+    "iceberg.catalog.warehouse" = "hdfs:///jdbc_iceberg/warehouse/ ",
+    "iceberg.catalog.uri" = "jdbc:mysql://ip:port/db_name",
+    "iceberg.catalog.jdbc.user" = "username",
+    "iceberg.catalog.jdbc.password" = "password"
+);
+```
+
 #### StorageCredentialParams
 
 StarRocks 访问 Iceberg 集群文件存储的相关参数配置。

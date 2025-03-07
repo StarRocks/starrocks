@@ -14,17 +14,13 @@
 
 package com.starrocks.authorization.ranger;
 
-import com.starrocks.common.Config;
 import com.starrocks.sql.ast.UserIdentity;
-import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.ranger.plugin.policyengine.RangerAccessRequestImpl;
 import org.apache.ranger.plugin.policyengine.RangerAccessResourceImpl;
 
-import java.util.Arrays;
 import java.util.Date;
-import java.util.HashSet;
 import java.util.Set;
 
 public class RangerStarRocksAccessRequest extends RangerAccessRequestImpl {
@@ -33,21 +29,13 @@ public class RangerStarRocksAccessRequest extends RangerAccessRequestImpl {
     private RangerStarRocksAccessRequest() {
     }
 
-    public static RangerStarRocksAccessRequest createAccessRequest(RangerAccessResourceImpl resource, UserIdentity user,
+    public static RangerStarRocksAccessRequest createAccessRequest(RangerAccessResourceImpl resource,
+                                                                   UserIdentity user,
+                                                                   Set<String> groups,
                                                                    String accessType) {
-        Set<String> userGroups = null;
-        if (Config.ranger_user_ugi) {
-            UserGroupInformation ugi = UserGroupInformation.createRemoteUser(user.getUser());
-            String[] groups = ugi.getGroupNames();
-
-            if (groups != null && groups.length > 0) {
-                userGroups = new HashSet<>(Arrays.asList(groups));
-            }
-        }
-
         RangerStarRocksAccessRequest request = new RangerStarRocksAccessRequest();
         request.setUser(user.getUser());
-        request.setUserGroups(userGroups);
+        request.setUserGroups(groups);
         request.setAccessType(accessType);
         request.setResource(resource);
         request.setClientIPAddress(user.getHost());

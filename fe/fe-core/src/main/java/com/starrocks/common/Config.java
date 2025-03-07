@@ -3530,7 +3530,7 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static String[] authenticated_group_list = {};
 
-    @ConfField(mutable = false)
+    @ConfField(mutable = true)
     public static String[] group_provider = {};
 
     @ConfField(mutable = true)
