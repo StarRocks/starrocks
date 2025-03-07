@@ -328,6 +328,7 @@ struct TQueryOptions {
   152: optional double k_factor;
 
   160: optional bool enable_join_runtime_filter_pushdown;
+  161: optional bool lower_upper_support_utf8;
 }
 
 // A scan range plus the parameters needed to execute that scan.
