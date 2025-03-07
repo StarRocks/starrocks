@@ -5287,7 +5287,7 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
                   << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
                   << " memory: " << memory_usage() << " time: " << timer.elapsed_time() / 1000000 << "ms";
     } else {
-        VLOG(1) << "build persistent index finish tablet: " << loader->tablet_id() << " version:" << applied_versio
+        VLOG(1) << "build persistent index finish tablet: " << loader->tablet_id() << " version:" << applied_version
                 << " size: " << _size;
     }
     return Status::OK();
