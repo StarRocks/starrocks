@@ -20,7 +20,7 @@ import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
-import com.starrocks.load.pipe.filelist.RepoExecutor;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.persist.TaskRunStatus;
@@ -152,7 +152,7 @@ public class TaskRunHistoryTable {
             }).collect(Collectors.joining(", "));
 
             String sql = insert + values;
-            RepoExecutor.getInstance().executeDML(sql);
+            SimpleExecutor.getRepoExecutor().executeDML(sql);
         }
     }
 
@@ -211,7 +211,7 @@ public class TaskRunHistoryTable {
         }
         sql += Joiner.on(" AND ").join(predicates);
 
-        List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
+        List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
         List<TaskRunStatus> result = TaskRunStatus.fromResultBatch(batch);
         // sort results by create time desc to make the result more stable.
         Collections.sort(result, TaskRunStatus.COMPARATOR_BY_CREATE_TIME_DESC);
@@ -230,7 +230,7 @@ public class TaskRunHistoryTable {
         }
 
         String sql = LOOKUP + Joiner.on(" AND ").join(predicates);
-        List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
+        List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
         List<TaskRunStatus> result = TaskRunStatus.fromResultBatch(batch);
         // sort results by create time desc to make the result more stable.
         Collections.sort(result, TaskRunStatus.COMPARATOR_BY_CREATE_TIME_DESC);
@@ -277,7 +277,7 @@ public class TaskRunHistoryTable {
         DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", template);
         String sql = sw.toString();
 
-        List<TResultBatch> batch = RepoExecutor.getInstance().executeDQL(sql);
+        List<TResultBatch> batch = SimpleExecutor.getRepoExecutor().executeDQL(sql);
         return TaskRunStatus.fromResultBatch(batch);
     }
 }

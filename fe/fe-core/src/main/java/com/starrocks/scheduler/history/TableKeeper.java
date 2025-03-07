@@ -20,7 +20,7 @@ import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.common.Config;
 import com.starrocks.common.util.FrontendDaemon;
 import com.starrocks.load.loadv2.LoadsHistorySyncer;
-import com.starrocks.load.pipe.filelist.RepoExecutor;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.statistic.columns.PredicateColumnsStorage;
 import jdk.jshell.spi.ExecutionControl;
@@ -93,7 +93,7 @@ public class TableKeeper {
     }
 
     public void createTable() throws ExecutionControl.UserException {
-        RepoExecutor.getInstance().executeDDL(createTableSql);
+        SimpleExecutor.getRepoExecutor().executeDDL(createTableSql);
     }
 
     public void correctTable() {
@@ -107,7 +107,7 @@ public class TableKeeper {
         if (replica != expectedReplicationNum) {
             String sql = alterTableReplicas(expectedReplicationNum);
             if (StringUtils.isNotEmpty(sql)) {
-                RepoExecutor.getInstance().executeDDL(sql);
+                SimpleExecutor.getRepoExecutor().executeDDL(sql);
             }
             LOG.info("changed replication_number of table {} from {} to {}",
                     tableName, replica, expectedReplicationNum);
@@ -130,7 +130,7 @@ public class TableKeeper {
         }
         String sql = alterTableTTL(expectedTTLDays);
         try {
-            RepoExecutor.getInstance().executeDDL(sql);
+            SimpleExecutor.getRepoExecutor().executeDDL(sql);
             LOG.info("change table {}.{} TTL from {} to {}",
                     databaseName, tableName, currentTTLNumber, expectedTTLDays);
         } catch (Throwable e) {
