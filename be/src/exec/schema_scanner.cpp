@@ -58,6 +58,7 @@
 #include "exec/schema_scanner/schema_user_privileges_scanner.h"
 #include "exec/schema_scanner/schema_variables_scanner.h"
 #include "exec/schema_scanner/schema_views_scanner.h"
+#include "exec/schema_scanner/schema_keywords_scanner.h"
 #include "exec/schema_scanner/starrocks_grants_to_scanner.h"
 #include "exec/schema_scanner/starrocks_role_edges_scanner.h"
 #include "exec/schema_scanner/sys_fe_locks.h"
@@ -225,6 +226,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaClusterSnapshotsScanner>();
     case TSchemaTableType::SCH_CLUSTER_SNAPSHOT_JOBS:
         return std::make_unique<SchemaClusterSnapshotJobsScanner>();
+    case TSchemaTableType::SCH_KEYWORDS:
+            return std::make_unique<SchemaKeywordsScanner>();
     default:
         return std::make_unique<SchemaDummyScanner>();
     }
