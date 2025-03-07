@@ -25,6 +25,7 @@ import com.starrocks.sql.ast.CreateResourceStmt;
 import com.starrocks.sql.ast.CreateRoutineLoadStmt;
 import com.starrocks.sql.ast.CreateStorageVolumeStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
+import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.ExportStmt;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
@@ -111,10 +112,7 @@ public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
         return !Strings.isNullOrEmpty(engineName) && !statement.isOlapEngine();
     }
 
-    @Override
-    public Boolean visitCreateStorageVolumeStatement(CreateStorageVolumeStmt statement, Void context) {
-        Map<String, String> properties = statement.getProperties();
-
+    private boolean hasSecretInProperties(Map<String, String> properties) {
         if (properties.containsKey(CloudConfigurationConstants.AWS_S3_ACCESS_KEY) ||
                 properties.containsKey(CloudConfigurationConstants.AWS_S3_SECRET_KEY) ||
                 properties.containsKey(CloudConfigurationConstants.AZURE_BLOB_SHARED_KEY) ||
@@ -125,8 +123,15 @@ public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
     }
 
     @Override
+    public Boolean visitCreateStorageVolumeStatement(CreateStorageVolumeStmt statement, Void context) {
+        Map<String, String> properties = statement.getProperties();
+        return hasSecretInProperties(properties);
+    }
+
+    @Override
     public Boolean visitAlterStorageVolumeStatement(AlterStorageVolumeStmt statement, Void context) {
         Map<String, String> properties = statement.getProperties();
+<<<<<<< HEAD
 
         if (properties.containsKey(CloudConfigurationConstants.AWS_S3_ACCESS_KEY) ||
                 properties.containsKey(CloudConfigurationConstants.AWS_S3_SECRET_KEY) ||
@@ -135,6 +140,9 @@ public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
             return true;
         }
         return false;
+=======
+        return hasSecretInProperties(properties);
+>>>>>>> c20bc05841 ([Enhancement] mask credentials in FILES (#56684))
     }
 
     @Override
@@ -191,7 +199,8 @@ public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
 
     @Override
     public Boolean visitFileTableFunction(FileTableFunctionRelation relation, Void context) {
-        return true;
+        Map<String, String> properties = relation.getProperties();
+        return hasSecretInProperties(properties);
     }
 
     @Override
@@ -208,5 +217,14 @@ public class AuditEncryptionChecker implements AstVisitor<Boolean, Void> {
     public Boolean visitSubquery(SubqueryRelation relation, Void context) {
         QueryStatement queryStatement = relation.getQueryStatement();
         return visit(queryStatement);
+    }
+
+    @Override
+    public Boolean visitDescTableStmt(DescribeStmt stmt, Void context) {
+        if (stmt.isTableFunctionTable()) {
+            Map<String, String> tableProperties = stmt.getTableFunctionProperties();
+            return hasSecretInProperties(tableProperties);
+        }
+        return false;
     }
 }
