@@ -31,7 +31,7 @@ public class FileTableFunctionRelation extends TableRelation {
     private Consumer<TableFunctionTable> pushDownSchemaFunc;
 
     public FileTableFunctionRelation(Map<String, String> properties, NodePosition pos) {
-        super(new TableName("", "table_function_table"));
+        super(new TableName(null, "table_function_table"));
         this.properties = properties;
     }
 
