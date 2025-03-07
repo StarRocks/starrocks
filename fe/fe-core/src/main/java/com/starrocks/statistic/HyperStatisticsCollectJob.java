@@ -205,6 +205,6 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
 
     @Override
     public String getName() {
-        return "Hyper";
+        return analyzeType == StatsConstants.AnalyzeType.FULL ? "HyperFull" : "HyperSample";
     }
 }
