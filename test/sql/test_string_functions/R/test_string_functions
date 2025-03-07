@@ -571,6 +571,9 @@ properties("replication_num" = "1");
 set cbo_enable_low_cardinality_optimize = false;
 -- result:
 -- !result
+set lower_upper_support_utf8 = true;
+-- result:
+-- !result
 insert into t values(1, 'теКст'), (2, 'ТЕкСТ'), (3, 'теКст hello'), (4, 'ТЕкСТ world'),
 (5, 'München'), (6, 'München Tum'), (7, 'hello WOrld'), (8, ''),
 (9, 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя'), (10, 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ'),
@@ -579,7 +582,7 @@ insert into t values(1, 'теКст'), (2, 'ТЕкСТ'), (3, 'теКст hello'
 (15, 'ＡＢＣＤＥＦＧＨＩＪＫＬＭＮＯＰＱＲＳＴＵＶＷＸＹＺ'), (16, 'ａｂｃｄｅｆｇｈｉｊｋｌｍｎｏｐｑｒｓｔｕｖｗｘｙｚ');
 -- result:
 -- !result
-select id, name, lower_utf8(name), upper_utf8(name) from t order by id;
+select id, name, lower(name), upper(name) from t order by id;
 -- result:
 1	теКст	текст	ТЕКСТ
 2	ТЕкСТ	текст	ТЕКСТ

@@ -1997,7 +1997,7 @@ void utf8_case_toggle(const Bytes& src_bytes, const Offsets& src_offsets, Bytes*
             // When this happens, we need to expand the capacity.
             // Considering that there are not many such characters, we will not reserve additional memory during resize.
             // If necessary, we can make some strategies for reserving memory in the future.
-            current_dst_size += dst_size - src_len + 1;
+            current_dst_size = current_offset + dst_size + 1;
             dst_bytes->resize(current_dst_size);
             dst_data = dst_bytes->data() + current_offset;
 
@@ -2076,12 +2076,31 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(lowerImpl, str) {
     return v;
 }
 
-StatusOr<ColumnPtr> StringFunctions::lower(FunctionContext* context, const Columns& columns) {
-    return VectorizedUnaryFunction<StringCaseToggleFunction<false>>::evaluate<TYPE_VARCHAR>(columns[0]);
+Status StringFunctions::lower_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+    auto state = new LowerUpperState();
+    if (context->state()->lower_upper_support_utf8()) {
+        state->impl_func = VectorizedUnaryFunction<UTF8StringCaseToggleFunction<false>>::evaluate<TYPE_VARCHAR>;
+    } else {
+        state->impl_func = VectorizedUnaryFunction<StringCaseToggleFunction<false>>::evaluate<TYPE_VARCHAR>;
+    }
+    context->set_function_state(scope, state);
+    return Status::OK();
 }
 
-StatusOr<ColumnPtr> StringFunctions::lower_utf8(FunctionContext* context, const Columns& columns) {
-    return VectorizedUnaryFunction<UTF8StringCaseToggleFunction<false>>::evaluate<TYPE_VARCHAR>(columns[0]);
+Status StringFunctions::lower_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* state = reinterpret_cast<LowerUpperState*>(context->get_function_state(scope));
+        delete state;
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> StringFunctions::lower(FunctionContext* context, const Columns& columns) {
+    auto* state = reinterpret_cast<LowerUpperState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    return state->impl_func(columns[0]);
 }
 
 // upper
@@ -2091,12 +2110,31 @@ DEFINE_STRING_UNARY_FN_WITH_IMPL(upperImpl, str) {
     return v;
 }
 
-StatusOr<ColumnPtr> StringFunctions::upper(FunctionContext* context, const Columns& columns) {
-    return VectorizedUnaryFunction<StringCaseToggleFunction<true>>::evaluate<TYPE_VARCHAR>(columns[0]);
+Status StringFunctions::upper_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope != FunctionContext::FRAGMENT_LOCAL) {
+        return Status::OK();
+    }
+    auto state = new LowerUpperState();
+    if (context->state()->lower_upper_support_utf8()) {
+        state->impl_func = VectorizedUnaryFunction<UTF8StringCaseToggleFunction<true>>::evaluate<TYPE_VARCHAR>;
+    } else {
+        state->impl_func = VectorizedUnaryFunction<StringCaseToggleFunction<true>>::evaluate<TYPE_VARCHAR>;
+    }
+    context->set_function_state(scope, state);
+    return Status::OK();
 }
 
-StatusOr<ColumnPtr> StringFunctions::upper_utf8(FunctionContext* context, const Columns& columns) {
-    return VectorizedUnaryFunction<UTF8StringCaseToggleFunction<true>>::evaluate<TYPE_VARCHAR>(columns[0]);
+Status StringFunctions::upper_close(FunctionContext* context, FunctionContext::FunctionStateScope scope) {
+    if (scope == FunctionContext::FRAGMENT_LOCAL) {
+        auto* state = reinterpret_cast<LowerUpperState*>(context->get_function_state(scope));
+        delete state;
+    }
+    return Status::OK();
+}
+
+StatusOr<ColumnPtr> StringFunctions::upper(FunctionContext* context, const Columns& columns) {
+    auto* state = reinterpret_cast<LowerUpperState*>(context->get_function_state(FunctionContext::FRAGMENT_LOCAL));
+    return state->impl_func(columns[0]);
 }
 
 static inline void ascii_reverse_per_slice(const char* src_begin, const char* src_end, char* dst_curr) {
