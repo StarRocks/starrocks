@@ -403,4 +403,9 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
         sb.append('}');
         return sb.toString();
     }
+
+    @Override
+    public String getName() {
+        return "Full";
+    }
 }
