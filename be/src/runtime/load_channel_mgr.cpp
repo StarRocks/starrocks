@@ -85,16 +85,11 @@ LoadChannelMgr::~LoadChannelMgr() {
 }
 
 void LoadChannelMgr::close() {
-    {
-        std::lock_guard l(_lock);
-        for (auto iter = _load_channels.begin(); iter != _load_channels.end();) {
-            iter->second->cancel();
-            iter->second->abort();
-            iter = _load_channels.erase(iter);
-        }
-    }
-    if (_async_rpc_pool) {
-        _async_rpc_pool->shutdown();
+    std::lock_guard l(_lock);
+    for (auto iter = _load_channels.begin(); iter != _load_channels.end();) {
+        iter->second->cancel();
+        iter->second->abort();
+        iter = _load_channels.erase(iter);
     }
 }
 
