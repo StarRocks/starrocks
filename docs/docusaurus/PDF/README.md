@@ -15,9 +15,9 @@ Clone this repo to your machine.
 
 ### Node.js
 
-This is tested with Node.js version 21.
+This is tested with Node.js version 20.
 
-Use Node.js version 21. You can install Node.js using the instructions at [nodejs.org](https://nodejs.org/en/download).
+Use Node.js version 20. You can install Node.js using the instructions at [nodejs.org](https://nodejs.org/en/download).
 
 ### Puppeteer
 
@@ -90,6 +90,7 @@ This command will crawl the docs and list the URLs in order:
 ```bash
 npx docusaurus-prince-pdf --list-only \
   --file URLs.txt \
+  --include-index \
   -u http://localhost:3000/zh/docs/introduction/StarRocks_intro/
 ```
 

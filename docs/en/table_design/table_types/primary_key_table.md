@@ -207,6 +207,6 @@ During data loading, the data is stored after being sorted according to the sort
 
 - To load data into the table created, you can refer to [Loading overview](../../loading/Loading_intro.md) to choose an appropriate load options.
 - If you need to change data in the Primary Key table, you can refer to [change data through loading](../../loading/Load_to_Primary_Key_tables.md) or use DML ([INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md), [UPDATE](../../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md), and [DELETE](../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md)).
-- If you want to further accelerate queries, you can refer to [Query Acceleration](../../using_starrocks/using_starrocks.mdx).
+- If you want to further accelerate queries, you can refer to [Query Acceleration](../../using_starrocks/async_mv/Materialized_view.md).
 - If you need to modify the table schema, you can refer to [ALTER TABLE](../../sql-reference/sql-statements/Resource/ALTER_RESOURCE.md).
 - An [AUTO_INCREMENT](../../sql-reference/sql-statements/generated_columns.md) column can be used as the Primary Key.
