@@ -539,6 +539,7 @@ under the License.
                 <groupId>org.apache.spark</groupId>
                 <artifactId>spark-core_2.12</artifactId>
                 <version>${spark.version}</version>
+                <scope>provided</scope>
                 <exclusions>
                     <exclusion>
                         <groupId>org.slf4j</groupId>
@@ -560,6 +561,7 @@ under the License.
                 <groupId>org.apache.spark</groupId>
                 <artifactId>spark-launcher_2.12</artifactId>
                 <version>${spark.version}</version>
+                <scope>provided</scope>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-sql_2.12 -->
@@ -567,6 +569,7 @@ under the License.
                 <groupId>org.apache.spark</groupId>
                 <artifactId>spark-sql_2.12</artifactId>
                 <version>${spark.version}</version>
+                <scope>provided</scope>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-catalyst -->
@@ -574,6 +577,7 @@ under the License.
                 <groupId>org.apache.spark</groupId>
                 <artifactId>spark-catalyst_2.12</artifactId>
                 <version>${spark.version}</version>
+                <scope>provided</scope>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/io.trino.hive/hive-apache -->
