@@ -48,7 +48,7 @@ under the License.
         <tomcat.version>8.5.70</tomcat.version>
         <parquet.version>1.14.0</parquet.version>
         <hadoop.version>3.4.1</hadoop.version>
-        <gcs.connector.version>hadoop3-2.2.11</gcs.connector.version>
+        <gcs.connector.version>hadoop3-2.2.26</gcs.connector.version>
         <skip.plugin>false</skip.plugin>
         <hudi.version>0.15.0</hudi.version>
         <hive-apache.version>3.1.2-22</hive-apache.version>
@@ -242,6 +242,19 @@ under the License.
                 <groupId>com.github.seancfoley</groupId>
                 <artifactId>ipaddress</artifactId>
                 <version>5.4.2</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.velocity</groupId>
+                <artifactId>velocity-engine-core</artifactId>
+                <version>2.4.1</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.apache.httpcomponents.client5/httpclient5 -->
+            <dependency>
+                <groupId>org.apache.httpcomponents.client5</groupId>
+                <artifactId>httpclient5</artifactId>
+                <version>5.4.1</version>
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/commons-validator/commons-validator -->
@@ -603,6 +616,13 @@ under the License.
                 <groupId>org.apache.avro</groupId>
                 <artifactId>avro</artifactId>
                 <version>${avro.version}</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.apache.ivy/ivy -->
+            <dependency>
+                <groupId>org.apache.ivy</groupId>
+                <artifactId>ivy</artifactId>
+                <version>2.5.2</version>
             </dependency>
 
             <!-- spark -->
@@ -1277,6 +1297,11 @@ under the License.
                 <version>${staros.version}</version>
             </dependency>
 
+            <dependency>
+                <groupId>org.xerial.snappy</groupId>
+                <artifactId>snappy-java</artifactId>
+                <version>1.1.10.5</version>
+            </dependency>
         </dependencies>
     </dependencyManagement>
 
