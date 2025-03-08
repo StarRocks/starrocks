@@ -112,15 +112,15 @@ void LoadChannel::set_profile_config(const PLoadChannelProfileConfig& config) {
     }
 }
 
-void LoadChannel::open(const LoadChannelOpenRequest& open_request) {
+void LoadChannel::open(const LoadChannelOpenContext& open_context) {
     int64_t start_time_ns = MonotonicNanos();
     COUNTER_UPDATE(_open_request_count, 1);
-    COUNTER_UPDATE(_open_request_pending_timer, (start_time_ns - open_request.receive_rpc_time_ns));
-    const PTabletWriterOpenRequest& request = *open_request.request;
-    PTabletWriterOpenResult* response = open_request.response;
+    COUNTER_UPDATE(_open_request_pending_timer, (start_time_ns - open_context.receive_rpc_time_ns));
+    const PTabletWriterOpenRequest& request = *open_context.request;
+    PTabletWriterOpenResult* response = open_context.response;
     _span->AddEvent("open_index", {{"index_id", request.index_id()}});
     auto scoped = trace::Scope(_span);
-    ClosureGuard done_guard(open_request.done);
+    ClosureGuard done_guard(open_context.done);
 
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
     bool is_lake_tablet = request.has_is_lake_tablet() && request.is_lake_tablet();
