@@ -101,10 +101,10 @@ Status LoadChannelMgr::init(MemTracker* mem_tracker) {
         num_threads = CpuInfo::num_cores();
     }
     RETURN_IF_ERROR(ThreadPoolBuilder("load_channel")
-                            .set_min_threads(5)
+                            .set_min_threads(std::min(5, num_threads))
                             .set_max_threads(num_threads)
                             .set_max_queue_size(config::load_channel_rpc_thread_pool_queue_size)
-                            .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(60000))
                             .build(&_async_rpc_pool));
     REGISTER_THREAD_POOL_METRICS(load_channel, _async_rpc_pool.get());
     return Status::OK();
