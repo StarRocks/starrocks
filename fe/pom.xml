@@ -386,13 +386,6 @@ under the License.
                 <version>1.9</version>
             </dependency>
 
-            <dependency>
-                <groupId>javax.ws.rs</groupId>
-                <artifactId>javax.ws.rs-api</artifactId>
-                <version>2.1.1</version>
-                <scope>compile</scope>
-            </dependency>
-
             <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-precompile-plugin -->
             <dependency>
                 <groupId>com.baidu</groupId>
@@ -604,6 +597,12 @@ under the License.
                 <groupId>org.roaringbitmap</groupId>
                 <artifactId>RoaringBitmap</artifactId>
                 <version>0.8.13</version>
+                <exclusions>
+                    <exclusion>
+                        <artifactId>zookeeper</artifactId>
+                        <groupId>org.apache.zookeeper</groupId>
+                    </exclusion>
+                </exclusions>
             </dependency>
 
             <dependency>
@@ -1301,6 +1300,52 @@ under the License.
                 <groupId>org.xerial.snappy</groupId>
                 <artifactId>snappy-java</artifactId>
                 <version>1.1.10.5</version>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.apache.ranger/ranger-plugins-common -->
+            <dependency>
+                <groupId>org.apache.ranger</groupId>
+                <artifactId>ranger-plugins-common</artifactId>
+                <version>2.5.0</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>com.amazonaws</groupId>
+                        <artifactId>aws-java-sdk-bundle</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.elasticsearch</groupId>
+                        <artifactId>*</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.elasticsearch.client</groupId>
+                        <artifactId>*</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>org.eclipse.jetty</groupId>
+                        <artifactId>jetty-client</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <artifactId>elasticsearch</artifactId>
+                        <groupId>org.elasticsearch</groupId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>com.nimbusds</groupId>
+                        <artifactId>nimbus-jose-jwt</artifactId>
+                    </exclusion>
+                </exclusions>
+            </dependency>
+
+            <!-- https://mvnrepository.com/artifact/org.antlr/antlr4 -->
+            <dependency>
+                <groupId>org.antlr</groupId>
+                <artifactId>antlr4</artifactId>
+                <version>4.9.2</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>commons-lang</groupId>
+                        <artifactId>commons-lang</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
         </dependencies>
     </dependencyManagement>
