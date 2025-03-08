@@ -17,6 +17,7 @@
 #include <brpc/controller.h>
 #include <gtest/gtest.h>
 
+#include "service/brpc_service_test_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/storage_engine.h"
 #include "storage/tablet_manager.h"
@@ -147,19 +148,6 @@ protected:
     int64_t _tablet_id;
     std::shared_ptr<Schema> _schema;
     std::shared_ptr<OlapTableSchemaParam> _schema_param;
-};
-
-class MockClosure : public ::google::protobuf::Closure {
-public:
-    MockClosure() = default;
-    ~MockClosure() override = default;
-
-    void Run() override { _run.store(true); }
-
-    bool has_run() { return _run.load(); }
-
-private:
-    std::atomic_bool _run = false;
 };
 
 TEST_F(LoadChannelMgrTest, async_open_success) {
