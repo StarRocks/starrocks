@@ -71,7 +71,7 @@ namespace lake {
 class TabletManager;
 }
 
-struct LoadChannelOpenRequest {
+struct LoadChannelOpenContext {
     brpc::Controller* cntl;
     const PTabletWriterOpenRequest* request;
     PTabletWriterOpenResult* response;
@@ -96,7 +96,7 @@ public:
 
     // Open a new load channel if it does not exist.
     // NOTE: This method may be called multiple times, and each time with a different |request|.
-    void open(const LoadChannelOpenRequest& open_request);
+    void open(const LoadChannelOpenContext& open_context);
 
     void add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response);
 

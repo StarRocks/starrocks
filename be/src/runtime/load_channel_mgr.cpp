@@ -105,29 +105,29 @@ Status LoadChannelMgr::init(MemTracker* mem_tracker) {
     if (num_threads <= 0) {
         num_threads = CpuInfo::num_cores();
     }
-    RETURN_IF_ERROR(ThreadPoolBuilder("load_channel_mgr")
+    RETURN_IF_ERROR(ThreadPoolBuilder("load_channel")
                             .set_min_threads(5)
                             .set_max_threads(num_threads)
                             .set_max_queue_size(config::load_channel_rpc_thread_pool_queue_size)
                             .set_idle_timeout(MonoDelta::FromMilliseconds(10000))
                             .build(&_async_rpc_pool));
-    REGISTER_THREAD_POOL_METRICS(load_channel_mgr, _async_rpc_pool.get());
+    REGISTER_THREAD_POOL_METRICS(load_channel, _async_rpc_pool.get());
     return Status::OK();
 }
 
 void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request,
                           PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
-    LoadChannelOpenRequest open_request;
-    open_request.cntl = cntl;
-    open_request.request = &request;
-    open_request.response = response;
-    open_request.done = done;
-    open_request.receive_rpc_time_ns = MonotonicNanos();
+    LoadChannelOpenContext open_context;
+    open_context.cntl = cntl;
+    open_context.request = &request;
+    open_context.response = response;
+    open_context.done = done;
+    open_context.receive_rpc_time_ns = MonotonicNanos();
     if (!config::enable_load_channel_rpc_async) {
-        _open(open_request);
+        _open(open_context);
         return;
     }
-    auto task = [=]() { this->_open(open_request); };
+    auto task = [=]() { this->_open(open_context); };
     Status status = _async_rpc_pool->submit_func(std::move(task));
     if (!status.ok()) {
         ClosureGuard closure_guard(done);
@@ -135,10 +135,10 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
     }
 }
 
-void LoadChannelMgr::_open(LoadChannelOpenRequest open_request) {
-    ClosureGuard done_guard(open_request.done);
-    const PTabletWriterOpenRequest& request = *open_request.request;
-    PTabletWriterOpenResult* response = open_request.response;
+void LoadChannelMgr::_open(LoadChannelOpenContext open_context) {
+    ClosureGuard done_guard(open_context.done);
+    const PTabletWriterOpenRequest& request = *open_context.request;
+    PTabletWriterOpenResult* response = open_context.response;
     if (!request.encryption_meta().empty()) {
         Status st = KeyCache::instance().refresh_keys(request.encryption_meta());
         if (!st.ok()) {
@@ -181,7 +181,7 @@ void LoadChannelMgr::_open(LoadChannelOpenRequest open_request) {
         }
     }
     done_guard.release();
-    channel->open(open_request);
+    channel->open(open_context);
 }
 
 void LoadChannelMgr::add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
