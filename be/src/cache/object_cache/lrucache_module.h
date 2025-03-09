@@ -23,11 +23,9 @@ class Cache;
 
 class LRUCacheModule : public ObjectCacheModule {
 public:
-    LRUCacheModule(const ObjectCacheOptions& options) : _options(options) {}
+    LRUCacheModule(const ObjectCacheOptions& options);
 
     ~LRUCacheModule();
-
-    Status init() override;
 
     Status insert(const std::string& key, void* value, size_t size, size_t charge, ObjectCacheDeleter deleter,
                   ObjectCacheHandlePtr* handle, ObjectCacheWriteOptions* options) override;

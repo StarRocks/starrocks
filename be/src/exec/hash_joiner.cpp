@@ -575,7 +575,7 @@ Status HashJoiner::_create_runtime_bloom_filters(RuntimeState* state, int64_t li
         int expr_order = rf_desc->build_expr_order();
         bool eq_null = _is_null_safes[expr_order];
         bool is_empty = false;
-        std::vector<ColumnPtr> columns;
+        Columns columns;
 
         for (auto* ht : hash_tables) {
             ColumnPtr column = ht->get_key_columns()[expr_order];

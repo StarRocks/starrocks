@@ -50,7 +50,7 @@ struct RuntimeBloomFilterBuildParam;
 using OptRuntimeBloomFilterBuildParams = std::vector<std::optional<RuntimeBloomFilterBuildParam>>;
 // Parameters used to build runtime bloom-filters.
 struct RuntimeBloomFilterBuildParam {
-    RuntimeBloomFilterBuildParam(bool multi_partitioned, bool eq_null, bool is_empty, std::vector<ColumnPtr> columns,
+    RuntimeBloomFilterBuildParam(bool multi_partitioned, bool eq_null, bool is_empty, Columns columns,
                                  MutableRuntimeFilterPtr runtime_filter)
             : multi_partitioned(multi_partitioned),
               eq_null(eq_null),
@@ -60,7 +60,7 @@ struct RuntimeBloomFilterBuildParam {
     bool multi_partitioned;
     bool eq_null;
     bool is_empty;
-    std::vector<ColumnPtr> columns;
+    Columns columns;
     MutableRuntimeFilterPtr runtime_filter;
 };
 

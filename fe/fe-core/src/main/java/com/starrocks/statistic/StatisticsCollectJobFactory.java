@@ -109,7 +109,9 @@ public class StatisticsCollectJobFactory {
                                                                  List<Type> columnTypes,
                                                                  StatsConstants.AnalyzeType analyzeType,
                                                                  StatsConstants.ScheduleType scheduleType,
-                                                                 Map<String, String> properties) {
+                                                                 Map<String, String> properties,
+                                                                 List<StatsConstants.StatisticsType> statisticsTypes,
+                                                                 List<List<String>> columnGroup) {
         if (CollectionUtils.isEmpty(columnNames)) {
             columnNames = StatisticUtils.getCollectibleColumns(table);
             columnTypes = columnNames.stream().map(col -> table.getColumn(col).getType()).collect(Collectors.toList());
@@ -120,7 +122,7 @@ public class StatisticsCollectJobFactory {
         }
 
         LOG.debug("statistics job work on table: {}, type: {}", table.getName(), analyzeType.name());
-        if (analyzeType.equals(StatsConstants.AnalyzeType.SAMPLE)) {
+        if (analyzeType.equals(StatsConstants.AnalyzeType.SAMPLE) && statisticsTypes.isEmpty()) {
             if (partitionIdList == null) {
                 partitionIdList = table.getPartitions().stream().filter(Partition::hasData)
                         .map(Partition::getId).collect(Collectors.toList());
@@ -135,7 +137,7 @@ public class StatisticsCollectJobFactory {
             }
         } else if (analyzeType.equals(StatsConstants.AnalyzeType.HISTOGRAM)) {
             return new HistogramStatisticsCollectJob(db, table, columnNames, columnTypes, scheduleType, properties);
-        } else {
+        } else if (analyzeType.equals(StatsConstants.AnalyzeType.FULL) && statisticsTypes.isEmpty()) {
             if (partitionIdList == null) {
                 partitionIdList = table.getPartitions().stream().filter(Partition::hasData)
                         .map(Partition::getId).collect(Collectors.toList());
@@ -148,6 +150,14 @@ public class StatisticsCollectJobFactory {
                 return new FullStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
                         StatsConstants.AnalyzeType.FULL, scheduleType, properties);
             }
+        } else {
+            if (partitionIdList == null) {
+                partitionIdList = table.getPartitions().stream().filter(Partition::hasData)
+                        .map(Partition::getId).collect(Collectors.toList());
+            }
+
+            return new MultiColumnHyperStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
+                    analyzeType, scheduleType, properties, statisticsTypes, columnGroup);
         }
     }
 
@@ -395,7 +405,6 @@ public class StatisticsCollectJobFactory {
                 updatedPartitions == null ? null : Lists.newArrayList(updatedPartitions),
                 columnNames, columnTypes, StatsConstants.AnalyzeType.FULL, job.getScheduleType(), Maps.newHashMap()));
     }
-
     private static void createExternalSampleStatsJob(List<StatisticsCollectJob> allTableJobMap,
                                                      LocalDateTime statisticsUpdateTime,
                                                      ExternalAnalyzeJob job, Database db, Table table,
@@ -592,7 +601,7 @@ public class StatisticsCollectJobFactory {
         }
 
         StatisticsCollectJob sample = buildStatisticsCollectJob(db, table, partitionIdList, columnNames, columnTypes,
-                StatsConstants.AnalyzeType.SAMPLE, job.getScheduleType(), job.getProperties());
+                StatsConstants.AnalyzeType.SAMPLE, job.getScheduleType(), job.getProperties(), List.of(), List.of());
         sample.setPriority(priority);
         allTableJobMap.add(sample);
     }
@@ -601,7 +610,7 @@ public class StatisticsCollectJobFactory {
                                            Database db, Table table, List<String> columnNames,
                                            List<Type> columnTypes, StatisticsCollectJob.Priority priority) {
         StatisticsCollectJob sample = buildStatisticsCollectJob(db, table, null, columnNames, columnTypes,
-                StatsConstants.AnalyzeType.HISTOGRAM, job.getScheduleType(), job.getProperties());
+                StatsConstants.AnalyzeType.HISTOGRAM, job.getScheduleType(), job.getProperties(), List.of(), List.of());
         sample.setPriority(priority);
         allTableJobMap.add(sample);
     }
@@ -627,7 +636,7 @@ public class StatisticsCollectJobFactory {
         if (!partitionList.isEmpty()) {
             StatisticsCollectJob statisticsCollectJob = buildStatisticsCollectJob(db, table,
                     partitionList.stream().map(Partition::getId).collect(Collectors.toList()), columnNames, columnTypes,
-                    analyzeType, job.getScheduleType(), Maps.newHashMap());
+                    analyzeType, job.getScheduleType(), Maps.newHashMap(), List.of(), List.of());
             statisticsCollectJob.setPriority(priority);
             allTableJobMap.add(statisticsCollectJob);
         }

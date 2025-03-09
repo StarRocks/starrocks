@@ -22,6 +22,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.ExternalOlapTable;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.ResourceGroupClassifier;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.AnalysisException;
@@ -88,6 +89,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import static com.starrocks.qe.StmtExecutor.buildExplainString;
+
 public class StatementPlanner {
     private static final Logger LOG = LogManager.getLogger(StatementPlanner.class);
 
@@ -144,9 +147,12 @@ public class StatementPlanner {
                     plan = createQueryPlanWithReTry(queryStmt, session, resultSinkType, plannerMetaLocker, planStartTime);
                 }
                 setOutfileSink(queryStmt, plan);
+                setExplainToQueryDetail(plan, stmt, session, ResourceGroupClassifier.QueryType.SELECT);
                 return plan;
             } else if (stmt instanceof InsertStmt) {
-                return planInsertStmt(plannerMetaLocker, (InsertStmt) stmt, session);
+                ExecPlan plan = planInsertStmt(plannerMetaLocker, (InsertStmt) stmt, session);
+                setExplainToQueryDetail(plan, stmt, session, ResourceGroupClassifier.QueryType.INSERT);
+                return plan;
             } else if (stmt instanceof UpdateStmt) {
                 return new UpdatePlanner().plan((UpdateStmt) stmt, session);
             } else if (stmt instanceof DeleteStmt) {
@@ -168,6 +174,25 @@ public class StatementPlanner {
         }
 
         return null;
+    }
+
+    /**
+     * Generate a query plan for query detail.
+     * Explaining internal table is very quick, we prefer to use EXPLAIN COSTS.
+     * But explaining external table is expensive, may need to access lots of metadata, so have to use EXPLAIN.
+     *
+     * <p> NOTE that `buildExplainString` will access table metadata, so need be called in the critical section of the lock.
+     */
+    private static void setExplainToQueryDetail(ExecPlan plan, StatementBase stmt, ConnectContext session,
+                                                ResourceGroupClassifier.QueryType queryType) {
+        if (plan == null || session.getQueryDetail() == null) {
+            return;
+        }
+
+        StatementBase.ExplainLevel level = AnalyzerUtils.hasExternalTables(stmt) ?
+                StatementBase.ExplainLevel.defaultValue() :
+                StatementBase.ExplainLevel.parse(Config.query_detail_explain_level);
+        session.getQueryDetail().setExplain(buildExplainString(plan, stmt, session, queryType, level));
     }
 
     /**

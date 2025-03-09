@@ -180,7 +180,7 @@ public:
     // flatten without flat json, input must not flat json
     void flatten(const Column* json_column);
 
-    std::vector<ColumnPtr> mutable_result();
+    Columns mutable_result();
 
 private:
     template <bool HAS_REMAIN>
@@ -196,7 +196,7 @@ private:
     std::vector<std::string> _dst_paths;
     std::shared_ptr<JsonFlatPath> _dst_root;
 
-    std::vector<ColumnPtr> _flat_columns;
+    Columns _flat_columns;
     JsonColumn* _remain;
 };
 
@@ -221,7 +221,7 @@ public:
     bool has_exclude_paths() const { return !_exclude_paths.empty(); }
 
     // input nullable-json, output none null json
-    ColumnPtr merge(const std::vector<ColumnPtr>& columns);
+    ColumnPtr merge(const Columns& columns);
 
 private:
     template <bool IN_TREE>
@@ -277,11 +277,11 @@ public:
     void init_compaction_task(const std::vector<std::string>& paths, const std::vector<LogicalType>& types,
                               bool has_remain);
 
-    Status trans(std::vector<ColumnPtr>& columns);
+    Status trans(const Columns& columns);
 
-    std::vector<ColumnPtr>& result() { return _dst_columns; }
+    Columns& result() { return _dst_columns; }
 
-    std::vector<ColumnPtr> mutable_result();
+    Columns mutable_result();
 
     std::vector<std::string> cast_paths() const;
 
@@ -315,16 +315,16 @@ private:
         std::unique_ptr<JsonFlattener> flattener;
     };
 
-    Status _equals(const MergeTask& task, std::vector<ColumnPtr>& columns);
-    Status _cast(const MergeTask& task, ColumnPtr& columns);
-    Status _merge(const MergeTask& task, std::vector<ColumnPtr>& columns);
-    void _flat(const FlatTask& task, std::vector<ColumnPtr>& columns);
+    Status _equals(const MergeTask& task, const Columns& columns);
+    Status _cast(const MergeTask& task, const ColumnPtr& columns);
+    Status _merge(const MergeTask& task, const Columns& columns);
+    void _flat(const FlatTask& task, const Columns& columns);
 
 private:
     bool _dst_remain = false;
     std::vector<std::string> _dst_paths;
     std::vector<LogicalType> _dst_types;
-    std::vector<ColumnPtr> _dst_columns;
+    Columns _dst_columns;
 
     std::vector<std::string> _src_paths;
     std::vector<LogicalType> _src_types;

@@ -260,7 +260,7 @@ static void BM_primitive(benchmark::State& state) {
         orc::RowReader::ReadPosition pos;
         size_t totalNumRows = 0;
         while (rr->next(*batch, &pos)) {
-            ColumnPtr column = ColumnHelper::create_column(c0Type, isNullable);
+            MutableColumnPtr column = ColumnHelper::create_column(c0Type, isNullable);
             CHECK(orcColumnReader->get_next(c0, column, 0, columnSize).ok());
             DCHECK_EQ(columnSize, column->size());
             totalNumRows += columnSize;

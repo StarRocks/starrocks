@@ -800,11 +800,12 @@ void JsonFlattener::_flatten(const Column* json_column, const JsonColumn* json_d
     }
 }
 
-std::vector<ColumnPtr> JsonFlattener::mutable_result() {
-    std::vector<ColumnPtr> res;
+Columns JsonFlattener::mutable_result() {
+    Columns res;
     for (size_t i = 0; i < _flat_columns.size(); i++) {
-        res.emplace_back(_flat_columns[i]);
-        _flat_columns[i] = _flat_columns[i]->clone_empty();
+        auto cloned = _flat_columns[i]->clone_empty();
+        res.emplace_back(std::move(_flat_columns[i]));
+        _flat_columns[i] = std::move(cloned);
     }
     if (_has_remain) {
         _remain = down_cast<JsonColumn*>(_flat_columns.back().get());
@@ -867,7 +868,7 @@ void JsonMerger::set_root_path(const std::string& base_path) {
     JsonFlatPath::set_root(base_path, _src_root.get());
 }
 
-ColumnPtr JsonMerger::merge(const std::vector<ColumnPtr>& columns) {
+ColumnPtr JsonMerger::merge(const Columns& columns) {
     DCHECK_GE(columns.size(), 1);
     DCHECK(_src_columns.empty());
 
@@ -1277,7 +1278,7 @@ void HyperJsonTransformer::init_compaction_task(const std::vector<std::string>& 
     }
 }
 
-Status HyperJsonTransformer::trans(std::vector<ColumnPtr>& columns) {
+Status HyperJsonTransformer::trans(const Columns& columns) {
     DCHECK(_dst_remain ? _dst_columns.size() == _dst_paths.size() + 1 : _dst_columns.size() == _dst_paths.size());
     for (auto& col : _dst_columns) {
         DCHECK_EQ(col->size(), 0);
@@ -1316,17 +1317,17 @@ Status HyperJsonTransformer::trans(std::vector<ColumnPtr>& columns) {
     return Status::OK();
 }
 
-Status HyperJsonTransformer::_equals(const MergeTask& task, std::vector<ColumnPtr>& columns) {
+Status HyperJsonTransformer::_equals(const MergeTask& task, const Columns& columns) {
     DCHECK(task.src_index.size() == 1);
     if (task.need_cast) {
-        auto col = columns[task.src_index[0]];
+        auto& col = columns[task.src_index[0]];
         return _cast(task, col);
     }
     _dst_columns[task.dst_index] = columns[task.src_index[0]];
     return Status::OK();
 }
 
-Status HyperJsonTransformer::_cast(const MergeTask& task, ColumnPtr& col) {
+Status HyperJsonTransformer::_cast(const MergeTask& task, const ColumnPtr& col) {
     DCHECK(task.need_cast);
     Chunk chunk;
     chunk.append_column(col, task.dst_index);
@@ -1341,7 +1342,7 @@ Status HyperJsonTransformer::_cast(const MergeTask& task, ColumnPtr& col) {
         _dst_columns[task.dst_index]->append_value_multiple_times(*data, 0, col->size());
     } else if (_dst_columns[task.dst_index]->is_nullable() && !res->is_nullable()) {
         auto nl = NullColumn::create(col->size(), 0);
-        _dst_columns[task.dst_index] = NullableColumn::create(res, nl);
+        _dst_columns[task.dst_index] = NullableColumn::create(res, std::move(nl));
     } else {
         DCHECK_EQ(_dst_columns[task.dst_index]->is_nullable(), res->is_nullable());
         _dst_columns[task.dst_index].swap(res);
@@ -1349,7 +1350,7 @@ Status HyperJsonTransformer::_cast(const MergeTask& task, ColumnPtr& col) {
     return Status::OK();
 }
 
-Status HyperJsonTransformer::_merge(const MergeTask& task, std::vector<ColumnPtr>& columns) {
+Status HyperJsonTransformer::_merge(const MergeTask& task, const Columns& columns) {
     if (task.dst_index == _dst_paths.size()) {
         DCHECK(_dst_remain);
         // output to remain
@@ -1367,7 +1368,7 @@ Status HyperJsonTransformer::_merge(const MergeTask& task, std::vector<ColumnPtr
         return Status::OK();
     }
 
-    std::vector<ColumnPtr> cols;
+    Columns cols;
     for (auto& index : task.src_index) {
         cols.emplace_back(columns[index]);
     }
@@ -1380,7 +1381,7 @@ Status HyperJsonTransformer::_merge(const MergeTask& task, std::vector<ColumnPtr
     return Status::OK();
 }
 
-void HyperJsonTransformer::_flat(const FlatTask& task, std::vector<ColumnPtr>& columns) {
+void HyperJsonTransformer::_flat(const FlatTask& task, const Columns& columns) {
     if (task.dst_index.empty()) {
         return;
     }
@@ -1402,11 +1403,12 @@ void HyperJsonTransformer::_flat(const FlatTask& task, std::vector<ColumnPtr>& c
     }
 }
 
-std::vector<ColumnPtr> HyperJsonTransformer::mutable_result() {
-    std::vector<ColumnPtr> res;
+Columns HyperJsonTransformer::mutable_result() {
+    Columns res;
     for (size_t i = 0; i < _dst_columns.size(); i++) {
-        res.emplace_back(_dst_columns[i]);
-        _dst_columns[i] = _dst_columns[i]->clone_empty();
+        auto cloned = _dst_columns[i]->clone_empty();
+        res.emplace_back(std::move(_dst_columns[i]));
+        _dst_columns[i] = std::move(cloned);
     }
     return res;
 }

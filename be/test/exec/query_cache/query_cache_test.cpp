@@ -107,7 +107,7 @@ TEST_F(QueryCacheTest, testCacheManager) {
         auto col = Int8Column::create();
         auto payload = byte_size - sizeof(query_cache::CacheValue);
         col->resize(payload);
-        chk->append_column(col, 0);
+        chk->append_column(std::move(col), 0);
         query_cache::CacheValue value(0, 0, {chk});
         return value;
     };
@@ -177,7 +177,7 @@ ChunkPtr create_test_chunk(query_cache::LaneOwnerType owner, long from, long to,
     for (auto i = from; i < to; ++i) {
         data[i - from] = double(i);
     }
-    chunk->append_column(column, SlotId(1));
+    chunk->append_column(std::move(column), SlotId(1));
     return chunk;
 }
 struct Task {

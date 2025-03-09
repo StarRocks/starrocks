@@ -128,13 +128,13 @@ int FixedLengthColumnBase<T>::compare_at(size_t left, size_t right, const Column
 }
 
 template <typename T>
-uint32_t FixedLengthColumnBase<T>::serialize(size_t idx, uint8_t* pos) {
+uint32_t FixedLengthColumnBase<T>::serialize(size_t idx, uint8_t* pos) const {
     memcpy(pos, &_data[idx], sizeof(T));
     return sizeof(T);
 }
 
 template <typename T>
-uint32_t FixedLengthColumnBase<T>::serialize_default(uint8_t* pos) {
+uint32_t FixedLengthColumnBase<T>::serialize_default(uint8_t* pos) const {
     ValueType value{};
     memcpy(pos, &value, sizeof(T));
     return sizeof(T);
@@ -142,9 +142,9 @@ uint32_t FixedLengthColumnBase<T>::serialize_default(uint8_t* pos) {
 
 template <typename T>
 void FixedLengthColumnBase<T>::serialize_batch(uint8_t* __restrict__ dst, Buffer<uint32_t>& slice_sizes,
-                                               size_t chunk_size, uint32_t max_one_row_size) {
+                                               size_t chunk_size, uint32_t max_one_row_size) const {
     uint32_t* sizes = slice_sizes.data();
-    T* __restrict__ src = _data.data();
+    const T* __restrict__ src = _data.data();
 
     for (size_t i = 0; i < chunk_size; ++i) {
         memcpy(dst + i * max_one_row_size + sizes[i], src + i, sizeof(T));
@@ -158,9 +158,9 @@ void FixedLengthColumnBase<T>::serialize_batch(uint8_t* __restrict__ dst, Buffer
 template <typename T>
 void FixedLengthColumnBase<T>::serialize_batch_with_null_masks(uint8_t* __restrict__ dst, Buffer<uint32_t>& slice_sizes,
                                                                size_t chunk_size, uint32_t max_one_row_size,
-                                                               uint8_t* null_masks, bool has_null) {
+                                                               const uint8_t* null_masks, bool has_null) const {
     uint32_t* sizes = slice_sizes.data();
-    T* __restrict__ src = _data.data();
+    const T* __restrict__ src = _data.data();
 
     if (!has_null) {
         for (size_t i = 0; i < chunk_size; ++i) {
@@ -187,7 +187,7 @@ void FixedLengthColumnBase<T>::serialize_batch_with_null_masks(uint8_t* __restri
 
 template <typename T>
 size_t FixedLengthColumnBase<T>::serialize_batch_at_interval(uint8_t* dst, size_t byte_offset, size_t byte_interval,
-                                                             size_t start, size_t count) {
+                                                             size_t start, size_t count) const {
     const size_t value_size = sizeof(T);
     const auto& key_data = get_data();
     uint8_t* buf = dst + byte_offset;

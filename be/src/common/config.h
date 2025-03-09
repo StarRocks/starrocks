@@ -383,6 +383,10 @@ CONF_mInt64(size_tiered_level_multiple, "5");
 CONF_mInt64(size_tiered_level_multiple_dupkey, "10");
 CONF_mInt64(size_tiered_level_num, "7");
 
+// random compaction strategy is only used for chaos test,
+// should never be true in prodution.
+CONF_mBool(chaos_test_enable_random_compaction_strategy, "false");
+
 CONF_Bool(enable_check_string_lengths, "true");
 
 // Max row source mask memory bytes, default is 200M.
@@ -939,6 +943,7 @@ CONF_Bool(parquet_late_materialization_enable, "true");
 CONF_Bool(parquet_page_index_enable, "true");
 CONF_mBool(parquet_statistics_process_more_filter_enable, "true");
 CONF_mBool(parquet_fast_timezone_conversion, "false");
+CONF_mBool(parquet_push_down_filter_to_decoder_enable, "true");
 
 CONF_Int32(io_coalesce_read_max_buffer_size, "8388608");
 CONF_Int32(io_coalesce_read_max_distance_size, "1048576");
@@ -1588,4 +1593,6 @@ CONF_mBool(enable_collect_table_metrics, "true");
 CONF_mInt64(rf_sample_rows, "1024");
 CONF_mInt64(rf_sample_ratio, "32");
 CONF_mInt64(rf_branchless_ratio, "8");
+
+CONF_mInt32(big_query_sec, "1");
 } // namespace starrocks::config

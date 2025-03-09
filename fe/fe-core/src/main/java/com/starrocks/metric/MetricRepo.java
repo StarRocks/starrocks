@@ -965,7 +965,7 @@ public final class MetricRepo {
                     MetricUnit.BYTES, "total size of db in bytes") {
                 @Override
                 public Long getValue() {
-                    return globalStateMgr.getLocalMetastore().getUsedDataQuotaWithLock(db);
+                    return db.usedDataQuotaBytes.get();
                 }
             };
             dbSizeBytesTotal.addLabel(new MetricLabel("db_name", dbName));

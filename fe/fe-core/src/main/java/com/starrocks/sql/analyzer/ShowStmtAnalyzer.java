@@ -33,6 +33,7 @@ import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MysqlTable;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableFunctionTable;
 import com.starrocks.catalog.Type;
@@ -562,6 +563,8 @@ public class ShowStmtAnalyzer {
 
         @Override
         public Void visitShowPartitionsStatement(ShowPartitionsStmt statement, ConnectContext context) {
+            TableName tbl = statement.getTbl();
+            tbl.normalization(context);
             String dbName = statement.getDbName();
             dbName = getDatabaseName(dbName, context);
             statement.setDbName(dbName);
@@ -569,7 +572,7 @@ public class ShowStmtAnalyzer {
             if (statement.getWhereClause() != null) {
                 analyzeSubPredicate(filterMap, statement.getWhereClause());
             }
-            Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
+            Database db = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tbl.getCatalog(), dbName);
             if (db == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
             }
@@ -579,19 +582,27 @@ public class ShowStmtAnalyzer {
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
-                Table table = MetaUtils.getSessionAwareTable(context, db, new TableName(dbName, tableName));
-                if (!(table instanceof OlapTable)) {
-                    throw new SemanticException("Table[" + tableName + "] does not exists or is not OLAP table");
+                Table table =
+                        MetaUtils.getSessionAwareTable(context, db, new TableName(tbl.getCatalog(), dbName, tableName));
+                if (!(table instanceof OlapTable) && !(table instanceof PaimonTable)) {
+                    throw new SemanticException("Table[" + tableName + "] does not exists or is not OLAP/Paimon table");
                 }
-
                 // build proc path
                 StringBuilder stringBuilder = new StringBuilder();
-                stringBuilder.append("/dbs/");
-                stringBuilder.append(db.getId());
-                stringBuilder.append("/").append(table.getId());
-                if (isTempPartition) {
-                    stringBuilder.append("/temp_partitions");
-                } else {
+                if (table instanceof OlapTable) {
+                    stringBuilder.append("/dbs/");
+                    stringBuilder.append(db.getId());
+                    stringBuilder.append("/").append(table.getId());
+                    if (isTempPartition) {
+                        stringBuilder.append("/temp_partitions");
+                    } else {
+                        stringBuilder.append("/partitions");
+                    }
+                } else if (table instanceof PaimonTable) {
+                    stringBuilder.append("/catalog/");
+                    stringBuilder.append(tbl.getCatalog());
+                    stringBuilder.append("/").append(dbName);
+                    stringBuilder.append("/").append(tableName);
                     stringBuilder.append("/partitions");
                 }
 

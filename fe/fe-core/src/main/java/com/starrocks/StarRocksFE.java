@@ -114,6 +114,9 @@ public class StarRocksFE {
             checkCommandLineOptions(cmdLineOpts);
 
             Log4jConfig.initLogging();
+            // We have already output the caffine's error message to Log4j2.
+            // we turn off the java.util.logging.Logger of caffine to reduce the output log of the console
+            java.util.logging.Logger.getLogger("com.github.benmanes.caffeine").setLevel(java.util.logging.Level.OFF);
 
             // set dns cache ttl
             java.security.Security.setProperty("networkaddress.cache.ttl", "60");

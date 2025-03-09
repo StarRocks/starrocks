@@ -130,7 +130,7 @@ void BinaryColumnBase<T>::append_value_multiple_times(const Column& src, uint32_
 //TODO(fzh): optimize copy using SIMD
 template <typename T>
 StatusOr<ColumnPtr> BinaryColumnBase<T>::replicate(const Buffer<uint32_t>& offsets) {
-    auto dest = std::dynamic_pointer_cast<BinaryColumnBase<T>>(BinaryColumnBase<T>::create());
+    auto dest = BinaryColumnBase<T>::create();
     auto& dest_offsets = dest->get_offset();
     auto& dest_bytes = dest->get_bytes();
     auto src_size = offsets.size() - 1; // this->size() may be large than offsets->size() -1
@@ -407,7 +407,7 @@ void BinaryColumnBase<T>::remove_first_n_values(size_t count) {
     size_t remain_size = _offsets.size() - 1 - count;
 
     ColumnPtr column = cut(count, remain_size);
-    auto* binary_column = down_cast<BinaryColumnBase<T>*>(column.get());
+    auto* binary_column = down_cast<const BinaryColumnBase<T>*>(column.get());
     _offsets = std::move(binary_column->_offsets);
     _bytes = std::move(binary_column->_bytes);
     _slices_cache = false;
@@ -537,7 +537,7 @@ uint32_t BinaryColumnBase<T>::max_one_element_serialize_size() const {
 }
 
 template <typename T>
-uint32_t BinaryColumnBase<T>::serialize_default(uint8_t* pos) {
+uint32_t BinaryColumnBase<T>::serialize_default(uint8_t* pos) const {
     // max size of one string is 2^32, so use uint32_t not T
     uint32_t binary_size = 0;
     strings::memcpy_inlined(pos, &binary_size, sizeof(uint32_t));
@@ -546,7 +546,7 @@ uint32_t BinaryColumnBase<T>::serialize_default(uint8_t* pos) {
 
 template <typename T>
 void BinaryColumnBase<T>::serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                                          uint32_t max_one_row_size) {
+                                          uint32_t max_one_row_size) const {
     for (size_t i = 0; i < chunk_size; ++i) {
         slice_sizes[i] += serialize(i, dst + i * max_one_row_size + slice_sizes[i]);
     }
@@ -579,7 +579,7 @@ void BinaryColumnBase<T>::deserialize_and_append_batch(Buffer<Slice>& srcs, size
 template <typename T>
 void BinaryColumnBase<T>::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes,
                                                           size_t chunk_size, uint32_t max_one_row_size,
-                                                          uint8_t* null_masks, bool has_null) {
+                                                          const uint8_t* null_masks, bool has_null) const {
     uint32_t* sizes = slice_sizes.data();
 
     if (!has_null) {

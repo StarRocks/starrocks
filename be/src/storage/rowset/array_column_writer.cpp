@@ -153,11 +153,11 @@ Status ArrayColumnWriter::init() {
 
 Status ArrayColumnWriter::append(const Column& column) {
     const ArrayColumn* array_column = nullptr;
-    NullColumn* null_column = nullptr;
+    const NullColumn* null_column = nullptr;
     if (is_nullable()) {
         const auto& nullable_column = down_cast<const NullableColumn&>(column);
-        array_column = down_cast<ArrayColumn*>(nullable_column.data_column().get());
-        null_column = down_cast<NullColumn*>(nullable_column.null_column().get());
+        array_column = down_cast<const ArrayColumn*>(nullable_column.data_column().get());
+        null_column = down_cast<const NullColumn*>(nullable_column.null_column().get());
     } else {
         array_column = down_cast<const ArrayColumn*>(&column);
     }

@@ -54,7 +54,7 @@ struct PreAggState {
     std::vector<FunctionContext*> _agg_fn_ctxs;
     std::vector<const AggregateFunction*> _agg_functions;
     std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
-    std::vector<std::vector<ColumnPtr>> _agg_input_columns;
+    std::vector<Columns> _agg_input_columns;
     //raw pointers in order to get multi-column values
     std::vector<std::vector<const Column*>> _agg_input_raw_columns;
     std::vector<FunctionTypes> _agg_fn_types;
@@ -154,7 +154,7 @@ private:
     // std::vector<FunctionContext*> _agg_fn_ctxs;
     // std::vector<const AggregateFunction*> _agg_functions;
     // std::vector<std::vector<ExprContext*>> _agg_expr_ctxs;
-    // std::vector<std::vector<ColumnPtr>> _agg_input_columns;
+    // std::vector<Columns> _agg_input_columns;
     // //raw pointers in order to get multi-column values
     // std::vector<std::vector<const Column*>> _agg_input_raw_columns;
     // std::vector<FunctionTypes> _agg_fn_types;

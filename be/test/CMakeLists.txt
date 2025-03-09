@@ -20,11 +20,13 @@ set(EXEC_FILES
         ./column/timestamp_value_test.cpp
         ./common/cow_test.cpp
         ./column/schema_test.cpp
+        ./column/column_cow_test.cpp
         ./common/config_test.cpp
         ./common/process_exit_test.cpp
         ./common/status_test.cpp
         ./common/tracer_test.cpp
         ./common/uri_test.cpp
+        ./common/cow_test.cpp
         ./connector/deletion_vector/deletion_vector_test.cpp
         ./connector_sink/hive_chunk_sink_test.cpp
         ./connector_sink/iceberg_chunk_sink_test.cpp
@@ -73,6 +75,7 @@ set(EXEC_FILES
         ./exec/analytor_test.cpp
         ./exec/analytor_test.cpp
         ./exec/arrow_converter_test.cpp
+        ./exec/cache_select_scanner_test.cpp
         ./exec/chunks_sorter_heap_sort_test.cpp
         ./exec/chunks_sorter_test.cpp
         ./exec/connector_scan_node_test.cpp
@@ -511,6 +514,8 @@ set(EXEC_FILES
 if ("${WITH_STARCACHE}" STREQUAL "ON")
     list(APPEND EXEC_FILES ./cache/block_cache/block_cache_test.cpp)
     list(APPEND EXEC_FILES ./cache/block_cache/disk_space_monitor_test.cpp)
+    list(APPEND EXEC_FILES ./cache/object_cache/starcache_module_test.cpp)
+    list(APPEND EXEC_FILES ./cache/object_cache/object_cache_test.cpp)
     list(APPEND EXEC_FILES ./io/cache_input_stream_test.cpp)
 endif ()
 

@@ -697,4 +697,17 @@ public class MvRewritePreprocessorTest extends MVTestBase {
             Assert.assertEquals(1, mvWithPlanContexts.size());
         });
     }
+
+    @Test
+    public void testValidPlanWithoutForce() {
+        String sql = "create materialized view invalid_plan_mv distributed by random " +
+                "as select count(v1) as cnt from t1 group by k1";
+        starRocksAssert.withMaterializedView(sql, (obj) -> {
+            String mvName = (String) obj;
+            MaterializedView mv = getMv(DB_NAME, mvName);
+            CachingMvPlanContextBuilder.getInstance().invalidateAstFromCache(mv);
+            String status = mv.getQueryRewriteStatus();
+            Assert.assertTrue(status.equalsIgnoreCase("UNKNOWN: MV plan is not in cache, valid check is unknown"));
+        });
+    }
 }

@@ -49,7 +49,7 @@ RepeatNode::RepeatNode(ObjectPool* pool, const TPlanNode& tnode, const Descripto
 
     // initial for _grouping_columns;
     for (auto& group : _grouping_list) {
-        std::vector<ColumnPtr> columns;
+        Columns columns;
         columns.reserve(group.size());
         for (auto slot_id : group) {
             columns.push_back(generate_repeat_column(slot_id, config::vector_chunk_size));

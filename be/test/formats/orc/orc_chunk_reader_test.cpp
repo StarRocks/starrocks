@@ -572,9 +572,9 @@ Buffer<DecimalV2Value> convert_orc_to_starrocks_decimalv2(RuntimeState* state, O
     CHECK(!st.ok());
     std::filesystem::remove(filename);
 
-    auto nullable = std::static_pointer_cast<NullableColumn>(chunk->get_column_by_index(0));
+    auto nullable = NullableColumn::static_pointer_cast(chunk->get_column_by_index(0));
     CHECK(!nullable->has_null());
-    auto decimal_col = std::static_pointer_cast<DecimalColumn>(nullable->data_column());
+    auto decimal_col = DecimalColumn::static_pointer_cast(nullable->data_column());
     return decimal_col->get_data();
 }
 
@@ -907,9 +907,9 @@ Buffer<TimestampValue> convert_orc_to_starrocks_timestamp(RuntimeState* state, O
     CHECK(!st.ok());
     std::filesystem::remove(filename);
 
-    auto nullable = std::static_pointer_cast<NullableColumn>(chunk->get_column_by_index(0));
+    auto nullable = NullableColumn::static_pointer_cast(chunk->get_column_by_index(0));
     CHECK(!nullable->has_null());
-    auto ts_col = std::static_pointer_cast<TimestampColumn>(nullable->data_column());
+    auto ts_col = TimestampColumn::static_pointer_cast(nullable->data_column());
     return ts_col->get_data();
 }
 
@@ -2135,9 +2135,9 @@ TEST_F(OrcChunkReaderTest, TestOrcIcebergPositionDelete) {
     roaring64_bitmap_add(bitmap, 4);
     skip_rows_ctx->deletion_bitmap = std::make_shared<DeletionBitmap>(bitmap);
 
-    StatusOr<ColumnPtr> status = reader.get_row_delete_filter(skip_rows_ctx);
+    StatusOr<MutableColumnPtr> status = reader.get_row_delete_filter(skip_rows_ctx);
     EXPECT_TRUE(status.ok());
-    ColumnPtr row_delete_filter = status.value();
+    MutableColumnPtr row_delete_filter = std::move(status.value());
 
     EXPECT_EQ(4, row_delete_filter->size());
     BooleanColumn* binary_column = down_cast<BooleanColumn*>(row_delete_filter.get());

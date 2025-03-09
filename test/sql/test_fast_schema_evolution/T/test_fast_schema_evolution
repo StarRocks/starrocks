@@ -122,7 +122,7 @@ show create table reproducex4;
 insert into reproducex4 values (7,8,9);
 function: manual_compact("meta_scan", "reproducex4")
 
-select dict_merge(v2) from reproducex4 [_META_];
+select dict_merge(v2, 255) from reproducex4 [_META_];
 analyze full table reproducex4;
 
 function: wait_analyze_finish("meta_scan", "reproducex4", "explain select v2 from reproducex4 group by v2;")
@@ -152,7 +152,7 @@ show create table reproducex4;
 insert into reproducex4 values (7,8,9);
 function: manual_compact("meta_scan", "reproducex4")
 
-select dict_merge(v2) from reproducex4 [_META_];
+select dict_merge(v2, 255) from reproducex4 [_META_];
 analyze full table reproducex4;
 
 function: wait_analyze_finish("meta_scan", "reproducex4", "explain select v2 from reproducex4 group by v2;")

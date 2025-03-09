@@ -39,7 +39,7 @@ struct DictOptimizeContext {
     SlotId slot_id;
     // if input was not nullable but output was nullable this flag will set true
     bool result_nullable = false;
-    // size: DICT_DECODE_MAX_SIZE + 1
+    // size: dict codes.size() + 1
     std::vector<int16_t> code_convert_map;
     Filter filter;
     // for no-string column convert map

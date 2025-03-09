@@ -34,6 +34,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
+import java.util.Set;
 
 import static java.util.Locale.ENGLISH;
 
@@ -63,7 +64,8 @@ public abstract class RangerAccessController extends ExternalAccessController im
 
     public Expr getColumnMaskingExpression(RangerAccessResourceImpl resource, Column column, ConnectContext context) {
         RangerStarRocksAccessRequest request = RangerStarRocksAccessRequest.createAccessRequest(
-                resource, context.getCurrentUserIdentity(), PrivilegeType.SELECT.name().toLowerCase(ENGLISH));
+                resource, context.getCurrentUserIdentity(), context.getGroups(),
+                PrivilegeType.SELECT.name().toLowerCase(ENGLISH));
 
         RangerAccessResult result = rangerPlugin.evalDataMaskPolicies(request, null);
         if (result != null && result.isMaskEnabled()) {
@@ -95,7 +97,8 @@ public abstract class RangerAccessController extends ExternalAccessController im
 
     protected Expr getRowAccessExpression(RangerAccessResourceImpl resource, ConnectContext context) {
         RangerStarRocksAccessRequest request = RangerStarRocksAccessRequest.createAccessRequest(
-                resource, context.getCurrentUserIdentity(), PrivilegeType.SELECT.name().toLowerCase(ENGLISH));
+                resource, context.getCurrentUserIdentity(), context.getGroups(),
+                PrivilegeType.SELECT.name().toLowerCase(ENGLISH));
         RangerAccessResult result = rangerPlugin.evalRowFilterPolicies(request, null);
         if (result != null && result.isRowFilterEnabled()) {
             return SqlParser.parseSqlToExpr(result.getFilterExpr(), context.getSessionVariable().getSqlMode());
@@ -104,7 +107,8 @@ public abstract class RangerAccessController extends ExternalAccessController im
         }
     }
 
-    protected void hasPermission(RangerAccessResourceImpl resource, UserIdentity user, PrivilegeType privilegeType)
+    protected void hasPermission(RangerAccessResourceImpl resource, UserIdentity user, Set<String> groups,
+                                 PrivilegeType privilegeType)
             throws AccessDeniedException {
         String accessType;
         if (privilegeType.equals(PrivilegeType.ANY)) {
@@ -113,7 +117,8 @@ public abstract class RangerAccessController extends ExternalAccessController im
             accessType = convertToAccessType(privilegeType);
         }
 
-        RangerStarRocksAccessRequest request = RangerStarRocksAccessRequest.createAccessRequest(resource, user, accessType);
+        RangerStarRocksAccessRequest request =
+                RangerStarRocksAccessRequest.createAccessRequest(resource, user, groups, accessType);
         RangerAccessResult result = rangerPlugin.isAccessAllowed(request);
         if (result == null || !result.getIsAllowed()) {
             throw new AccessDeniedException();

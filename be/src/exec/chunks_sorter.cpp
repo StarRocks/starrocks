@@ -24,6 +24,7 @@
 #include "runtime/current_thread.h"
 #include "runtime/runtime_state.h"
 #include "util/orlp/pdqsort.h"
+#include "util/runtime_profile.h"
 #include "util/stopwatch.hpp"
 
 namespace starrocks {
@@ -58,6 +59,7 @@ void ChunksSorter::setup_runtime(RuntimeState* state, RuntimeProfile* profile, M
     _sort_timer = ADD_TIMER(profile, "SortingTime");
     _merge_timer = ADD_TIMER(profile, "MergingTime");
     _output_timer = ADD_TIMER(profile, "OutputTime");
+    _sort_cnt = ADD_COUNTER(profile, "SortingCnt", TUnit::UNIT);
     profile->add_info_string("SortKeys", _sort_keys);
     profile->add_info_string("SortType", _is_topn ? "TopN" : "All");
 }
@@ -81,9 +83,9 @@ StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, Tup
             if (col->is_nullable()) {
                 // Constant null column doesn't have original column data type information,
                 // so replace it by a nullable column of original data type filled with all NULLs.
-                ColumnPtr new_col = ColumnHelper::create_column(order_by_types[i].type_desc, true);
+                MutableColumnPtr new_col = ColumnHelper::create_column(order_by_types[i].type_desc, true);
                 new_col->append_nulls(row_num);
-                materialize_chunk->append_column(new_col, slots_in_row_descriptor[i]->id());
+                materialize_chunk->append_column(std::move(new_col), slots_in_row_descriptor[i]->id());
             } else {
                 // Case 1: an expression may generate a constant column which will be reused by
                 // another call of evaluate(). We clone its data column to resize it as same as
@@ -98,10 +100,10 @@ StatusOr<ChunkPtr> ChunksSorter::materialize_chunk_before_sort(Chunk* chunk, Tup
                 new_col->assign(row_num, 0);
                 if (order_by_types[i].is_nullable) {
                     ColumnPtr nullable_column =
-                            NullableColumn::create(ColumnPtr(new_col.release()), NullColumn::create(row_num, 0));
+                            NullableColumn::create(ColumnPtr(std::move(new_col)), NullColumn::create(row_num, 0));
                     materialize_chunk->append_column(nullable_column, slots_in_row_descriptor[i]->id());
                 } else {
-                    materialize_chunk->append_column(ColumnPtr(new_col.release()), slots_in_row_descriptor[i]->id());
+                    materialize_chunk->append_column(ColumnPtr(std::move(new_col)), slots_in_row_descriptor[i]->id());
                 }
             }
         } else {

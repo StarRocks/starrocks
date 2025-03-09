@@ -29,10 +29,10 @@ namespace starrocks {
 // JsonColumn column for JSON type
 // format_version 1: store each JSON in binary encoding individually
 // format_version 2: TODO columnar encoding for JSON
-class JsonColumn final : public ColumnFactory<ObjectColumn<JsonValue>, JsonColumn, Column> {
+class JsonColumn final : public CowFactory<ColumnFactory<ObjectColumn<JsonValue>, JsonColumn>, JsonColumn, Column> {
 public:
     using ValueType = JsonValue;
-    using SuperClass = ColumnFactory<ObjectColumn<JsonValue>, JsonColumn, Column>;
+    using SuperClass = CowFactory<ColumnFactory<ObjectColumn<JsonValue>, JsonColumn>, JsonColumn, Column>;
     using BaseClass = JsonColumnBase;
 
     JsonColumn() = default;
@@ -46,8 +46,7 @@ public:
     }
 
     MutableColumnPtr clone() const override;
-    MutableColumnPtr clone_empty() const override;
-    ColumnPtr clone_shared() const override;
+    MutableColumnPtr clone_empty() const override { return this->create(); }
 
     void append_datum(const Datum& datum) override;
     void put_mysql_row_buffer(starrocks::MysqlRowBuffer* buf, size_t idx,
@@ -57,9 +56,9 @@ public:
 
     const uint8_t* deserialize_and_append(const uint8_t* pos) override;
     uint32_t serialize_size(size_t idx) const override;
-    uint32_t serialize(size_t idx, uint8_t* pos) override;
+    uint32_t serialize(size_t idx, uint8_t* pos) const override;
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                         uint32_t max_one_row_size) override;
+                         uint32_t max_one_row_size) const override;
 
     // json column & flat column may used
     std::string debug_item(size_t idx) const override;
@@ -117,6 +116,13 @@ public:
 
     const Columns& get_flat_fields() const { return _flat_columns; };
 
+    Columns get_flat_fields_ptrs() const {
+        Columns columns;
+        columns.reserve(_flat_columns.size());
+        columns.assign(_flat_columns.begin(), _flat_columns.end());
+        return columns;
+    };
+
     ColumnPtr& get_flat_field(int index);
 
     const ColumnPtr& get_flat_field(int index) const;
@@ -139,6 +145,12 @@ public:
     bool is_equallity_schema(const Column* other) const;
 
     std::string debug_flat_paths() const;
+
+    void mutate_each_subcolumn() override {
+        for (auto& column : _flat_columns) {
+            column = (std::move(*column)).mutate();
+        }
+    }
 
 private:
     // flat-columns[sub_columns, remain_column]

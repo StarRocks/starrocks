@@ -42,6 +42,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
@@ -217,9 +218,10 @@ public class StarOSAgent2ndTest {
         workerToNode.put(1L, 2L);
         Deencapsulation.setField(starosAgent, "workerToNode", workerToNode);
 
-        Assert.assertEquals(2, starosAgent.getPrimaryComputeNodeIdByShard(shardId));
+        Assert.assertEquals(2, starosAgent.getPrimaryComputeNodeIdByShard(shardId, StarOSAgent.DEFAULT_WORKER_GROUP_ID));
         StarRocksException exception =
-                Assert.assertThrows(StarRocksException.class, () -> starosAgent.getPrimaryComputeNodeIdByShard(shardId));
+                Assert.assertThrows(StarRocksException.class, () -> starosAgent.getPrimaryComputeNodeIdByShard(shardId,
+                StarOSAgent.DEFAULT_WORKER_GROUP_ID));
         Assert.assertEquals(InternalErrorCode.REPLICA_FEW_ERR, exception.getErrorCode());
     }
 
@@ -268,6 +270,6 @@ public class StarOSAgent2ndTest {
     }
 
     private Set<Long> getBackendIdsByShard(long shardId, long workerGroupId) throws StarRocksException {
-        return starosAgent.getAllNodeIdsByShard(shardId, workerGroupId, false);
+        return new HashSet<Long>(starosAgent.getAllNodeIdsByShard(shardId, workerGroupId));
     }
 }

@@ -62,7 +62,7 @@ Status GlobalDictCodeColumnIterator::decode_string_dict_codes(const Column& code
     auto& res_data = *container;
 #ifndef NDEBUG
     for (size_t i = 0; i < size; ++i) {
-        DCHECK(code_data[i] <= DICT_DECODE_MAX_SIZE);
+        DCHECK(code_data[i] <= size);
         if (code_data[i] < 0) {
             DCHECK(output_nullable);
         }
@@ -70,7 +70,7 @@ Status GlobalDictCodeColumnIterator::decode_string_dict_codes(const Column& code
 #endif
     {
         // res_data[i] = _local_to_global[code_data[i]];
-        SIMDGather::gather(res_data.data(), _local_to_global, code_data.data(), DICT_DECODE_MAX_SIZE, size);
+        SIMDGather::gather(res_data.data(), _local_to_global, code_data.data(), _dict_size, size);
     }
 
     if (output_nullable) {
@@ -127,11 +127,11 @@ Status GlobalDictCodeColumnIterator::build_code_convert_map(ColumnIterator* file
     return Status::OK();
 }
 
-ColumnPtr GlobalDictCodeColumnIterator::_new_local_dict_col(Column* src) {
-    ColumnPtr res = std::make_unique<Int32Column>();
+MutableColumnPtr GlobalDictCodeColumnIterator::_new_local_dict_col(Column* src) {
+    MutableColumnPtr res = Int32Column::create();
     auto code_data = ColumnHelper::get_data_column(src);
     if (code_data->is_array()) {
-        res = ArrayColumn::create(NullableColumn::create(res, NullColumn::create()), UInt32Column::create());
+        res = ArrayColumn::create(NullableColumn::create(std::move(res), NullColumn::create()), UInt32Column::create());
     }
 
     if (src->is_nullable()) {

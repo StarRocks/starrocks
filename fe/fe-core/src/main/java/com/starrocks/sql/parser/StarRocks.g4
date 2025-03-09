@@ -341,6 +341,11 @@ statement
     // Translate Statement
     | translateStatement
 
+    // SQL Plan Management Statement
+    | createBaselinePlanStatement
+    | dropBaselinePlanStatement
+    | showBaselinePlanStatement
+
     // Unsupported Statement
     | unsupportedStatement
     ;
@@ -1325,10 +1330,11 @@ analyzeColumnClause
     | qualifiedName  (',' qualifiedName)*                       #regularColumns
     | ALL COLUMNS                                               #allColumns
     | PREDICATE COLUMNS                                         #predicateColumns
+    | MULTI_COLUMNS '(' qualifiedName  (',' qualifiedName)* ')' #combinedMultiColumns
     ;
 
 dropStatsStatement
-    : DROP STATS qualifiedName
+    : DROP (MULTI_COLUMNS)? STATS qualifiedName
     ;
 
 histogramStatement:
@@ -1378,6 +1384,20 @@ killAnalyzeStatement
 analyzeProfileStatement
     : ANALYZE PROFILE FROM string
     | ANALYZE PROFILE FROM string ',' INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+
+// ----------------------------------------- SQL Plan Manager Statement -------------------------------------------------
+createBaselinePlanStatement
+    : CREATE GLOBAL? BASELINE (ON queryRelation)? USING queryRelation properties?
+    ;
+
+dropBaselinePlanStatement
+    : DROP BASELINE INTEGER_VALUE
+    ;
+
+showBaselinePlanStatement
+    : SHOW BASELINE
     ;
 
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
@@ -3010,7 +3030,7 @@ nonReserved
     : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
     | ARRAY_AGG | ARRAY_AGG_DISTINCT
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS
-    | BUILTIN | BASE | BEFORE
+    | BUILTIN | BASE | BEFORE | BASELINE
     | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
@@ -3024,7 +3044,7 @@ nonReserved
     | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS
-    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS
+    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTI_COLUMNS
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE | OFF
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLAN | PLUGIN | PLUGINS | POLICY | POLICIES

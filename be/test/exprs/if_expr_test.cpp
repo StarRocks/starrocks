@@ -56,7 +56,7 @@ TEST_F(VectorizedIfExprTest, ifArray) {
     auto expr = VectorizedConditionExprFactory::create_if_expr(expr_node);
     std::unique_ptr<Expr> expr_ptr(expr);
 
-    auto target = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
+    ColumnPtr target = ColumnHelper::create_column(TypeDescriptor(TYPE_BOOLEAN), false);
     target->append_datum(Datum{(int8_t)0});
     target->append_datum(Datum{(int8_t)1});
     target->append_datum(Datum{(int8_t)0});
@@ -64,13 +64,13 @@ TEST_F(VectorizedIfExprTest, ifArray) {
 
     TypeDescriptor type_arr_int = array_type(TYPE_INT);
 
-    auto array0 = ColumnHelper::create_column(type_arr_int, true);
+    ColumnPtr array0 = ColumnHelper::create_column(type_arr_int, true);
     array0->append_datum(DatumArray{Datum((int32_t)1), Datum((int32_t)4)}); // [1,4]
     array0->append_datum(DatumArray{Datum(), Datum()});                     // [NULL, NULL]
     array0->append_datum(DatumArray{Datum(), Datum((int32_t)12)});          // [NULL, 12]
     auto array_expr0 = MockExpr(type_arr_int, array0);
 
-    auto array1 = ColumnHelper::create_column(type_arr_int, false);
+    ColumnPtr array1 = ColumnHelper::create_column(type_arr_int, false);
     array1->append_datum(DatumArray{Datum((int32_t)11), Datum((int32_t)41)}); // [11,41]
     array1->append_datum(DatumArray{Datum(), Datum()});                       // [NULL, NULL]
     array1->append_datum(DatumArray{Datum(), Datum((int32_t)1)});             // [NULL, 1]

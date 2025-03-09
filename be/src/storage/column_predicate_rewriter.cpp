@@ -384,14 +384,14 @@ Status ColumnPredicateRewriter::_load_segment_dict_vec(ColumnIterator* iter, Col
 
     if (field_nullable) {
         // create nullable column with NULL at last.
-        NullColumnPtr null_col = NullColumn::create();
+        NullColumn::MutablePtr null_col = NullColumn::create();
         null_col->resize(dict_size);
-        auto null_column = NullableColumn::create(dict_col, null_col);
+        auto null_column = NullableColumn::create(std::move(dict_col), std::move(null_col));
         null_column->append_default();
-        *dict_column = null_column;
+        *dict_column = std::move(null_column);
     } else {
         // otherwise we just give binary column.
-        *dict_column = dict_col;
+        *dict_column = std::move(dict_col);
     }
 
     auto code_col = Int32Column::create();
@@ -400,7 +400,7 @@ Status ColumnPredicateRewriter::_load_segment_dict_vec(ColumnIterator* iter, Col
     for (int i = 0; i < dict_size; i++) {
         code_buf[i] = dict_codes[i];
     }
-    *code_column = code_col;
+    *code_column = std::move(code_col);
     return Status::OK();
 }
 
@@ -480,7 +480,7 @@ StatusOr<ColumnPredicateRewriter::RewriteStatus> ColumnPredicateRewriter::_rewri
     builder.set_is_not_in(is_not_in);
     builder.use_array_set(code_size);
     DCHECK_IF_ERROR(builder.create());
-    (void)builder.add_values(used_values, 0);
+    (void)builder.add_values(std::move(used_values), 0);
     ExprContext* filter = builder.get_in_const_predicate();
 
     DCHECK_IF_ERROR(filter->prepare(state));
@@ -514,7 +514,7 @@ StatusOr<ColumnPredicatePtr> GlobalDictPredicatesRewriter::_rewrite_predicate(co
     RETURN_IF_ERROR(pred->evaluate(binary_column.get(), selection.data(), 0, dict_rows));
 
     std::vector<uint8_t> code_mapping;
-    code_mapping.resize(DICT_DECODE_MAX_SIZE + 1);
+    code_mapping.resize(dict_rows + 1);
     for (size_t i = 0; i < codes.size(); ++i) {
         code_mapping[codes[i]] = selection[i];
     }

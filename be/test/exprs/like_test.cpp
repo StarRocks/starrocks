@@ -51,8 +51,8 @@ TEST_F(LikeTest, startConstPatternLike) {
         str->append("test" + std::to_string(j));
     }
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -90,8 +90,8 @@ TEST_F(LikeTest, endConstPatternLike) {
         null->append(j % 2 == 0);
     }
 
-    columns.push_back(NullableColumn::create(str, null));
-    columns.push_back(pattern);
+    columns.push_back(NullableColumn::create(std::move(str), std::move(null)));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -134,8 +134,8 @@ TEST_F(LikeTest, substringConstPatternLike) {
         str->append(std::to_string(j) + "test" + std::to_string(j));
     }
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -167,8 +167,8 @@ TEST_F(LikeTest, haystackConstantLike) {
     auto haystack = ColumnHelper::create_const_column<TYPE_VARCHAR>("CHINA", 1);
     auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("%IN%", 1);
 
-    columns.push_back(haystack);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(haystack));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -202,8 +202,8 @@ TEST_F(LikeTest, haystackConstantLikeLargerThanHyperscan) {
 
     auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>(large_pattern, 1);
 
-    columns.push_back(haystack);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(haystack));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -238,8 +238,8 @@ TEST_F(LikeTest, haystackNullableLike) {
         }
     }
 
-    columns.push_back(NullableColumn::create(haystack, null));
-    columns.push_back(pattern);
+    columns.push_back(NullableColumn::create(std::move(haystack), std::move(null)));
+    columns.emplace_back(std::move(pattern));
     context->set_constant_columns(columns);
 
     ASSERT_TRUE(LikePredicate::like_prepare(context, FunctionContext::FunctionStateScope::THREAD_LOCAL).ok());
@@ -276,8 +276,8 @@ TEST_F(LikeTest, patternEmptyLike) {
         str->append("test");
     }
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -309,8 +309,8 @@ TEST_F(LikeTest, patternStrAndPatternBothEmptyLike) {
         str->append("");
     }
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -343,8 +343,8 @@ TEST_F(LikeTest, patternStrAndPatternBothEmptyExplicitNullPtrLike) {
         str->append(Slice(null_ptr, 0));
     }
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -372,8 +372,8 @@ TEST_F(LikeTest, patternOnlyNullLike) {
     auto str = ColumnHelper::create_const_null_column(1);
     auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>("%Test%", 1);
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -406,8 +406,8 @@ TEST_F(LikeTest, rowsPatternLike) {
         }
     }
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -453,8 +453,8 @@ TEST_F(LikeTest, rowsNullablePatternLike) {
         }
     }
 
-    columns.push_back(str);
-    columns.push_back(NullableColumn::create(pattern, null));
+    columns.emplace_back(std::move(str));
+    columns.push_back(NullableColumn::create(std::move(pattern), std::move(null)));
 
     context->set_constant_columns(columns);
 
@@ -494,8 +494,8 @@ TEST_F(LikeTest, rowsPatternRegex) {
         pattern->append(".+\\d\\d");
     }
 
-    columns.push_back(str);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(str));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -611,8 +611,8 @@ TEST_F(LikeTest, constValueRegexpLargerThanHyperscan) {
 
     auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>(large_pattern, 1);
 
-    columns.push_back(haystack);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(haystack));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 
@@ -644,8 +644,8 @@ TEST_F(LikeTest, constValueLikeComplicateForHyperscan) {
             "增|毛|胖|牙|奶|肉|毒|暑|总).{0,5}(永)";
     auto pattern = ColumnHelper::create_const_column<TYPE_VARCHAR>(large_pattern, 1);
 
-    columns.push_back(haystack);
-    columns.push_back(pattern);
+    columns.emplace_back(std::move(haystack));
+    columns.emplace_back(std::move(pattern));
 
     context->set_constant_columns(columns);
 

@@ -17,6 +17,7 @@
 
 package com.starrocks.utframe;
 
+import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReportException;
@@ -38,7 +39,7 @@ import java.util.Set;
  */
 public class MockedWarehouseManager extends WarehouseManager {
     private final Map<Long, List<Long>> warehouseIdToComputeNodeIds = new HashMap<>();
-    private final Set<Long> computeNodeIdSetAssignedToTablet = new HashSet<>();
+    private final List<Long> computeNodeIdSetAssignedToTablet = new ArrayList<>();
     private final Set<ComputeNode> computeNodeSetAssignedToTablet = new HashSet<>();
 
     private Long computeNodeId = 1000L;
@@ -47,7 +48,7 @@ public class MockedWarehouseManager extends WarehouseManager {
     public MockedWarehouseManager() {
         super();
         warehouseIdToComputeNodeIds.put(DEFAULT_WAREHOUSE_ID, List.of(1000L));
-        computeNodeIdSetAssignedToTablet.addAll(Sets.newHashSet(1000L));
+        computeNodeIdSetAssignedToTablet.addAll(Lists.newArrayList(1000L));
         computeNodeSetAssignedToTablet.addAll(Sets.newHashSet(new ComputeNode(1000L, "127.0.0.1", 9030)));
     }
     @Override
@@ -89,11 +90,6 @@ public class MockedWarehouseManager extends WarehouseManager {
         warehouseIdToComputeNodeIds.put(DEFAULT_WAREHOUSE_ID, computeNodeIds);
     }
 
-    @Override
-    public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
-        return computeNodeId;
-    }
-
     public void setComputeNodeId(Long computeNodeId) {
         this.computeNodeId = computeNodeId;
     }
@@ -104,7 +100,7 @@ public class MockedWarehouseManager extends WarehouseManager {
     }
 
     @Override
-    public Set<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
+    public List<Long> getAllComputeNodeIdsAssignToTablet(Long warehouseId, LakeTablet tablet) {
         return computeNodeIdSetAssignedToTablet;
     }
 

@@ -1,10 +1,10 @@
 -- name: test_security_integration
 
 create security integration oidc properties("oidc_jwks_url"="jwks.json", "oidc_principal_field"="sub");
-create security integration oidc properties("type"="oidc", "oidc_principal_field"="sub");
-create security integration oidc properties("type"="oidc", "oidc_jwks_url"="jwks.json");
+create security integration oidc properties("type"="authentication_openid_connect", "oidc_principal_field"="sub");
+create security integration oidc properties("type"="authentication_openid_connect", "oidc_jwks_url"="jwks.json");
 
-create security integration oidc properties("type"="oidc", "oidc_jwks_url"="jwks.json", "oidc_principal_field"="sub");
+create security integration oidc properties("type"="authentication_openid_connect", "oidc_jwks_url"="jwks.json", "oidc_principal_field"="sub");
 show security integrations;
 show create security integration oidc;
 alter security integration oidc set ("oidc_principal_field"="preferred_name");

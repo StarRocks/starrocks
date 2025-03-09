@@ -214,7 +214,7 @@ public class SelectAnalyzer {
                         .collect(Collectors.toList());
                 List<String> unknownTypeFields = fields.stream()
                         .filter(field -> field.getType().getPrimitiveType().equals(PrimitiveType.UNKNOWN_TYPE))
-                        .map(Field::getName).collect(Collectors.toList());
+                        .map(Field::getName).toList();
                 if (!unknownTypeFields.isEmpty()) {
                     throw new SemanticException("Datatype of external table column " + unknownTypeFields
                             + " is not supported!");

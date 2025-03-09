@@ -351,9 +351,9 @@ private:
         for (auto& expr_ctx : expr_ctxs) {
             ASSIGN_OR_RETURN(auto column_ptr, expr_ctx->evaluate(chunk.get()));
             if (column_ptr->only_null()) {
-                ColumnPtr column = ColumnHelper::create_column(expr_ctx->root()->type(), true);
+                MutableColumnPtr column = ColumnHelper::create_column(expr_ctx->root()->type(), true);
                 column->append_nulls(chunk->num_rows());
-                key_columns.emplace_back(column);
+                key_columns.emplace_back(std::move(column));
             } else if (column_ptr->is_constant()) {
                 auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(column_ptr);
                 const_column->data_column()->assign(chunk->num_rows(), 0);

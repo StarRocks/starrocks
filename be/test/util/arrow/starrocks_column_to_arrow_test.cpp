@@ -94,7 +94,7 @@ struct NotNullableColumnTester {
             auto datum = data[k++ % data_size];
             data_column->append(datum);
         }
-        chunk->append_column(column, SlotId(0));
+        chunk->append_column(std::move(column), SlotId(0));
         std::shared_ptr<ArrowType> arrow_type;
         if constexpr (lt_is_decimalv2<LT>) {
             arrow_type = std::make_shared<ArrowType>(27, 9);
@@ -156,7 +156,7 @@ struct NullableColumnTester {
                 data_column->append(datum);
             }
         }
-        chunk->append_column(NullableColumn::create(column, null_column), SlotId(0));
+        chunk->append_column(NullableColumn::create(std::move(column), std::move(null_column)), SlotId(0));
         std::shared_ptr<ArrowType> arrow_type;
         if constexpr (lt_is_decimalv2<LT>) {
             arrow_type = std::make_shared<ArrowType>(27, 9);
@@ -205,7 +205,7 @@ struct ConstNullColumnTester {
         auto chunk = std::make_shared<Chunk>();
         std::vector<LogicalType> primitive_types(1, LT);
         auto column = ColumnHelper::create_const_null_column(num_rows);
-        chunk->append_column(column, SlotId(0));
+        chunk->append_column(std::move(column), SlotId(0));
         std::shared_ptr<ArrowType> arrow_type;
         if constexpr (lt_is_decimalv2<LT>) {
             arrow_type = std::make_shared<ArrowType>(27, 9);
@@ -258,7 +258,7 @@ struct ConstColumnTester {
             arrow_type = std::make_shared<ArrowType>();
         }
         data_column->append(datum);
-        chunk->append_column(ConstColumn::create(data_column, num_rows), SlotId(0));
+        chunk->append_column(ConstColumn::create(std::move(data_column), num_rows), SlotId(0));
 
         std::vector<std::shared_ptr<arrow::Field>> fields(1);
         fields[0] = arrow::field("col", arrow_type, false);
@@ -534,7 +534,7 @@ void convert_to_arrow(const TypeDescriptor& type_desc, const ColumnPtr& column,
                       std::shared_ptr<arrow::DataType>& arrow_type, arrow::MemoryPool* memory_pool,
                       std::shared_ptr<arrow::RecordBatch>* result) {
     auto chunk = std::make_shared<Chunk>();
-    chunk->append_column(column, SlotId(0));
+    chunk->append_column(std::move(column), SlotId(0));
     std::vector<const TypeDescriptor*> slot_types{&type_desc};
     std::vector<SlotId> slot_ids{SlotId(0)};
 
@@ -564,7 +564,7 @@ TEST_F(StarRocksColumnToArrowTest, testArrayColumn) {
     auto memory_pool = arrow::MemoryPool::CreateDefault();
     std::shared_ptr<arrow::DataType> arrow_type = arrow::list(arrow::int32());
     std::shared_ptr<arrow::RecordBatch> result;
-    convert_to_arrow(array_type_desc, column, arrow_type, memory_pool.get(), &result);
+    convert_to_arrow(array_type_desc, std::move(column), arrow_type, memory_pool.get(), &result);
     std::shared_ptr<arrow::Array> array = result->column(0);
 
     auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type, "[[1, 2, 3], [4, null, 5, 6], [], [null, null]]");
@@ -590,7 +590,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableArrayColumn) {
     auto memory_pool = arrow::MemoryPool::CreateDefault();
     std::shared_ptr<arrow::DataType> arrow_type = arrow::list(arrow::int32());
     std::shared_ptr<arrow::RecordBatch> result;
-    convert_to_arrow(array_type_desc, column, arrow_type, memory_pool.get(), &result);
+    convert_to_arrow(array_type_desc, std::move(column), arrow_type, memory_pool.get(), &result);
     std::shared_ptr<arrow::Array> array = result->column(0);
 
     std::shared_ptr<arrow::Array> expect_array;
@@ -619,7 +619,7 @@ TEST_F(StarRocksColumnToArrowTest, testStructColumn) {
     std::shared_ptr<arrow::DataType> arrow_type =
             arrow::struct_({arrow::field("id", arrow::int32()), arrow::field("name", arrow::utf8())});
     std::shared_ptr<arrow::RecordBatch> result;
-    convert_to_arrow(struct_type_desc, column, arrow_type, memory_pool.get(), &result);
+    convert_to_arrow(struct_type_desc, std::move(column), arrow_type, memory_pool.get(), &result);
     std::shared_ptr<arrow::Array> array = result->column(0);
 
     auto s = arrow::ipc::internal::json::ArrayFromJSON(arrow_type,
@@ -654,7 +654,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableStructColumn) {
     std::shared_ptr<arrow::DataType> arrow_type =
             arrow::struct_({arrow::field("id", arrow::int32()), arrow::field("name", arrow::utf8())});
     std::shared_ptr<arrow::RecordBatch> result;
-    convert_to_arrow(struct_type_desc, column, arrow_type, memory_pool.get(), &result);
+    convert_to_arrow(struct_type_desc, std::move(column), arrow_type, memory_pool.get(), &result);
     std::shared_ptr<arrow::Array> array = result->column(0);
 
     std::shared_ptr<arrow::Array> expect_array;
@@ -686,7 +686,7 @@ TEST_F(StarRocksColumnToArrowTest, testMapColumn) {
     auto memory_pool = arrow::MemoryPool::CreateDefault();
     std::shared_ptr<arrow::DataType> arrow_type = arrow::map(arrow::int32(), arrow::utf8());
     std::shared_ptr<arrow::RecordBatch> result;
-    convert_to_arrow(map_type_desc, column, arrow_type, memory_pool.get(), &result);
+    convert_to_arrow(map_type_desc, std::move(column), arrow_type, memory_pool.get(), &result);
     std::shared_ptr<arrow::Array> array = result->column(0);
 
     std::unique_ptr<arrow::ArrayBuilder> builder;
@@ -731,7 +731,7 @@ TEST_F(StarRocksColumnToArrowTest, testNullableMapColumn) {
     auto memory_pool = arrow::MemoryPool::CreateDefault();
     std::shared_ptr<arrow::DataType> arrow_type = arrow::map(arrow::int32(), arrow::utf8());
     std::shared_ptr<arrow::RecordBatch> result;
-    convert_to_arrow(map_type_desc, column, arrow_type, memory_pool.get(), &result);
+    convert_to_arrow(map_type_desc, std::move(column), arrow_type, memory_pool.get(), &result);
     std::shared_ptr<arrow::Array> array = result->column(0);
 
     std::unique_ptr<arrow::ArrayBuilder> builder;
@@ -786,7 +786,7 @@ TEST_F(StarRocksColumnToArrowTest, testNestedArrayStructMap) {
             arrow::struct_({arrow::field("id", arrow::int32()), arrow::field("map", arrow_map_type)});
     std::shared_ptr<arrow::DataType> arrow_type = arrow::list(arrow_struct_type);
     std::shared_ptr<arrow::RecordBatch> result;
-    convert_to_arrow(array_type_desc, column, arrow_type, memory_pool.get(), &result);
+    convert_to_arrow(array_type_desc, std::move(column), arrow_type, memory_pool.get(), &result);
     std::shared_ptr<arrow::Array> array = result->column(0);
     ASSERT_EQ(5, array->length());
 

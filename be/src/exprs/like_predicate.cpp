@@ -331,7 +331,7 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
         } else {
             res->append(true);
         }
-        return ConstColumn::create(res, columns[0]->size());
+        return ConstColumn::create(std::move(res), columns[0]->size());
     }
 
     BinaryColumn* haystack = nullptr;
@@ -386,7 +386,7 @@ StatusOr<ColumnPtr> LikePredicate::constant_substring_fn(FunctionContext* contex
     }
 
     if (columns[0]->has_null()) {
-        return NullableColumn::create(res, res_null);
+        return NullableColumn::create(std::move(res), std::move(res_null));
     }
     return res;
 }

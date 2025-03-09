@@ -307,7 +307,7 @@ TEST_P(SchemaChangeAddColumnTest, test_add_column) {
         c0->append_datum(Datum(i * 1));
         c1->append_datum(Datum(i * 2));
 
-        VChunk chunk0({c0, c1}, _base_schema);
+        VChunk chunk0({std::move(c0), std::move(c1)}, _base_schema);
         uint32_t indexes[1] = {0};
 
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -352,7 +352,7 @@ TEST_P(SchemaChangeAddColumnTest, test_add_column) {
         c1->append_datum(Datum(i * 4));
         c2->append_datum(Datum(i * 8));
 
-        VChunk chunk1({c0, c1, c2}, _new_schema);
+        VChunk chunk1({std::move(c0), std::move(c1), std::move(c2)}, _new_schema);
         uint32_t indexes[1] = {0};
 
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -437,7 +437,7 @@ TEST_P(SchemaChangeAddColumnTest, test_add_generated_column) {
         c0->append_datum(Datum(i * 1));
         c1->append_datum(Datum(i * 2));
 
-        VChunk chunk0({c0, c1}, _base_schema);
+        VChunk chunk0({std::move(c0), std::move(c1)}, _base_schema);
         uint32_t indexes[1] = {0};
 
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -508,7 +508,7 @@ TEST_P(SchemaChangeAddColumnTest, test_add_generated_column) {
         c1->append_datum(Datum(i * 4));
         c2->append_datum(Datum(i * 5 /* c0 + c1 */));
 
-        VChunk chunk1({c0, c1, c2}, _new_schema_with_generated_column);
+        VChunk chunk1({std::move(c0), std::move(c1), std::move(c2)}, _new_schema_with_generated_column);
         uint32_t indexes[1] = {0};
 
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -718,7 +718,7 @@ TEST_P(SchemaChangeModifyColumnTypeTest, test_alter_column_type) {
         c0->append_datum(Datum(i * 1));
         c1->append_datum(Datum(i * 2));
 
-        VChunk chunk0({c0, c1}, _base_schema);
+        VChunk chunk0({std::move(c0), std::move(c1)}, _base_schema);
         uint32_t indexes[1] = {0};
 
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -762,7 +762,7 @@ TEST_P(SchemaChangeModifyColumnTypeTest, test_alter_column_type) {
         c0->append_datum(Datum((int32_t)(i * 1)));
         c1->append_datum(Datum((int64_t)(i * 4)));
 
-        VChunk chunk1({c0, c1}, _new_schema);
+        VChunk chunk1({std::move(c0), std::move(c1)}, _new_schema);
         uint32_t indexes[1] = {0};
 
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
@@ -981,9 +981,9 @@ TEST_P(SchemaChangeModifyColumnOrderTest, test_alter_key_order) {
     std::vector<int> k1{1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3};
     std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24};
 
-    auto ck0 = Int32Column::create();
-    auto ck1 = Int32Column::create();
-    auto cv0 = Int32Column::create();
+    Int32Column::Ptr ck0 = Int32Column::create();
+    Int32Column::Ptr ck1 = Int32Column::create();
+    Int32Column::Ptr cv0 = Int32Column::create();
     ck0->append_numbers(k0.data(), k0.size() * sizeof(int));
     ck1->append_numbers(k1.data(), k1.size() * sizeof(int));
     cv0->append_numbers(v0.data(), v0.size() * sizeof(int));
@@ -1271,8 +1271,8 @@ TEST_P(SchemaChangeModifyColumnMultiSegmentOrderTest, test_alter_table) {
         // mutli segments in on rowset
         const int64_t old_size = config::write_buffer_size;
         config::write_buffer_size = 1;
-        VChunk chunk0({ck0, ck1, cv0}, _base_schema);
-        VChunk chunk1({ck0_2, ck1_2, cv0_2}, _base_schema);
+        VChunk chunk0({std::move(ck0), std::move(ck1), std::move(cv0)}, _base_schema);
+        VChunk chunk1({std::move(ck0_2), std::move(ck1_2), std::move(cv0_2)}, _base_schema);
 
         ASSIGN_OR_ABORT(auto delta_writer, DeltaWriterBuilder()
                                                    .set_tablet_manager(_tablet_manager.get())
@@ -1470,9 +1470,9 @@ TEST_P(SchemaChangeSortKeyReorderTest1, test_alter_sortkey_reorder_1) {
     std::vector<int> k1{1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3};
     std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24};
 
-    auto ck0 = Int32Column::create();
-    auto ck1 = Int32Column::create();
-    auto cv0 = Int32Column::create();
+    Int32Column::Ptr ck0 = Int32Column::create();
+    Int32Column::Ptr ck1 = Int32Column::create();
+    Int32Column::Ptr cv0 = Int32Column::create();
     ck0->append_numbers(k0.data(), k0.size() * sizeof(int));
     ck1->append_numbers(k1.data(), k1.size() * sizeof(int));
     cv0->append_numbers(v0.data(), v0.size() * sizeof(int));
@@ -1708,9 +1708,9 @@ TEST_P(SchemaChangeSortKeyReorderTest2, test_alter_sortkey_reorder2) {
     std::vector<int> k1{1, 2, 3, 3, 2, 1, 1, 2, 3, 1, 2, 3};
     std::vector<int> v0{2, 4, 6, 12, 10, 8, 14, 16, 18, 20, 22, 24};
 
-    auto ck0 = Int32Column::create();
-    auto ck1 = Int32Column::create();
-    auto cv0 = Int32Column::create();
+    Int32Column::Ptr ck0 = Int32Column::create();
+    Int32Column::Ptr ck1 = Int32Column::create();
+    Int32Column::Ptr cv0 = Int32Column::create();
     ck0->append_numbers(k0.data(), k0.size() * sizeof(int));
     ck1->append_numbers(k1.data(), k1.size() * sizeof(int));
     cv0->append_numbers(v0.data(), v0.size() * sizeof(int));
@@ -1944,9 +1944,9 @@ TEST_P(SchemaChangeSortKeyReorderTest3, test_alter_sortkey_reorder3) {
     std::vector<int> k1{1, 2, 3, 1, 2, 3, 1, 2, 3, 1, 2, 3};
     std::vector<int> v0{2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24};
 
-    auto ck0 = Int32Column::create();
-    auto ck1 = Int32Column::create();
-    auto cv0 = Int32Column::create();
+    Int32Column::Ptr ck0 = Int32Column::create();
+    Int32Column::Ptr ck1 = Int32Column::create();
+    Int32Column::Ptr cv0 = Int32Column::create();
     ck0->append_numbers(k0.data(), k0.size() * sizeof(int));
     ck1->append_numbers(k1.data(), k1.size() * sizeof(int));
     cv0->append_numbers(v0.data(), v0.size() * sizeof(int));

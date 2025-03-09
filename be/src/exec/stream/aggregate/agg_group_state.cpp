@@ -134,7 +134,7 @@ Status AggGroupState::open(RuntimeState* state) {
 }
 
 Status AggGroupState::process_chunk(size_t chunk_size, const Columns& group_by_columns, const Filter& keys_not_in_map,
-                                    const StreamRowOp* ops, const std::vector<std::vector<ColumnPtr>>& agg_columns,
+                                    const StreamRowOp* ops, const std::vector<Columns>& agg_columns,
                                     std::vector<std::vector<const Column*>>& raw_columns,
                                     const Buffer<AggDataPtr>& agg_group_state) const {
     DCHECK(!_agg_states.empty());
@@ -245,7 +245,7 @@ Status AggGroupState::output_changes(size_t chunk_size, const Columns& group_by_
             auto agg_col = ColumnHelper::create_column(agg_func_type.result_type,
                                                        agg_func_type.has_nullable_child & agg_func_type.is_nullable);
             auto count_col = Int64Column::create();
-            Columns detail_cols{agg_col, count_col};
+            Columns detail_cols{std::move(agg_col), std::move(count_col)};
 
             // record each column's map count which is used to expand group by columns.
             auto result_count = Int64Column::create();
@@ -264,12 +264,13 @@ Status AggGroupState::output_changes(size_t chunk_size, const Columns& group_by_
             auto detail_result_chunk = std::make_shared<Chunk>();
             SlotId slot_id = 0;
             for (size_t j = 0; j < group_by_columns.size(); j++) {
-                ASSIGN_OR_RETURN(auto replicated_col, group_by_columns[j]->replicate(replicate_offsets))
+                ASSIGN_OR_RETURN(auto replicated_col,
+                                 group_by_columns[j]->as_mutable_ptr()->replicate(replicate_offsets))
                 detail_result_chunk->append_column(replicated_col, slot_id++);
             }
             // TODO: take care slot_ids.
-            detail_result_chunk->append_column(std::move(agg_col), slot_id++);
-            detail_result_chunk->append_column(std::move(count_col), slot_id++);
+            detail_result_chunk->append_column(detail_cols[0], slot_id++);
+            detail_result_chunk->append_column(detail_cols[1], slot_id++);
             detail_chunks->emplace_back(std::move(detail_result_chunk));
         }
         // only output intermediate result if intermediate agg group is not empty

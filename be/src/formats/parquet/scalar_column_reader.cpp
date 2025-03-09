@@ -220,8 +220,8 @@ StatusOr<bool> RawColumnReader::_row_group_zone_map_filter(const std::vector<con
     std::optional<ZoneMapDetail> zone_map_detail = std::nullopt;
 
     // used to hold min/max slice values
-    const ColumnPtr min_column = ColumnHelper::create_column(col_type, true);
-    const ColumnPtr max_column = ColumnHelper::create_column(col_type, true);
+    const MutableColumnPtr min_column = ColumnHelper::create_column(col_type, true);
+    const MutableColumnPtr max_column = ColumnHelper::create_column(col_type, true);
     if (is_all_null) {
         // if the entire column's value is null, the min/max value not existed
         zone_map_detail = ZoneMapDetail{Datum{}, Datum{}, true};
@@ -282,8 +282,8 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
     const size_t page_num = column_index.min_values.size();
     const std::vector<bool> null_pages = column_index.null_pages;
 
-    ColumnPtr min_column = ColumnHelper::create_column(col_type, true);
-    ColumnPtr max_column = ColumnHelper::create_column(col_type, true);
+    MutableColumnPtr min_column = ColumnHelper::create_column(col_type, true);
+    MutableColumnPtr max_column = ColumnHelper::create_column(col_type, true);
     // deal with min_values
     auto st = StatisticsHelper::decode_value_into_column(min_column, column_index.min_values, null_pages, col_type,
                                                          get_column_parquet_field(), _opts.timezone);
@@ -547,7 +547,7 @@ Status LowCardColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
 
     auto* dst_data_column = down_cast<LowCardDictColumn*>(ColumnHelper::get_data_column(dst.get()));
     SIMDGather::gather(dst_data_column->get_data().data(), _code_convert_map->data(), codes.data(),
-                       DICT_DECODE_MAX_SIZE, src->size());
+                       _code_convert_map->size(), src->size());
 
     if (dst->is_nullable()) {
         auto* nullable_dst = down_cast<NullableColumn*>(dst.get());

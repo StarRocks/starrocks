@@ -24,8 +24,6 @@ class ObjectCacheModule {
 public:
     virtual ~ObjectCacheModule() = default;
 
-    virtual Status init() = 0;
-
     virtual Status insert(const std::string& key, void* value, size_t size, size_t charge, ObjectCacheDeleter deleter,
                           ObjectCacheHandlePtr* handle, ObjectCacheWriteOptions* options) = 0;
 

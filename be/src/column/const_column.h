@@ -22,8 +22,8 @@
 
 namespace starrocks {
 
-class ConstColumn final : public ColumnFactory<Column, ConstColumn> {
-    friend class ColumnFactory<Column, ConstColumn>;
+class ConstColumn final : public CowFactory<ColumnFactory<Column, ConstColumn>, ConstColumn> {
+    friend class CowFactory<ColumnFactory<Column, ConstColumn>, ConstColumn>;
 
 public:
     using ValueType = void;
@@ -31,7 +31,7 @@ public:
     explicit ConstColumn(ColumnPtr data_column);
     ConstColumn(ColumnPtr data_column, size_t size);
 
-    ConstColumn(const ConstColumn& rhs) : _data(rhs._data->clone_shared()), _size(rhs._size) {}
+    ConstColumn(const ConstColumn& rhs) : _data(rhs._data->clone()), _size(rhs._size) {}
 
     ConstColumn(ConstColumn&& rhs) noexcept : _data(std::move(rhs._data)), _size(rhs._size) {}
 
@@ -155,12 +155,12 @@ public:
 
     void update_rows(const Column& src, const uint32_t* indexes) override;
 
-    uint32_t serialize(size_t idx, uint8_t* pos) override { return _data->serialize(0, pos); }
+    uint32_t serialize(size_t idx, uint8_t* pos) const override { return _data->serialize(0, pos); }
 
-    uint32_t serialize_default(uint8_t* pos) override { return _data->serialize_default(pos); }
+    uint32_t serialize_default(uint8_t* pos) const override { return _data->serialize_default(pos); }
 
     void serialize_batch(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                         uint32_t max_one_row_size) override {
+                         uint32_t max_one_row_size) const override {
         if (chunk_size <= 0) {
             return;
         }
@@ -200,7 +200,7 @@ public:
 
     uint32_t serialize_size(size_t idx) const override { return _data->serialize_size(0); }
 
-    MutableColumnPtr clone_empty() const override { return create_mutable(_data->clone_empty(), 0); }
+    MutableColumnPtr clone_empty() const override { return create(_data->clone_empty(), 0); }
 
     size_t filter_range(const Filter& filter, size_t from, size_t to) override;
 
@@ -220,9 +220,11 @@ public:
 
     std::string get_name() const override { return "const-" + _data->get_name(); }
 
-    ColumnPtr* mutable_data_column() { return &_data; }
+    Column* mutable_data_column() { return _data.get(); }
 
+    ColumnPtr& data_column() { return _data; }
     const ColumnPtr& data_column() const { return _data; }
+    MutableColumnPtr data_column_ptr() { return _data->as_mutable_ptr(); }
 
     Datum get(size_t n __attribute__((unused))) const override { return _data->get(0); }
 
@@ -278,6 +280,8 @@ public:
     StatusOr<ColumnPtr> downgrade() override;
 
     bool has_large_column() const override { return _data->has_large_column(); }
+
+    void mutate_each_subcolumn() override { _data = (std::move(*_data)).mutate(); }
 
 private:
     ColumnPtr _data;

@@ -3365,8 +3365,7 @@ Status PersistentIndex::_build_commit(TabletLoader* loader, PersistentIndexMetaP
     return status;
 }
 
-Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey_schema,
-                                        std::unique_ptr<Column> pk_column) {
+Status PersistentIndex::_insert_rowsets(TabletLoader* loader, const Schema& pkey_schema, MutableColumnPtr pk_column) {
     CHECK_MEM_LIMIT("PersistentIndex::_insert_rowsets");
     std::vector<uint32_t> rowids;
     TRY_CATCH_BAD_ALLOC(rowids.reserve(4096));
@@ -5272,19 +5271,25 @@ Status PersistentIndex::_load_by_loader(TabletLoader* loader) {
     data->set_offset(0);
     data->set_size(0);
 
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     if (pkey_schema.num_fields() > 1) {
         RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
     }
     RETURN_IF_ERROR(_insert_rowsets(loader, pkey_schema, std::move(pk_column)));
     RETURN_IF_ERROR(_build_commit(loader, index_meta));
     loader->set_write_amp_score(PersistentIndex::major_compaction_score(index_meta));
-    LOG(INFO) << "build persistent index finish tablet: " << loader->tablet_id() << " version:" << applied_version
-              << " #rowset:" << loader->rowset_num() << " #segment:" << loader->total_segments()
-              << " data_size:" << loader->total_data_size() << " size: " << _size << " l0_size: " << _l0->size()
-              << " l0_capacity:" << _l0->capacity() << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
-              << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
-              << " memory: " << memory_usage() << " time: " << timer.elapsed_time() / 1000000 << "ms";
+    bool is_slow = (timer.elapsed_time() / 1000000) > config::apply_version_slow_log_sec * 1000;
+    if (_size > 0 && is_slow) {
+        LOG(INFO) << "build persistent index finish tablet: " << loader->tablet_id() << " version:" << applied_version
+                  << " #rowset:" << loader->rowset_num() << " #segment:" << loader->total_segments()
+                  << " data_size:" << loader->total_data_size() << " size: " << _size << " l0_size: " << _l0->size()
+                  << " l0_capacity:" << _l0->capacity() << " #shard: " << (_has_l1 ? _l1_vec[0]->_shards.size() : 0)
+                  << " l1_size:" << (_has_l1 ? _l1_vec[0]->_size : 0) << " l2_size:" << _l2_file_size()
+                  << " memory: " << memory_usage() << " time: " << timer.elapsed_time() / 1000000 << "ms";
+    } else {
+        VLOG(1) << "build persistent index finish tablet: " << loader->tablet_id() << " version:" << applied_version
+                << " size: " << _size;
+    }
     return Status::OK();
 }
 

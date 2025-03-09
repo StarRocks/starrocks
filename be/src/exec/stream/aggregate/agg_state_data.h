@@ -69,7 +69,7 @@ public:
     Status output_result(size_t chunk_size, const Columns& group_by_columns, const Buffer<AggDataPtr>& agg_group_data,
                          const StateTable* detail_state_table, Column* to) const;
 
-    Status output_detail(size_t chunk_size, const Buffer<AggDataPtr>& agg_group_state, const Columns& to,
+    Status output_detail(size_t chunk_size, const Buffer<AggDataPtr>& agg_group_state, Columns& to,
                          Column* count) const;
 
     const AggregateFunction* agg_function() const { return _agg_function; }

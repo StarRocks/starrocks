@@ -126,8 +126,8 @@ public:
 
     virtual void set_can_lazy_decode(bool can_lazy_decode) {}
 
-    virtual Status filter_dict_column(const ColumnPtr& column, Filter* filter,
-                                      const std::vector<std::string>& sub_field_path, const size_t& layer) {
+    virtual Status filter_dict_column(ColumnPtr& column, Filter* filter, const std::vector<std::string>& sub_field_path,
+                                      const size_t& layer) {
         return Status::OK();
     }
 
