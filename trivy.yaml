@@ -11,15 +11,7 @@ scan:
     - "**/hbase-protocol-shaded-2.4.13.jar"
     - "**/hbase-shaded-netty-4.1.1.jar"
     # kudu required, already latest
-    - "**/kudu-client-1.17.0.jar"
-    # hadoop-common 3.4.0 introduced, already latest
-    - "**/dnsjava-3.4.0.jar"
-    - "**/hadoop-client-runtime-3.4.0.jar"
-    - "**/commons-compress-1.24.0.jar"
-    - "**/netty-common-4.1.100.Final.jar"
+    - "**/kudu-client-1.17.1.jar"
+    - "**/hadoop-client-runtime-3.4.1.jar"
     # paimon required, already latest
-    - "**/paimon-bundle-1.0.0.jar"
-    # apache ranger required
-    - "**/jackson-mapper-asl-1.9.13.jar"
-    # aws sdk bundle
-    - "**/bundle-2.23.19.jar"
+    - "**/paimon-bundle-1.0.1.jar"
