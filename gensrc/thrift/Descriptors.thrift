@@ -160,7 +160,6 @@ enum TSchemaTableType {
     SCH_BE_LOGS,
     SCH_BE_BVARS,
     SCH_BE_CLOUD_NATIVE_COMPACTIONS,
-    SCH_KEYWORDS,
     
     STARROCKS_ROLE_EDGES,
     STARROCKS_GRANT_TO_ROLES,
@@ -182,6 +181,8 @@ enum TSchemaTableType {
 
     SCH_CLUSTER_SNAPSHOTS,
     SCH_CLUSTER_SNAPSHOT_JOBS,
+
+    SCH_KEYWORDS,
 }
 
 enum THdfsCompression {
