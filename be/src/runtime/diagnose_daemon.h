@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <list>
 #include <string>
 #include <thread>
@@ -44,7 +45,7 @@ public:
     void stop();
 
     ThreadPool* thread_pool() { return _single_thread_pool.get(); }
-    int64_t diagnose_id() { return _diagnose_id; }
+    int64_t diagnose_id() { return _diagnose_id.load(); }
 
 private:
     void _execute_request(const DiagnoseRequest& request);
@@ -52,7 +53,7 @@ private:
 
     std::unique_ptr<ThreadPool> _single_thread_pool;
     int64_t _last_stack_trace_time_ms = 0;
-    int64_t _diagnose_id = 0;
+    std::atomic<int64_t> _diagnose_id{0};
 };
 
 } // namespace starrocks

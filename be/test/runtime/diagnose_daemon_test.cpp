@@ -18,6 +18,7 @@
 
 #include "testutil/assert.h"
 #include "testutil/sync_point.h"
+#include "util/await.h"
 #include "util/defer_op.h"
 
 namespace starrocks {
@@ -64,7 +65,7 @@ TEST_F(DiagnoseDaemonTest, test_stack_trace) {
     request2.context = "trace2";
     ASSERT_OK(_daemon->diagnose(request2));
 
-    ASSERT_TRUE(_daemon->thread_pool()->wait_for(MonoDelta::FromSeconds(10)));
+    Awaitility().timeout(60000).until([&]() { return _daemon->thread_pool()->total_executed_tasks() == 2; });
     ASSERT_EQ(1, _daemon->diagnose_id());
 }
 
