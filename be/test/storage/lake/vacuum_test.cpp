@@ -150,6 +150,134 @@ TEST_P(LakeVacuumTest, test_vacuum_1) {
     }
 }
 
+
+// Check that vacuum_full cleans up the expected metadata files
+// NOLINTNEXTLINE
+TEST_P(LakeVacuumTest, test_vacuum_full) {
+    VacuumFullRequest request;
+    request.set_partition_id(1);
+    request.add_tablet_ids(600);
+    request.set_min_check_version(3);
+    request.set_max_check_version(5);
+    
+    // Check that it cleans up metadata files when their tablet id isn't in the request,
+    // and leaves the metadata files where the tablet id is in the request
+    
+    // tablet id is in the request -> should not be cleaned up
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 600,
+        "version": 4,
+        "rowsets": [],
+        "prev_garbage_version": 3
+        }
+        )DEL")));
+
+    // tablet id is not in the request -> should be cleaned up
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 601,
+        "version": 5,
+        "rowsets": []
+        }
+        )DEL")));
+    // Check that it cleans up the metadata files where version is less than min_check_version
+    // and leaves the metadata files where version is greater than or equal to min_check_version
+
+    // version 2 is less than min_check_version -> should be cleaned up
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 600,
+        "version": 2,
+        "rowsets": [],
+        "prev_garbage_version": 1
+        }
+        )DEL")));
+    // version 3 is equal to min_check_version -> should not be cleaned up
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 600,
+        "version": 3,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000159e3_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"
+                ],
+                "data_size": 4096
+            }
+        ],
+        "prev_garbage_version": 2
+        }
+        )DEL")));
+    // version 6 is greater than min_check_version -> should not be cleaned up
+    // But it's greater than max_check_version, so its data file may be cleaned up
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(json_to_pb<TabletMetadataPB>(R"DEL(
+        {
+        "id": 600,
+        "version": 6,
+        "rowsets": [
+            {
+                "segments": [
+                    "00000000000159e3_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1f.dat"
+                ],
+                "data_size": 4096
+            }
+        ],
+        "prev_garbage_version": 5
+        }
+        )DEL")));
+
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(600, 4)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(600, 3)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(601, 5)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(600, 2)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(600, 6)));
+
+
+    // Set up some data files which will be vacuumed, and some that won't.
+    // Data files with txn_id >= min_active_txn_id will not be vacuumed
+    const int64_t kTxnId1 = extract_txn_id_prefix("00000000000159e4_").value_or(-1);
+    const int64_t kRequestTxnId = kTxnId1;
+    request.set_min_active_txn_id(kRequestTxnId);
+    // These files will not be vacuumed because they're too new based on txn id (prefix of filename)
+    create_data_file("00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
+    create_data_file("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat");
+    // Data files referenced by metadata files with version <= max_check_version will not be vacuumed
+    // This file was created by an older txn id (by 1),
+    // but it was referenced by a metadata file with version 3, so it will not be vacuumed
+    create_data_file("00000000000159e3_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");
+    // This file was created by an older txn id (by 1),
+    // and it was not referenced by any metadata file so it will be vacuumed. 
+    create_data_file("00000000000159e3_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat");
+
+    // This file was created by an older txn id (by 1),
+    // and it was only referenced by a metadata file with version 6 (grea+ter than max_check_version),
+    // so it will be vacuumed.
+    create_data_file("00000000000159e3_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1f.dat");
+    
+    VacuumFullResponse response;
+    vacuum_full(_tablet_mgr.get(), request, &response);
+
+    ASSERT_TRUE(response.has_status());
+    EXPECT_EQ(0, response.status().status_code()) << response.status().error_msgs(0);
+    EXPECT_EQ(2 + 2, response.vacuumed_files()); // 2 metadata, 2 data
+    // The size of deleted metadata files is not counted in vacuumed_file_size.
+    // Each data file happens to be 4 bytes.
+    EXPECT_EQ(2*4, response.vacuumed_file_size());
+
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(600, 4)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(600, 3)));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(601, 5)));
+    EXPECT_FALSE(file_exist(tablet_metadata_filename(600, 2)));
+    EXPECT_TRUE(file_exist(tablet_metadata_filename(600, 6)));
+
+    EXPECT_TRUE(file_exist("00000000000159e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
+    EXPECT_TRUE(file_exist("00000000000159e4_a542395a-bff5-48a7-a3a7-2ed05691b58c.dat"));
+    EXPECT_TRUE(file_exist("00000000000159e3_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat"));
+    EXPECT_FALSE(file_exist("00000000000159e3_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1e.dat"));
+    EXPECT_FALSE(file_exist("00000000000159e3_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1f.dat"));
+}
+
 // NOLINTNEXTLINE
 TEST_P(LakeVacuumTest, test_vacuum_2) {
     create_data_file("00000000000259e4_27dc159f-6bfc-4a3a-9d9c-c97c10bb2e1d.dat");

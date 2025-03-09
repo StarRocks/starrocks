@@ -284,10 +284,11 @@ message VacuumResponse {
 }
 
 message VacuumFullRequest {
-    repeated int64 tablet_ids = 1;
-    optional int64 min_check_version = 2;
-    optional int64 max_check_version = 3;
-    optional int64 min_active_txn_id = 4;
+    optional int64 partition_id = 5; // The id of the partition to vacuum
+    repeated int64 tablet_ids = 1; // The ids of the tablets, ignore other tablets
+    optional int64 min_check_version = 2; // Ignore version < min_check_version, default 1 (set by FE)
+    optional int64 max_check_version = 3; // Ignore version >= max_check_version, default visible version
+    optional int64 min_active_txn_id = 4; // Delete txn log files with txn IDs less than min_active_txn_id
 }
 
 message VacuumFullResponse {

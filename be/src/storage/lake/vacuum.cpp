@@ -274,6 +274,10 @@ static Status collect_garbage_files(const TabletMetadataPB& metadata, const std:
     return Status::OK();
 }
 
+// Tablet metadata files with version numbers greater than or equal to min_retain_version will NOT be vacuumed.
+// grace_timestamp marks the point after which created tablet metadata files will not be vacuumed.
+// In addition to retaining all versions after grace_timestamp, retain the last version before
+// grace_timestamp. Set to 0 to not use
 static Status collect_files_to_vacuum(TabletManager* tablet_mgr, std::string_view root_dir, TabletInfoPB& tablet_info,
                                       int64_t grace_timestamp, int64_t min_retain_version,
                                       AsyncFileDeleter* datafile_deleter, AsyncFileDeleter* metafile_deleter,
@@ -376,6 +380,10 @@ static void erase_tablet_metadata_from_metacache(TabletManager* tablet_mgr, cons
     }
 }
 
+// Tablet metadata files with version numbers greater than or equal to min_retain_version will NOT be vacuumed.
+// grace_timestamp marks the point after which created tablet metadata files will not be vacuumed.
+// In addition to retaining all versions after grace_timestamp, retain the last version before
+// grace_timestamp. Set to 0 to not use
 static Status vacuum_tablet_metadata(TabletManager* tablet_mgr, std::string_view root_dir,
                                      std::vector<TabletInfoPB>& tablet_infos, int64_t min_retain_version,
                                      int64_t grace_timestamp, int64_t* vacuumed_files, int64_t* vacuumed_file_size,
@@ -518,14 +526,6 @@ void vacuum(TabletManager* tablet_mgr, const VacuumRequest& request, VacuumRespo
     st.to_protobuf(response->mutable_status());
 }
 
-Status vacuum_full_impl(TabletManager* tablet_mgr, const VacuumFullRequest& request, VacuumFullResponse* response) {
-    return Status::NotSupported("vacuum_full not implemented yet");
-}
-
-void vacuum_full(TabletManager* tablet_mgr, const VacuumFullRequest& request, VacuumFullResponse* response) {
-    auto st = vacuum_full_impl(tablet_mgr, request, response);
-    st.to_protobuf(response->mutable_status());
-}
 
 // TODO: remote list objects requests
 Status delete_tablets_impl(TabletManager* tablet_mgr, const std::string& root_dir,
@@ -999,6 +999,198 @@ Status datafile_gc(std::string_view root_location, std::string_view audit_file_p
               << ", total size: " << pair_or.value().second;
 
     return Status::OK();
+}
+
+static Status vacuum_unspecified_tablet_metadata(
+    TabletManager* tablet_mgr, const std::string& partition_directory, int64_t partition_id, const std::set<int64_t>& tablet_ids,
+    int64_t* vacuumed_files) {
+    DCHECK(tablet_mgr != nullptr);
+    DCHECK(vacuumed_files != nullptr);
+
+    const auto metadata_root_location = join_path(partition_directory, kMetadataDirectoryName);
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(partition_directory));
+    ASSIGN_OR_RETURN(auto meta_files, list_meta_files(fs.get(), metadata_root_location));
+    auto metafile_delete_cb = [=](const std::vector<std::string>& files) {
+        erase_tablet_metadata_from_metacache(tablet_mgr, files);
+    };
+    AsyncFileDeleter metafile_deleter(INT64_MAX, metafile_delete_cb);
+    for (const auto& name : meta_files) {
+        auto [tablet_id, version] = parse_tablet_metadata_filename(name);
+        if (!tablet_ids.contains(tablet_id)) {
+            RETURN_IF_ERROR(metafile_deleter.delete_file(join_path(metadata_root_location, name)));
+        }
+    }
+
+    RETURN_IF_ERROR(metafile_deleter.finish());
+    (*vacuumed_files) += metafile_deleter.delete_count();
+    return Status::OK();
+} 
+// Deletes orphaned data files (data files which are not referenced by "relevant" metadata files)
+// A relevant metadata file has a version <= max_check_version
+// Data files written by transactions with txn_id >= min_active_txn_id will NOT be vacuumed
+// Returns the number of files vacuumed and their total size
+static StatusOr<std::pair<int64_t, int64_t>> vacuum_orphaned_datafiles(
+    TabletManager* tablet_mgr,
+    std::string_view partition_directory,
+    int64_t max_check_version,
+    int64_t min_active_txn_id) {
+    const auto metadata_root_location = join_path(partition_directory, kMetadataDirectoryName);
+    const auto segment_root_location = join_path(partition_directory, kSegmentDirectoryName);
+    ASSIGN_OR_RETURN(auto fs, FileSystem::CreateSharedFromString(partition_directory));
+
+    LOG(INFO) << "Listing files at " << segment_root_location << " to look for orphaned files";
+    ASSIGN_OR_RETURN(auto data_files_to_vacuum, list_data_files(fs.get(), segment_root_location, /*expired_seconds=*/0));
+
+    if (data_files_to_vacuum.empty()) {
+        LOG(INFO) << "Found no files at " << segment_root_location;
+        return std::pair(0, 0);
+    }
+
+    LOG(INFO) << "Starting to filter out files created by txn >= " << min_active_txn_id;
+    const auto original_size = data_files_to_vacuum.size();
+    std::erase_if(data_files_to_vacuum, [&](const auto& elem) {
+        const auto& name = elem.first;
+        const auto txn_id = extract_txn_id_prefix(name).value_or(0);
+        return txn_id >= min_active_txn_id;
+    });
+    LOG(INFO) << "Removed " << original_size - data_files_to_vacuum.size() << " data files from consideration as orphans based on txn id";
+
+    ASSIGN_OR_RETURN(auto meta_files, list_meta_files(fs.get(), metadata_root_location));
+
+    std::set<std::string> data_files_in_metadatas;
+    auto check_rowset = [&](const RowsetMetadata& rowset) {
+        for (const auto& segment : rowset.segments()) {
+            data_files_to_vacuum.erase(segment);
+            data_files_in_metadatas.emplace(segment);
+        }
+    };
+    auto check_sst_meta = [&](const PersistentIndexSstableMetaPB& sst_meta) {
+        for (const auto& sst : sst_meta.sstables()) {
+            data_files_to_vacuum.erase(sst.filename());
+            data_files_in_metadatas.emplace(sst.filename());
+        }
+    };
+
+    LOG(INFO) << "Start to filter with metadatas, count: " << meta_files.size();
+
+    int64_t progress = 0;
+    for (const auto& name : meta_files) {
+        ++progress;
+        auto location = join_path(metadata_root_location, name);
+        auto res = get_tablet_metadata(location, false);
+        if (res.status().is_not_found()) { // This metadata file was deleted by another node
+            LOG(INFO) << location << " is deleted by other node";
+            continue;
+        } else if (!res.ok()) {
+            LOG(WARNING) << "Failed to get meta file: " << location << ", status: " << res.status();
+            continue;
+        }
+        const auto& metadata = res.value();
+        const auto& version = metadata->version();
+        if (version > max_check_version) {
+            LOG(INFO) << "Skipping use of " << name << " to see which data files it references.";
+            continue;
+        }
+        for (const auto& rowset : metadata->rowsets()) {
+            check_rowset(rowset);
+        }
+        check_sst_meta(metadata->sstable_meta());\
+        LOG(INFO) << "Filtered with meta file: " << name << " (" << progress << '/' << meta_files.size() << ')';
+    }
+
+    LOG(INFO) << "Found " << data_files_to_vacuum.size() << " orphaned files to delete";
+
+    int64_t bytes_to_delete = 0;
+    std::vector<std::string> files_to_delete;
+    files_to_delete.reserve(data_files_to_vacuum.size());
+    for (const auto& [name, dir_entry] : data_files_to_vacuum) {
+        bytes_to_delete += dir_entry.size.value_or(0);
+        files_to_delete.push_back(join_path(segment_root_location, name));
+    }
+    LOG(INFO) << "Start to delete orphan data files: " << data_files_to_vacuum.size()
+              << ", total size: " << bytes_to_delete;
+
+    RETURN_IF_ERROR(do_delete_files(fs.get(), files_to_delete));
+
+    return std::pair<int64_t, int64_t>(files_to_delete.size(), bytes_to_delete);
+}
+
+Status vacuum_full_impl(TabletManager* tablet_mgr, const VacuumFullRequest& request, VacuumFullResponse* response) {
+    if (UNLIKELY(tablet_mgr == nullptr)) {
+        return Status::InvalidArgument("tablet_mgr is null");
+    }
+    if (UNLIKELY(request.partition_id() == 0)) {
+        return Status::InvalidArgument("partition_id is unset");
+    }
+    if (UNLIKELY(request.tablet_ids_size() == 0)) {
+        return Status::InvalidArgument("tablet_ids is empty");
+    }
+    // min_check_version should be set to 1 if we want to check all versions, never 0
+    if (UNLIKELY(request.min_check_version() <= 0)) {
+        return Status::InvalidArgument("value of min_check_version is unset or negative");
+    }
+    if (UNLIKELY(request.max_check_version() <= 0)) {
+        return Status::InvalidArgument("value of max_check_version is unset or negative");
+    }
+    if (UNLIKELY(request.max_check_version() <= request.min_check_version())) {
+        return Status::InvalidArgument("value of max_check_version is less than or equal to min_check_version");
+    }
+    if (UNLIKELY(request.min_active_txn_id() <= 0)) {
+        return Status::InvalidArgument("value of min_active_txn_id is unset or nagative");
+    }
+    
+    const auto partition_id = request.partition_id();
+    auto tablet_infos = std::vector<TabletInfoPB>();
+    tablet_infos.reserve(request.tablet_ids_size());
+    std::set<int64_t> tablet_ids_set;
+    std::set<std::string> root_locations;
+    for (const auto& tablet_id : request.tablet_ids()) {
+        auto& tablet_info = tablet_infos.emplace_back();
+        tablet_info.set_tablet_id(tablet_id);
+        tablet_info.set_min_version(0);
+        tablet_ids_set.insert(tablet_id);
+        root_locations.insert(tablet_mgr->tablet_root_location(tablet_id));
+    }
+    if (UNLIKELY(root_locations.size() != 1)) {
+        return Status::InvalidArgument("tablet_ids are not in the same partition");
+    }
+    const std::string partition_directory = *(root_locations.begin());
+    const auto min_check_version = request.min_check_version();
+    const auto max_check_version = request.max_check_version();
+    const auto min_active_txn_id = request.min_active_txn_id();
+
+    int64_t vacuumed_files = 0;
+    int64_t vacuumed_file_size = 0;
+
+    std::sort(tablet_infos.begin(), tablet_infos.end(),
+              [](const auto& a, const auto& b) { return a.tablet_id() < b.tablet_id(); });
+
+    // 1. Before the orphaned data file cleanup even starts, delete metadata files which satisfy the following:
+    // (tablet_id not in request.tablet_ids OR version < min_check_version)
+
+    // 1a. Delete all metadata files associated with the given partition which are not in the list of tablet_ids
+    RETURN_IF_ERROR(vacuum_unspecified_tablet_metadata(tablet_mgr, partition_directory, partition_id, tablet_ids_set, &vacuumed_files));
+
+    // 1b. Delete all metadata files associated with the given partition which have version < min_check_version
+    int64_t unused_tablet_version;
+    RETURN_IF_ERROR(vacuum_tablet_metadata(tablet_mgr, partition_directory, tablet_infos, min_check_version, /*grace_timestamp=*/0,
+                                           &vacuumed_files, &vacuumed_file_size, &unused_tablet_version));
+    RETURN_IF_ERROR(vacuum_txn_log(partition_directory, min_active_txn_id, &vacuumed_files, &vacuumed_file_size));
+
+    // 2. Determine and delete orphaned data files. We use min_active_txn_id to filter out new data files, then we open
+    // any remaining metadata files with version <= max_check_version and note that the data files referenced are not orphans.
+    ASSIGN_OR_RETURN(auto count_and_size, vacuum_orphaned_datafiles(tablet_mgr, partition_directory, max_check_version, min_active_txn_id));
+    vacuumed_files += count_and_size.first;
+    vacuumed_file_size += count_and_size.second;
+
+    response->set_vacuumed_files(vacuumed_files);
+    response->set_vacuumed_file_size(vacuumed_file_size);
+    return Status::OK();
+}
+
+void vacuum_full(TabletManager* tablet_mgr, const VacuumFullRequest& request, VacuumFullResponse* response) {
+    auto st = vacuum_full_impl(tablet_mgr, request, response);
+    st.to_protobuf(response->mutable_status());
 }
 
 } // namespace starrocks::lake
