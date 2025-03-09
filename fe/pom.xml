@@ -228,7 +228,6 @@ under the License.
                 <groupId>org.apache.kudu</groupId>
                 <artifactId>kudu-client</artifactId>
                 <version>${kudu.version}</version>
-                <scope>provided</scope>
                 <exclusions>
                     <exclusion>
                         <groupId>io.netty</groupId>
@@ -975,7 +974,6 @@ under the License.
                 <groupId>org.apache.hudi</groupId>
                 <artifactId>hudi-common</artifactId>
                 <version>${hudi.version}</version>
-                <scope>provided</scope>
                 <exclusions>
                     <exclusion>
                         <groupId>io.netty</groupId>
@@ -1204,7 +1202,6 @@ under the License.
                 <groupId>org.apache.paimon</groupId>
                 <artifactId>paimon-bundle</artifactId>
                 <version>${paimon.version}</version>
-                <scope>provided</scope>
             </dependency>
 
             <dependency>
