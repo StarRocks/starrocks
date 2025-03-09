@@ -120,7 +120,7 @@ public class ComplexFunctionCallTransformer {
             // parse_datetime -> str_to_jodatime
             String formatString = ((StringLiteral) args[1]).getStringValue();
             // "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'" -> "yyyy-MM-ddTHH:mm:ss.SSS"
-            formatString = formatString.replace("'T'", "T").replace("'Z'", "");
+            formatString = formatString.replace("'", "").replace("Z", "");
             return new FunctionCallExpr("str_to_jodatime", java.util.List.of(args[0], new StringLiteral(formatString)));
         }
         return null;
