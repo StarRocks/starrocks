@@ -489,6 +489,8 @@ CONF_mInt32(load_diagnose_rpc_timeout_stack_trace_threshold_ms, "600000");
 CONF_mInt32(load_fp_brpc_timeout_ms, "-1");
 // Used in load fail point. The block time to simulate TabletsChannel::add_chunk spends much time
 CONF_mInt32(load_fp_tablets_channel_add_chunk_block_ms, "-1");
+// Used in load fail point. The block time to simulate waiting secondary replica spends much time
+CONF_mInt32(load_fp_tablets_channel_wait_secondary_replica_block_ms, "-1");
 
 // The interval for performing stack trace to control the frequency.
 CONF_mInt64(diagnose_stack_trace_interval_ms, "1800000");

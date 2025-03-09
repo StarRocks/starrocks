@@ -71,6 +71,12 @@ NodeChannel::~NodeChannel() noexcept {
         _rpc_request.mutable_requests(i)->release_id();
     }
     _rpc_request.release_id();
+    if (_diagnose_closure) {
+        if (_diagnose_closure->unref()) {
+            delete _diagnose_closure;
+        }
+        _diagnose_closure = nullptr;
+    }
 }
 
 Status NodeChannel::init(RuntimeState* state) {
@@ -1097,7 +1103,7 @@ void NodeChannel::_try_diagnose(const std::string& error_text) {
     if (!enable_profile && !enable_stack_trace) {
         return;
     }
-    _diagnose_closure = std::make_unique<RefCountClosure<PLoadDiagnoseResult>>();
+    _diagnose_closure = new RefCountClosure<PLoadDiagnoseResult>();
     _diagnose_closure->ref();
     SET_IGNORE_OVERCROWDED(_diagnose_closure->cntl, load);
     _diagnose_closure->cntl.set_timeout_ms(config::load_diagnose_send_rpc_timeout_ms);
@@ -1108,9 +1114,9 @@ void NodeChannel::_try_diagnose(const std::string& error_text) {
     request.set_stack_trace(enable_stack_trace);
     _diagnose_closure->ref();
 #ifndef BE_TEST
-    _stub->load_diagnose(&_diagnose_closure->cntl, &request, &_diagnose_closure->result, _diagnose_closure.get());
+    _stub->load_diagnose(&_diagnose_closure->cntl, &request, &_diagnose_closure->result, _diagnose_closure);
 #else
-    std::pair<PLoadDiagnoseRequest*, RefCountClosure<PLoadDiagnoseResult>*> rpc_pair{&request, _diagnose_closure.get()};
+    std::pair<PLoadDiagnoseRequest*, RefCountClosure<PLoadDiagnoseResult>*> rpc_pair{&request, _diagnose_closure};
     TEST_SYNC_POINT_CALLBACK("NodeChannel::rpc::load_diagnose_send", &rpc_pair);
 #endif
     request.release_id();
@@ -1130,7 +1136,7 @@ void NodeChannel::_wait_diagnose(RuntimeState* state) {
 #ifndef BE_TEST
     _diagnose_closure->join();
 #else
-    TEST_SYNC_POINT_CALLBACK("NodeChannel::rpc::load_diagnose_join", _diagnose_closure.get());
+    TEST_SYNC_POINT_CALLBACK("NodeChannel::rpc::load_diagnose_join", _diagnose_closure);
 #endif
     if (_diagnose_closure->cntl.Failed()) {
         LOG(WARNING) << "NodeChannel[" << _load_info << "] diagnose failed, node: [" << _node_info->host << ":"
