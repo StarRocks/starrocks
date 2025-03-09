@@ -45,7 +45,8 @@ static void split_and_log_long_message(const std::string& raw_log) {
     }
     std::string message;
     for (auto& line : lines) {
-        if (message.size() + line.size() + 1 > max_message_size) {
+        auto msg_size = message.size() + line.size() + (message.empty() ? 0 : 1);
+        if (msg_size > max_message_size) {
             if (!message.empty()) {
                 LOG(INFO) << message;
                 message.clear();
@@ -53,10 +54,10 @@ static void split_and_log_long_message(const std::string& raw_log) {
             if (line.size() > max_message_size) {
                 LOG(INFO) << line;
             } else {
-                message = line + "\n";
+                message = line;
             }
         } else {
-            message += line + "\n";
+            message += (message.empty() ? "" : "\n") + line;
         }
     }
     if (!message.empty()) {

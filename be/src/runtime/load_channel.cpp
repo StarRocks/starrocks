@@ -460,6 +460,10 @@ void LoadChannel::diagnose(const std::string& remote_ip, const PLoadDiagnoseRequ
         stack_trace_request.context =
                 fmt::format("load_id: {}, txn_id: {}, remote: {}", print_id(_load_id), _txn_id, remote_ip);
         Status st = ExecEnv::GetInstance()->diagnose_daemon()->diagnose(stack_trace_request);
+        if (!st.ok()) {
+            LOG(WARNING) << "failed to diagnose stack trace, load_id: " << print_id(_load_id) << ", txn_id: " << _txn_id
+                         << ", status: " << st;
+        }
         result->mutable_stack_trace_status()->set_status_code(st.code());
         result->mutable_stack_trace_status()->add_error_msgs(st.to_string());
         VLOG(2) << "load channel diagnose stack trace, " << stack_trace_request.context << ", status: " << st;
