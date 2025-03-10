@@ -118,6 +118,9 @@ public class StarRocksFE {
             // we turn off the java.util.logging.Logger of caffine to reduce the output log of the console
             java.util.logging.Logger.getLogger("com.github.benmanes.caffeine").setLevel(java.util.logging.Level.OFF);
 
+            // test jul logging
+            java.util.logging.Logger.getLogger(java.util.logging.Logger.class.getName()).info("java.util.logging init");
+
             // set dns cache ttl
             java.security.Security.setProperty("networkaddress.cache.ttl", "60");
 
