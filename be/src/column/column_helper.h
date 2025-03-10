@@ -542,8 +542,8 @@ public:
         constexpr size_t kBatchNums = 128 / (8 * sizeof(uint8_t));
         while (start_offset + kBatchNums < to) {
             const uint8x16_t vfilter = vld1q_u8(filter_data);
-            // vfilter[i] != 0 ? 0xFF : 0x00
-            uint64_t nibble_mask = SIMD::get_nibble_mask(vmvnq_u8(vtstq_u8(vfilter, vfilter));
+            // nibble_mask[i] != 0 ? 0xFF : 0x00
+            uint64_t nibble_mask = SIMD::get_nibble_mask(vtstq_u8(vfilter, vfilter));
             if (nibble_mask == 0) {
                 // skip
             } else if (nibble_mask == 0xffff'ffff'ffff'ffffull) {
