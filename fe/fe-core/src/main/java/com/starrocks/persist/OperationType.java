@@ -606,6 +606,12 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DROP_GROUP_PROVIDER = 13531;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_CREATE_SPM_BASELINE_LOG = 13540;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_SPM_BASELINE_LOG = 13541;
+
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
      */

@@ -218,7 +218,7 @@ import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
-import com.starrocks.sql.spm.SQLPlanManager;
+import com.starrocks.sql.spm.SQLPlanStorage;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticAutoCollector;
@@ -528,7 +528,7 @@ public class GlobalStateMgr {
     private final SqlBlackList sqlBlackList;
     private final ReportHandler reportHandler;
     private final TabletCollector tabletCollector;
-    private final SQLPlanManager sqlPlanManager;
+    private final SQLPlanStorage sqlPlanStorage;
 
     private JwkMgr jwkMgr;
 
@@ -675,7 +675,7 @@ public class GlobalStateMgr {
         this.statisticAutoCollector = new StatisticAutoCollector();
         this.safeModeChecker = new SafeModeChecker();
         this.statisticStorage = new CachedStatisticStorage();
-        this.sqlPlanManager = new SQLPlanManager();
+        this.sqlPlanStorage = SQLPlanStorage.create(true);
 
         this.replayedJournalId = new AtomicLong(0L);
         this.synchronizedTimeMs = 0;
@@ -962,8 +962,8 @@ public class GlobalStateMgr {
         this.statisticStorage = statisticStorage;
     }
 
-    public SQLPlanManager getSqlPlanManager() {
-        return sqlPlanManager;
+    public SQLPlanStorage getSqlPlanStorage() {
+        return sqlPlanStorage;
     }
 
     public StarOSAgent getStarOSAgent() {

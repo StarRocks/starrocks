@@ -63,6 +63,7 @@ import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.HISTOGRAM_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.SAMPLE_STATISTICS_TABLE_NAME;
+import static com.starrocks.statistic.StatsConstants.SPM_BASELINE_TABLE_NAME;
 import static com.starrocks.statistic.StatsConstants.STATISTICS_DB_NAME;
 
 public class StatisticsMetaManager extends FrontendDaemon {
@@ -101,7 +102,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
             return true;
         }
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(STATISTICS_DB_NAME);
-        Table table =  GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), tableName);
         for (String columnName : FULL_STATISTICS_COMPATIBLE_COLUMNS) {
             if (table.getColumn(columnName) == null) {
                 return false;
@@ -332,6 +333,40 @@ public class StatisticsMetaManager extends FrontendDaemon {
         return checkTableExist(MULTI_COLUMN_STATISTICS_TABLE_NAME);
     }
 
+    private boolean createSPMBaselinesTable(ConnectContext context) {
+        LOG.info("create spm_baselines table start");
+        TableName tableName = new TableName(STATISTICS_DB_NAME, SPM_BASELINE_TABLE_NAME);
+        KeysType keysType = KeysType.DUP_KEYS;
+        Map<String, String> properties = Maps.newHashMap();
+        try {
+            List<ColumnDef> columns = ImmutableList.of(
+                    new ColumnDef("id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("bind_sql", new TypeDef(ScalarType.createVarcharType(65530))),
+                    new ColumnDef("bind_sql_digest", new TypeDef(ScalarType.createVarcharType(65530))),
+                    new ColumnDef("bind_sql_hash", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("plan_sql", new TypeDef(ScalarType.createVarcharType(65530))),
+                    new ColumnDef("costs", new TypeDef(ScalarType.createType(PrimitiveType.DOUBLE))),
+                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
+            );
+
+            int defaultReplicationNum = AutoInferUtil.calDefaultReplicationNum();
+            properties.put(PropertyAnalyzer.PROPERTIES_REPLICATION_NUM, Integer.toString(defaultReplicationNum));
+            CreateTableStmt stmt = new CreateTableStmt(false, false,
+                    tableName, columns, EngineType.defaultEngine().name(),
+                    new KeysDesc(keysType, List.of("id")), null,
+                    new HashDistributionDesc(10, List.of("id")),
+                    properties, null, "");
+
+            Analyzer.analyze(stmt, context);
+            GlobalStateMgr.getCurrentState().getLocalMetastore().createTable(stmt);
+        } catch (StarRocksException e) {
+            LOG.warn("Failed to create spm_baselines table", e);
+            return false;
+        }
+        LOG.info("create spm_baselines table done");
+        return checkTableExist(SPM_BASELINE_TABLE_NAME);
+    }
+
     private void refreshAnalyzeJob() {
         for (Map.Entry<Long, BasicStatsMeta> entry :
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().getBasicStatsMetaMap().entrySet()) {
@@ -369,6 +404,8 @@ public class StatisticsMetaManager extends FrontendDaemon {
                 return createExternalHistogramStatisticsTable(context);
             } else if (tableName.equals(MULTI_COLUMN_STATISTICS_TABLE_NAME)) {
                 return createMultiColumnStatisticsTable(context);
+            } else if (SPM_BASELINE_TABLE_NAME.equals(tableName)) {
+                return createSPMBaselinesTable(context);
             } else {
                 throw new StarRocksPlannerException("Error table name " + tableName, ErrorType.INTERNAL_ERROR);
             }
@@ -474,6 +511,7 @@ public class StatisticsMetaManager extends FrontendDaemon {
         refreshStatisticsTable(EXTERNAL_FULL_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME);
         refreshStatisticsTable(MULTI_COLUMN_STATISTICS_TABLE_NAME);
+        refreshStatisticsTable(SPM_BASELINE_TABLE_NAME);
 
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedPartition();
         GlobalStateMgr.getCurrentState().getAnalyzeMgr().clearStatisticFromDroppedTable();

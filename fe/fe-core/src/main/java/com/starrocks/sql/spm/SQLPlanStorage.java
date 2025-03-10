@@ -11,27 +11,25 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+package com.starrocks.sql.spm;
 
-package com.starrocks.sql.ast.spm;
+import java.util.List;
 
-import com.starrocks.sql.ast.AstVisitor;
-import com.starrocks.sql.ast.DdlStmt;
-import com.starrocks.sql.parser.NodePosition;
-
-public class DropBaselinePlanStmt extends DdlStmt {
-    private final long baseLineId;
-
-    public DropBaselinePlanStmt(long baseLineId, NodePosition pos) {
-        super(pos);
-        this.baseLineId = baseLineId;
+public interface SQLPlanStorage {
+    static SQLPlanStorage create(boolean isGlobal) {
+        return isGlobal ? new SQLPlanGlobalStorage() : new SQLPlanSessionStorage();
     }
 
-    public long getBaseLineId() {
-        return baseLineId;
-    }
+    List<BaselinePlan> getAllBaselines();
 
-    @Override
-    public <R, C> R accept(AstVisitor<R, C> visitor, C context) {
-        return visitor.visitDropBaselinePlanStatement(this, context);
-    }
+    void storeBaselinePlan(BaselinePlan plan);
+
+    List<BaselinePlan> findBaselinePlan(String sqlDigest, long hash);
+
+    void dropBaselinePlan(long baseLineId);
+
+    // for ut test use
+    void dropAllBaselinePlans();
+
+    default void replayBaselinePlan(BaselinePlan plan, boolean isCreate) {}
 }
