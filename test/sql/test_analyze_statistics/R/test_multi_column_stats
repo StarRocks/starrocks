@@ -18,9 +18,24 @@ insert into t1 values (2, 2, 's2', 's2');
 insert into t1 values (3, 3, 's3', 's3');
 -- result:
 -- !result
+insert into t1 select generate_series, generate_series, generate_series, generate_series from table(generate_series(1,1000));
+-- result:
+-- !result
+insert into t1 select generate_series, generate_series, generate_series, generate_series from table(generate_series(1,1000));
+-- result:
+-- !result
+insert into t1 select generate_series, generate_series, generate_series, generate_series from table(generate_series(1,1000));
+-- result:
+-- !result
+insert into t1 select generate_series, generate_series, generate_series, generate_series from table(generate_series(1,1000));
+-- result:
+-- !result
+insert into t1 select generate_series, generate_series, generate_series, generate_series from table(generate_series(1,1000));
+-- result:
+-- !result
 [UC]analyze full table t1 multi_columns (c1, c2);
 -- result:
-analyze_test_1e6b633984734138afdcd352934c9306.t1	analyze	status	OK
+analyze_test_3a9807b56f3e40b8947f3b3ba7dc1dfc.t1	analyze	status	OK
 -- !result
 select count(1) from _statistics_.multi_column_statistics where table_name like "%t1%" and column_names = "c1,c2";
 -- result:
@@ -35,7 +50,7 @@ select count(1) from _statistics_.multi_column_statistics where table_name like 
 -- !result
 [UC]analyze sample table t1 multi_columns (c1, c2);
 -- result:
-analyze_test_1e6b633984734138afdcd352934c9306.t1	sample	status	OK
+analyze_test_3a9807b56f3e40b8947f3b3ba7dc1dfc.t1	sample	status	OK
 -- !result
 select count(1) from _statistics_.multi_column_statistics where table_name like "%t1%" and column_names = "c1,c2";
 -- result:
@@ -47,4 +62,19 @@ drop stats t1;
 select count(1) from _statistics_.multi_column_statistics where table_name like "%t1%" and column_names = "c1,c2";
 -- result:
 0
+-- !result
+[UC]analyze full table t1 multi_columns (c1, c2, c3, c4);
+-- result:
+analyze_test_3a9807b56f3e40b8947f3b3ba7dc1dfc.t1	analyze	status	OK
+-- !result
+[UC]analyze full table t1;
+-- result:
+analyze_test_3a9807b56f3e40b8947f3b3ba7dc1dfc.t1	analyze	status	OK
+-- !result
+function: assert_explain_costs_contains('select count(1) from t1 group by c1,c2,c3,c4', 'cardinality: 1002')
+-- result:
+None
+-- !result
+drop stats t1;
+-- result:
 -- !result

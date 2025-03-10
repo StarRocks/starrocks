@@ -115,4 +115,5 @@ public class StatisticsUtils {
         return new ConnectorTableColumnStats(connectorTableColumnStats.getColumnStatistic(),
                 totalRowCount, connectorTableColumnStats.getUpdateTime());
     }
+
 }

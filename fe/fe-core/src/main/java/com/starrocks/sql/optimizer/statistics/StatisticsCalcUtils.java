@@ -37,9 +37,13 @@ import org.jetbrains.annotations.Nullable;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 public class StatisticsCalcUtils {
@@ -80,6 +84,60 @@ public class StatisticsCalcUtils {
                         .addTableStatistics(table, requiredColumnRefs.get(i).getName(), columnStatisticList.get(i));
             }
         }
+        return builder;
+    }
+
+    public static Statistics.Builder estimateMultiColumnCombinedStats(Table table,
+                                                                      Statistics.Builder builder,
+                                                                      Map<ColumnRefOperator, Column> colRefToColumnMetaMap) {
+        if (!table.isNativeTableOrMaterializedView()) {
+            return builder;
+        }
+
+        MultiColumnCombinedStatistics cachedMcStats = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                .getMultiColumnCombinedStatistics(table.getId());
+        if (cachedMcStats == null || cachedMcStats == MultiColumnCombinedStatistics.EMPTY) {
+            return builder;
+        }
+
+        Map<String, ColumnRefOperator> columnNameToRefMap = colRefToColumnMetaMap.keySet().stream()
+                .collect(Collectors.toMap(ColumnRefOperator::getName, Function.identity()));
+
+        Map<Integer, String> uniqueIdToColumnNameMap = new HashMap<>(table.getBaseSchema().size());
+        table.getBaseSchema().forEach(column ->
+                uniqueIdToColumnNameMap.put(column.getUniqueId(), column.getName()));
+
+
+        Map<Set<Integer>, Long> distinctCounts = cachedMcStats.getDistinctCounts();
+        for (Map.Entry<Set<Integer>, Long> entry : distinctCounts.entrySet()) {
+            Set<Integer> uniqueColumnIds = entry.getKey();
+            Long ndv = entry.getValue();
+
+            Set<ColumnRefOperator> mcRefOperators = new HashSet<>(uniqueColumnIds.size());
+            boolean allColumnsFound = true;
+
+            for (Integer uniqueColumnId : uniqueColumnIds) {
+                String columnName = uniqueIdToColumnNameMap.get(uniqueColumnId);
+                if (columnName == null) {
+                    allColumnsFound = false;
+                    break;
+                }
+
+                ColumnRefOperator columnRef = columnNameToRefMap.get(columnName);
+                if (columnRef == null) {
+                    allColumnsFound = false;
+                    break;
+                }
+
+                mcRefOperators.add(columnRef);
+            }
+
+            // Add the multi-column statistic if all required columns are found
+            if (allColumnsFound) {
+                builder = builder.addMultiColumnStatistics(mcRefOperators, new MultiColumnCombinedStats(ndv));
+            }
+        }
+
         return builder;
     }
 
