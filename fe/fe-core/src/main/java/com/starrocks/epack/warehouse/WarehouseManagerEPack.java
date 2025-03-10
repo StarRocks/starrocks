@@ -3,8 +3,6 @@
 package com.starrocks.epack.warehouse;
 
 import com.google.common.base.Preconditions;
-import com.staros.client.StarClientException;
-import com.staros.proto.ShardInfo;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -116,41 +114,9 @@ public class WarehouseManagerEPack extends WarehouseManager {
         LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseId);
         checkWarehouseState(warehouse);
         try {
-            ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getShardInfo(tablet.getShardId(), warehouse.getAnyAvailableCluster().getWorkerGroupId());
-
-            Long nodeId;
-            List<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getAllNodeIdsByShard(shardInfo, true);
-            if (!ids.isEmpty()) {
-                nodeId = ids.iterator().next();
-                return nodeId;
-            } else {
-                return null;
-            }
-        } catch (StarClientException e) {
-            return null;
-        }
-    }
-
-    @Override
-    public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
-        LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseName);
-        checkWarehouseState(warehouse);
-        try {
-            ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getShardInfo(tablet.getShardId(), warehouse.getAnyAvailableCluster().getWorkerGroupId());
-
-            Long nodeId;
-            List<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getAllNodeIdsByShard(shardInfo, true);
-            if (!ids.isEmpty()) {
-                nodeId = ids.iterator().next();
-                return nodeId;
-            } else {
-                return null;
-            }
-        } catch (StarClientException e) {
+            return GlobalStateMgr.getCurrentState().getStarOSAgent()
+                    .getPrimaryComputeNodeIdByShard(tablet.getShardId(), warehouse.getAnyAvailableCluster().getWorkerGroupId());
+        } catch (StarRocksException e) {
             return null;
         }
     }
@@ -160,12 +126,9 @@ public class WarehouseManagerEPack extends WarehouseManager {
         LocalWarehouse warehouse = (LocalWarehouse) getWarehouse(warehouseId);
         checkWarehouseState(warehouse);
         try {
-            ShardInfo shardInfo = GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getShardInfo(tablet.getShardId(), warehouse.getAnyAvailableCluster().getWorkerGroupId());
-
             return GlobalStateMgr.getCurrentState().getStarOSAgent()
-                    .getAllNodeIdsByShard(shardInfo, true);
-        } catch (StarClientException e) {
+                    .getAllNodeIdsByShard(tablet.getShardId(), warehouse.getAnyAvailableCluster().getWorkerGroupId());
+        } catch (StarRocksException e) {
             return null;
         }
     }

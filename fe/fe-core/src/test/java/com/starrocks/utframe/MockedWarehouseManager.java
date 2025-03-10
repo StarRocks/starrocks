@@ -91,11 +91,6 @@ public class MockedWarehouseManager extends WarehouseManagerEPack {
         warehouseIdToComputeNodeIds.put(DEFAULT_WAREHOUSE_ID, computeNodeIds);
     }
 
-    @Override
-    public Long getComputeNodeId(String warehouseName, LakeTablet tablet) {
-        return computeNodeId;
-    }
-
     public void setComputeNodeId(Long computeNodeId) {
         this.computeNodeId = computeNodeId;
     }
