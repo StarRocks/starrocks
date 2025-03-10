@@ -250,9 +250,9 @@ int64_t ColumnHelper::find_first_not_equal(const Column* column, int64_t target,
 // expression trees' return column should align return type when some return columns maybe diff from the required
 // return type, as well the null flag. e.g., concat_ws returns col from create_const_null_column(), it's type is
 // Nullable(int8), but required return type is nullable(string), so col need align return type to nullable(string).
-ColumnPtr ColumnHelper::align_return_type(const ColumnPtr& old_col, const TypeDescriptor& type_desc, size_t num_rows,
+ColumnPtr ColumnHelper::align_return_type(ColumnPtr&& old_col, const TypeDescriptor& type_desc, size_t num_rows,
                                           const bool is_nullable) {
-    MutableColumnPtr new_column = old_col->clone();
+    MutableColumnPtr new_column = (std::move(*old_col)).mutate();
     if (old_col->only_null()) {
         new_column = ColumnHelper::create_column(type_desc, true);
         new_column->append_nulls(num_rows);

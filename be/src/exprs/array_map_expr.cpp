@@ -193,7 +193,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         }
         tmp_col->check_or_die();
         ASSIGN_OR_RETURN(column, tmp_col->replicate(aligned_offsets->get_data()));
-        column = ColumnHelper::align_return_type(column, type().children[0], column->size(), true);
+        column = ColumnHelper::align_return_type(std::move(column), type().children[0], column->size(), true);
 
         RETURN_IF_ERROR(column->capacity_limit_reached());
     } else {
@@ -204,7 +204,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
             tmp_col->check_or_die();
             // if result is a const column, we should unpack it first and make it to be the elements column of array column
             column = ColumnHelper::unpack_and_duplicate_const_column(tmp_col->size(), tmp_col);
-            column = ColumnHelper::align_return_type(column, type().children[0], column->size(), true);
+            column = ColumnHelper::align_return_type(std::move(column), type().children[0], column->size(), true);
         } else {
             ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
             RETURN_IF_ERROR(accumulator.push(std::move(cur_chunk)));
@@ -220,7 +220,8 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                 }
                 ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], tmp_chunk.get()));
                 tmp_col->check_or_die();
-                tmp_col = ColumnHelper::align_return_type(tmp_col, type().children[0], tmp_chunk->num_rows(), true);
+                tmp_col = ColumnHelper::align_return_type(std::move(tmp_col), type().children[0], tmp_chunk->num_rows(),
+                                                          true);
                 if (column == nullptr) {
                     column = tmp_col;
                 } else {
@@ -277,7 +278,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         ASSIGN_OR_RETURN(auto child_col, context->evaluate(_children[i], chunk));
         // the column is a null literal.
         if (child_col->only_null()) {
-            return ColumnHelper::align_return_type(child_col, type(), chunk->num_rows(), true);
+            return ColumnHelper::align_return_type(std::move(child_col), type(), chunk->num_rows(), true);
         }
 
         bool is_const = child_col->is_constant();
