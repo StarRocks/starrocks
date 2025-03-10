@@ -53,7 +53,7 @@ as select s1.k1 as s11, s1.k2 as s12, s1.k3 as s13, s2.k1 s21, s2.k2 s22, s2.k3 
 -- !result
 [UC]REFRESH materialized view test_mv12 with sync mode;
 -- result:
-de2d3fd3-f8d3-11ef-95e1-461f20abc3f0
+bcd31717-fd7b-11ef-bc7a-4a3b5e4e3ccc
 -- !result
 set enable_rbo_table_prune = true;
 -- result:
@@ -310,6 +310,45 @@ PROPERTIES (
 "replicated_storage" = "true",
 "replication_num" = "1"
 );
+-- !result
+CREATE TABLE `primary_table_with_null_partition` ( `k1` date not null, `k2` datetime not null, `k3` varchar(20) not null, `k4` varchar(20) not null, `k5` boolean not null, `v1` tinyint, `v2` smallint, `v3` int, `v4` bigint, `v5` largeint, `v6` float, `v7` double, `v8` decimal(27,9) ) PRIMARY KEY(`k1`, `k2`, `k3`, `k4`, `k5`) COMMENT "OLAP" PARTITION BY RANGE(`k1`) ( PARTITION `p202006` VALUES LESS THAN ("2020-07-01"), PARTITION `p202007` VALUES LESS THAN ("2020-08-01"), PARTITION `p202008` VALUES LESS THAN ("2020-09-01") ) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3 PROPERTIES ( "replication_num" = "1", "storage_format" = "v2" );
+-- result:
+-- !result
+CREATE TABLE `aggregate_table_with_null` ( `k1` date, `k2` datetime, `k3` char(20), `k4` varchar(20), `k5` boolean, `v1` bigint sum, `v2` bigint sum, `v3` bigint sum, `v4` bigint max, `v5` largeint max, `v6` float min, `v7` double min, `v8` decimal(27,9) sum ) AGGREGATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) COMMENT "OLAP" DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3 PROPERTIES ( "replication_num" = "1", "storage_format" = "v2", "light_schema_change" = "false" );
+-- result:
+-- !result
+INSERT INTO primary_table_with_null_partition values ('2020-06-01', '2020-06-01 00:00:00', 'a', 'a', true, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0), ('2020-07-01', '2020-07-01 00:00:00', 'a', 'a', true, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0), ('2020-08-01', '2020-08-01 00:00:00', 'a', 'a', true, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0);
+-- result:
+-- !result
+INSERT INTO aggregate_table_with_null values ('2020-06-01', '2020-06-01 00:00:00', 'a', 'a', true, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0), ('2020-07-01', '2020-07-01 00:00:00', 'a', 'a', true, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0), ('2020-08-01', '2020-08-01 00:00:00', 'a', 'a', true, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0);
+-- result:
+-- !result
+select * from primary_table_with_null_partition order by k1 limit 3;
+-- result:
+2020-06-01	2020-06-01 00:00:00	a	a	1	1	1	1	1	1	1.0	1.0	1.000000000
+2020-07-01	2020-07-01 00:00:00	a	a	1	1	1	1	1	1	1.0	1.0	1.000000000
+2020-08-01	2020-08-01 00:00:00	a	a	1	1	1	1	1	1	1.0	1.0	1.000000000
+-- !result
+select * from aggregate_table_with_null order by k1 limit 3;
+-- result:
+2020-06-01	2020-06-01 00:00:00	a	a	1	1	1	1	1	1	1.0	1.0	1.000000000
+2020-07-01	2020-07-01 00:00:00	a	a	1	1	1	1	1	1	1.0	1.0	1.000000000
+2020-08-01	2020-08-01 00:00:00	a	a	1	1	1	1	1	1	1.0	1.0	1.000000000
+-- !result
+alter table primary_table_with_null_partition SWAP WITH aggregate_table_with_null;
+-- result:
+-- !result
+select * from primary_table_with_null_partition order by k1 limit 3;
+-- result:
+2020-06-01	2020-06-01 00:00:00	a	a	1	1	1	1	1	1	1.0	1.0	1.000000000
+2020-07-01	2020-07-01 00:00:00	a	a	1	1	1	1	1	1	1.0	1.0	1.000000000
+2020-08-01	2020-08-01 00:00:00	a	a	1	1	1	1	1	1	1.0	1.0	1.000000000
+-- !result
+select * from aggregate_table_with_null order by k1 limit 3;
+-- result:
+2020-06-01	2020-06-01 00:00:00	a	a	1	1	1	1	1	1	1.0	1.0	1.000000000
+2020-07-01	2020-07-01 00:00:00	a	a	1	1	1	1	1	1	1.0	1.0	1.000000000
+2020-08-01	2020-08-01 00:00:00	a	a	1	1	1	1	1	1	1.0	1.0	1.000000000
 -- !result
 DROP DATABASE db_test_alter_swap_table;
 -- result:
