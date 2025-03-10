@@ -44,23 +44,21 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-
-
 public class SemiJoinDeduplicateRule implements TreeRewriteRule {
-    private static final Logger LOG = LogManager.getLogger(SemiJoinDeduplicateRule.class);
-
     public static final int DISABLE_PUSH_DOWN_DISTINCT = -1;
+    private static final Logger LOG = LogManager.getLogger(SemiJoinDeduplicateRule.class);
     private static final int PUSH_DOWN_DISTINCT_AUTO = 0;
     private static final int PUSH_DOWN_ALL_DISTINCT_FORCE = 1;
+    private static final int PUSH_DOWN_DISTINCT_TO_RIGHT = 2;
 
     private boolean hasRewrite;
 
-    public boolean hasRewrite() {
-        return hasRewrite;
-    }
-
     public SemiJoinDeduplicateRule() {
         hasRewrite = false;
+    }
+
+    public boolean hasRewrite() {
+        return hasRewrite;
     }
 
     @Override
@@ -101,11 +99,6 @@ public class SemiJoinDeduplicateRule implements TreeRewriteRule {
         private final OptimizerContext optimizerContext;
         private final ColumnRefFactory factory;
         private final SessionVariable sessionVariable;
-
-        public boolean hasRewrite() {
-            return hasRewrite;
-        }
-
         private boolean hasRewrite;
 
         public DeduplicateVisitor(TaskContext taskContext) {
@@ -113,6 +106,10 @@ public class SemiJoinDeduplicateRule implements TreeRewriteRule {
             this.factory = taskContext.getOptimizerContext().getColumnRefFactory();
             this.sessionVariable = taskContext.getOptimizerContext().getSessionVariable();
             this.hasRewrite = false;
+        }
+
+        public boolean hasRewrite() {
+            return hasRewrite;
         }
 
         private OptExpression visitChildren(OptExpression optExpression, DeduplicateContext context) {
@@ -161,7 +158,9 @@ public class SemiJoinDeduplicateRule implements TreeRewriteRule {
             }
 
             LogicalAggregationOperator aggOperator = (LogicalAggregationOperator) opt.getOp();
-            if (!aggOperator.getAggregations().isEmpty()) {
+            // support distinct or count(distinct)
+            if (!aggOperator.getAggregations().isEmpty() ||
+                    !aggOperator.getAggregations().values().stream().allMatch(agg -> agg.isDistinct())) {
                 return visitChildren(opt, context);
             }
             OptExpression child = opt.inputAt(0);
@@ -194,7 +193,7 @@ public class SemiJoinDeduplicateRule implements TreeRewriteRule {
                     JoinHelper.getEqualsPredicate(leftOutputColumns, rightOutputColumns,
                             Utils.extractConjuncts(joinOperator.getOnPredicate()));
             // 3. only support with one equal condition in onPredicate
-            if (equalConjs.size() != 1 || joinOperator.getPredicate() != null) {
+            if (equalConjs.size() > 2 || joinOperator.getPredicate() != null) {
                 return visit(opt, context);
             }
 
@@ -245,15 +244,17 @@ public class SemiJoinDeduplicateRule implements TreeRewriteRule {
                 hasRewrite = true;
 
                 AggType aggType;
-                if (sessionVariable.getCboPushDownDISTINCT().equalsIgnoreCase("global")) {
-                    aggType = AggType.GLOBAL;
-                } else if (sessionVariable.getCboPushDownDISTINCT().equalsIgnoreCase("local")) {
+                if (sessionVariable.getCboPushDownDISTINCT().equalsIgnoreCase("local")) {
                     aggType = AggType.LOCAL;
                 } else {
-                    aggType = context.globalDeduplicate ? AggType.GLOBAL : AggType.LOCAL;
+                    aggType = AggType.GLOBAL;
                 }
+
                 LogicalAggregationOperator distinct =
                         new LogicalAggregationOperator(aggType, groupBys, new HashMap<>());
+                if (aggType.isLocal()) {
+                    distinct.setOnlyLocalAggregate();
+                }
                 return OptExpression.create(distinct, opt);
             } else {
                 return opt;
@@ -265,7 +266,12 @@ public class SemiJoinDeduplicateRule implements TreeRewriteRule {
                 return true;
             }
 
-            if (groupBys.size() > 3) {
+            if (sessionVariable.getSemiJoinDeduplicateMode() == PUSH_DOWN_DISTINCT_TO_RIGHT &&
+                    !context.globalDeduplicate) {
+                return false;
+            }
+
+            if (groupBys.size() > 2) {
                 return false;
             }
 
