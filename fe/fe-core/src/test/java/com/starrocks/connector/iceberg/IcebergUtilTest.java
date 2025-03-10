@@ -14,19 +14,17 @@
 
 package com.starrocks.connector.iceberg;
 
-public enum IcebergTableOperation {
-    EXPIRE_SNAPSHOTS,
-    FAST_FORWARD,
-    CHERRYPICK_SNAPSHOT,
-    REMOVE_ORPHAN_FILES,
-    UNKNOWN;
+import org.junit.Test;
 
-    public static IcebergTableOperation fromString(String opStr) {
-        for (IcebergTableOperation op : IcebergTableOperation.values()) {
-            if (op.name().equalsIgnoreCase(opStr)) {
-                return op;
-            }
-        }
-        return UNKNOWN;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+public class IcebergUtilTest {
+
+    @Test
+    public void testFileName() {
+        assertEquals("1.orc", IcebergUtil.fileName("hdfs://tans/user/hive/warehouse/max-test/1.orc"));
+        assertEquals("2.orc", IcebergUtil.fileName("cos://tans/user/hive/warehouse/max-test/2.orc"));
+        assertEquals("3.orc", IcebergUtil.fileName("s3://tans/user/hive/warehouse/max-test/3.orc"));
+        assertEquals("4.orc", IcebergUtil.fileName("gs://tans/user/hive/warehouse/max-test/4.orc"));
     }
 }

@@ -14,19 +14,10 @@
 
 package com.starrocks.connector.iceberg;
 
-public enum IcebergTableOperation {
-    EXPIRE_SNAPSHOTS,
-    FAST_FORWARD,
-    CHERRYPICK_SNAPSHOT,
-    REMOVE_ORPHAN_FILES,
-    UNKNOWN;
+public final class IcebergUtil {
+    private IcebergUtil() {}
 
-    public static IcebergTableOperation fromString(String opStr) {
-        for (IcebergTableOperation op : IcebergTableOperation.values()) {
-            if (op.name().equalsIgnoreCase(opStr)) {
-                return op;
-            }
-        }
-        return UNKNOWN;
+    public static String fileName(String path) {
+        return path.substring(path.lastIndexOf('/') + 1);
     }
 }
