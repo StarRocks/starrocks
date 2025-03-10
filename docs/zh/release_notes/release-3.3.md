@@ -16,7 +16,7 @@ displayed_sidebar: docs
 
 ### 功能优化
 
-- 使用 `F``iles` 函数导出数据时，支持向 Parquet 文件导出 JSON 数据类型。[#56406](https://github.com/StarRocks/starrocks/pull/56406)
+- 使用 `Files` 函数导出数据时，支持向 Parquet 文件导出 JSON 数据类型。[#56406](https://github.com/StarRocks/starrocks/pull/56406)
 - 提升存算分离集群中云原生表 Data Cache 预热性能。[#56190](https://github.com/StarRocks/starrocks/pull/56190)
 - Trino 语法兼容 AT TIME ZONE 表达式和 `from_iso8601_timestamp` 函数。[#56311](https://github.com/StarRocks/starrocks/pull/56311) [#55573](https://github.com/StarRocks/starrocks/pull/55573)
 - 存算分离集群中主键表的部份列更新支持条件更新。[#56132](https://github.com/StarRocks/starrocks/pull/56132)
@@ -32,7 +32,7 @@ displayed_sidebar: docs
 - FE 不支持将常量 TIME 数据类型 Cast 成 DATETIME 导致的问题。[#55804](https://github.com/StarRocks/starrocks/pull/55804)
 - Stream Load 事务接口不支持 `starrocks_fe_table_load_rows` 和 `starrocks_fe_table_load_bytes` 两个指标导致的问题。[#44991](https://github.com/StarRocks/starrocks/pull/44991)
 - 更改自动统计信息收集的方式不生效。[#56173](https://github.com/StarRocks/starrocks/pull/56173)
-- 物化视图状态异常时导致 `SHOW`` ``MATERIALIZED`` ``VIEWS` 出现问题。[#55995](https://github.com/StarRocks/starrocks/pull/55995)
+- 物化视图状态异常时导致 `SHOW MATERIALIZED VIEWS` 出现问题。[#55995](https://github.com/StarRocks/starrocks/pull/55995)
 - 基于文本的物化视图改写在不同数据库下不生效的问题。[#56001](https://github.com/StarRocks/starrocks/pull/56001)
 - JDBC Catalog 元数据兼容性问题。[#55993](https://github.com/StarRocks/starrocks/pull/55993)
 - JDBC Catalog 处理 JSON 类型数据的问题。[#56008](https://github.com/StarRocks/starrocks/pull/56008)
@@ -177,7 +177,7 @@ displayed_sidebar: docs
 - FE 指标缺失。[#53058](https://github.com/StarRocks/starrocks/pull/53058)
 - INSERT 任务内存泄露问题。[#53809](https://github.com/StarRocks/starrocks/pull/53809)
 - 副本复制任务中提交的事务没有写锁引发的并发问题。[#54061](https://github.com/StarRocks/starrocks/pull/54061)
-- 统计信息数据库中的表 `parti``ti``on_ttl` 不生效。[#54398](https://github.com/StarRocks/starrocks/pull/54398)
+- 统计信息数据库中的表 `partition_ttl` 不生效。[#54398](https://github.com/StarRocks/starrocks/pull/54398)
 - Query Cache 相关问题：
   - 在开启 Group Execution 时 Query Cache 发生 Crash。[#54363](https://github.com/StarRocks/starrocks/pull/54363) 
   - Runtime Filter 发生 Crash 的问题。[#54305](https://github.com/StarRocks/starrocks/pull/54305)
