@@ -764,6 +764,11 @@ ALTER TABLE [<db_name>.]<tbl_name>
 SWAP WITH <tbl_name>;
 ```
 
+:::note
+- StarRocks 会在 Swap 过程中验证 OLAP 表之间的唯一键和外键约束，以确保被交换的两个表的约束一致。如果检测到不一致，将返回错误信息。如果未检测到不一致，将自动 Swap 唯一键和外键约束。
+- 依赖于被 Swap 表的物化视图将自动设置为 Inactive，其唯一键和外键约束将被移除，变为不可用。
+:::
+
 ### 手动 Compaction（3.1 版本起）
 
 StarRocks 通过 Compaction 机制将导入的不同数据版本进行合并，将小文件合并成大文件，有效提升了查询性能。
