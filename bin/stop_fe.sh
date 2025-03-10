@@ -40,7 +40,7 @@ Usage:
 
 Options:
     -h, --help              display this usage only
-    -g, --graceful          send USER1 to FE process instead of SIGKILL
+    -g, --graceful          send USER1 to FE process instead of SIGTERM
     --timeout               specify the timeout for graceful exit
 "
     exit 0

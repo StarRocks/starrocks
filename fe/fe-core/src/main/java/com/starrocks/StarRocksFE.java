@@ -190,6 +190,8 @@ public class StarRocksFE {
 
             ThreadPoolManager.registerAllThreadPoolMetric();
 
+            addShutdownHook();
+
             RestoreClusterSnapshotMgr.finishRestoring();
 
             handleGracefulExit();
@@ -496,5 +498,13 @@ public class StarRocksFE {
         }
 
         return false;
+    }
+
+    // Some cleanup work can be done here.
+    // Currently, only one log is printed to distinguish whether it is a normal exit or killed by the operating system.
+    private static void addShutdownHook() {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            LOG.info("FE shutdown");
+        }));
     }
 }
