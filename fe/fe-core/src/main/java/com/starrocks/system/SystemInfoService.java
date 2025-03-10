@@ -67,7 +67,9 @@ import com.starrocks.persist.CancelDecommissionDiskInfo;
 import com.starrocks.persist.DecommissionDiskInfo;
 import com.starrocks.persist.DisableDiskInfo;
 import com.starrocks.persist.DropComputeNodeLog;
+import com.starrocks.persist.UpdateHistoricalNodeLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.qe.ShowResultSetMetaData;
 import com.starrocks.server.GlobalStateMgr;
@@ -166,22 +168,42 @@ public class SystemInfoService implements GsonPostProcessable {
         idToComputeNodeRef.remove(computeNode.getId());
     }
 
-    private void updateHistoricalComputeNodes(String warehouseName)
-            throws DdlException {
+    private boolean needUpdateHistoricalNodes(long currentTime, String warehouse) {
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
-        boolean updateResult = false;
+        long minUpdateIntervalSec = ConnectContext.getSessionVariableOrDefault().getHistoricalNodesMinUpdateInterval();
+        if (currentTime - historicalNodeMgr.getLastUpdateTime(warehouse) < minUpdateIntervalSec * 1000L) {
+            return false;
+        }
+        return true;
+    }
+
+    private void tryUpdateHistoricalComputeNodes(String warehouse) {
+        long currentTime = System.currentTimeMillis();
+        if (needUpdateHistoricalNodes(currentTime, warehouse)) {
+            updateHistoricalComputeNodes(warehouse, currentTime);
+        }
+    }
+
+    private void updateHistoricalComputeNodes(String warehouse, long updateTime) {
+        HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
         if (RunMode.isSharedDataMode()) {
             ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
-            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseName);
+            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouse);
             computeNodeIds.forEach(nodeId -> builder.put(nodeId, getBackendOrComputeNode(nodeId)));
             ImmutableMap<Long, ComputeNode> idToComputeNode = builder.build();
-            updateResult = historicalNodeMgr.updateHistoricalComputeNodes(idToComputeNode, warehouseName);
-            LOG.info("[Gavin] update historical compute nodes, warehouse: {}, nodes: {}, result: {} ", warehouseName,
-                    idToComputeNode.toString(), updateResult);
+            historicalNodeMgr.updateHistoricalComputeNodes(idToComputeNode, updateTime, warehouse);
+
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateHistoricalNode(
+                    new UpdateHistoricalNodeLog(warehouse, updateTime, null, idToComputeNode));
+            LOG.info("[Gavin] update historical compute nodes, warehouse: {}, nodes: {}", warehouse,
+                    idToComputeNode.toString());
         } else {
-            updateResult = historicalNodeMgr.updateHistoricalComputeNodes(idToComputeNodeRef, warehouseName);
-            LOG.info("[Gavin] update historical compute nodes, warehouse: {}, nodeIds: {}, result: {} ", warehouseName,
-                    idToComputeNodeRef.toString(), updateResult);
+            historicalNodeMgr.updateHistoricalComputeNodes(idToComputeNodeRef, updateTime, warehouse);
+
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateHistoricalNode(
+                    new UpdateHistoricalNodeLog(warehouse, updateTime, null, idToComputeNodeRef));
+            LOG.info("[Gavin] update historical compute nodes, warehouse: {}, nodeIds: {}", warehouse,
+                    idToComputeNodeRef.toString());
         }
     }
 
@@ -190,8 +212,9 @@ public class SystemInfoService implements GsonPostProcessable {
         ComputeNode newComputeNode = new ComputeNode(GlobalStateMgr.getCurrentState().getNextId(), host, heartbeatPort);
         setComputeNodeOwner(newComputeNode);
         addComputeNodeToWarehouse(newComputeNode, warehouse);
-        // Record the historical compute nodes
-        updateHistoricalComputeNodes(warehouse);
+
+        // try to record the historical compute nodes
+        tryUpdateHistoricalComputeNodes(warehouse);
 
         idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
 
@@ -264,22 +287,33 @@ public class SystemInfoService implements GsonPostProcessable {
         computeNode.setWarehouseId(warehouse.getId());
     }
 
-    private void updateHistoricalBackends(String warehouseName)
-            throws DdlException {
+    private void tryUpdateHistoricalBackends(String warehouse) {
+        long currentTime = System.currentTimeMillis();
+        if (needUpdateHistoricalNodes(currentTime, warehouse)) {
+            updateHistoricalBackends(warehouse, currentTime);
+        }
+    }
+
+    private void updateHistoricalBackends(String warehouse, long updateTime) {
         HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
-        boolean updateResult = false;
         if (RunMode.isSharedDataMode()) {
             ImmutableMap.Builder<Long, ComputeNode> builder = ImmutableMap.builder();
-            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseName);
+            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouse);
             computeNodeIds.forEach(nodeId -> builder.put(nodeId, getBackendOrComputeNode(nodeId)));
             ImmutableMap<Long, ComputeNode> idToComputeNode = builder.build();
-            updateResult = historicalNodeMgr.updateHistoricalComputeNodes(idToComputeNode, warehouseName);
-            LOG.info("[Gavin] update historical compute nodes, warehouse: {}, nodes: {}, result: {} ", warehouseName,
-                    idToComputeNode.toString(), updateResult);
+            historicalNodeMgr.updateHistoricalComputeNodes(idToComputeNode, updateTime, warehouse);
+
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateHistoricalNode(
+                    new UpdateHistoricalNodeLog(warehouse, updateTime, null, idToComputeNode));
+            LOG.info("[Gavin] update historical compute nodes, warehouse: {}, nodes: {}", warehouse,
+                    idToComputeNode.toString());
         } else {
-            updateResult = historicalNodeMgr.updateHistoricalBackends(idToBackendRef, warehouseName);
-            LOG.info("[Gavin] update historical backend nodes, warehouse: {}, nodeIds: {}, result: {} ", warehouseName,
-                    idToComputeNodeRef.toString(), updateResult);
+            historicalNodeMgr.updateHistoricalBackends(idToBackendRef, updateTime, warehouse);
+
+            GlobalStateMgr.getCurrentState().getEditLog().logUpdateHistoricalNode(
+                    new UpdateHistoricalNodeLog(warehouse, updateTime, idToBackendRef, null));
+            LOG.info("[Gavin] update historical backend nodes, warehouse: {}, nodeIds: {}", warehouse,
+                    idToBackendRef.toString());
         }
     }
 
@@ -290,8 +324,9 @@ public class SystemInfoService implements GsonPostProcessable {
         // add backend to DEFAULT_CLUSTER
         setBackendOwner(newBackend);
         addComputeNodeToWarehouse(newBackend, warehouse);
-        // Record the historical backend nodes
-        updateHistoricalBackends(warehouse);
+
+        // try to record the historical backend nodes
+        tryUpdateHistoricalBackends(warehouse);
 
         // update idToBackend
         idToBackendRef.put(newBackend.getId(), newBackend);
@@ -431,8 +466,8 @@ public class SystemInfoService implements GsonPostProcessable {
                     "] does not exist in warehouse " + warehouse);
         }
 
-        // Record the historical backend nodes
-        updateHistoricalComputeNodes(warehouse);
+        // try to record the historical backend nodes
+        tryUpdateHistoricalComputeNodes(warehouse);
 
         // update idToComputeNode
         idToComputeNodeRef.remove(dropComputeNode.getId());
@@ -547,8 +582,8 @@ public class SystemInfoService implements GsonPostProcessable {
             }
         }
 
-        // Record the historical backend nodes
-        updateHistoricalBackends(warehouse);
+        // try to record the historical backend nodes
+        tryUpdateHistoricalBackends(warehouse);
 
         // update idToBackend
         idToBackendRef.remove(droppedBackend.getId());
@@ -1077,8 +1112,10 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     public void replayAddComputeNode(ComputeNode newComputeNode) {
+        LOG.info("[Gavin] replay add new compute node: {}", newComputeNode);
         // update idToComputeNode
         newComputeNode.setBackendState(BackendState.using);
+
         idToComputeNodeRef.put(newComputeNode.getId(), newComputeNode);
     }
 
@@ -1094,6 +1131,7 @@ public class SystemInfoService implements GsonPostProcessable {
 
     public void replayDropComputeNode(long computeNodeId) {
         LOG.debug("replayDropComputeNode: {}", computeNodeId);
+
         // update idToComputeNode
         ComputeNode cn = idToComputeNodeRef.remove(computeNodeId);
 
@@ -1138,6 +1176,19 @@ public class SystemInfoService implements GsonPostProcessable {
             }
             String workerAddr = NetUtils.getHostPortInAccessibleFormat(backend.getHost(), starletPort);
             GlobalStateMgr.getCurrentState().getStarOSAgent().removeWorkerFromMap(workerAddr);
+        }
+    }
+
+    public void replayUpdateHistoricalNode(UpdateHistoricalNodeLog log) {
+        LOG.debug("replayUpdateHistoricalNode, warehouse: {}, updateTime: {}, idToBackend: {}, idToComputeNode: {}",
+                log.getWarehouse(), log.getUpdateTime(), log.getIdToBackend(), log.getIdToComputeNode());
+
+        HistoricalNodeMgr historicalNodeMgr = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr();
+        if (log.getIdToBackend() != null) {
+            historicalNodeMgr.updateHistoricalBackends(log.getIdToBackend(), log.getUpdateTime(), log.getWarehouse());
+        }
+        if (log.getIdToComputeNode() != null) {
+            historicalNodeMgr.updateHistoricalComputeNodes(log.getIdToComputeNode(), log.getUpdateTime(), log.getWarehouse());
         }
     }
 

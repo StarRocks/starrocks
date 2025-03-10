@@ -18,14 +18,18 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
+import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
-import com.starrocks.qe.ConnectContext;
+import com.starrocks.persist.metablock.SRMetaBlockWriter;
+import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Collectors;
 
 public class HistoricalNodeMgr {
     private static final Logger LOG = LogManager.getLogger(HistoricalNodeMgr.class);
@@ -37,52 +41,21 @@ public class HistoricalNodeMgr {
         whToComputeNodeIds = new ConcurrentHashMap<>();
     }
 
-    /*
-    public void addHistoricalNodeSet(String warehouse) {
-        HistoricalNodeSet nodeSet = new HistoricalNodeSet(kMinUpdateInterval);
-        whToComputeNodeIds.put(warehouse, nodeSet);
-        LOG.info("[Gavin] add historical node set for warehouse: {}", warehouse);
-    }
 
-    public void removeHistoricalNodeSet(String warehouse) {
-        whToComputeNodeIds.remove(warehouse);
-        LOG.info("[Gavin] remove historical node set for warehouse: {}", warehouse);
-    }
-
-    public boolean updateHistoricalNodeIds(List<Long> nodeIds, String warehouse) {
+    public void updateHistoricalBackends(Map<Long, Backend> idToBackend, long currentTime, String warehouse) {
         HistoricalNodeSet nodeSet = whToComputeNodeIds.computeIfAbsent(warehouse, k -> new HistoricalNodeSet());
-        int minUpdateInterval = ConnectContext.getSessionVariableOrDefault().getHistoricalNodesMinUpdateInterval();
-        return nodeSet.setHistoricalNodeIds(nodeIds, minUpdateInterval * 1000);
+        //int minUpdateInterval = ConnectContext.getSessionVariableOrDefault().getHistoricalNodesMinUpdateInterval();
+        nodeSet.updateHistoricalBackends(idToBackend, currentTime);
     }
 
-    public List<Long> getHistoricalNodeIds(String warehouse) {
-        HistoricalNodeSet nodeSet = whToComputeNodeIds.get(warehouse);
-        if (nodeSet == null) {
-            LOG.error("fail to update historical nodes for warehouse[{}] because the warehouse is not exist",
-                    warehouse);
-            return null;
-        }
-        return nodeSet.getNodeIds();
-    }
-    */
-
-    public boolean updateHistoricalBackends(Map<Long, Backend> idToBackend, String warehouse) {
+    public void updateHistoricalComputeNodes(Map<Long, ComputeNode> idToComputeNode, long currentTime, String warehouse) {
         HistoricalNodeSet nodeSet = whToComputeNodeIds.computeIfAbsent(warehouse, k -> new HistoricalNodeSet());
-        int minUpdateInterval = ConnectContext.getSessionVariableOrDefault().getHistoricalNodesMinUpdateInterval();
-        return nodeSet.updateHistoricalBackends(idToBackend, minUpdateInterval * 1000);
-    }
-
-    public boolean updateHistoricalComputeNodes(Map<Long, ComputeNode> idToComputeNode, String warehouse) {
-        HistoricalNodeSet nodeSet = whToComputeNodeIds.computeIfAbsent(warehouse, k -> new HistoricalNodeSet());
-        int minUpdateInterval = ConnectContext.getSessionVariableOrDefault().getHistoricalNodesMinUpdateInterval();
-        return nodeSet.updateHistoricalComputeNodes(idToComputeNode, minUpdateInterval * 1000);
+        nodeSet.updateHistoricalComputeNodes(idToComputeNode, currentTime);
     }
 
     public ImmutableMap<Long, Backend> getHistoricalBackends(String warehouse) {
         HistoricalNodeSet nodeSet = whToComputeNodeIds.get(warehouse);
         if (nodeSet == null) {
-            LOG.error("fail to get historical backends for warehouse[{}] because the warehouse is not exist",
-                    warehouse);
             return ImmutableMap.of();
         }
         return nodeSet.getHistoricalBackends();
@@ -91,8 +64,6 @@ public class HistoricalNodeMgr {
     public ImmutableMap<Long, ComputeNode> getHistoricalComputeNodes(String warehouse) {
         HistoricalNodeSet nodeSet = whToComputeNodeIds.get(warehouse);
         if (nodeSet == null) {
-            LOG.error("fail to get historical compute nodes for warehouse[{}] because the warehouse is not exist",
-                    warehouse);
             return ImmutableMap.of();
         }
         return nodeSet.getHistoricalComputeNodes();
@@ -101,16 +72,34 @@ public class HistoricalNodeMgr {
     public long getLastUpdateTime(String warehouse) {
         HistoricalNodeSet nodeSet = whToComputeNodeIds.get(warehouse);
         if (nodeSet == null) {
-            LOG.error("fail to get last update time for warehouse[{}] because the warehouse is not exist",
-                    warehouse);
             return 0;
         }
         return nodeSet.getLastUpdateTime();
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
+        LOG.info("start save image for historical node manager");
+        WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+        Map<String, HistoricalNodeSet> serializedHistoricalNodes = whToComputeNodeIds.entrySet().stream()
+                .filter(entry -> warehouseManager.warehouseExists(entry.getKey()))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+
+        int numJson = 1 + serializedHistoricalNodes.size() * 2;
+        SRMetaBlockWriter writer = imageWriter.getBlockWriter(SRMetaBlockID.HISTORICAL_NODE_MGR, numJson);
+
+        writer.writeInt(serializedHistoricalNodes.size());
+        for (Map.Entry<String, HistoricalNodeSet> nodeSetEntry : serializedHistoricalNodes.entrySet()) {
+            writer.writeString(nodeSetEntry.getKey());
+            writer.writeJson(nodeSetEntry.getValue());
+        }
+        writer.close();
+        LOG.info("finish save image for historical node manager, whToComputeNodeIds: {}, serializedHistoricalNodes: {}",
+                whToComputeNodeIds, serializedHistoricalNodes);
     }
 
     public void load(SRMetaBlockReader reader) throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
+        LOG.info("start load image for historical ");
+        reader.readMap(String.class, HistoricalNodeSet.class, whToComputeNodeIds::put);
+        LOG.info("finish load image for historical node manager, whToComputeNodeIds: {}", whToComputeNodeIds);
     }
 }

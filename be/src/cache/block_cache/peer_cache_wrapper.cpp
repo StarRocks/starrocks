@@ -46,7 +46,7 @@ Status PeerCacheWrapper::read_buffer(const std::string& key, size_t off, size_t 
     request.set_size(size);
 
     brpc::Controller cntl;
-    cntl.set_timeout_ms(2000);
+    cntl.set_timeout_ms(1000);
 
     auto begin_us = GetCurrentTimeMicros();
 
