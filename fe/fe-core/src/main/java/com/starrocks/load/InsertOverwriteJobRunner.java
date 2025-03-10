@@ -288,15 +288,18 @@ public class InsertOverwriteJobRunner {
             }
         }
 
+        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
+        String targetDb = insertStmt.getTableName().getDb();
+        Database db = state.getLocalMetastore().getDb(targetDb);
+        db.readLock();
         try {
             addPartitionClause = AnalyzerUtils.getAddPartitionClauseFromPartitionValues(olapTable, partitionValues);
         } catch (AnalysisException ex) {
             LOG.warn(ex);
             throw new RuntimeException(ex);
+        } finally {
+            db.readUnlock();
         }
-        GlobalStateMgr state = GlobalStateMgr.getCurrentState();
-        String targetDb = insertStmt.getTableName().getDb();
-        Database db = state.getDb(targetDb);
         List<Long> sourcePartitionIds = job.getSourcePartitionIds();
         try {
             state.addPartitions(db, olapTable.getName(), addPartitionClause);
