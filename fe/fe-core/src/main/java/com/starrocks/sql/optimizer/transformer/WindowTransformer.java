@@ -188,7 +188,8 @@ public class WindowTransformer {
         if (windowFrame != null
                 && windowFrame.getLeftBoundary().getType() == AnalyticWindow.BoundaryType.UNBOUNDED_PRECEDING
                 && windowFrame.getRightBoundary().getType() != AnalyticWindow.BoundaryType.PRECEDING
-                && callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE)) {
+                && callExpr.getFnName().getFunction().equalsIgnoreCase(AnalyticExpr.FIRSTVALUE) &&
+                !callExpr.getIgnoreNulls()) {
             windowFrame.setRightBoundary(new AnalyticWindow.Boundary(AnalyticWindow.BoundaryType.CURRENT_ROW, null));
         }
 
