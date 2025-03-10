@@ -40,17 +40,25 @@ struct MaxAggregateData<LT, AggregateComplexLTGuard<LT>> {
 // TODO(murphy) refactor the guard with AggDataTypeTraits
 template <LogicalType LT>
 struct MaxAggregateData<LT, StringLTGuard<LT>> {
-    int32_t size = -1;
-    raw::RawVector<uint8_t> buffer;
+    void assign(const Slice& slice) {
+        size_t buffer_length = std::max<size_t>(PADDED_SIZE, slice.size);
+        _buffer.resize(buffer_length);
+        memcpy(_buffer.data(), slice.data, slice.size);
+        _size = slice.size;
+    }
 
-    bool has_value() const { return buffer.size() > 0; }
+    bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {buffer.data(), buffer.size()}; }
+    Slice slice() const { return {_buffer.data(), (size_t)_size}; }
 
     void reset() {
-        buffer.clear();
-        size = -1;
+        _buffer.clear();
+        _size = -1;
     }
+
+private:
+    int32_t _size = -1;
+    raw::RawVector<uint8_t> _buffer;
 };
 
 template <LogicalType LT, typename = guard::Guard>
@@ -66,17 +74,25 @@ struct MinAggregateData<LT, AggregateComplexLTGuard<LT>> {
 
 template <LogicalType LT>
 struct MinAggregateData<LT, StringLTGuard<LT>> {
-    int32_t size = -1;
-    raw::RawVector<uint8_t> buffer;
+    void assign(const Slice& slice) {
+        size_t buffer_length = std::max<size_t>(PADDED_SIZE, slice.size);
+        _buffer.resize(buffer_length);
+        memcpy(_buffer.data(), slice.data, slice.size);
+        _size = slice.size;
+    }
 
-    bool has_value() const { return size > -1; }
+    bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {buffer.data(), buffer.size()}; }
+    Slice slice() const { return {_buffer.data(), (size_t)_size}; }
 
     void reset() {
-        buffer.clear();
-        size = -1;
+        _buffer.clear();
+        _size = -1;
     }
+
+private:
+    int32_t _size = -1;
+    raw::RawVector<uint8_t> _buffer;
 };
 
 template <LogicalType LT, typename State, typename = guard::Guard>
@@ -116,9 +132,7 @@ struct MaxElement<LT, State, StringLTGuard<LT>> {
     void operator()(State& state, const Slice& right) const {
         if (!state.has_value() || memcompare_padded(state.slice().get_data(), state.slice().get_size(),
                                                     right.get_data(), right.get_size()) < 0) {
-            state.buffer.resize(right.size);
-            memcpy(state.buffer.data(), right.data, right.size);
-            state.size = right.size;
+            state.assign(right);
         }
     }
 
@@ -138,9 +152,7 @@ struct MinElement<LT, State, StringLTGuard<LT>> {
     void operator()(State& state, const Slice& right) const {
         if (!state.has_value() || memcompare_padded(state.slice().get_data(), state.slice().get_size(),
                                                     right.get_data(), right.get_size()) > 0) {
-            state.buffer.resize(right.size);
-            memcpy(state.buffer.data(), right.data, right.size);
-            state.size = right.size;
+            state.assign(right);
         }
     }
 
