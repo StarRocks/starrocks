@@ -3,6 +3,7 @@
 package com.starrocks.epack.warehouse;
 
 import com.google.common.base.Preconditions;
+import com.staros.proto.ReplicationType;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -211,9 +212,10 @@ public class WarehouseManagerEPack extends WarehouseManager {
 
             for (Cluster cluster : wh.getClusters().values()) {
                 try {
+                    ReplicationType replicationType = toStarOSReplicationType(warehouseProperty.getReplicationType());
                     StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
                     cluster.setWorkerGroupId(starOSAgent.createWorkerGroup("x0", warehouseProperty.getComputeReplica(),
-                                             warehouseProperty.getReplicationType().toString()));
+                                             replicationType));
                 } catch (DdlException e) {
                     LOG.warn(e);
                     throw new DdlException("create warehouse " + wh.getName() + " failed, reason: " + e);
@@ -366,8 +368,9 @@ public class WarehouseManagerEPack extends WarehouseManager {
             StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
             for (Cluster cluster : warehouse.getClusters().values()) {
                 try {
+                    ReplicationType replicationType = toStarOSReplicationType(warehouseProperty.getReplicationType());
                     starOSAgent.updateWorkerGroup(cluster.getWorkerGroupId(), warehouseProperty.getComputeReplica(),
-                            warehouseProperty.getReplicationType().toString());
+                            replicationType);
                 } catch (DdlException e) {
                     LOG.warn(e);
                     throw new DdlException("alter warehouse " + warehouse.getName() + " failed, reason: " + e);
@@ -406,6 +409,17 @@ public class WarehouseManagerEPack extends WarehouseManager {
     @Override
     public Warehouse getBackgroundWarehouse() {
         return getWarehouse(Config.lake_background_warehouse);
+    }
+
+    public static com.staros.proto.ReplicationType toStarOSReplicationType(
+            WarehouseProperty.ReplicationType replicationType)
+            throws DdlException {
+        return switch (replicationType) {
+            case NONE -> com.staros.proto.ReplicationType.NO_REPLICATION;
+            case SYNC -> com.staros.proto.ReplicationType.SYNC;
+            case ASYNC -> com.staros.proto.ReplicationType.ASYNC;
+            default -> throw new DdlException("Unknown replication type " + replicationType);
+        };
     }
 }
 
