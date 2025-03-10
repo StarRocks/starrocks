@@ -525,8 +525,10 @@ public class StmtExecutor {
             httpResultSender = new HttpResultSender((HttpConnectContext) context);
         }
 
-        if (shouldMarkIdleCheck(parsedStmt)) {
-            WarehouseIdleChecker.increaseRunningSQL(context.getCurrentWarehouseId());
+        final boolean shouldMarkIdleCheck = shouldMarkIdleCheck(parsedStmt);
+        final long originWarehouseId = context.getCurrentWarehouseId();
+        if (shouldMarkIdleCheck) {
+            WarehouseIdleChecker.increaseRunningSQL(originWarehouseId);
         }
         try {
             context.getState().setIsQuery(parsedStmt instanceof QueryStatement);
@@ -833,8 +835,8 @@ public class StmtExecutor {
             // restore session variable in connect context
             context.setSessionVariable(sessionVariableBackup);
 
-            if (shouldMarkIdleCheck(parsedStmt)) {
-                WarehouseIdleChecker.decreaseRunningSQL(context.getCurrentWarehouseId());
+            if (shouldMarkIdleCheck) {
+                WarehouseIdleChecker.decreaseRunningSQL(originWarehouseId);
             }
         }
     }
