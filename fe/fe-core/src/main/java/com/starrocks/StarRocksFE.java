@@ -41,24 +41,31 @@ import com.starrocks.common.Config;
 import com.starrocks.common.Log4jConfig;
 import com.starrocks.common.ThreadPoolManager;
 import com.starrocks.common.Version;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.ha.StateChangeExecutor;
 import com.starrocks.http.HttpServer;
 import com.starrocks.journal.Journal;
+import com.starrocks.journal.JournalWriter;
 import com.starrocks.journal.bdbje.BDBEnvironment;
 import com.starrocks.journal.bdbje.BDBJEJournal;
 import com.starrocks.journal.bdbje.BDBTool;
 import com.starrocks.journal.bdbje.BDBToolOptions;
 import com.starrocks.lake.snapshot.RestoreClusterSnapshotMgr;
 import com.starrocks.leader.MetaHelper;
+import com.starrocks.qe.ConnectScheduler;
 import com.starrocks.qe.CoordinatorMonitor;
+import com.starrocks.qe.ProxyContextManager;
 import com.starrocks.qe.QeService;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.service.FrontendThriftServer;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlService;
 import com.starrocks.staros.StarMgrServer;
+import com.starrocks.system.Frontend;
+import com.starrocks.task.AgentTaskQueue;
 import org.apache.commons.cli.BasicParser;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -66,12 +73,15 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import sun.misc.Signal;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.RandomAccessFile;
 import java.lang.management.ManagementFactory;
+import java.net.InetSocketAddress;
 import java.nio.channels.FileLock;
+import java.util.List;
 
 public class StarRocksFE {
     private static final Logger LOG = LogManager.getLogger(StarRocksFE.class);
@@ -184,6 +194,8 @@ public class StarRocksFE {
 
             RestoreClusterSnapshotMgr.finishRestoring();
 
+            handleGracefulExit();
+
             LOG.info("FE started successfully");
 
             while (!stopped) {
@@ -196,6 +208,120 @@ public class StarRocksFE {
         }
 
         System.exit(0);
+    }
+
+    private static void handleGracefulExit() {
+        // Since the normal exit is using SIGTERM(15),
+        // so we have to choose another signal for the graceful exit, use SIGUSR1(10) here.
+        Signal.handle(new Signal("USR1"), sig -> {
+            Thread t = new Thread(() -> {
+                if (canGracefulExit()) {
+                    long startTime = System.nanoTime();
+                    LOG.info("start to handle graceful exit");
+                    GracefulExitFlag.markGracefulExit();
+
+                    // transfer leader if current node is leader
+                    try {
+                        transferLeader();
+                    } catch (Exception e) {
+                        LOG.warn("handle graceful exit failed", e);
+                        System.exit(-1);
+                    }
+
+                    // Wait for queries to complete
+                    try {
+                        waitForDraining();
+                    } catch (Exception e) {
+                        LOG.warn("handle graceful exit failed", e);
+                        System.exit(-1);
+                    }
+
+                    long usedTimeMs = (System.nanoTime() - startTime) / 1000000L;
+                    if (usedTimeMs < Config.min_graceful_exit_time_second * 1000L) {
+                        try {
+                            Thread.sleep(Config.min_graceful_exit_time_second * 1000L - usedTimeMs);
+                        } catch (InterruptedException ignored) {
+                        }
+                    }
+
+                    LOG.info("handle graceful exit successfully");
+                    System.exit(0);
+                } else {
+                    LOG.info("The current number of FEs that are alive cannot match graceful exit condition, " +
+                            "and can only exit forcefully.");
+                    System.exit(-1);
+                }
+            }, "graceful-exit");
+            t.start();
+
+            try {
+                t.join(Config.max_graceful_exit_time_second * 1000);
+            } catch (InterruptedException e) {
+                LOG.warn("An exception thrown while waiting for graceful-exit thread to complete", e);
+            }
+            if (t.isAlive()) {
+                LOG.warn("graceful exit timeout");
+                System.exit(-1);
+            } else {
+                System.exit(0);
+            }
+        });
+    }
+
+    private static void transferLeader() throws InterruptedException {
+        if (GlobalStateMgr.getCurrentState().isLeader()) {
+            JournalWriter journalWriter = GlobalStateMgr.getCurrentState().getJournalWriter();
+            // stop journal writer
+            journalWriter.stopAndWait();
+            Journal journal = GlobalStateMgr.getCurrentState().getJournal();
+
+            // transfer leader
+            if (journal instanceof BDBJEJournal) {
+                BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
+                if (bdbEnvironment != null) {
+                    // close bdb env, leader election will be triggered
+                    bdbEnvironment.close();
+                    // wait for new leader
+                    while (true) {
+                        try {
+                            InetSocketAddress address = GlobalStateMgr.getCurrentState().getHaProtocol().getLeader();
+                            LOG.info("leader is transferred to {}", address);
+                            break;
+                        } catch (Exception e) {
+                            Thread.sleep(100L);
+                        }
+                    }
+                }
+
+                GlobalStateMgr.getCurrentState().markLeaderTransferred();
+            }
+
+            AgentTaskQueue.failForLeaderTransfer();
+        }
+    }
+
+    private static void waitForDraining() throws InterruptedException {
+        ConnectScheduler connectScheduler = ExecuteEnv.getInstance().getScheduler();
+        ProxyContextManager proxyContextManager = ProxyContextManager.getInstance();
+        final long printLogInterval = 1000L;
+        long lastPrintTimeMs = -1L;
+        while (connectScheduler.getTotalConnCount() + proxyContextManager.getTotalConnCount() > 0) {
+            connectScheduler.closeAllIdleConnection();
+            if (System.currentTimeMillis() - lastPrintTimeMs > printLogInterval) {
+                LOG.info("waiting for {} connections to drain",
+                        connectScheduler.getTotalConnCount() + proxyContextManager.getTotalConnCount());
+                lastPrintTimeMs = System.currentTimeMillis();
+            }
+            Thread.sleep(100L);
+        }
+    }
+
+    private static boolean canGracefulExit() {
+        List<Frontend> frontends = GlobalStateMgr.getCurrentState().getNodeMgr().getFrontends(FrontendNodeType.FOLLOWER);
+        long aliveCnt = frontends.stream().filter(Frontend::isAlive).count();
+        // We need to ensure that after the node is shut down, there are still enough followers alive
+        // so that the traffic can be switched to other normal nodes.
+        return (aliveCnt - 1) >= (frontends.size()) / 2 + 1;
     }
 
     /*
@@ -374,37 +500,11 @@ public class StarRocksFE {
         return false;
     }
 
-    // NOTE: To avoid dead lock
-    //      1. never call System.exit in shutdownHook
-    //      2. shutdownHook cannot have lock conflict with the function calling System.exit
+    // Some cleanup work can be done here.
+    // Currently, only one log is printed to distinguish whether it is a normal exit or killed by the operating system.
     private static void addShutdownHook() {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
-            LOG.info("start to execute shutdown hook");
-            try {
-                Thread t = new Thread(() -> {
-                    try {
-                        Journal journal = GlobalStateMgr.getCurrentState().getJournal();
-                        if (journal instanceof BDBJEJournal) {
-                            BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
-                            if (bdbEnvironment != null) {
-                                bdbEnvironment.flushVLSNMapping();
-                            }
-                        }
-                    } catch (Throwable e) {
-                        LOG.warn("flush vlsn mapping failed", e);
-                    }
-                });
-
-                t.start();
-
-                // it is necessary to set shutdown timeout,
-                // because in addition to kill by user, System.exit(-1) will trigger the shutdown hook too,
-                // if no timeout and shutdown hook blocked indefinitely, Fe will fall into a catastrophic state.
-                t.join(30000);
-            } catch (Throwable e) {
-                LOG.warn("shut down hook failed", e);
-            }
-            LOG.info("shutdown hook end");
+            LOG.info("FE shutdown");
         }));
     }
 }
