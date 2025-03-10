@@ -79,6 +79,13 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
         partitionsWithSchemaFile.addAll(other.partitionsWithSchemaFile);
     }
 
+    // Only for reducing data writing after the first log, so we don't do deep copy
+    LakeTableAsyncFastSchemaChangeJob getShadowCopy() {
+        LakeTableAsyncFastSchemaChangeJob copied = new LakeTableAsyncFastSchemaChangeJob();
+        copyOnlyForNonFirstLog(copied);
+        return copied;
+    }
+
     public void setIndexTabletSchema(long indexId, String indexName, SchemaInfo schemaInfo) {
         schemaInfos.add(new IndexSchemaInfo(indexId, indexName, schemaInfo));
     }
@@ -152,10 +159,11 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
 
     @Override
     protected void restoreState(LakeTableAlterMetaJobBase job) {
-        this.schemaInfos = new ArrayList<>(((LakeTableAsyncFastSchemaChangeJob) job).schemaInfos);
+        List<IndexSchemaInfo> schemaInfos = ((LakeTableAsyncFastSchemaChangeJob) job).schemaInfos;
+        if (schemaInfos != null && !schemaInfos.isEmpty()) {
+            this.schemaInfos = new ArrayList<>(schemaInfos);
+        }
     }
-
-
 
     private static class IndexSchemaInfo {
         @SerializedName("indexId")
