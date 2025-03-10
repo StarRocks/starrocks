@@ -212,41 +212,53 @@ public class StarRocksFE {
         // Since the normal exit is using SIGTERM(15),
         // so we have to choose another signal for the graceful exit, use SIGUSR1(10) here.
         Signal.handle(new Signal("USR1"), sig -> {
-            if (canGracefulExit()) {
-                long startTime = System.nanoTime();
-                LOG.info("start to handle graceful exit");
-                GracefulExitFlag.markGracefulExit();
+            Thread t = new Thread(() -> {
+                if (canGracefulExit()) {
+                    long startTime = System.nanoTime();
+                    LOG.info("start to handle graceful exit");
+                    GracefulExitFlag.markGracefulExit();
 
-                // transfer leader if current node is leader
-                try {
-                    transferLeader();
-                } catch (Exception e) {
-                    LOG.warn("handle graceful exit failed", e);
-                    System.exit(-1);
-                }
-
-                // Wait for queries to complete
-                try {
-                    waitForDraining();
-                } catch (Exception e) {
-                    LOG.warn("handle graceful exit failed", e);
-                    System.exit(-1);
-                }
-
-                long usedTimeMs = (System.nanoTime() - startTime) / 1000000L;
-                if (usedTimeMs < Config.min_graceful_exit_time_second * 1000L) {
+                    // transfer leader if current node is leader
                     try {
-                        Thread.sleep(Config.min_graceful_exit_time_second * 1000L - usedTimeMs);
-                    } catch (InterruptedException ignored) {
+                        transferLeader();
+                    } catch (Exception e) {
+                        LOG.warn("handle graceful exit failed", e);
+                        System.exit(-1);
                     }
-                }
 
-                LOG.info("handle graceful exit successfully");
-                System.exit(0);
-            } else {
-                LOG.info("The current number of FEs that are alive cannot match graceful exit condition, " +
-                        "and can only exit forcefully.");
-                System.exit(-1);
+                    // Wait for queries to complete
+                    try {
+                        waitForDraining();
+                    } catch (Exception e) {
+                        LOG.warn("handle graceful exit failed", e);
+                        System.exit(-1);
+                    }
+
+                    long usedTimeMs = (System.nanoTime() - startTime) / 1000000L;
+                    if (usedTimeMs < Config.min_graceful_exit_time_second * 1000L) {
+                        try {
+                            Thread.sleep(Config.min_graceful_exit_time_second * 1000L - usedTimeMs);
+                        } catch (InterruptedException ignored) {
+                        }
+                    }
+
+                    LOG.info("handle graceful exit successfully");
+                    System.exit(0);
+                } else {
+                    LOG.info("The current number of FEs that are alive cannot match graceful exit condition, " +
+                            "and can only exit forcefully.");
+                    System.exit(-1);
+                }
+            }, "graceful-exit");
+            t.start();
+
+            try {
+                t.join(Config.max_graceful_exit_time_second * 1000);
+            } catch (InterruptedException e) {
+                LOG.warn("An exception thrown while waiting for graceful-exit thread to complete", e);
+            }
+            if (t.isAlive()) {
+                LOG.warn("graceful exit timeout");
             }
         });
     }

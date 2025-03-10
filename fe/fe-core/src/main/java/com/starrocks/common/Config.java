@@ -3563,5 +3563,5 @@ public class Config extends ConfigBase {
      * timeout for graceful exit
      */
     @ConfField(mutable = true)
-    public static long max_graceful_exit_time_second = 15;
+    public static long max_graceful_exit_time_second = 60;
 }
