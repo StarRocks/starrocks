@@ -291,7 +291,7 @@ public class AnalyzeMgr implements Writable {
             return;
         }
         GlobalStateMgr.getCurrentStatisticStorage()
-                .refreshConnectorTableColumnStatistics(table, columns, async);
+                .refreshConnectorTableColumnStatistics(table, columns, !async);
     }
 
     public void replayRemoveBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
