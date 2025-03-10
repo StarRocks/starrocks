@@ -70,10 +70,9 @@ public class LocalTabletsProcDir implements ProcDirInterface {
             .add("VersionHash").add("LstSuccessVersion").add("LstSuccessVersionHash")
             .add("LstFailedVersion").add("LstFailedVersionHash").add("LstFailedTime")
             .add("DataSize").add("RowCount").add("State")
-            .add("LstConsistencyCheckTime").add("IsConsistent").add("Checksum")
-            .add("CheckVersion").add("CheckVersionHash")
+            .add("LstConsistencyCheckTime").add("CheckVersion").add("CheckVersionHash")
             .add("VersionCount").add("PathHash").add("MetaUrl").add("CompactionStatus")
-            .add("DiskRootPath")
+            .add("DiskRootPath").add("IsConsistent").add("Checksum")
             .build();
 
     private final Database db;
@@ -140,8 +139,6 @@ public class LocalTabletsProcDir implements ProcDirInterface {
                         tabletInfo.add(replica.getState());
 
                         tabletInfo.add(TimeUtils.longToTimeString(tablet.getLastCheckTime()));
-                        tabletInfo.add(localTablet.isConsistent());
-                        tabletInfo.add(replica.getChecksum());
                         tabletInfo.add(localTablet.getCheckedVersion());
                         tabletInfo.add(0);
                         tabletInfo.add(replica.getVersionCount());
@@ -165,6 +162,8 @@ public class LocalTabletsProcDir implements ProcDirInterface {
                         tabletInfo.add(metaUrl);
                         tabletInfo.add(compactionUrl);
                         tabletInfo.add(diskRootPath);
+                        tabletInfo.add(localTablet.isConsistent());
+                        tabletInfo.add(replica.getChecksum());
 
                         tabletInfos.add(tabletInfo);
                     }
@@ -193,14 +192,15 @@ public class LocalTabletsProcDir implements ProcDirInterface {
         tabletInfo.add(-1); // row count
         tabletInfo.add(FeConstants.NULL_STRING); // state
         tabletInfo.add(-1); // lst consistency check time
-        tabletInfo.add(true); // is consistent
-        tabletInfo.add(-1); // checksum
         tabletInfo.add(-1); // check version
         tabletInfo.add(0); // check version hash
         tabletInfo.add(-1); // version count
         tabletInfo.add(-1); // path hash
         tabletInfo.add(FeConstants.NULL_STRING); // meta url
         tabletInfo.add(FeConstants.NULL_STRING); // compaction status
+        tabletInfo.add(FeConstants.NULL_STRING); // DiskRootPath
+        tabletInfo.add(true); // is consistent
+        tabletInfo.add(-1); // checksum
         return tabletInfo;
     }
 
