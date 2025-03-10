@@ -139,4 +139,82 @@ Status ColumnDictFilterContext::rewrite_conjunct_ctxs_to_predicate(StoredColumnR
     return Status::OK();
 }
 
+bool ColumnReader::check_type_can_apply_bloom_filter(const TypeDescriptor& col_type, const ParquetField& field) const {
+    bool appliable = false;
+    auto type = col_type.type;
+    auto parquet_type = field.physical_type;
+    if (type == LogicalType::TYPE_BOOLEAN) {
+        if (parquet_type == tparquet::Type::type::BOOLEAN) {
+            appliable = true;
+        }
+    } else if (type == LogicalType::TYPE_DATE) {
+        if (parquet_type == tparquet::Type::type::INT32) {
+            // appliable = true;
+            // TODO:
+            // sr._julian - date::UNIX_EPOCH_JULIAN == parquet INT32;
+        }
+    } else if (type == LogicalType::TYPE_TINYINT || type == LogicalType::TYPE_SMALLINT ||
+               type == LogicalType::TYPE_INT) {
+        if (parquet_type == tparquet::Type::type::INT32) {
+            appliable = true;
+        }
+        //TODO: if parquet type is int64, convert the val;
+    } else if (type == LogicalType::TYPE_BIGINT) {
+        if (parquet_type == tparquet::Type::type::INT64) {
+            appliable = true;
+        }
+    } else if (type == LogicalType::TYPE_DOUBLE) {
+        if (parquet_type == tparquet::Type::type::DOUBLE) {
+            appliable = true;
+        }
+    } else if (type == LogicalType::TYPE_FLOAT) {
+        if (parquet_type == tparquet::Type::type::FLOAT) {
+            appliable = true;
+        }
+    } else if (type == LogicalType::TYPE_VARCHAR || type == LogicalType::TYPE_VARBINARY) {
+        if (parquet_type == tparquet::Type::type::BYTE_ARRAY) {
+            appliable = true;
+        }
+        //TODO: FLBA type should check the length and pad space.
+    } else if (type == LogicalType::TYPE_CHAR || type == LogicalType::TYPE_BINARY) {
+        //TODO: The char type will be padded with space
+        //      And we should care about if 'a' == 'a  ' is ture, in SR it is false.
+        //      Thus only the flba type can match the SR type char.
+        //      And the length of the flba should be the same as the type char.
+        //      And any convert should be disabled, because the length cannot change.
+    } else if (type == LogicalType::TYPE_DECIMAL32 || type == LogicalType::TYPE_DECIMAL64 ||
+               type == LogicalType::TYPE_DECIMAL128 || type == LogicalType::TYPE_DECIMALV2) {
+        //TODO: Decimal can be stored as INT32, INT64, BYTE_ARRAY, FLBA in parquet
+        //      SR stores the decimalxx as intxx with precision and scale,
+        //      First the int type should match the parquet's physical type
+        //      And the logical type of sr and parquet's scale and precision should also be the same
+        //      Ohterwise, we need to convert the value.
+        //      But we should notice that if the convert will cause precision loss, otherwise it should be disabled.
+    } else {
+        //TODO: Other types like TYPE_TIME, TYPE_DATE_V1, TYPE_DATETIME, TYPE_DATETIME_V1 is stored different with int type in sr
+        //    should be converted as int32_t or int64_t.
+    }
+    //TODO: be/src/formats/parquet/level_builder.cpp have methods of the above data changing.
+    return appliable;
+}
+
+StatusOr<bool> ColumnReader::adaptive_judge_if_apply_bloom_filter(int64_t span_size) const {
+    bool apply_bloom_filter = true;
+    if (!config::parquet_reader_enable_adpative_bloom_filter) {
+        return apply_bloom_filter = false;
+    } else if (get_chunk_metadata() == nullptr) {
+        return apply_bloom_filter = true;
+    }
+
+    auto& column_metadata = get_chunk_metadata()->meta_data;
+
+    if (column_metadata.__isset.bloom_filter_length) {
+        if (1.0 * span_size / column_metadata.num_values * column_metadata.total_compressed_size <=
+            column_metadata.bloom_filter_length) {
+            return apply_bloom_filter = false;
+        }
+    }
+    return apply_bloom_filter;
+}
+
 } // namespace starrocks::parquet

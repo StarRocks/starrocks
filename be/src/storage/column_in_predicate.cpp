@@ -23,8 +23,8 @@
 #include "storage/column_predicate.h"
 #include "storage/in_predicate_utils.h"
 #include "storage/rowset/bitmap_index_reader.h"
-#include "storage/rowset/bloom_filter.h"
 #include "types/logical_type.h"
+#include "util/bloom_filter.h"
 
 namespace starrocks {
 
@@ -361,6 +361,20 @@ public:
             _slices.emplace(str.data(), old_sz);
         }
         return true;
+    }
+
+    std::string debug_string() const override {
+        std::stringstream ss;
+        ss << "((columnId=" << _column_id << ")IN(";
+        int i = 0;
+        for (auto& item : _zero_padded_strs) {
+            if (i++ != 0) {
+                ss << ",";
+            }
+            ss << this->type_info()->to_string(&item);
+        }
+        ss << "))";
+        return ss.str();
     }
 
 private:

@@ -25,6 +25,8 @@ set(UTIL_FILES
   await.cpp
   bfd_parser.cpp
   base85.cpp
+  bloom_filter.cpp
+  block_split_bloom_filter.cpp
   compression/block_compression.cpp
   compression/compression_context_pool_singletons.cpp
   compression/stream_compression.cpp
