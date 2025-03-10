@@ -185,4 +185,9 @@ public class HistogramStatisticsCollectJob extends StatisticsCollectJob {
         builder.append(build(context, COLLECT_HISTOGRAM_STATISTIC_TEMPLATE));
         return builder.toString();
     }
+
+    @Override
+    public String getName() {
+        return "Histogram";
+    }
 }

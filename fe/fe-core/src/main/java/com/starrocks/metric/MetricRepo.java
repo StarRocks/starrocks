@@ -148,6 +148,21 @@ public final class MetricRepo {
                     () -> new LongCounterMetric("query_queue_v2_category_state", MetricUnit.REQUESTS,
                             "the current state of each category"));
 
+
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_RUNNING_STATS_COLLECT_JOB =
+            new MetricWithLabelGroup<>("type",
+                    () -> new LongCounterMetric("running_stats_collect_job", MetricUnit.REQUESTS,
+                            "the number of running statistics collect jobs"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_TOTAL_STATS_COLLECT_JOB =
+            new MetricWithLabelGroup<>("type",
+                    () -> new LongCounterMetric("total_stats_collect_job", MetricUnit.REQUESTS,
+                            "the number of total statistics collect jobs"));
+    public static final MetricWithLabelGroup<LongCounterMetric> COUNTER_FAILED_STATS_COLLECT_JOB =
+            new MetricWithLabelGroup<>("type",
+                    () -> new LongCounterMetric("failed_stats_collect_job", MetricUnit.REQUESTS,
+                            "the number of failed statistics collect jobs"));
+
+
     public static LongCounterMetric COUNTER_UNFINISHED_BACKUP_JOB;
     public static LongCounterMetric COUNTER_UNFINISHED_RESTORE_JOB;
 

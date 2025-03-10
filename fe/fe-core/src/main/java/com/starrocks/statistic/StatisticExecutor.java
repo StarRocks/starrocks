@@ -35,6 +35,8 @@ import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.connector.statistics.StatisticsUtils;
+import com.starrocks.metric.LongCounterMetric;
+import com.starrocks.metric.MetricRepo;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
@@ -447,6 +449,11 @@ public class StatisticExecutor {
         Database db = statsJob.getDb();
         Table table = statsJob.getTable();
 
+        LongCounterMetric runningJobs = MetricRepo.COUNTER_RUNNING_STATS_COLLECT_JOB.getMetric(statsJob.getName());
+        LongCounterMetric totalJobs = MetricRepo.COUNTER_TOTAL_STATS_COLLECT_JOB.getMetric(statsJob.getName());
+        runningJobs.increase(1L);
+        totalJobs.increase(1L);
+
         try {
             Stopwatch watch = Stopwatch.createStarted();
             statsConnectCtx.getSessionVariable().setEnableProfile(Config.enable_statistics_collect_profile);
@@ -464,8 +471,10 @@ public class StatisticExecutor {
             analyzeStatus.setEndTime(LocalDateTime.now());
             analyzeStatus.setReason(e.getMessage());
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            MetricRepo.COUNTER_FAILED_STATS_COLLECT_JOB.getMetric(statsJob.getName()).increase(1L);
             return analyzeStatus;
         } finally {
+            runningJobs.increase(-1L);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().unregisterConnection(analyzeStatus.getId(), false);
         }
 
