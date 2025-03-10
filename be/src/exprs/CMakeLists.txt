@@ -102,6 +102,7 @@ set(EXPR_FILES
   dictionary_get_expr.cpp
   ngram.cpp
   match_expr.cpp
+  try_expr.cpp
 )
 
 if(STARROCKS_JIT_ENABLE)
