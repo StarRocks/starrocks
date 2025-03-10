@@ -1629,7 +1629,8 @@ public class AnalyzerUtils {
                     if (expr instanceof FunctionCallExpr) {
                         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
                         if (containsNonDeterministicFunction(functionCallExpr)) {
-                            nonDeterministicFunctionOpt = Optional.of(functionCallExpr.getFnName().getFunction());
+                            nonDeterministicFunctionOpt =
+                                    Optional.ofNullable(functionCallExpr.getFnName()).map(FunctionName::getFunction);
                             return null;
                         }
                     }
@@ -1641,7 +1642,7 @@ public class AnalyzerUtils {
         @Override
         public Void visitFunctionCall(FunctionCallExpr expr, Void context) {
             if (containsNonDeterministicFunction(expr)) {
-                nonDeterministicFunctionOpt = Optional.of(expr.getFn().functionName());
+                nonDeterministicFunctionOpt = Optional.ofNullable(expr.getFnName()).map(FunctionName::getFunction);
                 return null;
             }
             for (Expr param : expr.getChildren()) {
