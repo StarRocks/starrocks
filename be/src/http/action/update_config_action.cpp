@@ -368,6 +368,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         UPDATE_STARLET_CONFIG(starlet_delete_files_max_key_in_batch, delete_files_max_key_in_batch);
 #undef UPDATE_STARLET_CONFIG
 
+#ifndef BUILD_FORMAT_LIB
         _config_callback.emplace("starlet_filesystem_instance_cache_capacity", [&]() -> Status {
             LOG(INFO) << "set starlet_filesystem_instance_cache_capacity:"
                       << config::starlet_filesystem_instance_cache_capacity;
@@ -376,6 +377,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             }
             return Status::OK();
         });
+#endif
+
 #endif // USE_STAROS
     });
 

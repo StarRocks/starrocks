@@ -17,6 +17,8 @@
 
 package com.starrocks.format;
 
+
+import com.starrocks.format.jni.NativeOperateException;
 import org.apache.arrow.c.ArrowArray;
 import org.apache.arrow.c.ArrowSchema;
 import org.apache.arrow.c.Data;
@@ -25,36 +27,46 @@ import org.apache.arrow.memory.RootAllocator;
 import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.types.pojo.Schema;
 
+import java.util.Iterator;
 import java.util.Map;
 import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
-public class StarRocksWriter extends DataAccessor {
+public class StarRocksReader extends DataAccessor implements Iterator<VectorSchemaRoot> {
 
     private final BufferAllocator allocator;
-    private final Schema schema;
+    private final Schema requiredSchema;
+    private final Schema outputSchema;
 
-    public StarRocksWriter(long tabletId,
+    private VectorSchemaRoot data;
+
+    public StarRocksReader(long tabletId,
                            String tabletRootPath,
-                           long txnId,
-                           Schema schema,
+                           long version,
+                           Schema requiredSchema,
+                           Schema outputSchema,
                            Config config) {
         this.allocator = new RootAllocator();
-        this.schema = requireNonNull(schema, "Null schema.");
-        if (null == schema.getFields() || schema.getFields().isEmpty()) {
-            throw new IllegalArgumentException("Empty schema fields.");
+        this.requiredSchema = requireNonNull(requiredSchema, "Null required schema");
+        if (null == requiredSchema.getFields() || requiredSchema.getFields().isEmpty()) {
+            throw new IllegalArgumentException("Empty required schema fields");
         }
+        this.outputSchema = requireNonNull(outputSchema, "Null output schema");
 
-        ArrowSchema arrowSchema = ArrowSchema.allocateNew(allocator);
-        Data.exportSchema(allocator, schema, null, arrowSchema);
+        ArrowSchema requiredArrowSchema = ArrowSchema.allocateNew(allocator);
+        Data.exportSchema(allocator, this.requiredSchema, null, requiredArrowSchema);
 
-        this.nativePointer = createNativeWriter(
+        ArrowSchema outputArrowSchema = ArrowSchema.allocateNew(allocator);
+        Data.exportSchema(allocator, this.outputSchema, null, outputArrowSchema);
+
+        this.nativePointer = createNativeReader(
                 tabletId,
-                txnId,
-                arrowSchema.memoryAddress(),
-                requireNonNull(tabletRootPath, "Null tablet root path."),
-                requireNonNull(config, "Null config.").toMap()
+                version,
+                requiredArrowSchema.memoryAddress(),
+                outputArrowSchema.memoryAddress(),
+                tabletRootPath,
+                config.toMap()
         );
 
         Optional.ofNullable(config.getUnreleasedWarningThreshold())
@@ -65,22 +77,29 @@ public class StarRocksWriter extends DataAccessor {
         checkAndDo(() -> nativeOpen(nativePointer));
     }
 
-    public void write(VectorSchemaRoot root) {
-        checkAndDo(() -> {
+    @Override
+    public boolean hasNext() {
+        data = checkAndDo(() -> {
+            VectorSchemaRoot root = VectorSchemaRoot.create(outputSchema, allocator);
             try (ArrowArray array = ArrowArray.allocateNew(allocator)) {
-                Data.exportVectorSchemaRoot(allocator, root, null, array);
-                nativeWrite(nativePointer, array.memoryAddress());
+                try {
+                    nativeGetNext(nativePointer, array.memoryAddress());
+                    Data.importIntoVectorSchemaRoot(allocator, array, root, null);
+                } catch (Exception e) {
+                    array.release();
+                    throw new NativeOperateException(e.getMessage(), e);
+                }
             }
+            return root;
         });
+        return null != data && data.getRowCount() > 0;
     }
 
-    public void flush() {
-        checkAndDo(() -> nativeFlush(nativePointer));
+    @Override
+    public VectorSchemaRoot next() {
+        return checkAndDo(() -> data);
     }
 
-    public void finish() {
-        checkAndDo(() -> nativeFinish(nativePointer));
-    }
 
     @Override
     public void close() throws Exception {
@@ -93,25 +112,18 @@ public class StarRocksWriter extends DataAccessor {
         nativeRelease(nativePointer);
     }
 
-    public BufferAllocator getAllocator() {
-        return allocator;
-    }
-
     /* native methods */
 
-    public native long createNativeWriter(long tabletId,
-                                          long txnId,
-                                          long schema,
+    public native long createNativeReader(long tabletId,
+                                          long version,
+                                          long requiredArrowSchemaAddr,
+                                          long outputArrowSchemaAddr,
                                           String tableRootPath,
                                           Map<String, String> options);
 
     public native void nativeOpen(long nativePointer);
 
-    public native void nativeWrite(long nativePointer, long arrowArray);
-
-    public native void nativeFlush(long nativePointer);
-
-    public native void nativeFinish(long nativePointer);
+    public native void nativeGetNext(long nativePointer, long arrowArray);
 
     public native void nativeClose(long nativePointer);
 
