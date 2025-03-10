@@ -1437,7 +1437,7 @@ alterResourceStatement
     ;
 
 dropResourceStatement
-    : DROP RESOURCE resourceName=identifierOrString
+    : DROP RESOURCE (IF EXISTS)? resourceName=identifierOrString
     ;
 
 showResourceStatement

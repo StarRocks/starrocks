@@ -91,7 +91,7 @@ public class ResourceMgrTest {
         addSparkResource(mgr, brokerMgr, editLog, globalStateMgr);
 
         // drop
-        DropResourceStmt dropStmt = new DropResourceStmt(name);
+        DropResourceStmt dropStmt = new DropResourceStmt(name, false);
         mgr.dropResource(dropStmt);
         Assert.assertEquals(0, mgr.getResourceNum());
     }
@@ -114,7 +114,7 @@ public class ResourceMgrTest {
         // drop
         ResourceMgr mgr = new ResourceMgr();
         Assert.assertEquals(0, mgr.getResourceNum());
-        DropResourceStmt stmt = new DropResourceStmt(name);
+        DropResourceStmt stmt = new DropResourceStmt(name, false);
         mgr.dropResource(stmt);
     }
 
