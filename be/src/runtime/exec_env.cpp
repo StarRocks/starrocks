@@ -1007,6 +1007,7 @@ ThreadPool* ExecEnv::delete_file_thread_pool() {
 }
 
 void ExecEnv::try_release_resource_before_core_dump() {
+    LOG(INFO) << "try release resource start";
     std::set<std::string> modules;
     bool release_all = false;
     if (config::try_release_resource_before_core_dump.value() == "*") {
