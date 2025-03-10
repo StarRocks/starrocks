@@ -65,7 +65,8 @@ TEST_F(DiagnoseDaemonTest, test_stack_trace) {
     request2.context = "trace2";
     ASSERT_OK(_daemon->diagnose(request2));
 
-    Awaitility().timeout(60000).until([&]() { return _daemon->thread_pool()->total_executed_tasks() == 2; });
+    ASSERT_TRUE(
+            Awaitility().timeout(60000).until([&]() { return _daemon->thread_pool()->total_executed_tasks() == 2; }));
     ASSERT_EQ(1, _daemon->diagnose_id());
 }
 

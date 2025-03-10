@@ -96,7 +96,7 @@ void DiagnoseDaemon::_execute_request(const DiagnoseRequest& request) {
 
 void DiagnoseDaemon::_perform_stack_trace(const std::string& context) {
     int64_t interval = MonotonicMillis() - _last_stack_trace_time_ms;
-    if (interval < config::diagnose_stack_trace_interval_ms) {
+    if (_last_stack_trace_time_ms > 0 && interval < config::diagnose_stack_trace_interval_ms) {
         VLOG(2) << "skip to diagnose stack trace, last time: " << _last_stack_trace_time_ms
                 << " ms, interval: " << interval << " ms";
         return;
