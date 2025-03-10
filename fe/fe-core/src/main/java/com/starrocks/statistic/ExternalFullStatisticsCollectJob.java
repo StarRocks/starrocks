@@ -99,6 +99,11 @@ public class ExternalFullStatisticsCollectJob extends StatisticsCollectJob {
     }
 
     @Override
+    public String getName() {
+        return "ExternalFull";
+    }
+
+    @Override
     public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
         long finishedSQLNum = 0;
         int parallelism = Math.max(1, context.getSessionVariable().getStatisticCollectParallelism());
