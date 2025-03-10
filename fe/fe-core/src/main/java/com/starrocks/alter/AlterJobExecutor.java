@@ -44,12 +44,8 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
-<<<<<<< HEAD
-import com.starrocks.common.UserException;
-=======
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksException;
->>>>>>> 8f7f003788 ([BugFix]  Fix fk/uk constraints invalidation with swap table (#56532))
+import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;

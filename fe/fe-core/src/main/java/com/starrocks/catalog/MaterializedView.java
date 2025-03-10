@@ -998,14 +998,6 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             if (desiredActive && reloadActive) {
                 setActive();
             }
-<<<<<<< HEAD
-=======
-            analyzePartitionExprs();
-
-            // register constraints from global state manager
-            GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
-            globalConstraintManager.registerConstraint(this);
->>>>>>> 8f7f003788 ([BugFix]  Fix fk/uk constraints invalidation with swap table (#56532))
         } catch (Throwable e) {
             LOG.error("reload mv failed: {}", this, e);
             setInactiveAndReason("reload failed: " + e.getMessage());
