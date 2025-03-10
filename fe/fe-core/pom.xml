@@ -875,7 +875,7 @@ under the License.
                 <groupId>com.baidu</groupId>
                 <artifactId>jprotobuf-precompile-plugin</artifactId>
                 <configuration>
-                    <filterClassPackage>com.starrocks.proto</filterClassPackage>
+                    <filterClassPackage>com.starrocks.proto;com.starrocks.rpc;com.starrocks.server</filterClassPackage>
                     <generateProtoFile>true</generateProtoFile>
                     <compileDependencies>true</compileDependencies>
                 </configuration>
