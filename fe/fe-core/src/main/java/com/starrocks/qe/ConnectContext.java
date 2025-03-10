@@ -82,6 +82,7 @@ import com.starrocks.sql.optimizer.QueryMaterializationContext;
 import com.starrocks.sql.optimizer.dump.DumpInfo;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.spm.SQLPlanStorage;
 import com.starrocks.thrift.TPipelineProfileLevel;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWorkGroup;
@@ -260,6 +261,9 @@ public class ConnectContext {
     // ExplicitTxnStateItem, and the transaction state is recorded in TransactionState.
     private ExplicitTxnState explicitTxnState;
 
+    // session level SPM storage
+    private SQLPlanStorage sqlPlanStorage = SQLPlanStorage.create(false);
+
     public void setExplicitTxnState(ExplicitTxnState explicitTxnState) {
         this.explicitTxnState = explicitTxnState;
     }
@@ -347,6 +351,9 @@ public class ConnectContext {
         return connectContext;
     }
 
+    public SQLPlanStorage getSqlPlanStorage() {
+        return sqlPlanStorage;
+    }
     public void putPreparedStmt(String stmtName, PrepareStmtContext ctx) {
         this.preparedStmtCtxs.put(stmtName, ctx);
     }

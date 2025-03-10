@@ -50,6 +50,7 @@ import com.starrocks.scheduler.persist.TaskRunPeriodStatusChange;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.spm.BaselinePlan;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.ExternalAnalyzeJob;
@@ -250,6 +251,8 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
             .put(OperationType.OP_CREATE_GROUP_PROVIDER, GroupProviderLog.class)
             .put(OperationType.OP_DROP_GROUP_PROVIDER, GroupProviderLog.class)
+            .put(OperationType.OP_CREATE_SPM_BASELINE_LOG, BaselinePlan.class)
+            .put(OperationType.OP_DROP_SPM_BASELINE_LOG, BaselinePlan.class)
             .build();
 
     public static Writable deserialize(Short opCode, DataInput in) throws IOException {
