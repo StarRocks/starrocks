@@ -198,7 +198,7 @@ select cast("  20200101 " as datetime);
 -- !result
 select cast("  20200101010203   " as datetime);
 -- result:
-None
+2020-01-01 01:02:03
 -- !result
 select cast("  20200101T010203" as datetime);
 -- result:
