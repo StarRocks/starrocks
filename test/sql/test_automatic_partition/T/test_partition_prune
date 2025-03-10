@@ -63,12 +63,12 @@ CREATE TABLE o (
     id BIGINT NOT NULL,
     city STRING NOT NULL
 )
-PARTITION BY from_unixtime(cast(ts as INT) + 3600);
-insert into o values(unix_timestamp(),1,'cd');
-insert into o values(unix_timestamp()+1000000,1,'cd');
-insert into o values(unix_timestamp()-1000000,1,'cd');
-explain select * from o where ts>cast(unix_timestamp() as STRING);
-explain select * from o where ts>'1740108713';
+PARTITION BY from_unixtime(cast(ts as INT) - 3600);
+insert into o values(1741592007,1,'cd');
+insert into o values(1742592007,1,'cd');
+insert into o values(1740592007,1,'cd');
+[UC]show partitions from o;
+explain select * from o where ts>cast(1741892007 as STRING);
 
 -- name: test_prune_convert_tz
 CREATE TABLE ts (

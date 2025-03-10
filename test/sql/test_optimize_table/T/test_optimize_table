@@ -124,7 +124,7 @@ ALTER TABLE demo2_alter_0 DISTRIBUTED BY HASH(`user_name`) BUCKETS 10;
 function: wait_optimize_table_finish()
 
 
--- name: test_online_optimize_table_basic
+-- name: test_online_optimize_table_basic @sequential
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
 (
     PARTITION `p202006` VALUES LESS THAN ("2020-07-01"),
@@ -182,7 +182,7 @@ show create table t;
 -- show partitions from t;
 select * from t;
 
--- name: test_online_optimize_table_pk
+-- name: test_online_optimize_table_pk @sequential
 create table tpk(k int) primary key(k) distributed by hash(k) buckets 10;
 show create table tpk;
 insert into tpk values(1);
@@ -229,7 +229,7 @@ function: wait_optimize_table_finish()
 show create table tpk;
 select * from tpk;
 
--- name: test_online_optimize_table_stream_load
+-- name: test_online_optimize_table_stream_load @sequential
 create database db_${uuid0};
 use db_${uuid0};
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
@@ -301,7 +301,7 @@ function: wait_optimize_table_finish()
 show create table `t#t`;
 admin set frontend config ('enable_online_optimize_table'='true');
 
--- name: test_online_optimize_table_expr_partition
+-- name: test_online_optimize_table_expr_partition @sequential
 create table t(k int, k1 date) PARTITION BY date_trunc('day', k1)
 distributed by hash(k) buckets 10;
 insert into t values(1, '2020-06-01'),(2, '2020-07-01'),(3, '2020-08-01');
@@ -359,7 +359,7 @@ alter table t distributed by hash(k);
 cancel alter table optimize from t;
 function: wait_optimize_table_finish(expect_status="CANCELLED")
 
--- name: test_online_optimize_table_batch
+-- name: test_online_optimize_table_batch @seqential
 create database db_${uuid0};
 use db_${uuid0};
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
