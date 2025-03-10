@@ -54,7 +54,7 @@ Status IcebergMORProcessor::init(RuntimeState* runtime_state, const MORParams& p
 }
 
 Status IcebergMORProcessor::build_hash_table(RuntimeState* runtime_state) {
-    RETURN_IF_ERROR(_hash_joiner->build_ht(runtime_state));
+    RETURN_IF_ERROR(_hash_joiner->build_ht(runtime_state, true));
     _hash_joiner->enter_probe_phase();
     return Status::OK();
 }
