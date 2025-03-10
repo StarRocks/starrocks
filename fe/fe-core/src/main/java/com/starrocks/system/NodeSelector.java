@@ -23,8 +23,10 @@ import com.google.common.collect.Multimap;
 import com.starrocks.clone.TabletChecker;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.thrift.TStorageMedium;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -63,6 +65,23 @@ public class NodeSelector {
 
         return seqChooseBackendIds(backendNum, needAvailable, isCreate, locReq,
                 v -> !v.checkDiskExceedLimitForCreate(storageMedium));
+    }
+
+    /**
+     * It's the caller's responsibility to make sure warehouse existence is pre-checked
+     */
+    public Long seqChooseComputeIdFromWarehouse(long warehouseId) throws StarRocksException {
+        Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseId);
+        assert warehouse != null;
+        List<ComputeNode> aliveComputeNodes =
+                GlobalStateMgr.getCurrentState().getWarehouseMgr().getAliveComputeNodes(warehouseId);
+        if (CollectionUtils.isNotEmpty(aliveComputeNodes)) {
+            List<Long> computeNodes = seqChooseNodeIds(1, false, null, aliveComputeNodes);
+            if (CollectionUtils.isNotEmpty(computeNodes)) {
+                return computeNodes.get(0);
+            }
+        }
+        throw new StarRocksException("No compute node alive in warehouse: " + warehouseId);
     }
 
     public Long seqChooseBackendOrComputeId() throws StarRocksException {
