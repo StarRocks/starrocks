@@ -1709,7 +1709,8 @@ public class AnalyzerUtils {
                     if (expr instanceof FunctionCallExpr) {
                         FunctionCallExpr functionCallExpr = (FunctionCallExpr) expr;
                         if (containsNonDeterministicFunction(functionCallExpr)) {
-                            nonDeterministicFunctionOpt = Optional.of(functionCallExpr.getFnName().getFunction());
+                            nonDeterministicFunctionOpt =
+                                    Optional.ofNullable(functionCallExpr.getFnName()).map(FunctionName::getFunction);
                             return null;
                         }
                     }

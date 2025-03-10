@@ -433,9 +433,10 @@ public class DynamicPartitionUtil {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         PartitionType partitionType = partitionInfo.getType();
         if (!isDynamicPartitionTable(olapTable, partitionInfo, tableProperty)) {
-            LOG.info("olap table {}-{} with dynamic partition enabled, but unable to schedule, " +
+            LOG.info("unable to schedule olap table {}-{} because dynamic partition is not enabled, " +
                             "partition type: {}, partition column size: {}",
                     table.getName(), table.getId(), partitionType, partitionInfo.getPartitionColumnsSize());
+            return false;
         }
         return true;
     }
@@ -478,9 +479,10 @@ public class DynamicPartitionUtil {
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         PartitionType partitionType = partitionInfo.getType();
         if (!isTTLPartitionTable(olapTable, partitionInfo, tableProperty)) {
-            LOG.info("olap table {}-{} with partition ttl enabled, but unable to schedule, " +
+            LOG.info("unable to schedule olap table {}-{} because partition ttl is not enabled, " +
                             "partition type: {}, partition column size: {}",
                     table.getName(), table.getId(), partitionType, partitionInfo.getPartitionColumnsSize());
+            return false;
         }
         return true;
     }
@@ -497,20 +499,14 @@ public class DynamicPartitionUtil {
             }
             // if ttl is not set in table property, return false
             Map<String, String> properties = tableProperty.getProperties();
-            if (!properties.containsKey(PROPERTIES_PARTITION_TTL_NUMBER) &&
-                    !properties.containsKey(PROPERTIES_PARTITION_LIVE_NUMBER) &&
-                    !properties.containsKey(PROPERTIES_PARTITION_TTL) ||
-                    !properties.containsKey(PROPERTIES_PARTITION_RETENTION_CONDITION)) {
-                return false;
-            }
-            return true;
+            return properties.containsKey(PROPERTIES_PARTITION_TTL_NUMBER) ||
+                    properties.containsKey(PROPERTIES_PARTITION_LIVE_NUMBER) ||
+                    properties.containsKey(PROPERTIES_PARTITION_TTL) ||
+                    properties.containsKey(PROPERTIES_PARTITION_RETENTION_CONDITION);
         } else if (partitionInfo instanceof ListPartitionInfo) {
             // if ttl is not set in table property, return false
-            Map<String, String> properties = tableProperty.getProperties();
-            if (!properties.containsKey(PROPERTIES_PARTITION_RETENTION_CONDITION)) {
-                return false;
-            }
-            return true;
+            final Map<String, String> properties = tableProperty.getProperties();
+            return properties.containsKey(PROPERTIES_PARTITION_RETENTION_CONDITION);
         } else {
             return false;
         }
@@ -524,19 +520,17 @@ public class DynamicPartitionUtil {
         }
         // list partition is not supported
         if (partitionInfo instanceof RangePartitionInfo) {
-            // if ttl is not set in table property, return false
-            if (tableProperty.getPartitionTTLNumber() > 0 || !tableProperty.getPartitionTTL().isZero()) {
-                return true;
-            }
-            if (!Strings.isNullOrEmpty(tableProperty.getPartitionRetentionCondition())) {
-                return true;
-            }
-            return false;
+            // if one of those ttls is set in table property, return true
+            // - partition_ttl_number
+            // - partition_ttl
+            // - partition_retention_condition
+            return tableProperty.getPartitionTTLNumber() > 0 ||
+                    !tableProperty.getPartitionTTL().isZero() ||
+                    !Strings.isNullOrEmpty(tableProperty.getPartitionRetentionCondition());
         } else if (partitionInfo instanceof ListPartitionInfo) {
-            if (!Strings.isNullOrEmpty(tableProperty.getPartitionRetentionCondition())) {
-                return true;
-            }
-            return false;
+            // if one of those ttls is set in table property, return true
+            // - partition_retention_condition
+            return !Strings.isNullOrEmpty(tableProperty.getPartitionRetentionCondition());
         } else {
             return false;
         }
