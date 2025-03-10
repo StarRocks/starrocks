@@ -238,7 +238,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 runtimeProfile = new RuntimeProfile();
                 Tracers.toRuntimeProfile(runtimeProfile);
             }
-            logger.info("refresh mv trace logs: {}", Tracers.getTrace(mvRefreshTraceMode));
+            if (logger.isDebugEnabled()) {
+                logger.debug("refresh mv trace logs: {}", Tracers.getTrace(mvRefreshTraceMode));
+            }
             Tracers.close();
             postProcess();
         }
@@ -1027,11 +1029,13 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     .collect(Collectors.toList());
             insertStmt.setTargetColumnNames(targetColumnNames);
         }
-        logger.debug("generate insert-overwrite statement, materialized view's target partition names:{}, " +
-                        "mv's target columns: {}, definition:{}",
-                Joiner.on(",").join(materializedViewPartitions),
-                insertStmt.getTargetColumnNames() == null ? "" : Joiner.on(",").join(insertStmt.getTargetColumnNames()),
-                definition);
+        if (logger.isDebugEnabled()) {
+            logger.debug("generate insert-overwrite statement, materialized view's target partition names:{}, " +
+                            "mv's target columns: {}, definition:{}",
+                    Joiner.on(",").join(materializedViewPartitions),
+                    insertStmt.getTargetColumnNames() == null ? "" : Joiner.on(",").join(insertStmt.getTargetColumnNames()),
+                    definition);
+        }
         return insertStmt;
     }
 
@@ -1361,7 +1365,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                         partition.getDefaultPhysicalPartition().getVisibleVersionTime());
                 partitionInfos.put(partition.getName(), basePartitionInfo);
             }
-            logger.debug("Collect olap base table {}'s refreshed partition infos: {}", baseTable.getName(), partitionInfos);
+            if (logger.isDebugEnabled()) {
+                logger.debug("Collect olap base table {}'s refreshed partition infos: {}", baseTable.getName(), partitionInfos);
+            }
             return partitionInfos;
         } else if (ConnectorPartitionTraits.isSupportPCTRefresh(baseTable.getType())) {
             return getSelectedPartitionInfos(baseTable, Lists.newArrayList(refreshedPartitionNames), baseTableInfo);
