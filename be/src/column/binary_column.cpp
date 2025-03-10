@@ -66,7 +66,7 @@ void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count)
     // new_offsets[i] = new_offsets[i - 1] + (b._offsets[offset + i + 1] - b._offsets[offset + i])
     //    = b._offsets[offset + i + 1] + (new_offsets[i - 1] - b._offsets[offset + i])
     //    = b._offsets[offset + i + 1] + delta
-    // where `delta` is the difference between the start offset of the num_prev_offsets-th destination string
+    // where `delta` is always the difference between the start offset of the num_prev_offsets-th destination string
     // and the start offset of the offset-th source string.
     const size_t num_prev_offsets = _offsets.size();
     _offsets.resize(num_prev_offsets + count);
