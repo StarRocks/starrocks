@@ -344,9 +344,12 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                 }
 
                 // check unique constraints: if old table contains constraints, new table must contain the same constraints
-                final List<UniqueConstraint> origUKConstraints = Optional.ofNullable(origTable.getUniqueConstraints())
+                // TODO: only check users' defined constraints to be compatible with old version
+                final List<UniqueConstraint> origUKConstraints = Optional.ofNullable(origTable.getTableProperty())
+                        .map(tableProperty -> tableProperty.getUniqueConstraints())
                         .orElse(Lists.newArrayList());
-                final List<UniqueConstraint> newUKConstraints = Optional.ofNullable(olapNewTbl.getUniqueConstraints())
+                final List<UniqueConstraint> newUKConstraints = Optional.ofNullable(olapNewTbl.getTableProperty())
+                        .map(tableProperty -> tableProperty.getUniqueConstraints())
                         .orElse(Lists.newArrayList());
                 if (origUKConstraints.size() != newUKConstraints.size()) {
                     throw new AlterJobException("Table " + newTblName + " does not contain the same unique constraints, " +
@@ -367,9 +370,12 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                     }
                 }
                 // check foreign constraints: if old table contains constraints, new table must contain the same constraints
-                final List<ForeignKeyConstraint> origFKConstraints = Optional.ofNullable(origTable.getForeignKeyConstraints())
+                // NOTE: only check users' defined constraints to be compatible with old version
+                final List<ForeignKeyConstraint> origFKConstraints = Optional.ofNullable(origTable.getTableProperty())
+                        .map(tableProperty -> tableProperty.getForeignKeyConstraints())
                         .orElse(Lists.newArrayList());
-                final List<ForeignKeyConstraint> newFKConstraints = Optional.ofNullable(olapNewTbl.getForeignKeyConstraints())
+                final List<ForeignKeyConstraint> newFKConstraints = Optional.ofNullable(olapNewTbl.getTableProperty())
+                        .map(tableProperty -> tableProperty.getForeignKeyConstraints())
                         .orElse(Lists.newArrayList());
                 if (origFKConstraints.size() != newFKConstraints.size()) {
                     throw new AlterJobException("Table " + newTblName + " does not contain the same foreign key " +
