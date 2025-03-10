@@ -259,6 +259,9 @@ public class StarRocksFE {
             }
             if (t.isAlive()) {
                 LOG.warn("graceful exit timeout");
+                System.exit(-1);
+            } else {
+                System.exit(0);
             }
         });
     }

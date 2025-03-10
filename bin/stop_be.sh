@@ -43,7 +43,7 @@ export_shared_envvars
 pidfile=$PID_DIR/be.pid
 
 SIG=9
-TIME_OUT=20
+TIME_OUT=-1
 
 OPTS=$(getopt \
   -n $0 \
@@ -64,7 +64,7 @@ Usage:
 Options:
     -h, --help              display this usage only
     -g, --graceful          send SIGTERM to BE process instead of SIGKILL
-    --timeout               specify the timeout for graceful exit, the default is 20
+    --timeout               specify the timeout for graceful exit
 "
     exit 0
 }
@@ -75,7 +75,6 @@ while true; do
         --help|-h) usage ; shift ;;
         --graceful|-g) SIG=15 ; shift ;;
         --) shift ;  break ;;
-        *) echo "Internal error" ; exit 1 ;;
     esac
 done
 
@@ -106,7 +105,7 @@ if [ -f $pidfile ]; then
     # Waiting for a process to exit
     start_ts=$(date +%s)
     while kill -0 $pid > /dev/null 2>&1; do
-        if [ $(($(date +%s) - $start_ts)) -gt $TIME_OUT ]; then
+        if [ $TIME_OUT -gt 0 ] && [ $(($(date +%s) - $start_ts)) -gt $TIME_OUT ]; then
             kill -9 $pid
             echo "graceful exit timeout, forced termination of the process"
             break
