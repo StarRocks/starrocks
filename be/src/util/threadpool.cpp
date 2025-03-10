@@ -345,6 +345,8 @@ void ThreadPool::shutdown() {
     for (auto* t : _tokens) {
         DCHECK(t->state() == ThreadPoolToken::State::IDLE || t->state() == ThreadPoolToken::State::QUIESCED);
     }
+    // releasing the tasks outside of lock
+    l.unlock();
 }
 
 std::unique_ptr<ThreadPoolToken> ThreadPool::new_token(ExecutionMode mode) {

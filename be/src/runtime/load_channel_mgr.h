@@ -102,6 +102,8 @@ public:
     }
 
 private:
+    friend class ChannelOpenTask;
+
     static void* load_channel_clean_bg_worker(void* arg);
 
     void _open(LoadChannelOpenContext open_context);
