@@ -37,6 +37,7 @@
 #include <memory>
 
 #include "common/closure_guard.h"
+#include "common/tracer.h"
 #include "fmt/format.h"
 #include "runtime/lake_tablets_channel.h"
 #include "runtime/load_channel_mgr.h"
