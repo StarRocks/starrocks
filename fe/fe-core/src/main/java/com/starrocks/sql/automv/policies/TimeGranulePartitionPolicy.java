@@ -146,7 +146,14 @@ public class TimeGranulePartitionPolicy extends AggregatePolicy.SimplePolicy {
         if (optChosenGranule.isPresent()) {
             TimeGranule timeGranule = optChosenGranule.get();
             TimeGranule wellFormedTimeGranule = timeGranule.toWellFormed();
-            TimeGranule coarseTimeGranule =
+
+            PartitionPlus partitionPlus = ppList.stream()
+                    .filter(pp -> pp.getPartitionColumns().stream()
+                            .anyMatch(partColumnId -> timeGranule.getOp().getIds().contains(partColumnId.first)))
+                    .findFirst().orElse(null);
+
+            TimeGranule coarseTimeGranule = Objects.requireNonNull(partitionPlus).isListPartitionOlapTable() ?
+                    wellFormedTimeGranule :
                     Objects.requireNonNull(wellFormedTimeGranule.toCoarse(defaultTimeGranuleUnit));
 
             boolean exists = aggPiece.getDimensions().merge(aggPiece.getRollupDimensions())

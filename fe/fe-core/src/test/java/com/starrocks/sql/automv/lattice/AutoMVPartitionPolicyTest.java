@@ -549,4 +549,124 @@ public class AutoMVPartitionPolicyTest {
         }
     }
 
+    @Test
+    public void testListPartition1() {
+        String q0 = "select date_trunc('week', EventTime), UserId, sum(M0) " +
+                "from hits_daily_list_by_dt " +
+                "group by date_trunc('week', EventTime), UserId";
+
+        Object[][] testCases = new Object[][] {
+                {q0, TimeGranule.Unit.MONTH, new String[] {"PARTITION BY EventDate"}}
+        };
+        Map<String, Object> vars = AutoMVUtil.saveGlobalVariable();
+        try {
+            GlobalVariable.setAutoMVPreferRangePartition(false);
+            AutoMVUtil.testPartitionHelper(STARROCKS_ASSERT.get(), testCases);
+        } finally {
+            AutoMVUtil.restoreGlobalVariable(vars);
+        }
+    }
+
+    @Test
+    public void testListPartition2() {
+        String q0 = "select date_trunc('week', EventDate), UserId, sum(M0) " +
+                "from hits_daily_list_by_dt " +
+                "group by date_trunc('week', EventDate), UserId";
+
+        Object[][] testCases = new Object[][] {
+                {q0, TimeGranule.Unit.MONTH, new String[] {"PARTITION BY EventDate"}}
+        };
+        Map<String, Object> vars = AutoMVUtil.saveGlobalVariable();
+        try {
+            GlobalVariable.setAutoMVPreferRangePartition(false);
+            AutoMVUtil.testPartitionHelper(STARROCKS_ASSERT.get(), testCases);
+        } finally {
+            AutoMVUtil.restoreGlobalVariable(vars);
+        }
+    }
+
+    @Test
+    public void testListPartition3() {
+        String q0 = "select EventDate, date_trunc('week', EventDate), UserId, sum(M0) " +
+                "from hits_daily_list_by_dt " +
+                "group by EventDate, date_trunc('week', EventDate), UserId";
+
+        Object[][] testCases = new Object[][] {
+                {q0, TimeGranule.Unit.MONTH, new String[] {"PARTITION BY EventDate"}}
+        };
+        Map<String, Object> vars = AutoMVUtil.saveGlobalVariable();
+        try {
+            GlobalVariable.setAutoMVPreferRangePartition(false);
+            AutoMVUtil.testPartitionHelper(STARROCKS_ASSERT.get(), testCases);
+        } finally {
+            AutoMVUtil.restoreGlobalVariable(vars);
+        }
+    }
+
+    @Test
+    public void testRangePartition1() {
+        String q0 = "select date_trunc('week', EventTime), UserId, sum(M0) " +
+                "from hits_daily " +
+                "group by date_trunc('week', EventTime), UserId";
+
+        Object[][] testCases = new Object[][] {
+                {q0, TimeGranule.Unit.DAY, new String[] {"PARTITION BY EventDate"}},
+                {q0, TimeGranule.Unit.MONTH, new String[] {"PARTITION BY _ca0002",
+                        "(date_trunc(\"month\", `db0`.`hits_daily`.EventDate)) AS _ca0002"}}
+        };
+        Map<String, Object> vars = AutoMVUtil.saveGlobalVariable();
+        try {
+            GlobalVariable.setAutoMVPreferRangePartition(false);
+            AutoMVUtil.testPartitionHelper(STARROCKS_ASSERT.get(), testCases);
+        } finally {
+            AutoMVUtil.restoreGlobalVariable(vars);
+        }
+    }
+
+    @Test
+    public void testRangePartition2() {
+        String q0 = "select date_trunc('week', EventDate), UserId, sum(M0) " +
+                "from hits_daily " +
+                "group by date_trunc('week', EventDate), UserId";
+
+        Object[][] testCases = new Object[][] {
+                {q0, TimeGranule.Unit.DAY, new String[] {"PARTITION BY EventDate"}},
+                {q0, TimeGranule.Unit.MONTH, new String[] {
+                        "PARTITION BY _ca0002",
+                        "(date_trunc(\"month\", `db0`.`hits_daily`.EventDate)) AS _ca0002"
+                }
+                }
+        };
+        Map<String, Object> vars = AutoMVUtil.saveGlobalVariable();
+        try {
+            GlobalVariable.setAutoMVPreferRangePartition(false);
+            AutoMVUtil.testPartitionHelper(STARROCKS_ASSERT.get(), testCases);
+        } finally {
+            AutoMVUtil.restoreGlobalVariable(vars);
+        }
+    }
+
+    @Test
+    public void testRangePartition3() {
+        String q0 = "select EventDate, date_trunc('week', EventDate), UserId, sum(M0) " +
+                "from hits_daily " +
+                "group by EventDate, date_trunc('week', EventDate), UserId";
+
+        System.out.println(q0);
+        Object[][] testCases = new Object[][] {
+                {q0, TimeGranule.Unit.MONTH, new String[] {
+                        "PARTITION BY _ca0002",
+                        "(date_trunc(\"month\", `db0`.`hits_daily`.EventDate)) AS _ca0002"
+                }
+                }
+        };
+        Map<String, Object> vars = AutoMVUtil.saveGlobalVariable();
+        try {
+            GlobalVariable.setAutoMVPreferRangePartition(false);
+            AutoMVUtil.testPartitionHelper(STARROCKS_ASSERT.get(), testCases);
+        } finally {
+            AutoMVUtil.restoreGlobalVariable(vars);
+        }
+    }
+
 }

@@ -16,6 +16,7 @@ package com.starrocks.sql.automv.generator;
 
 import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Pair;
@@ -60,10 +61,44 @@ public class PartitionPolicy {
             if (op.getIds().size() != 1) {
                 return false;
             }
+
             int columnId = op.getIds().getFirstId();
-            return Optional.ofNullable(partitionColumnIdToPartition.get(columnId))
-                    .map(pp -> !pp.isListPartitionOlapTable() || op.isVar())
-                    .orElse(false);
+            if (!partitionColumnIdToPartition.containsKey(columnId)) {
+                return false;
+            }
+
+            PartitionPlus pp = partitionColumnIdToPartition.get(columnId);
+            if (pp.isListPartitionOlapTable()) {
+                return op.isVar();
+            }
+
+            Optional<TimeGranule> optTimeGranule = Optional.ofNullable(TimeGranule.of(op));
+            if (!optTimeGranule.isPresent()) {
+                return op.isVar() || pp.getPartitionOps().stream().anyMatch(partOp -> partOp.equals(op));
+            }
+            TimeGranule timeGranule = optTimeGranule.get();
+            if (op.isFun(FunctionSet.STR2DATE)) {
+                return pp.isExternalTable() && op.arg(0).isVar() && op.arg(0).getType().isStringType();
+            }
+            if (!TimeGranule.ACCEPTABLE_TIME_GRANULE_UNITS.contains(timeGranule.getUnit())) {
+                return false;
+            }
+            String minGranuleUnit = Optional.ofNullable(ConnectContext.get())
+                    .map(ctx -> ctx.getSessionVariable().getAutoMVDefaultPartitionByTimeGranule())
+                    .orElse("none");
+
+            if (minGranuleUnit.equalsIgnoreCase("none")) {
+                return true;
+            }
+
+            if (TimeGranule.Unit.valueOf(minGranuleUnit.toUpperCase()).ordinal() > timeGranule.getUnit().ordinal()) {
+                return false;
+            }
+            return (op.isVar() || op.isFun(FunctionSet.DATE_TRUNC)) &&
+                    pp.getPartitionOps()
+                            .stream()
+                            .anyMatch(partOp -> partOp.getIds().equals(op.getIds()) && (partOp.isVar() ||
+                                    partOp.isFun(FunctionSet.DATE_TRUNC)));
         };
     }
 

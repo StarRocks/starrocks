@@ -181,7 +181,7 @@ public class PartitionPlus {
                 .stream().map(p -> OpUtil.columnToOp(p.first, p.second)).collect(Collectors.toList()));
         Preconditions.checkState(partitionOps.size() == partitionColumnIds.size());
         Preconditions.checkState(partitionColumnIds.isEmpty() || IntStream.range(0, partitionColumnIds.size())
-                .anyMatch(i -> partitionOps.get(i).getIds().contains(partitionColumnIds.get(i).first)));
+                .allMatch(i -> partitionOps.get(i).getIds().contains(partitionColumnIds.get(i).first)));
 
         Map<String, List<Op>> partitions =
                 Optional.ofNullable(extractor).map(e -> e.getCachedOrExtract(tablePiece.getTable()))
@@ -221,6 +221,10 @@ public class PartitionPlus {
         return Util.downcast(tablePiece.getTable().getTable(), OlapTable.class)
                 .map(olapTable -> olapTable.getPartitionInfo().isListPartition())
                 .orElse(false);
+    }
+
+    public boolean isExternalTable() {
+        return !Util.downcast(tablePiece.getTable().getTable(), OlapTable.class).isPresent();
     }
 
     // timeFormat as follows:

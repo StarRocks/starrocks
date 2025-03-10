@@ -81,6 +81,7 @@ public class AutoMVFlatTPCDSTest {
             sv.setAutoMVCardRowCountRatioHWM(1.0);
         }, results -> {
             String mv = results.get(0).get(2);
+            System.out.println(mv);
             Assert.assertTrue(mv, mv.contains("PARTITION BY cs_sold_date"));
         });
     }

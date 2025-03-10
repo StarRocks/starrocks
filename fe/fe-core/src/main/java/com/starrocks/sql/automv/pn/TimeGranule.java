@@ -16,6 +16,7 @@ package com.starrocks.sql.automv.pn;
 
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableSet;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.Type;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -25,10 +26,18 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class TimeGranule {
+    public static Set<Unit> ACCEPTABLE_TIME_GRANULE_UNITS = ImmutableSet.of(
+            TimeGranule.Unit.HOUR,
+            TimeGranule.Unit.DAY,
+            TimeGranule.Unit.MONTH,
+            TimeGranule.Unit.QUARTER,
+            TimeGranule.Unit.YEAR
+    );
     private final Op op;
     private final Var var;
     private final int num;
@@ -100,15 +109,9 @@ public class TimeGranule {
 
     public static void validate(String granule) {
         List<String> acceptableGranules = Stream.concat(
-                Stream.of("none"),
-                Stream.of(
-                                TimeGranule.Unit.HOUR,
-                                TimeGranule.Unit.DAY,
-                                TimeGranule.Unit.MONTH,
-                                TimeGranule.Unit.QUARTER,
-                                TimeGranule.Unit.YEAR).map(
-                                Enum::name)
-                        .map(String::toLowerCase)).collect(Collectors.toList());
+                        Stream.of("none"),
+                        ACCEPTABLE_TIME_GRANULE_UNITS.stream().map(Enum::name).map(String::toLowerCase))
+                .collect(Collectors.toList());
 
         String lcGranule = Optional.ofNullable(granule).orElse("").toLowerCase();
         if (!acceptableGranules.contains(lcGranule)) {

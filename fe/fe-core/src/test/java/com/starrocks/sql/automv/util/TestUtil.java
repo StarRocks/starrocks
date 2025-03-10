@@ -98,7 +98,8 @@ public class TestUtil {
     }
 
     public static List<String> getPartitionedTableSqlList() {
-        return getSqlList("sql/partitioned_tables/", "hits_daily", "hits_hourly", "hits_daily_list");
+        return getSqlList("sql/partitioned_tables/", "hits_daily", "hits_hourly", "hits_daily_list",
+                "hits_daily_list_by_dt");
     }
 
     public static List<String> getFlatTpcdsTableSqlList() {
