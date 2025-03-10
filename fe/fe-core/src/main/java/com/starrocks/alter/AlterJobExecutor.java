@@ -320,6 +320,66 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                     }
                 }
 
+<<<<<<< HEAD
+=======
+                // check unique constraints: if old table contains constraints, new table must contain the same constraints
+                // TODO: only check users' defined constraints to be compatible with old version
+                final List<UniqueConstraint> origUKConstraints = Optional.ofNullable(origTable.getTableProperty())
+                        .map(tableProperty -> tableProperty.getUniqueConstraints())
+                        .orElse(Lists.newArrayList());
+                final List<UniqueConstraint> newUKConstraints = Optional.ofNullable(olapNewTbl.getTableProperty())
+                        .map(tableProperty -> tableProperty.getUniqueConstraints())
+                        .orElse(Lists.newArrayList());
+                if (origUKConstraints.size() != newUKConstraints.size()) {
+                    throw new AlterJobException("Table " + newTblName + " does not contain the same unique constraints, " +
+                            "origin: " + origUKConstraints + ", new: " + newUKConstraints);
+                }
+                for (UniqueConstraint origUniqueConstraint : origUKConstraints) {
+                    final List<String> originUKNames = origUniqueConstraint.getUniqueColumnNames(origTable);
+                    final List<String> newUKNames = origUniqueConstraint.getUniqueColumnNames(olapNewTbl);
+                    if (originUKNames.size() != newUKNames.size()) {
+                        throw new AlterJobException("Table " + newTblName + " does not contain the same unique constraints" +
+                                ", origin: " + origUKConstraints + ", new: " + newUKConstraints);
+                    }
+                    for (int i = 0; i < originUKNames.size(); i++) {
+                        if (!originUKNames.get(i).equals(newUKNames.get(i))) {
+                            throw new AlterJobException("Table " + newTblName + " does not contain the same unique constraints" +
+                                    ", origin: " + origUKConstraints + ", new: " + newUKConstraints);
+                        }
+                    }
+                }
+                // check foreign constraints: if old table contains constraints, new table must contain the same constraints
+                // NOTE: only check users' defined constraints to be compatible with old version
+                final List<ForeignKeyConstraint> origFKConstraints = Optional.ofNullable(origTable.getTableProperty())
+                        .map(tableProperty -> tableProperty.getForeignKeyConstraints())
+                        .orElse(Lists.newArrayList());
+                final List<ForeignKeyConstraint> newFKConstraints = Optional.ofNullable(olapNewTbl.getTableProperty())
+                        .map(tableProperty -> tableProperty.getForeignKeyConstraints())
+                        .orElse(Lists.newArrayList());
+                if (origFKConstraints.size() != newFKConstraints.size()) {
+                    throw new AlterJobException("Table " + newTblName + " does not contain the same foreign key " +
+                            "constraints, origin: " + origFKConstraints + ", new: " + newFKConstraints);
+                }
+                for (int i = 0; i < origFKConstraints.size(); i++) {
+                    final ForeignKeyConstraint originFKConstraint = origFKConstraints.get(i);
+                    final ForeignKeyConstraint newFKConstraint = newFKConstraints.get(i);
+                    final List<Pair<String, String>> originFKCNPairs = originFKConstraint.getColumnNameRefPairs(origTable);
+                    final List<Pair<String, String>> newFKCNPairs = newFKConstraint.getColumnNameRefPairs(origTable);
+                    if (originFKCNPairs.size() != newFKCNPairs.size()) {
+                        throw new AlterJobException("Table " + newTblName + " does not contain the same foreign key " +
+                                "constraints, origin: " + origFKConstraints + ", new: " + newFKConstraints);
+                    }
+                    for (int j = 0; j < originFKCNPairs.size(); j++) {
+                        final Pair<String, String> originPair = originFKCNPairs.get(j);
+                        final Pair<String, String> newPair = newFKCNPairs.get(j);
+                        if (!originPair.first.equals(newPair.first) || !originPair.second.equals(newPair.second)) {
+                            throw new AlterJobException("Table " + newTblName + " does not contain the same foreign key " +
+                                    "constraints, origin: " + origFKConstraints + ", new: " + newFKConstraints);
+                        }
+                    }
+                }
+
+>>>>>>> 722dc4e738 ([BugFix] Only check users' defined uk/fk constraints to be compatible with old versions (#56761))
                 // inactive the related MVs
                 AlterMVJobExecutor.inactiveRelatedMaterializedView(origTable,
                         MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName), false);
