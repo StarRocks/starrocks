@@ -24,6 +24,7 @@ import com.starrocks.epack.authorization.Policy;
 import com.starrocks.epack.authorization.SecurityPolicyMgr;
 import com.starrocks.epack.authorization.ranger.RangerKerberosAuth;
 import com.starrocks.epack.sql.ast.PolicyType;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
 import org.apache.ranger.authorization.hadoop.config.RangerPluginConfig;
@@ -42,23 +43,23 @@ public class RangerStarRocksAccessControllerEPack extends RangerStarRocksAccessC
     }
 
     @Override
-    public void checkPolicyAction(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
+    public void checkPolicyAction(ConnectContext context, PolicyType policyType, String catalogName,
                                   String db, String policy, PrivilegeType privilegeType) throws AccessDeniedException {
         RangerStarRocksResourceEPack resource =
                 RangerStarRocksResourceEPack.makePolicyResource(policyType, catalogName, db, policy);
-        hasPermission(resource, currentUser, privilegeType);
+        hasPermission(resource, context.getCurrentUserIdentity(), context.getGroups(), privilegeType);
     }
 
     @Override
-    public void checkAnyActionOnPolicy(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
+    public void checkAnyActionOnPolicy(ConnectContext context, PolicyType policyType, String catalogName,
                                        String db, String policy) throws AccessDeniedException {
         RangerStarRocksResourceEPack resource =
                 RangerStarRocksResourceEPack.makePolicyResource(policyType, catalogName, db, policy);
-        hasPermission(resource, currentUser, PrivilegeType.ANY);
+        hasPermission(resource, context.getCurrentUserIdentity(), context.getGroups(), PrivilegeType.ANY);
     }
 
     @Override
-    public void checkAnyActionOnAnyPolicy(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
+    public void checkAnyActionOnAnyPolicy(ConnectContext context, PolicyType policyType, String catalogName,
                                           String db) throws AccessDeniedException {
         SecurityPolicyMgr securityPolicyMgr = GlobalStateMgr.getCurrentState().getSecurityPolicyManager();
         Map<String, Policy> policyMap = securityPolicyMgr
@@ -67,7 +68,7 @@ public class RangerStarRocksAccessControllerEPack extends RangerStarRocksAccessC
         for (Policy policy : policyMap.values()) {
             resource = RangerStarRocksResourceEPack.makePolicyResource(policyType, catalogName, db, policy.getName());
             try {
-                hasPermission(resource, currentUser, PrivilegeType.ANY);
+                hasPermission(resource, context.getCurrentUserIdentity(), context.getGroups(), PrivilegeType.ANY);
             } catch (AccessDeniedException e) {
                 continue;
             }
@@ -78,33 +79,34 @@ public class RangerStarRocksAccessControllerEPack extends RangerStarRocksAccessC
     }
 
     @Override
-    public void checkWarehouseAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
+    public void checkWarehouseAction(ConnectContext context, String name, PrivilegeType privilegeType)
             throws AccessDeniedException {
         RangerStarRocksResourceEPack resource = RangerStarRocksResourceEPack.makeWarehouseResource(name);
-        hasPermission(resource, currentUser, privilegeType);
+        hasPermission(resource, context.getCurrentUserIdentity(), context.getGroups(), privilegeType);
     }
 
     @Override
-    public void checkAnyActionOnWarehouse(UserIdentity currentUser, Set<Long> roleIds, String name) throws AccessDeniedException {
+    public void checkAnyActionOnWarehouse(ConnectContext context, String name) throws AccessDeniedException {
         RangerStarRocksResourceEPack resource = RangerStarRocksResourceEPack.makeWarehouseResource(name);
-        hasPermission(resource, currentUser, PrivilegeType.ANY);
+        hasPermission(resource, context.getCurrentUserIdentity(), context.getGroups(), PrivilegeType.ANY);
     }
 
     @Override
-    public void checkFailoverGroupAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
+    public void checkFailoverGroupAction(ConnectContext context, String name, PrivilegeType privilegeType)
             throws AccessDeniedException {
         RangerStarRocksResourceEPack resource = RangerStarRocksResourceEPack.makeFailoverGroup(name);
-        hasPermission(resource, currentUser, privilegeType);
+        hasPermission(resource, context.getCurrentUserIdentity(), context.getGroups(), privilegeType);
     }
 
     @Override
-    public void checkAnyActionOnFailoverGroup(UserIdentity currentUser, Set<Long> roleIds, String name)
+    public void checkAnyActionOnFailoverGroup(ConnectContext context, String name)
             throws AccessDeniedException {
         RangerStarRocksResourceEPack resource = RangerStarRocksResourceEPack.makeFailoverGroup(name);
-        hasPermission(resource, currentUser, PrivilegeType.ANY);
+        hasPermission(resource, context.getCurrentUserIdentity(), context.getGroups(), PrivilegeType.ANY);
     }
 
-    private void hasPermission(RangerStarRocksResourceEPack resource, UserIdentity user, PrivilegeType privilegeType)
+    private void hasPermission(RangerStarRocksResourceEPack resource, UserIdentity user, Set<String> groups,
+                               PrivilegeType privilegeType)
             throws AccessDeniedException {
         String accessType;
         if (privilegeType.equals(PrivilegeType.ANY)) {
@@ -113,7 +115,8 @@ public class RangerStarRocksAccessControllerEPack extends RangerStarRocksAccessC
             accessType = privilegeType.name().toLowerCase(ENGLISH);
         }
 
-        RangerStarRocksAccessRequest request = RangerStarRocksAccessRequest.createAccessRequest(resource, user, accessType);
+        RangerStarRocksAccessRequest request =
+                RangerStarRocksAccessRequest.createAccessRequest(resource, user, groups, accessType);
         RangerAccessResult result = rangerPlugin.isAccessAllowed(request);
 
         if (result == null || !result.getIsAllowed()) {

@@ -52,7 +52,6 @@ import com.starrocks.thrift.TUserRoles;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashSet;
 import java.util.Set;
 
 // https://dev.mysql.com/doc/refman/8.0/en/account-names.html
@@ -115,18 +114,6 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
         return new UserIdentity(user, domain, true);
     }
 
-    public static UserIdentity fromThrift(TUserIdentity tUserIdent) {
-        UserIdentity userIdentity =
-                new UserIdentity(tUserIdent.getUsername(), tUserIdent.getHost(), tUserIdent.is_domain);
-        if (tUserIdent.isSetIs_ephemeral()) {
-            userIdentity.setEphemeral(tUserIdent.is_ephemeral);
-        }
-        if (tUserIdent.isSetCurrent_role_ids()) {
-            userIdentity.setMappedRoleIds(new HashSet<>(tUserIdent.current_role_ids.getRole_id_list()));
-        }
-        return userIdentity;
-    }
-
     public static UserIdentity createEphemeralUserIdent(String user, String host) {
         return new UserIdentity(true, user, host);
     }
@@ -149,14 +136,6 @@ public class UserIdentity implements ParseNode, Writable, GsonPostProcessable {
 
     public void setEphemeral(boolean ephemeral) {
         this.ephemeral = ephemeral;
-    }
-
-    public void setMappedRoleIds(Set<Long> mappedRoleIds) {
-        this.mappedRoleIds = mappedRoleIds;
-    }
-
-    public Set<Long> getMappedRoleIds() {
-        return mappedRoleIds;
     }
 
     public void analyze() {

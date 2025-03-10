@@ -175,27 +175,24 @@ public class WebBaseAction extends BaseAction {
         ActionAuthorizationInfo authInfo;
         try {
             authInfo = getAuthorizationInfo(request);
-            UserIdentity currentUser = checkPassword(authInfo);
+            ConnectContext ctx = new ConnectContext(null);
+            UserIdentity currentUser = checkPassword(ctx, authInfo);
             if (needAdmin()) {
                 try {
-                    Authorizer.checkSystemAction(currentUser,
-                            currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null, PrivilegeType.NODE);
+                    Authorizer.checkSystemAction(ctx, PrivilegeType.NODE);
                 } catch (AccessDeniedException e) {
                     checkUserOwnsAdminRole(currentUser);
                 }
             }
             request.setAuthorized(true);
             SessionValue value = new SessionValue();
-            value.currentUser = currentUser;
+            value.connectContext = ctx;
             addSession(request, response, value);
 
-            ConnectContext ctx = new ConnectContext(null);
             ctx.setQualifiedUser(authInfo.fullUserName);
             ctx.setQueryId(UUIDUtil.genUUID());
             ctx.setRemoteIP(authInfo.remoteIp);
-            ctx.setCurrentUserIdentity(currentUser);
             ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-            ctx.setCurrentRoleIds(currentUser);
             ctx.setThreadLocalInfo();
 
             return true;
@@ -219,11 +216,9 @@ public class WebBaseAction extends BaseAction {
 
             try {
                 try {
-                    Authorizer.checkSystemAction(sessionValue.currentUser,
-                            sessionValue.currentUser.isEphemeral() ? sessionValue.currentUser.getMappedRoleIds() : null,
-                            PrivilegeType.NODE);
+                    Authorizer.checkSystemAction(sessionValue.connectContext, PrivilegeType.NODE);
                 } catch (AccessDeniedException e) {
-                    checkUserOwnsAdminRole(sessionValue.currentUser);
+                    checkUserOwnsAdminRole(sessionValue.connectContext.getCurrentUserIdentity());
                 }
                 authorized = true;
             } catch (AccessDeniedException e) {
@@ -235,12 +230,12 @@ public class WebBaseAction extends BaseAction {
                 request.setAuthorized(true);
 
                 ConnectContext ctx = new ConnectContext(null);
-                ctx.setQualifiedUser(sessionValue.currentUser.getUser());
+                ctx.setQualifiedUser(sessionValue.connectContext.getCurrentUserIdentity().getUser());
                 ctx.setQueryId(UUIDUtil.genUUID());
                 ctx.setRemoteIP(request.getHostString());
-                ctx.setCurrentUserIdentity(sessionValue.currentUser);
+                ctx.setCurrentUserIdentity(sessionValue.connectContext.getCurrentUserIdentity());
                 ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
-                ctx.setCurrentRoleIds(sessionValue.currentUser);
+                ctx.setCurrentRoleIds(sessionValue.connectContext.getCurrentRoleIds());
 
                 ctx.setThreadLocalInfo();
                 return true;

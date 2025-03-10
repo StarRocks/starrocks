@@ -138,17 +138,16 @@ public class RestBaseAction extends BaseAction {
     @Override
     public void execute(BaseRequest request, BaseResponse response) throws DdlException, AccessDeniedException {
         ActionAuthorizationInfo authInfo = getAuthorizationInfo(request);
-        // check password
-        UserIdentity currentUser = checkPassword(authInfo);
-        // ctx lifetime is the same as the channel
         HttpConnectContext ctx = request.getConnectContext();
+
+        // check password
+        checkPassword(ctx, authInfo);
+        // ctx lifetime is the same as the channel
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
         ctx.setNettyChannel(request.getContext());
         ctx.setQualifiedUser(authInfo.fullUserName);
         ctx.setQueryId(UUIDUtil.genUUID());
         ctx.setRemoteIP(authInfo.remoteIp);
-        ctx.setCurrentUserIdentity(currentUser);
-        ctx.setCurrentRoleIds(currentUser);
         ctx.setThreadLocalInfo();
         executeWithoutPassword(request, response);
     }

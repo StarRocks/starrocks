@@ -63,9 +63,9 @@ import com.starrocks.common.util.TimeUtils;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Backend;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.task.AgentTaskQueue;
@@ -1272,9 +1272,9 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
         return result;
     }
 
-    public boolean checkPrivForCurrUser(UserIdentity currentUser) {
+    public boolean checkPrivForCurrUser(ConnectContext context) {
         // For backward compatibility
-        if (currentUser == null) {
+        if (context == null) {
             return true;
         }
 
@@ -1292,11 +1292,11 @@ public class TabletSchedCtx implements Comparable<TabletSchedCtx> {
             } else {
                 // if user has 'OPERATE' privilege, can see this tablet, for backward compatibility
                 try {
-                    Authorizer.checkSystemAction(currentUser, null, PrivilegeType.OPERATE);
+                    Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
                     return true;
                 } catch (AccessDeniedException ae) {
                     try {
-                        Authorizer.checkAnyActionOnTableLikeObject(currentUser, null, db.getFullName(), table);
+                        Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
                         return true;
                     } catch (AccessDeniedException e) {
                         return false;

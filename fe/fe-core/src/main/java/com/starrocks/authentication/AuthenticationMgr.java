@@ -21,13 +21,11 @@ import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.authorization.UserPrivilegeCollectionV2;
 import com.starrocks.common.Config;
-import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.epack.authorization.PasswordPolicy;
 import com.starrocks.epack.sql.ast.UserPasswordOption;
 import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.persist.EditLog;
 import com.starrocks.persist.GroupProviderLog;
 import com.starrocks.persist.ImageWriter;
@@ -39,8 +37,6 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.rpc.ThriftConnectionPool;
-import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.CreateUserStmt;
@@ -49,10 +45,6 @@ import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.ast.UserLockOption;
 import com.starrocks.sql.ast.group.CreateGroupProviderStmt;
 import com.starrocks.sql.ast.group.DropGroupProviderStmt;
-import com.starrocks.thrift.TAuthInfo;
-import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TUserSecurityPolicyRequest;
-import com.starrocks.thrift.TUserSecurityPolicyResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -60,7 +52,6 @@ import java.io.File;
 import java.io.IOException;
 import java.net.URL;
 import java.net.URLClassLoader;
-import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -242,101 +233,6 @@ public class AuthenticationMgr {
         } finally {
             readUnlock();
         }
-    }
-
-    private UserIdentity checkPasswordForNative(
-            String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
-        Map.Entry<UserIdentity, UserAuthenticationInfo> matchedUserIdentity =
-                getBestMatchedUserIdentity(remoteUser, remoteHost);
-
-        if (matchedUserIdentity == null) {
-            LOG.debug("cannot find user {}@{}", remoteUser, remoteHost);
-        } else {
-            try {
-                AuthenticationProvider provider =
-                        AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin());
-                provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
-                        matchedUserIdentity.getValue());
-                return matchedUserIdentity.getKey();
-            } catch (AuthenticationException e) {
-                LOG.debug("failed to authenticate for native, user: {}@{}, error: {}",
-                        remoteUser, remoteHost, e.getMessage());
-
-                try {
-                    if (GlobalStateMgr.getCurrentState().isLeader()) {
-                        increasePasswordErrorTimes(matchedUserIdentity.getKey());
-                    } else {
-                        TAuthInfo tAuthInfo = new TAuthInfo();
-                        tAuthInfo.current_user_ident = matchedUserIdentity.getKey().toThrift();
-
-                        TUserSecurityPolicyRequest tUserSecurityPolicyRequest = new TUserSecurityPolicyRequest();
-                        tUserSecurityPolicyRequest.setAuthInfo(tAuthInfo);
-
-                        Pair<String, Integer> ipAndPort =
-                                GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
-                        TNetworkAddress thriftAddress = new TNetworkAddress(ipAndPort.first, ipAndPort.second);
-                        TUserSecurityPolicyResponse response = ThriftRPCRequestExecutor.call(
-                                ThriftConnectionPool.frontendPool,
-                                thriftAddress,
-                                client -> client.increasePasswordErrorTimes(tUserSecurityPolicyRequest));
-                    }
-                } catch (Exception ex) {
-                    LOG.error(ex);
-                }
-            }
-        }
-
-        return null;
-    }
-
-    protected UserIdentity checkPasswordForNonNative(
-            String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString, String authMechanism) {
-        SecurityIntegration securityIntegration =
-                nameToSecurityIntegrationMap.getOrDefault(authMechanism, null);
-        if (securityIntegration == null) {
-            LOG.info("'{}' authentication mechanism not found", authMechanism);
-        } else {
-            try {
-                AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
-                UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
-                userAuthenticationInfo.extraInfo.put(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name(),
-                        securityIntegration);
-                provider.authenticate(remoteUser, remoteHost, remotePasswd, randomString,
-                        userAuthenticationInfo);
-                // the ephemeral user is identified as 'username'@'auth_mechanism'
-                UserIdentity authenticatedUser = UserIdentity.createEphemeralUserIdent(remoteUser, authMechanism);
-                return authenticatedUser;
-            } catch (AuthenticationException e) {
-                LOG.debug("failed to authenticate, user: {}@{}, security integration: {}, error: {}",
-                        remoteUser, remoteHost, securityIntegration, e.getMessage());
-            }
-        }
-
-        return null;
-    }
-
-    public UserIdentity checkPassword(String remoteUser, String remoteHost, byte[] remotePasswd, byte[] randomString) {
-        String[] authChain = Config.authentication_chain;
-        UserIdentity authenticatedUser = null;
-        for (String authMechanism : authChain) {
-            if (authenticatedUser != null) {
-                break;
-            }
-
-            if (authMechanism.equals(ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
-                authenticatedUser = checkPasswordForNative(remoteUser, remoteHost, remotePasswd, randomString);
-            } else {
-                authenticatedUser = checkPasswordForNonNative(
-                        remoteUser, remoteHost, remotePasswd, randomString, authMechanism);
-            }
-        }
-
-        return authenticatedUser;
-    }
-
-    public UserIdentity checkPlainPassword(String remoteUser, String remoteHost, String remotePasswd) {
-        return checkPassword(remoteUser, remoteHost,
-                remotePasswd.getBytes(StandardCharsets.UTF_8), null);
     }
 
     public void createUser(CreateUserStmt stmt) throws DdlException {

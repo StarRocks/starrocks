@@ -19,7 +19,6 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AstRewriter;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.sql.parser.SqlParser;
 
@@ -27,44 +26,46 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class NativeAccessControllerEPack extends NativeAccessController implements AccessControllerEPack {
     @Override
-    public void checkPolicyAction(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
+    public void checkPolicyAction(ConnectContext context, PolicyType policyType, String catalogName,
                                   String db, String policy, PrivilegeType privilegeType) throws AccessDeniedException {
         List<String> objectTokens = Lists.newArrayList(catalogName, db, policy);
         ObjectType objectType = policyType.equals(PolicyType.MASKING) ? ObjectTypeEPack.MASKING_POLICY :
                 ObjectTypeEPack.ROW_ACCESS_POLICY;
-        checkObjectTypeAction(currentUser, roleIds, privilegeType, objectType, objectTokens);
+        checkObjectTypeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), privilegeType, objectType,
+                objectTokens);
     }
 
     @Override
-    public void checkAnyActionOnPolicy(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
+    public void checkAnyActionOnPolicy(ConnectContext context, PolicyType policyType, String catalogName,
                                        String db, String policy) throws AccessDeniedException {
         List<String> objectTokens = Lists.newArrayList(catalogName, db, policy);
         ObjectType objectType = policyType.equals(PolicyType.MASKING) ? ObjectTypeEPack.MASKING_POLICY :
                 ObjectTypeEPack.ROW_ACCESS_POLICY;
-        checkAnyActionOnObject(currentUser, roleIds, objectType, objectTokens);
+        checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), objectType, objectTokens);
     }
 
     @Override
-    public void checkAnyActionOnAnyPolicy(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
+    public void checkAnyActionOnAnyPolicy(ConnectContext context, PolicyType policyType, String catalogName,
                                           String db) throws AccessDeniedException {
-        checkAnyActionOnPolicy(currentUser, roleIds, policyType, catalogName, db, "*");
+        checkAnyActionOnPolicy(context, policyType, catalogName, db, "*");
     }
 
     @Override
-    public void checkFailoverGroupAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
+    public void checkFailoverGroupAction(ConnectContext context, String name, PrivilegeType privilegeType)
             throws AccessDeniedException {
-        checkObjectTypeAction(currentUser, roleIds, privilegeType, ObjectTypeEPack.FAILOVER_GROUP,
+        checkObjectTypeAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), privilegeType,
+                ObjectTypeEPack.FAILOVER_GROUP,
                 Collections.singletonList(name));
     }
 
     @Override
-    public void checkAnyActionOnFailoverGroup(UserIdentity currentUser, Set<Long> roleIds, String name)
+    public void checkAnyActionOnFailoverGroup(ConnectContext context, String name)
             throws AccessDeniedException {
-        checkAnyActionOnObject(currentUser, roleIds, ObjectTypeEPack.FAILOVER_GROUP, Collections.singletonList(name));
+        checkAnyActionOnObject(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), ObjectTypeEPack.FAILOVER_GROUP,
+                Collections.singletonList(name));
     }
 
     @Override

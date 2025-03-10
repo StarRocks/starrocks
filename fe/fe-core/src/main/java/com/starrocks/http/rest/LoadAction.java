@@ -142,8 +142,7 @@ public class LoadAction extends RestBaseAction {
             throw new DdlException("No table selected.");
         }
 
-        Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
-                dbName, tableName, PrivilegeType.INSERT);
+        Authorizer.checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.INSERT);
 
         if (!enableBatchWrite) {
             processNormalStreamLoad(request, response, dbName, tableName);

@@ -84,8 +84,7 @@ public class ShowFailoverGroupsStmt extends ShowStmt {
                         return true;
                     }
                     try {
-                        AuthorizerEPack.checkAnyActionOnFailoverGroup(connectContext.getCurrentUserIdentity(),
-                                connectContext.getCurrentRoleIds(), failoverGroup.getName());
+                        AuthorizerEPack.checkAnyActionOnFailoverGroup(connectContext, failoverGroup.getName());
                         return true;
                     } catch (AccessDeniedException e) {
                         return false;

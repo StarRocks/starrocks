@@ -14,17 +14,27 @@
 
 package com.starrocks.authentication;
 
+import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.ErrorCode;
+import com.starrocks.common.Pair;
 import com.starrocks.epack.authentication.AuthenticationMgrEPack;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.rpc.ThriftConnectionPool;
+import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TUserSecurityPolicyRequest;
+import com.starrocks.thrift.TUserSecurityPolicyResponse;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Map;
+import java.util.Set;
 
 public class AuthenticationHandler {
     private static final Logger LOG = LogManager.getLogger(AuthenticationHandler.class);
@@ -69,6 +79,28 @@ public class AuthenticationHandler {
                         } catch (AuthenticationException e) {
                             LOG.debug("failed to authenticate for native, user: {}@{}, error: {}",
                                     user, remoteHost, e.getMessage());
+
+                            try {
+                                if (GlobalStateMgr.getCurrentState().isLeader()) {
+                                    authenticationMgr.increasePasswordErrorTimes(matchedUserIdentity.getKey());
+                                } else {
+                                    TAuthInfo tAuthInfo = new TAuthInfo();
+                                    tAuthInfo.current_user_ident = matchedUserIdentity.getKey().toThrift();
+
+                                    TUserSecurityPolicyRequest tUserSecurityPolicyRequest = new TUserSecurityPolicyRequest();
+                                    tUserSecurityPolicyRequest.setAuthInfo(tAuthInfo);
+
+                                    Pair<String, Integer> ipAndPort =
+                                            GlobalStateMgr.getCurrentState().getNodeMgr().getLeaderIpAndRpcPort();
+                                    TNetworkAddress thriftAddress = new TNetworkAddress(ipAndPort.first, ipAndPort.second);
+                                    TUserSecurityPolicyResponse response = ThriftRPCRequestExecutor.call(
+                                            ThriftConnectionPool.frontendPool,
+                                            thriftAddress,
+                                            client -> client.increasePasswordErrorTimes(tUserSecurityPolicyRequest));
+                                }
+                            } catch (Exception ex) {
+                                LOG.error(ex);
+                            }
                         }
                     }
                 } else {
@@ -80,9 +112,27 @@ public class AuthenticationHandler {
                     try {
                         AuthenticationProvider provider = securityIntegration.getAuthenticationProvider();
                         UserAuthenticationInfo userAuthenticationInfo = new UserAuthenticationInfo();
-                        provider.authenticate(user, remoteHost, authResponse, randomString, userAuthenticationInfo);
-                        // the ephemeral user is identified as 'username'@'auth_mechanism'
-                        authenticatedUser = UserIdentity.createEphemeralUserIdent(user, securityIntegration.getName());
+                        if (securityIntegration.getType().equalsIgnoreCase(SecurityIntegration.SECURITY_INTEGRATION_TYPE_LDAP)) {
+                            userAuthenticationInfo.extraInfo.put(AuthPlugin.AUTHENTICATION_LDAP_SIMPLE_FOR_EXTERNAL.name(),
+                                    securityIntegration);
+
+                            provider.authenticate(user, remoteHost, authResponse, randomString, userAuthenticationInfo);
+
+                            AuthorizationMgr authorizationMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+                            Set<Long> roleIds = authorizationMgr.getRoleMappingMetaMgr()
+                                    .getMappedRoleIdsForLdapUser(securityIntegration.getName(), user);
+                            if (roleIds.isEmpty()) {
+                                LOG.info("authenticate '{}' with security integration '{}' successfully," +
+                                                " but cannot map any role, will try other auth mechanisms",
+                                        user, securityIntegration.getName());
+                            } else {
+                                authenticatedUser = UserIdentity.createEphemeralUserIdent(user, authMechanism);
+                                context.setCurrentRoleIds(roleIds);
+                            }
+                        } else {
+                            provider.authenticate(user, remoteHost, authResponse, randomString, userAuthenticationInfo);
+                            authenticatedUser = UserIdentity.createEphemeralUserIdent(user, securityIntegration.getName());
+                        }
                     } catch (AuthenticationException e) {
                         LOG.debug("failed to authenticate, user: {}@{}, security integration: {}, error: {}",
                                 user, remoteHost, securityIntegration, e.getMessage());

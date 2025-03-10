@@ -249,7 +249,7 @@ public class RoutineLoadFunctionalExprProvider extends FunctionalExprProvider<Ro
         try {
             try {
                 Authorizer.checkTableAction(
-                        cxt.getCurrentUserIdentity(), cxt.getCurrentRoleIds(),
+                        cxt,
                         job.getDbFullName(),
                         job.getTableName(),
                         PrivilegeType.INSERT);

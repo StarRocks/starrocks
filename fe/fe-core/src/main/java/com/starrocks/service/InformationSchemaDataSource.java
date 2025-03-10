@@ -45,12 +45,12 @@ import com.starrocks.lake.compaction.PartitionIdentifier;
 import com.starrocks.lake.compaction.PartitionStatistics;
 import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.monitor.unit.ByteSizeValue;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TGetPartitionsMetaRequest;
 import com.starrocks.thrift.TGetPartitionsMetaResponse;
@@ -110,17 +110,12 @@ public class InformationSchemaDataSource {
         List<String> dbNames = metadataMgr.listDbNames(catalogName);
         LOG.debug("get db names: {}", dbNames);
 
-        UserIdentity currentUser;
-        if (authInfo.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(authInfo.current_user_ident);
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
-        }
-        for (String fullName : dbNames) {
+        ConnectContext context = new ConnectContext();
+        context.setAuthInfoFromThrift(authInfo);
 
+        for (String fullName : dbNames) {
             try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser,
-                        currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null, catalogName, fullName);
+                Authorizer.checkAnyActionOnOrInDb(context, catalogName, fullName);
             } catch (AccessDeniedException e) {
                 continue;
             }
@@ -131,16 +126,16 @@ public class InformationSchemaDataSource {
             }
             authorizedDbs.add(fullName);
         }
-        return new AuthDbRequestResult(authorizedDbs, currentUser);
+        return new AuthDbRequestResult(authorizedDbs, context);
     }
 
     private static class AuthDbRequestResult {
         public final List<String> authorizedDbs;
-        public final UserIdentity currentUser;
+        public final ConnectContext context;
 
-        public AuthDbRequestResult(List<String> authorizedDbs, UserIdentity currentUser) {
+        public AuthDbRequestResult(List<String> authorizedDbs, ConnectContext context) {
             this.authorizedDbs = authorizedDbs;
-            this.currentUser = currentUser;
+            this.context = context;
         }
     }
 
@@ -151,7 +146,6 @@ public class InformationSchemaDataSource {
         List<TTableConfigInfo> tList = new ArrayList<>();
 
         AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
-
         for (String dbName : result.authorizedDbs) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
             if (db != null) {
@@ -161,9 +155,7 @@ public class InformationSchemaDataSource {
                     List<Table> allTables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
                     for (Table table : allTables) {
                         try {
-                            UserIdentity currentUser = result.currentUser;
-                            Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                                    currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null, dbName, table);
+                            Authorizer.checkAnyActionOnTableLikeObject(result.context, dbName, table);
                         } catch (AccessDeniedException e) {
                             LOG.warn("failed to check db: {} table: {} authorization", dbName, table, e);
                             continue;
@@ -266,13 +258,16 @@ public class InformationSchemaDataSource {
                 this.dbId = dbId;
                 this.table = table;
             }
+
             public long getTableId() {
                 return table.getId();
             }
+
             public String dbName;
             public long dbId;
             public Table table;
-        };
+        }
+        ;
         long startTableIdOffset = request.isSetStart_table_id_offset() ? request.getStart_table_id_offset() : 0;
         TreeSet<Element> sortedElements = new TreeSet<>(Comparator.comparing(Element::getTableId));
         for (String dbName : result.authorizedDbs) {
@@ -295,8 +290,7 @@ public class InformationSchemaDataSource {
                 continue;
             }
             try {
-                Authorizer.checkAnyActionOnTableLikeObject(result.currentUser,
-                        null, ele.dbName, table);
+                Authorizer.checkAnyActionOnTableLikeObject(result.context, ele.dbName, table);
             } catch (AccessDeniedException e) {
                 LOG.warn("failed to check db: {} table: {} authorization", ele.dbName, table, e);
                 continue;
@@ -455,9 +449,7 @@ public class InformationSchemaDataSource {
                     }
 
                     try {
-                        UserIdentity currentUser = result.currentUser;
-                        Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                                currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null, dbName, table);
+                        Authorizer.checkAnyActionOnTableLikeObject(result.context, dbName, table);
                     } catch (AccessDeniedException e) {
                         continue;
                     }

@@ -11,6 +11,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
+
 package com.starrocks.catalog.system.information;
 
 import com.google.common.collect.Lists;
@@ -22,12 +23,12 @@ import com.starrocks.catalog.Table;
 import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.cluster.ClusterNamespace;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskManager;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TGetTasksParams;
 import com.starrocks.thrift.TSchemaTableType;
 import com.starrocks.thrift.TTaskInfo;
@@ -67,9 +68,10 @@ public class TasksSystemTable {
         TaskManager taskManager = globalStateMgr.getTaskManager();
         List<Task> taskList = taskManager.filterTasks(params);
         List<TTaskInfo> result = Lists.newArrayList();
-        UserIdentity currentUser = null;
+
+        ConnectContext context = new ConnectContext();
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            context.setAuthInfoFromThrift(params.current_user_ident);
         }
 
         for (Task task : taskList) {
@@ -79,10 +81,7 @@ public class TasksSystemTable {
             }
 
             try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser,
-                        currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null,
-                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                        task.getDbName());
+                Authorizer.checkAnyActionOnOrInDb(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, task.getDbName());
             } catch (AccessDeniedException e) {
                 continue;
             }

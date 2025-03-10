@@ -238,8 +238,7 @@ public class ConnectScheduler {
             // Check authorization first.
             if (!ctx.getQualifiedUser().equals(currUser)) {
                 try {
-                    Authorizer.checkSystemAction(currContext.getCurrentUserIdentity(),
-                            currContext.getCurrentRoleIds(), PrivilegeType.OPERATE);
+                    Authorizer.checkSystemAction(currContext, PrivilegeType.OPERATE);
                 } catch (AccessDeniedException e) {
                     continue;
                 }

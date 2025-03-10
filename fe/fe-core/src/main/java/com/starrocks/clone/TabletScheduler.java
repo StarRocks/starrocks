@@ -72,8 +72,8 @@ import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.leader.ReportHandler;
 import com.starrocks.persist.ReplicaPersistInfo;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.Backend;
 import com.starrocks.system.ComputeNode;
 import com.starrocks.system.NodeSelector;
@@ -2040,9 +2040,9 @@ public class TabletScheduler extends FrontendDaemon {
         String state = request.isSetState() ? request.state : null;
         long limit = request.isSetLimit() ? request.limit : -1;
         List<TabletSchedCtx> tabletCtxs;
-        UserIdentity currentUser = null;
+        ConnectContext context = new ConnectContext();
         if (request.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(request.current_user_ident);
+            context.setAuthInfoFromThrift(request.current_user_ident);
         }
         synchronized (this) {
             Stream<TabletSchedCtx> all;
@@ -2060,8 +2060,7 @@ public class TabletScheduler extends FrontendDaemon {
                     all = all.filter(t -> t.getState().name().equals(state));
                 }
             }
-            final UserIdentity finalUser = currentUser;
-            all = all.filter(t -> t.checkPrivForCurrUser(finalUser));
+            all = all.filter(t -> t.checkPrivForCurrUser(context));
             if (type != null) {
                 all = all.filter(t -> t.getType().name().equals(type));
             }

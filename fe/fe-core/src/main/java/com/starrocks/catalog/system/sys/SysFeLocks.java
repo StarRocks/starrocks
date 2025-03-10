@@ -32,9 +32,9 @@ import com.starrocks.common.util.concurrent.lock.LockInfo;
 import com.starrocks.common.util.concurrent.lock.LockManager;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.consistency.LockChecker;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TFeLocksItem;
 import com.starrocks.thrift.TFeLocksReq;
@@ -72,17 +72,13 @@ public class SysFeLocks {
     @VisibleForTesting
     public static TFeLocksRes listLocks(TFeLocksReq request, boolean authenticate) throws TException {
         TAuthInfo auth = request.getAuth_info();
-        UserIdentity currentUser;
-        if (auth.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(auth.getCurrent_user_ident());
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(auth.getUser(), auth.getUser_ip());
-        }
+        ConnectContext context = new ConnectContext();
+        context.setAuthInfoFromThrift(auth);
 
         // authorize
         try {
             if (authenticate) {
-                Authorizer.checkSystemAction(currentUser, null, PrivilegeType.OPERATE);
+                Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
             }
         } catch (AccessDeniedException e) {
             throw new TException(e.getMessage(), e);

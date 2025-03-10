@@ -73,8 +73,7 @@ public class ShowHistogramStatsMetaStmt extends ShowStmt {
         }
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
         try {
-            Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), db.getFullName(), table);
+            Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
         } catch (AccessDeniedException e) {
             return null;
         }
@@ -107,8 +106,7 @@ public class ShowHistogramStatsMetaStmt extends ShowStmt {
         }
         // In new privilege framework(RBAC), user needs any action on the table to show analysis status for it.
         try {
-            Authorizer.checkAnyActionOnTable(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), new TableName(catalogName, db.getFullName(), table.getName()));
+            Authorizer.checkAnyActionOnTable(context, new TableName(catalogName, db.getFullName(), table.getName()));
         } catch (AccessDeniedException e) {
             return null;
         }

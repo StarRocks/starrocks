@@ -80,8 +80,7 @@ public abstract class TableBaseAction extends RestBaseAction {
                                          Function<OlapTable, T> tableFunction) throws AccessDeniedException {
         // check privilege for select, otherwise return 401 HTTP status
         checkTableAction(
-                ConnectContext.get().getCurrentUserIdentity(),
-                ConnectContext.get().getCurrentRoleIds(),
+                ConnectContext.get(),
                 catalogName,
                 dbName,
                 tableName,

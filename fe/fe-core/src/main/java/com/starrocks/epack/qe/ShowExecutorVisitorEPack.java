@@ -116,8 +116,7 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
                 .filter(warehouse -> finalMatcher == null || finalMatcher.match(warehouse.getName()))
                 .filter(warehouse -> {
                     try {
-                        AuthorizerEPack.checkAnyActionOnWarehouse(context.getCurrentUserIdentity(),
-                                context.getCurrentRoleIds(), warehouse.getName());
+                        AuthorizerEPack.checkAnyActionOnWarehouse(context, warehouse.getName());
                     } catch (AccessDeniedException e) {
                         return false;
                     }
@@ -146,8 +145,7 @@ public class ShowExecutorVisitorEPack extends ShowExecutor.ShowExecutorVisitor
         List<Warehouse> warehouseList = warehouseMgr.getAllWarehouses().stream().filter(
                 warehouse -> {
                     try {
-                        AuthorizerEPack.checkAnyActionOnWarehouse(context.getCurrentUserIdentity(),
-                                context.getCurrentRoleIds(), warehouse.getName());
+                        AuthorizerEPack.checkAnyActionOnWarehouse(context, warehouse.getName());
                     } catch (AccessDeniedException e) {
                         return false;
                     }

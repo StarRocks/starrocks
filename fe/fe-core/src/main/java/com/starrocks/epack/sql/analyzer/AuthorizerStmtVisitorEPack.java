@@ -87,8 +87,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
 
     private void checkWarehouseUsagePrivilege(String warehouseName, ConnectContext context) {
         try {
-            AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), warehouseName, PrivilegeType.USAGE);
+            AuthorizerEPack.checkWarehouseAction(context, warehouseName, PrivilegeType.USAGE);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -165,8 +164,8 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
         PrivilegeType privilegeType = statement.getPolicyType().equals(PolicyType.MASKING) ?
                 PrivilegeTypeEPack.CREATE_MASKING_POLICY : PrivilegeTypeEPack.CREATE_ROW_ACCESS_POLICY;
         try {
-            Authorizer.checkDbAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    statement.getPolicyName().getCatalog(), statement.getPolicyName().getDbName(), privilegeType);
+            Authorizer.checkDbAction(context, statement.getPolicyName().getCatalog(), statement.getPolicyName().getDbName(),
+                    privilegeType);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     statement.getPolicyName().getCatalog(),
@@ -179,8 +178,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitDropPolicyStatement(DropPolicyStmt statement, ConnectContext context) {
         try {
-            AuthorizerEPack.checkPolicyAction(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), statement.getPolicyType(), statement.getPolicyName().getCatalog(),
+            AuthorizerEPack.checkPolicyAction(context, statement.getPolicyType(), statement.getPolicyName().getCatalog(),
                     statement.getPolicyName().getDbName(), statement.getPolicyName().getName(), PrivilegeType.DROP);
         } catch (AccessDeniedException e) {
             ObjectType objectType = statement.getPolicyType().equals(PolicyType.MASKING) ? ObjectTypeEPack.MASKING_POLICY :
@@ -196,8 +194,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitAlterPolicyStatement(AlterPolicyStmt statement, ConnectContext context) {
         try {
-            AuthorizerEPack.checkPolicyAction(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), statement.getPolicyType(),
+            AuthorizerEPack.checkPolicyAction(context, statement.getPolicyType(),
                     statement.getPolicyName().getCatalog(), statement.getPolicyName().getDbName(),
                     statement.getPolicyName().getName(), PrivilegeType.ALTER);
         } catch (AccessDeniedException e) {
@@ -219,8 +216,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitShowCreatePolicyStatement(ShowCreatePolicyStmt statement, ConnectContext context) {
         try {
-            AuthorizerEPack.checkAnyActionOnPolicy(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), statement.getPolicyType(),
+            AuthorizerEPack.checkAnyActionOnPolicy(context, statement.getPolicyType(),
                     statement.getPolicyName().getCatalog(), statement.getPolicyName().getDbName(),
                     statement.getPolicyName().getName());
         } catch (AccessDeniedException e) {
@@ -241,9 +237,8 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
                 PolicyName policyName = withColumnMaskingPolicy.getPolicyName();
 
                 try {
-                    AuthorizerEPack.checkPolicyAction(context.getCurrentUserIdentity(),
-                            context.getCurrentRoleIds(), PolicyType.MASKING, policyName.getCatalog(), policyName.getDbName(),
-                            policyName.getName(), PrivilegeTypeEPack.APPLY);
+                    AuthorizerEPack.checkPolicyAction(context, PolicyType.MASKING, policyName.getCatalog(),
+                            policyName.getDbName(), policyName.getName(), PrivilegeTypeEPack.APPLY);
                 } catch (AccessDeniedException e) {
                     AccessDeniedException.reportAccessDenied(policyName.getCatalog(),
                             context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -256,9 +251,8 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
             for (WithRowAccessPolicy withRowAccessPolicy : withRowAccessPolicyList) {
                 PolicyName policyName = withRowAccessPolicy.getPolicyName();
                 try {
-                    AuthorizerEPack.checkPolicyAction(context.getCurrentUserIdentity(),
-                            context.getCurrentRoleIds(), PolicyType.ROW_ACCESS, policyName.getCatalog(), policyName.getDbName(),
-                            policyName.getName(), PrivilegeTypeEPack.APPLY);
+                    AuthorizerEPack.checkPolicyAction(context, PolicyType.ROW_ACCESS, policyName.getCatalog(),
+                            policyName.getDbName(), policyName.getName(), PrivilegeTypeEPack.APPLY);
                 } catch (AccessDeniedException e) {
                     AccessDeniedException.reportAccessDenied(policyName.getCatalog(),
                             context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -283,7 +277,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitCreatePasswordPolicyStatement(CreatePasswordPolicyStmt statement, ConnectContext context) {
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
+            Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -296,7 +290,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitDropPasswordPolicyStatement(DropPasswordPolicyStmt statement, ConnectContext context) {
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
+            Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -309,7 +303,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitSetPasswordPolicyStatement(SetPasswordPolicyStmt statement, ConnectContext context) {
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
+            Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -322,7 +316,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitUnsetPasswordPolicyStatement(UnsetPasswordPolicyStmt statement, ConnectContext context) {
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(), PrivilegeType.GRANT);
+            Authorizer.checkSystemAction(context, PrivilegeType.GRANT);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(
                     InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -336,7 +330,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitCreateSecurityIntegrationStatement(CreateSecurityIntegrationStatement statement, ConnectContext context) {
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+            Authorizer.checkSystemAction(context,
                     PrivilegeTypeEPack.SECURITY);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -349,8 +343,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitDropSecurityIntegrationStatement(DropSecurityIntegrationStatement statement, ConnectContext context) {
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeTypeEPack.SECURITY);
+            Authorizer.checkSystemAction(context, PrivilegeTypeEPack.SECURITY);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -362,8 +355,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitAlterSecurityIntegrationStatement(AlterSecurityIntegrationStatement statement, ConnectContext context) {
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeTypeEPack.SECURITY);
+            Authorizer.checkSystemAction(context, PrivilegeTypeEPack.SECURITY);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -375,8 +367,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitShowSecurityIntegrationStatement(ShowSecurityIntegrationStatement statement, ConnectContext context) {
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeTypeEPack.SECURITY);
+            Authorizer.checkSystemAction(context, PrivilegeTypeEPack.SECURITY);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -389,8 +380,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     public Void visitShowCreateSecurityIntegrationStatement(ShowCreateSecurityIntegrationStatement statement,
                                                             ConnectContext context) {
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeTypeEPack.SECURITY);
+            Authorizer.checkSystemAction(context, PrivilegeTypeEPack.SECURITY);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -402,8 +392,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitCreateRoleMappingStatement(CreateRoleMappingStatement statement, ConnectContext context) {
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeTypeEPack.SECURITY);
+            Authorizer.checkSystemAction(context, PrivilegeTypeEPack.SECURITY);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -415,8 +404,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitAlterRoleMappingStatement(AlterRoleMappingStatement statement, ConnectContext context) {
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeTypeEPack.SECURITY);
+            Authorizer.checkSystemAction(context, PrivilegeTypeEPack.SECURITY);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -428,8 +416,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitDropRoleMappingStatement(DropRoleMappingStatement statement, ConnectContext context) {
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeTypeEPack.SECURITY);
+            Authorizer.checkSystemAction(context, PrivilegeTypeEPack.SECURITY);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -441,8 +428,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitShowRoleMappingStatement(ShowRoleMappingStatement statement, ConnectContext context) {
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeTypeEPack.SECURITY);
+            Authorizer.checkSystemAction(context, PrivilegeTypeEPack.SECURITY);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -454,8 +440,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitRefreshRoleMappingStatement(RefreshRoleMappingStatement statement, ConnectContext context) {
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeTypeEPack.SECURITY);
+            Authorizer.checkSystemAction(context, PrivilegeTypeEPack.SECURITY);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -468,8 +453,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitCreateWarehouseStatement(CreateWarehouseStmt statement, ConnectContext context) {
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeTypeEPack.CREATE_WAREHOUSE);
+            Authorizer.checkSystemAction(context, PrivilegeTypeEPack.CREATE_WAREHOUSE);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -481,8 +465,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitSuspendWarehouseStatement(SuspendWarehouseStmt statement, ConnectContext context) {
         try {
-            AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), statement.getWarehouseName(), PrivilegeType.ALTER);
+            AuthorizerEPack.checkWarehouseAction(context, statement.getWarehouseName(), PrivilegeType.ALTER);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -494,8 +477,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitResumeWarehouseStatement(ResumeWarehouseStmt statement, ConnectContext context) {
         try {
-            AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), statement.getWarehouseName(), PrivilegeType.ALTER);
+            AuthorizerEPack.checkWarehouseAction(context, statement.getWarehouseName(), PrivilegeType.ALTER);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -506,8 +488,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
 
     public Void visitDropWarehouseStatement(DropWarehouseStmt statement, ConnectContext context) {
         try {
-            AuthorizerEPack.checkWarehouseAction(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), statement.getWarehouseName(), PrivilegeType.DROP);
+            AuthorizerEPack.checkWarehouseAction(context, statement.getWarehouseName(), PrivilegeType.DROP);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -530,8 +511,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
 
     public Void visitShowClusterStatement(ShowClustersStmt statement, ConnectContext context) {
         try {
-            AuthorizerEPack.checkAnyActionOnWarehouse(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), statement.getWarehouseName());
+            AuthorizerEPack.checkAnyActionOnWarehouse(context, statement.getWarehouseName());
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -545,8 +525,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     public Void visitCreatePrimaryFailoverGroupStatement(CreatePrimaryFailoverGroupStmt statement,
                                                          ConnectContext context) {
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeTypeEPack.CREATE_FAILOVER_GROUP);
+            Authorizer.checkSystemAction(context, PrivilegeTypeEPack.CREATE_FAILOVER_GROUP);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -559,8 +538,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     public Void visitCreateSecondaryFailoverGroupStatement(CreateSecondaryFailoverGroupStmt statement,
                                                            ConnectContext context) {
         try {
-            Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                    PrivilegeTypeEPack.CREATE_FAILOVER_GROUP);
+            Authorizer.checkSystemAction(context, PrivilegeTypeEPack.CREATE_FAILOVER_GROUP);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -572,8 +550,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitDropFailoverGroupStatement(DropFailoverGroupStmt statement, ConnectContext context) {
         try {
-            AuthorizerEPack.checkFailoverGroupAction(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), statement.getFailoverGroupName(), PrivilegeType.DROP);
+            AuthorizerEPack.checkFailoverGroupAction(context, statement.getFailoverGroupName(), PrivilegeType.DROP);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -592,8 +569,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitDescribeFailoverGroupStatement(DescribeFailoverGroupStmt statement, ConnectContext context) {
         try {
-            AuthorizerEPack.checkFailoverGroupAction(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), statement.getFailoverGroupName(), PrivilegeType.USAGE);
+            AuthorizerEPack.checkFailoverGroupAction(context, statement.getFailoverGroupName(), PrivilegeType.USAGE);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -606,8 +582,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitAlterFailoverGroupSetStatement(AlterFailoverGroupSetStmt statement, ConnectContext context) {
         try {
-            AuthorizerEPack.checkFailoverGroupAction(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), statement.getFailoverGroupName(), PrivilegeType.ALTER);
+            AuthorizerEPack.checkFailoverGroupAction(context, statement.getFailoverGroupName(), PrivilegeType.ALTER);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -620,8 +595,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitAlterFailoverGroupAddStatement(AlterFailoverGroupAddStmt statement, ConnectContext context) {
         try {
-            AuthorizerEPack.checkFailoverGroupAction(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), statement.getFailoverGroupName(), PrivilegeType.ALTER);
+            AuthorizerEPack.checkFailoverGroupAction(context, statement.getFailoverGroupName(), PrivilegeType.ALTER);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -634,8 +608,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitAlterFailoverGroupRemoveStatement(AlterFailoverGroupRemoveStmt statement, ConnectContext context) {
         try {
-            AuthorizerEPack.checkFailoverGroupAction(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), statement.getFailoverGroupName(), PrivilegeType.ALTER);
+            AuthorizerEPack.checkFailoverGroupAction(context, statement.getFailoverGroupName(), PrivilegeType.ALTER);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -648,8 +621,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitAlterFailoverGroupRefreshStatement(AlterFailoverGroupRefreshStmt statement, ConnectContext context) {
         try {
-            AuthorizerEPack.checkFailoverGroupAction(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), statement.getFailoverGroupName(), PrivilegeType.ALTER);
+            AuthorizerEPack.checkFailoverGroupAction(context, statement.getFailoverGroupName(), PrivilegeType.ALTER);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -662,8 +634,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitAlterFailoverGroupPrimaryStatement(AlterFailoverGroupPrimaryStmt statement, ConnectContext context) {
         try {
-            AuthorizerEPack.checkFailoverGroupAction(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), statement.getFailoverGroupName(), PrivilegeType.ALTER);
+            AuthorizerEPack.checkFailoverGroupAction(context, statement.getFailoverGroupName(), PrivilegeType.ALTER);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -676,8 +647,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitAlterFailoverGroupSuspendStatement(AlterFailoverGroupSuspendStmt statement, ConnectContext context) {
         try {
-            AuthorizerEPack.checkFailoverGroupAction(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), statement.getFailoverGroupName(), PrivilegeType.ALTER);
+            AuthorizerEPack.checkFailoverGroupAction(context, statement.getFailoverGroupName(), PrivilegeType.ALTER);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
@@ -690,8 +660,7 @@ public class AuthorizerStmtVisitorEPack extends AuthorizerStmtVisitor implements
     @Override
     public Void visitAlterFailoverGroupResumeStatement(AlterFailoverGroupResumeStmt statement, ConnectContext context) {
         try {
-            AuthorizerEPack.checkFailoverGroupAction(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), statement.getFailoverGroupName(), PrivilegeType.ALTER);
+            AuthorizerEPack.checkFailoverGroupAction(context, statement.getFailoverGroupName(), PrivilegeType.ALTER);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     context.getCurrentUserIdentity(), context.getCurrentRoleIds(),

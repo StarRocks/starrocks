@@ -12,10 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.epack.authentication;
 
 import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
@@ -349,7 +349,8 @@ public class SecurityIntegrationTest {
         byte[] seed = "petals on a wet black bough".getBytes(StandardCharsets.UTF_8);
         byte[] scramble = MysqlPassword.scramble(seed, "abc");
         UserIdentity userIdentity =
-                imageManager.checkPassword("ldap_external_user", "192.168.0.1", scramble, seed);
+                AuthenticationHandler.authenticate(connectContext, "ldap_external_user", "192.168.0.1", scramble, seed);
+
         System.out.println(userIdentity);
         Assert.assertEquals("'ldap_external_user'@'ldap3'", userIdentity.toString());
         Assert.assertTrue(userIdentity.isEphemeral());
@@ -361,7 +362,6 @@ public class SecurityIntegrationTest {
         RoleMappingStatementAnalyzer.analyze(createRoleMappingStatement, connectContext);
         DDLStmtExecutor.execute(createRoleMappingStatement, connectContext);
     }
-
 
     @Test
     public void testAlterSecurityIntegration() throws Exception {

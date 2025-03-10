@@ -146,8 +146,7 @@ public class TableQueryPlanAction extends RestBaseAction {
                     sql, ConnectContext.get().getCurrentUserIdentity(), dbName, tableName);
 
             // check privilege for select, otherwise return HTTP 401
-            Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
-                    dbName, tableName, PrivilegeType.SELECT);
+            Authorizer.checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.SELECT);
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
             if (db == null) {
                 throw new StarRocksHttpException(HttpResponseStatus.NOT_FOUND,

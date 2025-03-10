@@ -99,8 +99,7 @@ public class StreamLoadMetaAction extends RestBaseAction {
             sendResult(request, response, responseResult);
         }
 
-        Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
-                dbName, tableName, PrivilegeType.INSERT);
+        Authorizer.checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.INSERT);
 
         if (!enableBatchWrite) {
             processNormalStreamLoad(request, response, dbName, tableName);

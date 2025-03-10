@@ -19,20 +19,20 @@ package com.starrocks.http;
 
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.qe.ConnectContext;
 
 import java.util.concurrent.TimeUnit;
 
 // We simulate a simplified session here: only store user-name of clients who already logged in,
 // and we only have a default admin user for now.
 public final class HttpAuthManager {
-    private static long SESSION_EXPIRE_TIME = 2; // hour
-    private static long SESSION_MAX_SIZE = 100; // avoid to store too many
+    private static final long SESSION_EXPIRE_TIME = 2; // hour
+    private static final long SESSION_MAX_SIZE = 100; // avoid to store too many
 
-    private static HttpAuthManager instance = new HttpAuthManager();
+    private static final HttpAuthManager INSTANCE = new HttpAuthManager();
 
     public static class SessionValue {
-        public UserIdentity currentUser;
+        public ConnectContext connectContext;
     }
 
     // session_id => session value
@@ -46,7 +46,7 @@ public final class HttpAuthManager {
     }
 
     public static HttpAuthManager getInstance() {
-        return instance;
+        return INSTANCE;
     }
 
     public SessionValue getSessionValue(String sessionId) {

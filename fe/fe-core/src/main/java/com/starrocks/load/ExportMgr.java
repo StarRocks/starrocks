@@ -242,8 +242,7 @@ public class ExportMgr implements MemoryTrackable {
                     }
 
                     try {
-                        Authorizer.checkAnyActionOnOrInDb(ConnectContext.get().getCurrentUserIdentity(),
-                                ConnectContext.get().getCurrentRoleIds(),
+                        Authorizer.checkAnyActionOnOrInDb(ConnectContext.get(),
                                 InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                                 db.getFullName());
                     } catch (AccessDeniedException e) {
@@ -251,8 +250,7 @@ public class ExportMgr implements MemoryTrackable {
                     }
                 } else {
                     try {
-                        Authorizer.checkAnyActionOnTable(ConnectContext.get().getCurrentUserIdentity(),
-                                ConnectContext.get().getCurrentRoleIds(), tableName);
+                        Authorizer.checkAnyActionOnTable(ConnectContext.get(), tableName);
                     } catch (AccessDeniedException e) {
                         continue;
                     }

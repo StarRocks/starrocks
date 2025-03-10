@@ -14,13 +14,17 @@
 package com.starrocks.epack.authentication;
 
 import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.common.Config;
 import com.starrocks.epack.authorization.PasswordPolicy;
 import com.starrocks.epack.authorization.SecurityPolicyMgr;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
+
+import java.nio.charset.StandardCharsets;
 
 public class PlainPasswordAuthenticationProviderEPack extends PlainPasswordAuthenticationProvider {
 
@@ -38,10 +42,14 @@ public class PlainPasswordAuthenticationProviderEPack extends PlainPasswordAuthe
         }
 
         if (!Config.enable_password_reuse) {
-            if (GlobalStateMgr.getCurrentState().getAuthenticationMgr()
-                    .checkPlainPassword(userIdentity.getUser(), userIdentity.getHost(), password) != null) {
-                throw new SemanticException("password should not be the same as the previous one!");
+            try {
+                AuthenticationHandler.authenticate(new ConnectContext(), userIdentity.getUser(), userIdentity.getHost(),
+                        password.getBytes(StandardCharsets.UTF_8), null);
+            } catch (AuthenticationException e) {
+                return;
             }
+
+            throw new SemanticException("password should not be the same as the previous one!");
         }
     }
 }

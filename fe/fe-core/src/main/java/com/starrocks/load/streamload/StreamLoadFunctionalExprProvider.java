@@ -181,7 +181,7 @@ public class StreamLoadFunctionalExprProvider extends FunctionalExprProvider<Str
         // validate table privilege at the end of a predicateChain in the `stream().filter()`
         try {
             Authorizer.checkTableAction(
-                    cxt.getCurrentUserIdentity(), cxt.getCurrentRoleIds(),
+                    cxt,
                     task.getDBName(),
                     task.getTableName(),
                     PrivilegeType.INSERT);

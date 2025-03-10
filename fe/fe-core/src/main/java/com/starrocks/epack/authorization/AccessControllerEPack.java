@@ -6,33 +6,31 @@ import com.starrocks.authorization.AccessController;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.epack.sql.ast.PolicyType;
-import com.starrocks.sql.ast.UserIdentity;
-
-import java.util.Set;
+import com.starrocks.qe.ConnectContext;
 
 public interface AccessControllerEPack extends AccessController {
 
-    default void checkPolicyAction(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
+    default void checkPolicyAction(ConnectContext context, PolicyType policyType, String catalogName,
                                    String db, String policy, PrivilegeType privilegeType) throws AccessDeniedException {
         throw new AccessDeniedException();
     }
 
-    default void checkAnyActionOnPolicy(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
+    default void checkAnyActionOnPolicy(ConnectContext context, PolicyType policyType, String catalogName,
                                         String db, String policy) throws AccessDeniedException {
         throw new AccessDeniedException();
     }
 
-    default void checkAnyActionOnAnyPolicy(UserIdentity currentUser, Set<Long> roleIds, PolicyType policyType, String catalogName,
+    default void checkAnyActionOnAnyPolicy(ConnectContext context, PolicyType policyType, String catalogName,
                                            String db) throws AccessDeniedException {
         throw new AccessDeniedException();
     }
 
-    default void checkFailoverGroupAction(UserIdentity currentUser, Set<Long> roleIds, String name, PrivilegeType privilegeType)
+    default void checkFailoverGroupAction(ConnectContext context, String name, PrivilegeType privilegeType)
             throws AccessDeniedException {
         throw new AccessDeniedException();
     }
 
-    default void checkAnyActionOnFailoverGroup(UserIdentity currentUser, Set<Long> roleIds, String name)
+    default void checkAnyActionOnFailoverGroup(ConnectContext context, String name)
             throws AccessDeniedException {
         throw new AccessDeniedException();
     }

@@ -25,9 +25,9 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.thrift.TAuthInfo;
 import com.starrocks.thrift.TObjectDependencyItem;
@@ -68,12 +68,8 @@ public class SysObjectDependencies {
         TAuthInfo auth = req.getAuth_info();
         TObjectDependencyRes response = new TObjectDependencyRes();
 
-        UserIdentity currentUser;
-        if (auth.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(auth.getCurrent_user_ident());
-        } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(auth.getUser(), auth.getUser_ip());
-        }
+        ConnectContext context = new ConnectContext();
+        context.setAuthInfoFromThrift(auth);
 
         // list dependencies of mv
         Locker locker = new Locker();
@@ -90,7 +86,7 @@ public class SysObjectDependencies {
                     }
                     // Only show tables with privilege
                     try {
-                        Authorizer.checkAnyActionOnTableLikeObject(currentUser, null, db.getFullName(), table);
+                        Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), table);
                     } catch (AccessDeniedException e) {
                         continue;
                     }

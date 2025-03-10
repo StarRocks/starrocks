@@ -1018,9 +1018,9 @@ public class PrivilegeCheckerTest {
                     Mockito.any())).thenCallRealMethod();
             authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
                     Mockito.any(), Mockito.any())).thenCallRealMethod();
-            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
+            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(),
                     Mockito.any(), Mockito.any(), Mockito.any())).thenCallRealMethod();
-            authorizerMockedStatic.when(() -> Authorizer.checkColumnAction(Mockito.any(), Mockito.any(),
+            authorizerMockedStatic.when(() -> Authorizer.checkColumnAction(Mockito.any(),
                     Mockito.any(), Mockito.any(), eq(PrivilegeType.SELECT))).thenCallRealMethod();
             verify("insert into db2.tbl1 (k1, k2) select k1,k2 from db1.tbl2 union all select k1,k2 from db2.tbl1",
                     "Access denied; you need (at least one of) the SELECT privilege(s) on" +
@@ -1054,9 +1054,9 @@ public class PrivilegeCheckerTest {
                     Mockito.any())).thenCallRealMethod();
             authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
                     Mockito.any(), Mockito.any())).thenCallRealMethod();
-            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(), Mockito.any(),
+            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(),
                     Mockito.any(), Mockito.any(), Mockito.any())).thenCallRealMethod();
-            authorizerMockedStatic.when(() -> Authorizer.checkColumnAction(Mockito.any(), Mockito.any(),
+            authorizerMockedStatic.when(() -> Authorizer.checkColumnAction(Mockito.any(),
                     Mockito.any(), Mockito.any(), eq(PrivilegeType.SELECT))).thenCallRealMethod();
             verify("update db3.tprimary set k2 = '2' where k2 = (select k2 from db2.tbl1 where k1='1')",
                     "Access denied; you need (at least one of) the SELECT privilege(s) on" +
@@ -1883,10 +1883,13 @@ public class PrivilegeCheckerTest {
 
     @Test
     public void testCheckPrivForCurrUserInTabletCtx() throws Exception {
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(testUser);
+
         // test db not exist
         TabletSchedCtx tabletSchedCtx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR,
                 1, 2, 3, 4, 1000, System.currentTimeMillis());
-        boolean result = tabletSchedCtx.checkPrivForCurrUser(testUser);
+        boolean result = tabletSchedCtx.checkPrivForCurrUser(context);
         Assert.assertTrue(result);
 
         // test user null
@@ -1906,18 +1909,18 @@ public class PrivilegeCheckerTest {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getFullName(), "tbl1");
         tabletSchedCtx = new TabletSchedCtx(TabletSchedCtx.Type.REPAIR,
                 db.getId(), table.getId(), 3, 4, 1000, System.currentTimeMillis());
-        result = tabletSchedCtx.checkPrivForCurrUser(testUser);
+        result = tabletSchedCtx.checkPrivForCurrUser(context);
         Assert.assertTrue(result);
         grantRevokeSqlAsRoot("revoke OPERATE on SYSTEM from test");
 
         // test user has ANY privilege
         grantRevokeSqlAsRoot("grant SELECT on TABLE db1.tbl1 to test");
-        result = tabletSchedCtx.checkPrivForCurrUser(testUser);
+        result = tabletSchedCtx.checkPrivForCurrUser(context);
         Assert.assertTrue(result);
         grantRevokeSqlAsRoot("revoke SELECT on TABLE db1.tbl1 from test");
 
         // test user has no privilege
-        result = tabletSchedCtx.checkPrivForCurrUser(testUser);
+        result = tabletSchedCtx.checkPrivForCurrUser(context);
         Assert.assertFalse(result);
     }
 
@@ -4087,10 +4090,10 @@ public class PrivilegeCheckerTest {
                     .when(() -> Authorizer.check(Mockito.any(), Mockito.any()))
                     .thenCallRealMethod();
 
-            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(), Mockito.any(),
+            authorizerMockedStatic.when(() -> Authorizer.checkTableAction(Mockito.any(),
                             Mockito.any(), Mockito.any(), Mockito.any(), Mockito.any()))
                     .thenCallRealMethod();
-            authorizerMockedStatic.when(() -> Authorizer.checkColumnAction(Mockito.any(), Mockito.any(),
+            authorizerMockedStatic.when(() -> Authorizer.checkColumnAction(Mockito.any(),
                             Mockito.any(), Mockito.any(), Mockito.any()))
                     .thenCallRealMethod();
             String sql = "select * from db_for_ranger.tbl1";

@@ -76,13 +76,10 @@ public class GetLoadInfoAction extends RestBaseAction {
         }
 
         if (info.tblNames.isEmpty()) {
-            Authorizer.checkActionInDb(ConnectContext.get().getCurrentUserIdentity(),
-                    ConnectContext.get().getCurrentRoleIds(), info.dbName, PrivilegeType.INSERT);
+            Authorizer.checkActionInDb(ConnectContext.get(), info.dbName, PrivilegeType.INSERT);
         } else {
             for (String tblName : info.tblNames) {
-                Authorizer.checkTableAction(
-                        ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
-                        info.dbName, tblName, PrivilegeType.INSERT);
+                Authorizer.checkTableAction(ConnectContext.get(), info.dbName, tblName, PrivilegeType.INSERT);
             }
         }
         globalStateMgr.getLoadMgr().getLoadJobInfo(info);

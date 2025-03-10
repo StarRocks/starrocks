@@ -316,9 +316,10 @@ public abstract class BaseAction implements IAction {
     }
 
     // return currentUserIdentity from StarRocks auth
-    public static UserIdentity checkPassword(ActionAuthorizationInfo authInfo) throws AccessDeniedException {
+    public static UserIdentity checkPassword(ConnectContext context, ActionAuthorizationInfo authInfo)
+            throws AccessDeniedException {
         try {
-            return AuthenticationHandler.authenticate(new ConnectContext(), authInfo.fullUserName,
+            return AuthenticationHandler.authenticate(context, authInfo.fullUserName,
                     authInfo.remoteIp, authInfo.password.getBytes(StandardCharsets.UTF_8), null);
         } catch (AuthenticationException e) {
             throw new AccessDeniedException("Access denied for " + authInfo.fullUserName + "@" + authInfo.remoteIp);

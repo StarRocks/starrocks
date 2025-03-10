@@ -334,8 +334,7 @@ public class ResourceMgr implements Writable {
                 }
 
                 try {
-                    Authorizer.checkAnyActionOnResource(ConnectContext.get().getCurrentUserIdentity(),
-                            ConnectContext.get().getCurrentRoleIds(), resource.getName());
+                    Authorizer.checkAnyActionOnResource(ConnectContext.get(), resource.getName());
                 } catch (AccessDeniedException e) {
                     continue;
                 }

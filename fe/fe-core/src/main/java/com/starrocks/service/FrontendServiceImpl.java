@@ -354,7 +354,6 @@ import com.starrocks.thrift.TTransactionStatus;
 import com.starrocks.thrift.TUpdateExportTaskStatusRequest;
 import com.starrocks.thrift.TUpdateResourceUsageRequest;
 import com.starrocks.thrift.TUpdateResourceUsageResponse;
-import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.thrift.TUserPrivDesc;
 import com.starrocks.thrift.TUserSecurityPolicyRequest;
 import com.starrocks.thrift.TUserSecurityPolicyResponse;
@@ -437,18 +436,19 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<String> dbNames = metadataMgr.listDbNames(catalogName);
         LOG.debug("get db names: {}", dbNames);
 
-        UserIdentity currentUser;
+        ConnectContext context = new ConnectContext();
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            context.setAuthInfoFromThrift(params.current_user_ident);
         } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
         }
 
         List<String> dbs = new ArrayList<>();
         for (String fullName : dbNames) {
             try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser,
-                        currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null, catalogName, fullName);
+                Authorizer.checkAnyActionOnOrInDb(context, catalogName, fullName);
             } catch (AccessDeniedException e) {
                 continue;
             }
@@ -490,11 +490,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
         Database db = metadataMgr.getDb(catalogName, params.db);
 
-        UserIdentity currentUser = null;
+        ConnectContext context = new ConnectContext();
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            context.setAuthInfoFromThrift(params.current_user_ident);
         } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
         }
 
         if (db != null) {
@@ -512,8 +514,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
 
                 try {
-                    Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                            currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null, params.db, tbl);
+                    Authorizer.checkAnyActionOnTableLikeObject(context, params.db, tbl);
                 } catch (AccessDeniedException e) {
                     continue;
                 }
@@ -546,12 +547,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(params.db);
         long limit = params.isSetLimit() ? params.getLimit() : -1;
-        UserIdentity currentUser;
+
+        ConnectContext context = new ConnectContext();
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            context.setAuthInfoFromThrift(params.getCurrent_user_ident());
         } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
         }
+
         if (db != null) {
             Locker locker = new Locker();
             locker.lockDatabase(db.getId(), LockType.READ);
@@ -562,8 +567,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 OUTER:
                 for (Table table : tables) {
                     try {
-                        Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                                currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null, params.db, table);
+                        Authorizer.checkAnyActionOnTableLikeObject(context, params.db, table);
                     } catch (AccessDeniedException e) {
                         continue;
                     }
@@ -595,9 +599,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                         .getTable(db.getFullName(), tableName.getTbl());
                                 if (tbl != null) {
                                     try {
-                                        Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                                                currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null,
-                                                db.getFullName(), tbl);
+                                        Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), tbl);
                                     } catch (AccessDeniedException e) {
                                         continue OUTER;
                                     }
@@ -634,14 +636,18 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
         // database privs should be checked in analysis phrase
         long limit = params.isSetLimit() ? params.getLimit() : -1;
-        UserIdentity currentUser;
+
+        ConnectContext context = new ConnectContext();
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            context.setAuthInfoFromThrift(params.getCurrent_user_ident());
         } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
         }
+
         Preconditions.checkState(params.isSetType() && TTableType.MATERIALIZED_VIEW.equals(params.getType()));
-        return listMaterializedViewStatus(limit, matcher, currentUser, params);
+        return listMaterializedViewStatus(limit, matcher, context, params);
     }
 
     @Override
@@ -650,7 +656,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             throw new TException("missed user_identity");
         }
         // TODO: check privilege
-        UserIdentity userIdentity = UserIdentity.fromThrift(params.getUser_ident());
 
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
@@ -688,7 +693,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
         LOG.info("listPipeFiles params={}", params);
         // TODO: check privilege
-        UserIdentity userIdentity = UserIdentity.fromThrift(params.getUser_ident());
+
         TListPipeFilesResult result = new TListPipeFilesResult();
         PipeManager pm = GlobalStateMgr.getCurrentState().getPipeManager();
         Map<PipeId, Pipe> pipes = pm.getPipesUnlock();
@@ -747,13 +752,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TColumnStatsUsageRes getColumnStatsUsage(TColumnStatsUsageReq request) throws TException {
-        UserIdentity currentUser = UserIdentity.fromThrift(request.getAuth_info().getCurrent_user_ident());
+        ConnectContext context = new ConnectContext();
+        context.setAuthInfoFromThrift(request.getAuth_info());
 
         TColumnStatsUsageRes result = ColumnStatsUsageSystemTable.query(request);
         result.getItems().removeIf(item -> {
             try {
-                Authorizer.checkTableAction(currentUser, null, item.getTable_database(), item.getTable_name(),
-                        PrivilegeType.SELECT);
+                Authorizer.checkTableAction(context, item.getTable_database(), item.getTable_name(), PrivilegeType.SELECT);
                 return false;
             } catch (AccessDeniedException e) {
                 return true;
@@ -766,10 +771,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TAnalyzeStatusRes getAnalyzeStatus(TAnalyzeStatusReq request) throws TException {
         TAnalyzeStatusRes res = AnalyzeStatusSystemTable.query(request);
-        UserIdentity currentUser = UserIdentity.fromThrift(request.getAuth_info().getCurrent_user_ident());
+        ConnectContext context = new ConnectContext();
+        context.setAuthInfoFromThrift(request.getAuth_info());
+
         res.getItems().removeIf(item -> {
             try {
-                Authorizer.checkTableAction(currentUser, null, item.getDatabase_name(), item.getTable_name(),
+                Authorizer.checkTableAction(context, item.getDatabase_name(), item.getTable_name(),
                         PrivilegeType.SELECT);
                 return false;
             } catch (AccessDeniedException e) {
@@ -782,7 +789,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     // list MaterializedView table match pattern
     private TListMaterializedViewStatusResult listMaterializedViewStatus(long limit, PatternMatcher matcher,
-                                                                         UserIdentity currentUser, TGetTablesParams params) {
+                                                                         ConnectContext context, TGetTablesParams params) {
         TListMaterializedViewStatusResult result = new TListMaterializedViewStatusResult();
         List<TMaterializedViewStatus> tablesResult = Lists.newArrayList();
         result.setMaterialized_views(tablesResult);
@@ -793,14 +800,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
             return result;
         }
 
-        listMaterializedViews(limit, matcher, currentUser, params).stream()
+        listMaterializedViews(limit, matcher, context, params).stream()
                 .map(s -> s.toThrift())
                 .forEach(t -> tablesResult.add(t));
         return result;
     }
 
     private void filterAsynchronousMaterializedView(PatternMatcher matcher,
-                                                    UserIdentity currentUser,
+                                                    ConnectContext context,
                                                     String dbName,
                                                     MaterializedView mv,
                                                     TGetTablesParams params,
@@ -812,8 +819,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         try {
-            Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                    currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null, dbName, mv);
+            Authorizer.checkAnyActionOnTableLikeObject(context, dbName, mv);
         } catch (AccessDeniedException e) {
             return;
         }
@@ -856,7 +862,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     }
 
     private List<ShowMaterializedViewStatus> listMaterializedViews(long limit, PatternMatcher matcher,
-                                                                   UserIdentity currentUser, TGetTablesParams params) {
+                                                                   ConnectContext context, TGetTablesParams params) {
         String dbName = params.getDb();
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbName);
         List<MaterializedView> materializedViews = Lists.newArrayList();
@@ -866,7 +872,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId())) {
                 if (table.isMaterializedView()) {
-                    filterAsynchronousMaterializedView(matcher, currentUser, dbName,
+                    filterAsynchronousMaterializedView(matcher, context, dbName,
                             (MaterializedView) table, params, materializedViews);
                 } else if (table.getType() == Table.TableType.OLAP) {
                     filterSynchronousMaterializedView((OlapTable) table, matcher, params, singleTableMVs);
@@ -977,12 +983,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         result.setColumns(columns);
 
         // database privs should be checked in analysis phrase
-        UserIdentity currentUser = null;
+        ConnectContext context = new ConnectContext();
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            context.setAuthInfoFromThrift(params.current_user_ident);
         } else {
-            currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(params.user, params.user_ip);
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
         }
+
+
         long limit = params.isSetLimit() ? params.getLimit() : -1;
 
         // if user query schema meta such as "select * from information_schema.columns limit 10;",
@@ -990,7 +1000,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         // describe_table interface only once, which can reduce RPC time from BE to FE, and
         // the amount of data. In additional,we need add db_name & table_name values to TColumnDesc.
         if (!params.isSetDb() && StringUtils.isBlank(params.getTable_name())) {
-            describeWithoutDbAndTable(currentUser, columns, limit);
+            describeWithoutDbAndTable(context, columns, limit);
             return result;
         }
 
@@ -1011,8 +1021,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     return result;
                 }
                 try {
-                    Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                            currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null, params.db, table);
+                    Authorizer.checkAnyActionOnTableLikeObject(context, params.db, table);
                 } catch (AccessDeniedException e) {
                     return result;
                 }
@@ -1026,15 +1035,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     // get describeTable without db name and table name parameter, so we need iterate over
     // dbs and tables, when reach limit, we break;
-    private void describeWithoutDbAndTable(UserIdentity currentUser, List<TColumnDef> columns, long limit) {
+    private void describeWithoutDbAndTable(ConnectContext context, List<TColumnDef> columns, long limit) {
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         List<String> dbNames = globalStateMgr.getLocalMetastore().listDbNames();
         boolean reachLimit;
         for (String fullName : dbNames) {
             try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser,
-                        currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null,
-                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, fullName);
+                Authorizer.checkAnyActionOnOrInDb(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, fullName);
             } catch (AccessDeniedException e) {
                 continue;
             }
@@ -1050,8 +1057,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         }
 
                         try {
-                            Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                                    currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null, fullName, table);
+                            Authorizer.checkAnyActionOnTableLikeObject(context, fullName, table);
                         } catch (AccessDeniedException e) {
                             continue;
                         }
@@ -1234,12 +1240,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     private void checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,
                                           String clientIp) throws AuthenticationException {
-        UserIdentity currentUser = AuthenticationHandler.authenticate(new ConnectContext(), user, clientIp,
+        ConnectContext context = new ConnectContext();
+        UserIdentity currentUser = AuthenticationHandler.authenticate(context, user, clientIp,
                 passwd.getBytes(StandardCharsets.UTF_8), null);
         // check INSERT action on table
         try {
-            Authorizer.checkTableAction(currentUser,
-                    currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null, db, tbl, PrivilegeType.INSERT);
+            Authorizer.checkTableAction(context, db, tbl, PrivilegeType.INSERT);
         } catch (AccessDeniedException e) {
             throw new AuthenticationException(
                     "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
@@ -1886,11 +1892,12 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 " target cluster if you don't want to check the authorization and privilege.";
 
         // 1. check user and password
+        ConnectContext context = new ConnectContext();
         UserIdentity userIdentity;
         try {
             BaseAction.ActionAuthorizationInfo authInfo = BaseAction.parseAuthInfo(
                     authParams.getUser(), authParams.getPasswd(), authParams.getHost());
-            userIdentity = BaseAction.checkPassword(authInfo);
+            userIdentity = BaseAction.checkPassword(context, authInfo);
         } catch (Exception e) {
             LOG.warn("Failed to check TAuthenticateParams [user: {}, host: {}, db: {}, tables: {}]",
                     authParams.user, authParams.getHost(), authParams.getDb_name(), authParams.getTable_names(), e);
@@ -1904,9 +1911,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             String dbName = authParams.getDb_name();
             for (String tableName : authParams.getTable_names()) {
-                Authorizer.checkTableAction(userIdentity,
-                        userIdentity.isEphemeral() ? userIdentity.getMappedRoleIds() : null,
-                        dbName, tableName, PrivilegeType.INSERT);
+                Authorizer.checkTableAction(context, dbName, tableName, PrivilegeType.INSERT);
             }
             return new TStatus(TStatusCode.OK);
         } catch (Exception e) {
@@ -3062,13 +3067,13 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TUserSecurityPolicyResponse increasePasswordErrorTimes(TUserSecurityPolicyRequest request)
             throws TException {
-        TUserIdentity tUserIdentity = request.authInfo.current_user_ident;
-        UserIdentity userIdentity = UserIdentity.fromThrift(tUserIdentity);
+        ConnectContext context = new ConnectContext();
+        context.setAuthInfoFromThrift(request.authInfo.current_user_ident);
 
         AuthenticationMgr authenticationMgr =
                 GlobalStateMgr.getCurrentState().getAuthenticationMgr();
         try {
-            authenticationMgr.increasePasswordErrorTimes(userIdentity);
+            authenticationMgr.increasePasswordErrorTimes(context.getCurrentUserIdentity());
         } catch (DdlException e) {
             throw new TException(e);
         }

@@ -33,7 +33,6 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
@@ -184,10 +183,11 @@ public class TaskRunsSystemTable extends SystemTable {
         List<TTaskRunInfo> tasksResult = Lists.newArrayList();
         result.setTask_runs(tasksResult);
 
-        UserIdentity currentUser = null;
+        ConnectContext context = new ConnectContext();
         if (params.isSetCurrent_user_ident()) {
-            currentUser = UserIdentity.fromThrift(params.current_user_ident);
+            context.setAuthInfoFromThrift(params.current_user_ident);
         }
+
         GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
         TaskManager taskManager = globalStateMgr.getTaskManager();
         List<TaskRunStatus> taskRunList = taskManager.getMatchedTaskRunStatus(params);
@@ -199,10 +199,7 @@ public class TaskRunsSystemTable extends SystemTable {
             }
 
             try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser,
-                        currentUser.isEphemeral() ? currentUser.getMappedRoleIds() : null,
-                        InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
-                        status.getDbName());
+                Authorizer.checkAnyActionOnOrInDb(context, InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, status.getDbName());
             } catch (AccessDeniedException e) {
                 continue;
             }
