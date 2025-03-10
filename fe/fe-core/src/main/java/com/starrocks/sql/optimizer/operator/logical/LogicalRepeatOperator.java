@@ -27,22 +27,25 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class LogicalRepeatOperator extends LogicalOperator {
     private List<ColumnRefOperator> outputGrouping;
     private List<List<ColumnRefOperator>> repeatColumnRefList;
     private List<List<Long>> groupingIds;
+    private Map<ColumnRefOperator, List<ColumnRefOperator>> groupingsFnArgs; // SPM use
     private boolean hasPushDown;
 
     public LogicalRepeatOperator(List<ColumnRefOperator> outputGrouping,
-                                 List<List<ColumnRefOperator>> repeatColumnRefList,
-                                 List<List<Long>> groupingIds) {
+                                 List<List<ColumnRefOperator>> repeatColumnRefList, List<List<Long>> groupingIds,
+                                 Map<ColumnRefOperator, List<ColumnRefOperator>> groupingsFnArgs) {
         super(OperatorType.LOGICAL_REPEAT);
         this.outputGrouping = outputGrouping;
         this.repeatColumnRefList = repeatColumnRefList;
         this.groupingIds = groupingIds;
         this.hasPushDown = false;
+        this.groupingsFnArgs = groupingsFnArgs;
     }
 
     private LogicalRepeatOperator() {
@@ -63,6 +66,10 @@ public class LogicalRepeatOperator extends LogicalOperator {
 
     public boolean hasPushDown() {
         return hasPushDown;
+    }
+
+    public Map<ColumnRefOperator, List<ColumnRefOperator>> getGroupingsFnArgs() {
+        return groupingsFnArgs;
     }
 
     @Override

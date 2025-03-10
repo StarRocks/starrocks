@@ -27,6 +27,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.spm.SPMFunctions;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -191,7 +192,9 @@ public class ExpressionStatisticCalculator {
                 return deriveBasicColStats(call);
             }
 
-            if (call.getChildren().size() == 0) {
+            if (SPMFunctions.isSPMFunctions(call)) {
+                return SPMFunctions.getSPMFunctionStatistics(call, childrenColumnStatistics).get(0);
+            } else if (call.getChildren().isEmpty()) {
                 return nullaryExpressionCalculate(call);
             } else if (call.getChildren().size() == 1) {
                 return unaryExpressionCalculate(call, childrenColumnStatistics.get(0));

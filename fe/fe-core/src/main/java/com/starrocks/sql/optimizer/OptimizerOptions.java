@@ -23,6 +23,7 @@ public class OptimizerOptions {
         RULE_BASED,
         COST_BASED,
         SHORT_CIRCUIT,
+        BASELINE_PLAN,
     }
 
     private final OptimizerStrategy optimizerStrategy;
@@ -45,6 +46,10 @@ public class OptimizerOptions {
 
     public boolean isShortCircuit() {
         return optimizerStrategy.equals(OptimizerStrategy.SHORT_CIRCUIT);
+    }
+
+    public boolean isBaselinePlan() {
+        return optimizerStrategy.equals(OptimizerStrategy.BASELINE_PLAN);
     }
 
     public void disableRule(RuleType ruleType) {

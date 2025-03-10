@@ -27,17 +27,19 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 public class PhysicalRepeatOperator extends PhysicalOperator {
     private final List<ColumnRefOperator> outputGrouping;
     private final List<List<ColumnRefOperator>> repeatColumnRef;
     private final List<List<Long>> groupingIds;
+    private final Map<ColumnRefOperator, List<ColumnRefOperator>> groupingsFnArgs; // SPM use
 
     public PhysicalRepeatOperator(List<ColumnRefOperator> outputGrouping, List<List<ColumnRefOperator>> repeatColumnRef,
-                                  List<List<Long>> groupingIds, long limit,
-                                  ScalarOperator predicate,
-                                  Projection projection) {
+                                  List<List<Long>> groupingIds,
+                                  Map<ColumnRefOperator, List<ColumnRefOperator>> groupingsFnArgs, long limit,
+                                  ScalarOperator predicate, Projection projection) {
         super(OperatorType.PHYSICAL_REPEAT);
         this.outputGrouping = outputGrouping;
         this.repeatColumnRef = repeatColumnRef;
@@ -45,6 +47,7 @@ public class PhysicalRepeatOperator extends PhysicalOperator {
         this.limit = limit;
         this.predicate = predicate;
         this.projection = projection;
+        this.groupingsFnArgs = groupingsFnArgs;
     }
 
     @Override
@@ -77,6 +80,10 @@ public class PhysicalRepeatOperator extends PhysicalOperator {
 
     public List<List<Long>> getGroupingIds() {
         return groupingIds;
+    }
+
+    public Map<ColumnRefOperator, List<ColumnRefOperator>> getGroupingsFnArgs() {
+        return groupingsFnArgs;
     }
 
     @Override
