@@ -5,7 +5,7 @@ create external catalog iceberg_sql_test_${uuid0} PROPERTIES ("type"="iceberg", 
 create database iceberg_sql_test_${uuid0}.iceberg_db_${uuid0};
 -- result:
 -- !result
-create table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}(k1 int);
+create table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0}(k1 int) properties('location' = 'oss://starrocks-ci-test/iceberg_db_${uuid0}/ice_tbl_${uuid0}');
 -- result:
 -- !result
 insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} select 1;
