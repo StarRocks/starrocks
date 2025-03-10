@@ -173,6 +173,7 @@ inline int sse_memcmp2(const char* p1, const char* p2, size_t size) {
 }
 #endif
 
+constexpr size_t PADDED_SIZE = 16;
 // memcmp has special inline optimizations for bytes <= 16.
 // Requires input to be overflow readable. (Allocate memory aligned to 16 byte size or tail length of 16.)
 inline int memcompare_padded(const char* p1, size_t size1, const char* p2, size_t size2) {

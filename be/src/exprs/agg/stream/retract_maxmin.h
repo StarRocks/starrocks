@@ -50,21 +50,29 @@ struct MaxAggregateDataRetractable<LT, FixedLengthLTGuard<LT>> : public StreamDe
 
 template <LogicalType LT>
 struct MaxAggregateDataRetractable<LT, StringLTGuard<LT>> : public StreamDetailState<LT> {
-    int32_t size = -1;
-    raw::RawVector<uint8_t> buffer;
+    void assign(const Slice& slice) {
+        _buffer.resize(slice.size);
+        size_t length = std::min<size_t>(PADDED_SIZE, slice.size);
+        memcpy(_buffer.data(), slice.data, length);
+        _size = slice.size;
+    }
 
-    bool has_value() const { return buffer.size() > 0; }
+    bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {buffer.data(), buffer.size()}; }
+    Slice slice() const { return {_buffer.data(), (size_t)_size}; }
 
     void reset_result() {
-        buffer.clear();
-        size = -1;
+        _buffer.clear();
+        _size = -1;
     }
     void reset() {
         StreamDetailState<LT>::reset();
         reset_result();
     }
+
+private:
+    int32_t _size = -1;
+    raw::RawVector<uint8_t> _buffer;
 };
 
 template <LogicalType LT, typename = guard::Guard>
@@ -83,21 +91,29 @@ struct MinAggregateDataRetractable<LT, FixedLengthLTGuard<LT>> : public StreamDe
 
 template <LogicalType LT>
 struct MinAggregateDataRetractable<LT, StringLTGuard<LT>> : public StreamDetailState<LT> {
-    int32_t size = -1;
-    Buffer<uint8_t> buffer;
+    void assign(const Slice& slice) {
+        _buffer.resize(slice.size);
+        size_t length = std::min<size_t>(PADDED_SIZE, slice.size);
+        memcpy(_buffer.data(), slice.data, length);
+        _size = slice.size;
+    }
 
-    bool has_value() const { return size > -1; }
+    bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {buffer.data(), buffer.size()}; }
+    Slice slice() const { return {_buffer.data(), (size_t)_size}; }
 
     void reset_result() {
-        buffer.clear();
-        size = -1;
+        _buffer.clear();
+        _size = -1;
     }
     void reset() {
         StreamDetailState<LT>::reset();
         reset_result();
     }
+
+private:
+    int32_t _size = -1;
+    raw::RawVector<uint8_t> _buffer;
 };
 
 template <LogicalType LT, typename State, class OP, typename T = RunTimeCppType<LT>>
