@@ -304,21 +304,45 @@ public:
 struct GroupConcatAggregateStateV2 {
     // update without null elements
     void update(FunctionContext* ctx, const Column& column, size_t index, size_t offset, size_t count) {
+        SCOPED_THREAD_LOCAL_COLUMN_ALLOCATOR_SETTER(ctx->agg_state_column_allocator());
         (*data_columns)[index]->append(column, offset, count);
     }
 
     // order-by items may be null
-    void update_nulls(FunctionContext* ctx, size_t index, size_t count) { (*data_columns)[index]->append_nulls(count); }
+    void update_nulls(FunctionContext* ctx, size_t index, size_t count) {
+        SCOPED_THREAD_LOCAL_COLUMN_ALLOCATOR_SETTER(ctx->agg_state_column_allocator());
+        (*data_columns)[index]->append_nulls(count);
+    }
 
     // release the trailing order-by columns
-    void release_order_by_columns() const {
+    void release_order_by_columns(FunctionContext* ctx) const {
         if (data_columns == nullptr) {
             return;
         }
+        SCOPED_THREAD_LOCAL_COLUMN_ALLOCATOR_SETTER(ctx->agg_state_column_allocator());
         for (auto i = output_col_num + 1; i < data_columns->size(); ++i) { // after the separator column
             data_columns->at(i).reset();
         }
         data_columns->resize(output_col_num + 1);
+    }
+
+    void reset(FunctionContext* ctx) {
+        SCOPED_THREAD_LOCAL_COLUMN_ALLOCATOR_SETTER(ctx->agg_state_column_allocator());
+        if (data_columns != nullptr) {
+            for (auto& col : *data_columns) {
+                col->resize(0);
+            }
+        }
+    }
+
+    void release(FunctionContext* ctx) {
+        SCOPED_THREAD_LOCAL_COLUMN_ALLOCATOR_SETTER(ctx->agg_state_column_allocator());
+        if (data_columns != nullptr) {
+            for (auto& col : *data_columns) {
+                col.reset();
+            }
+            data_columns->clear();
+        }
     }
 
     // using pointer rather than vector to avoid variadic size
@@ -358,6 +382,7 @@ public:
                 return;
             }
         }
+        SCOPED_THREAD_LOCAL_COLUMN_ALLOCATOR_SETTER(ctx->agg_state_column_allocator());
         for (auto i = 0; i < num; ++i) {
             state.data_columns->emplace_back(ctx->create_column(*ctx->get_arg_type(i), true));
         }
@@ -366,11 +391,7 @@ public:
 
     void reset(FunctionContext* ctx, const Columns& args, AggDataPtr __restrict state) const override {
         auto& state_impl = this->data(state);
-        if (state_impl.data_columns != nullptr) {
-            for (auto& col : *state_impl.data_columns) {
-                col->resize(0);
-            }
-        }
+        state_impl.reset(ctx);
     }
 
     // reject null for output columns, but non-output columns may be null
@@ -473,7 +494,7 @@ public:
     // nullable struct {nullable array[nullable elements]...}, the struct may be null, array and array elements from
     // output columns wouldn't be null.
     void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        auto& state_impl = this->data(state);
+        auto& state_impl = this->data(const_cast<AggDataPtr>(state));
         DCHECK(state_impl.data_columns == nullptr || !state_impl.data_columns->empty());
         if (state_impl.data_columns == nullptr || (*state_impl.data_columns)[0]->size() == 0) {
             to->append_default();
@@ -494,9 +515,8 @@ public:
                     elem_size);
             auto& offsets = array_col->offsets_column()->get_data();
             offsets.push_back(offsets.back() + elem_size);
-            (*state_impl.data_columns)[i].reset(); // early release memory
         }
-        state_impl.data_columns->clear();
+        state_impl.release(ctx);
     }
 
     // convert each cell of a row to a [nullable] array in a nullable struct, keep the same of chunk_size
@@ -617,7 +637,7 @@ public:
             Status st = sort_and_tie_columns(ctx->state()->cancelled_ref(), order_by_columns, sort_desc, &perm);
             // release order-by columns early
             order_by_columns.clear();
-            state_impl.release_order_by_columns();
+            state_impl.release_order_by_columns(ctx);
             if (UNLIKELY(ctx->state()->cancelled_ref())) {
                 ctx->set_error("group_concat detects cancelled.", false);
                 return;
