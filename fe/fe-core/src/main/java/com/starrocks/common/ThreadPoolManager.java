@@ -147,6 +147,12 @@ public class ThreadPoolManager {
                 new BlockedPolicy(poolName, 5), poolName, needRegisterMetric);
     }
 
+    public static ThreadPoolExecutor newDaemonCacheRejectThreadPool(int maxNumThread, String poolName,
+                                                                    boolean needRegisterMetric) {
+        return newDaemonThreadPool(0, maxNumThread, KEEP_ALIVE_TIME, TimeUnit.SECONDS, new SynchronousQueue(),
+                new LogRejectPolicy(poolName), poolName, needRegisterMetric);
+    }
+
     public static ThreadPoolExecutor newDaemonFixedThreadPool(int numThread, int queueSize, String poolName,
                                                               boolean needRegisterMetric) {
         return newDaemonThreadPool(numThread, numThread, KEEP_ALIVE_TIME, TimeUnit.SECONDS,
@@ -222,6 +228,10 @@ public class ThreadPoolManager {
         public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
             LOG.warn("Task " + r.toString() + " rejected from " + threadPoolName + " " + executor.toString());
         }
+
+        public String getThreadPoolName() {
+            return this.threadPoolName;
+        }
     }
 
     /**
@@ -252,6 +262,20 @@ public class ThreadPoolManager {
             } catch (InterruptedException e) {
                 throw new RejectedExecutionException(msg);
             }
+        }
+    }
+
+    static class LogRejectPolicy extends LogDiscardPolicy {
+
+        public LogRejectPolicy(String threadPoolName) {
+            super(threadPoolName);
+        }
+
+        @Override
+        public void rejectedExecution(Runnable r, ThreadPoolExecutor executor) {
+            super.rejectedExecution(r, executor);
+            String msg = "Task " + r + " rejected from " + getThreadPoolName() + " " + executor;
+            throw new RejectedExecutionException(msg);
         }
     }
 
