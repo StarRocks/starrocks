@@ -36,12 +36,15 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.common.Pair;
 import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
@@ -103,6 +106,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.stream.Collectors;
@@ -339,8 +343,6 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                     }
                 }
 
-<<<<<<< HEAD
-=======
                 // check unique constraints: if old table contains constraints, new table must contain the same constraints
                 // TODO: only check users' defined constraints to be compatible with old version
                 final List<UniqueConstraint> origUKConstraints = Optional.ofNullable(origTable.getTableProperty())
@@ -398,7 +400,6 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                     }
                 }
 
->>>>>>> 722dc4e738 ([BugFix] Only check users' defined uk/fk constraints to be compatible with old versions (#56761))
                 // inactive the related MVs
                 AlterMVJobExecutor.inactiveRelatedMaterializedView(origTable,
                         MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName), false);
