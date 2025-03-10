@@ -95,4 +95,15 @@ DROP TABLE s1;
 SHOW CREATE TABLE s2;
 SHOW CREATE TABLE s3;
 
+CREATE TABLE `primary_table_with_null_partition` ( `k1` date not null, `k2` datetime not null, `k3` varchar(20) not null, `k4` varchar(20) not null, `k5` boolean not null, `v1` tinyint, `v2` smallint, `v3` int, `v4` bigint, `v5` largeint, `v6` float, `v7` double, `v8` decimal(27,9) ) PRIMARY KEY(`k1`, `k2`, `k3`, `k4`, `k5`) COMMENT "OLAP" PARTITION BY RANGE(`k1`) ( PARTITION `p202006` VALUES LESS THAN ("2020-07-01"), PARTITION `p202007` VALUES LESS THAN ("2020-08-01"), PARTITION `p202008` VALUES LESS THAN ("2020-09-01") ) DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3 PROPERTIES ( "replication_num" = "1", "storage_format" = "v2" );
+CREATE TABLE `aggregate_table_with_null` ( `k1` date, `k2` datetime, `k3` char(20), `k4` varchar(20), `k5` boolean, `v1` bigint sum, `v2` bigint sum, `v3` bigint sum, `v4` bigint max, `v5` largeint max, `v6` float min, `v7` double min, `v8` decimal(27,9) sum ) AGGREGATE KEY(`k1`, `k2`, `k3`, `k4`, `k5`) COMMENT "OLAP" DISTRIBUTED BY HASH(`k1`, `k2`, `k3`, `k4`, `k5`) BUCKETS 3 PROPERTIES ( "replication_num" = "1", "storage_format" = "v2", "light_schema_change" = "false" );
+INSERT INTO primary_table_with_null_partition values ('2020-06-01', '2020-06-01 00:00:00', 'a', 'a', true, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0), ('2020-07-01', '2020-07-01 00:00:00', 'a', 'a', true, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0), ('2020-08-01', '2020-08-01 00:00:00', 'a', 'a', true, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0);
+INSERT INTO aggregate_table_with_null values ('2020-06-01', '2020-06-01 00:00:00', 'a', 'a', true, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0), ('2020-07-01', '2020-07-01 00:00:00', 'a', 'a', true, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0), ('2020-08-01', '2020-08-01 00:00:00', 'a', 'a', true, 1, 1, 1, 1, 1, 1.0, 1.0, 1.0);
+select * from primary_table_with_null_partition order by k1 limit 3;
+select * from aggregate_table_with_null order by k1 limit 3;
+-- swap table
+alter table primary_table_with_null_partition SWAP WITH aggregate_table_with_null;
+select * from primary_table_with_null_partition order by k1 limit 3;
+select * from aggregate_table_with_null order by k1 limit 3;
+
 DROP DATABASE db_test_alter_swap_table;
