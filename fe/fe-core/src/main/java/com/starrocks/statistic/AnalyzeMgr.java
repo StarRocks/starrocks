@@ -290,13 +290,8 @@ public class AnalyzeMgr implements Writable {
         } catch (Exception e) {
             return;
         }
-<<<<<<< HEAD
         GlobalStateMgr.getCurrentStatisticStorage()
-                .refreshConnectorTableColumnStatistics(table, columns, async);
-=======
-        GlobalStateMgr.getCurrentState().getStatisticStorage()
                 .refreshConnectorTableColumnStatistics(table, columns, !async);
->>>>>>> 557678b4eb ([BugFix] Fix replay external table stats meta takes long time (#56745))
     }
 
     public void replayRemoveBasicStatsMeta(BasicStatsMeta basicStatsMeta) {
