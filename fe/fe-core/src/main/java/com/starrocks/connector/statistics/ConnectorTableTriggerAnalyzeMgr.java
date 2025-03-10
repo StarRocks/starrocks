@@ -41,8 +41,13 @@ public class ConnectorTableTriggerAnalyzeMgr {
 
     public void start() {
         if (isStart.compareAndSet(false, true)) {
+<<<<<<< HEAD
             dispatchScheduler.scheduleAtFixedRate(connectorAnalyzeTaskQueue::scheduledPendingTask, 0,
                     Config.connector_table_query_trigger_analyze_schedule_interval, TimeUnit.SECONDS);
+=======
+            dispatchScheduler.scheduleAtFixedRate(this::schedulePendingTask, 0,
+                    Config.connector_table_query_trigger_task_schedule_interval, TimeUnit.SECONDS);
+>>>>>>> 456aebbce7 ([Doc]rename configuartion to take charge of all query-trigger tasks (#56544))
         }
     }
 

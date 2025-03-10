@@ -1176,6 +1176,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 説明: ヒストグラムのために収集する最大行数。
 - 導入バージョン: -
 
+##### connector_table_query_trigger_task_schedule_interval
+
+- デフォルト: 30
+- タイプ: Int
+- 単位: 秒
+- 変更可能: はい
+- 説明: Scheduler スレッドがクエリトリガーのバックグラウンドタスクをスケジュールする間隔。この項目は v3.4.0 で導入された `connector_table_query_trigger_analyze_schedule_interval` を置き換えるものである。ここで、バックグラウンドタスクとは、v3.4 では `ANALYZE` タスク、v3.4 より後のバージョンでは低カーディナリティ列の辞書のコレクションタスクを指す。
+- 導入バージョン: v3.4.2
+
 ##### connector_table_query_trigger_analyze_small_table_rows
 
 - デフォルト: 10000000
@@ -1210,15 +1219,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 単位: -
 - 変更可能: はい
 - 説明: FE 上で保留状態のクエリトリガー分析タスクの最大数。
-- 導入バージョン: v3.4.0
-
-##### connector_table_query_trigger_analyze_schedule_interval
-
-- デフォルト: 30
-- タイプ: Int
-- 単位: 秒
-- 変更可能: はい
-- 説明: スケジューラースレッドがクエリトリガー分析タスクをスケジュールする間隔。
 - 導入バージョン: v3.4.0
 
 ##### connector_table_query_trigger_analyze_max_running_task_num
