@@ -28,8 +28,8 @@ import com.starrocks.planner.HdfsScanNode;
 import com.starrocks.planner.OlapScanNode;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.sql.plan.ExecPlan;
+import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
-import org.slf4j.Logger;
 
 import java.util.Collection;
 import java.util.HashSet;

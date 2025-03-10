@@ -59,7 +59,7 @@ import com.starrocks.sql.common.RangePartitionDiffer;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections4.ListUtils;
-import org.slf4j.Logger;
+import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.Iterator;
