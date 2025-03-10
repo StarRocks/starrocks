@@ -19,6 +19,7 @@ insert into iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} selec
 -- !result
 select count(1) from files ("path"="oss://starrocks-ci-test/iceberg_db_${uuid0}/ice_tbl_${uuid0}/data","list_files_only" = "true");
 -- result:
+3
 -- !result
 insert overwrite iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} SELECT 4;
 -- result:
