@@ -124,7 +124,7 @@ public:
                                                  TClusterSnapshotJobsResponse* res);
 
     static Status get_keywords(const SchemaScannerState& state, const TGetKeywordsRequest& request,
-                                   TGetKeywordsResponse* response);
+                               TGetKeywordsResponse* response);
 
 private:
     static Status _call_rpc(const SchemaScannerState& state,
