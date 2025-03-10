@@ -2734,10 +2734,10 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
             // noop
         } else if (context instanceof StarRocksParser.AllColumnsContext) {
             // noop
-        } else if (context instanceof StarRocksParser.CombinedMultiColumnsContext) {
-            StarRocksParser.CombinedMultiColumnsContext combinedMultiColumnsContext =
-                    (StarRocksParser.CombinedMultiColumnsContext) context;
-            List<QualifiedName> names = combinedMultiColumnsContext.qualifiedName().stream()
+        } else if (context instanceof StarRocksParser.MultiColumnSetContext) {
+            StarRocksParser.MultiColumnSetContext multiColumnSetContext =
+                    (StarRocksParser.MultiColumnSetContext) context;
+            List<QualifiedName> names = multiColumnSetContext.qualifiedName().stream()
                     .map(this::getQualifiedName).collect(toList());
             columns = getAnalyzeColumns(names);
         } else if (context instanceof StarRocksParser.PredicateColumnsContext) {
@@ -2776,7 +2776,7 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         Pair<Boolean, List<Expr>> analyzeColumn = visitAnalyzeColumnClause(context.analyzeColumnClause());
         AnalyzeTypeDesc analyzeTypeDesc = new AnalyzeBasicDesc();
-        if (context.analyzeColumnClause() instanceof StarRocksParser.CombinedMultiColumnsContext) {
+        if (context.analyzeColumnClause() instanceof StarRocksParser.MultiColumnSetContext) {
             List<StatsConstants.StatisticsType> statisticsTypes = Lists.newArrayList();
             statisticsTypes.add(StatsConstants.StatisticsType.MCDISTINCT);
 

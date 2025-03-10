@@ -28,7 +28,7 @@ public class MultiColumnStatsMeta implements Writable {
     @SerializedName("tableId")
     private long tableId;
 
-    @SerializedName("column")
+    @SerializedName("columnIds")
     private Set<Integer> columnIds;
 
     @SerializedName("analyzeType")

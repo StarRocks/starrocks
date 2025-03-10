@@ -14,9 +14,11 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.Sets;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
+import com.starrocks.sql.optimizer.statistics.MultiColumnCombinedStatistics;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import mockit.Expectations;
 import org.apache.commons.lang3.StringUtils;
@@ -84,6 +86,17 @@ public class AggregatePushDownWithCostTest extends PlanWithCostTestBase {
                 minTimes = 0;
                 ss.getColumnStatistic(t3, "v12");
                 result = new ColumnStatistic(1, 200000, 0, 4, t3Rows / 20000.0);
+                minTimes = 0;
+
+                // for multi-column statistics
+                ss.getMultiColumnCombinedStatistics(t0.getId());
+                result = new MultiColumnCombinedStatistics(Sets.newHashSet(t0.getColumn("v1").getUniqueId(),
+                        t0.getColumn("v3").getUniqueId()), 5555555);
+                minTimes = 0;
+
+                ss.getMultiColumnCombinedStatistics(t3.getId());
+                result = new MultiColumnCombinedStatistics(Sets.newHashSet(t3.getColumn("v10").getUniqueId(),
+                        t3.getColumn("v11").getUniqueId()), 1);
                 minTimes = 0;
             }
         };
@@ -335,5 +348,33 @@ public class AggregatePushDownWithCostTest extends PlanWithCostTestBase {
                 "group by v5";
         plan = getFragmentPlan(sql);
         Assert.assertEquals(4, StringUtils.countMatches(plan, ":AGGREGATE "));
+    }
+
+    @Test
+    public void testAggWithMultiColumnStats() throws Exception {
+        String sql = "select count(1) from t0 group by v1, v3";
+        String plan = getCostExplain(sql);
+        assertCContains(plan, "1:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: count[(1); args: TINYINT; result: BIGINT; args nullable: false; result nullable: false]\n" +
+                "  |  group by: [1: v1, BIGINT, true], [3: v3, BIGINT, true]\n" +
+                "  |  cardinality: 5555555\n" +
+                "  |  column statistics: \n" +
+                "  |  * v1-->[1.0, 2.0, 0.0, 4.0, 3333333.3333333335] ESTIMATE\n" +
+                "  |  * v3-->[1.0, 2000000.0, 0.0, 4.0, 3333333.3333333335] ESTIMATE\n" +
+                "  |  * count-->[0.0, 1.0E9, 0.0, 8.0, 5555555.0] ESTIMATE");
+
+        sql = "select count(1) from t0 group by v1, abs(v3)";
+        plan = getCostExplain(sql);
+        assertCContains(plan, "3:Project\n" +
+                "  |  output columns:\n" +
+                "  |  5 <-> [5: count, BIGINT, false]\n" +
+                "  |  cardinality: 1000000000");
+
+        sql = "select count(1) from t3 group by v10, v11, v12";
+        plan = getCostExplain(sql);
+        assertCContains(plan, "1:AGGREGATE (update finalize)\n" +
+                "  |  aggregate: count[(1); args: TINYINT; result: BIGINT; args nullable: false; result nullable: false]\n" +
+                "  |  group by: [1: v10, BIGINT, true], [2: v11, BIGINT, true], [3: v12, BIGINT, true]\n" +
+                "  |  cardinality: 3750");
     }
 }
