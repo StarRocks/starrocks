@@ -15,8 +15,14 @@
 package com.starrocks.system;
 
 import com.google.common.collect.ImmutableMap;
+import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
+import com.starrocks.common.io.Text;
+import com.starrocks.common.io.Writable;
+import com.starrocks.persist.gson.GsonUtils;
 
+import java.io.DataInput;
+import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
@@ -24,9 +30,14 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 /**
  * This class keeps a historical backend or compute node set with the update time.
  */
-public class HistoricalNodeSet {
+public class HistoricalNodeSet implements Writable {
+    @SerializedName(value = "idToBackend")
     private ImmutableMap<Long, Backend> idToBackend;
+
+    @SerializedName(value = "idToComputeNode")
     private ImmutableMap<Long, ComputeNode> idToComputeNode;
+
+    @SerializedName(value = "lastUpdateTime")
     private long lastUpdateTime;
     private ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
@@ -36,31 +47,18 @@ public class HistoricalNodeSet {
         lastUpdateTime = System.currentTimeMillis();
     }
 
-    public boolean updateHistoricalBackends(Map<Long, Backend> idToBackend, long minUpdateInterval) {
-        long currentTime = System.currentTimeMillis();
-
+    public void updateHistoricalBackends(Map<Long, Backend> idToBackend, long currentTime) {
         try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
-            if (currentTime - lastUpdateTime < minUpdateInterval) {
-                return false;
-            }
-
             this.idToBackend = ImmutableMap.copyOf(idToBackend);
             this.lastUpdateTime = currentTime;
-            return true;
         }
     }
 
-    public boolean updateHistoricalComputeNodes(Map<Long, ComputeNode> idToComputeNode, long minUpdateInterval) {
-        long currentTime = System.currentTimeMillis();
-
+    public void updateHistoricalComputeNodes(Map<Long, ComputeNode> idToComputeNode, long currentTime) {
+        // long currentTime = System.currentTimeMillis();
         try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
-            if (currentTime - lastUpdateTime < minUpdateInterval) {
-                return false;
-            }
-
             this.idToComputeNode = ImmutableMap.copyOf(idToComputeNode);
             this.lastUpdateTime = currentTime;
-            return true;
         }
     }
 
@@ -77,28 +75,12 @@ public class HistoricalNodeSet {
     }
 
     public long getLastUpdateTime() {
-        return lastUpdateTime;
-    }
-
-    /*
-    public boolean setHistoricalNodeIds(List<Long> nodeIds, long minUpdateInterval) {
-        long currentTime = System.currentTimeMillis();
-
-        try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
-            if (currentTime - lastUpdateTime < minUpdateInterval) {
-                return false;
-            }
-
-            //this.nodeIds = nodeIds;
-            this.lastUpdateTime = currentTime;
-            return true;
-        }
-    }
-
-    public List<Long> getNodeIds() {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
-            return this.nodeIds;
+            return lastUpdateTime;
         }
     }
-     */
+
+    public static HistoricalNodeSet read(DataInput in) throws IOException {
+        return GsonUtils.GSON.fromJson(Text.readString(in), HistoricalNodeSet.class);
+    }
 }

@@ -607,9 +607,8 @@ template <typename T>
 void PInternalServiceImplBase<T>::fetch_datacache(google::protobuf::RpcController* cntl_base,
                                                   const PFetchDataCacheRequest* request, PFetchDataCacheResponse* response,
                                                   google::protobuf::Closure* done) {
-    // TODO: Submit to a task pool related to datacache.
     auto task = [=]() { this->_fetch_datacache(cntl_base, request, response, done); };
-    if (!_exec_env->query_rpc_pool()->try_offer(std::move(task))) {
+    if (!_exec_env->datacache_rpc_pool()->try_offer(std::move(task))) {
         ClosureGuard closure_guard(done);
         Status::ServiceUnavailable("submit fetch_data task failed").to_protobuf(response->mutable_status());
     }

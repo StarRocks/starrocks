@@ -1178,6 +1178,7 @@ CONF_Int64(spill_read_buffer_min_bytes, "1048576");
 CONF_mInt64(mem_limited_chunk_queue_block_size, "8388608");
 
 CONF_Int32(internal_service_query_rpc_thread_num, "-1");
+CONF_Int32(internal_service_datacache_rpc_thread_num, "-1");
 
 /*
  * When compile with ENABLE_STATUS_FAILED, every use of RETURN_INJECT has probability of 1/cardinality_of_inject

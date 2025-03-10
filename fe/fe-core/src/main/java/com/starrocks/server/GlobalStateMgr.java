@@ -1596,9 +1596,9 @@ public class GlobalStateMgr {
                 .put(SRMetaBlockID.KEY_MGR, keyMgr::load)
                 .put(SRMetaBlockID.PIPE_MGR, pipeManager.getRepo()::load)
                 .put(SRMetaBlockID.WAREHOUSE_MGR, warehouseMgr::load)
-                .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
                 .put(SRMetaBlockID.CLUSTER_SNAPSHOT_MGR, clusterSnapshotMgr::load)
                 .put(SRMetaBlockID.BLACKLIST_MGR, sqlBlackList::load)
+                .put(SRMetaBlockID.HISTORICAL_NODE_MGR, historicalNodeMgr::load)
                 .build();
 
         Set<SRMetaBlockID> metaMgrMustExists = new HashSet<>(loadImages.keySet());
@@ -1817,9 +1817,9 @@ public class GlobalStateMgr {
                 keyMgr.save(imageWriter);
                 pipeManager.getRepo().save(imageWriter);
                 warehouseMgr.save(imageWriter);
-                historicalNodeMgr.save(imageWriter);
                 sqlBlackList.save(imageWriter);
                 clusterSnapshotMgr.save(imageWriter);
+                historicalNodeMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
