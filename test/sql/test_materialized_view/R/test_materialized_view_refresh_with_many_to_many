@@ -1,4 +1,4 @@
--- name: test_materialized_view_refresh_with_many_to_many
+-- name: test_materialized_view_refresh_with_many_to_many @slow
 create external catalog hive_catalog_${uuid0}
 properties
 (

@@ -26,7 +26,6 @@ public class GroupProviderFactory {
             ImmutableSortedSet.orderedBy(String.CASE_INSENSITIVE_ORDER)
                     .add(UnixGroupProvider.TYPE)
                     .add(FileGroupProvider.TYPE)
-                    .add(LDAPGroupProvider.TYPE)
                     .build();
 
     public static void checkGroupProviderIsSupported(String groupProviderType) {
@@ -43,8 +42,6 @@ public class GroupProviderFactory {
             groupProvider = new FileGroupProvider(name, propertyMap);
         } else if (type.equalsIgnoreCase(UnixGroupProvider.TYPE)) {
             groupProvider = new UnixGroupProvider(name, propertyMap);
-        } else if (type.equalsIgnoreCase(LDAPGroupProvider.TYPE)) {
-            groupProvider = new LDAPGroupProvider(name, propertyMap);
         }
 
         Preconditions.checkNotNull(groupProvider);

@@ -37,6 +37,7 @@ package com.starrocks.common;
 import com.starrocks.StarRocksFE;
 import com.starrocks.catalog.LocalTablet;
 import com.starrocks.catalog.Replica;
+import com.starrocks.qe.scheduler.slot.QueryQueueOptions;
 
 import static java.lang.Math.max;
 import static java.lang.Runtime.getRuntime;
@@ -714,6 +715,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int query_queue_v2_concurrency_level = 4;
+
+    @ConfField(mutable = true, comment = "Schedule strategy of pending queries: SWRR/SJF")
+    public static String query_queue_v2_schedule_strategy = QueryQueueOptions.SchedulePolicy.createDefault().name();
+
     /**
      * Used to estimate the number of slots of a query based on the cardinality of the Source Node. It is equal to the
      * cardinality of the Source Node divided by the configuration value and is limited to between [1, DOP*numBEs].
@@ -2179,6 +2184,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = true)
     public static boolean statistic_use_meta_statistics = true;
 
+    @ConfField(mutable = true, comment = "collect multi-column combined statistics max column nums")
+    public static int statistics_max_multi_column_combined_num = 10;
+
     /**
      * default bucket size of histogram statistics
      */
@@ -3527,9 +3535,9 @@ public class Config extends ConfigBase {
     @ConfField(mutable = false)
     public static String oidc_required_audience = "";
 
-    @ConfField(mutable = true)
-    public static String[] authenticated_group_list = {};
-
+    /**
+     * The name of the group provider. If there are multiple, separate them with commas.
+     */
     @ConfField(mutable = true)
     public static String[] group_provider = {};
 
@@ -3545,4 +3553,7 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static int max_get_partitions_meta_result_count = 100000;
+
+    @ConfField(mutable = false)
+    public static int max_spm_cache_baseline_size = 200;
 }

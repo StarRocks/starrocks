@@ -683,6 +683,13 @@ public class QueryOptimizer extends Optimizer {
 
         tree = SimplifyCaseWhenPredicateRule.INSTANCE.rewrite(tree, rootTaskContext);
         deriveLogicalProperty(tree);
+
+        // TODO(packy92)
+        //  The tree-based rewriting rules in RBO may modify the child node but not update the
+        //  parent node, resulting in the statistical cache calculated by the previous rules
+        //  not being refreshed, which may affect the calculation of statistical information in memo.
+        //  Just clear it before into memo.
+        tree.getInputs().get(0).clearStatsAndInitOutputInfo();
         return tree.getInputs().get(0);
     }
 

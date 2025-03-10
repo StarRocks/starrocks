@@ -26,7 +26,7 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.TimeUtils;
-import com.starrocks.load.pipe.filelist.RepoExecutor;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -121,7 +121,7 @@ public class PredicateColumnsStorage {
     private final LocalDateTime systemStartTime = TimeUtils.getSystemNow();
     private volatile LocalDateTime lastPersist = LocalDateTime.MIN;
 
-    private final RepoExecutor executor;
+    private final SimpleExecutor executor;
 
     public static TableKeeper createKeeper() {
         return KEEPER;
@@ -132,10 +132,10 @@ public class PredicateColumnsStorage {
     }
 
     public PredicateColumnsStorage() {
-        this.executor = RepoExecutor.getInstance();
+        this.executor = SimpleExecutor.getRepoExecutor();
     }
 
-    public PredicateColumnsStorage(RepoExecutor executor) {
+    public PredicateColumnsStorage(SimpleExecutor executor) {
         this.executor = executor;
     }
 

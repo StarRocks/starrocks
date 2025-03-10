@@ -231,8 +231,8 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
                 break;
             }
             AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
-                    statsJob.getDb().getId(), statsJob.getTable().getId(), statsJob.getColumnNames(),
-                    statsJob.getType(), statsJob.getScheduleType(), statsJob.getProperties(), LocalDateTime.now());
+                    statsJob.getDb().getId(), statsJob.getTable().getId(), statsJob.getColumnNames(), statsJob.getAnalyzeType(),
+                    statsJob.getScheduleType(), statsJob.getProperties(), LocalDateTime.now());
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
@@ -253,8 +253,6 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithLog(this);
         }
     }
-
-
 
     public static NativeAnalyzeJob read(DataInput in) throws IOException {
         String s = Text.readString(in);

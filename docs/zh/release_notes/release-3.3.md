@@ -10,6 +10,39 @@ displayed_sidebar: docs
 
 :::
 
+## 3.3.11
+
+发布日期：2025 年 3 月 7 日
+
+### 功能优化
+
+- 使用 `F``iles` 函数导出数据时，支持向 Parquet 文件导出 JSON 数据类型。[#56406](https://github.com/StarRocks/starrocks/pull/56406)
+- 提升存算分离集群中云原生表 Data Cache 预热性能。[#56190](https://github.com/StarRocks/starrocks/pull/56190)
+- Trino 语法兼容 AT TIME ZONE 表达式和 `from_iso8601_timestamp` 函数。[#56311](https://github.com/StarRocks/starrocks/pull/56311) [#55573](https://github.com/StarRocks/starrocks/pull/55573)
+- 存算分离集群中主键表的部份列更新支持条件更新。[#56132](https://github.com/StarRocks/starrocks/pull/56132)
+- 进一步支持所有类型语句的统计信息收集。[#56257](https://github.com/StarRocks/starrocks/pull/56257)
+- `SHOW PROC '/transaction'` 语句支持配置返回的最大行数。[#55933](https://github.com/StarRocks/starrocks/pull/55933)
+- 支持基于 Oracle 类型 JDBC Catalog 表上创建异步物化视图。[#55372](https://github.com/StarRocks/starrocks/pull/55372)
+- BE 的 WebUI 上 MemTracker 支持 25 行分页。[#56206](https://github.com/StarRocks/starrocks/pull/56206)
+
+### 问题修复
+
+修复了如下问题：
+
+- FE 不支持将常量 TIME 数据类型 Cast 成 DATETIME 导致的问题。[#55804](https://github.com/StarRocks/starrocks/pull/55804)
+- Stream Load 事务接口不支持 `starrocks_fe_table_load_rows` 和 `starrocks_fe_table_load_bytes` 两个指标导致的问题。[#44991](https://github.com/StarRocks/starrocks/pull/44991)
+- 更改自动统计信息收集的方式不生效。[#56173](https://github.com/StarRocks/starrocks/pull/56173)
+- 物化视图状态异常时导致 `SHOW`` ``MATERIALIZED`` ``VIEWS` 出现问题。[#55995](https://github.com/StarRocks/starrocks/pull/55995)
+- 基于文本的物化视图改写在不同数据库下不生效的问题。[#56001](https://github.com/StarRocks/starrocks/pull/56001)
+- JDBC Catalog 元数据兼容性问题。[#55993](https://github.com/StarRocks/starrocks/pull/55993)
+- JDBC Catalog 处理 JSON 类型数据的问题。[#56008](https://github.com/StarRocks/starrocks/pull/56008)
+- Schema Change 时 Sort Key 设置错误的问题。[#55902](https://github.com/StarRocks/starrocks/pull/55902)
+- Broker Load 敏感信息泄露的问题。[#55358](https://github.com/StarRocks/starrocks/pull/55358)
+
+### 行为变更
+
+- FE 的 `query_detail` 接口增加认证环节。[#55919](https://github.com/StarRocks/starrocks/pull/55919)
+
 ## 3.3.10 (已下线)
 
 发布日期：2025 年 2 月 21 日

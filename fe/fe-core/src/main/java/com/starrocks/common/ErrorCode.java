@@ -257,7 +257,7 @@ public enum ErrorCode {
     ERR_SECURE_TRANSPORT_REQUIRED(5205, new byte[] {'H', 'Y', '0', '0', '0'},
             "Connections using insecure transport are prohibited"),
     ERR_GROUP_ACCESS_DENY(5206, new byte[] {'4', '2', '0', '0', '0'},
-            "Group Access Denied"),
+            "Access denied; User %s's group[%s] is not in the group_allowed_login_list"),
 
     /**
      * 5300 - 5399: Lock and Transaction

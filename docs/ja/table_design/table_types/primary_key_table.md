@@ -208,6 +208,6 @@ v3.0 以降、主キーテーブルはソートキーを主キーから分離し
 
 - 作成したテーブルにデータをロードするには、[ロードの概要](../../loading/Loading_intro.md)を参照して適切なロードオプションを選択できます。
 - 主キーテーブルのデータを変更する必要がある場合は、[ロードを通じてデータを変更](../../loading/Load_to_Primary_Key_tables.md)するか、DML（[INSERT](../../sql-reference/sql-statements/loading_unloading/INSERT.md)、[UPDATE](../../sql-reference/sql-statements/table_bucket_part_index/UPDATE.md)、および [DELETE](../../sql-reference/sql-statements/table_bucket_part_index/DELETE.md)）を使用できます。
-- クエリアクセラレーションをさらに進めたい場合は、[クエリアクセラレーション](../../using_starrocks/using_starrocks.mdx)を参照してください。
+- クエリアクセラレーションをさらに進めたい場合は、[クエリアクセラレーション](../../using_starrocks/async_mv/Materialized_view.md)を参照してください。
 - テーブルスキーマを変更する必要がある場合は、[ALTER TABLE](../../sql-reference/sql-statements/Resource/ALTER_RESOURCE.md)を参照してください。
 - [AUTO_INCREMENT](../../sql-reference/sql-statements/generated_columns.md) 列を主キーとして使用できます。

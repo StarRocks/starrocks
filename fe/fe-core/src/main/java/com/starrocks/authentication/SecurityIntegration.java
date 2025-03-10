@@ -27,7 +27,7 @@ import java.util.Map;
 public abstract class SecurityIntegration {
     public static final String SECURITY_INTEGRATION_PROPERTY_TYPE_KEY = "type";
     public static final String SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER = "group_provider";
-    public static final String SECURITY_INTEGRATION_PROPERTY_AUTHENTICATED_GROUP_LIST = "authenticated_group_list";
+    public static final String SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN = "group_allowed_login_list";
 
     @SerializedName(value = "n")
     protected String name;
@@ -70,8 +70,8 @@ public abstract class SecurityIntegration {
         return List.of(propertyMap.get(SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER).split(",\\s*"));
     }
 
-    public List<String> getAuthenticatedGroupList() {
-        String property = propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_AUTHENTICATED_GROUP_LIST);
+    public List<String> getGroupAllowedLoginList() {
+        String property = propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN);
         if (property == null) {
             return List.of();
         } else {

@@ -196,6 +196,13 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_REMOVE_ANALYZE_STATUS = 10017;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_ADD_MULTI_COLUMN_STATS_META = 10018;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_REMOVE_MULTI_COLUMN_STATS_META = 10019;
+
+
     // workgroup 10021 ~ 10030
     @IgnorableOnReplayFailed
     public static final short OP_RESOURCE_GROUP = 10021;
@@ -598,6 +605,12 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_DROP_GROUP_PROVIDER = 13531;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_CREATE_SPM_BASELINE_LOG = 13540;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_SPM_BASELINE_LOG = 13541;
 
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number

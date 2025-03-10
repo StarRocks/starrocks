@@ -14,6 +14,7 @@
 
 package com.starrocks.authentication;
 
+import com.google.common.base.Joiner;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.ErrorCode;
@@ -66,7 +67,6 @@ public class AuthenticationHandler {
                             authenticatedUser = matchedUserIdentity.getKey();
 
                             groupProviderName = List.of(Config.group_provider);
-                            authenticatedGroupList = List.of(Config.authenticated_group_list);
                         } catch (AuthenticationException e) {
                             LOG.debug("failed to authenticate for native, user: {}@{}, error: {}",
                                     user, remoteHost, e.getMessage());
@@ -90,7 +90,7 @@ public class AuthenticationHandler {
                             groupProviderName = List.of(Config.group_provider);
                         }
 
-                        authenticatedGroupList = securityIntegration.getAuthenticatedGroupList();
+                        authenticatedGroupList = securityIntegration.getGroupAllowedLoginList();
                     } catch (AuthenticationException e) {
                         LOG.debug("failed to authenticate, user: {}@{}, security integration: {}, error: {}",
                                 user, remoteHost, securityIntegration, e.getMessage());
@@ -106,7 +106,6 @@ public class AuthenticationHandler {
             } else {
                 authenticatedUser = matchedUserIdentity.getKey();
                 groupProviderName = List.of(Config.group_provider);
-                authenticatedGroupList = List.of(Config.authenticated_group_list);
             }
         }
 
@@ -124,11 +123,11 @@ public class AuthenticationHandler {
         Set<String> groups = getGroups(authenticatedUser, groupProviderName);
         context.setGroups(groups);
 
-        if (!authenticatedGroupList.isEmpty()) {
+        if (authenticatedGroupList != null && !authenticatedGroupList.isEmpty()) {
             Set<String> intersection = new HashSet<>(groups);
             intersection.retainAll(authenticatedGroupList);
             if (intersection.isEmpty()) {
-                throw new AuthenticationException(ErrorCode.ERR_GROUP_ACCESS_DENY);
+                throw new AuthenticationException(ErrorCode.ERR_GROUP_ACCESS_DENY, user, Joiner.on(",").join(groups));
             }
         }
 

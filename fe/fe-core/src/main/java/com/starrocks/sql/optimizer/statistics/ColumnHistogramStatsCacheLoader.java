@@ -100,7 +100,7 @@ public class ColumnHistogramStatsCacheLoader implements AsyncCacheLoader<ColumnS
                 return result;
             } catch (RuntimeException e) {
                 LOG.error(e);
-                return result;
+                throw new CompletionException(e);
             } catch (Exception e) {
                 throw new CompletionException(e);
             } finally {
