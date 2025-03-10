@@ -40,6 +40,7 @@ import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StatusCode;
 import com.staros.proto.UpdateMetaGroupInfo;
+import com.staros.proto.WarmupLevel;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
@@ -762,7 +763,21 @@ public class StarOSAgent {
         }
     }
 
-    public long createWorkerGroup(String size, int replicaNumber, String replicationTypeStr) throws DdlException {
+    public long createWorkerGroup(String size) throws DdlException {
+        return createWorkerGroup(size, 1);
+    }
+
+    public long createWorkerGroup(String size, int replicaNumber) throws DdlException {
+        return createWorkerGroup(size, replicaNumber, ReplicationType.NO_REPLICATION);
+    }
+
+    public long createWorkerGroup(String size, int replicaNumber, ReplicationType replicationType) throws DdlException {
+        return createWorkerGroup(size, replicaNumber, replicationType, WarmupLevel.WARMUP_NOTHING);
+    }
+
+    public long createWorkerGroup(String size, int replicaNumber, ReplicationType replicationType,
+                                  WarmupLevel warmupLevel)
+            throws DdlException {
         prepare();
 
         // size should be x0, x1, x2, x4...
@@ -771,18 +786,8 @@ public class StarOSAgent {
         String owner = "Starrocks";
         WorkerGroupDetailInfo result = null;
         try {
-            ReplicationType replicationType = ReplicationType.NO_REPLICATION;
-            if (replicationTypeStr == null || replicationTypeStr.equalsIgnoreCase("NONE")) {
-                replicationType = ReplicationType.NO_REPLICATION;
-            } else if (replicationTypeStr.equalsIgnoreCase("SYNC")) {
-                replicationType = ReplicationType.SYNC;
-            } else if (replicationTypeStr.equalsIgnoreCase("ASYNC")) {
-                replicationType = ReplicationType.ASYNC;
-            } else {
-                throw new DdlException("Unknown replication type " + replicationTypeStr);
-            }
             result = client.createWorkerGroup(serviceId, owner, spec, Collections.emptyMap(),
-                    Collections.emptyMap(), replicaNumber, replicationType);
+                    Collections.emptyMap(), replicaNumber, replicationType, warmupLevel);
         } catch (StarClientException e) {
             LOG.warn("Failed to create worker group. error: {}", e.getMessage());
             throw new DdlException("Failed to create worker group. error: " + e.getMessage());
@@ -790,21 +795,20 @@ public class StarOSAgent {
         return result.getGroupId();
     }
 
-    public void updateWorkerGroup(long workerGroupId, int replicaNumber, String replicationTypeStr)
+    public void updateWorkerGroup(long workerGroupId, int replicaNumber) throws DdlException {
+        updateWorkerGroup(workerGroupId, replicaNumber, ReplicationType.NO_SET);
+    }
+
+    public void updateWorkerGroup(long workerGroupId, int replicaNumber, ReplicationType replicationType)
             throws DdlException {
+        updateWorkerGroup(workerGroupId, replicaNumber, replicationType, WarmupLevel.WARMUP_NOT_SET);
+    }
+
+    public void updateWorkerGroup(long workerGroupId, int replicaNumber, ReplicationType replicationType,
+                                  WarmupLevel warmupLevel) throws DdlException {
         prepare();
         try {
-            ReplicationType replicationType = ReplicationType.NO_REPLICATION;
-            if (replicationTypeStr == null || replicationTypeStr.equalsIgnoreCase("NONE")) {
-                replicationType = ReplicationType.NO_REPLICATION;
-            } else if (replicationTypeStr.equalsIgnoreCase("SYNC")) {
-                replicationType = ReplicationType.SYNC;
-            } else if (replicationTypeStr.equalsIgnoreCase("ASYNC")) {
-                replicationType = ReplicationType.ASYNC;
-            } else {
-                throw new DdlException("Unknown replication type " + replicationTypeStr);
-            }
-            client.updateWorkerGroup(serviceId, workerGroupId, null, null, replicaNumber, replicationType);
+            client.updateWorkerGroup(serviceId, workerGroupId, null, null, replicaNumber, replicationType, warmupLevel);
         } catch (StarClientException e) {
             LOG.warn("Failed to update worker group. error: {}", e.getMessage());
             throw new DdlException("Failed to update worker group. error: " + e.getMessage());

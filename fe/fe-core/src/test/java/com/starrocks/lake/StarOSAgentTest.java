@@ -33,6 +33,7 @@ import com.staros.proto.ShardGroupInfo;
 import com.staros.proto.ShardInfo;
 import com.staros.proto.StarStatus;
 import com.staros.proto.StatusCode;
+import com.staros.proto.WarmupLevel;
 import com.staros.proto.WorkerGroupDetailInfo;
 import com.staros.proto.WorkerGroupSpec;
 import com.staros.proto.WorkerInfo;
@@ -735,37 +736,34 @@ public class StarOSAgentTest {
         new MockUp<StarClient>() {
             @Mock
             public WorkerGroupDetailInfo createWorkerGroup(String serviceId, String owner, WorkerGroupSpec spec,
-                    Map<String, String> labels, Map<String, String> properties, int replicaNumber,
-                    ReplicationType replicationType) throws StarClientException {
+                                                           Map<String, String> labels, Map<String, String> properties,
+                                                           int replicaNumber, ReplicationType replicationType,
+                                                           WarmupLevel warmupLevel) throws StarClientException {
                 return WorkerGroupDetailInfo.newBuilder().build();
             }
         };
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        starosAgent.createWorkerGroup("size", 1, null);
-        starosAgent.createWorkerGroup("size", 1, "sync");
-        starosAgent.createWorkerGroup("size", 1, "async");
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Unknown replication type aaa",
-                () -> starosAgent.createWorkerGroup("size", 1, "aaa"));
+        starosAgent.createWorkerGroup("size");
+        starosAgent.createWorkerGroup("size", 1);
+        starosAgent.createWorkerGroup("size", 1, ReplicationType.SYNC);
+        starosAgent.createWorkerGroup("size", 1, ReplicationType.ASYNC, WarmupLevel.WARMUP_META);
     }
 
     @Test
     public void testUpdateWorkerGroup() throws StarClientException, DdlException, StarRocksException {
         new MockUp<StarClient>() {
             @Mock
-            public WorkerGroupDetailInfo updateWorkerGroup(String serviceId, long groupId,
-                    Map<String, String> labels, Map<String, String> properties, int replicaNumber,
-                    ReplicationType replicationType) throws StarClientException {
+            public WorkerGroupDetailInfo updateWorkerGroup(String serviceId, long groupId, Map<String, String> labels,
+                                                           Map<String, String> properties, int replicaNumber,
+                                                           ReplicationType replicationType, WarmupLevel warmupLevel)
+                    throws StarClientException {
                 return WorkerGroupDetailInfo.newBuilder().build();
             }
         };
         Deencapsulation.setField(starosAgent, "serviceId", "1");
-        starosAgent.updateWorkerGroup(123, 1, null);
-        starosAgent.updateWorkerGroup(123, 1, "sync");
-        starosAgent.updateWorkerGroup(123, 1, "async");
-        ExceptionChecker.expectThrowsWithMsg(DdlException.class,
-                "Unknown replication type aaa",
-                () -> starosAgent.updateWorkerGroup(123, 1, "aaa"));
+        starosAgent.updateWorkerGroup(123, 1);
+        starosAgent.updateWorkerGroup(123, 1, ReplicationType.SYNC);
+        starosAgent.updateWorkerGroup(123, 1, ReplicationType.ASYNC, WarmupLevel.WARMUP_META);
     }
 
     @Test
