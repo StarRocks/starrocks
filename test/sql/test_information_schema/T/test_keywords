@@ -1,0 +1,19 @@
+-- name: test_keywords_system_table
+CREATE DATABASE db_${uuid0};
+USE db_${uuid0};
+SELECT * FROM information_schema.keywords ORDER BY keyword ASC;
+SELECT * FROM information_schema.keywords WHERE RESERVED = true ORDER BY keyword ASC;
+SELECT * FROM information_schema.keywords WHERE RESERVED = false ORDER BY keyword ASC;
+SELECT * FROM information_schema.keywords ORDER BY keyword ASC LIMIT 3 OFFSET 2;
+SELECT * FROM information_schema.keywords WHERE keyword LIKE 'S%' ORDER BY keyword ASC;
+SELECT * FROM information_schema.keywords WHERE keyword IN ('SELECT', 'USER', 'TABLE') ORDER BY keyword ASC;
+SELECT * FROM information_schema.keywords ORDER BY RESERVED DESC, keyword ASC;
+ADMIN SET FRONTEND CONFIG("max_get_partitions_meta_result_count" = "1");
+SELECT * FROM information_schema.keywords ORDER BY keyword ASC;
+ADMIN SET FRONTEND CONFIG("max_get_partitions_meta_result_count" = "100000");
+DROP USER IF EXISTS test_user;
+CREATE USER test_user IDENTIFIED BY 'password';
+GRANT SELECT ON information_schema.keywords TO test_user;
+SELECT * FROM information_schema.keywords;
+DROP USER test_user;
+DROP DATABASE db_${uuid0};

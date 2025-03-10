@@ -224,6 +224,8 @@ import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGetKeysRequest;
 import com.starrocks.thrift.TGetKeysResponse;
+import com.starrocks.thrift.TGetKeywordsRequest;
+import com.starrocks.thrift.TGetKeywordsResponse;
 import com.starrocks.thrift.TGetLoadTxnStatusRequest;
 import com.starrocks.thrift.TGetLoadTxnStatusResult;
 import com.starrocks.thrift.TGetLoadsParams;
@@ -3200,5 +3202,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
     @Override
     public TClusterSnapshotJobsResponse getClusterSnapshotJobsInfo(TClusterSnapshotJobsRequest params) {
         return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo();
+    }
+
+    @Override
+    public TGetKeywordsResponse getKeywords(TGetKeywordsRequest request) throws TException {
+        return InformationSchemaDataSource.generateKeywordsResponse(request);
     }
 }
