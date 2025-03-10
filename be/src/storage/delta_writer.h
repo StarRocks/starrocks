@@ -16,7 +16,7 @@
 
 #include "column/chunk.h"
 #include "column/vectorized_fwd.h"
-#include "common/tracer.h"
+#include "common/tracer_fwd.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "gen_cpp/olap_common.pb.h"
 #include "gutil/macros.h"

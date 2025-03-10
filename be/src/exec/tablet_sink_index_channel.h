@@ -24,7 +24,7 @@
 #include <vector>
 
 #include "common/status.h"
-#include "common/tracer.h"
+#include "common/tracer_fwd.h"
 #include "exec/async_data_sink.h"
 #include "exec/tablet_info.h"
 #include "gen_cpp/Types_types.h"

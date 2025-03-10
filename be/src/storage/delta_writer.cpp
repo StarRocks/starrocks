@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "common/tracer.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
