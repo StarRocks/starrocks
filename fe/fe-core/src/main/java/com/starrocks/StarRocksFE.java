@@ -57,6 +57,7 @@ import com.starrocks.server.RunMode;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.service.FrontendThriftServer;
+import com.starrocks.service.GroovyUDSServer;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlService;
 import com.starrocks.staros.StarMgrServer;
 import org.apache.commons.cli.BasicParser;
@@ -177,6 +178,10 @@ public class StarRocksFE {
             httpServer.start();
             qeService.start();
             arrowFlightSqlService.start();
+
+            if (Config.enable_groovy_debug_server) {
+                GroovyUDSServer.getInstance().start();
+            }
 
             ThreadPoolManager.registerAllThreadPoolMetric();
 
