@@ -22,6 +22,10 @@
 #include "common/logging.h"
 #include "testutil/assert.h"
 
+// let gcov to calculate code coverage for byte_buffer.h
+#pragma GCC push_options
+#pragma GCC optimize("no-inline")
+
 namespace starrocks {
 
 class ByteBufferTest : public testing::Test {
@@ -109,3 +113,4 @@ TEST_F(ByteBufferTest, test_allocate_with_meta) {
 }
 
 } // namespace starrocks
+#pragma GCC pop_options
