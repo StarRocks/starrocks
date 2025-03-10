@@ -15,19 +15,19 @@
 #include "exec/schema_scanner/schema_keywords_scanner.h"
 
 #include <fmt/format.h>
+
+#include "common/logging.h"
 #include "exec/schema_scanner/schema_helper.h"
 #include "runtime/runtime_state.h"
-#include "common/logging.h"
 #include "runtime/string_value.h"
 #include "types/logical_type.h"
-
 
 namespace starrocks {
 
 SchemaScanner::ColumnDesc SchemaKeywordsScanner::_s_columns[] = {
-    //   name,       type,          size,     is_null
-    {"KEYWORD", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
-    {"RESERVED", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), false},
+        //   name,       type,          size,     is_null
+        {"KEYWORD", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"RESERVED", TypeDescriptor::from_logical_type(TYPE_BOOLEAN), sizeof(bool), false},
 };
 
 SchemaKeywordsScanner::SchemaKeywordsScanner()
@@ -61,8 +61,7 @@ Status SchemaKeywordsScanner::start(RuntimeState* state) {
         keywords_req.__set_start_table_id_offset(table_id_offset);
         TGetKeywordsResponse keywords_response;
         RETURN_IF_ERROR(SchemaHelper::get_keywords(_ss_state, keywords_req, &keywords_response));
-        _keywords_vec.insert(_keywords_vec.end(), keywords_response.keywords.begin(),
-                                    keywords_response.keywords.end());
+        _keywords_vec.insert(_keywords_vec.end(), keywords_response.keywords.begin(), keywords_response.keywords.end());
         table_id_offset = keywords_response.next_table_id_offset;
         if (!table_id_offset) {
             break;
@@ -98,22 +97,22 @@ Status SchemaKeywordsScanner::fill_chunk(ChunkPtr* chunk) {
         ColumnPtr column = (*chunk)->get_column_by_slot_id(slot_id);
 
         switch (slot_id) {
-            case 1: {
-                // KEYWORD
-                Slice keyword = Slice(info.keyword);
-                fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&keyword);
-                break;
-            }
-            case 2: {
-                // IS_RESERVED
-                fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&info.reserved);
-                break;
-            }
-            default:
-                break;
-            }
+        case 1: {
+            // KEYWORD
+            Slice keyword = Slice(info.keyword);
+            fill_column_with_slot<TYPE_VARCHAR>(column.get(), (void*)&keyword);
+            break;
         }
-        _keywords_index++;
-        return Status::OK();
+        case 2: {
+            // IS_RESERVED
+            fill_column_with_slot<TYPE_BOOLEAN>(column.get(), (void*)&info.reserved);
+            break;
+        }
+        default:
+            break;
+        }
+    }
+    _keywords_index++;
+    return Status::OK();
 }
 } // namespace starrocks
