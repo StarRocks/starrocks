@@ -97,11 +97,6 @@ public class SPMAstCheckVisitor implements AstVisitor<Boolean, ParseNode> {
         }
 
         boolean check = check(node.getRelation(), other.getRelation());
-        //        if (node.getOutputExpression() == null) {
-        //            check = check && check(node.getSelectList().getItems(), other.getSelectList().getItems());
-        //        } else {
-        //        check = check && check(node.getOutputExpression(), other.getOutputExpression());
-        //        }
         check = check && check(node.getOutputExpression(), other.getOutputExpression());
         check = check && check(node.getWhereClause(), other.getWhereClause());
         check = check && check(node.getGroupBy(), other.getGroupBy());
@@ -109,16 +104,6 @@ public class SPMAstCheckVisitor implements AstVisitor<Boolean, ParseNode> {
         check = check && check(node.getOrderBy(), other.getOrderBy());
         return check;
     }
-
-    //    @Override
-    //    public Boolean visitSelectItem(SelectListItem node, ParseNode context) {
-    //        SelectListItem other = cast(context);
-    //        if (!Objects.equals(node.isStar(), other.isStar()) || !Objects.equals(node.getAlias(), other.getAlias())
-    //                || !Objects.equals(node.getTblName(), other.getTblName())) {
-    //            return false;
-    //        }
-    //        return check(node.getExpr(), other.getExpr());
-    //    }
 
     @Override
     public Boolean visitSlot(SlotRef node, ParseNode node2) {
