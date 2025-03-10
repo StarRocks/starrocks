@@ -111,7 +111,7 @@ public class MVTraceUtils {
         if (mv == null || Strings.isNullOrEmpty(mv.getName())) {
             return "";
         } else {
-            return String.format("[%s] ", mv.getName());
+            return mv.getName();
         }
     }
 

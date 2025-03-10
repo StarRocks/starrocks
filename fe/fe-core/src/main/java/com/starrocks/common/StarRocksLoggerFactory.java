@@ -18,16 +18,16 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.message.Message;
 import org.apache.logging.log4j.message.MessageFactory;
-import org.apache.logging.log4j.message.SimpleMessage;
+import org.apache.logging.log4j.message.ParameterizedMessage;
 
 /**
  * A logger factory that adds a prefix to all log messages.
  */
 public class StarRocksLoggerFactory {
-    private final String logPrefix;
+    private final String prefix;
 
-    public StarRocksLoggerFactory(String logPrefix) {
-        this.logPrefix = logPrefix == null ? "" : logPrefix;
+    public StarRocksLoggerFactory(String prefix) {
+        this.prefix = prefix == null ? "" : prefix;
     }
 
     public StarRocksLoggerFactory() {
@@ -35,10 +35,10 @@ public class StarRocksLoggerFactory {
     }
 
     public Logger getLogger(Class<?> clazz) {
-        if (Strings.isNullOrEmpty(logPrefix)) {
+        if (Strings.isNullOrEmpty(prefix)) {
             return LogManager.getLogger(clazz);
         } else {
-            return LogManager.getLogger(clazz, new PrefixedMessageFactory(logPrefix));
+            return LogManager.getLogger(clazz, new PrefixedMessageFactory(prefix));
         }
     }
 
@@ -51,17 +51,17 @@ public class StarRocksLoggerFactory {
 
         @Override
         public Message newMessage(String message, Object... params) {
-            return new SimpleMessage("[" + prefix + "] " + message);
+            return new ParameterizedMessage("[" + prefix + "] " + message, params);
         }
 
         @Override
         public Message newMessage(String message) {
-            return new SimpleMessage("[" + prefix + "] " + message);
+            return new ParameterizedMessage("[" + prefix + "] " + message);
         }
 
         @Override
         public Message newMessage(Object message) {
-            return new SimpleMessage("[" + prefix + "] " + message.toString());
+            return new ParameterizedMessage("[" + prefix + "] " + message.toString());
         }
     }
 }
