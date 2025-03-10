@@ -1093,6 +1093,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = NET_READ_TIMEOUT)
     private int netReadTimeout = 60;
 
+    @VariableMgr.VarAttr(name = "enable_use_mc_estimate_agg")
+    private boolean enableUseMC = true;
+
+
+
     // The current time zone
     @VariableMgr.VarAttr(name = TIME_ZONE)
     private String timeZone = TimeUtils.getSystemTimeZone().getID();
@@ -2519,6 +2524,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnablePaimonColumnStatistics(boolean enablePaimonColumnStatistics) {
         this.enablePaimonColumnStatistics = enablePaimonColumnStatistics;
+    }
+
+    public boolean isEnableUseMC() {
+        return enableUseMC;
     }
 
     @VarAttr(name = ENABLE_PIPELINE_LEVEL_SHUFFLE, flag = VariableMgr.INVISIBLE)

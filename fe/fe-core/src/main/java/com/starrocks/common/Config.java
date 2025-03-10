@@ -425,6 +425,7 @@ public class Config extends ConfigBase {
     @ConfField
     public static int transaction_clean_interval_second = 30;
 
+
     // Configurations for meta data durability
     /**
      * StarRocks metadata will be saved here.

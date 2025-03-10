@@ -19,6 +19,7 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.common.Pair;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.ExpressionContext;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -41,6 +42,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
 import com.starrocks.sql.optimizer.statistics.ExpressionStatisticCalculator;
+import com.starrocks.sql.optimizer.statistics.MultiColumnCombinedStats;
 import com.starrocks.sql.optimizer.statistics.Statistics;
 import com.starrocks.sql.optimizer.statistics.StatisticsCalculator;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
@@ -475,10 +477,31 @@ class PushDownAggregateCollector extends OptExpressionVisitor<Void, AggregatePus
 
         List<ColumnStatistic>[] cards = new List[] {lower, medium, high};
 
-        Set<ColumnStatistic> columnStatistics = groupBys.getStream()
+        Set<ColumnRefOperator> columnRefOperators = groupBys.getStream()
                 .map(factory::getColumnRef)
-                .map(s -> ExpressionStatisticCalculator.calculate(s, statistics))
                 .collect(Collectors.toSet());
+
+        Pair<Set<ColumnRefOperator>, MultiColumnCombinedStats> mcStats = statistics.getLargestSubsetMCStats(columnRefOperators);
+        Set<ColumnStatistic> columnStatistics = new HashSet<>();
+
+        if (sessionVariable.isEnableUseMC() && mcStats != null && !mcStats.first.isEmpty()) {
+            // Use multi-column combined stats as a single column stats
+            ColumnStatistic multiColumnStat = ColumnStatistic.builder()
+                    .setDistinctValuesCount(mcStats.second.getNdv())
+                    .build();
+            columnStatistics.add(multiColumnStat);
+            Set<ColumnRefOperator> remainedColumns = new HashSet<>(columnRefOperators);
+            remainedColumns.removeAll(mcStats.first);
+
+            columnStatistics.addAll(remainedColumns.stream()
+                    .map(s -> ExpressionStatisticCalculator.calculate(s, statistics))
+                    .collect(Collectors.toSet()));
+        } else {
+            columnStatistics.addAll(columnRefOperators.stream()
+                    .map(s -> ExpressionStatisticCalculator.calculate(s, statistics))
+                    .collect(Collectors.toSet()));
+        }
+
         columnStatistics.forEach(s -> cards[groupByCardinality(s, statistics.getOutputRowCount())].add(s));
 
         double lowerCartesian = lower.stream().map(ColumnStatistic::getDistinctValuesCount).reduce((a, b) -> a * b)
