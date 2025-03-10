@@ -26,6 +26,7 @@ import com.starrocks.sql.optimizer.operator.scalar.InPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.IsNullPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperatorVisitor;
+import com.starrocks.sql.spm.SPMFunctions;
 import org.apache.commons.math3.util.Precision;
 
 import java.util.List;
@@ -102,13 +103,21 @@ public class PredicateStatisticsCalculator {
             double selectivity;
 
             ScalarOperator firstChild = getChildForCastOperator(predicate.getChild(0));
-            List<ScalarOperator> otherChildrenList =
-                    predicate.getChildren().stream().skip(1).map(this::getChildForCastOperator).distinct()
-                            .collect(Collectors.toList());
             // 1. compute the inPredicate children column statistics
             ColumnStatistic inColumnStatistic = getExpressionStatistic(firstChild);
+
+            List<ScalarOperator> children = predicate.getChildren();
+            List<ScalarOperator> otherChildrenList = predicate.getChildren().stream().skip(1).toList();
+            if (children.size() == 2 && SPMFunctions.isSPMFunctions(children.get(1))) {
+                otherChildrenList = children.get(1).getChildren().stream().skip(1).collect(Collectors.toList());
+                if (otherChildrenList.isEmpty()) {
+                    return statistics;
+                }
+            }
+            otherChildrenList = otherChildrenList.stream().map(this::getChildForCastOperator).distinct().collect(
+                    Collectors.toList());
             List<ColumnStatistic> otherChildrenColumnStatisticList =
-                    otherChildrenList.stream().distinct().map(this::getExpressionStatistic).collect(Collectors.toList());
+                    otherChildrenList.stream().distinct().map(this::getExpressionStatistic).toList();
 
             // using ndv to estimate string col inPredicate
             if (!predicate.isNotIn() && firstChild.getType().getPrimitiveType().isCharFamily()
