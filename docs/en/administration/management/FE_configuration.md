@@ -1797,6 +1797,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The maximum number of rows to collect for a histogram.
 - Introduced in: -
 
+##### connector_table_query_trigger_task_schedule_interval
+
+- Default: 30
+- Type: Int
+- Unit: Second
+- Is mutable: Yes
+- Description: The interval at which the Scheduler thread schedules the query-trigger background tasks. This item is to replace `connector_table_query_trigger_analyze_schedule_interval` introduced in v3.4.0. Here, the background tasks refer `ANALYZE` tasks in v3.4，and the collection task of low-cardinality columns' dictionary in versions later than v3.4.  
+- Introduced in: v3.4.2
+
 ##### connector_table_query_trigger_analyze_small_table_rows
 
 - Default: 10000000
@@ -1831,15 +1840,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: -
 - Is mutable: Yes
 - Description: Maximum number of query-trigger ANALYZE tasks that are in Pending state on the FE.
-- Introduced in: v3.4.0
-
-##### connector_table_query_trigger_analyze_schedule_interval
-
-- Default: 30
-- Type: Int
-- Unit: Second
-- Is mutable: Yes
-- Description: The interval at which the Scheduler thread schedules to query-trigger ANALYZE tasks.
 - Introduced in: v3.4.0
 
 ##### connector_table_query_trigger_analyze_max_running_task_num
