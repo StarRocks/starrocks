@@ -35,24 +35,16 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
-<<<<<<< HEAD
-=======
-import com.starrocks.catalog.View;
 import com.starrocks.catalog.constraint.ForeignKeyConstraint;
 import com.starrocks.catalog.constraint.UniqueConstraint;
->>>>>>> 8f7f003788 ([BugFix]  Fix fk/uk constraints invalidation with swap table (#56532))
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
-<<<<<<< HEAD
-import com.starrocks.common.UserException;
-=======
 import com.starrocks.common.Pair;
-import com.starrocks.common.StarRocksException;
->>>>>>> 8f7f003788 ([BugFix]  Fix fk/uk constraints invalidation with swap table (#56532))
+import com.starrocks.common.UserException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
