@@ -29,6 +29,7 @@ import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.credential.CloudType;
 import com.starrocks.credential.aliyun.AliyunCloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.PartitionValue;
 import com.starrocks.thrift.TTableDescriptor;
 import org.junit.Assert;
@@ -82,26 +83,26 @@ public class OdpsMetadataTest extends MockedBase {
     @Test
     public void testListDbNames() {
         List<String> expectedDbNames = Collections.singletonList("project");
-        List<String> dbNames = odpsMetadata.listDbNames();
+        List<String> dbNames = odpsMetadata.listDbNames(new ConnectContext());
         Assert.assertEquals(dbNames, expectedDbNames);
     }
 
     @Test
     public void testGetDb() {
-        Database database = odpsMetadata.getDb("project");
+        Database database = odpsMetadata.getDb(new ConnectContext(), "project");
         Assert.assertNotNull(database);
         Assert.assertEquals(database.getFullName(), "project");
     }
 
     @Test
     public void testListTableNames() {
-        List<String> project = odpsMetadata.listTableNames("project");
+        List<String> project = odpsMetadata.listTableNames(new ConnectContext(), "project");
         Assert.assertEquals(Collections.singletonList("tableName"), project);
     }
 
     @Test
     public void testGetTable() throws ExecutionException {
-        OdpsTable table = (OdpsTable) odpsMetadata.getTable("project", "tableName");
+        OdpsTable table = (OdpsTable) odpsMetadata.getTable(new ConnectContext(), "project", "tableName");
         Assert.assertTrue(table.isOdpsTable());
         Assert.assertEquals("tableName", table.getName());
         Assert.assertEquals("project", table.getCatalogDBName());
@@ -129,7 +130,7 @@ public class OdpsMetadataTest extends MockedBase {
 
     @Test
     public void testGetPartitions() {
-        Table table = odpsMetadata.getTable("db", "tbl");
+        Table table = odpsMetadata.getTable(new ConnectContext(), "db", "tbl");
         List<String> partitionNames = odpsMetadata.listPartitionNames("db", "tbl", ConnectorMetadatRequestContext.DEFAULT);
         List<PartitionInfo> partitions = odpsMetadata.getPartitions(table, partitionNames);
         Assert.assertEquals(1, partitions.size());
@@ -139,21 +140,21 @@ public class OdpsMetadataTest extends MockedBase {
 
     @Test
     public void testRefreshTable() {
-        Table odpsTable = odpsMetadata.getTable("project", "tableName");
+        Table odpsTable = odpsMetadata.getTable(new ConnectContext(), "project", "tableName");
         // mock schema change
         when(table.getSchema()).thenReturn(new TableSchema());
 
-        Table cacheTable = odpsMetadata.getTable("project", "tableName");
+        Table cacheTable = odpsMetadata.getTable(new ConnectContext(), "project", "tableName");
         Assert.assertTrue(cacheTable.getColumns().size() > 0);
 
         odpsMetadata.refreshTable("project", odpsTable, null, false);
-        Table refreshTable = odpsMetadata.getTable("project", "tableName");
+        Table refreshTable = odpsMetadata.getTable(new ConnectContext(), "project", "tableName");
         Assert.assertTrue(refreshTable.getColumns().size() == 0);
     }
 
     @Test
     public void testGetRemoteFiles() throws AnalysisException, IOException {
-        Table odpsTable = odpsMetadata.getTable("project", "tableName");
+        Table odpsTable = odpsMetadata.getTable(new ConnectContext(), "project", "tableName");
         PartitionKey partitionKey =
                 PartitionKey.createPartitionKey(ImmutableList.of(new PartitionValue("a"), new PartitionValue("b")),
                         odpsTable.getPartitionColumns());

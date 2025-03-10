@@ -14,35 +14,51 @@
 
 package com.starrocks.connector.paimon;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.FunctionName;
 import com.starrocks.catalog.Column;
+import com.starrocks.catalog.Function;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
 import com.starrocks.sql.optimizer.OptimizerFactory;
+import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.logical.LogicalPaimonScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
+import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.ExternalScanPartitionPruneRule;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.apache.paimon.CoreOptions;
 import org.apache.paimon.catalog.Catalog;
+import org.apache.paimon.catalog.CatalogContext;
+import org.apache.paimon.catalog.CatalogFactory;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.data.BinaryRowWriter;
@@ -50,20 +66,27 @@ import org.apache.paimon.data.BinaryString;
 import org.apache.paimon.data.GenericRow;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
+import org.apache.paimon.fs.Path;
 import org.apache.paimon.io.DataFileMeta;
+import org.apache.paimon.options.Options;
+import org.apache.paimon.partition.Partition;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
+import org.apache.paimon.schema.Schema;
 import org.apache.paimon.stats.ColStats;
 import org.apache.paimon.stats.Statistics;
 import org.apache.paimon.table.FileStoreTable;
+import org.apache.paimon.table.sink.BatchTableCommit;
+import org.apache.paimon.table.sink.BatchTableWrite;
+import org.apache.paimon.table.sink.BatchWriteBuilder;
+import org.apache.paimon.table.sink.CommitMessage;
 import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.InnerTableScan;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.table.source.TableScan;
 import org.apache.paimon.table.system.ManifestsTable;
-import org.apache.paimon.table.system.PartitionsTable;
 import org.apache.paimon.table.system.SchemasTable;
 import org.apache.paimon.table.system.SnapshotsTable;
 import org.apache.paimon.types.BigIntType;
@@ -84,8 +107,9 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.IOException;
+import java.nio.file.Files;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -177,9 +201,9 @@ public class PaimonMetadataTest {
                 result = "hdfs://127.0.0.1:10000/paimon";
             }
         };
-        com.starrocks.catalog.Table table = metadata.getTable("db1", "tbl1");
+        com.starrocks.catalog.Table table = metadata.getTable(connectContext, "db1", "tbl1");
         PaimonTable paimonTable = (PaimonTable) table;
-        Assert.assertTrue(metadata.tableExists("db1", "tbl1"));
+        Assert.assertTrue(metadata.tableExists(connectContext, "db1", "tbl1"));
         Assert.assertEquals("db1", paimonTable.getCatalogDBName());
         Assert.assertEquals("tbl1", paimonTable.getCatalogTableName());
         Assert.assertEquals(Lists.newArrayList("col1"), paimonTable.getPartitionColumnNames());
@@ -201,7 +225,7 @@ public class PaimonMetadataTest {
                 result = new Catalog.DatabaseNotExistException("Database does not exist");
             }
         };
-        Assert.assertNull(metadata.getDb("nonexistentDb"));
+        Assert.assertNull(metadata.getDb(connectContext, "nonexistentDb"));
     }
 
     @Test
@@ -213,8 +237,8 @@ public class PaimonMetadataTest {
                 result = new Catalog.TableNotExistException(identifier);
             }
         };
-        Assert.assertFalse(metadata.tableExists("nonexistentDb", "nonexistentTbl"));
-        Assert.assertNull(metadata.getTable("nonexistentDb", "nonexistentTbl"));
+        Assert.assertFalse(metadata.tableExists(connectContext, "nonexistentDb", "nonexistentTbl"));
+        Assert.assertNull(metadata.getTable(connectContext, "nonexistentDb", "nonexistentTbl"));
     }
 
     @Test
@@ -233,7 +257,7 @@ public class PaimonMetadataTest {
                 result = scan;
             }
         };
-        PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1$manifests");
+        PaimonTable paimonTable = (PaimonTable) metadata.getTable(connectContext, "db1", "tbl1$manifests");
         List<String> requiredNames = Lists.newArrayList("file_name", "file_size");
         List<RemoteFileInfo> result =
                 metadata.getRemoteFiles(paimonTable, GetRemoteFilesParams.newBuilder().setFieldNames(requiredNames).build());
@@ -241,66 +265,19 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testListPartitionNames(@Mocked FileStoreTable mockPaimonTable,
-                                       @Mocked PartitionsTable mockPartitionTable,
-                                       @Mocked RecordReader<InternalRow> mockRecordReader)
-            throws Catalog.TableNotExistException, IOException {
-
-        RowType tblRowType = RowType.of(
-                new DataType[] {
-                        new IntType(true),
-                        new IntType(true)
-                },
-                new String[] {"year", "month"});
-
+    public void testListPartitionNames(@Mocked FileStoreTable mockPaimonTable)
+            throws Catalog.TableNotExistException {
         List<String> partitionNames = Lists.newArrayList("year", "month");
-
-        Identifier tblIdentifier = new Identifier("db1", "tbl1");
-        Identifier partitionTblIdentifier = new Identifier("db1", "tbl1$partitions");
-
         RowType partitionRowType = new RowType(
                 Arrays.asList(
-                        new DataField(0, "partition", SerializationUtils.newStringType(true)),
-                        new DataField(1, "record_count", new BigIntType(false)),
-                        new DataField(2, "file_size_in_bytes", new BigIntType(false)),
-                        new DataField(3, "file_count", new BigIntType(false)),
-                        new DataField(4, "last_update_time", DataTypes.TIMESTAMP_MILLIS())
+                        new DataField(0, "year", SerializationUtils.newStringType(false)),
+                        new DataField(1, "month", SerializationUtils.newStringType(false))
                 ));
-
-        GenericRow row1 = new GenericRow(5);
-        row1.setField(0, BinaryString.fromString("[2020, 1]"));
-        row1.setField(1, 100L);
-        row1.setField(2, 1L);
-        row1.setField(3, 1L);
-        row1.setField(4, Timestamp.fromLocalDateTime(LocalDateTime.of(2023, 1, 1, 0, 0, 0, 0)));
-
-        GenericRow row2 = new GenericRow(5);
-        row2.setField(0, BinaryString.fromString("[2020, 2]"));
-        row2.setField(1, 100L);
-        row2.setField(2, 1L);
-        row2.setField(3, 1L);
-        row2.setField(4, Timestamp.fromLocalDateTime(LocalDateTime.of(2023, 2, 1, 0, 0, 0, 0)));
-        new MockUp<RecordReaderIterator>() {
-            private int callCount;
-            private final GenericRow[] elements = {row1, row2};
-            private final boolean[] hasNextOutputs = {true, true, false};
-
-            @Mock
-            public boolean hasNext() {
-                if (callCount < hasNextOutputs.length) {
-                    return hasNextOutputs[callCount];
-                }
-                return false;
-            }
-
-            @Mock
-            public InternalRow next() {
-                if (callCount < elements.length) {
-                    return elements[callCount++];
-                }
-                return null;
-            }
-        };
+        Identifier tblIdentifier = new Identifier("db1", "tbl1");
+        org.apache.paimon.partition.Partition partition1 = new Partition(Map.of("year", "2020", "month", "1"),
+                100L, 1L, 1L, 1741327322000L);
+        org.apache.paimon.partition.Partition partition2 = new Partition(Map.of("year", "2020", "month", "2"),
+                100L, 1L, 1L, 1741327322000L);
 
         new Expectations() {
             {
@@ -309,20 +286,34 @@ public class PaimonMetadataTest {
                 mockPaimonTable.partitionKeys();
                 result = partitionNames;
                 mockPaimonTable.rowType();
-                result = tblRowType;
-                paimonNativeCatalog.getTable(partitionTblIdentifier);
-                result = mockPartitionTable;
-                mockPartitionTable.rowType();
                 result = partitionRowType;
-
-                mockPartitionTable.newReadBuilder().withProjection((int[]) any).newRead().createReader((TableScan.Plan) any);
-                result = mockRecordReader;
+                paimonNativeCatalog.listPartitions(tblIdentifier);
+                result = Arrays.asList(partition1, partition2);
             }
         };
         List<String> result = metadata.listPartitionNames("db1", "tbl1", ConnectorMetadatRequestContext.DEFAULT);
         Assert.assertEquals(2, result.size());
-        List<String> expections = Lists.newArrayList("year=2020/month=1", "year=2020/month=2");
-        Assertions.assertThat(result).hasSameElementsAs(expections);
+        List<String> expectations = Lists.newArrayList("year=2020/month=1", "year=2020/month=2");
+        Assertions.assertThat(result).hasSameElementsAs(expectations);
+        Config.enable_paimon_refresh_manifest_files = true;
+        metadata.refreshTable("db1", metadata.getTable(connectContext, "db1", "tbl1"), new ArrayList<>(), false);
+        metadata.refreshTable("db1", metadata.getTable(connectContext, "db1", "tbl1"), expectations, false);
+
+    }
+
+    @Test
+    public void testRefreshPaimonMetadata() throws Catalog.DatabaseNotExistException {
+        new Expectations() {
+            {
+                paimonNativeCatalog.listDatabases();
+                result = ImmutableList.of("db");
+                paimonNativeCatalog.listTables((String) any);
+                result = ImmutableList.of("tbl");
+            }
+        };
+        ConnectorTableMetadataProcessor connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
+        connectorTableMetadataProcessor.registerPaimonCatalog("paimon_catalog", paimonNativeCatalog);
+        connectorTableMetadataProcessor.refreshPaimonCatalog();
     }
 
     @Test
@@ -348,7 +339,7 @@ public class PaimonMetadataTest {
                 result = scan;
             }
         };
-        PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1");
+        PaimonTable paimonTable = (PaimonTable) metadata.getTable(connectContext, "db1", "tbl1");
         List<String> requiredNames = Lists.newArrayList("f2", "dt");
         List<RemoteFileInfo> result =
                 metadata.getRemoteFiles(paimonTable, GetRemoteFilesParams.newBuilder().setFieldNames(requiredNames).build());
@@ -356,6 +347,179 @@ public class PaimonMetadataTest {
         Assert.assertEquals(1, result.get(0).getFiles().size());
         PaimonRemoteFileDesc desc = (PaimonRemoteFileDesc) result.get(0).getFiles().get(0);
         Assert.assertEquals(2, desc.getPaimonSplitsInfo().getPaimonSplits().size());
+    }
+
+    @Test
+    public void testGetRemoteFileInfosWithLimit() throws Exception {
+
+        java.nio.file.Path tmpDir = Files.createTempDirectory("tmp_");
+
+        Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(tmpDir.toString())));
+
+        catalog.createDatabase("test_db", true);
+
+        // create schema
+        Schema.Builder schemaBuilder = Schema.newBuilder();
+        schemaBuilder.partitionKeys("create_date");
+        schemaBuilder.column("create_date", DataTypes.STRING());
+        schemaBuilder.column("user", DataTypes.STRING());
+        schemaBuilder.column("record_time", DataTypes.STRING());
+
+        Options options = new Options();
+        options.set(CoreOptions.BUCKET, 2);
+        options.set(CoreOptions.BUCKET_KEY, "user");
+        schemaBuilder.options(options.toMap());
+
+        Schema schema = schemaBuilder.build();
+
+        // create table
+        Identifier identifier = Identifier.create("test_db", "test_table");
+        catalog.createTable(identifier, schema, true);
+
+        // insert data
+        org.apache.paimon.table.Table table = catalog.getTable(identifier);
+        BatchWriteBuilder writeBuilder = table.newBatchWriteBuilder().withOverwrite();
+        BatchTableWrite write = writeBuilder.newWrite();
+
+        DateTimeFormatter dateFormatter = DateTimeFormatter.ofPattern("yyyyMMdd");
+
+        DateTimeFormatter dateTimeFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+        LocalDateTime now = LocalDateTime.now();
+        GenericRow record1 = GenericRow.of(BinaryString.fromString(dateFormatter.format(now)),
+                BinaryString.fromString("user_1"),
+                BinaryString.fromString(dateTimeFormatter.format(now)));
+        GenericRow record2 = GenericRow.of(BinaryString.fromString(dateFormatter.format(now)),
+                BinaryString.fromString("user_2"),
+                BinaryString.fromString(dateTimeFormatter.format(now)));
+
+        now = now.minusDays(1);
+        GenericRow record3 = GenericRow.of(BinaryString.fromString(dateFormatter.format(now)),
+                BinaryString.fromString("user_1"),
+                BinaryString.fromString(dateTimeFormatter.format(now)));
+        GenericRow record4 = GenericRow.of(BinaryString.fromString(dateFormatter.format(now)),
+                BinaryString.fromString("user_2"),
+                BinaryString.fromString(dateTimeFormatter.format(now)));
+
+        now = now.minusDays(1);
+        GenericRow record5 = GenericRow.of(BinaryString.fromString(dateFormatter.format(now)),
+                BinaryString.fromString("user_1"),
+                BinaryString.fromString(dateTimeFormatter.format(now)));
+        GenericRow record6 = GenericRow.of(BinaryString.fromString(dateFormatter.format(now)),
+                BinaryString.fromString("user_2"),
+                BinaryString.fromString(dateTimeFormatter.format(now)));
+
+        write.write(record1);
+        write.write(record2);
+        write.write(record3);
+        write.write(record4);
+        write.write(record5);
+        write.write(record6);
+
+        List<CommitMessage> messages = write.prepareCommit();
+
+        BatchTableCommit commit = writeBuilder.newCommit();
+        commit.commit(messages);
+
+        List<String> fieldNames = Lists.newArrayList("create_date", "user", "record_time");
+
+        HdfsEnvironment environment = new HdfsEnvironment();
+        ConnectorProperties properties = new ConnectorProperties(ConnectorType.PAIMON);
+
+        // no predicate, limit 1
+        PaimonMetadata metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setLimit(1).build();
+        List<RemoteFileInfo> result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
+        Assert.assertEquals(1, result.size());
+        Assert.assertEquals(1, result.get(0).getFiles().size());
+        Assert.assertEquals(1, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
+                .getPaimonSplitsInfo().getPaimonSplits().size());
+
+        // no predicate, no limit
+        metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+        params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setLimit(-1).build();
+        result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
+        Assert.assertEquals(1, result.size());
+        Assert.assertEquals(1, result.get(0).getFiles().size());
+        Assert.assertEquals(6, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
+                .getPaimonSplitsInfo().getPaimonSplits().size());
+
+        ColumnRefOperator createDateColumn = new ColumnRefOperator(1, Type.STRING, "create_date", false);
+        ScalarOperator createDateEqualPredicate = new BinaryPredicateOperator(BinaryType.EQ, createDateColumn,
+                ConstantOperator.createVarchar(dateFormatter.format(now)));
+
+        // partition predicate, limit 1
+        metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+        params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(createDateEqualPredicate)
+                .setLimit(1).build();
+        result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
+        Assert.assertEquals(1, result.size());
+        Assert.assertEquals(1, result.get(0).getFiles().size());
+        Assert.assertEquals(1, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
+                .getPaimonSplitsInfo().getPaimonSplits().size());
+
+        // partition predicate, no limit
+        metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+        params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(createDateEqualPredicate)
+                .setLimit(-1).build();
+        result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
+        Assert.assertEquals(1, result.size());
+        Assert.assertEquals(1, result.get(0).getFiles().size());
+        Assert.assertEquals(2, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
+                .getPaimonSplitsInfo().getPaimonSplits().size());
+
+        ColumnRefOperator userColumn = new ColumnRefOperator(2, Type.STRING, "user", false);
+        ScalarOperator userEqualPredicate = new BinaryPredicateOperator(BinaryType.EQ, userColumn,
+                ConstantOperator.createVarchar("user_1"));
+
+        // none partition predicate, limit 1
+        metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+        params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(userEqualPredicate)
+                .setLimit(1).build();
+        result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
+        Assert.assertEquals(1, result.size());
+        Assert.assertEquals(1, result.get(0).getFiles().size());
+        Assert.assertEquals(3, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
+                .getPaimonSplitsInfo().getPaimonSplits().size());
+
+        ScalarOperator createDateGreaterPredicate = new BinaryPredicateOperator(BinaryType.GT, createDateColumn,
+                ConstantOperator.createVarchar(dateFormatter.format(now)));
+
+        // partition and none partition predicate, limit 1
+        metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+        params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames)
+                .setPredicate(Utils.compoundAnd(createDateGreaterPredicate, userEqualPredicate))
+                .setLimit(1).build();
+        result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
+        Assert.assertEquals(1, result.size());
+        Assert.assertEquals(1, result.get(0).getFiles().size());
+        Assert.assertEquals(2, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
+                .getPaimonSplitsInfo().getPaimonSplits().size());
+
+        Function coalesce = GlobalStateMgr.getCurrentState().getFunction(
+                new Function(new FunctionName(FunctionSet.COALESCE), Lists.newArrayList(Type.VARCHAR, Type.VARCHAR),
+                        Type.VARCHAR, false),
+                Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
+
+        CallOperator createDateCoalesce = new CallOperator("coalesce", Type.VARCHAR,
+                List.of(createDateColumn, ConstantOperator.createVarchar("unknown")), coalesce);
+
+        ScalarOperator createDateCoalescePredicate = new BinaryPredicateOperator(BinaryType.EQ, createDateCoalesce,
+                ConstantOperator.createVarchar(dateFormatter.format(now)));
+
+        // partition with function predicate, limit 1
+        metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+        params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(createDateCoalescePredicate)
+                .setLimit(1).build();
+        result = metadata.getRemoteFiles(metadata.getTable(connectContext, "test_db", "test_table"), params);
+        Assert.assertEquals(1, result.size());
+        Assert.assertEquals(1, result.get(0).getFiles().size());
+        Assert.assertEquals(6, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
+                .getPaimonSplitsInfo().getPaimonSplits().size());
+
+        catalog.dropTable(identifier, true);
+        catalog.dropDatabase("test_db", true, true);
+        Files.delete(tmpDir);
     }
 
     @Test
@@ -493,7 +657,7 @@ public class PaimonMetadataTest {
             }
         };
 
-        PaimonTable paimonTable = (PaimonTable) metadata.getTable("db1", "tbl1");
+        PaimonTable paimonTable = (PaimonTable) metadata.getTable(connectContext, "db1", "tbl1");
 
         ExternalScanPartitionPruneRule rule0 = new ExternalScanPartitionPruneRule();
 
@@ -515,6 +679,7 @@ public class PaimonMetadataTest {
         assertEquals(1, ((LogicalPaimonScanOperator) scan.getOp()).getScanOperatorPredicates()
                 .getSelectedPartitionIds().size());
     }
+
     @Test
     public void testGetTableStatistics() {
         String stats = "{\n" +

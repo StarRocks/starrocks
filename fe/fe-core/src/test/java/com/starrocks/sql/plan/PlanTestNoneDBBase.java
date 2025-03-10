@@ -90,9 +90,11 @@ public class PlanTestNoneDBBase {
         connectContext.getSessionVariable().setOptimizerExecuteTimeout(30000);
         connectContext.getSessionVariable().setUseLowCardinalityOptimizeV2(false);
         connectContext.getSessionVariable().setCboEqBaseType(SessionVariableConstants.VARCHAR);
+        connectContext.getSessionVariable().setUseCorrelatedPredicateEstimate(false);
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.showJoinLocalShuffleInExplain = false;
         FeConstants.showFragmentCost = false;
+        FeConstants.setLengthForVarchar = false;
     }
 
     @Before

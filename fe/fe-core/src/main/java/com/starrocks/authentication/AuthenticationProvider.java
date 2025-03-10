@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
 package com.starrocks.authentication;
 
 import com.starrocks.sql.ast.UserAuthOption;
@@ -36,4 +35,12 @@ public interface AuthenticationProvider {
             byte[] password,
             byte[] randomString,
             UserAuthenticationInfo authenticationInfo) throws AuthenticationException;
+
+    /**
+     * Some special Authentication Methods need to pass more information, and authMoreDataPacket is a unified interface.
+     * <a href="https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_connection_phase_packets_protocol_auth_more_data.html">...</a>
+     */
+    default byte[] authMoreDataPacket(String user, String host) throws AuthenticationException {
+        return null;
+    }
 }

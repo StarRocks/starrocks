@@ -4,6 +4,32 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.1
+
+发布日期：2025 年 3 月 12 日
+
+### 功能优化
+
+- 湖分析中支持 Delta Lake 的 Deletion Vector。
+- 支持安全视图。通过创建安全视图，您可以禁止没有对应基表 SELECT 权限的用户查询视图（即使该用户有视图的 SELETE 权限）。
+- 支持 Sketch HLL ([`ds_hll_count_distinct`](https://docs.starrocks.io/zh/docs/sql-reference/sql-functions/aggregate-functions/ds_hll_count_distinct/))。对比 `approx_count_distinct`，该函数可以提供更高精度的模糊去重。
+- 存算分离架构支持自动创建 Snapshot，以便进行集群恢复操作。
+- 存算分离架构中的 Storage Volume 支持 Azure Data Lake Storage Gen2。
+- 通过 MySQL 协议连接 StarRocks 时支持 SSL 认证，确保客户端与 StarRocks 集群之间传输的数据不会被未经授权的用户读取。
+
+### 问题修复
+
+修复了如下问题：
+
+- OLAP 视图参与物化视图处理逻辑导致的问题。[#52989](https://github.com/StarRocks/starrocks/pull/52989)
+- 当未找到其中一个副本（Replica）时，无论有多少个副本提交成功，写入事务都会提交失败（修复后，多数副本成功后写入事务即可成功）。 [#55212](https://github.com/StarRocks/starrocks/pull/55212)
+- Stream Load 调度到 Alive 状态为 false 的节点时，导入失败。[#55371](https://github.com/StarRocks/starrocks/pull/55371)
+- 集群 Snapshot 下文件被错误删除。 [#56338](https://github.com/StarRocks/starrocks/pull/56338)
+
+### 行为变更
+
+- 优雅退出由默认关闭变更为打开。相关 BE/CN 参数 `loop_count_wait_fragments_finish` 默认值修改为 `2`，也即系统最多会等待 20 秒来等已经运行中的查询继续执行完。[#56002](https://github.com/StarRocks/starrocks/pull/56002)
+
 ## 3.4.0
 
 发布日期：2025 年 1 月 24 日
@@ -58,6 +84,17 @@ displayed_sidebar: docs
 - 优化日志打印，避免占用过多磁盘空间。
 - 存算一体集群支持备份恢复更多对象：逻辑视图、External Catalog 元数据，以及表达式分区和 List 分区。
 - [Preview] 支持在 Follower FE 上进行 CheckPoint，以避免 CheckPoint 期间 Leader FE 内存大量消耗，从而提升 Leader FE 的稳定性。
+
+### 行为变更
+
+由于存算分离架构和数据湖查询场景中使用统一的 Data Cache 实例，升级到 v3.4.0 后将会有以下行为变更：
+
+- BE 配置项 `datacache_disk_path` 现已废弃。数据将缓存在 `${storage_root_path}/datacache` 目录下。如果要为 Data Cache 分配专用磁盘，可以使用 Symlink 手动将该目录指向上述目录。
+- 存算分离集群中的缓存数据将自动迁移到 `${storage_root_path}/datacache`，升级后可重新使用。
+- `datacache_disk_size` 的行为变更：
+
+  - 当 `datacache_disk_size` 为 `0`（默认值）时，将启用缓存容量自动调整（与升级前的行为一致）。
+  - 当 `datacache_disk_size` 设置为大于 `0` 时，系统将在 `datacache_disk_size` 和 `starlet_star_cache_disk_size_percent` 之间选择一个较大的值作为缓存容量。
 
 ### 降级说明
 

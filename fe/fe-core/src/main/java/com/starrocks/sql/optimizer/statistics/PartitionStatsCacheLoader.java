@@ -61,8 +61,9 @@ public class PartitionStatsCacheLoader implements AsyncCacheLoader<ColumnStatsCa
                         tableId, Lists.newArrayList(), columns);
                 for (TStatisticData data : statisticData) {
                     ColumnStatsCacheKey key = new ColumnStatsCacheKey(tableId, data.columnName);
-                    result.computeIfAbsent(key, (x) -> Optional.of(new PartitionStats()))
-                            .get().getDistinctCount().put(data.partitionId, (double) data.countDistinct);
+                    Optional<PartitionStats> stats = result.computeIfAbsent(key, (x) -> Optional.of(new PartitionStats()));
+                    stats.get().getDistinctCount().put(data.partitionId, (double) data.countDistinct);
+                    stats.get().getNullFraction().put(data.partitionId, data.nullCount * 1.0 / Math.max(data.rowCount, 1));
                 }
                 for (ColumnStatsCacheKey key : cacheKey) {
                     if (!result.containsKey(key)) {

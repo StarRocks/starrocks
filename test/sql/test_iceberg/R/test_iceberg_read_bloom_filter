@@ -1,0 +1,109 @@
+-- name: test_iceberg_read_bloom_filter
+set enable_dynamic_prune_scan_range=false;
+-- result:
+-- !result
+create external catalog iceberg_sql_test_${uuid0} PROPERTIES (
+    "type"="iceberg", 
+    "iceberg.catalog.type"="hive", 
+    "iceberg.catalog.hive.metastore.uris"="${iceberg_catalog_hive_metastore_uris}",
+    "enable_iceberg_metadata_cache"="true",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+-- result:
+-- !result
+set catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result
+set enable_profile=true;
+-- result:
+-- !result
+set enable_async_profile=false;
+-- result:
+-- !result
+select * from iceberg_oss_db.bloom_filter_table5 where c1 = 2;
+-- result:
+-- !result
+select *  from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%- BloomFilterSuccessCounter%' or v.line like '%- BloomFilterTriedCounter%';
+-- result:
+                   - BloomFilterSuccessCounter: 1
+                   - BloomFilterTriedCounter: 1
+-- !result
+select * from iceberg_oss_db.bloom_filter_table5 where c1 = 1;
+-- result:
+1	Alice	12.34	2024-01-01
+-- !result
+select *  from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%- BloomFilterSuccessCounter%' or v.line like '%- BloomFilterTriedCounter%';
+-- result:
+                   - BloomFilterSuccessCounter: 0
+                   - BloomFilterTriedCounter: 1
+-- !result
+select * from iceberg_oss_db.bloom_filter_table5 where c2 = 'Alice';
+-- result:
+1	Alice	12.34	2024-01-01
+-- !result
+select *  from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%- BloomFilterSuccessCounter%' or v.line like '%- BloomFilterTriedCounter%';
+-- result:
+                   - BloomFilterSuccessCounter: 0
+                   - BloomFilterTriedCounter: 1
+-- !result
+select * from iceberg_oss_db.bloom_filter_table5 where c2 = 'Bob';
+-- result:
+3	Bob	56.78	2024-02-15
+-- !result
+select *  from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%- BloomFilterSuccessCounter%' or v.line like '%- BloomFilterTriedCounter%';
+-- result:
+                   - BloomFilterSuccessCounter: 0
+                   - BloomFilterTriedCounter: 1
+-- !result
+select * from iceberg_oss_db.bloom_filter_table5 where c2 = 'Jack';
+-- result:
+-- !result
+select *  from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%- BloomFilterSuccessCounter%' or v.line like '%- BloomFilterTriedCounter%';
+-- result:
+                   - BloomFilterSuccessCounter: 1
+                   - BloomFilterTriedCounter: 1
+-- !result
+select * from iceberg_oss_db.bloom_filter_table5 where c3 = 12.34;
+-- result:
+1	Alice	12.34	2024-01-01
+-- !result
+select *  from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%- BloomFilterSuccessCounter%' or v.line like '%- BloomFilterTriedCounter%';
+-- result:
+                   - BloomFilterSuccessCounter: 0
+                   - BloomFilterTriedCounter: 0
+-- !result
+select * from iceberg_oss_db.bloom_filter_table5 where c3 = 56.78;
+-- result:
+3	Bob	56.78	2024-02-15
+-- !result
+select *  from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%- BloomFilterSuccessCounter%' or v.line like '%- BloomFilterTriedCounter%';
+-- result:
+                   - BloomFilterSuccessCounter: 0
+                   - BloomFilterTriedCounter: 0
+-- !result
+select * from iceberg_oss_db.bloom_filter_table5 where c3 = 19.24;
+-- result:
+-- !result
+select *  from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%- BloomFilterSuccessCounter%' or v.line like '%- BloomFilterTriedCounter%';
+-- result:
+                   - BloomFilterSuccessCounter: 0
+                   - BloomFilterTriedCounter: 0
+-- !result
+select * from iceberg_oss_db.bloom_filter_table5 where c2 = 'Alice' and c1 = 2;
+-- result:
+-- !result
+select *  from (select line from table(unnest(split(get_query_profile(last_query_id()),"\n"))) t(line)) v where v.line like '%- BloomFilterSuccessCounter%' or v.line like '%- BloomFilterTriedCounter%';
+-- result:
+                   - BloomFilterSuccessCounter: 1
+                   - BloomFilterTriedCounter: 1
+-- !result
+drop catalog iceberg_sql_test_${uuid0};
+-- result:
+-- !result
+set catalog default_catalog;
+-- result:
+-- !result
+set enable_profile=false;
+-- result:
+-- !result

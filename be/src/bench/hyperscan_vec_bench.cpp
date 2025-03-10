@@ -64,11 +64,11 @@ void HyperScanBench::SetUp() {
     _columns.push_back(std::move(column));
     MutableColumnPtr pattern_data = ColumnHelper::create_column(type_desc, false);
     pattern_data->append_datum(Datum(Slice("-")));
-    auto pattern_column = ConstColumn::create(pattern_data, _num_rows);
+    auto pattern_column = ConstColumn::create(std::move(pattern_data), _num_rows);
     _columns.push_back(std::move(pattern_column));
     MutableColumnPtr rpl_data = ColumnHelper::create_column(type_desc, false);
     rpl_data->append_datum(Datum(Slice("")));
-    auto rpl_column = ConstColumn::create(rpl_data, _num_rows);
+    auto rpl_column = ConstColumn::create(std::move(rpl_data), _num_rows);
     _columns.push_back(std::move(rpl_column));
     _state = std::make_shared<StringFunctionsState>();
     _state->options = std::make_unique<re2::RE2::Options>();

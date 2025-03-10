@@ -114,6 +114,8 @@ private:
 
     Status _build_split_tasks();
 
+    Status _collect_row_group_io(std::shared_ptr<GroupReader>& group_reader);
+
     RandomAccessFile* _file = nullptr;
     uint64_t _file_size = 0;
     const DataCacheOptions _datacache_options;

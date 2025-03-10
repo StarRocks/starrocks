@@ -913,28 +913,110 @@ std::shared_ptr<RuntimeState> JoinHashMapTest::create_runtime_state() {
 
 // NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, JoinKeyHash) {
-    auto v1 = JoinKeyHash<int64_t>()(1);
-    auto v2 = JoinKeyHash<int32_t>()(1);
-    auto v3 = JoinKeyHash<Slice>()(Slice{"abcd", 4});
+    const uint32_t num_buckets = 1 << 16;
+    const uint32_t log_num_buckets = 16;
 
-    ASSERT_EQ(v1, 2592448939l);
-    ASSERT_EQ(v2, 98743132903886l);
-    ASSERT_EQ(v3, 2777932099l);
+    auto get_hash_statistics = [&](const std::vector<uint32_t>& count_per_bucket) {
+        uint32_t min_count = *std::ranges::min_element(count_per_bucket);
+        uint32_t max_count = *std::ranges::max_element(count_per_bucket);
+
+        return std::make_tuple(min_count, max_count);
+    };
+
+    {
+        std::vector<uint32_t> count_per_bucket(num_buckets);
+        for (int32_t i = 0; i < num_buckets * 3 * 5; i += 3) {
+            auto bucket = JoinKeyHash<int32_t>()(i, num_buckets, log_num_buckets);
+            count_per_bucket[bucket]++;
+        }
+        auto [min_count, max_count] = get_hash_statistics(count_per_bucket);
+        // crc32: 0, 11
+        ASSERT_EQ(0, min_count);
+        ASSERT_EQ(11, max_count);
+    }
+
+    {
+        std::vector<uint32_t> count_per_bucket(num_buckets);
+        for (int32_t i = 0; i < num_buckets * 7 * 5; i += 7) {
+            auto bucket = JoinKeyHash<int32_t>()(i, num_buckets, log_num_buckets);
+            count_per_bucket[bucket]++;
+        }
+        auto [min_count, max_count] = get_hash_statistics(count_per_bucket);
+        // crc32: 0, 14
+        ASSERT_EQ(0, min_count);
+        ASSERT_EQ(14, max_count);
+    }
+
+    {
+        std::vector<uint32_t> count_per_bucket(num_buckets);
+        for (int32_t i = 0; i < num_buckets * 5; i++) {
+            auto bucket = JoinKeyHash<int32_t>()(i, num_buckets, log_num_buckets);
+            count_per_bucket[bucket]++;
+        }
+        auto [min_count, max_count] = get_hash_statistics(count_per_bucket);
+        // crc32: 4, 6
+        ASSERT_EQ(4, min_count);
+        ASSERT_EQ(6, max_count);
+    }
+
+    {
+        std::vector<uint32_t> count_per_bucket(num_buckets);
+        for (int32_t i = 0; i < num_buckets * 3 * 5; i += 3) {
+            auto bucket = JoinKeyHash<int64_t>()(i, num_buckets, log_num_buckets);
+            count_per_bucket[bucket]++;
+        }
+        auto [min_count, max_count] = get_hash_statistics(count_per_bucket);
+        // crc32: 0, 12
+        ASSERT_EQ(3, min_count);
+        ASSERT_EQ(7, max_count);
+    }
+
+    {
+        std::vector<uint32_t> count_per_bucket(num_buckets);
+        for (int32_t i = 0; i < num_buckets * 7 * 5; i += 7) {
+            auto bucket = JoinKeyHash<int64_t>()(i, num_buckets, log_num_buckets);
+            count_per_bucket[bucket]++;
+        }
+        auto [min_count, max_count] = get_hash_statistics(count_per_bucket);
+        // crc32: 0, 15
+        ASSERT_EQ(4, min_count);
+        ASSERT_EQ(7, max_count);
+    }
+
+    {
+        std::vector<uint32_t> count_per_bucket(num_buckets);
+        for (int32_t i = 0; i < num_buckets * 5; i++) {
+            auto bucket = JoinKeyHash<int64_t>()(i, num_buckets, log_num_buckets);
+            count_per_bucket[bucket]++;
+        }
+        auto [min_count, max_count] = get_hash_statistics(count_per_bucket);
+        // crc32: 5, 5
+        ASSERT_EQ(4, min_count);
+        ASSERT_EQ(6, max_count);
+    }
+
+    auto v3 = JoinKeyHash<Slice>()(Slice{"abcd", 4}, num_buckets, log_num_buckets);
+    ASSERT_EQ(v3, 2777932099l % num_buckets);
 }
 
 // NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, CalcBucketNum) {
-    uint32_t bucket_num = JoinHashMapHelper::calc_bucket_num(1, 4);
+    const uint32_t num_buckets = 1 << 2;
+    const uint32_t log_num_buckets = 2;
+    uint32_t bucket_num = JoinHashMapHelper::calc_bucket_num(1, num_buckets, log_num_buckets);
     ASSERT_EQ(2, bucket_num);
 }
 
 // NOLINTNEXTLINE
 TEST_F(JoinHashMapTest, CalcBucketNums) {
+    const uint32_t num_buckets = 1 << 2;
+    const uint32_t log_num_buckets = 2;
+
     Buffer<int32_t> data{1, 2, 3, 4};
     Buffer<uint32_t> buckets{0, 0, 0, 0};
-    Buffer<uint32_t> check_buckets{2, 2, 3, 1};
+    Buffer<uint32_t> check_buckets{2, 0, 3, 1};
 
-    JoinHashMapHelper::calc_bucket_nums<int32_t>(data, 4, &buckets, 0, 4);
+    JoinHashMapHelper::calc_bucket_nums<int32_t>(data, num_buckets, log_num_buckets, &buckets, 0, 4);
     for (size_t i = 0; i < buckets.size(); i++) {
         ASSERT_EQ(buckets[i], check_buckets[i]);
     }

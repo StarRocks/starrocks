@@ -1724,6 +1724,23 @@ struct TObjectDependencyRes {
     1: optional list<TObjectDependencyItem> items
 }
 
+struct TKeywordInfo {
+    1: optional string keyword;
+    2: optional bool reserved;
+}
+
+struct TGetKeywordsRequest {
+    1: optional TAuthInfo auth_info
+    // get keywords where table id >= start_table_id_offset
+    2: optional i64 start_table_id_offset;
+}
+
+struct TGetKeywordsResponse {
+    1: optional list<TKeywordInfo> keywords;
+    // max table id in keywords + 1, if set to 0, it means reaches end
+    2: optional i64 next_table_id_offset;
+}
+
 struct TFeLocksItem {
     1: optional string lock_type
     2: optional string lock_object
@@ -1994,6 +2011,28 @@ struct TClusterSnapshotJobsResponse {
     1: optional list<TClusterSnapshotJobsItem> items;
 }
 
+struct TApplicableRolesInfo {
+    1: optional string user;
+    2: optional string host;
+    3: optional string grantee;
+    4: optional string grantee_host;
+    5: optional string role_name;
+    6: optional string role_host;
+    7: optional string is_grantable;
+    8: optional string is_default;
+    9: optional string is_mandatory;
+}
+
+struct TGetApplicableRolesRequest {
+    1: optional TAuthInfo auth_info;
+    2: optional i64 start_table_id_offset;
+}
+
+struct TGetApplicableRolesResponse {
+    1: optional list<TApplicableRolesInfo> roles;
+    2: optional i64 next_table_id_offset;
+}
+
 service FrontendService {
     TGetDbsResult getDbNames(1:TGetDbsParams params)
     TGetTablesResult getTableNames(1:TGetTablesParams params)
@@ -2123,5 +2162,9 @@ service FrontendService {
 
     TClusterSnapshotsResponse getClusterSnapshotsInfo(1: TClusterSnapshotsRequest request)
     TClusterSnapshotJobsResponse getClusterSnapshotJobsInfo(1: TClusterSnapshotJobsRequest request)
+
+    TGetApplicableRolesResponse getApplicableRoles(1: TGetApplicableRolesRequest request)
+
+    TGetKeywordsResponse getKeywords(1: TGetKeywordsRequest request)
 }
 

@@ -22,6 +22,7 @@
 #include "fs/fs_util.h"
 #include "fs/key_cache.h"
 #include "runtime/exec_env.h"
+#include "util/threadpool.h"
 
 namespace starrocks::lake {
 
@@ -56,6 +57,10 @@ Status LoadSpillBlockMergeExecutor::refresh_max_thread_num() {
         return _merge_pool->update_max_threads(calc_max_merge_blocks_thread());
     }
     return Status::OK();
+}
+
+std::unique_ptr<ThreadPoolToken> LoadSpillBlockMergeExecutor::create_token() {
+    return _merge_pool->new_token(ThreadPool::ExecutionMode::SERIAL);
 }
 
 void LoadSpillBlockContainer::append_block(const spill::BlockPtr& block) {

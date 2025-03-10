@@ -271,4 +271,18 @@ public class ConnectScheduler {
         }
         return sessionIds;
     }
+
+    public int getTotalConnCount() {
+        return connectionMap.size();
+    }
+
+    public void closeAllIdleConnection() {
+        try (CloseableLock ignored = CloseableLock.lock(this.connStatsLock)) {
+            connectionMap.values().forEach(context -> {
+                if (context.isIdleLastFor(1000)) {
+                    context.cleanup();
+                }
+            });
+        }
+    }
 }

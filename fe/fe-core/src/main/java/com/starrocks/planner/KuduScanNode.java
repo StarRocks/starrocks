@@ -14,6 +14,7 @@
 
 package com.starrocks.planner;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.starrocks.analysis.SlotDescriptor;
@@ -25,9 +26,13 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.kudu.KuduRemoteFileDesc;
 import com.starrocks.credential.CloudConfiguration;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.plan.HDFSScanNodePredicates;
+import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TExplainLevel;
 import com.starrocks.thrift.THdfsScanNode;
@@ -37,6 +42,7 @@ import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
+import com.starrocks.warehouse.Warehouse;
 import org.apache.kudu.client.KuduScanToken;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -139,10 +145,24 @@ public class KuduScanNode extends ScanNode {
         scanRangeLocationsList.add(scanRangeLocations);
     }
 
-    private List<Long> getAllAvailableBackendOrComputeIds() {
-        SystemInfoService infoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
-        List<Long> allNodes = infoService.getAvailableBackendIds();
-        allNodes.addAll(infoService.getAvailableComputeNodeIds());
+    @VisibleForTesting
+    public List<Long> getAllAvailableBackendOrComputeIds() {
+        List<Long> allNodes;
+        SystemInfoService systemInfoService = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+        if (RunMode.isSharedDataMode()) {
+            WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
+            String warehouseName = WarehouseManager.DEFAULT_WAREHOUSE_NAME;
+            if (ConnectContext.get() != null) {
+                warehouseName = ConnectContext.get().getCurrentWarehouseName();
+            }
+            Warehouse warehouse = warehouseManager.getWarehouse(warehouseName);
+            allNodes = warehouseManager.getAliveComputeNodes(warehouse.getId()).stream().map(ComputeNode::getId)
+                    .collect(Collectors.toList());
+        } else {
+            allNodes = systemInfoService.getAvailableBackendIds();
+            assert allNodes != null;
+            allNodes.addAll(systemInfoService.getAvailableComputeNodeIds());
+        }
         return allNodes;
     }
 

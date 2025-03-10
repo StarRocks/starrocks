@@ -121,6 +121,8 @@ public:
 
     bool enable_join_runtime_filter_pushdown = false;
 
+    bool read_by_generated_column_adding = false;
+
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;
 

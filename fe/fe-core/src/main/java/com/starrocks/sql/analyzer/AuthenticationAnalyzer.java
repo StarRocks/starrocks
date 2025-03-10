@@ -17,10 +17,10 @@ import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.AuthenticationProviderFactory;
-import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.common.Config;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
@@ -32,6 +32,8 @@ import com.starrocks.sql.ast.ShowAuthenticationStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
+
+import java.util.Arrays;
 
 public class AuthenticationAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
@@ -104,16 +106,20 @@ public class AuthenticationAnalyzer {
         private UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption) {
             String authPluginUsing;
             if (userAuthOption == null || userAuthOption.getAuthPlugin() == null) {
-                authPluginUsing = PlainPasswordAuthenticationProvider.PLUGIN_NAME;
+                authPluginUsing = AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.toString();
             } else {
                 authPluginUsing = userAuthOption.getAuthPlugin();
             }
 
+            AuthenticationProvider provider = AuthenticationProviderFactory.create(authPluginUsing);
+            if (provider == null) {
+                throw new SemanticException("Cannot find " + authPluginUsing
+                        + " from " + Arrays.toString(AuthPlugin.Client.values()));
+            }
             try {
-                AuthenticationProvider provider = AuthenticationProviderFactory.create(authPluginUsing);
                 return provider.analyzeAuthOption(userIdentity, userAuthOption);
             } catch (AuthenticationException e) {
-                throw new SemanticException("invalidate authentication: " + e.getMessage(), e);
+                throw new SemanticException(e.getMessage());
             }
         }
 

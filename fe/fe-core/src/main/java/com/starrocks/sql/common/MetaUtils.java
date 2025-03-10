@@ -101,7 +101,8 @@ public class MetaUtils {
             if (Strings.isNullOrEmpty(tableName.getCatalog())) {
                 tableName.setCatalog(session.getCurrentCatalog());
             }
-            database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(tableName.getCatalog(), tableName.getDb());
+            database = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                    .getDb(session, tableName.getCatalog(), tableName.getDb());
             if (database == null) {
                 throw new SemanticException("Database %s is not found", tableName.getCatalogAndDb());
             }
@@ -113,7 +114,7 @@ public class MetaUtils {
             return table;
         }
         table = session.getGlobalStateMgr().getMetadataMgr().getTable(
-                tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
+                session, tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
         if (table == null) {
             throw new SemanticException("Table %s is not found", tableName.getTbl());
         }

@@ -1,0 +1,27 @@
+-- name: test_except_with_json
+create table `t1` (
+  `c0` string not null,
+  `c1` string not null,
+  `c2` datetime null,
+  `data` json null,
+  `id` bigint  not null auto_increment
+) duplicate key(`c0`)
+distributed by hash(`c0`) buckets 1
+properties('replication_num'='1');
+
+create table `t2` (
+  `c0` string not null,
+  `c1` string not null,
+  `c2` datetime null,
+  `data` json null,
+  `id` bigint  not null auto_increment
+) duplicate key(`c0`)
+distributed by hash(`c0`) buckets 1
+properties('replication_num'='1');
+
+set @uuid_val = uuid();
+set @json_val = JSON_OBJECT('k', floor(rand() * 100), 'v', repeat(floor(rand() * 10), 1000));
+set query_timeout=300;
+insert into `t1` (`c0`,`c1`,`c2`,`data`) select @uuid_val, @uuid_val, '2020-01-01 00:00:00', @json_val from table(generate_series(1, 1000000, 1));
+insert into `t2` select * from t1;
+select t1.c0, t1.c1, t1.c2,t1.data,t1.id from t1 minus select t2.c0, t2.c1,t2.c2, t2.data,t2.id from t2;

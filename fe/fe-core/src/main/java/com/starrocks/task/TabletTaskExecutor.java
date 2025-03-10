@@ -28,7 +28,9 @@ import com.starrocks.common.DdlException;
 import com.starrocks.common.Status;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
+import com.starrocks.journal.LeaderTransferException;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -354,13 +356,32 @@ public class TabletTaskExecutor {
     // REQUIRE: must set countDownLatch to error stat before throw an exception.
     private static void waitForFinished(MarkedCountDownLatch<Long, Long> countDownLatch, long timeout) throws DdlException {
         try {
-            if (countDownLatch.await(timeout, TimeUnit.SECONDS)) {
-                if (!countDownLatch.getStatus().ok()) {
-                    String errMsg = "fail to create tablet: " + countDownLatch.getStatus().getErrorMsg();
-                    LOG.warn(errMsg);
-                    throw new DdlException(errMsg);
+            long timeLeft = timeout;
+            final long waitInterval = 1;
+            while (timeLeft > 0) {
+                // fast fail for leader transfer
+                if (GlobalStateMgr.getCurrentState().isLeaderTransferred()) {
+                    LOG.warn("leader transferred during creating tablets");
+                    if (ConnectContext.get() != null) {
+                        ConnectContext.get().setIsLeaderTransferred(true);
+                    }
+                    throw new LeaderTransferException();
                 }
-            } else { // timed out
+
+                if (countDownLatch.await(waitInterval, TimeUnit.SECONDS)) {
+                    if (!countDownLatch.getStatus().ok()) {
+                        String errMsg = "fail to create tablet: " + countDownLatch.getStatus().getErrorMsg();
+                        LOG.warn(errMsg);
+                        throw new DdlException(errMsg);
+                    } else {
+                        break;
+                    }
+                }
+
+                timeLeft -= waitInterval;
+            }
+            // timed out
+            if (timeLeft <= 0) {
                 List<Map.Entry<Long, Long>> unfinishedMarks = countDownLatch.getLeftMarks();
                 List<Map.Entry<Long, Long>> firstThree =
                         unfinishedMarks.subList(0, Math.min(unfinishedMarks.size(), 3));

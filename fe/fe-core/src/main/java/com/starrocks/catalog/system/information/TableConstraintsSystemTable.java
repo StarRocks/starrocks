@@ -37,6 +37,7 @@ public class TableConstraintsSystemTable {
                         .column("TABLE_SCHEMA", ScalarType.createVarchar(64))
                         .column("TABLE_NAME", ScalarType.createVarchar(64))
                         .column("CONSTRAINT_TYPE", ScalarType.createVarchar(64))
+                        .column("ENFORCED", ScalarType.createVarcharType(3))
                         .build(), TSchemaTableType.SCH_TABLE_CONSTRAINTS);
     }
 }

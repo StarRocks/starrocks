@@ -265,7 +265,7 @@ public:
     // expression trees' return column should align return type when some return columns maybe diff from the required
     // return type, as well the null flag. e.g., concat_ws returns col from create_const_null_column(), it's type is
     // Nullable(int8), but required return type is nullable(string), so col need align return type to nullable(string).
-    static ColumnPtr align_return_type(const ColumnPtr& old_col, const TypeDescriptor& type_desc, size_t num_rows,
+    static ColumnPtr align_return_type(ColumnPtr&& old_col, const TypeDescriptor& type_desc, size_t num_rows,
                                        const bool is_nullable);
 
     // Create a column with specified size, the column will be resized to size
@@ -542,7 +542,8 @@ public:
         constexpr size_t kBatchNums = 128 / (8 * sizeof(uint8_t));
         while (start_offset + kBatchNums < to) {
             const uint8x16_t vfilter = vld1q_u8(filter_data);
-            uint64_t nibble_mask = SIMD::get_nibble_mask(vmvnq_u8(vceqzq_u8(vfilter)));
+            // nibble_mask[i] != 0 ? 0xFF : 0x00
+            uint64_t nibble_mask = SIMD::get_nibble_mask(vtstq_u8(vfilter, vfilter));
             if (nibble_mask == 0) {
                 // skip
             } else if (nibble_mask == 0xffff'ffff'ffff'ffffull) {

@@ -7,8 +7,8 @@ toc_max_heading_level: 5
 
 統合カタログは、StarRocks が v3.2 以降で提供する外部カタログの一種で、Apache Hive™、Apache Iceberg、Apache Hudi、Delta Lake、Apache Kudu のデータソースを取り込みなしで統合データソースとして扱うことができます。統合カタログを使用すると、次のことが可能です。
 
-- Hive、Iceberg、Hudi、Delta Lake、Kudu に保存されたデータを直接クエリし、手動でテーブルを作成する必要がありません。
-- [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) または非同期マテリアライズドビュー（v2.5 以降でサポート）を使用して、Hive、Iceberg、Hudi、Delta Lake、Kudu に保存されたデータを処理し、StarRocks にデータをロードします。
+- Hive、Iceberg、Hudi、Delta Lake、Paimon、Kudu に保存されたデータを直接クエリし、手動でテーブルを作成する必要がありません。
+- [INSERT INTO](../../sql-reference/sql-statements/loading_unloading/INSERT.md) または非同期マテリアライズドビュー（v2.5 以降でサポート）を使用して、Hive、Iceberg、Hudi、Delta Lake、Paimon、Kudu に保存されたデータを処理し、StarRocks にデータをロードします。
 - StarRocks 上で操作を行い、Hive および Iceberg のデータベースとテーブルを作成または削除します。
 
 統合データソースでの SQL ワークロードを成功させるためには、StarRocks クラスターが統合データソースのストレージシステムとメタストアにアクセスできる必要があります。StarRocks は次のストレージシステムとメタストアをサポートしています。
@@ -27,7 +27,7 @@ toc_max_heading_level: 5
 
 ## 使用上の注意
 
-- サポートされているファイル形式とデータ型を理解するために、[Hive catalog](../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](./iceberg/iceberg_catalog.md)、[Hudi catalog](../../data_source/catalog/hudi_catalog.md)、[Delta Lake catalog](../../data_source/catalog/deltalake_catalog.md)、[Kudu catalog](../../data_source/catalog/kudu_catalog.md) の「使用上の注意」セクションを参照してください。
+- サポートされているファイル形式とデータ型を理解するために、[Hive catalog](../../data_source/catalog/hive_catalog.md)、[Iceberg catalog](./iceberg/iceberg_catalog.md)、[Hudi catalog](../../data_source/catalog/hudi_catalog.md)、[Delta Lake catalog](../../data_source/catalog/deltalake_catalog.md)、[Paimon catalog](../catalog/paimon_catalog.md)、[Kudu catalog](../../data_source/catalog/kudu_catalog.md) の「使用上の注意」セクションを参照してください。
 
 - 形式固有の操作は特定のテーブル形式でのみサポートされています。たとえば、[CREATE TABLE](../../sql-reference/sql-statements/table_bucket_part_index/CREATE_TABLE.md) と [DROP TABLE](../../sql-reference/sql-statements/table_bucket_part_index/DROP_TABLE.md) は Hive と Iceberg のみでサポートされ、[REFRESH EXTERNAL TABLE](../../sql-reference/sql-statements/table_bucket_part_index/REFRESH_EXTERNAL_TABLE.md) は Hive と Hudi のみでサポートされています。
 
@@ -74,6 +74,7 @@ PROPERTIES
     MetastoreParams,
     StorageCredentialParams,
     MetadataUpdateParams,
+    PaimonCatalogParams,
     KuduCatalogParams
 )
 ```
@@ -433,6 +434,14 @@ StarRocks が Hive、Hudi、Delta Lake のキャッシュされたメタデー�
 | remote_file_cache_refresh_interval_sec | No       | StarRocks が自身にキャッシュされた Hive、Hudi、Delta Lake テーブルまたはパーティションの基礎データファイルのメタデータを非同期に更新する時間間隔。単位: 秒。デフォルト値: `60`。 |
 | metastore_cache_ttl_sec                | No       | StarRocks が自身にキャッシュされた Hive、Hudi、Delta Lake テーブルまたはパーティションのメタデータを自動的に破棄する時間間隔。単位: 秒。デフォルト値: `86400`（24 時間）。 |
 | remote_file_cache_ttl_sec              | No       | StarRocks が自身にキャッシュされた Hive、Hudi、Delta Lake テーブルまたはパーティションの基礎データファイルのメタデータを自動的に破棄する時間間隔。単位: 秒。デフォルト値: `129600`（36 時間）。 |
+
+#### KuduCatalogParams
+
+Paimon Catalog に接続する方法に関する一連のパラメータ。このパラメータセットはオプションです。
+
+| パラメータ                    | 必須  | 説明                        |
+|--------------------------|-----|---------------------------|
+| paimon.catalog.warehouse | いいえ | Paimon データのウェアハウスストレージパス。 |
 
 #### KuduCatalogParams
 

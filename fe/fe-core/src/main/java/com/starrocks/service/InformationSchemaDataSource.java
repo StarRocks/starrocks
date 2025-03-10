@@ -18,6 +18,9 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.Lists;
 import com.google.gson.Gson;
 import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.RolePrivilegeCollectionV2;
 import com.starrocks.catalog.BasicTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DataProperty;
@@ -52,7 +55,12 @@ import com.starrocks.server.TemporaryTableMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.thrift.TApplicableRolesInfo;
 import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TGetApplicableRolesRequest;
+import com.starrocks.thrift.TGetApplicableRolesResponse;
+import com.starrocks.thrift.TGetKeywordsRequest;
+import com.starrocks.thrift.TGetKeywordsResponse;
 import com.starrocks.thrift.TGetPartitionsMetaRequest;
 import com.starrocks.thrift.TGetPartitionsMetaResponse;
 import com.starrocks.thrift.TGetTablesConfigRequest;
@@ -61,6 +69,7 @@ import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTemporaryTablesInfoRequest;
 import com.starrocks.thrift.TGetTemporaryTablesInfoResponse;
+import com.starrocks.thrift.TKeywordInfo;
 import com.starrocks.thrift.TPartitionMetaInfo;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTableInfo;
@@ -107,22 +116,23 @@ public class InformationSchemaDataSource {
             catalogName = authInfo.getCatalog_name();
         }
 
-        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        List<String> dbNames = metadataMgr.listDbNames(catalogName);
-        LOG.debug("get db names: {}", dbNames);
-
         UserIdentity currentUser;
         if (authInfo.isSetCurrent_user_ident()) {
             currentUser = UserIdentity.fromThrift(authInfo.current_user_ident);
         } else {
             currentUser = UserIdentity.createAnalyzedUserIdentWithIp(authInfo.user, authInfo.user_ip);
         }
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(currentUser);
+        context.setCurrentRoleIds(currentUser);
+
+        MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
+        List<String> dbNames = metadataMgr.listDbNames(context, catalogName);
+        LOG.debug("get db names: {}", dbNames);
+
         for (String fullName : dbNames) {
 
             try {
-                ConnectContext context = new ConnectContext();
-                context.setCurrentUserIdentity(currentUser);
-                context.setCurrentRoleIds(currentUser);
                 Authorizer.checkAnyActionOnOrInDb(context, catalogName, fullName);
             } catch (AccessDeniedException e) {
                 continue;
@@ -136,6 +146,72 @@ public class InformationSchemaDataSource {
             authorizedDbs.add(fullName);
         }
         return new AuthDbRequestResult(authorizedDbs, currentUser);
+    }
+
+    // keywords
+    public static TGetKeywordsResponse generateKeywordsResponse(TGetKeywordsRequest request) throws TException {
+        TGetKeywordsResponse resp = new TGetKeywordsResponse();
+        List<TKeywordInfo> keywordList = new ArrayList<>();
+
+        AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
+
+        if (result.authorizedDbs.isEmpty()) {
+            resp.setKeywords(keywordList);
+            return resp;
+        }
+        class KeywordElement {
+            public KeywordElement(String keyword, boolean reserved) {
+                this.keyword = keyword;
+                this.reserved = reserved;
+            }
+            public String getKeyword() {
+                return keyword;
+            }
+            public String keyword;
+            public boolean reserved;
+        }
+
+        TreeSet<KeywordElement> sortedKeywords = new TreeSet<>(Comparator.comparing(KeywordElement::getKeyword));
+
+        List<KeywordElement> keywords = new ArrayList<>();
+        keywords.add(new KeywordElement("SELECT", true));
+        keywords.add(new KeywordElement("INSERT", true));
+        keywords.add(new KeywordElement("UPDATE", true));
+        keywords.add(new KeywordElement("DELETE", true));
+        keywords.add(new KeywordElement("TABLE", true));
+        keywords.add(new KeywordElement("INDEX", true));
+        keywords.add(new KeywordElement("VIEW", true));
+        keywords.add(new KeywordElement("USER", false));
+        keywords.add(new KeywordElement("PASSWORD", false));
+        sortedKeywords.addAll(keywords);
+
+        long startTableIdOffset = request.isSetStart_table_id_offset() ? request.getStart_table_id_offset() : 0;
+        boolean startOffsetReached = startTableIdOffset == 0;
+        long currentOffset = 0;
+
+        for (KeywordElement ele : sortedKeywords) {
+            if (!startOffsetReached) {
+                if (currentOffset == startTableIdOffset) {
+                    startOffsetReached = true;
+                }
+                currentOffset++;
+                continue;
+            }
+
+            TKeywordInfo keywordInfo = new TKeywordInfo();
+            keywordInfo.setKeyword(ele.keyword);
+            keywordInfo.setReserved(ele.reserved);
+            keywordList.add(keywordInfo);
+
+            if (keywordList.size() >= 10000) {
+                resp.setNext_table_id_offset(currentOffset + 1);
+                break;
+            }
+            currentOffset++;
+        }
+
+        resp.setKeywords(keywordList);
+        return resp;
     }
 
     private static class AuthDbRequestResult {
@@ -425,6 +501,9 @@ public class InformationSchemaDataSource {
 
         TAuthInfo authInfo = request.getAuth_info();
         AuthDbRequestResult result = getAuthDbRequestResult(authInfo);
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(result.currentUser);
+        context.setCurrentRoleIds(result.currentUser);
 
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         if (authInfo.isSetCatalog_name()) {
@@ -434,7 +513,7 @@ public class InformationSchemaDataSource {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
 
         for (String dbName : result.authorizedDbs) {
-            Database db = metadataMgr.getDb(catalogName, dbName);
+            Database db = metadataMgr.getDb(context, catalogName, dbName);
             if (db == null) {
                 continue;
             }
@@ -443,7 +522,7 @@ public class InformationSchemaDataSource {
             Locker locker = new Locker();
             try {
                 locker.lockDatabase(db.getId(), LockType.READ);
-                List<String> tableNames = metadataMgr.listTableNames(catalogName, dbName);
+                List<String> tableNames = metadataMgr.listTableNames(context, catalogName, dbName);
                 for (String tableName : tableNames) {
                     if (request.isSetTable_name()) {
                         if (!tableName.equals(request.getTable_name())) {
@@ -453,7 +532,7 @@ public class InformationSchemaDataSource {
 
                     BasicTable table = null;
                     try {
-                        table = metadataMgr.getBasicTable(catalogName, dbName, tableName);
+                        table = metadataMgr.getBasicTable(context, catalogName, dbName, tableName);
                     } catch (Exception e) {
                         LOG.warn(e.getMessage(), e);
                     }
@@ -462,9 +541,6 @@ public class InformationSchemaDataSource {
                     }
 
                     try {
-                        ConnectContext context = new ConnectContext();
-                        context.setCurrentUserIdentity(result.currentUser);
-                        context.setCurrentRoleIds(result.currentUser);
                         Authorizer.checkAnyActionOnTableLikeObject(context, dbName, table);
                     } catch (AccessDeniedException e) {
                         continue;
@@ -536,11 +612,64 @@ public class InformationSchemaDataSource {
         return response;
     }
 
+    // applicable_roles
+    public static TGetApplicableRolesResponse generateApplicableRolesResp(TGetApplicableRolesRequest request) throws TException {
+        TGetApplicableRolesResponse response = new TGetApplicableRolesResponse();
+        List<TApplicableRolesInfo> roleList = new ArrayList<>();
+
+        AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
+
+        if (result.authorizedDbs.isEmpty()) {
+            response.setRoles(roleList);
+            return response;
+        }
+
+        UserIdentity currentUser = result.currentUser;
+        if (currentUser == null) {
+            response.setRoles(roleList);
+            return response;
+        }
+
+        AuthorizationMgr authMgr = GlobalStateMgr.getCurrentState().getAuthorizationMgr();
+        try {
+            for (RolePrivilegeCollectionV2 role : authMgr.getApplicableRoles(currentUser)) {
+                String roleName = role.getName();
+                String roleHost = "%";
+
+                // TODO The related functions of 'isGrantable' may be expanded in the future
+                String isGrantable = "NO";
+                String isDefault = "NO";
+                String isMandatory = "NO";
+
+                TApplicableRolesInfo roleInfo = new TApplicableRolesInfo();
+                roleInfo.setUser(currentUser.getUser());
+                roleInfo.setHost(currentUser.getHost());
+                roleInfo.setGrantee(currentUser.getUser());
+                roleInfo.setGrantee_host(currentUser.getHost());
+                roleInfo.setRole_name(roleName);
+                roleInfo.setRole_host(roleHost);
+                roleInfo.setIs_grantable(isGrantable);
+                roleInfo.setIs_default(isDefault);
+                roleInfo.setIs_mandatory(isMandatory);
+
+                roleList.add(roleInfo);
+            }
+        } catch (PrivilegeException e) {
+            throw new RuntimeException(e);
+        }
+
+        response.setRoles(roleList);
+        return response;
+    }
+
     public static TGetTemporaryTablesInfoResponse generateTemporaryTablesInfoResponse(TGetTemporaryTablesInfoRequest request)
             throws TException {
         TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
         TAuthInfo authInfo = request.getAuth_info();
         AuthDbRequestResult result = getAuthDbRequestResult(authInfo);
+        ConnectContext context = new ConnectContext();
+        context.setCurrentUserIdentity(result.currentUser);
+        context.setCurrentRoleIds(result.currentUser);
 
         String catalogName = InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME;
         if (authInfo.isSetCatalog_name()) {
@@ -551,7 +680,7 @@ public class InformationSchemaDataSource {
 
         Set<Long> requiredDbIds = new HashSet<>();
         for (String dbName : result.authorizedDbs) {
-            Database db = metadataMgr.getDb(catalogName, dbName);
+            Database db = metadataMgr.getDb(context, catalogName, dbName);
             if (db != null) {
                 requiredDbIds.add(db.getId());
             }

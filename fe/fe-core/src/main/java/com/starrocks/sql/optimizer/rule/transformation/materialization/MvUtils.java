@@ -81,6 +81,7 @@ import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
 import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
+import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalFilterOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -105,6 +106,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
+import com.starrocks.sql.optimizer.rule.mv.MaterializedViewWrapper;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
@@ -135,20 +137,20 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 public class MvUtils {
     private static final Logger LOG = LogManager.getLogger(MvUtils.class);
 
-    public static Set<MaterializedView> getRelatedMvs(ConnectContext connectContext,
-                                                      int maxLevel,
-                                                      Set<Table> tablesToCheck) {
+    public static Set<MaterializedViewWrapper> getRelatedMvs(ConnectContext connectContext,
+                                                             int maxLevel,
+                                                             Set<Table> tablesToCheck) {
         if (tablesToCheck.isEmpty()) {
             return Sets.newHashSet();
         }
-        Set<MaterializedView> mvs = Sets.newHashSet();
+        Set<MaterializedViewWrapper> mvs = Sets.newHashSet();
         getRelatedMvs(connectContext, maxLevel, 0, tablesToCheck, mvs);
         return mvs;
     }
 
     public static void getRelatedMvs(ConnectContext connectContext,
                                      int maxLevel, int currentLevel,
-                                     Set<Table> tablesToCheck, Set<MaterializedView> mvs) {
+                                     Set<Table> tablesToCheck, Set<MaterializedViewWrapper> mvs) {
         if (currentLevel >= maxLevel) {
             logMVPrepare("Current level {} is greater than max level {}", currentLevel, maxLevel);
             return;
@@ -181,7 +183,7 @@ public class MvUtils {
                 continue;
             }
             newMvs.add(table);
-            mvs.add((MaterializedView) table);
+            mvs.add(MaterializedViewWrapper.create((MaterializedView) table, currentLevel));
         }
         getRelatedMvs(connectContext, maxLevel, currentLevel + 1, newMvs, mvs);
     }
@@ -1208,7 +1210,29 @@ public class MvUtils {
         if (op instanceof LogicalViewScanOperator) {
             LogicalViewScanOperator viewScanOperator = op.cast();
             OptExpression viewPlan = viewScanOperator.getOriginalPlanEvaluator();
-            parent.setChild(index, viewPlan);
+            if (viewScanOperator.getPredicate() != null) {
+                // If viewScanOperator contains predicate, we need to rewrite them,
+                // otherwise predicate will be lost.
+                Map<ColumnRefOperator, ScalarOperator> reverseColumnRefMap =
+                        viewScanOperator.getProjection().getColumnRefMap().entrySet().stream()
+                                .collect(Collectors.toMap(e -> (ColumnRefOperator) e.getValue(), e -> e.getKey()));
+                ReplaceColumnRefRewriter rewriter = new ReplaceColumnRefRewriter(reverseColumnRefMap);
+                Operator.Builder builder = OperatorBuilderFactory.build(viewPlan.getOp());
+                builder.withOperator(viewPlan.getOp());
+                // rewrite predicate
+                builder.setPredicate(rewriter.rewrite(viewScanOperator.getPredicate()));
+                // rewrite projection
+                Map<ColumnRefOperator, ScalarOperator> newColumnRefMap = viewScanOperator.getProjection().getColumnRefMap()
+                        .entrySet()
+                        .stream()
+                        .map(e -> Maps.immutableEntry(e.getKey(), rewriter.rewrite(e.getValue())))
+                        .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+                builder.setProjection(new Projection(newColumnRefMap));
+                Operator newViewPlanOp = builder.build();
+                parent.setChild(index, OptExpression.create(newViewPlanOp, viewPlan.getInputs()));
+            } else {
+                parent.setChild(index, viewPlan);
+            }
             return;
         }
         for (int i = 0; i < queryExpression.getInputs().size(); i++) {
@@ -1353,15 +1377,15 @@ public class MvUtils {
     }
 
     public static Optional<Table> getTable(BaseTableInfo baseTableInfo) {
-        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(baseTableInfo);
+        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(new ConnectContext(), baseTableInfo);
     }
 
     public static Optional<Table> getTableWithIdentifier(BaseTableInfo baseTableInfo) {
-        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableWithIdentifier(baseTableInfo);
+        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableWithIdentifier(new ConnectContext(), baseTableInfo);
     }
 
     public static Table getTableChecked(BaseTableInfo baseTableInfo) {
-        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableChecked(baseTableInfo);
+        return GlobalStateMgr.getCurrentState().getMetadataMgr().getTableChecked(new ConnectContext(), baseTableInfo);
     }
 
     public static Optional<FunctionCallExpr> getStr2DateExpr(Expr partitionExpr) {

@@ -34,9 +34,9 @@
 
 package com.starrocks.qe;
 
-import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.DdlException;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SetStmtAnalyzer;
 import com.starrocks.sql.ast.SetListItem;
@@ -79,7 +79,7 @@ public class SetExecutor {
             if (null == userAuthenticationInfo) {
                 throw new DdlException("authentication info for user " + setPassVar.getUserIdent() + " not found");
             }
-            if (!userAuthenticationInfo.getAuthPlugin().equals(PlainPasswordAuthenticationProvider.PLUGIN_NAME)) {
+            if (!userAuthenticationInfo.getAuthPlugin().equals(AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.name())) {
                 throw new DdlException("only allow set password for native user, current user: " +
                         setPassVar.getUserIdent() + ", AuthPlugin: " + userAuthenticationInfo.getAuthPlugin());
             }

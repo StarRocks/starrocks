@@ -30,6 +30,7 @@ import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.PartitionInfo;
 import com.starrocks.connector.paimon.PaimonMetadata;
 import com.starrocks.connector.paimon.Partition;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.parser.NodePosition;
 import mockit.Mock;
@@ -68,12 +69,12 @@ public class PaimonPartitionsProcDirTest {
 
         new MockUp<MetadataMgr>() {
             @Mock
-            public Database getDb(String catalogName, String dbName) {
+            public Database getDb(ConnectContext context, String catalogName, String dbName) {
                 return new Database(1L, "db1");
             }
 
             @Mock
-            public Table getTable(String catalogName, String dbName, String tblName) {
+            public Table getTable(ConnectContext context, String catalogName, String dbName, String tblName) {
                 return new PaimonTable("paimon_catalog", "db1", "tb1", null, nativeTable, 1L);
             }
 

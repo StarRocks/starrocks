@@ -135,7 +135,7 @@ public class RangerStarRocksAccessController extends RangerAccessController {
     @Override
     public void checkAnyActionOnAnyTable(ConnectContext context, String catalog, String db)
             throws AccessDeniedException {
-        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(catalog, db);
+        Database database = GlobalStateMgr.getCurrentState().getMetadataMgr().getDb(context, catalog, db);
         for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(database.getId())) {
             try {
                 hasPermission(

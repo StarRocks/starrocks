@@ -387,12 +387,12 @@ StatusOr<ColumnPtr> MapFunctions::map_concat(FunctionContext* context, const Col
         if (col->is_constant()) {
             src_column = ColumnHelper::unpack_and_duplicate_const_column(chunk_size, col);
         }
-        not_null_columns.push_back(src_column);
+        not_null_columns.emplace_back(std::move(src_column));
     }
     if (not_null_columns.empty()) {
         return ColumnHelper::create_const_null_column(chunk_size);
     } else if (not_null_columns.size() == 1) {
-        return ColumnHelper::cast_to_nullable_column(not_null_columns[0]->clone());
+        return ColumnHelper::cast_to_nullable_column((std::move(*not_null_columns[0])).mutate());
     }
 
     ssize_t columns_num = not_null_columns.size();

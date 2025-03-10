@@ -36,7 +36,7 @@ UNKNOWN Operation Type xxx
 
 1. 停止所有 FE 节点。
 2. 备份所有 FE 节点的元数据目录 `meta_dir`。
-3. 在所有 FE 节点的配置文件 **fe.conf** 中添加配置 `ignore_unknown_log_id = true`。
+3. 在所有 FE 节点的配置文件 **fe.conf** 中添加配置 `metadata_ignore_unknown_operation_type = true`。
 4. 启动所有 FE 节点，并检查数据和元数据是否完整。
 5. 如果数据和元数据都完整，请执行以下语句为元数据创建镜像文件：
 
@@ -114,7 +114,7 @@ Caused by: com.sleepycat.je.rep.ReplicaWriteException: (JE 18.3.16) Problem clos
         at com.sleepycat.je.rep.impl.node.Replica$ReplayThread.run(Replica.java:1225) ~[starrocks-bdb-je-18.3.16.jar:?]
 ```
 
-导致此问题原因是当前 FE 节点的 BDBJE 版本（v18.3.16）与 Leader FE 节点的版本（v7.3.7）不匹配。
+导致此问题原因是当前 FE 节点的 BDBJE 版本（v18.3.*）与 Leader FE 节点的版本（v7.3.7）不匹配。
 
 按照以下步骤来解决此问题：
 
@@ -150,18 +150,6 @@ Caused by: com.sleepycat.je.rep.ReplicaWriteException: (JE 18.3.16) Problem clos
    ```
 
 5. 在报错节点健康状态恢复后，需要将集群中的 BDBJE 软件包升级到 **starrocks-bdb-je-18.3.16.jar**（或将 StarRocks 集群升级到 v3.0 或更高版本）。此操作需要按照先 Follower，后 Leader 的顺序进行。
-
-##### InsufficientReplicasException
-
-根据以下 Error Message 识别该问题：
-
-```Plain
-com.sleepycat.je.rep.InsufficientReplicasException: (JE 7.3.7) Commit policy: SIMPLE_MAJORITY required 1 replica. But none were active with this master.
-```
-
-当 Leader 节点或 Follower 节点使用过多内存资源而导致 Full GC 时，会出现此问题。
-
-要解决此问题，可以增加 JVM 内存大小或使用 G1 GC 算法。
 
 ##### InsufficientLogException
 
@@ -207,27 +195,6 @@ Caused by: com.sleepycat.je.EnvironmentFailureException: Environment invalid bec
 导致此问题原因是，Leader 节点挂起后，剩余的 Follower 节点尝试选举新的 Leader 节点，此时原 Leader 节点重新上线。Follower 节点将尝试与原始 Leader 节点建立新连接。但是，由于旧有连接仍然存在，Leader 节点将拒绝连接请求。一旦请求被拒绝，Follower 节点会将环境设置为 Invalid 并抛出此异常。
 
 要解决此问题，可以增加 JVM 内存大小或使用 G1 GC 算法。
-
-##### Latch timeout. com.sleepycat.je.log.LogbufferPool_FullLatch
-
-根据以下 Error Message 识别该问题：
-
-```Plain
-Environment invalid because of previous exception: xxx Latch timeout. com.sleepycat.je.log.LogbufferPool_FullLatch xxx'
-        at com.sleepycat.je.EnvironmentFailureException.unexpectedState(EnvironmentFailureException.java:459)
-        at com.sleepycat.je.latch.LatchSupport.handleTimeout(LatchSupport.java:211)
-        at com.sleepycat.je.latch.LatchWithStatsImpl.acquireExclusive(LatchWithStatsImpl.java:87)
-        at com.sleepycat.je.log.LogBufferPool.bumpCurrent(LogBufferPool.java:527)
-        at com.sleepycat.je.log.LogManager.flushInternal(LogManager.java:1373)
-        at com.sleepycat.je.log.LogManager.flushNoSync(LogManager.java:1337)
-        at com.sleepycat.je.log.LogFlusher$FlushTask.run(LogFlusher.java:232)
-        at java.util.TimerThread.mainLoop(Timer.java:555)
-        at java.util.TimerThread.run(Timer.java:505)
-```
-
-当 FE 节点的本地磁盘压力过大时会出现此问题。
-
-要解决此问题，可以为 FE 元数据路径分配一个专用磁盘，或者将当前磁盘替换为高性能磁盘。
 
 ##### DatabaseNotFoundException
 
@@ -284,6 +251,32 @@ catch exception when replaying
 :::
 
 按照以下步骤来解决此问题：
+
+##### 忽略错误 Journal ID(首选)
+
+1. 关闭所有 FE 节点。
+2. 备份所有 FE 节点的元数据目录。
+3. 在日志中找到出错的 Journal ID。以下日志中的 `xxx` 代表错误的 Journal ID。
+
+   ```Plain
+   got interrupt exception or inconsistent exception when replay journal xxx, will exit
+   ```
+
+4. 在所有的 **fe.conf** 中添加配置，并重新启动 FE。
+
+   ```Plain
+   metadata_journal_skip_bad_journal_ids=xxx
+   ```
+
+5. 如果仍然无法启动，需要再次通过第 3 步找到新的失败的 Journal ID，并添加到 **fe.conf** 中。先前配置的仍然要保留，然后再重启。
+
+   ```Plain
+   metadata_journal_skip_bad_journal_ids=xxx,yyy
+   ```
+
+6. 通过以上步骤如果仍然不能启动，或者失败的 Journal ID 太多，需要按以下 Recover Mode 恢复。
+
+##### Recovery Mode
 
 1. 停止所有 FE 节点。
 2. 备份所有 FE 节点的元数据目录 `meta_dir`。
@@ -346,7 +339,7 @@ wait globalStateMgr to be ready. FE type: INIT. is ready: false
   2024-01-24 08:21:44.754 UTC INFO [172.26.92.139_29917_1698226672727] Current group size: 3
   ```
 
-要解决此问题，需要启动集群中的所有 Follower 节点。如果无法重新启动，请参阅[最终应急方案](#7-最终应急方案)。
+要解决此问题，需要启动集群中的所有 Follower 节点。如果无法重新启动，请参阅[最终应急方案](#10-最终应急方案)。
 
 ### 2. 节点 IP 变更
 
@@ -438,7 +431,74 @@ jstat -gcutil pid 1000 1000
 
 要解决此问题，必须增大 JVM 内存。
 
-### 7. 最终应急方案
+### 7. Latch timeout. com.sleepycat.je.log.LogbufferPool_FullLatch
+
+根据以下 Error Message 识别该问题：
+
+```Plain
+Environment invalid because of previous exception: xxx Latch timeout. com.sleepycat.je.log.LogbufferPool_FullLatch xxx'
+        at com.sleepycat.je.EnvironmentFailureException.unexpectedState(EnvironmentFailureException.java:459)
+        at com.sleepycat.je.latch.LatchSupport.handleTimeout(LatchSupport.java:211)
+        at com.sleepycat.je.latch.LatchWithStatsImpl.acquireExclusive(LatchWithStatsImpl.java:87)
+        at com.sleepycat.je.log.LogBufferPool.bumpCurrent(LogBufferPool.java:527)
+        at com.sleepycat.je.log.LogManager.flushInternal(LogManager.java:1373)
+        at com.sleepycat.je.log.LogManager.flushNoSync(LogManager.java:1337)
+        at com.sleepycat.je.log.LogFlusher$FlushTask.run(LogFlusher.java:232)
+        at java.util.TimerThread.mainLoop(Timer.java:555)
+        at java.util.TimerThread.run(Timer.java:505)
+```
+
+当 FE 节点的本地磁盘压力过大时会出现此问题。
+
+要解决此问题，可以为 FE 元数据路径分配一个专用磁盘，或者将当前磁盘替换为高性能磁盘。
+
+### 8. InsufficientReplicasException
+
+根据以下 Error Message 识别该问题：
+
+```Plain
+com.sleepycat.je.rep.InsufficientReplicasException: (JE 7.3.7) Commit policy: SIMPLE_MAJORITY required 1 replica. But none were active with this master.
+```
+
+当 Leader FE 节点或 Follower FE 节点使用过多内存资源而导致 Full GC 时，会出现此问题。
+
+要解决此问题，可以增加 JVM 内存大小或使用 G1 GC 算法。
+
+### 9. UnknownMasterException
+
+根据以下 Error Message 识别该问题：
+
+```Plain
+com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine master from helpers at:[/xxx.xxx.xxx.xxx:9010, /xxx.xxx.xxx.xxx:9010]
+        at com.sleepycat.je.rep.elections.Learner.findMaster(Learner.java:443) ~[starrocks-bdb-je-18.3.16.jar:?]
+        at com.sleepycat.je.rep.util.ReplicationGroupAdmin.getMasterSocket(ReplicationGroupAdmin.java:186) ~[starrocks-bdb-je-18.3.16.jar:?]
+        at com.sleepycat.je.rep.util.ReplicationGroupAdmin.doMessageExchange(ReplicationGroupAdmin.java:607) ~[starrocks-bdb-je-18.3.16.jar:?]
+        at com.sleepycat.je.rep.util.ReplicationGroupAdmin.getGroup(ReplicationGroupAdmin.java:406) ~[starrocks-bdb-je-18.3.16.jar:?]
+        at com.starrocks.ha.BDBHA.getElectableNodes(BDBHA.java:178) ~[starrocks-fe.jar:?]
+        at com.starrocks.common.proc.FrontendsProcNode.getFrontendsInfo(FrontendsProcNode.java:96) ~[starrocks-fe.jar:?]
+        at com.starrocks.common.proc.FrontendsProcNode.fetchResult(FrontendsProcNode.java:80) ~[starrocks-fe.jar:?]
+        at com.starrocks.sql.ast.ShowProcStmt.getMetaData(ShowProcStmt.java:74) ~[starrocks-fe.jar:?]
+        at com.starrocks.qe.ShowExecutor.handleShowProc(ShowExecutor.java:872) ~[starrocks-fe.jar:?]
+        at com.starrocks.qe.ShowExecutor.execute(ShowExecutor.java:286) ~[starrocks-fe.jar:?]
+        at com.starrocks.qe.StmtExecutor.handleShow(StmtExecutor.java:1574) ~[starrocks-fe.jar:?]
+        at com.starrocks.qe.StmtExecutor.execute(StmtExecutor.java:688) ~[starrocks-fe.jar:?]
+        at com.starrocks.qe.ConnectProcessor.handleQuery(ConnectProcessor.java:336) ~[starrocks-fe.jar:?]
+        at com.starrocks.qe.ConnectProcessor.dispatch(ConnectProcessor.java:530) ~[starrocks-fe.jar:?]
+        at com.starrocks.qe.ConnectProcessor.processOnce(ConnectProcessor.java:838) ~[starrocks-fe.jar:?]
+        at com.starrocks.mysql.nio.ReadListener.lambda$handleEvent$0(ReadListener.java:69) ~[starrocks-fe.jar:?]
+        at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+        at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+        at java.lang.Thread.run(Thread.java:829) ~[?:?]
+```
+
+执行 `SHOW FRONTENDS` 的时候发现找不到 Leader FE 节点，原因有多种:
+
+- 发现有超过半数以上的FE发生了 Full GC，并且时间都很长。
+- 日志中有 `java.lang.OutOfMemoryError: Java heap space` 关键字。
+
+可以断定是内存不足，需要调大 JVM 的内存。
+
+### 10. 最终应急方案
 
 :::warning
 
@@ -458,18 +518,10 @@ jstat -gcutil pid 1000 1000
 2. 备份所有 FE 节点的元数据目录 `meta_dir`。
 3. 查看拥有最新元数据的节点。您需要在**所有 FE 节点的服务器**上运行以下命令。
 
-   - StarRocks v2.5 及之前版本：
-
-     ```Bash
-     java -jar fe/lib/je-7.3.7.jar DbPrintLog -h meta/bdb/ -vd
-     ```
-
-   - StarRocks v3.0 及以后版本：
-
-     ```Bash
-     # 需要在命令中指定节点实际使用的 .jar 包名，因为该包会根据 StarRocks 版本不同而变化。
-     java -jar fe/lib/starrocks-bdb-je-18.3.16.jar DbPrintLog -h meta/bdb/ -vd
-     ```
+   ```Bash
+   # 需要在命令中指定节点实际使用的 .jar 包名，因为该包会根据 StarRocks 版本不同而变化。
+   java -jar fe/lib/starrocks-bdb-je-18.3.16.jar DbPrintLog -h meta/bdb/ -vd
+   ```
 
    示例输出：
 
@@ -513,17 +565,9 @@ jstat -gcutil pid 1000 1000
 
    1. 在 **fe.conf** 中添加以下配置：
 
-      - StarRocks v2.5、v3.0、v3.1.9 及之前小版本和 v3.2.4 及之前小版本：
-
-        ```Properties
-        metadata_failure_recovery = true
-        ```
-    
-      - StarRocks v3.1.10 及之后小版本、v3.2.5 及之后小版本和 v3.3 及之后版本：
-
-        ```Properties
-        bdbje_reset_election_group = true
-        ```
+      ```Properties
+      bdbje_reset_election_group = true
+      ```
 
    2. 启动该节点，并检查数据和元数据是否完整。
    3. 查看当前节点是否为 Leader 节点。
@@ -546,17 +590,9 @@ jstat -gcutil pid 1000 1000
    1. 在 **fe/meta/image/ROLE** 文件中将 FE 节点的角色从 `OBSERVER` 更改为 `FOLLOWER`。
    2. 在 **fe.conf** 中添加以下配置：
 
-      - StarRocks v2.5、v3.0、v3.1.9 及之前小版本和 v3.2.4 及之前小版本：
-
-        ```Properties
-        metadata_failure_recovery = true
-        ```
-
-      - StarRocks v3.1.10 及之后小版本、v3.2.5 及之后小版本和 v3.3 及之后版本：
-
-        ```Properties
-        bdbje_reset_election_group = true
-        ```
+      ```Properties
+      bdbje_reset_election_group = true
+      ```
 
    3. 启动该节点，并检查数据和元数据是否完整。
    4. 查看当前节点是否为 Leader 节点。
@@ -569,25 +605,13 @@ jstat -gcutil pid 1000 1000
       - 如果字段 `Role` 为 `LEADER`，说明该 FE 节点为 Leader FE 节点。
 
    5. 如果数据和元数据完整，且该节点的角色是 Leader，可以删除之前添加的配置。**但不要重新启动该节点。**
-   6. 删除除当前节点之外的所有 FE 节点。当前节点将作为临时 Leader 节点。
-
-      ```SQL
-      -- 如需删除 Follower 节点，请将 <follower_host> 替换为 Follower 节点的 IP 地址（priority_networks），
-      -- 并将 <follower_edit_log_port>（默认值：9010）替换为 Follower 节点的 edit_log_port。
-      ALTER SYSTEM DROP FOLLOWER "<follower_host>:<follower_edit_log_port>";
-
-      -- 如需删除 Observer 节点，请将 <observer_host> 替换为 Observer 节点的 IP 地址（priority_networks），
-      -- 并将 <observer_edit_log_port>（默认值：9010）替换为 Observer 节点的 edit_log_port。
-      ALTER SYSTEM DROP OBSERVER "<observer_host>:<observer_edit_log_port>";
-      ```
-
-   7. 向集群添加一个新的 Follower 节点（基于新的服务器）。
+   6. 向集群添加一个新的 Follower 节点（基于新的服务器）。
 
       ```SQL
       ALTER SYSTEM ADD FOLLOWER "<new_follower_host>:<new_follower_edit_log_port>";
       ```
 
-   8. 使用临时 Leader FE 节点作为 Helper，在新服务器上启动新 FE 节点。
+   7. 使用临时 Leader FE 节点作为 Helper，在新服务器上启动新 FE 节点。
 
       ```Bash
       # 将 <leader_ip> 替换为 Leader FE 节点的 IP 地址（priority_networks），
@@ -595,7 +619,7 @@ jstat -gcutil pid 1000 1000
       ./fe/bin/start_fe.sh --helper <leader_ip>:<leader_edit_log_port> --daemon
       ```
 
-   9. 新的 FE 节点成功启动后，检查两个 FE 节点的状态和角色：
+   8. 新的 FE 节点成功启动后，检查两个 FE 节点的状态和角色：
 
       ```SQL
       SHOW FRONTENDS;
@@ -605,8 +629,8 @@ jstat -gcutil pid 1000 1000
       - 如果字段 `Role` 为 `FOLLOWER`，说明该 FE 节点是 Follower FE 节点。
       - 如果字段 `Role` 为 `LEADER`，说明该 FE 节点为 Leader FE 节点。
 
-   10. 如果新的 Follower 节点在集群中成功运行，就可以停止所有节点。
-   11. **仅在新的 Follower 节点的 fe.conf 中添加以下配置：**
+   9. 如果新的 Follower 节点在集群中成功运行，就可以停止所有节点。
+   10. **仅在新的 Follower 节点的 fe.conf 中添加以下配置：**
 
        - StarRocks v2.5、v3.0、v3.1.9 及之前小版本和 v3.2.4 及之前小版本：
 
@@ -620,8 +644,8 @@ jstat -gcutil pid 1000 1000
          bdbje_reset_election_group = true
          ```
 
-   12. 启动新的 Follower 节点，并检查数据和元数据是否完整。
-   13. 查看当前节点是否为 Leader 节点。
+   11. 启动新的 Follower 节点，并检查数据和元数据是否完整。
+   12. 查看当前节点是否为 Leader 节点。
 
        ```SQL
        SHOW FRONTENDS;
@@ -630,26 +654,14 @@ jstat -gcutil pid 1000 1000
        - 如果字段 `Alive` 为 `true`，说明该 FE 节点正常启动并加入集群。
        - 如果字段 `Role` 为 `LEADER`，说明该 FE 节点为 Leader FE 节点。
 
-   14. 如果数据和元数据完整，且该节点的角色是 Leader，可以删除之前添加的配置并重新启动节点。
+   13. 如果数据和元数据完整，且该节点的角色是 Leader，可以删除之前添加的配置并重新启动节点。
 
     </TabItem>
 
   </Tabs>
 
-6. 存活的 Follower 节点是集群当前实质上的 Leader 节点。删除除了当前节点外所有 FE 节点。
-
-   ```SQL
-   -- 如需删除 Follower 节点，请将 <follower_host> 替换为 Follower 节点的 IP 地址（priority_networks），
-   -- 并将 <follower_edit_log_port>（默认值：9010）替换为 Follower 节点的 edit_log_port。
-   ALTER SYSTEM DROP FOLLOWER "<follower_host>:<follower_edit_log_port>";
-
-   -- 如需删除 Observer 节点，请将 <observer_host> 替换为 Observer 节点的 IP 地址（priority_networks），
-   -- 并将 <observer_edit_log_port>（默认值：9010）替换为 Observer 节点的 edit_log_port。
-   ALTER SYSTEM DROP OBSERVER "<observer_host>:<observer_edit_log_port>";
-   ```
-
-7. 将需要重新添加回集群的 FE 节点的元数据目录 `meta_dir` 清除。
-8. 使用新 Leader FE 节点作为 Helper 启动 Follower 节点。
+5. 将需要重新添加回集群的 FE 节点的元数据目录 `meta_dir` 清除。
+6. 使用新 Leader FE 节点作为 Helper 启动 Follower 节点。
 
    ```Bash
    # 将 <leader_ip> 替换为 Leader FE 节点的 IP 地址（priority_networks），
@@ -657,7 +669,7 @@ jstat -gcutil pid 1000 1000
    ./fe/bin/start_fe.sh --helper <leader_ip>:<leader_edit_log_port> --daemon
    ```
 
-9. 将 Follower 节点重新添加至集群。
+7. 将 Follower 节点重新添加至集群。
 
    ```SQL
    ALTER SYSTEM ADD FOLLOWER "<new_follower_host>:<new_follower_edit_log_port>";

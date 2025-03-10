@@ -35,7 +35,7 @@ public:
     void set_need_parse_levels(bool need_parse_levels) override {}
 
     void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
-                                 ColumnIOType type, bool active) override {}
+                                 ColumnIOTypeFlags types, bool active) override {}
 
     void select_offset_index(const SparseRange<uint64_t>& range, const uint64_t rg_first_row) override {}
 
@@ -51,12 +51,20 @@ public:
                                               SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
                                               const uint64_t rg_first_row, const uint64_t rg_num_rows) override;
 
+    StatusOr<bool> row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                          CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                          const uint64_t rg_num_rows) const override {
+        //row_group_zone_map_filter should always be effective, bloom filter is not neccessary.
+        return Status::NotSupported("Not implemented");
+    }
+
 private:
     const Datum _fixed_value;
 };
 
 class RawColumnReader : public ColumnReader {
 public:
+    static const int32_t SBBF_HEADER_SIZE_ESTIMATE = 20;
     explicit RawColumnReader(const ParquetField* parquet_field, const tparquet::ColumnChunk* column_chunk_metadata,
                              const ColumnReaderOptions& opts)
             : ColumnReader(parquet_field), _opts(opts), _chunk_metadata(column_chunk_metadata) {}
@@ -77,7 +85,7 @@ public:
     void set_need_parse_levels(bool need_parse_levels) override { _reader->set_need_parse_levels(need_parse_levels); }
 
     void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
-                                 ColumnIOType type, bool active) override;
+                                 ColumnIOTypeFlags types, bool active) override;
 
     const tparquet::ColumnChunk* get_chunk_metadata() const override { return _chunk_metadata; }
 
@@ -103,6 +111,9 @@ public:
     // Returns true if all of the data pages in the column chunk are dict encoded
     bool column_all_pages_dict_encoded() const;
 
+private:
+    Status _init_column_bloom_filter(int32_t offset, int32_t length, BloomFilter& bloom_filter) const;
+
 protected:
     StatusOr<bool> _row_group_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
                                               CompoundNodeType pred_relation, const TypeDescriptor& col_type,
@@ -112,6 +123,10 @@ protected:
                                                SparseRange<uint64_t>* row_ranges, CompoundNodeType pred_relation,
                                                const TypeDescriptor& col_type, const uint64_t rg_first_row,
                                                const uint64_t rg_num_rows);
+
+    StatusOr<bool> _row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                           CompoundNodeType pred_relation, const TypeDescriptor& col_type,
+                                           const uint64_t rg_first_row, const uint64_t rg_num_rows) const;
 
     const ColumnReaderOptions& _opts;
 
@@ -170,6 +185,15 @@ public:
         return _page_index_zone_map_filter(predicates, row_ranges, pred_relation, *_col_type, rg_first_row,
                                            rg_num_rows);
     }
+
+    StatusOr<bool> row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                          CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                          const uint64_t rg_num_rows) const override {
+        return _row_group_bloom_filter(predicates, pred_relation, *_col_type, rg_first_row, rg_num_rows);
+    }
+
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOTypeFlags types, bool active) override;
 
 private:
     template <bool LAZY_DICT_DECODE, bool LAZY_CONVERT>
@@ -236,6 +260,16 @@ public:
                                            TypeDescriptor(LogicalType::TYPE_VARCHAR), rg_first_row, rg_num_rows);
     }
 
+    StatusOr<bool> row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                          CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                          const uint64_t rg_num_rows) const override {
+        return _row_group_bloom_filter(predicates, pred_relation, TypeDescriptor(LogicalType::TYPE_VARCHAR),
+                                       rg_first_row, rg_num_rows);
+    }
+
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOTypeFlags types, bool active) override;
+
 private:
     Status _check_current_dict();
 
@@ -272,6 +306,9 @@ public:
         return _page_index_zone_map_filter(predicates, row_ranges, pred_relation,
                                            TypeDescriptor(LogicalType::TYPE_VARCHAR), rg_first_row, rg_num_rows);
     }
+
+    void collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
+                                 ColumnIOTypeFlags types, bool active) override;
 
 private:
     const GlobalDictMap* _dict = nullptr;

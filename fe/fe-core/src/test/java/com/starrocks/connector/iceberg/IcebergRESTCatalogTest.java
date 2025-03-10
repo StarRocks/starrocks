@@ -24,6 +24,7 @@ import com.starrocks.catalog.IcebergView;
 import com.starrocks.catalog.Table;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.iceberg.rest.IcebergRESTCatalog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.ColWithComment;
 import com.starrocks.sql.ast.CreateViewStmt;
@@ -146,7 +147,7 @@ public class IcebergRESTCatalogTest {
             }
         };
 
-        List<String> tables = metadata.listTableNames("db");
+        List<String> tables = metadata.listTableNames(new ConnectContext(), "db");
         Assert.assertEquals(2, tables.size());
         Assert.assertEquals(tables, Lists.newArrayList("tbl1", "view1"));
     }
@@ -156,7 +157,7 @@ public class IcebergRESTCatalogTest {
         IcebergMetadata metadata = buildIcebergMetadata(restCatalog);
         new MockUp<IcebergMetadata>() {
             @Mock
-            Table getTable(String dbName, String tblName) {
+            Table getTable(ConnectContext context, String dbName, String tblName) {
                 return new IcebergView(1, "iceberg_rest_catalog", "db", "view",
                         Lists.newArrayList(), "mocked", "iceberg_rest_catalog", "db",
                         "location");
@@ -178,14 +179,6 @@ public class IcebergRESTCatalogTest {
     public void testCreateView(@Mocked RESTCatalog restCatalog, @Mocked BaseView baseView,
                                @Mocked ImmutableSQLViewRepresentation representation) throws Exception {
         IcebergMetadata metadata = buildIcebergMetadata(restCatalog);
-
-        new Expectations() {
-            {
-                restCatalog.loadNamespaceMetadata(Namespace.of("db"));
-                result = ImmutableMap.of("location", "xxxxx");
-                minTimes = 1;
-            }
-        };
 
         CreateViewStmt stmt = new CreateViewStmt(false, false, new TableName("catalog", "db", "table"),
                 Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", false, null, NodePosition.ZERO);
@@ -215,7 +208,7 @@ public class IcebergRESTCatalogTest {
                 minTimes = 1;
 
                 baseView.location();
-                result = "xxx";
+                result = null;
                 minTimes = 1;
 
                 restCatalog.loadView(TableIdentifier.of("db", "view"));
@@ -226,6 +219,6 @@ public class IcebergRESTCatalogTest {
 
         Table table = metadata.getView("db", "view");
         Assert.assertEquals(ICEBERG_VIEW, table.getType());
-        Assert.assertEquals("xxx", table.getTableLocation());
+        Assert.assertNull(table.getTableLocation());
     }
 }

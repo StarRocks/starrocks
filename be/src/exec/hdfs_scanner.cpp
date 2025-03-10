@@ -167,13 +167,15 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.can_use_min_max_count_opt = _scanner_params.can_use_min_max_count_opt;
     ctx.use_file_metacache = _scanner_params.use_file_metacache;
     ctx.timezone = _runtime_state->timezone();
-    ctx.iceberg_schema = _scanner_params.iceberg_schema;
+    ctx.lake_schema = _scanner_params.lake_schema;
     ctx.stats = &_app_stats;
     ctx.lazy_column_coalesce_counter = _scanner_params.lazy_column_coalesce_counter;
     ctx.split_context = _scanner_params.split_context;
     ctx.enable_split_tasks = _scanner_params.enable_split_tasks;
     ctx.connector_max_split_size = _scanner_params.connector_max_split_size;
     ctx.global_dictmaps = _scanner_params.global_dictmaps;
+    ctx.parquet_bloom_filter_enable = _scanner_params.parquet_bloom_filter_enable;
+    ctx.parquet_page_index_enable = _scanner_params.parquet_page_index_enable;
 
     ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &_scanner_params.all_conjunct_ctxs;

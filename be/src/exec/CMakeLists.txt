@@ -164,6 +164,8 @@ set(EXEC_FILES
     schema_scanner/schema_temp_tables_scanner.cpp
     schema_scanner/schema_cluster_snapshots_scanner.cpp
     schema_scanner/schema_cluster_snapshot_jobs_scanner.cpp
+    schema_scanner/schema_applicable_roles_scanner.cpp
+    schema_scanner/schema_keywords_scanner.cpp
     jdbc_scanner.cpp
     sorting/compare_column.cpp
     sorting/merge.cpp
@@ -293,6 +295,7 @@ set(EXEC_FILES
     pipeline/schedule/observer.cpp
     pipeline/schedule/pipeline_timer.cpp
     pipeline/wait_operator.cpp
+    pipeline/runtime_filter_types.cpp
     workgroup/pipeline_executor_set.cpp
     workgroup/pipeline_executor_set_manager.cpp
     workgroup/work_group.cpp

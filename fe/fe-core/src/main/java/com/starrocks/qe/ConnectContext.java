@@ -171,6 +171,8 @@ public class ConnectContext {
     // `execute as` will modify currentRoleIds and assign the active role of the impersonate user to currentRoleIds.
     // For specific logic, please refer to setCurrentRoleIds.
     protected Set<Long> currentRoleIds = new HashSet<>();
+    // groups of current user
+    protected Set<String> groups = new HashSet<>();
     // Serializer used to pack MySQL packet.
     protected MysqlSerializer serializer;
     // Variables belong to this session.
@@ -187,7 +189,9 @@ public class ConnectContext {
     // Command this connection is processing.
     protected MysqlCommand command;
     // last command start time
-    protected Instant startTime = Instant.now();
+    protected volatile Instant startTime = Instant.now();
+    // last command end time
+    protected volatile Instant endTime = Instant.ofEpochMilli(0);
     // Cache thread info for this connection.
     protected ThreadInfo threadInfo;
 
@@ -263,6 +267,9 @@ public class ConnectContext {
 
     // session level SPM storage
     private SQLPlanStorage sqlPlanStorage = SQLPlanStorage.create(false);
+
+    // Whether leader is transferred during executing stmt
+    private boolean isLeaderTransferred = false;
 
     public void setExplicitTxnState(ExplicitTxnState explicitTxnState) {
         this.explicitTxnState = explicitTxnState;
@@ -467,7 +474,11 @@ public class ConnectContext {
     }
 
     public Set<String> getGroups() {
-        return Set.of();
+        return groups;
+    }
+
+    public void setGroups(Set<String> groups) {
+        this.groups = groups;
     }
 
     public void modifySystemVariable(SystemVariable setVar, boolean onlySetSessionVar) throws DdlException {
@@ -625,6 +636,10 @@ public class ConnectContext {
     public void setStartTime(Instant start) {
         startTime = start;
         returnRows = 0;
+    }
+
+    public void setEndTime() {
+        endTime = Instant.now();
     }
 
     public void updateReturnRows(int returnRows) {
@@ -1212,7 +1227,7 @@ public class ConnectContext {
             dbName = parts[1];
         }
 
-        if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(this.getCurrentCatalog(), dbName) == null) {
+        if (!Strings.isNullOrEmpty(dbName) && metadataMgr.getDb(this, this.getCurrentCatalog(), dbName) == null) {
             LOG.debug("Unknown catalog {} and db {}", this.getCurrentCatalog(), dbName);
             ErrorReport.reportDdlException(ErrorCode.ERR_BAD_DB_ERROR, dbName);
         }
@@ -1297,6 +1312,14 @@ public class ConnectContext {
         }
     }
 
+    public boolean isLeaderTransferred() {
+        return isLeaderTransferred;
+    }
+
+    public void setIsLeaderTransferred(boolean isLeaderTransferred) {
+        this.isLeaderTransferred = isLeaderTransferred;
+    }
+
     /**
      * Set thread-local context for the scope, and remove it after leaving the scope
      */
@@ -1376,5 +1399,14 @@ public class ConnectContext {
             }
             return row;
         }
+    }
+
+    public boolean isIdleLastFor(long milliSeconds) {
+        if (command != MysqlCommand.COM_SLEEP) {
+            return false;
+        }
+
+        return endTime.isAfter(startTime)
+                && endTime.plusMillis(milliSeconds).isBefore(Instant.now());
     }
 }

@@ -14,18 +14,19 @@
 
 #pragma once
 
-#include "cache/object_cache/cache_module.h"
+#include "cache/object_cache/object_cache.h"
 #include "util/lru_cache.h"
 
 namespace starrocks {
 
 class Cache;
 
-class LRUCacheModule : public ObjectCacheModule {
+class LRUCacheModule final : public ObjectCache {
 public:
+    LRUCacheModule() = delete;
     LRUCacheModule(const ObjectCacheOptions& options);
 
-    ~LRUCacheModule();
+    virtual ~LRUCacheModule();
 
     Status insert(const std::string& key, void* value, size_t size, size_t charge, ObjectCacheDeleter deleter,
                   ObjectCacheHandlePtr* handle, ObjectCacheWriteOptions* options) override;

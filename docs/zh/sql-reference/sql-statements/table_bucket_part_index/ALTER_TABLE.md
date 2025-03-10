@@ -220,7 +220,7 @@ DROP PARTITION [ IF EXISTS ] <partition_name> [ FORCE ]
 ALTER TABLE [<db_name>.]<tbl_name>
 DROP [ TEMPORARY ] PARTITIONS [ IF EXISTS ]  { partition_name_list | multi_range_partitions } [ FORCE ] 
 
-partion_name_list ::= ( <partition_name> [, ... ] )
+partition_name_list ::= ( <partition_name> [, ... ] )
 
 multi_range_partitions ::=
     { START ("<start_date_value>") END ("<end_date_value>") EVERY ( INTERVAL <N> <time_unit> )
@@ -232,6 +232,27 @@ multi_range_partitions ::=
 - `multi_range_partitions` 仅适用于 Range 分区。
 - 其中涉及的参数与 [增加分区 ADD PARTITION(S)](#增加分区-add-partitions) 中的相同。
 - 仅支持基于单个分区键的分区。
+
+基于通用分区表达式删除分区（自 v3.4.1 起支持）：
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+DROP PARTITIONS WHERE <expr>
+```
+
+从 v3.4.1 开始，StarRocks 支持基于通用分区表达式（Common Partition Expression）删除分区。您可以通过指定一个带有表达式的 WHERE 子句来过滤要删除的分区。
+- 表达式声明了要删除的分区。执行后，符合表达式条件的分区将被批量删除。请谨慎操作。
+- 表达式只能包含分区列和常量。不支持非分区列。
+- 常用分区表达式处理 List 分区和 Range 分区的方式不同：
+  - 对于 List 分区表，StarRocks 支持通过通用分区表达式过滤删除分区。
+  - 对于 Range 分区表，StarRocks 只能基于 FE 的分区裁剪功能过滤删除分区。对于分区裁剪不支持的谓词，StarRocks 无法过滤删除对应的分区。
+
+示例：
+
+```sql
+-- 删除最近三个月之前的数据。dt 列为分区列。
+ALTER TABLE t1 DROP PARTITIONS WHERE dt < CURRENT_DATE() - INTERVAL 3 MONTH;
+```
 
 :::note
 
@@ -734,7 +755,7 @@ DROP INDEX index_name;
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-SET ("key" = "value",...)
+SET ("key" = "value")
 ```
 
 参数说明：
@@ -753,7 +774,13 @@ SET ("key" = "value",...)
   - `bucket_size`（自 3.2 版本支持）
   - `base_compaction_forbidden_time_ranges`（自 v3.2.13 版本支持）
 
-注意：修改表的属性也可以合并到 schema change <!--这个 schema change 除了column相关的alter table还包括啥--> 操作中来修改，见[示例](#示例)部分。
+
+:::note
+
+- 大多数情况下，一次只能修改一个属性。只有当多个属性的前缀相同时，才能同时修改多个属性。目前仅支持 `dynamic_partition.` 和 `binlog.`。
+- 修改表的属性也可以合并到 schema change 操作中来修改，见[示例](#示例)部分。
+
+:::
 
 ### Swap 将两个表原子替换
 

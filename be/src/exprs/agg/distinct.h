@@ -27,6 +27,7 @@
 #include "column/hash_set.h"
 #include "column/type_traits.h"
 #include "column/vectorized_fwd.h"
+#include "exec/aggregator.h"
 #include "exprs/agg/aggregate.h"
 #include "exprs/agg/aggregate_state_allocator.h"
 #include "exprs/agg/sum.h"
@@ -61,7 +62,7 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
 
     void prefetch(T key) { set.prefetch(key); }
 
-    int64_t disctint_count() const { return set.size(); }
+    int64_t distinct_count() const { return set.size(); }
 
     size_t serialize_size() const {
         size_t size = set.dump_bound();
@@ -103,60 +104,160 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
     MyHashSet set;
 };
 
+struct AdaptiveSliceHashSet {
+    using KeyType = typename SliceHashSet::key_type;
+
+    AdaptiveSliceHashSet() { set = std::make_shared<SliceHashSetWithAggStateAllocator>(); }
+
+    void try_convert_to_two_level(MemPool* mem_pool) {
+        if (distinct_size % 65536 == 0 && mem_pool->total_allocated_bytes() >= Aggregator::two_level_memory_threshold) {
+            two_level_set = std::make_shared<SliceTwoLevelHashSetWithAggStateAllocator>();
+            two_level_set->reserve(set->capacity());
+            two_level_set->insert(set->begin(), set->end());
+            set.reset();
+        }
+    }
+
+    void emplace(MemPool* mem_pool, Slice raw_key) {
+        KeyType key(raw_key);
+        if (set != nullptr) {
+#if defined(__clang__) && (__clang_major__ >= 16)
+            set->lazy_emplace(key, [&](const auto& ctor) {
+#else
+            set->template lazy_emplace(key, [&](const auto& ctor) {
+#endif
+                uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                assert(pos != nullptr);
+                memcpy(pos, key.data, key.size);
+                ctor(pos, key.size, key.hash);
+                distinct_size++;
+                try_convert_to_two_level(mem_pool);
+            });
+        } else {
+#if defined(__clang__) && (__clang_major__ >= 16)
+            two_level_set->lazy_emplace(key, [&](const auto& ctor) {
+#else
+            two_level_set->template lazy_emplace(key, [&](const auto& ctor) {
+#endif
+                uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                assert(pos != nullptr);
+                memcpy(pos, key.data, key.size);
+                ctor(pos, key.size, key.hash);
+                distinct_size++;
+            });
+        }
+    }
+
+    void lazy_emplace_with_hash(MemPool* mem_pool, Slice raw_key, size_t hash) {
+        KeyType key(reinterpret_cast<uint8_t*>(raw_key.data), raw_key.size, hash);
+        if (set != nullptr) {
+#if defined(__clang__) && (__clang_major__ >= 16)
+            set->lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
+#else
+            set->template lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
+#endif
+                uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                assert(pos != nullptr);
+                memcpy(pos, key.data, key.size);
+                ctor(pos, key.size, key.hash);
+                distinct_size++;
+                try_convert_to_two_level(mem_pool);
+            });
+        } else {
+#if defined(__clang__) && (__clang_major__ >= 16)
+            two_level_set->lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
+#else
+            two_level_set->template lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
+#endif
+                uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
+                assert(pos != nullptr);
+                memcpy(pos, key.data, key.size);
+                ctor(pos, key.size, key.hash);
+            });
+        }
+    }
+
+    void prefetch_hash(size_t hash_value) {
+        if (set != nullptr) {
+            set->prefetch_hash(hash_value);
+        } else {
+            two_level_set->prefetch_hash(hash_value);
+        }
+    }
+
+    int64_t serialize_size() const {
+        size_t size = 0;
+        if (set != nullptr) {
+            for (auto& key : *set) {
+                size += key.size + sizeof(uint32_t);
+            }
+        } else {
+            for (auto& key : *two_level_set) {
+                size += key.size + sizeof(uint32_t);
+            }
+        }
+        return size;
+    }
+
+    void serialize(uint8_t* dst) const {
+        if (set != nullptr) {
+            for (auto& key : *set) {
+                auto size = (uint32_t)key.size;
+                memcpy(dst, &size, sizeof(uint32_t));
+                dst += sizeof(uint32_t);
+                memcpy(dst, key.data, key.size);
+                dst += key.size;
+            }
+        } else {
+            for (auto& key : *two_level_set) {
+                auto size = (uint32_t)key.size;
+                memcpy(dst, &size, sizeof(uint32_t));
+                dst += sizeof(uint32_t);
+                memcpy(dst, key.data, key.size);
+                dst += key.size;
+            }
+        }
+    }
+
+    void fill_vector(std::vector<std::string>& values) const {
+        if (set != nullptr) {
+            for (const auto& v : *set) {
+                values.emplace_back(v.data, v.size);
+            }
+        } else {
+            for (const auto& v : *two_level_set) {
+                values.emplace_back(v.data, v.size);
+            }
+        }
+    }
+
+    int64_t size() const { return distinct_size; }
+
+    std::shared_ptr<SliceHashSetWithAggStateAllocator> set;
+    std::shared_ptr<SliceTwoLevelHashSetWithAggStateAllocator> two_level_set;
+    int64_t distinct_size = 0;
+
+    HashOnSliceWithHash hash_function() const { return HashOnSliceWithHash(); }
+};
+
 template <LogicalType LT, LogicalType SumLT>
 struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
     DistinctAggregateState() = default;
     using KeyType = typename SliceHashSet::key_type;
 
-    void update(MemPool* mem_pool, Slice raw_key) {
-        KeyType key(raw_key);
-#if defined(__clang__) && (__clang_major__ >= 16)
-        set.lazy_emplace(key, [&](const auto& ctor) {
-#else
-        set.template lazy_emplace(key, [&](const auto& ctor) {
-#endif
-            uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-            assert(pos != nullptr);
-            memcpy(pos, key.data, key.size);
-            ctor(pos, key.size, key.hash);
-        });
-    }
+    void update(MemPool* mem_pool, Slice raw_key) { set.emplace(mem_pool, raw_key); }
 
     void update_with_hash(MemPool* mem_pool, Slice raw_key, size_t hash) {
-        KeyType key(reinterpret_cast<uint8_t*>(raw_key.data), raw_key.size, hash);
-#if defined(__clang__) && (__clang_major__ >= 16)
-        set.lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
-#else
-        set.template lazy_emplace_with_hash(key, hash, [&](const auto& ctor) {
-#endif
-            uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-            assert(pos != nullptr);
-            memcpy(pos, key.data, key.size);
-            ctor(pos, key.size, key.hash);
-        });
+        set.lazy_emplace_with_hash(mem_pool, raw_key, hash);
     }
 
-    int64_t disctint_count() const { return set.size(); }
+    int64_t distinct_count() const { return set.distinct_size; }
 
-    size_t serialize_size() const {
-        size_t size = 0;
-        for (auto& key : set) {
-            size += key.size + sizeof(uint32_t);
-        }
-        return size;
-    }
+    size_t serialize_size() const { return set.serialize_size(); }
 
     // TODO(kks): If we put all string key to one continue memory,
     // then we could only one memcpy.
-    void serialize(uint8_t* dst) const {
-        for (auto& key : set) {
-            auto size = (uint32_t)key.size;
-            memcpy(dst, &size, sizeof(uint32_t));
-            dst += sizeof(uint32_t);
-            memcpy(dst, key.data, key.size);
-            dst += key.size;
-        }
-    }
+    void serialize(uint8_t* dst) const { return set.serialize(dst); }
 
     void deserialize_and_merge(MemPool* mem_pool, const uint8_t* src, size_t len) {
         const uint8_t* end = src + len;
@@ -165,24 +266,14 @@ struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
             memcpy(&size, src, sizeof(uint32_t));
             src += sizeof(uint32_t);
             Slice raw_key(src, size);
-            KeyType key(raw_key);
             // we only memcpy when the key is new
-#if defined(__clang__) && (__clang_major__ >= 16)
-            set.lazy_emplace(key, [&](const auto& ctor) {
-#else
-            set.template lazy_emplace(key, [&](const auto& ctor) {
-#endif
-                uint8_t* pos = mem_pool->allocate_with_reserve(key.size, SLICE_MEMEQUAL_OVERFLOW_PADDING);
-                assert(pos != nullptr);
-                memcpy(pos, key.data, key.size);
-                ctor(pos, key.size, key.hash);
-            });
+            set.emplace(mem_pool, raw_key);
             src += size;
         }
         DCHECK(src == end);
     }
 
-    SliceHashSetWithAggStateAllocator set;
+    AdaptiveSliceHashSet set;
 };
 
 // use a different way to do serialization to gain performance.
@@ -201,7 +292,7 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
 
     void prefetch(T key) { set.prefetch(key); }
 
-    int64_t disctint_count() const { return set.size(); }
+    int64_t distinct_count() const { return set.size(); }
 
     size_t serialize_size() const {
         size_t size = set.size() * sizeof(T) + sizeof(size_t);
@@ -417,7 +508,7 @@ public:
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(!to->is_nullable());
         if constexpr (DistinctType == AggDistinctType::COUNT) {
-            down_cast<Int64Column*>(to)->append(this->data(state).disctint_count());
+            down_cast<Int64Column*>(to)->append(this->data(state).distinct_count());
         } else if constexpr (DistinctType == AggDistinctType::SUM && is_starrocks_arithmetic<T>::value) {
             to->append_datum(Datum(this->data(state).sum_distinct()));
         }
@@ -433,15 +524,15 @@ public:
 };
 
 template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
-class DistinctAggregateFunction
+class DistinctAggregateFunction final
         : public TDistinctAggregateFunction<LT, SumResultLT<LT>, DistinctAggregateState, DistinctType, T> {};
 
 template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
-class DistinctAggregateFunctionV2
+class DistinctAggregateFunctionV2 final
         : public TDistinctAggregateFunction<LT, SumResultLT<LT>, DistinctAggregateStateV2, DistinctType, T> {};
 
 template <LogicalType LT, AggDistinctType DistinctType, typename T = RunTimeCppType<LT>>
-class DecimalDistinctAggregateFunction
+class DecimalDistinctAggregateFunction final
         : public TDistinctAggregateFunction<LT, TYPE_DECIMAL128, DistinctAggregateStateV2, DistinctType, T> {};
 
 // now we only support String
@@ -571,9 +662,7 @@ public:
             tglobal_dict.__isset.strings = true;
             tglobal_dict.strings.reserve(dict_ids.size());
 
-            for (const auto& v : agg_state.set) {
-                tglobal_dict.strings.emplace_back(v.data, v.size);
-            }
+            agg_state.set.fill_vector(tglobal_dict.strings);
 
             // Since the id in global dictionary may be used for sorting,
             // we also need to ensure that the dictionary is ordered when we build it

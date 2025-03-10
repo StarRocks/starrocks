@@ -40,20 +40,19 @@ bool RepeatOperator::has_output() const {
 }
 
 StatusOr<ChunkPtr> RepeatOperator::pull_chunk(RuntimeState* state) {
-    ChunkPtr curr_chunk = _curr_chunk->clone_empty(_curr_chunk->num_rows());
-    curr_chunk->append_safe(*_curr_chunk, 0, _curr_chunk->num_rows());
+    ChunkPtr curr_chunk = _curr_chunk->clone_unique();
     extend_and_update_columns(&curr_chunk);
     RETURN_IF_ERROR(eval_conjuncts_and_in_filters(_conjunct_ctxs, curr_chunk.get()));
     return curr_chunk;
 }
 
 void RepeatOperator::extend_and_update_columns(ChunkPtr* curr_chunk) {
-    size_t num_rows = (*curr_chunk)->num_rows();
+    const size_t num_rows = (*curr_chunk)->num_rows();
     // extend virtual columns for gourping_id and grouping()/grouping_id() columns.
     for (int i = 0; i < _grouping_list.size(); ++i) {
         auto grouping_column = generate_repeat_column(_grouping_list[i][_repeat_times_last], num_rows);
 
-        (*curr_chunk)->append_column(grouping_column, _tuple_desc->slots()[i]->id());
+        (*curr_chunk)->append_column(std::move(grouping_column), _tuple_desc->slots()[i]->id());
     }
 
     // update columns for unneed columns.

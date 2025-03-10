@@ -36,6 +36,7 @@
 
 #include <gtest/gtest.h>
 
+#include "cache/object_cache/lrucache_module.h"
 #include "testutil/assert.h"
 
 namespace starrocks {
@@ -61,10 +62,8 @@ void StoragePageCacheTest::SetUp() {
 void StoragePageCacheTest::create_obj_cache(size_t capacity) {
     ObjectCacheOptions options;
     options.capacity = capacity;
-    options.module = ObjectCacheModuleType::LRUCACHE;
 
-    _obj_cache = std::make_shared<ObjectCache>();
-    ASSERT_OK(_obj_cache->init(options));
+    _obj_cache = std::make_shared<LRUCacheModule>(options);
 }
 
 // NOLINTNEXTLINE
