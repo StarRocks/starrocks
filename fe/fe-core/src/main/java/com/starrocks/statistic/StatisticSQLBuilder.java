@@ -40,6 +40,7 @@ import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_HISTOGRA
 import static com.starrocks.statistic.StatsConstants.STATISTIC_EXTERNAL_QUERY_V2_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_HISTOGRAM_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_PARTITION_VERSION;
+import static com.starrocks.statistic.StatsConstants.STATISTIC_QUERY_MULTI_COLUMN_VERSION;
 import static com.starrocks.statistic.StatsConstants.STATISTIC_TABLE_VERSION;
 
 public class StatisticSQLBuilder {
@@ -98,6 +99,11 @@ public class StatisticSQLBuilder {
             "SELECT cast(" + STATISTIC_EXTERNAL_HISTOGRAM_VERSION + " as INT), column_name,"
                     + " cast(json_object(\"buckets\", buckets, \"mcv\", mcv) as varchar)"
                     + " FROM " + StatsConstants.EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME
+                    + " WHERE $predicate";
+
+    private static final String QUERY_MULTI_COLUMNS_COMBINED_STATISTICS_TEMPLATE =
+            "SELECT cast(" + STATISTIC_QUERY_MULTI_COLUMN_VERSION + " as INT), db_id, table_id, column_ids, ndv"
+                    + " FROM " + MULTI_COLUMN_STATISTICS_TABLE_NAME
                     + " WHERE $predicate";
 
     private static final VelocityEngine DEFAULT_VELOCITY_ENGINE;
@@ -195,6 +201,13 @@ public class StatisticSQLBuilder {
         });
 
         return Joiner.on(" UNION ALL ").join(querySQL);
+    }
+
+    public static String buildMultiColumnCombinedStatisticsSQL(List<Long> tableIds) {
+        VelocityContext context = new VelocityContext();
+        context.put("predicate", "table_id in (" +
+                tableIds.stream().map(String::valueOf).collect(Collectors.joining(", ")) + ")");
+        return build(context, QUERY_MULTI_COLUMNS_COMBINED_STATISTICS_TEMPLATE);
     }
 
     private static Map<String, List<String>> groupByTypes(List<String> columnNames, List<Type> columnTypes,

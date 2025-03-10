@@ -72,6 +72,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -122,6 +123,21 @@ public class StatisticExecutor {
         }
 
         return queryColumnStats(context, dbId, tableId, columnStatsMetaList, table);
+    }
+
+    public List<TStatisticData> queryMultiColumnCombinedStats(ConnectContext context, List<Long> tableIds) {
+        List<Long> queryTableIds = tableIds.stream()
+                .map(tableId -> lookupTable(null, tableId))
+                .filter(Objects::nonNull)
+                .map(Table::getId)
+                .collect(Collectors.toList());
+
+        if (queryTableIds.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        String sql = StatisticSQLBuilder.buildMultiColumnCombinedStatisticsSQL(queryTableIds);
+        return executeStatisticDQL(context, sql);
     }
 
     private static Table lookupTable(Long dbId, Long tableId) {
@@ -521,6 +537,7 @@ public class StatisticExecutor {
                         MultiColumnStatsMeta meta = new MultiColumnStatsMeta(db.getId(), table.getId(), columnIds,
                                 statsJob.getAnalyzeType(), type, analyzeStatus.getEndTime(), statsJob.getProperties());
                         GlobalStateMgr.getCurrentState().getAnalyzeMgr().addMultiColumnStatsMeta(meta);
+                        GlobalStateMgr.getCurrentState().getAnalyzeMgr().refreshMultiColumnStatisticsCache(meta.getTableId());
                     }
                 } else {
                     BasicStatsMeta basicStatsMeta = analyzeMgr.getTableBasicStatsMeta(table.getId());
