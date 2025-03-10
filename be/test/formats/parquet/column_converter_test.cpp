@@ -246,6 +246,10 @@ TEST_F(ColumnConverterTest, Int32Test) {
             const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_BIGINT);
             check(file_path, col_type, col_name, "[-99998]", expected_rows);
         }
+        {
+            const TypeDescriptor col_type = TypeDescriptor::from_logical_type(LogicalType::TYPE_DOUBLE);
+            check(file_path, col_type, col_name, "[-99998]", expected_rows);
+        }
     }
     {
         const std::string col_name = "uint8";
