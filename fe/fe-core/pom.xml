@@ -534,6 +534,11 @@ under the License.
             <artifactId>hadoop-aliyun</artifactId>
         </dependency>
 
+        <dependency>
+            <groupId>org.jdom</groupId>
+            <artifactId>jdom2</artifactId>
+        </dependency>
+
         <!-- https://mvnrepository.com/artifact/com.qcloud.cos/hadoop-cos -->
         <dependency>
             <groupId>com.qcloud.cos</groupId>
