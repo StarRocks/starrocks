@@ -14,15 +14,11 @@
 package com.starrocks.common;
 
 import com.google.common.base.Strings;
-import org.apache.logging.log4j.Level;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.apache.logging.log4j.Marker;
 import org.apache.logging.log4j.message.Message;
 import org.apache.logging.log4j.message.MessageFactory;
 import org.apache.logging.log4j.message.SimpleMessage;
-import org.apache.logging.log4j.spi.ExtendedLogger;
-import org.apache.logging.log4j.spi.ExtendedLoggerWrapper;
 
 /**
  * A logger factory that adds a prefix to all log messages.
@@ -66,25 +62,6 @@ public class StarRocksLoggerFactory {
         @Override
         public Message newMessage(Object message) {
             return new SimpleMessage("[" + prefix + "] " + message.toString());
-        }
-    }
-
-    private final class StarRocksLocationAwareLogger extends ExtendedLoggerWrapper {
-        private final String prefix;
-
-        StarRocksLocationAwareLogger(final String logPrefix, Logger logger) {
-            super((ExtendedLogger)logger, logger.getName(), logger.getMessageFactory());
-            this.prefix = logPrefix;
-        }
-
-        protected String addPrefix(final String message) {
-            return prefix + message;
-        }
-        @Override
-        public void logMessage(final String fqcn, final Level level, final Marker marker, final Message message,
-                               final Throwable t) {
-            final String formattedMessage = addPrefix(message.getFormattedMessage());
-            super.logMessage(fqcn, level, marker, formattedMessage, t);
         }
     }
 }
