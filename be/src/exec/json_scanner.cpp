@@ -371,7 +371,8 @@ Status JsonReader::read_chunk(Chunk* chunk, int32_t rows_to_read) {
     try {
         return _read_chunk_with_except(chunk, rows_to_read);
     } catch (simdjson::simdjson_error& e) {
-        auto err_msg = "Unrecognized json format, stop json loader.";
+        auto err_msg = fmt::format("Unrecognized json format, stop json loader, error: {}",
+                                   simdjson::error_message(e.error()));
         _append_error_msg("", err_msg);
         LOG(WARNING) << err_msg;
         return json_parse_error(err_msg);
