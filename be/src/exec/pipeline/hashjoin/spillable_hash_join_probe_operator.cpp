@@ -314,6 +314,8 @@ Status SpillableHashJoinProbeOperator::_load_all_partition_build_side(RuntimeSta
                 if (yield_ctx.need_yield) {
                     defer.cancel();
                 }
+            } else {
+                yield_ctx.set_finished();
             }
         };
         auto yield_func = [&](workgroup::ScanTask&& task) { spill::IOTaskExecutor::force_submit(std::move(task)); };
