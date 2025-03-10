@@ -182,6 +182,8 @@ public class DateUtils {
             return DATE_TIME_FORMATTER_UNIX;
         } else if (dateTimeStr.length() == 26) {
             return DATE_TIME_MS_FORMATTER_UNIX;
+        } else if (dateTimeStr.length() == 14) {
+            return DATE_TIME_S_FORMATTER_UNIX;
         } else {
             throw new SemanticException("can not probe datetime format:" + dateTimeStr);
         }
