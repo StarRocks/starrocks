@@ -202,4 +202,9 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
                 ", properties=" + properties +
                 '}';
     }
+
+    @Override
+    public String getName() {
+        return analyzeType == StatsConstants.AnalyzeType.FULL ? "HyperFull" : "HyperSample";
+    }
 }

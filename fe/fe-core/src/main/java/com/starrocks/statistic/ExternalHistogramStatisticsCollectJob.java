@@ -70,6 +70,11 @@ public class ExternalHistogramStatisticsCollectJob extends StatisticsCollectJob 
     }
 
     @Override
+    public String getName() {
+        return "ExternalHistogram";
+    }
+
+    @Override
     public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
         context.getSessionVariable().setNewPlanerAggStage(1);
 
