@@ -38,6 +38,10 @@
 
 #include "testutil//assert.h"
 
+// let gcov to calculate code coverage for kafka_consumer_pipe.h
+#pragma GCC push_options
+#pragma GCC optimize("no-inline")
+
 namespace starrocks {
 
 class KafkaConsumerPipeTest : public testing::Test {
@@ -113,3 +117,4 @@ TEST_F(KafkaConsumerPipeTest, append_read_json) {
 }
 
 } // namespace starrocks
+#pragma GCC pop_options
