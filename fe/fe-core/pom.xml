@@ -1134,7 +1134,7 @@ under the License.
                 <configuration>
                     <filterClassPackage>com.starrocks.proto</filterClassPackage>
                     <generateProtoFile>true</generateProtoFile>
-                    <compileDependencies>true</compileDependencies>
+                    <compileDependencies>false</compileDependencies>
                 </configuration>
                 <executions>
                     <execution>

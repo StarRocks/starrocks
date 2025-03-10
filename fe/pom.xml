@@ -539,7 +539,6 @@ under the License.
                 <groupId>org.apache.spark</groupId>
                 <artifactId>spark-core_2.12</artifactId>
                 <version>${spark.version}</version>
-                <scope>provided</scope>
                 <exclusions>
                     <exclusion>
                         <groupId>org.slf4j</groupId>
