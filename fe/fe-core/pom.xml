@@ -885,7 +885,7 @@ under the License.
                     <filterClassPackage>com.starrocks.proto;com.starrocks.rpc;com.starrocks.server</filterClassPackage>
 >>>>>>> 1ac6d132d3 (update pom.xml)
                     <generateProtoFile>true</generateProtoFile>
-                    <compileDependencies>false</compileDependencies>
+                    <compileDependencies>true</compileDependencies>
                 </configuration>
                 <executions>
                     <execution>
