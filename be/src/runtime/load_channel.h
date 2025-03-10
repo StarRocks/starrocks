@@ -44,7 +44,7 @@
 #include "column/chunk.h"
 #include "common/compiler_util.h"
 #include "common/status.h"
-#include "common/tracer.h"
+#include "common/tracer_fwd.h"
 #include "gen_cpp/InternalService_types.h"
 #include "gen_cpp/Types_types.h"
 #include "gen_cpp/internal_service.pb.h"

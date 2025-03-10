@@ -47,6 +47,7 @@
 #include "column/map_column.h"
 #include "column/nullable_column.h"
 #include "common/statusor.h"
+#include "common/tracer.h"
 #include "config.h"
 #include "exec/pipeline/query_context.h"
 #include "exec/tablet_sink_colocate_sender.h"
