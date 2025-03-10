@@ -43,6 +43,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndexMeta;
 import com.starrocks.catalog.MaterializedView;
+import com.starrocks.catalog.MvId;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.OlapTable.OlapTableState;
 import com.starrocks.catalog.PartitionInfo;
@@ -50,6 +51,8 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.View;
+import com.starrocks.catalog.constraint.GlobalConstraintManager;
+import com.starrocks.catalog.constraint.TableWithFKConstraint;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
@@ -91,6 +94,7 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.apache.logging.log4j.util.Strings;
@@ -99,8 +103,12 @@ import java.io.IOException;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.starrocks.catalog.constraint.ForeignKeyConstraint.onParentTableChanged;
 
 public class AlterJobMgr {
     private static final Logger LOG = LogManager.getLogger(AlterJobMgr.class);
@@ -513,6 +521,47 @@ public class AlterJobMgr {
             updateTaskDefinition(oldMv);
             updateTaskDefinition(newMv);
         }
+
+        // swap uk-fk constraints: after swap table, the parent table of fk constraint should be updated
+        final GlobalConstraintManager globalConstraintManager = GlobalStateMgr.getCurrentState().getGlobalConstraintManager();
+        final Set<TableWithFKConstraint> newRefConstraints = globalConstraintManager.getRefConstraints(origTable);
+        final Set<TableWithFKConstraint> originRefConstraints = globalConstraintManager.getRefConstraints(newTbl);
+        refreshTableConstraints(globalConstraintManager, newRefConstraints, newTbl, origTblName);
+        refreshTableConstraints(globalConstraintManager, originRefConstraints, origTable, newTblName);
+
+        // TODO: refactor unique/foreign key constraint by using table name rather than id to support swap table
+        // invalidate related materialized views' foreign key constraints and unique constraints because of
+        // the table name changed
+        invalidateRelatedMaterializedViews(origTable);
+        invalidateRelatedMaterializedViews(newTbl);
+    }
+
+    private void refreshTableConstraints(GlobalConstraintManager globalConstraintManager,
+                                         Set<TableWithFKConstraint> newRefConstraints,
+                                         OlapTable newTbl,
+                                         String origTblName) {
+        onParentTableChanged(newRefConstraints, newTbl, origTblName);
+        globalConstraintManager.updateConstraint(newTbl, newRefConstraints);
+    }
+
+    private void invalidateRelatedMaterializedViews(OlapTable olapTable) {
+        if (olapTable == null || olapTable.getRelatedMaterializedViews() == null) {
+            return;
+        }
+        final Set<MvId> relatedMvIds = olapTable.getRelatedMaterializedViews();
+        relatedMvIds.stream()
+                .map(mvId -> (MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(mvId.getDbId(),
+                        mvId.getId()))
+                .filter(Objects::nonNull)
+                .forEach(mv -> {
+                    if (CollectionUtils.isNotEmpty(mv.getForeignKeyConstraints())) {
+                        mv.setForeignKeyConstraints(Lists.newArrayList());
+                    }
+                    if (CollectionUtils.isNotEmpty(mv.getUniqueConstraints())) {
+                        mv.setUniqueConstraints(Lists.newArrayList());
+                    }
+                });
+        relatedMvIds.clear();
     }
 
     public void alterView(AlterViewInfo alterViewInfo, boolean isReplay) {

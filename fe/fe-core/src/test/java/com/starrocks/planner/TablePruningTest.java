@@ -900,4 +900,51 @@ public class TablePruningTest extends TablePruningTestBase {
         String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
         Assert.assertTrue(plan, plan.contains("META-SCAN"));
     }
+
+    @Test
+    public void testPruneWithSwapTables() throws Exception {
+        ctx.getSessionVariable().setEnableCboTablePrune(true);
+        ctx.getSessionVariable().setEnableRboTablePrune(true);
+        String s1 = "CREATE TABLE s1 \n" +
+                "(\n" +
+                "    k1 int not null, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='s1.k1');";
+        String s2 = "CREATE TABLE s2 \n" +
+                "(\n" +
+                "    k1 int not null, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'unique_constraints'='s2.k1');";
+        String s3 = "CREATE TABLE s3 \n" +
+                "(\n" +
+                "    k1 int not null, k2 int, k3 int\n" +
+                ")\n" +
+                "DUPLICATE KEY(k1, k2)\n" +
+                "DISTRIBUTED BY RANDOM \n" +
+                "PROPERTIES(\"replication_num\" = \"1\", 'foreign_key_constraints'='s3(k1) REFERENCES s1(k1)');";
+        starRocksAssert.withTable(s1);
+        starRocksAssert.withTable(s2);
+        starRocksAssert.withTable(s3);
+
+        ctx.getSessionVariable().setOptimizerExecuteTimeout(300000);
+        String sql = "select s3.k2 from s1 join s3 on s1.k1 = s3.k1;";
+        {
+            String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
+            PlanTestBase.assertNotContains(plan, "s1");
+        }
+
+        String replaceStmt = "ALTER TABLE s2 SWAP WITH s1";
+        starRocksAssert.alterTable(replaceStmt);
+        {
+            String plan = UtFrameUtils.explainLogicalPlan(ctx, sql);
+            PlanTestBase.assertNotContains(plan, "s1");
+        }
+        starRocksAssert.dropTable("s1");
+        starRocksAssert.dropTable("s2");
+        starRocksAssert.dropTable("s3");
+    }
 }
