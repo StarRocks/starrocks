@@ -22,7 +22,7 @@ SHOW PROC { '/backends' | '/compute_nodes' | '/dbs' | '/jobs'
           | '/resources' | '/load_error_hub' | '/transactions' 
           | '/monitor' | '/current_queries' | '/current_backend_instances' 
           | '/cluster_balance' | '/routine_loads' | '/colocation_group' 
-          | '/catalog' | '/replications' }
+          | '/catalog' | '/replications'  | '/global_current_queries' }
 ```
 
 ## Parameters
@@ -48,6 +48,7 @@ SHOW PROC { '/backends' | '/compute_nodes' | '/dbs' | '/jobs'
 | '/colocation_group'          | Shows the information of Colocate Join groups in the cluster. |
 | '/catalog'                   | Shows the information of catalogs in the cluster.            |
 | '/replications'              | Shows the information of data replication tasks in the cluster. |
+| '/global_current_queries'    | Shows the information of running queries on all FE nodes in the cluster. |
 
 ## Examples
 
@@ -471,3 +472,27 @@ mysql> SHOW PROC '/replications';
 | State        | Status of the task. Valid values: INITIALIZING, SNAPSHOTING, REPLICATING, COMMITTED, ABORTED. |
 | Progress     | Progress of the task.           |
 | Error        | Error message (if any).         |
+
+
+**Example 15: Shows the information of running queries on the current FE node.**
+
+```sql
+MySQL > show proc '/current_queries';
++---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+----------+----------+-------------------+---------------+---------------+
+| StartTime           | feIp          | QueryId                              | ConnectionId | Database | User | ScanBytes  | ScanRows     | MemoryUsage | DiskSpillSize | CPUTime  | ExecTime | Warehouse         | CustomQueryId | ResourceGroup |
++---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+----------+----------+-------------------+---------------+---------------+
+| 2025-03-07 02:00:19 | 172.26.92.227 | ddbd69b9-fab4-11ef-8063-461f20abc3f0 | 11           | tpcds_2  | root | 120.573 MB | 5859503 rows | 296.432 MB  | 0.000 B       | 27.888 s | 3.153 s  | default_warehouse |               | rg1           |
++---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+----------+----------+-------------------+---------------+---------------+
+```
+
+**Example 16: Shows the information of running queries on all FE nodes in the cluster.**
+
+```sql
+MySQL > show proc '/global_current_queries';
++---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+---------+----------+-------------------+---------------+---------------+
+| StartTime           | feIp          | QueryId                              | ConnectionId | Database | User | ScanBytes  | ScanRows     | MemoryUsage | DiskSpillSize | CPUTime | ExecTime | Warehouse         | CustomQueryId | ResourceGroup |
++---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+---------+----------+-------------------+---------------+---------------+
+| 2025-03-07 02:02:47 | 172.26.92.227 | 3603d566-fab5-11ef-8063-461f20abc3f0 | 12           | tpcds_2  | root | 100.886 MB | 4899036 rows | 114.491 MB  | 0.000 B       | 5.700 s | 0.713 s  | default_warehouse |               | rg1           |
++---------------------+---------------+--------------------------------------+--------------+----------+------+------------+--------------+-------------+---------------+---------+----------+-------------------+---------------+---------------+
+
+```
