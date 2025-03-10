@@ -297,11 +297,15 @@ std::string PaimonInputStream::GetUri() const {
 
 void PaimonInputStream::ReadAsync(char* buffer, uint32_t size, uint64_t offset,
                                   std::function<void(paimon::Status)>&& callback) {
-    auto st = _file->read_at_fully(offset, buffer, size);
-    if (!st.ok()) {
-        callback(paimon::Status::IOError(
-                fmt::format("Failed to read async for file {}, reason: {}", _file->filename(), st.detailed_message())));
+    paimon::Result<int32_t> read_size = Read(buffer, size, offset);
+    paimon::Status status =  paimon::Status::OK();
+    if (read_size.ok() && (uint32_t)read_size.value() != size) {
+        status =  paimon::Status::IOError(fmt::format("file '{}' async read size {} != expected {}",
+                                             _file->filename(), read_size.value(), size));
+    } else if (!read_size.ok()) {
+        status = read_size.status();
     }
+    callback(status);
 }
 
 PaimonOutputStream::PaimonOutputStream(std::unique_ptr<WritableFile> file) : _file(std::move(file)) {}
