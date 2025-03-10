@@ -197,6 +197,8 @@ public:
 
     static AggregateFunctionPtr MakePercentileApproxAggregateFunction();
 
+    static AggregateFunctionPtr MakePercentileApproxWeightedAggregateFunction();
+
     static AggregateFunctionPtr MakePercentileUnionAggregateFunction();
 
     template <LogicalType LT>
