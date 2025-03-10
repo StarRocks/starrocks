@@ -165,14 +165,7 @@ explain select * from o where ts>cast(1741892007 as STRING);
 -- result:
 [REGEX].*partitions=1/3.*
 -- !result
-<<<<<<< HEAD
-explain select * from o where ts>'1740108713';
--- result:
-[REGEX].*partitions=2/3.*
--- !result
 
-=======
->>>>>>> d349fe0c83 ([UT] Fix unstable sql test (#56762))
 -- name: test_prune_convert_tz
 CREATE TABLE ts (
 	ts DATETIME NOT NULL,
