@@ -167,8 +167,8 @@ inline int sse_memcmp2(const char* p1, const char* p2, size_t size) {
     __m128i right = _mm_lddqu_si128((__m128i*)(p2));
     __m128i nz = ~_mm_cmpeq_epi8(left, right);
     unsigned short mask = _mm_movemask_epi8(nz);
-    volatile int index = __builtin_ctz(mask);
-    if (index >= size) return 0;
+    int index = __builtin_ctz(mask);
+    if (mask == 0 || index >= size) return 0;
     return (int)(uint8_t)p1[index] - (int)(uint8_t)p2[index];
 }
 #endif
