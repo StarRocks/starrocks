@@ -173,7 +173,7 @@ Status TabletMeta::reset_tablet_uid(const string& file_path) {
     tmp_tablet_meta.to_meta_pb(&tmp_tablet_meta_pb);
     *(tmp_tablet_meta_pb.mutable_tablet_uid()) = TabletUid::gen_uid().to_proto();
     if (res = save(file_path, tmp_tablet_meta_pb); !res.ok()) {
-        LOG(FATAL) << "fail to save tablet meta pb to " << file_path << ": " << res;
+        LOG(WARNING) << "fail to save tablet meta pb to " << file_path << ": " << res;
         return res;
     }
     return res;

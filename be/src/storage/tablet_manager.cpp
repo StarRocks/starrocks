@@ -425,9 +425,8 @@ Status TabletManager::drop_tablet(TTabletId tablet_id, TabletDropFlag flag) {
             (void)dropped_tablet->set_tablet_state(TABLET_SHUTDOWN);
         }
 
-        // Remove tablet meta from storage, crash the program if failed.
         if (auto st = _remove_tablet_meta(dropped_tablet); !st.ok()) {
-            LOG(FATAL) << "Fail to remove tablet meta: " << st;
+            return Status::InternalError(strings::Substitute("fail to remove tablet $0 $1", tablet_id, st.to_string()));
         }
 
         // Remove the tablet directory in background to avoid holding the lock of tablet map shard for long.
@@ -1512,7 +1511,7 @@ Status TabletManager::_create_tablet_meta_unlocked(const TCreateTabletReq& reque
 Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag flag) {
     StarRocksMetrics::instance()->drop_tablet_requests_total.increment(1);
 
-    if (flag != kDeleteFiles && flag != kMoveFilesToTrash && flag != kKeepMetaAndFiles) {
+    if (flag != kMoveFilesToTrash && flag != kKeepMetaAndFiles) {
         return Status::InvalidArgument(fmt::format("invalid TabletDropFlag {}", (int)flag));
     }
 
@@ -1541,26 +1540,7 @@ Status TabletManager::_drop_tablet_unlocked(TTabletId tablet_id, TabletDropFlag 
         dropped_tablet->updates()->stop_and_wait_apply_done();
     }
 
-    if (flag == kDeleteFiles) {
-        {
-            // NOTE: Other threads may save the tablet meta back to storage again after we
-            // have deleted it here, and the tablet will reappear after restarted.
-            // To prevent this, set the tablet state to `SHUTDOWN` first before removing tablet
-            // meta from storage, and assuming that no thread will change the tablet state back
-            // to 'RUNNING' from 'SHUTDOWN'.
-            std::unique_lock l(dropped_tablet->get_header_lock());
-            CHECK(dropped_tablet->set_tablet_state(TABLET_SHUTDOWN).ok());
-        }
-
-        // Remove tablet meta from storage, crash the program if failed.
-        if (auto st = _remove_tablet_meta(dropped_tablet); !st.ok()) {
-            LOG(FATAL) << "Fail to remove tablet meta: " << st;
-        }
-
-        // Remove the tablet directory in background to avoid holding the lock of tablet map shard for long.
-        std::unique_lock l(_shutdown_tablets_lock);
-        _add_shutdown_tablet_unlocked(tablet_id, std::move(drop_info));
-    } else if (flag == kMoveFilesToTrash) {
+    if (flag == kMoveFilesToTrash) {
         {
             // See comments above
             std::unique_lock l(dropped_tablet->get_header_lock());
