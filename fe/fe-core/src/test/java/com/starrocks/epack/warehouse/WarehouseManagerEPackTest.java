@@ -15,6 +15,8 @@
 package com.starrocks.epack.warehouse;
 
 import com.google.common.collect.Maps;
+import com.staros.proto.ReplicationType;
+import com.staros.proto.WarmupLevel;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorReportException;
@@ -94,8 +96,8 @@ public class WarehouseManagerEPackTest {
     public void testAlterWarehouse() throws DdlException {
         new MockUp<StarOSAgentEpack>() {
             @Mock
-            public void updateWorkerGroup(long workerGroupId, int replicaNumber, String replicationTypeStr)
-                    throws DdlException {
+            public void updateWorkerGroup(long workerGroupId, int replicaNumber, ReplicationType replicationType,
+                                          WarmupLevel warmupLevel) throws DdlException {
             }
         };
         new MockUp<GlobalStateMgr>() {
