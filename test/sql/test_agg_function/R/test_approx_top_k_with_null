@@ -125,22 +125,13 @@ PROPERTIES (
 insert into t2 select idx, null, null from __row_util;
 -- result:
 -- !result
-with w1 as (select approx_top_k(c2, 3) as x from t1) -- non-group-by.
+with w1 as (select approx_top_k(c2, 3) as x from t2) -- non-group-by.
 select array_sortby((x) -> x.item, x) from w1;
 -- result:
-[{"item":null,"count":1281000},{"item":0,"count":640000},{"item":1,"count":640000}]
+[{"item":null,"count":1280000}]
 -- !result
-with w1 as (select approx_top_k(c2, 3) as x, c1 from t1 group by c1) -- group by.
+with w1 as (select approx_top_k(c2, 3) as x, c1 from t2 group by c1) -- group by.
 select c1, array_sortby((x) -> x.item, x) from w1 order by c1;
 -- result:
-0	[{"item":null,"count":128100},{"item":0,"count":128000}]
-1	[{"item":null,"count":128100},{"item":1,"count":128000}]
-2	[{"item":null,"count":128100},{"item":0,"count":128000}]
-3	[{"item":null,"count":128100},{"item":1,"count":128000}]
-4	[{"item":null,"count":128100},{"item":0,"count":128000}]
-5	[{"item":null,"count":128100},{"item":1,"count":128000}]
-6	[{"item":null,"count":128100},{"item":0,"count":128000}]
-7	[{"item":null,"count":128100},{"item":1,"count":128000}]
-8	[{"item":null,"count":128100},{"item":0,"count":128000}]
-9	[{"item":null,"count":128100},{"item":1,"count":128000}]
+None	[{"item":null,"count":1280000}]
 -- !result
