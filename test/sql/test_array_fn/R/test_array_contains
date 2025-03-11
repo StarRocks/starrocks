@@ -2118,6 +2118,8 @@ SELECT id FROM test_array_contains WHERE array_contains_seq(array_varchar, ['a',
 -- !result
 
 
+
+
 -- name: test_array_contains_complex_type
 CREATE TABLE test_array_contains_complex_type (
     id INT,
@@ -2364,6 +2366,8 @@ select array_contains([null], null), array_position([null], null);
 1	1
 -- !result
 
+
+
 -- name: test_array_contains_with_null
 CREATE TABLE t ( 
 pk bigint not null ,
@@ -2388,4 +2392,8 @@ insert into t select 1, null, null, null, null;
 select /*+ set_var(pipeline_dop=1) */ pk, array_contains(arr_bigint, 1000), arr_bigint from t order by pk limit 1;
 -- result:
 0	0	[0,0,0,0,0,0,0,0,0,0]
+-- !result
+select /*+ set_var(pipeline_dop=1) */ pk, array_length(arr_bigint), arr_bigint from t order by pk limit 1;
+-- result:
+0	10	[0,0,0,0,0,0,0,0,0,0]
 -- !result

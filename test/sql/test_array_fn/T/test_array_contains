@@ -557,3 +557,5 @@ PROPERTIES (
 insert into t select generate_series, md5sum(generate_series), array_repeat(generate_series, 10),array_repeat(md5sum(generate_series), 10), array_repeat(generate_series, 1000) from table(generate_series(0, 9999));
 insert into t select 1, null, null, null, null;
 select /*+ set_var(pipeline_dop=1) */ pk, array_contains(arr_bigint, 1000), arr_bigint from t order by pk limit 1;
+select /*+ set_var(pipeline_dop=1) */ pk, array_length(arr_bigint), arr_bigint from t order by pk limit 1;
+
