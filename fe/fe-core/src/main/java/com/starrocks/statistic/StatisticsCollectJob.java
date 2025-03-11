@@ -144,23 +144,8 @@ public abstract class StatisticsCollectJob {
         return this.priority;
     }
 
-<<<<<<< HEAD
-=======
-    public boolean isMultiColumnStatsJob() {
-        return !statisticsTypes.isEmpty();
-    }
-
-    public List<StatsConstants.StatisticsType> getStatisticsTypes() {
-        return statisticsTypes;
-    }
-
-    public List<List<String>> getColumnGroups() {
-        return columnGroups;
-    }
-
     abstract String getName();
 
->>>>>>> 960607235a ([Enhancement] add metrics for statistics collect jobs (#56693))
     protected void setDefaultSessionVariable(ConnectContext context) {
         SessionVariable sessionVariable = context.getSessionVariable();
         // Statistics collecting is not user-specific, which means response latency is not that important.

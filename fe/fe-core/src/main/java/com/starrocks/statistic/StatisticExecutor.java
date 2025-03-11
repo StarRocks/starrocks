@@ -30,14 +30,8 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.Status;
 import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.UUIDUtil;
-<<<<<<< HEAD
-=======
-import com.starrocks.connector.RemoteFilesSampleStrategy;
-import com.starrocks.connector.statistics.StatisticsUtils;
 import com.starrocks.metric.LongCounterMetric;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.planner.ScanNode;
->>>>>>> 960607235a ([Enhancement] add metrics for statistics collect jobs (#56693))
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
