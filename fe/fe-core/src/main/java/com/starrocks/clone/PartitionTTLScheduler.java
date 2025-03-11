@@ -119,6 +119,8 @@ public class PartitionTTLScheduler {
             if (CollectionUtils.isEmpty(dropPartitionNames)) {
                 continue;
             }
+            LOG.info("database={}, table={} has ttl partitions to drop: {}", db.getOriginName(), olapTable.getName(),
+                    dropPartitionNames);
 
             // do drop partitions
             String tableName = olapTable.getName();
