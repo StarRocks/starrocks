@@ -57,10 +57,13 @@ QueryContext::~QueryContext() noexcept {
     // current RuntimeState to release Operators, OperatorFactories in the remaining RuntimeStates will trigger
     // segmentation fault.
     if (_mem_tracker != nullptr) {
-        LOG(INFO) << fmt::format(
-                "finished query_id:{} context life time:{} cpu costs:{} peak memusage:{} scan_bytes:{} spilled "
-                "bytes:{}",
-                print_id(query_id()), lifetime(), cpu_cost(), mem_cost_bytes(), get_scan_bytes(), get_spill_bytes());
+        if (lifetime() > config::big_query_sec * 1000 * 1000 * 1000) {
+            LOG(INFO) << fmt::format(
+                    "finished query_id:{} context life time:{} cpu costs:{} peak memusage:{} scan_bytes:{} spilled "
+                    "bytes:{}",
+                    print_id(query_id()), lifetime(), cpu_cost(), mem_cost_bytes(), get_scan_bytes(),
+                    get_spill_bytes());
+        }
     }
 
     {
