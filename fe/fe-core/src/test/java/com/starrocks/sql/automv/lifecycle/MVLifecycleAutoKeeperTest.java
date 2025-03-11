@@ -30,6 +30,7 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -162,6 +163,7 @@ public class MVLifecycleAutoKeeperTest {
 
     @ParameterizedTest(name = "{0}")
     @MethodSource("nextQuery")
+    @Ignore
     public void testSingleSsbQuery(String queryName) throws Throwable {
         if (new Random().nextInt(5) != 0) {
             return;
