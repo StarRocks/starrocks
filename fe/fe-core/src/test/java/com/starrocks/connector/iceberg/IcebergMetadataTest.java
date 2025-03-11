@@ -68,6 +68,7 @@ import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
 import com.starrocks.sql.ast.AlterClause;
 import com.starrocks.sql.ast.AlterTableCommentClause;
+import com.starrocks.sql.ast.AlterTableOperationClause;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.ColumnRenameClause;
@@ -106,6 +107,7 @@ import org.apache.iceberg.DataFile;
 import org.apache.iceberg.DataFiles;
 import org.apache.iceberg.FileScanTask;
 import org.apache.iceberg.MetricsModes;
+import org.apache.iceberg.Snapshot;
 import org.apache.iceberg.TableMetadata;
 import org.apache.iceberg.TableProperties;
 import org.apache.iceberg.TableScan;
@@ -143,6 +145,7 @@ import static com.starrocks.connector.iceberg.IcebergCatalogProperties.ICEBERG_C
 import static com.starrocks.connector.iceberg.IcebergMetadata.COMPRESSION_CODEC;
 import static com.starrocks.connector.iceberg.IcebergMetadata.FILE_FORMAT;
 import static com.starrocks.connector.iceberg.IcebergMetadata.LOCATION_PROPERTY;
+import static com.starrocks.connector.iceberg.IcebergTableOperation.REMOVE_ORPHAN_FILES;
 
 public class IcebergMetadataTest extends TableTestBase {
     private static final String CATALOG_NAME = "iceberg_catalog";
@@ -1518,5 +1521,103 @@ public class IcebergMetadataTest extends TableTestBase {
         };
         Assert.assertEquals(1, icebergTable.getTableIdentifier().split(":").length);
         Assert.assertEquals(3, icebergTable.getUUID().split("\\.").length);
+    }
+
+    @Test
+    public void testAlterTableExecuteRemoveOrphanFiles(@Mocked IcebergHiveCatalog icebergHiveCatalog,
+                                                       @Mocked Snapshot snapshot) throws Exception {
+        new MockUp<IcebergMetadata>() {
+            @Mock
+            public Database getDb(String dbName) {
+                return new Database(1, "db");
+            }
+        };
+
+        new MockUp<IcebergHiveCatalog>() {
+            @Mock
+            org.apache.iceberg.Table getTable(String dbName, String tableName) throws StarRocksConnectorException {
+                return mockedNativeTableA;
+            }
+
+            @Mock
+            boolean tableExists(String dbName, String tableName) {
+                return true;
+            }
+        };
+
+
+        // Normalize Date
+        TableName tableName = new TableName(CATALOG_NAME, "db", "table");
+        AlterTableOperationClause clause = new AlterTableOperationClause(NodePosition.ZERO,
+                REMOVE_ORPHAN_FILES.toString(), List.of());
+        clause.setArgs(List.of(ConstantOperator.createChar("2024-01-01 00:00:00")));
+
+        IcebergAlterTableExecutor executor = new IcebergAlterTableExecutor(new AlterTableStmt(
+                tableName,
+                List.of(clause)),
+                icebergHiveCatalog.getTable(tableName.getDb(), tableName.getTbl()), icebergHiveCatalog, HDFS_ENVIRONMENT);
+        executor.execute();
+
+        // Illegal date
+        tableName = new TableName(CATALOG_NAME, "db", "table");
+        clause = new AlterTableOperationClause(NodePosition.ZERO, REMOVE_ORPHAN_FILES.toString(), List.of());
+        clause.setArgs(List.of(ConstantOperator.createChar("illegal date")));
+
+        executor = new IcebergAlterTableExecutor(new AlterTableStmt(
+                tableName,
+                List.of(clause)),
+                icebergHiveCatalog.getTable(tableName.getDb(), tableName.getTbl()), icebergHiveCatalog, HDFS_ENVIRONMENT);
+        IcebergAlterTableExecutor finalExecutor = executor;
+        Assert.assertThrows(DdlException.class, finalExecutor::execute);
+
+        // Default retention interval
+        tableName = new TableName(CATALOG_NAME, "db", "table");
+        clause = new AlterTableOperationClause(NodePosition.ZERO, REMOVE_ORPHAN_FILES.toString(), List.of());
+        clause.setArgs(List.of(ConstantOperator.createChar("")));
+
+        executor = new IcebergAlterTableExecutor(new AlterTableStmt(
+                tableName,
+                List.of(clause)),
+                icebergHiveCatalog.getTable(tableName.getDb(), tableName.getTbl()), icebergHiveCatalog, HDFS_ENVIRONMENT);
+        finalExecutor = executor;
+        Assert.assertThrows(DdlException.class, finalExecutor::execute);
+
+        // Mock snapshot behavior
+        new Expectations() {{
+                snapshot.snapshotId();
+                result = 1L;
+                minTimes = 0;
+
+                snapshot.timestampMillis();
+                result = System.currentTimeMillis();
+                minTimes = 0;
+
+                snapshot.parentId();
+                result = 0L;
+                minTimes = 0;
+            }};
+
+        new MockUp<org.apache.iceberg.BaseTable>() {
+            @Mock
+            public org.apache.iceberg.Snapshot currentSnapshot() {
+                return snapshot;
+            }
+
+            @Mock
+            public Iterable<org.apache.iceberg.Snapshot> snapshots() {
+                return List.of(snapshot, snapshot, snapshot);
+            }
+        };
+
+        // inject snapshot
+        tableName = new TableName(CATALOG_NAME, "db", "table");
+        clause = new AlterTableOperationClause(NodePosition.ZERO, REMOVE_ORPHAN_FILES.toString(), List.of());
+        clause.setArgs(List.of(ConstantOperator.createChar("2024-01-01 00:00:00")));
+
+        executor = new IcebergAlterTableExecutor(new AlterTableStmt(
+                tableName,
+                List.of(clause)),
+                icebergHiveCatalog.getTable(tableName.getDb(), tableName.getTbl()), icebergHiveCatalog, HDFS_ENVIRONMENT);
+        executor.execute();
     }
 }
