@@ -87,4 +87,9 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
         }
     }
 
+    @Override
+    public String getName() {
+        return "Sample";
+    }
+
 }
