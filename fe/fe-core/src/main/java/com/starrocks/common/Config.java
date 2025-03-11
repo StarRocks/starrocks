@@ -2444,6 +2444,12 @@ public class Config extends ConfigBase {
     public static long iceberg_metadata_cache_max_entry_size = 8388608L;
 
     /**
+     * paimon metadata cache preheat, default false
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_paimon_refresh_manifest_files = false;
+
+    /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs
      */
     @ConfField
