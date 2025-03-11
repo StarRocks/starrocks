@@ -856,13 +856,20 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         logger.info("prepare refresh mv, properties:{}", properties);
         // NOTE: mvId is set in Task's properties when creating
         long mvId = Long.parseLong(properties.get(MV_ID));
+        this.db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(context.ctx.getDatabase());
         if (db == null) {
+            logger.warn("database {} do not exist when refreshing materialized view:{}", context.ctx.getDatabase(), mvId);
             throw new DmlException("database " + context.ctx.getDatabase() + " do not exist.");
         }
-        if (mv == null) {
+        Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId);
+        if (table == null || !(table instanceof MaterializedView)) {
             throw new DmlException(String.format("materialized view:%s in database:%s do not exist when refreshing",
                     mvId, context.ctx.getDatabase()));
         }
+        this.mv = (MaterializedView) table;
+        // reinit the logger
+        this.logger = MVTraceUtils.getLogger(mv, PartitionBasedMvRefreshProcessor.class);
+
         // try to activate the mv before refresh
         if (!mv.isActive()) {
             MVActiveChecker.tryToActivate(mv);
