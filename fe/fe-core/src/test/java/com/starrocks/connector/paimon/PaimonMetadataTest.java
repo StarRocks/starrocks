@@ -14,18 +14,21 @@
 
 package com.starrocks.connector.paimon;
 
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.connector.ConnectorMetadatRequestContext;
 import com.starrocks.connector.ConnectorProperties;
 import com.starrocks.connector.ConnectorType;
 import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.HdfsEnvironment;
 import com.starrocks.connector.RemoteFileInfo;
+import com.starrocks.connector.hive.ConnectorTableMetadataProcessor;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudType;
 import com.starrocks.qe.ConnectContext;
@@ -46,11 +49,11 @@ import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.data.BinaryRowWriter;
-import org.apache.paimon.data.BinaryString;
 import org.apache.paimon.data.GenericRow;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
 import org.apache.paimon.io.DataFileMeta;
+import org.apache.paimon.partition.Partition;
 import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.reader.RecordReader;
 import org.apache.paimon.reader.RecordReaderIterator;
@@ -63,7 +66,6 @@ import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
 import org.apache.paimon.table.source.TableScan;
 import org.apache.paimon.table.system.ManifestsTable;
-import org.apache.paimon.table.system.PartitionsTable;
 import org.apache.paimon.table.system.SchemasTable;
 import org.apache.paimon.table.system.SnapshotsTable;
 import org.apache.paimon.types.BigIntType;
@@ -71,7 +73,6 @@ import org.apache.paimon.types.BooleanType;
 import org.apache.paimon.types.CharType;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
-import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.types.DoubleType;
 import org.apache.paimon.types.IntType;
 import org.apache.paimon.types.LocalZonedTimestampType;
@@ -84,7 +85,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -241,66 +241,19 @@ public class PaimonMetadataTest {
     }
 
     @Test
-    public void testListPartitionNames(@Mocked FileStoreTable mockPaimonTable,
-                                       @Mocked PartitionsTable mockPartitionTable,
-                                       @Mocked RecordReader<InternalRow> mockRecordReader)
-            throws Catalog.TableNotExistException, IOException {
-
-        RowType tblRowType = RowType.of(
-                new DataType[] {
-                        new IntType(true),
-                        new IntType(true)
-                },
-                new String[] {"year", "month"});
-
+    public void testListPartitionNames(@Mocked FileStoreTable mockPaimonTable)
+            throws Catalog.TableNotExistException {
         List<String> partitionNames = Lists.newArrayList("year", "month");
-
-        Identifier tblIdentifier = new Identifier("db1", "tbl1");
-        Identifier partitionTblIdentifier = new Identifier("db1", "tbl1$partitions");
-
         RowType partitionRowType = new RowType(
                 Arrays.asList(
-                        new DataField(0, "partition", SerializationUtils.newStringType(true)),
-                        new DataField(1, "record_count", new BigIntType(false)),
-                        new DataField(2, "file_size_in_bytes", new BigIntType(false)),
-                        new DataField(3, "file_count", new BigIntType(false)),
-                        new DataField(4, "last_update_time", DataTypes.TIMESTAMP_MILLIS())
+                        new DataField(0, "year", SerializationUtils.newStringType(false)),
+                        new DataField(1, "month", SerializationUtils.newStringType(false))
                 ));
-
-        GenericRow row1 = new GenericRow(5);
-        row1.setField(0, BinaryString.fromString("[2020, 1]"));
-        row1.setField(1, 100L);
-        row1.setField(2, 1L);
-        row1.setField(3, 1L);
-        row1.setField(4, Timestamp.fromLocalDateTime(LocalDateTime.of(2023, 1, 1, 0, 0, 0, 0)));
-
-        GenericRow row2 = new GenericRow(5);
-        row2.setField(0, BinaryString.fromString("[2020, 2]"));
-        row2.setField(1, 100L);
-        row2.setField(2, 1L);
-        row2.setField(3, 1L);
-        row2.setField(4, Timestamp.fromLocalDateTime(LocalDateTime.of(2023, 2, 1, 0, 0, 0, 0)));
-        new MockUp<RecordReaderIterator>() {
-            private int callCount;
-            private final GenericRow[] elements = {row1, row2};
-            private final boolean[] hasNextOutputs = {true, true, false};
-
-            @Mock
-            public boolean hasNext() {
-                if (callCount < hasNextOutputs.length) {
-                    return hasNextOutputs[callCount];
-                }
-                return false;
-            }
-
-            @Mock
-            public InternalRow next() {
-                if (callCount < elements.length) {
-                    return elements[callCount++];
-                }
-                return null;
-            }
-        };
+        Identifier tblIdentifier = new Identifier("db1", "tbl1");
+        org.apache.paimon.partition.Partition partition1 = new Partition(Map.of("year", "2020", "month", "1"),
+                100L, 1L, 1L, 1741327322000L);
+        org.apache.paimon.partition.Partition partition2 = new Partition(Map.of("year", "2020", "month", "2"),
+                100L, 1L, 1L, 1741327322000L);
 
         new Expectations() {
             {
@@ -309,20 +262,34 @@ public class PaimonMetadataTest {
                 mockPaimonTable.partitionKeys();
                 result = partitionNames;
                 mockPaimonTable.rowType();
-                result = tblRowType;
-                paimonNativeCatalog.getTable(partitionTblIdentifier);
-                result = mockPartitionTable;
-                mockPartitionTable.rowType();
                 result = partitionRowType;
-
-                mockPartitionTable.newReadBuilder().withProjection((int[]) any).newRead().createReader((TableScan.Plan) any);
-                result = mockRecordReader;
+                paimonNativeCatalog.listPartitions(tblIdentifier);
+                result = Arrays.asList(partition1, partition2);
             }
         };
         List<String> result = metadata.listPartitionNames("db1", "tbl1", ConnectorMetadatRequestContext.DEFAULT);
         Assert.assertEquals(2, result.size());
-        List<String> expections = Lists.newArrayList("year=2020/month=1", "year=2020/month=2");
-        Assertions.assertThat(result).hasSameElementsAs(expections);
+        List<String> expectations = Lists.newArrayList("year=2020/month=1", "year=2020/month=2");
+        Assertions.assertThat(result).hasSameElementsAs(expectations);
+        Config.enable_paimon_refresh_manifest_files = true;
+        metadata.refreshTable("db1", metadata.getTable("db1", "tbl1"), new ArrayList<>(), false);
+        metadata.refreshTable("db1", metadata.getTable("db1", "tbl1"), expectations, false);
+
+    }
+
+    @Test
+    public void testRefreshPaimonMetadata() throws Catalog.DatabaseNotExistException {
+        new Expectations() {
+            {
+                paimonNativeCatalog.listDatabases();
+                result = ImmutableList.of("db");
+                paimonNativeCatalog.listTables((String) any);
+                result = ImmutableList.of("tbl");
+            }
+        };
+        ConnectorTableMetadataProcessor connectorTableMetadataProcessor = new ConnectorTableMetadataProcessor();
+        connectorTableMetadataProcessor.registerPaimonCatalog("paimon_catalog", paimonNativeCatalog);
+        connectorTableMetadataProcessor.refreshPaimonCatalog();
     }
 
     @Test
