@@ -18,12 +18,10 @@ import com.google.gson.annotations.SerializedName;
 import com.starrocks.common.io.Text;
 import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.system.Backend;
-import com.starrocks.system.ComputeNode;
 
 import java.io.DataInput;
 import java.io.IOException;
-import java.util.Map;
+import java.util.List;
 
 public class UpdateHistoricalNodeLog implements Writable {
     @SerializedName(value = "warehouse")
@@ -32,18 +30,17 @@ public class UpdateHistoricalNodeLog implements Writable {
     @SerializedName(value = "updateTime")
     private long updateTime;
 
-    @SerializedName(value = "idToBackend")
-    private Map<Long, Backend> idToBackend;
+    @SerializedName(value = "backendIds")
+    private List<Long> backendIds;
 
-    @SerializedName(value = "needUpdateComputeNode")
-    private Map<Long, ComputeNode> idToComputeNode;
+    @SerializedName(value = "computeNodeIds")
+    private List<Long> computeNodeIds;
 
-    public UpdateHistoricalNodeLog(String warehouse, long updateTime, Map<Long, Backend> idToBackend,
-                                   Map<Long, ComputeNode> idToComputeNode) {
+    public UpdateHistoricalNodeLog(String warehouse, long updateTime, List<Long> backendIds, List<Long> computeNodeIds) {
         this.warehouse = warehouse;
         this.updateTime = updateTime;
-        this.idToBackend = idToBackend;
-        this.idToComputeNode = idToComputeNode;
+        this.backendIds = backendIds;
+        this.computeNodeIds = computeNodeIds;
     }
 
     public String getWarehouse() {
@@ -54,12 +51,12 @@ public class UpdateHistoricalNodeLog implements Writable {
         return updateTime;
     }
 
-    public Map<Long, Backend> getIdToBackend() {
-        return idToBackend;
+    public List<Long> getBackendIds() {
+        return backendIds;
     }
 
-    public Map<Long, ComputeNode> getIdToComputeNode() {
-        return idToComputeNode;
+    public List<Long> getComputeNodeIds() {
+        return computeNodeIds;
     }
 
     public static UpdateHistoricalNodeLog read(DataInput in) throws IOException {
