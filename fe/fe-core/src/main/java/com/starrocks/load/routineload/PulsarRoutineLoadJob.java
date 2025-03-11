@@ -139,7 +139,7 @@ public class PulsarRoutineLoadJob extends RoutineLoadJob {
 
     @Override
     protected String getSourceLagString(String progressJsonStr) {
-        // empty implement. 
+        // empty implement.
         return "";
     }
 
