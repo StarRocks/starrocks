@@ -282,6 +282,9 @@ public class TaskRun implements Comparable<TaskRun> {
         taskRunContext.setExecuteOption(executeOption);
         taskRunContext.setTaskRun(this);
 
+        // prepare to execute task run, move it here so that we can catch the exception and set the status
+        processor.prepare(taskRunContext);
+        // process task run
         processor.processTaskRun(taskRunContext);
 
         QueryState queryState = runCtx.getState();

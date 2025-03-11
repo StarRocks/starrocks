@@ -178,7 +178,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     // 4. construct the refresh sql and execute it
     // 5. update the source table version map if refresh task completes successfully
     @Override
-    public void processTaskRun(TaskRunContext context) {
+    public void processTaskRun(TaskRunContext context) throws Exception {
         // register tracers
         Tracers.register(context.getCtx());
         QueryDebugOptions queryDebugOptions = context.getCtx().getSessionVariable().getQueryDebugOptions();
@@ -192,11 +192,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         QueryMaterializationContext queryMVContext = new QueryMaterializationContext();
         connectContext.setQueryMVContext(queryMVContext);
         try {
-            // prepare
-            try (Timer ignored = Tracers.watchScope("MVRefreshPrepare")) {
-                prepare(context);
-            }
-
             // do refresh
             try (Timer ignored = Tracers.watchScope("MVRefreshDoWholeRefresh")) {
                 // refresh mv
@@ -214,19 +209,23 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             connectContext.getState().setError(e.getMessage());
             throw e;
         } finally {
-            // reset query mv context to avoid affecting other tasks
-            queryMVContext.clear();
-            connectContext.setQueryMVContext(null);
+            try {
+                // reset query mv context to avoid affecting other tasks
+                queryMVContext.clear();
+                connectContext.setQueryMVContext(null);
 
-            if (FeConstants.runningUnitTest) {
-                runtimeProfile = new RuntimeProfile();
-                Tracers.toRuntimeProfile(runtimeProfile);
+                if (FeConstants.runningUnitTest) {
+                    runtimeProfile = new RuntimeProfile();
+                    Tracers.toRuntimeProfile(runtimeProfile);
+                }
+                if (logger.isDebugEnabled()) {
+                    logger.debug("refresh mv trace logs: {}", Tracers.getTrace(mvRefreshTraceMode));
+                }
+                Tracers.close();
+                postProcess();
+            } catch (Exception e) {
+                logger.error("Failed to close Tracers", e);
             }
-            if (logger.isDebugEnabled()) {
-                logger.debug("refresh mv trace logs: {}", Tracers.getTrace(mvRefreshTraceMode));
-            }
-            Tracers.close();
-            postProcess();
         }
     }
 
@@ -851,7 +850,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     }
 
     @VisibleForTesting
-    public void prepare(TaskRunContext context) {
+    @Override
+    public void prepare(TaskRunContext context) throws Exception {
         Map<String, String> properties = context.getProperties();
         logger.info("prepare refresh mv, properties:{}", properties);
         // NOTE: mvId is set in Task's properties when creating

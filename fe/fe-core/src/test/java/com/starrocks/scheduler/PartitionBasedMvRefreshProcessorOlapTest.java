@@ -866,7 +866,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         Assert.assertEquals(3, baseTableVisibleVersionMap.get(tbl1.getId()).get("p100").getVersion());
     }
 
-    private PartitionBasedMvRefreshProcessor createProcessor(TaskRun taskRun, MaterializedView mv) {
+    private PartitionBasedMvRefreshProcessor createProcessor(TaskRun taskRun, MaterializedView mv) throws Exception {
         TaskRunContext context = new TaskRunContext();
         context.setTaskRun(taskRun);
         context.setCtx(connectContext);
@@ -875,7 +875,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         Map<String, String> props = Maps.newHashMap();
         props.put(MV_ID, String.valueOf(mv.getId()));
         mvContext.setProperties(props);
-        PartitionBasedMvRefreshProcessor processor = new PartitionBasedMvRefreshProcessor(context.getTaskRun());
+        PartitionBasedMvRefreshProcessor processor = new PartitionBasedMvRefreshProcessor();
         processor.setMvContext(mvContext);
         processor.prepare(mvContext);
         return processor;
