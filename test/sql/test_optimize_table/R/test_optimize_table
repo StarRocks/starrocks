@@ -130,6 +130,7 @@ function: wait_optimize_table_finish()
 None
 -- !result
 
+<<<<<<< HEAD
 
 
 
@@ -681,6 +682,9 @@ select count(*) from t;
 
 
 -- name: test_optimize_table_with_special_characters @sequential
+=======
+-- name: test_optimize_table_with_special_characters
+>>>>>>> 84d71828f9 ([UT] Fix unstable sql test (backport #56762) (#56818))
 create table `t#t`(k int) distributed by hash(k) buckets 10;
 -- result:
 -- !result
@@ -746,6 +750,7 @@ PROPERTIES (
 admin set frontend config ('enable_online_optimize_table'='true');
 -- result:
 -- !result
+<<<<<<< HEAD
 -- name: test_online_optimize_table_expr_partition @sequential
 create table t(k int, k1 date) PARTITION BY date_trunc('day', k1)
 distributed by hash(k) buckets 10;
@@ -952,6 +957,8 @@ select count(*) from t;
 
 
 
+=======
+>>>>>>> 84d71828f9 ([UT] Fix unstable sql test (backport #56762) (#56818))
 
 -- name: test_cancel_optimize
 create table t(k int) distributed by hash(k) buckets 10;
@@ -967,6 +974,7 @@ function: wait_optimize_table_finish(expect_status="CANCELLED")
 -- result:
 None
 -- !result
+<<<<<<< HEAD
 
 -- name: test_online_optimize_table_batch @sequential
 create database db_${uuid0};
@@ -1628,3 +1636,5 @@ select count(*) from t;
 -- result:
 300
 -- !result
+=======
+>>>>>>> 84d71828f9 ([UT] Fix unstable sql test (backport #56762) (#56818))

@@ -124,6 +124,7 @@ ALTER TABLE demo2_alter_0 DISTRIBUTED BY HASH(`user_name`) BUCKETS 10;
 function: wait_optimize_table_finish()
 
 
+<<<<<<< HEAD
 -- name: test_online_optimize_table_basic @sequential
 create table t(k int, k1 date) PARTITION BY RANGE(`k1`)
 (
@@ -290,6 +291,9 @@ show create table t;
 select count(*) from t;
 
 -- name: test_optimize_table_with_special_characters @sequential
+=======
+-- name: test_optimize_table_with_special_characters
+>>>>>>> 84d71828f9 ([UT] Fix unstable sql test (backport #56762) (#56818))
 create table `t#t`(k int) distributed by hash(k) buckets 10;
 show create table `t#t`;
 alter table `t#t` distributed by hash(k) buckets 20;
@@ -301,6 +305,7 @@ function: wait_optimize_table_finish()
 show create table `t#t`;
 admin set frontend config ('enable_online_optimize_table'='true');
 
+<<<<<<< HEAD
 -- name: test_online_optimize_table_expr_partition @sequential
 create table t(k int, k1 date) PARTITION BY date_trunc('day', k1)
 distributed by hash(k) buckets 10;
@@ -353,6 +358,8 @@ function: wait_optimize_table_finish()
 show create table t;
 select count(*) from t;
 
+=======
+>>>>>>> 84d71828f9 ([UT] Fix unstable sql test (backport #56762) (#56818))
 -- name: test_cancel_optimize
 create table t(k int) distributed by hash(k) buckets 10;
 alter table t distributed by hash(k);
