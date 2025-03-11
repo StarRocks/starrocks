@@ -271,8 +271,7 @@ public class MockedFrontend {
                     // TODO: support MockJournal in StarMgrServer
                     Preconditions.checkState(journal instanceof BDBJEJournal);
                     BDBEnvironment bdbEnvironment = ((BDBJEJournal) journal).getBdbEnvironment();
-                    StarMgrServer.getCurrentState()
-                            .initialize(bdbEnvironment, GlobalStateMgr.getCurrentState().getImageDir());
+                    StarMgrServer.getCurrentState().initialize(bdbEnvironment, GlobalStateMgr.getImageDirPath());
                     StateChangeExecutor.getInstance().registerStateChangeExecution(
                             StarMgrServer.getCurrentState().getStateChangeExecution());
                 }

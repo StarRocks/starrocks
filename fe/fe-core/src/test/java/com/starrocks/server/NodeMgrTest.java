@@ -14,6 +14,7 @@
 
 package com.starrocks.server;
 
+import com.starrocks.common.Config;
 import com.starrocks.common.Pair;
 import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.system.Frontend;
@@ -73,7 +74,7 @@ public class NodeMgrTest {
             return;
         }
 
-        nodeMgr.setImageDir(imageDir.getAbsolutePath());
+        Config.meta_dir = imageDir.getAbsolutePath();
         Assert.assertTrue(nodeMgr.isVersionAndRoleFilesNotExist());
         nodeMgr.getClusterIdAndRoleOnStartup();
         Assert.assertFalse(nodeMgr.isVersionAndRoleFilesNotExist());
