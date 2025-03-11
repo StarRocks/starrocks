@@ -320,8 +320,6 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
     public Set<String> getMVPartitionNamesWithTTL(MaterializedView mv,
                                                   MVRefreshParams mvRefreshParams,
                                                   boolean isAutoRefresh) {
-        int autoRefreshPartitionsLimit = mv.getTableProperty().getAutoRefreshPartitionsLimit();
-
         // if the user specifies the start and end ranges, only refresh the specified partitions
         boolean isCompleteRefresh = mvRefreshParams.isCompleteRefresh();
         Map<String, PCell> mvListPartitionMap = Maps.newHashMap();
