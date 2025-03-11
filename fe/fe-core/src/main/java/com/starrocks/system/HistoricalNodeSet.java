@@ -14,7 +14,7 @@
 
 package com.starrocks.system;
 
-import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableList;
 import com.google.gson.annotations.SerializedName;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.io.Text;
@@ -23,7 +23,7 @@ import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
 import java.io.IOException;
-import java.util.Map;
+import java.util.List;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -31,46 +31,45 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
  * This class keeps a historical backend or compute node set with the update time.
  */
 public class HistoricalNodeSet implements Writable {
-    @SerializedName(value = "idToBackend")
-    private ImmutableMap<Long, Backend> idToBackend;
+    @SerializedName(value = "backendIds")
+    private List<Long> backendIds;
 
-    @SerializedName(value = "idToComputeNode")
-    private ImmutableMap<Long, ComputeNode> idToComputeNode;
+    @SerializedName(value = "computeNodeIds")
+    private List<Long> computeNodeIds;
 
     @SerializedName(value = "lastUpdateTime")
     private long lastUpdateTime;
     private ReadWriteLock rwLock = new ReentrantReadWriteLock();
 
     HistoricalNodeSet() {
-        idToBackend = ImmutableMap.of();
-        idToComputeNode = ImmutableMap.of();
+        backendIds = ImmutableList.of();
+        computeNodeIds = ImmutableList.of();
         lastUpdateTime = System.currentTimeMillis();
     }
 
-    public void updateHistoricalBackends(Map<Long, Backend> idToBackend, long currentTime) {
+    public void updateHistoricalBackendIds(List<Long> backendIds, long currentTime) {
         try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
-            this.idToBackend = ImmutableMap.copyOf(idToBackend);
+            this.backendIds = ImmutableList.copyOf(backendIds);
             this.lastUpdateTime = currentTime;
         }
     }
 
-    public void updateHistoricalComputeNodes(Map<Long, ComputeNode> idToComputeNode, long currentTime) {
-        // long currentTime = System.currentTimeMillis();
+    public void updateHistoricalComputeNodeIds(List<Long> computeNodeIds, long currentTime) {
         try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
-            this.idToComputeNode = ImmutableMap.copyOf(idToComputeNode);
+            this.computeNodeIds = ImmutableList.copyOf(computeNodeIds);
             this.lastUpdateTime = currentTime;
         }
     }
 
-    public ImmutableMap<Long, Backend> getHistoricalBackends() {
+    public ImmutableList<Long> getHistoricalBackendIds() {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
-            return idToBackend;
+            return ImmutableList.copyOf(backendIds);
         }
     }
 
-    public ImmutableMap<Long, ComputeNode> getHistoricalComputeNodes() {
+    public ImmutableList<Long> getHistoricalComputeNodeIds() {
         try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
-            return idToComputeNode;
+            return ImmutableList.copyOf(computeNodeIds);
         }
     }
 

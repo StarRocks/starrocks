@@ -14,7 +14,7 @@
 
 package com.starrocks.system;
 
-import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableList;
 import com.starrocks.persist.ImageWriter;
 import com.starrocks.persist.metablock.SRMetaBlockEOFException;
 import com.starrocks.persist.metablock.SRMetaBlockException;
@@ -27,6 +27,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -42,31 +43,31 @@ public class HistoricalNodeMgr {
     }
 
 
-    public void updateHistoricalBackends(Map<Long, Backend> idToBackend, long currentTime, String warehouse) {
+    public void updateHistoricalBackendIds(List<Long> backendIds, long currentTime, String warehouse) {
         HistoricalNodeSet nodeSet = whToComputeNodeIds.computeIfAbsent(warehouse, k -> new HistoricalNodeSet());
         //int minUpdateInterval = ConnectContext.getSessionVariableOrDefault().getHistoricalNodesMinUpdateInterval();
-        nodeSet.updateHistoricalBackends(idToBackend, currentTime);
+        nodeSet.updateHistoricalBackendIds(backendIds, currentTime);
     }
 
-    public void updateHistoricalComputeNodes(Map<Long, ComputeNode> idToComputeNode, long currentTime, String warehouse) {
+    public void updateHistoricalComputeNodeIds(List<Long> computeNodeIds, long currentTime, String warehouse) {
         HistoricalNodeSet nodeSet = whToComputeNodeIds.computeIfAbsent(warehouse, k -> new HistoricalNodeSet());
-        nodeSet.updateHistoricalComputeNodes(idToComputeNode, currentTime);
+        nodeSet.updateHistoricalComputeNodeIds(computeNodeIds, currentTime);
     }
 
-    public ImmutableMap<Long, Backend> getHistoricalBackends(String warehouse) {
+    public ImmutableList<Long> getHistoricalBackendIds(String warehouse) {
         HistoricalNodeSet nodeSet = whToComputeNodeIds.get(warehouse);
         if (nodeSet == null) {
-            return ImmutableMap.of();
+            return ImmutableList.of();
         }
-        return nodeSet.getHistoricalBackends();
+        return nodeSet.getHistoricalBackendIds();
     }
 
-    public ImmutableMap<Long, ComputeNode> getHistoricalComputeNodes(String warehouse) {
+    public ImmutableList<Long> getHistoricalComputeNodeIds(String warehouse) {
         HistoricalNodeSet nodeSet = whToComputeNodeIds.get(warehouse);
         if (nodeSet == null) {
-            return ImmutableMap.of();
+            return ImmutableList.of();
         }
-        return nodeSet.getHistoricalComputeNodes();
+        return nodeSet.getHistoricalComputeNodeIds();
     }
 
     public long getLastUpdateTime(String warehouse) {
@@ -98,7 +99,7 @@ public class HistoricalNodeMgr {
     }
 
     public void load(SRMetaBlockReader reader) throws SRMetaBlockEOFException, IOException, SRMetaBlockException {
-        LOG.info("start load image for historical ");
+        LOG.info("start load image for historical");
         reader.readMap(String.class, HistoricalNodeSet.class, whToComputeNodeIds::put);
         LOG.info("finish load image for historical node manager, whToComputeNodeIds: {}", whToComputeNodeIds);
     }
