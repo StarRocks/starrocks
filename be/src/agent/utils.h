@@ -70,17 +70,16 @@ public:
 };
 
 class AgentUtils {
-    public:
+public:
     AgentUtils() = default;
     virtual ~AgentUtils() = default;
-    
-    // Execute shell cmd
-    virtual bool exec_cmd(const std::string& command, std::string* errmsg,
-                            bool redirect_stderr = true);
 
-    private:
-        DISALLOW_COPY_AND_ASSIGN(AgentUtils);
-        bool process_exit_status(int status, const std::string& output, std::string* errmsg);
+    // Execute shell cmd
+    virtual bool exec_cmd(const std::string& command, std::string* errmsg, bool redirect_stderr = true);
+
+private:
+    DISALLOW_COPY_AND_ASSIGN(AgentUtils);
+    bool process_exit_status(int status, const std::string& output, std::string* errmsg);
 }; // class AgentUtils
 
 } // namespace starrocks

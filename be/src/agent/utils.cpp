@@ -84,7 +84,7 @@ AgentStatus MasterServerClient::report(const TReportRequest& request, TMasterRes
 }
 
 bool AgentUtils::exec_cmd(const std::string& command, std::string* errmsg, bool redirect_stderr) {
-    if (!errmsg) return false;  
+    if (!errmsg) return false;
 
     std::string cmd = command + (redirect_stderr ? " 2>&1" : "");
 
@@ -119,7 +119,7 @@ bool AgentUtils::process_exit_status(int status, const std::string& output, std:
         int exit_code = WEXITSTATUS(status);
         if (exit_code == 0) {
             return true;
-        } 
+        }
         *errmsg = output;
     } else {
         *errmsg += "Command terminated abnormally.\n";

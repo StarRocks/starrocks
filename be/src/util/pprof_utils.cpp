@@ -42,9 +42,8 @@ Status PprofUtils::get_perf_cmd(std::string* cmd) {
     return Status::OK();
 }
 
-Status PprofUtils::generate_flamegraph(int32_t sample_seconds,
-                                       const std::string& flame_graph_tool_dir, bool return_file,
-                                       std::string* svg_file_or_content) {
+Status PprofUtils::generate_flamegraph(int32_t sample_seconds, const std::string& flame_graph_tool_dir,
+                                       bool return_file, std::string* svg_file_or_content) {
     std::string perf_cmd;
     RETURN_IF_ERROR(PprofUtils::get_perf_cmd(&perf_cmd));
 
@@ -59,8 +58,8 @@ Status PprofUtils::generate_flamegraph(int32_t sample_seconds,
     // Generate unique temp file names safely
     std::string tmp_file = fmt::format("{}/cpu_perf.{}.{}", config::pprof_profile_dir, getpid(), rand());
 
-    std::string perf_record_cmd = fmt::format("{} record -m 2 -g -p {} -o {} -- sleep {}",
-                                              perf_cmd, getpid(), tmp_file, sample_seconds);
+    std::string perf_record_cmd =
+	    fmt::format("{} record -m 2 -g -p {} -o {} -- sleep {}", perf_cmd, getpid(), tmp_file, sample_seconds);
 
     AgentUtils util;
     std::string cmd_output;
@@ -73,8 +72,8 @@ Status PprofUtils::generate_flamegraph(int32_t sample_seconds,
     std::string res_content;
     if (return_file) {
         std::string graph_file = fmt::format("{}/flamegraph.{}.{}.svg", config::pprof_profile_dir, getpid(), rand());
-        std::string gen_cmd = fmt::format("{} script -i {} | {} | {} > {}",
-                                          perf_cmd, tmp_file, stackcollapse_perf_pl, flamegraph_pl, graph_file);
+        std::string gen_cmd = fmt::format("{} script -i {} | {} | {} > {}", perf_cmd, tmp_file, stackcollapse_perf_pl,
+                                          flamegraph_pl, graph_file);
         LOG(INFO) << "Executing command: " << gen_cmd;
         if (!util.exec_cmd(gen_cmd, &res_content)) {
             static_cast<void>(FileSystem::Default()->delete_file(tmp_file));
@@ -83,8 +82,8 @@ Status PprofUtils::generate_flamegraph(int32_t sample_seconds,
         }
         *svg_file_or_content = graph_file;
     } else {
-        std::string gen_cmd = fmt::format("{} script -i {} | {} | {}",
-                                          perf_cmd, tmp_file, stackcollapse_perf_pl, flamegraph_pl);
+        std::string gen_cmd =
+		fmt::format("{} script -i {} | {} | {}", perf_cmd, tmp_file, stackcollapse_perf_pl, flamegraph_pl);
         LOG(INFO) << "Executing command: " << gen_cmd;
         if (!util.exec_cmd(gen_cmd, &res_content, false)) {
             static_cast<void>(FileSystem::Default()->delete_file(tmp_file));

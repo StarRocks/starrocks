@@ -27,8 +27,7 @@ class PprofUtils {
 public:
     static Status get_perf_cmd(std::string* cmd);
 
-    static Status generate_flamegraph(int32_t sample_seconds,
-                                      const std::string& flame_graph_tool_dir, bool return_file,
+    static Status generate_flamegraph(int32_t sample_seconds, const std::string& flame_graph_tool_dir, bool return_file,
                                       std::string* svg_file_or_content);
 };
 

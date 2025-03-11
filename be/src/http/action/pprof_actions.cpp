@@ -131,13 +131,11 @@ void ProfileAction::handle(HttpRequest* req) {
         std::string str = ss.str();
 
         HttpChannel::send_reply(req, str);
-    }else {
+    } else {
         // generate flamegraph
         std::string svg_file_content;
-        std::string flamegraph_install_dir =
-                std::string(std::getenv("STARROCKS_HOME")) + "/tools/FlameGraph/";
-        Status st = PprofUtils::generate_flamegraph(seconds, flamegraph_install_dir, false,
-                                                    &svg_file_content);
+        std::string flamegraph_install_dir = std::string(std::getenv("STARROCKS_HOME")) + "/tools/FlameGraph/";
+        Status st = PprofUtils::generate_flamegraph(seconds, flamegraph_install_dir, false, &svg_file_content);
         if (!st.ok()) {
             HttpChannel::send_reply(req, st.to_string());
         } else {
