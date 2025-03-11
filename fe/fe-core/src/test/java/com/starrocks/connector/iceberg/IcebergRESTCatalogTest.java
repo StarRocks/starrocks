@@ -179,14 +179,6 @@ public class IcebergRESTCatalogTest {
                                @Mocked ImmutableSQLViewRepresentation representation) throws Exception {
         IcebergMetadata metadata = buildIcebergMetadata(restCatalog);
 
-        new Expectations() {
-            {
-                restCatalog.loadNamespaceMetadata(Namespace.of("db"));
-                result = ImmutableMap.of("location", "xxxxx");
-                minTimes = 1;
-            }
-        };
-
         CreateViewStmt stmt = new CreateViewStmt(false, false, new TableName("catalog", "db", "table"),
                 Lists.newArrayList(new ColWithComment("k1", "", NodePosition.ZERO)), "", false, null, NodePosition.ZERO);
         stmt.setColumns(Lists.newArrayList(new Column("k1", INT)));
@@ -215,7 +207,7 @@ public class IcebergRESTCatalogTest {
                 minTimes = 1;
 
                 baseView.location();
-                result = "xxx";
+                result = null;
                 minTimes = 1;
 
                 restCatalog.loadView(TableIdentifier.of("db", "view"));
@@ -226,6 +218,6 @@ public class IcebergRESTCatalogTest {
 
         Table table = metadata.getView("db", "view");
         Assert.assertEquals(ICEBERG_VIEW, table.getType());
-        Assert.assertEquals("xxx", table.getTableLocation());
+        Assert.assertNull(table.getTableLocation());
     }
 }
