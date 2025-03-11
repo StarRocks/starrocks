@@ -40,17 +40,25 @@ struct MaxAggregateData<LT, AggregateComplexLTGuard<LT>> {
 // TODO(murphy) refactor the guard with AggDataTypeTraits
 template <LogicalType LT>
 struct MaxAggregateData<LT, StringLTGuard<LT>> {
-    int32_t size = -1;
-    raw::RawVector<uint8_t> buffer;
+    void assign(const Slice& slice) {
+        size_t buffer_length = std::max<size_t>(PADDED_SIZE, slice.size);
+        _buffer.resize(buffer_length);
+        memcpy(_buffer.data(), slice.data, slice.size);
+        _size = slice.size;
+    }
 
-    bool has_value() const { return buffer.size() > 0; }
+    bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {buffer.data(), buffer.size()}; }
+    Slice slice() const { return {_buffer.data(), (size_t)_size}; }
 
     void reset() {
-        buffer.clear();
-        size = -1;
+        _buffer.clear();
+        _size = -1;
     }
+
+private:
+    int32_t _size = -1;
+    raw::RawVector<uint8_t> _buffer;
 };
 
 template <LogicalType LT, typename = guard::Guard>
@@ -66,17 +74,25 @@ struct MinAggregateData<LT, AggregateComplexLTGuard<LT>> {
 
 template <LogicalType LT>
 struct MinAggregateData<LT, StringLTGuard<LT>> {
-    int32_t size = -1;
-    raw::RawVector<uint8_t> buffer;
+    void assign(const Slice& slice) {
+        size_t buffer_length = std::max<size_t>(PADDED_SIZE, slice.size);
+        _buffer.resize(buffer_length);
+        memcpy(_buffer.data(), slice.data, slice.size);
+        _size = slice.size;
+    }
 
-    bool has_value() const { return size > -1; }
+    bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {buffer.data(), buffer.size()}; }
+    Slice slice() const { return {_buffer.data(), (size_t)_size}; }
 
     void reset() {
-        buffer.clear();
-        size = -1;
+        _buffer.clear();
+        _size = -1;
     }
+
+private:
+    int32_t _size = -1;
+    raw::RawVector<uint8_t> _buffer;
 };
 
 template <LogicalType LT, typename State, typename = guard::Guard>
@@ -114,10 +130,9 @@ struct MaxElement<LT, State, StringLTGuard<LT>> {
         return !state.has_value() || state.slice().compare(right) <= 0;
     }
     void operator()(State& state, const Slice& right) const {
-        if (!state.has_value() || state.slice().compare(right) < 0) {
-            state.buffer.resize(right.size);
-            memcpy(state.buffer.data(), right.data, right.size);
-            state.size = right.size;
+        if (!state.has_value() || memcompare_padded(state.slice().get_data(), state.slice().get_size(),
+                                                    right.get_data(), right.get_size()) < 0) {
+            state.assign(right);
         }
     }
 
@@ -135,10 +150,9 @@ struct MinElement<LT, State, StringLTGuard<LT>> {
         return !state.has_value() || state.slice().compare(right) >= 0;
     }
     void operator()(State& state, const Slice& right) const {
-        if (!state.has_value() || state.slice().compare(right) > 0) {
-            state.buffer.resize(right.size);
-            memcpy(state.buffer.data(), right.data, right.size);
-            state.size = right.size;
+        if (!state.has_value() || memcompare_padded(state.slice().get_data(), state.slice().get_size(),
+                                                    right.get_data(), right.get_size()) > 0) {
+            state.assign(right);
         }
     }
 
@@ -256,7 +270,8 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         DCHECK((*columns[0]).is_binary());
-        Slice value = columns[0]->get(row_num).get_slice();
+        auto* binary_column = down_cast<const BinaryColumn*>(columns[0]);
+        auto value = binary_column->get_slice(row_num);
         OP()(this->data(state), value);
     }
 
@@ -308,7 +323,8 @@ public:
 
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_binary());
-        Slice value = column->get(row_num).get_slice();
+        auto* binary_column = down_cast<const BinaryColumn*>(column);
+        auto value = binary_column->get_slice(row_num);
         OP()(this->data(state), value);
     }
 
