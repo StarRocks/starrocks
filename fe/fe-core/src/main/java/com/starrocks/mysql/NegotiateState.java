@@ -20,6 +20,7 @@ public enum NegotiateState {
     READ_AUTH_SWITCH_PKG_FAILED("read auth switch package failed"),
     ENABLE_SSL_FAILED("enable ssl failed"),
     READ_SSL_AUTH_PKG_FAILED("read ssl auth package failed"),
+    INSECURE_TRANSPORT_PROHIBITED("Connections using insecure transport are prohibited"),
     NOT_SUPPORTED_AUTH_MODE("not supported auth mode"),
     KERBEROS_HANDSHAKE_FAILED("kerberos handshake failed"),
     KERBEROS_PLUGIN_NOT_LOADED("kerberos plugin not loaded"),
