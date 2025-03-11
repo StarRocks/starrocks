@@ -284,4 +284,10 @@ public class IcebergRESTCatalog implements IcebergCatalog {
 
         return properties;
     }
+
+    @Override
+    public String defaultTableLocation(Namespace ns, String tableName) {
+        // iceberg rest catalog doesn't require location property, and could choose the default location.
+        return null;
+    }
 }
