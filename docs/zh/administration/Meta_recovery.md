@@ -252,29 +252,29 @@ catch exception when replaying
 
 按照以下步骤来解决此问题：
 
-##### 忽略错误journal Id(首选)
+##### 忽略错误 Journal ID(首选)
 
-1. 关闭所有FE节点。
-2. 备份所有FE节点的元数据目录。
-3. 在日志中找到出错的journal Id，以下日志中的xxx即为错误的journal id。
+1. 关闭所有 FE 节点。
+2. 备份所有 FE 节点的元数据目录。
+3. 在日志中找到出错的 Journal ID。以下日志中的 `xxx` 代表错误的 Journal ID。
 
    ```Plain
    got interrupt exception or inconsistent exception when replay journal xxx, will exit
    ```
 
-4. 在所有的fe.conf中添加配置，启动
+4. 在所有的 **fe.conf** 中添加配置，并重新启动 FE。
 
    ```Plain
    metadata_journal_skip_bad_journal_ids=xxx
    ```
 
-5. 如果仍然启动失败，需要通过第3步找到新的失败的journal id，配置到fe.conf中，之前配置的仍然要保留，然后再重启。
+5. 如果仍然无法启动，需要再次通过第 3 步找到新的失败的 Journal ID，并添加到 **fe.conf** 中。先前配置的仍然要保留，然后再重启。
 
    ```Plain
    metadata_journal_skip_bad_journal_ids=xxx,yyy
    ```
 
-6. 通过以上步骤如果仍然不能启动，或者失败的journal id太多，需要走Recover Mode
+6. 通过以上步骤如果仍然不能启动，或者失败的 Journal ID 太多，需要按以下 Recover Mode 恢复。
 
 ##### Recovery Mode
 
@@ -460,7 +460,7 @@ Environment invalid because of previous exception: xxx Latch timeout. com.sleepy
 com.sleepycat.je.rep.InsufficientReplicasException: (JE 7.3.7) Commit policy: SIMPLE_MAJORITY required 1 replica. But none were active with this master.
 ```
 
-当 Leader 节点或 Follower 节点使用过多内存资源而导致 Full GC 时，会出现此问题。
+当 Leader FE 节点或 Follower FE 节点使用过多内存资源而导致 Full GC 时，会出现此问题。
 
 要解决此问题，可以增加 JVM 内存大小或使用 G1 GC 算法。
 
@@ -491,12 +491,12 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
         at java.lang.Thread.run(Thread.java:829) ~[?:?]
 ```
 
-执行`show frontends`的时候发现找不到leader，原因有多种:
+执行 `SHOW FRONTENDS` 的时候发现找不到 Leader FE 节点，原因有多种:
 
-- 如果发现有超过半数以上的FE发生了Full GC，并且时间都很长。
-- 或者日志中有`java.lang.OutOfMemoryError: Java heap space`关键字。
+- 发现有超过半数以上的FE发生了 Full GC，并且时间都很长。
+- 日志中有 `java.lang.OutOfMemoryError: Java heap space` 关键字。
 
-可以断定是内存不够用了，需要调大JVM的内存。
+可以断定是内存不足，需要调大 JVM 的内存。
 
 ### 10. 最终应急方案
 
