@@ -285,7 +285,7 @@ inline void neon_select_if_common_implement(uint8_t*& selector, T*& dst, const T
             return vdupq_n_u64(*reinterpret_cast<const uint64_t*>(ptr));
         }
     };
-    using VecType = decltype(get_const_vec<data_size>(nullptr));
+    using VecType = decltype(get_const_vec(nullptr));
     VecType vec_a = left_const ? get_const_vec(a) : VecType{};
     VecType vec_b = left_const ? get_const_vec(b) : VecType{};
 
