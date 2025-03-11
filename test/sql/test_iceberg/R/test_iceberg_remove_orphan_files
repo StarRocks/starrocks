@@ -34,6 +34,9 @@ alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} execu
 alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} execute remove_orphan_files(now());
 -- result:
 -- !result
+alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} execute expire_snapshots(now());
+-- result:
+-- !result
 alter table iceberg_sql_test_${uuid0}.iceberg_db_${uuid0}.ice_tbl_${uuid0} execute remove_orphan_files(now());
 -- result:
 -- !result
