@@ -57,15 +57,27 @@ template <typename T>
 void BinaryColumnBase<T>::append(const Column& src, size_t offset, size_t count) {
     DCHECK(offset + count <= src.size());
     const auto& b = down_cast<const BinaryColumnBase<T>&>(src);
+
     const unsigned char* p = &b._bytes[b._offsets[offset]];
     const unsigned char* e = &b._bytes[b._offsets[offset + count]];
-
     _bytes.insert(_bytes.end(), p, e);
 
-    for (size_t i = offset; i < offset + count; i++) {
-        size_t l = b._offsets[i + 1] - b._offsets[i];
-        _offsets.emplace_back(_offsets.back() + l);
+    // `new_offsets[i] = offsets[(num_prev_offsets + i - 1) + 1]` is the end offset of the new i-th string.
+    // new_offsets[i] = new_offsets[i - 1] + (b._offsets[offset + i + 1] - b._offsets[offset + i])
+    //    = b._offsets[offset + i + 1] + (new_offsets[i - 1] - b._offsets[offset + i])
+    //    = b._offsets[offset + i + 1] + delta
+    // where `delta` is always the difference between the start offset of the num_prev_offsets-th destination string
+    // and the start offset of the offset-th source string.
+    const size_t num_prev_offsets = _offsets.size();
+    _offsets.resize(num_prev_offsets + count);
+    auto* new_offsets = _offsets.data() + num_prev_offsets;
+    strings::memcpy_inlined(new_offsets, b._offsets.data() + offset + 1, count * sizeof(Offset));
+
+    const auto delta = _offsets[num_prev_offsets - 1] - b._offsets[offset];
+    for (size_t i = 0; i < count; i++) {
+        new_offsets[i] += delta;
     }
+
     _slices_cache = false;
 }
 
