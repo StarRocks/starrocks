@@ -78,6 +78,11 @@ public class PaimonTable extends Table {
         return paimonNativeTable;
     }
 
+    // For refresh table only
+    public void setPaimonNativeTable(org.apache.paimon.table.Table paimonNativeTable) {
+        this.paimonNativeTable = paimonNativeTable;
+    }
+
     @Override
     public String getUUID() {
         return String.join(".", catalogName, databaseName, tableName, Long.toString(createTime));
