@@ -128,8 +128,8 @@ inline void avx2_select_if_common_implement(uint8_t*& selector, T*& dst, const T
     constexpr int batch_width = 32;
     constexpr int data_size = sizeof(T);
 
-    const __m256i const_vec_a = left_const ? _mm256_set1_epi8(*a) : _mm256_setzero_si256();
-    const __m256i const_vec_b = right_const ? _mm256_set1_epi8(*b) : _mm256_setzero_si256();
+    const __m256i const_vec_a = left_const ? SIMDUtils::set_data(*a) : _mm256_setzero_si256();
+    const __m256i const_vec_b = right_const ? SIMDUtils::set_data(*b) : _mm256_setzero_si256();
 
     const T* dst_end = dst + size;
     while (dst + batch_width < dst_end) {
