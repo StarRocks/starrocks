@@ -58,8 +58,10 @@ import static com.starrocks.catalog.Type.INT;
 public class KuduScanNodeTest {
     @Mocked
     KuduClient client;
+
     @Mocked
     KuduScanToken token;
+
     StarRocksAssert starRocksAssert = new StarRocksAssert();
     private final List<KuduScanToken> tokens = new ArrayList<>();
     public static final String KUDU_MASTER = "localhost:7051";
