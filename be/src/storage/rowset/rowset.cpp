@@ -1034,8 +1034,9 @@ Status Rowset::verify() {
             }
         }
     } else {
-        // non-overlapping segments will return one iterator, so segment idx is unknown
-        if (iters.size() != 1) {
+        if (iters.empty()) {
+            st = Status::OK();
+        } else if (iters.size() != 1) {
             st = Status::Corruption("non-overlapping segments should return one iterator");
         } else {
             st = is_ordered(iters[0], is_pk_ordered);
