@@ -31,6 +31,8 @@ public class HttpAuthManagerTest {
         UserIdentity currentUser = UserIdentity.createAnalyzedUserIdentWithIp(username, "%");
         ConnectContext context = new ConnectContext();
         context.setCurrentUserIdentity(currentUser);
+        sessionValue.connectContext = context;
+
         authMgr.addSessionValue(sessionId, sessionValue);
         Assert.assertEquals(1, authMgr.getAuthSessions().size());
         System.out.println("username in test: " + authMgr.getSessionValue(sessionId).connectContext.getCurrentUserIdentity());
