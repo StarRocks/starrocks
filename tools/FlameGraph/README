@@ -1,0 +1,12 @@
+These 2 files:
+- flamegraph.pl
+- stackcollapse-perf.pl
+
+are sourced from:
+
+https://github.com/brendangregg/FlameGraph/blob/master/flamegraph.pl
+https://github.com/brendangregg/FlameGraph/blob/master/stackcollapse-perf.pl
+
+Both files are distributed under the CDDL-1.0 license.
+
+https://github.com/brendangregg/FlameGraph/blob/master/docs/cddl1.txt

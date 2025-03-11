@@ -108,6 +108,7 @@ set(UTIL_FILES
   hash_util.cpp
   debug_action.cpp
   internal_service_recoverable_stub.cpp
+  pprof_utils.cpp
 )
 
 add_library(Util STATIC

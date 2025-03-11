@@ -83,4 +83,48 @@ AgentStatus MasterServerClient::report(const TReportRequest& request, TMasterRes
     return STARROCKS_SUCCESS;
 }
 
+bool AgentUtils::exec_cmd(const std::string& command, std::string* errmsg, bool redirect_stderr) {
+    if (!errmsg) return false;  
+
+    std::string cmd = command + (redirect_stderr ? " 2>&1" : "");
+
+    FILE* fp = popen(cmd.c_str(), "r");
+    if (!fp) {
+        *errmsg = fmt::format("popen failed: {}, errno: {}\n", strerror(errno), errno);
+        return false;
+    }
+
+    std::ostringstream output;
+    char buffer[1024];
+
+    while (fgets(buffer, sizeof(buffer), fp) != nullptr) {
+        *errmsg += buffer;
+    }
+
+    int status = pclose(fp);
+    if (status == -1) {
+        if (errno == ECHILD) {
+            *errmsg += "pclose cannot obtain the child status.\n";
+        } else {
+            *errmsg += fmt::format("Close popen failed. {}, with errno: {}.\n", strerror(errno), errno);
+        }
+        return false;
+    }
+
+    return process_exit_status(status, output.str(), errmsg);
+}
+
+bool AgentUtils::process_exit_status(int status, const std::string& output, std::string* errmsg) {
+    if (WIFEXITED(status)) {
+        int exit_code = WEXITSTATUS(status);
+        if (exit_code == 0) {
+            return true;
+        } 
+        *errmsg = output;
+    } else {
+        *errmsg += "Command terminated abnormally.\n";
+    }
+    return false;
+}
+
 } // namespace starrocks
