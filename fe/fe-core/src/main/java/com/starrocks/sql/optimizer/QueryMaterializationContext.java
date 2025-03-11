@@ -76,6 +76,9 @@ public class QueryMaterializationContext {
     // used to cache partition traits result for the connector
     private final QueryCacheStats queryCacheStats = new QueryCacheStats();
 
+    // mv contexts that query has been rewritten successfully by materialized view
+    private Set<MaterializationContext> rewrittenSuccessMVContexts = Sets.newHashSet();
+
     /**
      * It's used to record the cache stats of `mvQueryContextCache`.
      */
@@ -99,7 +102,6 @@ public class QueryMaterializationContext {
         }
     }
 
-    private boolean hasRewrittenSuccess = false;
 
     public QueryMaterializationContext() {
     }
@@ -260,11 +262,23 @@ public class QueryMaterializationContext {
         this.mvQueryContextCache.invalidateAll();
     }
 
-    public void markRewriteSuccess(boolean val) {
-        this.hasRewrittenSuccess = val;
+    public void addRewrittenSuccessMVContext(MaterializationContext mvContext) {
+        rewrittenSuccessMVContexts.add(mvContext);
     }
 
     public boolean hasRewrittenSuccess() {
-        return this.hasRewrittenSuccess;
+        return !rewrittenSuccessMVContexts.isEmpty();
+    }
+
+    public boolean isNeedsFurtherMVRewrite() {
+        if (rewrittenSuccessMVContexts.isEmpty()) {
+            return true;
+        }
+        return rewrittenSuccessMVContexts
+                .stream()
+                .anyMatch(mvContext -> {
+                    final int level = mvContext.getLevel();
+                    return validCandidateMVs.stream().anyMatch(mv -> mv.getLevel() > level);
+                });
     }
 }

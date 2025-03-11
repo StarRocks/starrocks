@@ -146,7 +146,8 @@ public class MvRewriteStrategy {
         SessionVariable sessionVariable = connectContext.getSessionVariable();
 
         // only enable multi-stages when force rewrite is enabled
-        if (sessionVariable.isEnableMaterializedViewForceRewrite()) {
+        if (sessionVariable.isEnableMaterializedViewMultiStagesRewrite() ||
+                sessionVariable.isEnableMaterializedViewForceRewrite()) {
             strategy.mvStrategy = MVStrategy.MULTI_STAGES;
         }
         strategy.enableForceRBORewrite = sessionVariable.isEnableForceRuleBasedMvRewrite();

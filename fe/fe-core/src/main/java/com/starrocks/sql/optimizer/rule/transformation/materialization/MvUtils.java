@@ -105,12 +105,14 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
+import com.starrocks.sql.optimizer.rule.mv.MaterializedViewWrapper;
 import com.starrocks.sql.optimizer.transformer.LogicalPlan;
 import com.starrocks.sql.optimizer.transformer.RelationTransformer;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.util.Box;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -135,20 +137,33 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 public class MvUtils {
     private static final Logger LOG = LogManager.getLogger(MvUtils.class);
 
-    public static Set<MaterializedView> getRelatedMvs(ConnectContext connectContext,
-                                                      int maxLevel,
-                                                      Set<Table> tablesToCheck) {
+    public static boolean hasRelatedMVs(Set<Table> tablesToCheck) {
+        if (tablesToCheck.isEmpty()) {
+            return false;
+        }
+        for (Table table : tablesToCheck) {
+            Set<MvId> mvIds = table.getRelatedMaterializedViews();
+            if (CollectionUtils.isNotEmpty(mvIds)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public static Set<MaterializedViewWrapper> getRelatedMvs(ConnectContext connectContext,
+                                                             int maxLevel,
+                                                             Set<Table> tablesToCheck) {
         if (tablesToCheck.isEmpty()) {
             return Sets.newHashSet();
         }
-        Set<MaterializedView> mvs = Sets.newHashSet();
+        Set<MaterializedViewWrapper> mvs = Sets.newHashSet();
         getRelatedMvs(connectContext, maxLevel, 0, tablesToCheck, mvs);
         return mvs;
     }
 
     public static void getRelatedMvs(ConnectContext connectContext,
                                      int maxLevel, int currentLevel,
-                                     Set<Table> tablesToCheck, Set<MaterializedView> mvs) {
+                                     Set<Table> tablesToCheck, Set<MaterializedViewWrapper> mvs) {
         if (currentLevel >= maxLevel) {
             logMVPrepare("Current level {} is greater than max level {}", currentLevel, maxLevel);
             return;
@@ -181,7 +196,7 @@ public class MvUtils {
                 continue;
             }
             newMvs.add(table);
-            mvs.add((MaterializedView) table);
+            mvs.add(MaterializedViewWrapper.create((MaterializedView) table, currentLevel));
         }
         getRelatedMvs(connectContext, maxLevel, currentLevel + 1, newMvs, mvs);
     }

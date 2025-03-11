@@ -634,7 +634,8 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public static final String ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE =
             "enable_materialized_view_view_delta_rewrite";
-
+    public static final String ENABLE_MATERIALIZED_VIEW_MULTI_STAGES_REWRITE =
+            "enable_materialized_view_multi_stages_rewrite";
     public static final String MATERIALIZED_VIEW_MAX_RELATION_MAPPING_SIZE =
             "materialized_view_max_relation_mapping_size";
 
@@ -2001,6 +2002,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = ENABLE_MATERIALIZED_VIEW_VIEW_DELTA_REWRITE)
     private boolean enableMaterializedViewViewDeltaRewrite = true;
+
+    @VarAttr(name = ENABLE_MATERIALIZED_VIEW_MULTI_STAGES_REWRITE)
+    private boolean enableMaterializedViewMultiStagesRewrite = true;
 
     @VarAttr(name = MATERIALIZED_VIEW_MAX_RELATION_MAPPING_SIZE)
     private int materializedViewMaxRelationMappingSize = 10;
@@ -3980,6 +3984,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableMaterializedViewViewDeltaRewrite(boolean enableMaterializedViewViewDeltaRewrite) {
         this.enableMaterializedViewViewDeltaRewrite = enableMaterializedViewViewDeltaRewrite;
+    }
+
+    public boolean isEnableMaterializedViewMultiStagesRewrite() {
+        return enableMaterializedViewMultiStagesRewrite;
+    }
+
+    public void setEnableMaterializedViewMultiStagesRewrite(boolean enableMaterializedViewMultiStagesRewrite) {
+        this.enableMaterializedViewMultiStagesRewrite = enableMaterializedViewMultiStagesRewrite;
     }
 
     public int getMaterializedViewMaxRelationMappingSize() {
