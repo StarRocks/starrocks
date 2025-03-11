@@ -253,29 +253,29 @@ Before proceeding to recover the metadata by following the solution provided bel
 
 You can follow these steps to fix this issue:
 
-##### Ignore Error Journal Id (Preferred)
+##### Ignore Error Journal ID (Preferred)
 
 1. Shut down all FE nodes.
 2. Back up the metadata directories of all FE nodes.
-3. Locate the erroneous journal Id in the logs, where `xxx` in the following log represents the bad journal id.
+3. Locate the erroneous journal ID in the logs. `xxx` in the following log represents the erroneous journal ID.
 
    ```Plain
    got interrupt exception or inconsistent exception when replay journal xxx, will exit
    ```
 
-4. Add the following configuration to all fe.conf files and start the nodes.
+4. Add the following configuration to all **fe.conf** files and start the FE nodes.
 
    ```Plain
    metadata_journal_skip_bad_journal_ids=xxx
    ```
 
-5. If the startup still fails, identify the new failed journal id through step 3, add it to the fe.conf, retaining the previous configurations, and then restart.
+5. If the startup still again, identify the new failed journal ID through Step 3, add it to the **fe.conf**, and then restart the nodes with the previous configurations unchanged.
 
    ```Plain
    metadata_journal_skip_bad_journal_ids=xxx,yyy
    ```
 
-6. If the above steps still fail to start the system, or if there are too many failed journal ids, proceed to Recovery Mode.
+6. If the system still fails to start after the above steps, or if there are too many failed journal IDs, proceed to Recovery Mode.
 
 ##### Recovery Mode
 
@@ -461,7 +461,7 @@ You can identify this issue based on the following error message:
 com.sleepycat.je.rep.InsufficientReplicasException: (JE 7.3.7) Commit policy: SIMPLE_MAJORITY required 1 replica. But none were active with this master.
 ```
 
-This issue occurs when the Leader node or Follower nodes use excessive memory resources, leading to Full GC.
+This issue occurs when the Leader FE node or Follower FE nodes use excessive memory resources, leading to Full GC.
 
 To solve this issue, you can either increase the JVM heap size or use the G1 GC algorithm.
 
@@ -492,12 +492,12 @@ com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine ma
         at java.lang.Thread.run(Thread.java:829) ~[?:?]
 ```
 
-When executing show frontends, if the leader cannot be found, there could be several reasons:
+When executing `SHOW FRONTENDS`, if the Leader FE node cannot be found, there could be several reasons:
 
-- If it is observed that more than half of the FEs are undergoing Full GC, and the duration is notably long.
+- If it is observed that more than half of the FE nodes are undergoing Full GC, and the duration is notably long.
 - Or if the log contains the keyword `java.lang.OutOfMemoryError: Java heap space`.
 
-It can be concluded that there is insufficient memory, and the JVM memory allocation needs to be increased.
+It is because there is insufficient memory. You need to increase the JVM memory allocation.
 
 ### 10. Measure of the last resort
 
