@@ -17,6 +17,9 @@
 #include "column/column.h"
 #ifdef __x86_64__
 #include <immintrin.h>
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+#include <arm_acle.h>
+#include <arm_neon.h>
 #endif
 
 #include <utility>
@@ -361,16 +364,9 @@ public:
             while (offset + batch_nums < chunk_size) {
                 // TODO(kks): when our memory allocate could align 32-byte, we could use _mm256_load_si256
                 __m256i f = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(f_data + offset));
-                int mask = _mm256_movemask_epi8(_mm256_cmpgt_epi8(f, all0));
-                if (mask == 0) {
-                    // all not null
-                    for (size_t i = offset; i < offset + batch_nums; i++) {
-                        this->data(states[i] + state_offset).is_null = false;
-                        this->nested_function->update(ctx, &data_column,
-                                                      this->data(states[i] + state_offset).mutable_nest_state(), i);
-                    }
-                } else if (mask == 0xffffffff) {
-                    // all null
+                // notnull_mask[i] = f[i] == 0 ? 1 : 0
+                const int notnull_mask = _mm256_movemask_epi8(_mm256_cmpeq_epi8(f, all0));
+                if (notnull_mask == 0) { // all null
                     if constexpr (!IgnoreNull) {
                         for (size_t i = offset; i < offset + batch_nums; i++) {
                             this->data(states[i] + state_offset).is_null = false;
@@ -378,16 +374,71 @@ public:
                                     ctx, this->data(states[i] + state_offset).mutable_nest_state());
                         }
                     }
-                } else {
+                } else if (notnull_mask == 0xffff'ffff) { // all not null
                     for (size_t i = offset; i < offset + batch_nums; i++) {
-                        if (f_data[i] == 0) {
-                            this->data(states[i] + state_offset).is_null = false;
-                            this->nested_function->update(ctx, &data_column,
-                                                          this->data(states[i] + state_offset).mutable_nest_state(), i);
-                        } else if constexpr (!IgnoreNull) {
+                        this->data(states[i] + state_offset).is_null = false;
+                        this->nested_function->update(ctx, &data_column,
+                                                      this->data(states[i] + state_offset).mutable_nest_state(), i);
+                    }
+                } else {
+                    phmap::priv::BitMask<uint32_t, 32> bitmask(notnull_mask);
+                    for (auto idx : bitmask) {
+                        const size_t index = offset + idx;
+                        this->data(states[index] + state_offset).is_null = false;
+                        this->nested_function->update(ctx, &data_column,
+                                                      this->data(states[index] + state_offset).mutable_nest_state(),
+                                                      index);
+                    }
+
+                    if constexpr (!IgnoreNull) {
+                        for (size_t i = offset; i < offset + batch_nums; i++) {
+                            if (f_data[i] != 0) {
+                                this->data(states[i] + state_offset).is_null = false;
+                                this->nested_function->process_null(
+                                        ctx, this->data(states[i] + state_offset).mutable_nest_state());
+                            }
+                        }
+                    }
+                }
+                offset += batch_nums;
+            }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+            constexpr int batch_nums = 128 / (8 * sizeof(uint8_t));
+            while (offset + batch_nums < chunk_size) {
+                const uint8x16_t v_null_data = vld1q_u8(f_data + offset);
+                // v_notnull_data[i] = v_null_data[i] == 0 ? 0xFF : 0x00
+                const uint8x16_t v_notnull_data = vceqq_u8(v_null_data, vdupq_n_u8(0));
+                uint64_t notnull_nibble_mask = SIMD::get_nibble_mask(v_notnull_data);
+                if (notnull_nibble_mask == 0) { // All is null.
+                    if constexpr (!IgnoreNull) {
+                        for (size_t i = offset; i < offset + batch_nums; i++) {
                             this->data(states[i] + state_offset).is_null = false;
                             this->nested_function->process_null(
                                     ctx, this->data(states[i] + state_offset).mutable_nest_state());
+                        }
+                    }
+                } else if (notnull_nibble_mask == 0xffff'ffff'ffff'ffffull) { // All is not null.
+                    for (size_t i = offset; i < offset + batch_nums; i++) {
+                        this->data(states[i] + state_offset).is_null = false;
+                        this->nested_function->update(ctx, &data_column,
+                                                      this->data(states[i] + state_offset).mutable_nest_state(), i);
+                    }
+                } else { // Some is null.
+                    notnull_nibble_mask &= 0x8888'8888'8888'8888ull;
+                    for (; notnull_nibble_mask > 0; notnull_nibble_mask &= notnull_nibble_mask - 1) {
+                        const size_t index = offset + (__builtin_ctzll(notnull_nibble_mask) >> 2);
+                        this->data(states[index] + state_offset).is_null = false;
+                        this->nested_function->update(ctx, &data_column,
+                                                      this->data(states[index] + state_offset).mutable_nest_state(),
+                                                      index);
+                    }
+                    if constexpr (!IgnoreNull) {
+                        for (size_t i = offset; i < offset + batch_nums; i++) {
+                            if (f_data[i] != 0) {
+                                this->data(states[i] + state_offset).is_null = false;
+                                this->nested_function->process_null(
+                                        ctx, this->data(states[i] + state_offset).mutable_nest_state());
+                            }
                         }
                     }
                 }
@@ -478,6 +529,57 @@ public:
                 }
                 offset += batch_nums;
             }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+            constexpr int batch_nums = 128 / (8 * sizeof(uint8_t));
+            while (offset + batch_nums < chunk_size) {
+                const uint8x16_t v_null_data = vld1q_u8(f_data + offset);
+                // v_null_data[i] = v_null_data[i] == 0 ? 0xFF : 0x00
+                const uint8x16_t v_notnull_data = vceqq_u8(v_null_data, vdupq_n_u8(0));
+                uint64_t notnull_nibble_mask = SIMD::get_nibble_mask(v_notnull_data);
+                if (notnull_nibble_mask == 0) { // All is null.
+                    if constexpr (!IgnoreNull) {
+                        for (size_t i = offset; i < offset + batch_nums; i++) {
+                            if (!selection[i]) {
+                                this->data(states[i] + state_offset).is_null = false;
+                                this->nested_function->process_null(
+                                        ctx, this->data(states[i] + state_offset).mutable_nest_state());
+                            }
+                        }
+                    }
+                } else if (notnull_nibble_mask == 0xffff'ffff'ffff'ffffull) { // All is not null.
+                    for (size_t i = offset; i < offset + batch_nums; i++) {
+                        if (!selection[i]) {
+                            this->data(states[i] + state_offset).is_null = false;
+                            this->nested_function->update(ctx, &data_column,
+                                                          this->data(states[i] + state_offset).mutable_nest_state(), i);
+                        }
+                    }
+                } else { // Some is null.
+                    for (size_t i = offset; i < offset + batch_nums; i++) {
+                        if constexpr (!IgnoreNull) {
+                            if (!selection[i]) {
+                                this->data(states[i] + state_offset).is_null = false;
+                                if (!f_data[i]) {
+                                    this->nested_function->update(
+                                            ctx, &data_column,
+                                            this->data(states[i] + state_offset).mutable_nest_state(), i);
+                                } else {
+                                    this->nested_function->process_null(
+                                            ctx, this->data(states[i] + state_offset).mutable_nest_state());
+                                }
+                            }
+                        } else {
+                            if (!f_data[i] && !selection[i]) {
+                                this->data(states[i] + state_offset).is_null = false;
+                                this->nested_function->update(ctx, &data_column,
+                                                              this->data(states[i] + state_offset).mutable_nest_state(),
+                                                              i);
+                            }
+                        }
+                    }
+                }
+                offset += batch_nums;
+            }
 #endif
 
             for (size_t i = offset; i < chunk_size; ++i) {
@@ -535,28 +637,69 @@ public:
             __m256i all0 = _mm256_setzero_si256();
             while (offset + batch_nums < chunk_size) {
                 __m256i f = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(f_data + offset));
-                int mask = _mm256_movemask_epi8(_mm256_cmpgt_epi8(f, all0));
-                if (mask == 0) {
-                    // all not null
-                    this->data(state).is_null = false;
-                    for (size_t i = offset; i < offset + batch_nums; i++) {
-                        this->nested_function->update(ctx, &data_column, this->data(state).mutable_nest_state(), i);
-                    }
-                } else if (mask == 0xffffffff) {
-                    // all null
+                // notnull_mask[i] = f[i] == 0 ? 1 : 0
+                const int notnull_mask = _mm256_movemask_epi8(_mm256_cmpeq_epi8(f, all0));
+                if (notnull_mask == 0) { // all null
                     if constexpr (!IgnoreNull) {
                         this->data(state).is_null = false;
                         for (size_t i = offset; i < offset + batch_nums; i++) {
                             this->nested_function->process_null(ctx, this->data(state).mutable_nest_state());
                         }
                     }
-                } else {
+                } else if (notnull_mask == 0xffff'ffff) { // all not null
+                    this->data(state).is_null = false;
                     for (size_t i = offset; i < offset + batch_nums; i++) {
-                        if (f_data[i] == 0) {
-                            this->nested_function->update(ctx, &data_column, this->data(state).mutable_nest_state(), i);
-                            this->data(state).is_null = false;
-                        } else {
-                            if constexpr (!IgnoreNull) {
+                        this->nested_function->update(ctx, &data_column, this->data(state).mutable_nest_state(), i);
+                    }
+                } else {
+                    phmap::priv::BitMask<uint32_t, 32> bitmask(notnull_mask);
+                    for (auto idx : bitmask) {
+                        this->nested_function->update(ctx, &data_column, this->data(state).mutable_nest_state(),
+                                                      offset + idx);
+                        this->data(state).is_null = false;
+                    }
+
+                    if constexpr (!IgnoreNull) {
+                        for (size_t i = offset; i < offset + batch_nums; i++) {
+                            if (f_data[i] != 0) {
+                                this->data(state).is_null = false;
+                                this->nested_function->process_null(ctx, this->data(state).mutable_nest_state());
+                            }
+                        }
+                    }
+                }
+                offset += batch_nums;
+            }
+#elif defined(__ARM_NEON) && defined(__aarch64__)
+            constexpr int batch_nums = 128 / (8 * sizeof(uint8_t));
+            while (offset + batch_nums < chunk_size) {
+                const uint8x16_t v_null_data = vld1q_u8(f_data + offset);
+                // v_null_data[i] = v_null_data[i] == 0 ? 0xFF : 0x00
+                const uint8x16_t v_notnull_data = vceqq_u8(v_null_data, vdupq_n_u8(0));
+                uint64_t notnull_nibble_mask = SIMD::get_nibble_mask(v_notnull_data);
+                if (notnull_nibble_mask == 0) { // All is null.
+                    if constexpr (!IgnoreNull) {
+                        this->data(state).is_null = false;
+                        for (size_t i = offset; i < offset + batch_nums; i++) {
+                            this->nested_function->process_null(ctx, this->data(state).mutable_nest_state());
+                        }
+                    }
+                } else if (notnull_nibble_mask == 0xffff'ffff'ffff'ffffull) { // All is not null.
+                    this->data(state).is_null = false;
+                    for (size_t i = offset; i < offset + batch_nums; i++) {
+                        this->nested_function->update(ctx, &data_column, this->data(state).mutable_nest_state(), i);
+                    }
+                } else { // Some is null.
+                    notnull_nibble_mask &= 0x8888'8888'8888'8888ull;
+                    for (; notnull_nibble_mask > 0; notnull_nibble_mask &= notnull_nibble_mask - 1) {
+                        this->data(state).is_null = false;
+                        uint32_t index = __builtin_ctzll(notnull_nibble_mask) >> 2;
+                        this->nested_function->update(ctx, &data_column, this->data(state).mutable_nest_state(),
+                                                      offset + index);
+                    }
+                    if constexpr (!IgnoreNull) {
+                        for (size_t i = offset; i < offset + batch_nums; i++) {
+                            if (f_data[i] != 0) {
                                 this->data(state).is_null = false;
                                 this->nested_function->process_null(ctx, this->data(state).mutable_nest_state());
                             }
