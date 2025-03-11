@@ -78,8 +78,8 @@ PROPERTIES (
 -- All is null.
 insert into t2 select idx, null, null from __row_util;
 
-with w1 as (select approx_top_k(c2, 3) as x from t1) -- non-group-by.
+with w1 as (select approx_top_k(c2, 3) as x from t2) -- non-group-by.
 select array_sortby((x) -> x.item, x) from w1;
 
-with w1 as (select approx_top_k(c2, 3) as x, c1 from t1 group by c1) -- group by.
+with w1 as (select approx_top_k(c2, 3) as x, c1 from t2 group by c1) -- group by.
 select c1, array_sortby((x) -> x.item, x) from w1 order by c1;
