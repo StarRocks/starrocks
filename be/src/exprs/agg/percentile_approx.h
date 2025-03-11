@@ -116,7 +116,7 @@ public:
     }
 };
 
-// PercentileApproxAggregateFunctionV1: PERCENTILE_APPROX(expr, DOUBLE p[, DOUBLE compression])
+// PercentileApproxAggregateFunction: percentile_approx(expr, DOUBLE p[, DOUBLE compression])
 class PercentileApproxAggregateFunction final : public PercentileApproxAggregateFunctionBase {
 public:
     void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
@@ -138,17 +138,16 @@ public:
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
-        auto column_viewer = ColumnViewer<TYPE_DOUBLE>(columns[0]);
-        if (column_viewer.is_null(row_num)) {
-            return;
-        }
+        // argument 0
+        const auto* data_column = down_cast<const DoubleColumn*>(columns[0]);
+        // argument 1
         if (columns[1]->only_null()) {
             ctx->set_error("For percentile_approx the second argument is expected to be non-null.", false);
             return;
         }
         DCHECK(!columns[1]->is_null(0));
 
-        double column_value = column_viewer.value(row_num);
+        double column_value = data_column->get_data()[row_num];
         int64_t prev_memory = data(state).percentile->mem_usage();
         data(state).percentile->add(implicit_cast<float>(column_value));
         data(state).targetQuantile = columns[1]->get(0).get_double();
@@ -158,24 +157,14 @@ public:
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
-        auto column_viewer = ColumnViewer<TYPE_DOUBLE>(src[0]);
-
-        NullableColumn* dst_nullable_column = nullptr;
-        BinaryColumn* result = nullptr;
-        // get input data column
-        // Even if the input column is non-nullable, the result column still could be nullable
-        if (src[0]->is_nullable() || (*dst)->is_nullable()) {
-            dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
-            result = down_cast<BinaryColumn*>(dst_nullable_column->data_column().get());
-        } else {
-            result = down_cast<BinaryColumn*>((*dst).get());
-        }
-
-        // get const arg
+        // argument 0
+        const auto* data_column = down_cast<const DoubleColumn*>(src[0].get());
+        // argument 1
         DCHECK(src[1]->is_constant());
         const auto* const_column = down_cast<const ConstColumn*>(src[1].get());
         double quantile = const_column->get(0).get_double();
-
+        // result
+        BinaryColumn* result = down_cast<BinaryColumn*>((*dst).get());
         Bytes& bytes = result->get_bytes();
         bytes.reserve(chunk_size * 20);
         result->get_offset().resize(chunk_size + 1);
@@ -183,28 +172,22 @@ public:
         // serialize percentile one by one
         size_t old_size = bytes.size();
         for (size_t i = 0; i < chunk_size; ++i) {
-            if (column_viewer.is_null(i)) {
-                DCHECK(dst_nullable_column != nullptr);
-                dst_nullable_column->set_has_null(true);
-                result->get_offset()[i + 1] = old_size;
-            } else {
-                PercentileValue percentile;
-                percentile.add(column_viewer.value(i));
+            PercentileValue percentile;
+            percentile.add(data_column->get_data()[i]);
 
-                size_t new_size = old_size + sizeof(double) + percentile.serialize_size();
-                bytes.resize(new_size);
-                memcpy(bytes.data() + old_size, &quantile, sizeof(double));
-                percentile.serialize(bytes.data() + old_size + sizeof(double));
+            size_t new_size = old_size + sizeof(double) + percentile.serialize_size();
+            bytes.resize(new_size);
+            memcpy(bytes.data() + old_size, &quantile, sizeof(double));
+            percentile.serialize(bytes.data() + old_size + sizeof(double));
 
-                result->get_offset()[i + 1] = new_size;
-                old_size = new_size;
-            }
+            result->get_offset()[i + 1] = new_size;
+            old_size = new_size;
         }
     }
     std::string get_name() const override { return "percentile_approx"; }
 };
 
-// PercentileApproxAggregateFunctionV2: PERCENTILE_APPROX(expr, weight, DOUBLE p[, DOUBLE compression])
+// PercentileApproxWeightedAggregateFunction: percentile_approx_weighted(expr, weight, DOUBLE p[, DOUBLE compression])
 class PercentileApproxWeightedAggregateFunction final : public PercentileApproxAggregateFunctionBase {
 public:
     void create(FunctionContext* ctx, AggDataPtr __restrict ptr) const override {
@@ -226,46 +209,41 @@ public:
     }
 
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
-        auto column_viewer = ColumnViewer<TYPE_DOUBLE>(columns[0]);
+        // argument 0
+        const auto* data_column = down_cast<const DoubleColumn*>(columns[0]);
+        // argument 1: weight can be const or int64 column
         auto weight_viewer = ColumnViewer<TYPE_BIGINT>(columns[1]);
-
-        if (column_viewer.is_null(row_num) || weight_viewer.is_null(row_num)) {
-            return;
-        }
+        int64_t weight = weight_viewer.value(row_num);
+        // argument 2
         if (columns[2]->only_null()) {
             ctx->set_error("For percentile_approx the second argument is expected to be non-null.", false);
             return;
         }
         DCHECK(!columns[2]->is_null(0));
-        double column_value = column_viewer.value(row_num);
-        int64_t weight = weight_viewer.value(row_num);
+        double column_value = data_column->get_data()[row_num];
         int64_t prev_memory = data(state).percentile->mem_usage();
-        data(state).percentile->add(implicit_cast<float>(column_value), weight);
+
+        // add value with weight
         data(state).targetQuantile = columns[2]->get(0).get_double();
         data(state).is_null = false;
+        if (LIKELY(weight != 0)) {
+            data(state).percentile->add(implicit_cast<float>(column_value), weight);
+        }
         ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
     }
 
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
-        auto column_viewer = ColumnViewer<TYPE_DOUBLE>(src[0]);
+        // argument 0
+        const auto* data_column = down_cast<const DoubleColumn*>(src[0].get());
+        // argument 1, weight column can be int64 or const column
         auto weight_viewer = ColumnViewer<TYPE_BIGINT>(src[1]);
-
-        NullableColumn* dst_nullable_column = nullptr;
-        BinaryColumn* result = nullptr;
-        // get input data column
-        // Even if the input column is non-nullable, the result column still could be nullable
-        if (src[0]->is_nullable() || (*dst)->is_nullable()) {
-            dst_nullable_column = down_cast<NullableColumn*>((*dst).get());
-            result = down_cast<BinaryColumn*>(dst_nullable_column->data_column().get());
-        } else {
-            result = down_cast<BinaryColumn*>((*dst).get());
-        }
-        // get const arg
+        // argument 2
         DCHECK(src[2]->is_constant());
         const auto* const_column = down_cast<const ConstColumn*>(src[2].get());
         double quantile = const_column->get(0).get_double();
-
+        // result
+        BinaryColumn* result = down_cast<BinaryColumn*>((*dst).get());
         Bytes& bytes = result->get_bytes();
         bytes.reserve(chunk_size * 20);
         result->get_offset().resize(chunk_size + 1);
@@ -273,26 +251,19 @@ public:
         // serialize percentile one by one
         size_t old_size = bytes.size();
         for (size_t i = 0; i < chunk_size; ++i) {
-            if (dst_nullable_column != nullptr && (column_viewer.is_null(i) || weight_viewer.is_null(i))) {
-                dst_nullable_column->set_has_null(true);
-                result->get_offset()[i + 1] = old_size;
-            } else {
-                PercentileValue percentile;
-                int64_t weight = 0;
-                if (LIKELY(!weight_viewer.is_null(i))) {
-                    weight = weight_viewer.value(i);
-                }
-                double value = column_viewer.value(i);
+            PercentileValue percentile;
+            double value = data_column->get_data()[i];
+            int64_t weight = weight_viewer.value(i);
+            if (LIKELY(weight != 0)) {
                 percentile.add(value, weight);
-
-                size_t new_size = old_size + sizeof(double) + percentile.serialize_size();
-                bytes.resize(new_size);
-                memcpy(bytes.data() + old_size, &quantile, sizeof(double));
-                percentile.serialize(bytes.data() + old_size + sizeof(double));
-
-                result->get_offset()[i + 1] = new_size;
-                old_size = new_size;
             }
+            size_t new_size = old_size + sizeof(double) + percentile.serialize_size();
+            bytes.resize(new_size);
+            memcpy(bytes.data() + old_size, &quantile, sizeof(double));
+            percentile.serialize(bytes.data() + old_size + sizeof(double));
+
+            result->get_offset()[i + 1] = new_size;
+            old_size = new_size;
         }
     }
     std::string get_name() const override { return "percentile_approx_weighted"; }
