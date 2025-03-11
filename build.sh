@@ -108,7 +108,7 @@ Usage: $0 <options>
      --without-avx2     build Backend without avx2(instruction)    
      --with-maven-batch-mode {ON|OFF}
                         build maven project in batch mode (default: $WITH_MAVEN_BATCH_MODE)
-     --output           specify the output directory
+     --output           specify the output directory (default: $STARROCKS_HOME/output)
      -h,--help          Show this help message
   Eg.
     $0                                           build all
