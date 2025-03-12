@@ -840,6 +840,7 @@ StatusOr<std::vector<ChunkIteratorPtr>> Rowset::get_segment_iterators2(const Sch
     if (chunk_size > 0) {
         seg_options.chunk_size = chunk_size;
     }
+    seg_options.read_by_generated_column_adding = (dcg_meta != nullptr);
 
     std::vector<ChunkIteratorPtr> seg_iterators(num_segments());
     TabletSegmentId tsid;
