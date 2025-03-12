@@ -57,7 +57,6 @@
 #include "storage/rowset/array_column_iterator.h"
 #include "storage/rowset/binary_dict_page.h"
 #include "storage/rowset/bitmap_index_reader.h"
-#include "storage/rowset/bloom_filter.h"
 #include "storage/rowset/bloom_filter_index_reader.h"
 #include "storage/rowset/default_value_column_iterator.h"
 #include "storage/rowset/encoding_info.h"
@@ -73,6 +72,7 @@
 #include "storage/rowset/zone_map_index.h"
 #include "storage/types.h"
 #include "types/logical_type.h"
+#include "util/bloom_filter.h"
 #include "util/compression/block_compression.h"
 #include "util/rle_encoding.h"
 

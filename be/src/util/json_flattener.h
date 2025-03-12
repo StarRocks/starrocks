@@ -34,9 +34,9 @@
 #include "common/status.h"
 #include "common/statusor.h"
 #include "exprs/expr.h"
-#include "storage/rowset/block_split_bloom_filter.h"
 #include "storage/rowset/column_reader.h"
 #include "types/logical_type.h"
+#include "util/block_split_bloom_filter.h"
 #include "util/phmap/phmap.h"
 #include "velocypack/vpack.h"
 

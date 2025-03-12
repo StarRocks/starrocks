@@ -19,7 +19,7 @@
 #include "exprs/function_call_expr.h"
 #include "exprs/like_predicate.h"
 #include "exprs/mock_vectorized_expr.h"
-#include "storage/rowset/bloom_filter.h"
+#include "util/bloom_filter.h"
 
 namespace starrocks {
 

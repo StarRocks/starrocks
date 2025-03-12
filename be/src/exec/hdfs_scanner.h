@@ -48,6 +48,25 @@ struct SkipRowsContext {
 };
 using SkipRowsContextPtr = std::shared_ptr<SkipRowsContext>;
 
+struct OptimizationCounter {
+    int bloom_filter_tried_counter = 0;
+    int bloom_filter_success_counter = 0;
+    int statistics_tried_counter = 0;
+    int statistics_success_counter = 0;
+    int page_index_tried_counter = 0;
+    int page_index_filter_group_counter = 0;
+    int page_index_success_counter = 0;
+    OptimizationCounter& operator+=(const OptimizationCounter& counter) {
+        bloom_filter_tried_counter += counter.bloom_filter_tried_counter;
+        bloom_filter_success_counter += counter.bloom_filter_success_counter;
+        statistics_tried_counter += counter.statistics_tried_counter;
+        statistics_success_counter += counter.statistics_success_counter;
+        page_index_tried_counter += counter.page_index_tried_counter;
+        page_index_filter_group_counter += counter.page_index_filter_group_counter;
+        page_index_success_counter += counter.page_index_success_counter;
+        return *this;
+    }
+};
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
     int64_t rows_read = 0;
@@ -113,6 +132,9 @@ struct HdfsScanStats {
     int64_t deletion_vector_build_ns = 0;
     int64_t deletion_vector_build_count = 0;
     int64_t build_rowid_filter_ns = 0;
+
+    // reader filter info
+    OptimizationCounter _optimzation_counter{};
 };
 
 class HdfsParquetProfile;
@@ -242,6 +264,8 @@ struct HdfsScannerParams {
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
     bool orc_use_column_names = false;
+    bool parquet_page_index_enable = false;
+    bool parquet_bloom_filter_enable = false;
 
     int64_t connector_max_split_size = 0;
 
@@ -315,6 +339,10 @@ struct HdfsScannerContext {
     bool return_count_column = false;
 
     bool use_file_metacache = false;
+
+    bool parquet_page_index_enable = false;
+
+    bool parquet_bloom_filter_enable = false;
 
     std::string timezone;
 

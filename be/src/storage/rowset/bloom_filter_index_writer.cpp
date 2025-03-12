@@ -41,13 +41,13 @@
 #include "fs/fs.h"
 #include "runtime/mem_pool.h"
 #include "storage/olap_type_infra.h"
-#include "storage/rowset/bloom_filter.h" // for BloomFilterOptions, BloomFilter
 #include "storage/rowset/common.h"
 #include "storage/rowset/encoding_info.h"
 #include "storage/rowset/indexed_column_writer.h"
 #include "storage/type_traits.h"
 #include "storage/types.h"
 #include "types/logical_type.h"
+#include "util/bloom_filter.h" // for BloomFilterOptions, BloomFilter
 #include "util/slice.h"
 #include "util/utf8.h"
 

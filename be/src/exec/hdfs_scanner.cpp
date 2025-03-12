@@ -174,6 +174,8 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.enable_split_tasks = _scanner_params.enable_split_tasks;
     ctx.connector_max_split_size = _scanner_params.connector_max_split_size;
     ctx.global_dictmaps = _scanner_params.global_dictmaps;
+    ctx.parquet_bloom_filter_enable = _scanner_params.parquet_bloom_filter_enable;
+    ctx.parquet_page_index_enable = _scanner_params.parquet_page_index_enable;
 
     ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &_scanner_params.all_conjunct_ctxs;

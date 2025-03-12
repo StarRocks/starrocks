@@ -64,6 +64,8 @@ HdfsScannerContext* PageIndexTest::_create_scan_context() {
     ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
     ctx->timezone = "Asia/Shanghai";
     ctx->stats = &g_hdfs_scan_stats;
+    ctx->parquet_page_index_enable = true;
+    ctx->parquet_bloom_filter_enable = true;
     return ctx;
 }
 
@@ -592,6 +594,7 @@ TEST_F(PageIndexTest, TestPageIndexNoPageFiltered) {
     // and offset index for lazy column
     // and two group collect together. (2 + 2 + 1) * 2 = 10
     EXPECT_EQ(ranges.size(), 10);
+    std::cout << "range ref sum:" << shared_buffer->current_range_ref_sum() << std::endl;
 
     ranges.clear();
     end_offset = 0;
@@ -599,6 +602,10 @@ TEST_F(PageIndexTest, TestPageIndexNoPageFiltered) {
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
     // only collect io of 1 chunk / column.
     // three columns, 1 * 3 = 3
+
+    for (auto r : ranges) {
+        std::cout << r.offset << " " << r.size << ' ' << r.is_active << std::endl;
+    }
     EXPECT_EQ(ranges.size(), 3);
 
     EXPECT_EQ(shared_buffer->current_range_ref_sum(), 13);

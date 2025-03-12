@@ -16,8 +16,8 @@
 
 #include <gtest/gtest.h>
 
-#include "storage/rowset/block_split_bloom_filter.h"
 #include "testutil/column_test_helper.h"
+#include "util/block_split_bloom_filter.h"
 
 namespace starrocks {
 class ColumnAndPredicateTest : public ::testing::Test {

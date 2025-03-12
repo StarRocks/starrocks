@@ -77,7 +77,8 @@ add_library(Formats STATIC
         parquet/column_chunk_writer.cpp
         parquet/column_read_order_ctx.cpp
         parquet/statistics_helper.cpp
-        parquet/zone_map_filter_evaluator.h
+        parquet/predicate_filter_evaluator.h
+        parquet/parquet_block_split_bloom_filter.cpp
         disk_range.hpp
         )
 
