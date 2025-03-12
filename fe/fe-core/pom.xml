@@ -875,15 +875,7 @@ under the License.
                 <groupId>com.baidu</groupId>
                 <artifactId>jprotobuf-precompile-plugin</artifactId>
                 <configuration>
-<<<<<<< HEAD
-<<<<<<< HEAD
                     <filterClassPackage>com.starrocks.proto;com.starrocks.rpc;com.starrocks.server</filterClassPackage>
-=======
-                    <filterClassPackage>com.starrocks.proto</filterClassPackage>
->>>>>>> a8001681b9 (fix jprotobuf precompile)
-=======
-                    <filterClassPackage>com.starrocks.proto;com.starrocks.rpc;com.starrocks.server</filterClassPackage>
->>>>>>> 1ac6d132d3 (update pom.xml)
                     <generateProtoFile>true</generateProtoFile>
                     <compileDependencies>true</compileDependencies>
                 </configuration>
