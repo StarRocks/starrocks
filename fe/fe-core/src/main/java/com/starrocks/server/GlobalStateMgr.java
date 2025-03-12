@@ -2136,6 +2136,10 @@ public class GlobalStateMgr {
         return journal;
     }
 
+    public JournalWriter getJournalWriter() {
+        return journalWriter;
+    }
+
     // Get the next available, lock-free because nextId is atomic.
     public long getNextId() {
         return idGenerator.getNextId();
@@ -2259,6 +2263,18 @@ public class GlobalStateMgr {
 
     public boolean isLeader() {
         return feType == FrontendNodeType.LEADER;
+    }
+
+    public void markLeaderTransferred() {
+        // Set isReady to false, so that the leader info will be got from HA protocol, see NodeMgr.getLeaderIpAndRpcPort
+        isReady.set(false);
+        feType = FrontendNodeType.FOLLOWER;
+        journalWriter.setLeaderTransferred();
+    }
+
+    public boolean isLeaderTransferred() {
+        return journalWriter != null
+                && journalWriter.isLeaderTransferred();
     }
 
     public void setSynchronizedTime(long time) {
