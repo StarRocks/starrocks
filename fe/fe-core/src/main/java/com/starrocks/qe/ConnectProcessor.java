@@ -57,6 +57,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
+import com.starrocks.mysql.MysqlCodec;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlPacket;
 import com.starrocks.mysql.MysqlProto;
@@ -412,7 +413,7 @@ public class ConnectProcessor {
     // Get the column definitions of a table
     private void handleFieldList() throws IOException {
         // Already get command code.
-        String tableName = new String(MysqlProto.readNulTerminateString(packetBuf), StandardCharsets.UTF_8);
+        String tableName = new String(MysqlCodec.readNulTerminateString(packetBuf), StandardCharsets.UTF_8);
         if (Strings.isNullOrEmpty(tableName)) {
             ctx.getState().setError("Empty tableName");
             return;

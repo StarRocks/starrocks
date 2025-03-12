@@ -42,13 +42,13 @@ public class MysqlEofPacketTest {
         ByteBuffer buffer = serializer.toByteBuffer();
 
         // assert indicator(int1): 0
-        Assert.assertEquals(0xfe, MysqlProto.readInt1(buffer));
+        Assert.assertEquals(0xfe, MysqlCodec.readInt1(buffer));
 
         // assert warnings(int2): 0
-        Assert.assertEquals(0x00, MysqlProto.readInt2(buffer));
+        Assert.assertEquals(0x00, MysqlCodec.readInt2(buffer));
 
         // assert status flags(int2): 0
-        Assert.assertEquals(0x00, MysqlProto.readInt2(buffer));
+        Assert.assertEquals(0x00, MysqlCodec.readInt2(buffer));
 
         Assert.assertEquals(0, buffer.remaining());
     }

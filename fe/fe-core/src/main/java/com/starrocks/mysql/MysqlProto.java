@@ -176,7 +176,7 @@ public class MysqlProto {
             }
             // 3. the client use default password plugin of StarRocks to dispose
             // password
-            authPacket.setAuthResponse(readEofString(authSwitchResponse));
+            authPacket.setAuthResponse(MysqlCodec.readEofString(authSwitchResponse));
         }
 
         // change the capability of serializer
@@ -345,91 +345,6 @@ public class MysqlProto {
         LOG.info("Command `Change user` succeeded, from [{}] to [{}]. ", previousQualifiedUser,
                 context.getQualifiedUser());
         return true;
-    }
-
-    public static byte readByte(ByteBuffer buffer) {
-        return buffer.get();
-    }
-
-    public static int readInt1(ByteBuffer buffer) {
-        return readByte(buffer) & 0XFF;
-    }
-
-    public static int readInt2(ByteBuffer buffer) {
-        return (readByte(buffer) & 0xFF) | ((readByte(buffer) & 0xFF) << 8);
-    }
-
-    public static int readInt3(ByteBuffer buffer) {
-        return (readByte(buffer) & 0xFF) | ((readByte(buffer) & 0xFF) << 8) | ((readByte(
-                buffer) & 0xFF) << 16);
-    }
-
-    public static int readInt4(ByteBuffer buffer) {
-        return (readByte(buffer) & 0xFF) | ((readByte(buffer) & 0xFF) << 8) | ((readByte(
-                buffer) & 0xFF) << 16) | ((readByte(buffer) & 0XFF) << 24);
-    }
-
-    public static long readInt6(ByteBuffer buffer) {
-        return (readInt4(buffer) & 0XFFFFFFFFL) | (((long) readInt2(buffer)) << 32);
-    }
-
-    public static long readInt8(ByteBuffer buffer) {
-        return (readInt4(buffer) & 0XFFFFFFFFL) | (((long) readInt4(buffer)) << 32);
-    }
-
-    public static long readVInt(ByteBuffer buffer) {
-        int b = readInt1(buffer);
-
-        if (b < 251) {
-            return b;
-        }
-        if (b == 252) {
-            return readInt2(buffer);
-        }
-        if (b == 253) {
-            return readInt3(buffer);
-        }
-        if (b == 254) {
-            return readInt8(buffer);
-        }
-        if (b == 251) {
-            throw new NullPointerException();
-        }
-        return 0;
-    }
-
-    public static byte[] readFixedString(ByteBuffer buffer, int len) {
-        byte[] buf = new byte[len];
-        buffer.get(buf);
-        return buf;
-    }
-
-    public static byte[] readEofString(ByteBuffer buffer) {
-        byte[] buf = new byte[buffer.remaining()];
-        buffer.get(buf);
-        return buf;
-    }
-
-    public static byte[] readLenEncodedString(ByteBuffer buffer) {
-        long length = readVInt(buffer);
-        byte[] buf = new byte[(int) length];
-        buffer.get(buf);
-        return buf;
-    }
-
-    public static byte[] readNulTerminateString(ByteBuffer buffer) {
-        int oldPos = buffer.position();
-        int nullPos;
-        for (nullPos = oldPos; nullPos < buffer.limit(); ++nullPos) {
-            if (buffer.get(nullPos) == 0) {
-                break;
-            }
-        }
-        byte[] buf = new byte[nullPos - oldPos];
-        buffer.get(buf);
-        // skip null byte.
-        buffer.get();
-        return buf;
     }
 
     public static boolean isRemoteIPLocalhost(String remoteIP) {

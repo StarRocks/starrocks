@@ -59,39 +59,39 @@ public class MysqlChangeUserPacket extends MysqlPacket {
             return false;
         }
         buffer.position(1);
-        userName = new String(MysqlProto.readNulTerminateString(buffer));
+        userName = new String(MysqlCodec.readNulTerminateString(buffer));
         if (1 > buffer.remaining()) {
             return false;
         }
         // parse the password with the capability previously set on connecting
         if (capability.isPluginAuthDataLengthEncoded()) {
-            authResponse = MysqlProto.readLenEncodedString(buffer);
+            authResponse = MysqlCodec.readLenEncodedString(buffer);
         } else if (capability.isSecureConnection()) {
-            int len = MysqlProto.readInt1(buffer);
-            authResponse = MysqlProto.readFixedString(buffer, len);
+            int len = MysqlCodec.readInt1(buffer);
+            authResponse = MysqlCodec.readFixedString(buffer, len);
         } else {
-            authResponse = MysqlProto.readNulTerminateString(buffer);
+            authResponse = MysqlCodec.readNulTerminateString(buffer);
         }
         // parse database name
         if (0 < buffer.remaining()) {
-            database = new String(MysqlProto.readNulTerminateString(buffer));
+            database = new String(MysqlCodec.readNulTerminateString(buffer));
         }
         if (2 > buffer.remaining()) {
             return false;
         }
-        characterSet = MysqlProto.readInt2(buffer);
+        characterSet = MysqlCodec.readInt2(buffer);
         // plugin name to plugin
         if (0 < buffer.remaining() && capability.isPluginAuth()) {
-            pluginName = new String(MysqlProto.readNulTerminateString(buffer));
+            pluginName = new String(MysqlCodec.readNulTerminateString(buffer));
         }
         // attribute map, no use now.
         if (0 < buffer.remaining() && capability.isConnectAttrs()) {
             connectAttributes = Maps.newHashMap();
-            long connectionAttributesLength = MysqlProto.readVInt(buffer);
+            long connectionAttributesLength = MysqlCodec.readVInt(buffer);
             int connAttrBeginPos = buffer.position();
             while (buffer.position() < connAttrBeginPos + connectionAttributesLength) {
-                String key = new String(MysqlProto.readLenEncodedString(buffer));
-                String value = new String(MysqlProto.readLenEncodedString(buffer));
+                String key = new String(MysqlCodec.readLenEncodedString(buffer));
+                String value = new String(MysqlCodec.readLenEncodedString(buffer));
                 connectAttributes.put(key, value);
             }
         }
