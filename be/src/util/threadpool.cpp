@@ -45,6 +45,7 @@
 #include "testutil/sync_point.h"
 #include "util/cpu_info.h"
 #include "util/scoped_cleanup.h"
+#include "util/stack_util.h"
 #include "util/thread.h"
 
 namespace starrocks {
@@ -464,7 +465,7 @@ Status ThreadPool::do_submit(std::shared_ptr<Runnable> r, ThreadPoolToken* token
             }
             // If we failed to create a thread, but there are still some other
             // worker threads, log a warning message and continue.
-            LOG(ERROR) << "Thread pool failed to create thread: " << status.to_string();
+            LOG(ERROR) << "Thread pool failed to create thread: " << status.to_string() << "\n" << get_stack_trace();
         }
     }
 
