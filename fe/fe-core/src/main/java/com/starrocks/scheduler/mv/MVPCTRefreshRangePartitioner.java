@@ -82,11 +82,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                                         Database db,
                                         MaterializedView mv) {
         super(mvContext, context, db, mv);
-<<<<<<< HEAD
-=======
-        this.differ = new RangePartitionDiffer(mv, false, null);
         this.logger = MVTraceUtils.getLogger(mv, MVPCTRefreshRangePartitioner.class);
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
     }
 
     @Override
@@ -99,12 +95,8 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         Range<PartitionKey> rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
         RangePartitionDiffResult result = RangePartitionDiffer.computeRangePartitionDiff(mv, rangeToInclude, false);
         if (result == null) {
-<<<<<<< HEAD
             // TODO: throw exception?
-            LOG.warn("compute range partition diff failed: mv: {}", mv.getName());
-=======
             logger.warn("compute range partition diff failed: mv: {}", mv.getName());
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
             return false;
         }
         Map<String, Range<PartitionKey>> deletes = result.rangePartitionDiff.getDeletes();
@@ -120,13 +112,8 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         DistributionDesc distributionDesc = MvUtils.getDistributionDesc(mv);
         Map<String, Range<PartitionKey>> adds = result.rangePartitionDiff.getAdds();
         addRangePartitions(db, mv, adds, partitionProperties, distributionDesc);
-<<<<<<< HEAD
         adds.entrySet().stream().forEach(entry -> result.mvRangePartitionMap.put(entry.getKey(), entry.getValue()));
-        LOG.info("The process of synchronizing materialized view [{}] add partitions range [{}]",
-=======
-        adds.entrySet().stream().forEach(entry -> mvPartitionToCells.put(entry.getKey(), entry.getValue()));
         logger.info("The process of synchronizing materialized view [{}] add partitions range [{}]",
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
                 mv.getName(), adds);
 
         // used to get partitions to refresh
@@ -180,15 +167,6 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
             }
             sourceTablePartitionRange = converted;
         }
-<<<<<<< HEAD
-=======
-        if (mvPartitionSlotRefs.size() != 1) {
-            logger.warn("Cannot generate mv refresh partition predicate because mvPartitionSlotRefs size is not 1, " +
-                    "mvPartitionSlotRefs:{}", mvPartitionSlotRefs);
-            return null;
-        }
-        Expr mvPartitionSlotRef = mvPartitionSlotRefs.get(0);
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
         List<Expr> partitionPredicates =
                 MvUtils.convertRange(mvPartitionSlotRef, sourceTablePartitionRange);
         // range contains the min value could be null value
@@ -214,13 +192,8 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         String start = mvRefreshParams.getRangeStart();
         String end = mvRefreshParams.getRangeEnd();
         boolean force = mvRefreshParams.isForce();
-<<<<<<< HEAD
         Set<String> mvRangePartitionNames = getMVPartitionNamesWithTTL(mv, mvRefreshParams, partitionTTLNumber, isAutoRefresh);
-        LOG.info("Get partition names by range with partition limit, start: {}, end: {}, force:{}, " +
-=======
-        Set<String> mvRangePartitionNames = getMVPartitionNamesWithTTL(mv, mvRefreshParams, isAutoRefresh);
-        logger.info("Get partition names by range with partition limit, mv name: {}, start: {}, end: {}, force:{}, " +
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
+        logger.info("Get partition names by range with partition limit, start: {}, end: {}, force:{}, " +
                         "partitionTTLNumber: {}, isAutoRefresh: {}, mvRangePartitionNames: {}, isRefreshMvBaseOnNonRefTables:{}",
                 start, end, force, partitionTTLNumber, isAutoRefresh, mvRangePartitionNames, isRefreshMvBaseOnNonRefTables);
 

@@ -98,12 +98,8 @@ public class MVPCTRefreshPlanBuilder {
         this.mv = mv;
         this.mvContext = mvContext;
         this.mvRefreshPartitioner = mvRefreshPartitioner;
-<<<<<<< HEAD
         this.isEnableInsertStrict = mvContext.getCtx().getSessionVariable().getEnableInsertStrict();
-=======
-        this.isRefreshFailOnFilterData = mvContext.getCtx().getSessionVariable().getInsertMaxFilterRatio() == 0;
         this.logger = MVTraceUtils.getLogger(mv, MVPCTRefreshPlanBuilder.class);
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
     }
 
     public InsertStmt analyzeAndBuildInsertPlan(InsertStmt insertStmt,
@@ -160,15 +156,9 @@ public class MVPCTRefreshPlanBuilder {
                         "%s failed: table is null", mv.getName(), tableRelation.getName()));
             }
             // skip it table is not ref base table.
-<<<<<<< HEAD
             if (!mvRefBaseTablePartitionSlotRefs.containsKey(table)) {
-                LOG.warn("Skip to generate partition predicate because it's mv direct ref base table:{}, mv:{}, " +
-                        "refBaseTableAndCol: {}", table, mv.getName(), mvRefBaseTablePartitionSlotRefs);
-=======
-            if (!refBaseTablePartitionSlots.containsKey(table)) {
                 logger.warn("Skip to generate partition predicate because it's mv direct ref base table:{}, mv:{}, " +
-                        "refBaseTableAndCol: {}", table, mv.getName(), refBaseTablePartitionSlots);
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
+                        "refBaseTableAndCol: {}", table, mv.getName(), mvRefBaseTablePartitionSlotRefs);
                 continue;
             }
             SlotRef refTablePartitionSlotRef = mvRefBaseTablePartitionSlotRefs.get(table);
@@ -204,28 +194,16 @@ public class MVPCTRefreshPlanBuilder {
                 // table's slot ref since ref base table's partition column may be aliased in the query relation.
                 String mvPartitionInfoRefColName = getMVPartitionInfoRefColumnName();
                 // if it hasn't pushed down into table, add it into the query relation's predicate
-<<<<<<< HEAD
                 Expr mvPartitionOutputExpr = getPartitionOutputExpr(queryStatement, mvPartitionInfoRefColName);
                 if (mvPartitionOutputExpr == null) {
-                    LOG.warn("Fail to generate partition predicates for self-join table because output expr is null, " +
-                            "table: {}, refTablePartitionSlotRef:{}", table.getName(), refTablePartitionSlotRef);
-=======
-                List<Expr> mvPartitionOutputExprs = getPartitionOutputExpr(queryStatement, mvPartitionInfoRefColNames);
-                if (CollectionUtils.isEmpty(mvPartitionOutputExprs)) {
                     logger.warn("Fail to generate partition predicates for self-join table because output expr is null, " +
-                            "table: {}, refTablePartitionSlotRef:{}", table.getName(), refTablePartitionSlotRefs);
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
+                            "table: {}, refTablePartitionSlotRef:{}", table.getName(), refTablePartitionSlotRef);
                     continue;
                 }
                 Expr partitionPredicate = generatePartitionPredicate(table, tablePartitionNames, mvPartitionOutputExpr);
                 if (partitionPredicate == null) {
-<<<<<<< HEAD
-                    LOG.warn("Fail to generate partition predicates for self-join table, " +
-                            "table: {}, refTablePartitionSlotRef:{}", table.getName(), refTablePartitionSlotRef);
-=======
                     logger.warn("Fail to generate partition predicates for self-join table, " +
-                            "table: {}, refTablePartitionSlotRef:{}", table.getName(), refTablePartitionSlotRefs);
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
+                            "table: {}, refTablePartitionSlotRef:{}", table.getName(), refTablePartitionSlotRef);
                     continue;
                 }
                 hasGenerateNonPushDownPredicates = true;
@@ -321,7 +299,7 @@ public class MVPCTRefreshPlanBuilder {
         Expr partitionPredicate = generatePartitionPredicate(table,
                 tablePartitionNames, cloned);
         if (partitionPredicate == null) {
-            LOG.warn("Generate partition predicate failed, table:{}, tablePartitionNames:{}, outputMRefVPartitionExpr:{}",
+            logger.warn("Generate partition predicate failed, table:{}, tablePartitionNames:{}, outputMRefVPartitionExpr:{}",
                     table, tablePartitionNames, cloned);
             return false;
         }
@@ -334,20 +312,7 @@ public class MVPCTRefreshPlanBuilder {
                             "refBaseTablePartitionSlot:%s, tablePartitionNames:%s",
                     table, cloned, tablePartitionNames));
         }
-<<<<<<< HEAD
-        LOG.info("Optimize materialized view {} refresh task, push down partition predicate into table " +
-=======
-        // try to push down into table relation
-        List<Expr> mvPartitionExprs = cloneds.stream().map(x -> (Expr) x).collect(Collectors.toList());
-        Expr partitionPredicate = generatePartitionPredicate(table, tablePartitionNames, mvPartitionExprs);
-        if (partitionPredicate == null) {
-            logger.warn("Generate partition predicate failed, table:{}, tablePartitionNames:{}, outputMRefVPartitionExpr:{}",
-                    table, tablePartitionNames, cloneds);
-            return false;
-        }
-
         logger.info("Optimize materialized view {} refresh task, push down partition predicate into table " +
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
                         "relation {},  partition predicate:{} ",
                 mv.getName(), tableRelation.getName(), partitionPredicate.toSql());
         tableRelation.setPartitionPredicate(partitionPredicate);
@@ -359,35 +324,17 @@ public class MVPCTRefreshPlanBuilder {
      * This is only used to self-joins table for now and to be compatible with before.
      */
     @Deprecated
-<<<<<<< HEAD
     private Expr getPartitionOutputExpr(QueryStatement queryStatement, String mvPartitionInfoRefColName) {
         if (mvPartitionInfoRefColName == null) {
-            LOG.warn("Generate partition predicate failed: " +
+            logger.warn("Generate partition predicate failed: " +
                     "mv partition info ref column is null, mv:{}", mv.getName());
             return null;
         }
         Expr outputPartitionSlot = findPartitionOutputExpr(queryStatement, mvPartitionInfoRefColName);
         if (outputPartitionSlot == null) {
-            LOG.warn("Generate partition predicate failed: " +
+            logger.warn("Generate partition predicate failed: " +
                     "cannot find partition slot ref {} from query relation", mvPartitionInfoRefColName);
             return null;
-=======
-    private List<Expr> getPartitionOutputExpr(QueryStatement queryStatement, List<String> mvPartitionInfoRefColNames) {
-        if (CollectionUtils.isEmpty(mvPartitionInfoRefColNames)) {
-            logger.warn("Generate partition predicate failed: " +
-                    "mv partition info ref column is null, mv:{}", mv.getName());
-            return null;
-        }
-        List<Expr> mvPartitionExprs = Lists.newArrayList();
-        for (String mvPartitionInfoRefColName : mvPartitionInfoRefColNames) {
-            Expr outputPartitionSlot = findPartitionOutputExpr(queryStatement, mvPartitionInfoRefColName);
-            if (outputPartitionSlot == null) {
-                logger.warn("Generate partition predicate failed: " +
-                        "cannot find partition slot ref {} from query relation", mvPartitionInfoRefColName);
-                return null;
-            }
-            mvPartitionExprs.add(outputPartitionSlot);
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
         }
         return outputPartitionSlot;
     }

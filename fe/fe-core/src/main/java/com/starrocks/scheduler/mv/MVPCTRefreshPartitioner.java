@@ -36,12 +36,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.common.DmlException;
-<<<<<<< HEAD
-import org.apache.logging.log4j.LogManager;
-=======
-import com.starrocks.sql.common.PCell;
-import org.apache.commons.collections4.CollectionUtils;
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
 import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
@@ -152,28 +146,16 @@ public abstract class MVPCTRefreshPartitioner {
         Set<String> result = Sets.newHashSet();
         Map<Table, Map<String, Set<String>>> refBaseTableMVPartitionMaps = mvContext.getRefBaseTableMVIntersectedPartitions();
         if (refBaseTableMVPartitionMaps == null || !refBaseTableMVPartitionMaps.containsKey(refBaseTable)) {
-<<<<<<< HEAD
-            LOG.warn("Cannot find need refreshed ref base table partition from synced partition info: {}, " +
-                            "refBaseTableMVPartitionMaps: {}", refBaseTable, refBaseTableMVPartitionMaps);
-=======
             logger.warn("Cannot find need refreshed ref base table partition from synced partition info: {}, " +
-                    "refBaseTableMVPartitionMaps: {}", refBaseTable, refBaseTableMVPartitionMaps);
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
+                            "refBaseTableMVPartitionMaps: {}", refBaseTable, refBaseTableMVPartitionMaps);
             return null;
         }
         Map<String, Set<String>> refBaseTableMVPartitionMap = refBaseTableMVPartitionMaps.get(refBaseTable);
         for (String basePartitionName : baseTablePartitionNames) {
             if (!refBaseTableMVPartitionMap.containsKey(basePartitionName)) {
-<<<<<<< HEAD
-                LOG.warn("Cannot find need refreshed ref base table partition from synced partition info: {}, " +
+                logger.warn("Cannot find need refreshed ref base table partition from synced partition info: {}, " +
                                 "refBaseTableMVPartitionMaps: {}", basePartitionName, refBaseTableMVPartitionMaps);
                 return null;
-=======
-                logger.warn("Cannot find need refreshed ref base table partition from synced partition info: {}, " +
-                        "refBaseTableMVPartitionMaps: {}", basePartitionName, refBaseTableMVPartitionMaps);
-                // refBaseTableMVPartitionMap may not contain basePartitionName if it's filtered by ttl.
-                continue;
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
             }
             result.addAll(refBaseTableMVPartitionMap.get(basePartitionName));
         }
@@ -219,13 +201,8 @@ public abstract class MVPCTRefreshPartitioner {
                         " mv %s:, ref partitions: %s", baseTable.getName(), mv.getName(), refBaseTablePartitionNames));
             }
             ans.retainAll(mvPartitionNames);
-<<<<<<< HEAD
-            LOG.info("The ref base table {} has updated partitions: {}, the corresponding " +
-                    "mv partitions to refresh: {}, " + "mvRangePartitionNames: {}", baseTable.getName(),
-=======
             logger.info("The ref base table {} has updated partitions: {}, the corresponding " +
-                            "mv partitions to refresh: {}, " + "mvRangePartitionNames: {}", baseTable.getName(),
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
+                    "mv partitions to refresh: {}, " + "mvRangePartitionNames: {}", baseTable.getName(),
                     refBaseTablePartitionNames, ans, mvPartitionNames);
             result.addAll(ans);
         }
@@ -329,31 +306,4 @@ public abstract class MVPCTRefreshPartitioner {
         }
         return result;
     }
-<<<<<<< HEAD
-=======
-
-    /**
-     * Filter partitions by ttl, save the kept partitions and return the next task run partition values.
-     * @param toRefreshPartitions the partitions to refresh/add
-     * @return the next task run partition list cells after the reserved partition_ttl_number
-     */
-    protected void filterPartitionsByTTL(Map<String, PCell> toRefreshPartitions,
-                                         boolean isMockPartitionIds) {
-        if (!CollectionUtils.sizeIsEmpty(toRefreshPartitions)) {
-            // filter partitions by partition_retention_condition
-            String ttlCondition = mv.getTableProperty().getPartitionRetentionCondition();
-            if (!Strings.isNullOrEmpty(ttlCondition)) {
-                List<String> expiredPartitionNames = getExpiredPartitionsByRetentionCondition(db, mv, ttlCondition,
-                        toRefreshPartitions, isMockPartitionIds);
-                // remove the expired partitions
-                if (CollectionUtils.isNotEmpty(expiredPartitionNames)) {
-                    logger.info("Filter partitions by partition_retention_condition, ttl_condition:{}, expired:{}",
-                            ttlCondition, expiredPartitionNames);
-                    expiredPartitionNames.stream()
-                            .forEach(toRefreshPartitions::remove);
-                }
-            }
-        }
-    }
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
 }

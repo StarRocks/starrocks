@@ -80,11 +80,7 @@ public class MVVersionManager {
         if (changedTablePartitionInfos.isEmpty()) {
             return;
         }
-<<<<<<< HEAD
-        LOG.info("update meta for mv {} with olap tables:{}, refBaseTableIds:{}", mv.getName(),
-=======
-        logger.info("Update meta for mv {} with olap tables:{}, refBaseTableIds:{}", mv.getName(),
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
+        logger.info("update meta for mv {} with olap tables:{}, refBaseTableIds:{}", mv.getName(),
                 changedTablePartitionInfos, refBaseTableIds);
         Map<Long, Map<String, MaterializedView.BasePartitionInfo>> currentVersionMap =
                 refreshContext.getBaseTableVisibleVersionMap();
@@ -115,11 +111,7 @@ public class MVVersionManager {
             Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo =
                     currentVersionMap.get(tableId);
             Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = snapshotInfo.getRefreshedPartitionInfos();
-<<<<<<< HEAD
-            LOG.info("Update materialized view {} meta for base table {} with partitions info: {}, old partition infos:{}",
-=======
-            logger.debug("Update materialized view {} meta for base table {} with partitions info: {}, old partition infos:{}",
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
+            logger.info("Update materialized view {} meta for base table {} with partitions info: {}, old partition infos:{}",
                     mv.getName(), snapshotTable.getName(), partitionInfoMap, currentTablePartitionInfo);
             currentTablePartitionInfo.putAll(partitionInfoMap);
 
@@ -149,11 +141,7 @@ public class MVVersionManager {
         if (changedTablePartitionInfos.isEmpty()) {
             return;
         }
-<<<<<<< HEAD
-        LOG.info("update meta for mv {} with external tables:{}, refBaseTableIds:{}", mv.getName(),
-=======
-        logger.info("Update meta for mv {} with external tables:{}, refBaseTableIds:{}", mv.getName(),
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
+        logger.info("update meta for mv {} with external tables:{}, refBaseTableIds:{}", mv.getName(),
                 changedTablePartitionInfos, refBaseTableIds);
         Map<BaseTableInfo, Map<String, MaterializedView.BasePartitionInfo>> currentVersionMap =
                 refreshContext.getBaseTableInfoVisibleVersionMap();
@@ -183,11 +171,7 @@ public class MVVersionManager {
             currentVersionMap.computeIfAbsent(baseTableInfo, (v) -> Maps.newConcurrentMap());
             Map<String, MaterializedView.BasePartitionInfo> currentTablePartitionInfo = currentVersionMap.get(baseTableInfo);
             Map<String, MaterializedView.BasePartitionInfo> partitionInfoMap = snapshotInfo.getRefreshedPartitionInfos();
-<<<<<<< HEAD
-            LOG.info("Update materialized view {} meta for external base table {} with partitions info: {}, " +
-=======
-            logger.debug("Update materialized view {} meta for external base table {} with partitions info: {}, " +
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
+            logger.info("Update materialized view {} meta for external base table {} with partitions info: {}, " +
                             "old partition infos:{}", mv.getName(), snapshotTable.getName(),
                     partitionInfoMap, currentTablePartitionInfo);
             // overwrite old partition names
@@ -263,10 +247,5 @@ public class MVVersionManager {
         ChangeMaterializedViewRefreshSchemeLog changeRefreshSchemeLog =
                 new ChangeMaterializedViewRefreshSchemeLog(mv);
         GlobalStateMgr.getCurrentState().getEditLog().logMvChangeRefreshScheme(changeRefreshSchemeLog);
-<<<<<<< HEAD
-        LOG.info("update edit log after version changed for mv {}, maxChangedTableRefreshTime:{}",
-                mv.getName(), maxChangedTableRefreshTime);
-=======
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
     }
 }
