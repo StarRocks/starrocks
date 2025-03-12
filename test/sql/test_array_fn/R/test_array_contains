@@ -193,6 +193,8 @@ select sum(array_contains(@arr, str)) from t;
 -- result:
 0
 -- !result
+
+
 -- name: test_array_contains_with_decimal
 create table t (
     k bigint,
@@ -247,6 +249,8 @@ select array_position(v3, v2) from t;
 -- result:
 1
 -- !result
+
+
 -- name: test_array_contains_all_and_seq
 CREATE TABLE t (
   k bigint(20) NOT NULL,
@@ -667,6 +671,8 @@ select array_contains_seq('abc',['a']);
 -- result:
 E: (1064, 'Getting analyzing error from line 1, column 7 to line 1, column 37. Detail message: 1-th input of array_contains_seq should be an array, rather than varchar.')
 -- !result
+
+
 -- name: test_array_contains_all_type
 CREATE TABLE test_array_contains (
     id INT,
@@ -2110,6 +2116,10 @@ SELECT id FROM test_array_contains WHERE array_contains_all(array_varchar, ['a',
 SELECT id FROM test_array_contains WHERE array_contains_seq(array_varchar, ['a', 'b', 'c', 'd', 'e']) ORDER BY id;
 -- result:
 -- !result
+
+
+
+
 -- name: test_array_contains_complex_type
 CREATE TABLE test_array_contains_complex_type (
     id INT,
@@ -2354,4 +2364,36 @@ SELECT id, array_position(array_struct, NULL) FROM test_array_contains_complex_t
 select array_contains([null], null), array_position([null], null);
 -- result:
 1	1
+-- !result
+
+
+
+-- name: test_array_contains_with_null
+CREATE TABLE t ( 
+pk bigint not null ,
+str string,
+arr_bigint array<bigint>,
+arr_str array<string>,
+arr_decimal array<decimal(38,5)>
+) ENGINE=OLAP
+DUPLICATE KEY(`pk`)
+DISTRIBUTED BY HASH(`pk`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t select generate_series, md5sum(generate_series), array_repeat(generate_series, 10),array_repeat(md5sum(generate_series), 10), array_repeat(generate_series, 1000) from table(generate_series(0, 9999));
+-- result:
+-- !result
+insert into t select 1, null, null, null, null;
+-- result:
+-- !result
+select /*+ set_var(pipeline_dop=1) */ pk, array_contains(arr_bigint, 1000), arr_bigint from t order by pk limit 1;
+-- result:
+0	0	[0,0,0,0,0,0,0,0,0,0]
+-- !result
+select /*+ set_var(pipeline_dop=1) */ pk, array_length(arr_bigint), arr_bigint from t order by pk limit 1;
+-- result:
+0	10	[0,0,0,0,0,0,0,0,0,0]
 -- !result

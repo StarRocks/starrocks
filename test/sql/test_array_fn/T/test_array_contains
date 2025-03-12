@@ -540,3 +540,22 @@ SELECT id, array_position(array_struct, row(40, 'database')) FROM test_array_con
 SELECT id, array_position(array_struct, NULL) FROM test_array_contains_complex_type ORDER BY id;
 
 select array_contains([null], null), array_position([null], null);
+
+-- name: test_array_contains_with_null
+CREATE TABLE t ( 
+pk bigint not null ,
+str string,
+arr_bigint array<bigint>,
+arr_str array<string>,
+arr_decimal array<decimal(38,5)>
+) ENGINE=OLAP
+DUPLICATE KEY(`pk`)
+DISTRIBUTED BY HASH(`pk`) BUCKETS 3
+PROPERTIES (
+"replication_num" = "1"
+);
+insert into t select generate_series, md5sum(generate_series), array_repeat(generate_series, 10),array_repeat(md5sum(generate_series), 10), array_repeat(generate_series, 1000) from table(generate_series(0, 9999));
+insert into t select 1, null, null, null, null;
+select /*+ set_var(pipeline_dop=1) */ pk, array_contains(arr_bigint, 1000), arr_bigint from t order by pk limit 1;
+select /*+ set_var(pipeline_dop=1) */ pk, array_length(arr_bigint), arr_bigint from t order by pk limit 1;
+

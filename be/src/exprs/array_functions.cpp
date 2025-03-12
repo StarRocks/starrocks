@@ -58,7 +58,7 @@ StatusOr<ColumnPtr> ArrayFunctions::array_length([[maybe_unused]] FunctionContex
         if (arg0->has_null()) {
             // Copy null flags.
             return NullableColumn::create(std::move(col_result),
-                                          down_cast<const NullableColumn*>(arg0)->null_column()->as_mutable_ptr());
+                                          down_cast<const NullableColumn*>(arg0)->null_column()->clone());
         } else {
             return col_result;
         }
@@ -698,7 +698,7 @@ private:
         if (data_column->is_nullable()) {
             DCHECK_EQ(nullable_column->size(), result->size());
             if (nullable_column->has_null()) {
-                result = NullableColumn::create(std::move(result), nullable_column->null_column());
+                result = NullableColumn::create(std::move(result), nullable_column->null_column()->clone());
             }
         }
 
