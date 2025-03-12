@@ -29,9 +29,9 @@
 #include "exprs/expr_context.h"
 #include "formats/parquet/column_reader_factory.h"
 #include "formats/parquet/metadata.h"
+#include "formats/parquet/predicate_filter_evaluator.h"
 #include "formats/parquet/scalar_column_reader.h"
 #include "formats/parquet/schema.h"
-#include "formats/parquet/zone_map_filter_evaluator.h"
 #include "gutil/strings/substitute.h"
 #include "runtime/types.h"
 #include "simd/simd.h"
@@ -75,35 +75,16 @@ Status GroupReader::init() {
     return Status::OK();
 }
 
-Status GroupReader::_deal_with_pageindex() {
-    if (config::parquet_page_index_enable) {
-        SCOPED_RAW_TIMER(&_param.stats->page_index_ns);
-        _param.stats->rows_before_page_index += _row_group_metadata->num_rows;
-
-        ASSIGN_OR_RETURN(auto sparse_range, _param.predicate_tree->visit(ZoneMapEvaluator<FilterLevel::PAGE_INDEX>{
-                                                    *_param.predicate_tree, this}));
-        if (sparse_range.has_value()) {
-            if (sparse_range.value().empty()) {
-                // the whole row group has been filtered
-                _is_group_filtered = true;
-            } else if (sparse_range->span_size() < _row_group_metadata->num_rows) {
-                // some pages have been filtered
-                _range = sparse_range.value();
-                for (const auto& pair : _column_readers) {
-                    pair.second->select_offset_index(_range, _row_group_first_row);
-                }
-            }
-        }
-    }
-
-    return Status::OK();
-}
-
 Status GroupReader::prepare() {
     RETURN_IF_ERROR(_prepare_column_readers());
     // we need deal with page index first, so that it can work on collect_io_range,
     // and pageindex's io has been collected in FileReader
-    RETURN_IF_ERROR(_deal_with_pageindex());
+
+    if (_range.span_size() != get_row_group_metadata()->num_rows) {
+        for (const auto& pair : _column_readers) {
+            pair.second->select_offset_index(_range, _row_group_first_row);
+        }
+    }
 
     // if coalesce read enabled, we have to
     // 1. allocate shared buffered input stream and
@@ -475,20 +456,20 @@ ChunkPtr GroupReader::_create_read_chunk(const std::vector<int>& column_indices)
 }
 
 void GroupReader::collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
-                                    ColumnIOType type) {
+                                    ColumnIOTypeFlags types) {
     int64_t end = 0;
     // collect io of active column
     for (const auto& index : _active_column_indices) {
         const auto& column = _param.read_cols[index];
         SlotId slot_id = column.slot_id();
-        _column_readers[slot_id]->collect_column_io_range(ranges, &end, type, true);
+        _column_readers[slot_id]->collect_column_io_range(ranges, &end, types, true);
     }
 
     // collect io of lazy column
     for (const auto& index : _lazy_column_indices) {
         const auto& column = _param.read_cols[index];
         SlotId slot_id = column.slot_id();
-        _column_readers[slot_id]->collect_column_io_range(ranges, &end, type, false);
+        _column_readers[slot_id]->collect_column_io_range(ranges, &end, types, false);
     }
     *end_offset = end;
 }
