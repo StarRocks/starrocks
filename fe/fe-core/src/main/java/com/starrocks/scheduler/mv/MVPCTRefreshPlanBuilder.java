@@ -47,7 +47,6 @@ import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
 import com.starrocks.sql.ast.TableRelation;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
@@ -58,7 +57,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public class MVPCTRefreshPlanBuilder {
-    private static final Logger LOG = LogManager.getLogger(MVPCTRefreshPlanBuilder.class);
+    private final Logger logger;
     private final MaterializedView mv;
     private final MvTaskRunContext mvContext;
     private final MVPCTRefreshPartitioner mvRefreshPartitioner;
@@ -99,6 +98,7 @@ public class MVPCTRefreshPlanBuilder {
         this.mvContext = mvContext;
         this.mvRefreshPartitioner = mvRefreshPartitioner;
         this.isRefreshFailOnFilterData = mvContext.getCtx().getSessionVariable().getInsertMaxFilterRatio() == 0;
+        this.logger = MVTraceUtils.getLogger(mv, MVPCTRefreshPlanBuilder.class);
     }
 
     public InsertStmt analyzeAndBuildInsertPlan(InsertStmt insertStmt,
@@ -113,7 +113,7 @@ public class MVPCTRefreshPlanBuilder {
                                        Map<String, Set<String>> refTableRefreshPartitions) throws AnalysisException {
         // if the refTableRefreshPartitions is empty(not partitioned mv), no need to generate partition predicate
         if (refTableRefreshPartitions.isEmpty()) {
-            LOG.info("There is no ref table partitions to refresh, skip to generate partition predicates");
+            logger.info("There is no ref table partitions to refresh, skip to generate partition predicates");
             return insertStmt;
         }
 
@@ -140,7 +140,7 @@ public class MVPCTRefreshPlanBuilder {
         for (String tblName : uniqueTableNames) {
             // skip to generate partition predicate for non-ref base tables
             if (!refTableRefreshPartitions.containsKey(tblName)) {
-                LOG.warn("Skip to generate partition predicate to refresh because it's not ref " +
+                logger.warn("Skip to generate partition predicate to refresh because it's not ref " +
                                 "base table, table: {}, mv:{}, refTableRefreshPartitions:{}", tblName, mv.getName(),
                         refTableRefreshPartitions);
                 continue;
@@ -156,7 +156,7 @@ public class MVPCTRefreshPlanBuilder {
             }
             // skip it table is not ref base table.
             if (!refBaseTablePartitionSlots.containsKey(table)) {
-                LOG.warn("Skip to generate partition predicate because it's mv direct ref base table:{}, mv:{}, " +
+                logger.warn("Skip to generate partition predicate because it's mv direct ref base table:{}, mv:{}, " +
                         "refBaseTableAndCol: {}", table, mv.getName(), refBaseTablePartitionSlots);
                 continue;
             }
@@ -176,10 +176,10 @@ public class MVPCTRefreshPlanBuilder {
                 if (ret) {
                     numOfPushDownIntoTables += 1;
                 } else {
-                    LOG.warn("Generate push down partition predicate failed, table:{}", table);
+                    logger.warn("Generate push down partition predicate failed, table:{}", table);
                 }
             } else {
-                LOG.warn("Ref base table contains self join, cannot push down partition predicates, table:{}",
+                logger.warn("Ref base table contains self join, cannot push down partition predicates, table:{}",
                         table.getName());
                 // For non-push-down predicates, it only needs to be generated only once since we can only use mv's partition
                 // info ref column to generate incremental partition predicates.
@@ -195,13 +195,13 @@ public class MVPCTRefreshPlanBuilder {
                 // if it hasn't pushed down into table, add it into the query relation's predicate
                 List<Expr> mvPartitionOutputExprs = getPartitionOutputExpr(queryStatement, mvPartitionInfoRefColNames);
                 if (CollectionUtils.isEmpty(mvPartitionOutputExprs)) {
-                    LOG.warn("Fail to generate partition predicates for self-join table because output expr is null, " +
+                    logger.warn("Fail to generate partition predicates for self-join table because output expr is null, " +
                             "table: {}, refTablePartitionSlotRef:{}", table.getName(), refTablePartitionSlotRefs);
                     continue;
                 }
                 Expr partitionPredicate = generatePartitionPredicate(table, tablePartitionNames, mvPartitionOutputExprs);
                 if (partitionPredicate == null) {
-                    LOG.warn("Fail to generate partition predicates for self-join table, " +
+                    logger.warn("Fail to generate partition predicates for self-join table, " +
                             "table: {}, refTablePartitionSlotRef:{}", table.getName(), refTablePartitionSlotRefs);
                     continue;
                 }
@@ -211,7 +211,7 @@ public class MVPCTRefreshPlanBuilder {
         }
         if (extraPartitionPredicates.isEmpty()) {
             doIfNoPushDownPredicates(numOfPushDownIntoTables, refTableRefreshPartitions);
-            LOG.info("Generate partition extra predicates empty, mv:{}, numOfPushDownIntoTables:{}",
+            logger.info("Generate partition extra predicates empty, mv:{}, numOfPushDownIntoTables:{}",
                     mv.getName(), numOfPushDownIntoTables);
             return insertStmt;
         }
@@ -221,11 +221,11 @@ public class MVPCTRefreshPlanBuilder {
             extraPartitionPredicates.add(selectRelation.getWhereClause());
             Expr finalPredicate = Expr.compoundAnd(extraPartitionPredicates);
             selectRelation.setWhereClause(finalPredicate);
-            LOG.info("Optimize materialized view {} refresh task, generate insert stmt final " +
+            logger.info("Optimize materialized view {} refresh task, generate insert stmt final " +
                     "predicate(select relation):{} ", mv.getName(), finalPredicate.toSql());
         } else {
             // support to generate partition predicate for other query relation types
-            LOG.warn("MV Refresh cannot push down partition predicate since " +
+            logger.warn("MV Refresh cannot push down partition predicate since " +
                     "the query relation is not select relation, mv:{}", mv.getName());
             TableName tableName = queryRelation.getResolveTableName();
             // use `getColumnOutputNames` rather than `getOutputExpression` to avoid `getOutputExpression` referring original queryStatement's 
@@ -271,7 +271,7 @@ public class MVPCTRefreshPlanBuilder {
             return false;
         }
         // external table doesn't support query with partitionNames
-        LOG.info("Optimize materialized view {} refresh task, push down partition names into table " +
+        logger.info("Optimize materialized view {} refresh task, push down partition names into table " +
                         "relation {}, filtered partition names:{} ",
                 mv.getName(), tableRelation.getName(), Joiner.on(",").join(tablePartitionNames));
         tableRelation.setPartitionNames(
@@ -311,12 +311,12 @@ public class MVPCTRefreshPlanBuilder {
         List<Expr> mvPartitionExprs = cloneds.stream().map(x -> (Expr) x).collect(Collectors.toList());
         Expr partitionPredicate = generatePartitionPredicate(table, tablePartitionNames, mvPartitionExprs);
         if (partitionPredicate == null) {
-            LOG.warn("Generate partition predicate failed, table:{}, tablePartitionNames:{}, outputMRefVPartitionExpr:{}",
+            logger.warn("Generate partition predicate failed, table:{}, tablePartitionNames:{}, outputMRefVPartitionExpr:{}",
                     table, tablePartitionNames, cloneds);
             return false;
         }
 
-        LOG.info("Optimize materialized view {} refresh task, push down partition predicate into table " +
+        logger.info("Optimize materialized view {} refresh task, push down partition predicate into table " +
                         "relation {},  partition predicate:{} ",
                 mv.getName(), tableRelation.getName(), partitionPredicate.toSql());
         tableRelation.setPartitionPredicate(partitionPredicate);
@@ -330,7 +330,7 @@ public class MVPCTRefreshPlanBuilder {
     @Deprecated
     private List<Expr> getPartitionOutputExpr(QueryStatement queryStatement, List<String> mvPartitionInfoRefColNames) {
         if (CollectionUtils.isEmpty(mvPartitionInfoRefColNames)) {
-            LOG.warn("Generate partition predicate failed: " +
+            logger.warn("Generate partition predicate failed: " +
                     "mv partition info ref column is null, mv:{}", mv.getName());
             return null;
         }
@@ -338,7 +338,7 @@ public class MVPCTRefreshPlanBuilder {
         for (String mvPartitionInfoRefColName : mvPartitionInfoRefColNames) {
             Expr outputPartitionSlot = findPartitionOutputExpr(queryStatement, mvPartitionInfoRefColName);
             if (outputPartitionSlot == null) {
-                LOG.warn("Generate partition predicate failed: " +
+                logger.warn("Generate partition predicate failed: " +
                         "cannot find partition slot ref {} from query relation", mvPartitionInfoRefColName);
                 return null;
             }
@@ -423,7 +423,7 @@ public class MVPCTRefreshPlanBuilder {
         if (numOfPushDownIntoTables == refBaseTableSize) {
             return;
         }
-        LOG.warn("Cannot generate partition predicate for mv refresh {} and there " +
+        logger.warn("Cannot generate partition predicate for mv refresh {} and there " +
                         "are no predicate push down tables, refBaseTableSize:{}, numOfPushDownIntoTables:{}", mv.getName(),
                 refBaseTableSize, numOfPushDownIntoTables);
         if (isRefreshFailOnFilterData) {
