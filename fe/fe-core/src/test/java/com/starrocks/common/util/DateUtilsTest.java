@@ -39,6 +39,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 
 public class DateUtilsTest {
@@ -88,4 +89,48 @@ public class DateUtilsTest {
             Assert.fail();
         }
     }
+
+    @Test
+    public void testProbeFormat() {
+        try {
+            String datetime = "20250225112345";
+            DateTimeFormatter dateTimeFormatter = DateUtils.probeFormat(datetime);
+            Assert.assertEquals(dateTimeFormatter, DateUtils.DATE_TIME_S_FORMATTER_UNIX);
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
+    @Test
+    public void testParseStringWithDefaultHSM() {
+        try {
+            String datetime1 = "20250225112345";
+            LocalDateTime localDateTime1 =
+                    DateUtils.parseStringWithDefaultHSM(datetime1, DateUtils.probeFormat(datetime1));
+            Assert.assertTrue(localDateTime1.getYear() == 2025 && localDateTime1.getMonthValue() == 2 &&
+                    localDateTime1.getDayOfMonth() == 25
+                    && localDateTime1.getHour() == 11 && localDateTime1.getMinute() == 23 &&
+                    localDateTime1.getSecond() == 45);
+
+            String datetime2 = "2025-02-25 11:23:45";
+            LocalDateTime localDateTime2 =
+                    DateUtils.parseStringWithDefaultHSM(datetime2, DateUtils.probeFormat(datetime2));
+            Assert.assertTrue(localDateTime2.getYear() == 2025 && localDateTime2.getMonthValue() == 2 &&
+                    localDateTime2.getDayOfMonth() == 25
+                    && localDateTime2.getHour() == 11 && localDateTime2.getMinute() == 23 &&
+                    localDateTime2.getSecond() == 45);
+
+            String datetime3 = "2025-02-25";
+            LocalDateTime localDateTime3 =
+                    DateUtils.parseStringWithDefaultHSM(datetime3, DateUtils.probeFormat(datetime3));
+            Assert.assertTrue(localDateTime3.getYear() == 2025 && localDateTime3.getMonthValue() == 2 &&
+                    localDateTime3.getDayOfMonth() == 25
+                    && localDateTime3.getHour() == 0 && localDateTime3.getMinute() == 0 &&
+                    localDateTime3.getSecond() == 0);
+
+        } catch (Exception e) {
+            Assert.fail();
+        }
+    }
+
 }
