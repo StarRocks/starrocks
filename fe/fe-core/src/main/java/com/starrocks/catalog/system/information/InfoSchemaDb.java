@@ -90,6 +90,7 @@ public class InfoSchemaDb extends Database {
             super.registerTableUnlocked(TemporaryTablesTable.create());
             super.registerTableUnlocked(ClusterSnapshotsTable.create());
             super.registerTableUnlocked(ClusterSnapshotJobsTable.create());
+            super.registerTableUnlocked(KeywordsSystemTable.create());
         }
     }
 
