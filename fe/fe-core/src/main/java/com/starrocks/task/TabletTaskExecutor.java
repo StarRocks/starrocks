@@ -29,6 +29,7 @@ import com.starrocks.common.Status;
 import com.starrocks.common.TimeoutException;
 import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -356,6 +357,9 @@ public class TabletTaskExecutor {
         try {
             if (countDownLatch.await(timeout, TimeUnit.SECONDS)) {
                 if (!countDownLatch.getStatus().ok()) {
+                    if (countDownLatch.getStatus() == Status.LEADER_TRANSFERRED && ConnectContext.get() != null) {
+                        ConnectContext.get().setIsLeaderTransferred(true);
+                    }
                     String errMsg = "fail to create tablet: " + countDownLatch.getStatus().getErrorMsg();
                     LOG.warn(errMsg);
                     throw new DdlException(errMsg);

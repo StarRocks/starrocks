@@ -135,7 +135,14 @@ public class CreateReplicaTask extends AgentTask {
     public void countDownToZero(String errMsg) {
         if (this.latch != null) {
             latch.countDownToZero(new Status(TStatusCode.CANCELLED, errMsg));
-            LOG.debug("CreateReplicaTask download to zero. error msg: {}", errMsg);
+            LOG.debug("CreateReplicaTask count down to zero. error msg: {}", errMsg);
+        }
+    }
+
+    public void failForLeaderTransfer() {
+        if (this.latch != null) {
+            latch.countDownToZero(Status.LEADER_TRANSFERRED);
+            LOG.debug("CreateReplicaTask count down to zero because of leader transferred.");
         }
     }
 

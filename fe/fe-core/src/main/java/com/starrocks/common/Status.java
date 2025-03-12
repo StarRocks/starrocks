@@ -45,6 +45,7 @@ import java.util.Optional;
 public class Status {
     public static final Status OK = new Status();
     public static final Status CANCELLED = new Status(TStatusCode.CANCELLED, "Cancelled");
+    public static final Status LEADER_TRANSFERRED = new Status(TStatusCode.CANCELLED, "Leader Transferred");
 
     public TStatusCode getErrorCode() {
         return errorCode;

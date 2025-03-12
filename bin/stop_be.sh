@@ -42,30 +42,39 @@ export_shared_envvars
 
 pidfile=$PID_DIR/be.pid
 
-sig=9
+SIG=9
+TIME_OUT=-1
+
+OPTS=$(getopt \
+  -n $0 \
+  -o gh \
+  -l 'graceful' \
+  -l 'timeout:' \
+  -l 'help' \
+  -- "$@")
+
+eval set -- "$OPTS"
 
 usage() {
     echo "
 This script is used to stop BE process
 Usage:
-    sh stop_be.sh [option]
+    ./stop_be.sh [option]
 
 Options:
     -h, --help              display this usage only
     -g, --graceful          send SIGTERM to BE process instead of SIGKILL
+    --timeout               specify the timeout for graceful exit
 "
     exit 0
 }
 
-for arg in "$@"
-do
-    case $arg in
-        --help|-h)
-            usage
-        ;;
-        --graceful|-g)
-            sig=15
-        ;;
+while true; do
+    case "$1" in
+        --timeout) TIME_OUT=$2 ; shift 2 ;;
+        --help|-h) usage ; shift ;;
+        --graceful|-g) SIG=15 ; shift ;;
+        --) shift ;  break ;;
     esac
 done
 
@@ -83,18 +92,28 @@ if [ -f $pidfile ]; then
     pid=`cat $pidfile`
     pidcomm=`ps -p $pid -o comm=`
     if [ "starrocks_be"x != "$pidcomm"x ]; then
-        echo "ERROR: pid process may not be be. "
+        echo "ERROR: pid process may not be BE"
+        exit 1
+    fi
+    
+    kill -${SIG} $pid > /dev/null 2>&1
+    if [ $? -ne 0 ]; then
+        rm $pidfile
         exit 1
     fi
 
-    if kill -0 $pid >/dev/null 2>&1; then
-        kill -${sig} $pid > /dev/null 2>&1
-        if [ $? -ne 0 ]; then
-            exit 1
-        fi
-        while kill -0 $pid >/dev/null 2>&1; do
+    # Waiting for a process to exit
+    start_ts=$(date +%s)
+    while kill -0 $pid > /dev/null 2>&1; do
+        if [ $TIME_OUT -gt 0 ] && [ $(($(date +%s) - $start_ts)) -gt $TIME_OUT ]; then
+            kill -9 $pid
+            echo "graceful exit timeout, forced termination of the process"
+            break
+        else
             sleep 1
-        done
-    fi
+        fi
+    done
+
     rm $pidfile
 fi
+
