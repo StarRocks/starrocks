@@ -34,8 +34,10 @@ public:
         virtual ~IColumn() = default;
 
         virtual MutablePtr clone() const = 0;
-        virtual int get() const { return 0; };
+        virtual int get() const { return -1; };
         virtual void set(int value){};
+        virtual int get(int i) const { return -1; }
+        virtual void set(int i, int val) {}
 
         /// If the column contains subcolumns (such as Array, Nullable, etc), do callback on them.
         /// Shallow: doesn't do recursive calls; don't do call for itself.
@@ -95,16 +97,41 @@ public:
             this->_data = col._data;
         }
 
-        // ConcreteColumn(const ConcreteColumn & col) = delete;
-        ConcreteColumn& operator=(const ConcreteColumn&) = delete;
-        ConcreteColumn(ConcreteColumn&& col) = delete;
-        ConcreteColumn& operator=(ConcreteColumn&&) = delete;
-
     private:
         int _data;
     };
     using ConcreteColumnPtr = ConcreteColumn::Ptr;
     using ConcreteColumnMutablePtr = ConcreteColumn::MutablePtr;
+
+    // ConcreteVectorColumn is a column with vector<int> data
+    class ConcreteVectorColumn final
+            : public CowFactory<ColumnFactory<IColumn, ConcreteVectorColumn>, ConcreteVectorColumn> {
+    public:
+        void set(int i, int val) override {
+            DCHECK_LT(i, _data.size());
+            _data[i] = val;
+        }
+        int get(int i) const override {
+            DCHECK_LT(i, _data.size());
+            return _data[i];
+        }
+
+    private:
+        friend class CowFactory<ColumnFactory<IColumn, ConcreteVectorColumn>, ConcreteVectorColumn>;
+
+        explicit ConcreteVectorColumn(std::vector<int> data) : _data(std::move(data)) {
+            std::cout << "ConcreteVectorColumn constructor:" << std::endl;
+        }
+        ConcreteVectorColumn(const ConcreteVectorColumn& col) {
+            std::cout << "ConcreteVectorColumn copy constructor" << std::endl;
+            this->_data = col._data;
+        }
+
+    private:
+        std::vector<int> _data;
+    };
+    using ConcreteVectorColumnPtr = ConcreteVectorColumn::Ptr;
+    using ConcreteVectorColumnMutablePtr = ConcreteVectorColumn::MutablePtr;
 
     template <typename T>
     class MFixedLengthColumnBase
@@ -542,10 +569,10 @@ TEST_F(CowTest, TestColumnMutate1) {
     EXPECT_EQ(3, y->get());
 
     auto z = (std::move(*x)).mutate();
-    z->set(3);
+    z->set(4);
     EXPECT_EQ(3, x->get());
     EXPECT_EQ(3, y->get());
-    EXPECT_EQ(3, y->get());
+    EXPECT_EQ(4, z->get());
     EXPECT_EQ(2, x->use_count());
     EXPECT_EQ(2, y->use_count());
     EXPECT_EQ(1, z->use_count());
@@ -569,6 +596,55 @@ TEST_F(CowTest, TestColumnMutate2) {
     EXPECT_EQ(2, x->get());
     EXPECT_EQ(2, y->get());
     EXPECT_EQ(3, z->get());
+    EXPECT_EQ(2, x->use_count());
+    EXPECT_EQ(2, y->use_count());
+    EXPECT_EQ(1, z->use_count());
+}
+
+TEST_F(CowTest, TestConcreteVectorColumnMutate1) {
+    ConcreteVectorColumn::MutablePtr x = ConcreteVectorColumn::create({1, 2, 3});
+    // ensure x is not used again.
+    auto y = (std::move(*x)).mutate();
+    y->set(0, 2);
+
+    EXPECT_EQ(2, x->get(0));
+    EXPECT_EQ(2, y->get(0));
+    EXPECT_EQ(2, x->use_count());
+    EXPECT_EQ(2, y->use_count());
+
+    // if x changed, y will changed again.
+    x->set(1, 3);
+    EXPECT_EQ(3, x->get(1));
+    EXPECT_EQ(3, y->get(1));
+
+    auto z = (std::move(*x)).mutate();
+    z->set(2, 4);
+    EXPECT_EQ(3, x->get(2));
+    EXPECT_EQ(3, y->get(2));
+    EXPECT_EQ(4, z->get(2));
+    EXPECT_EQ(2, x->use_count());
+    EXPECT_EQ(2, y->use_count());
+    EXPECT_EQ(1, z->use_count());
+}
+
+TEST_F(CowTest, TestConcreteVectorColumnMutate2) {
+    const ConcreteVectorColumn::Ptr x = ConcreteVectorColumn::create({1, 2, 3});
+    // ensure x is not used again.
+    auto y = (std::move(*x)).mutate();
+    y->set(0, 2);
+    EXPECT_EQ(2, x->get(0));
+    EXPECT_EQ(2, y->get(0));
+    EXPECT_EQ(2, x->use_count());
+    EXPECT_EQ(2, y->use_count());
+
+    // x can't be changed, because x is const
+    // x->set(3);
+
+    auto z = (std::move(*x)).mutate();
+    z->set(1, 3);
+    EXPECT_EQ(2, x->get(1));
+    EXPECT_EQ(2, y->get(1));
+    EXPECT_EQ(3, z->get(1));
     EXPECT_EQ(2, x->use_count());
     EXPECT_EQ(2, y->use_count());
     EXPECT_EQ(1, z->use_count());

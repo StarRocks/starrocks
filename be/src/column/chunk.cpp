@@ -274,8 +274,7 @@ std::unique_ptr<Chunk> Chunk::clone_empty_with_schema(size_t size) const {
 std::unique_ptr<Chunk> Chunk::clone_unique() const {
     std::unique_ptr<Chunk> chunk = clone_empty(0);
     for (size_t idx = 0; idx < _columns.size(); idx++) {
-        ColumnPtr column = _columns[idx]->clone();
-        chunk->_columns[idx] = std::move(column);
+        chunk->_columns[idx] = _columns[idx]->clone();
     }
     chunk->_owner_info = _owner_info;
     chunk->_extra_data = std::move(_extra_data);

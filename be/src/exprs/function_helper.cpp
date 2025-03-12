@@ -27,16 +27,18 @@ NullColumn::MutablePtr FunctionHelper::union_nullable_column(const ColumnPtr& v1
         const auto& n1 = ColumnHelper::as_raw_column<NullableColumn>(v1)->null_column();
         const auto& n2 = ColumnHelper::as_raw_column<NullableColumn>(v2)->null_column();
         if (!v1->has_null()) {
-            result = n2->clone();
+            result = (std::move(*n2)).mutate();
         }
         if (!v2->has_null()) {
-            result = n1->clone();
+            result = (std::move(*n1)).mutate();
         }
         return union_null_column(n1, n2);
     } else if (v1->is_nullable()) {
-        result = ColumnHelper::as_raw_column<NullableColumn>(v1)->null_column()->clone();
+        auto& v1_null = ColumnHelper::as_raw_column<NullableColumn>(v1)->null_column();
+        result = (std::move(*v1_null)).mutate();
     } else if (v2->is_nullable()) {
-        result = ColumnHelper::as_raw_column<NullableColumn>(v2)->null_column()->clone();
+        auto& v2_null = ColumnHelper::as_raw_column<NullableColumn>(v2)->null_column();
+        result = (std::move(*v2_null)).mutate();
     } else {
         return nullptr;
     }
@@ -150,7 +152,7 @@ ColumnPtr FunctionHelper::merge_column_and_null_column(ColumnPtr&& column, NullC
     } else if (column->is_constant()) {
         auto* const_column = down_cast<ConstColumn*>(column.get());
         const auto& data_column = const_column->data_column();
-        auto new_data_column = data_column->clone();
+        auto new_data_column = (std::move(*data_column)).mutate();
         new_data_column->assign(null_column->size(), 0);
         return NullableColumn::create(std::move(new_data_column), std::move(null_column));
     } else if (column->is_nullable()) {

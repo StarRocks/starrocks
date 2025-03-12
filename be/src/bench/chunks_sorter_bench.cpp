@@ -79,7 +79,7 @@ public:
         }
         down_cast<NullableColumn*>(column.get())->update_has_null();
 
-        return {column, std::move(expr)};
+        return {std::move(column), std::move(expr)};
     }
 
     static std::tuple<ColumnPtr, std::unique_ptr<ColumnRef>> build_column(const TypeDescriptor& type_desc,
@@ -132,7 +132,7 @@ public:
             }
         }
 
-        return {column, std::move(expr)};
+        return {std::move(column), std::move(expr)};
     }
 
     std::shared_ptr<RuntimeState> _create_runtime_state() {
@@ -258,7 +258,7 @@ static void do_bench(benchmark::State& state, SortAlgorithm sorter_algo, Logical
         case MergeSort: {
             sorter = std::make_unique<ChunksSorterTopn>(suite._runtime_state.get(), &sort_exprs, &asc_arr, &null_first,
                                                         "", 0, limit_rows, TTopNType::ROW_NUMBER, max_buffered_rows,
-                                                        max_buffered_bytes params.max_buffered_chunks);
+                                                        params.max_buffered_chunks);
             expected_rows = limit_rows;
             break;
         }

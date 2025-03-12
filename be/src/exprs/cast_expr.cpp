@@ -75,7 +75,7 @@ namespace starrocks {
 
 template <LogicalType FromType, LogicalType ToType, bool AllowThrowException = false>
 struct CastFn {
-    static ColumnPtr cast_fn(ColumnPtr& column);
+    static ColumnPtr cast_fn(ColumnPtr&& column);
 };
 
 // clang-format off
@@ -83,13 +83,13 @@ struct CastFn {
 #define SELF_CAST(FROM_TYPE)                                                    \
     template <bool AllowThrowException>                                         \
     struct CastFn<FROM_TYPE, FROM_TYPE, AllowThrowException> {                  \
-        static ColumnPtr cast_fn(ColumnPtr& column) { return column->clone(); } \
+        static ColumnPtr cast_fn(ColumnPtr&& column) { return Column::mutate(std::move(column)); } \
     };
 
 #define UNARY_FN_CAST(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                        \
     template <bool AllowThrowException>                                                                      \
     struct CastFn<FROM_TYPE, TO_TYPE, AllowThrowException> {                                                 \
-        static ColumnPtr cast_fn(ColumnPtr& column) {                                                        \
+        static ColumnPtr cast_fn(ColumnPtr&& column) {                                                        \
             return VectorizedStrictUnaryFunction<UNARY_IMPL>::template evaluate<FROM_TYPE, TO_TYPE>(column); \
         }                                                                                                    \
     };
@@ -97,7 +97,7 @@ struct CastFn {
 #define UNARY_FN_CAST_VALID(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                            \
     template <bool AllowThrowException>                                                                                \
     struct CastFn<FROM_TYPE, TO_TYPE, AllowThrowException> {                                                           \
-        static ColumnPtr cast_fn(ColumnPtr& column) {                                                                  \
+        static ColumnPtr cast_fn(ColumnPtr&& column) {                                                                  \
             if constexpr (std::numeric_limits<RunTimeCppType<TO_TYPE>>::max() <                                        \
                           std::numeric_limits<RunTimeCppType<FROM_TYPE>>::max()) {                                     \
                 if constexpr (!AllowThrowException) {                                                                  \
@@ -116,7 +116,7 @@ struct CastFn {
 #define UNARY_FN_CAST_TIME_VALID(FROM_TYPE, TO_TYPE, UNARY_IMPL)                                                    \
     template <bool AllowThrowException>                                                                             \
     struct CastFn<FROM_TYPE, TO_TYPE, AllowThrowException> {                                                        \
-        static ColumnPtr cast_fn(ColumnPtr& column) {                                                               \
+        static ColumnPtr cast_fn(ColumnPtr&& column) {                                                               \
             return VectorizedInputCheckUnaryFunction<UNARY_IMPL, TimeCheck>::template evaluate<FROM_TYPE, TO_TYPE>( \
                     column);                                                                                        \
         }                                                                                                           \
@@ -125,7 +125,7 @@ struct CastFn {
 #define CUSTOMIZE_FN_CAST(FROM_TYPE, TO_TYPE, CUSTOMIZE_IMPL)                       \
     template <bool AllowThrowException>                                             \
     struct CastFn<FROM_TYPE, TO_TYPE, AllowThrowException> {                        \
-        static ColumnPtr cast_fn(ColumnPtr& column) {                               \
+        static ColumnPtr cast_fn(ColumnPtr&& column) {                               \
             return CUSTOMIZE_IMPL<FROM_TYPE, TO_TYPE, AllowThrowException>(column); \
         }                                                                           \
     };
@@ -1065,8 +1065,10 @@ public:
     DEFINE_CAST_CONSTRUCT(VectorizedCastExpr);
     StatusOr<ColumnPtr> evaluate_checked(ExprContext* context, Chunk* ptr) override {
         ASSIGN_OR_RETURN(ColumnPtr column, _children[0]->evaluate_checked(context, ptr));
-        if (ColumnHelper::count_nulls(column) == column->size() && column->size() != 0) {
-            return ColumnHelper::create_const_null_column(column->size());
+
+        size_t col_size = column->size();
+        if (col_size != 0 && ColumnHelper::count_nulls(column) == col_size) {
+            return ColumnHelper::create_const_null_column(col_size);
         }
         const TypeDescriptor& to_type = this->type();
 
@@ -1084,9 +1086,9 @@ public:
                     double_column = VectorizedUnaryFunction<DecimalTo<OverflowMode::OUTPUT_NULL>>::evaluate<
                             FromType, TYPE_DOUBLE>(column);
                 }
-                result_column = CastFn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>::cast_fn(double_column);
+                result_column = CastFn<TYPE_DOUBLE, TYPE_JSON, AllowThrowException>::cast_fn(std::move(double_column));
             } else {
-                result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(column);
+                result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column));
             }
         } else if constexpr (lt_is_decimal<FromType> && lt_is_decimal<ToType>) {
             if (context != nullptr && context->error_if_overflow()) {
@@ -1114,13 +1116,13 @@ public:
                         column, to_type.precision, to_type.scale);
             }
         } else if constexpr (lt_is_string<FromType> && lt_is_binary<ToType>) {
-            result_column = column->clone();
+            result_column = Column::mutate(std::move(column));
         } else {
-            result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(column);
+            result_column = CastFn<FromType, ToType, AllowThrowException>::cast_fn(std::move(column));
         }
         DCHECK(result_column.get() != nullptr);
         if (result_column->is_constant()) {
-            result_column->resize(column->size());
+            result_column->resize(col_size);
         }
         return result_column;
     };
@@ -1343,7 +1345,7 @@ public:
         }
 
         if constexpr (Type == TYPE_VARBINARY) {
-            return column->clone();
+            return Column::mutate(std::move(column));
         }
 
         if constexpr (lt_is_decimal<Type>) {
@@ -1373,7 +1375,7 @@ public:
             return cast_from_json_fn<TYPE_JSON, TYPE_VARCHAR, AllowThrowException>(column);
         }
 
-        return _evaluate_string(context, column);
+        return _evaluate_string(context, std::move(column));
     };
 
 private:
@@ -1429,7 +1431,7 @@ private:
     //    length of char.
     // In SR, behaviors of both cast(string as varchar(n)) and cast(string as char(n)) keep the same: neglect
     // of the length of char/varchar and return input column directly.
-    ColumnPtr _evaluate_string(ExprContext* context, ColumnPtr& column) { return column->clone(); }
+    ColumnPtr _evaluate_string(ExprContext* context, ColumnPtr&& column) { return Column::mutate(std::move(column)); }
 
     ColumnPtr _evaluate_time(ExprContext* context, const ColumnPtr& column) {
         ColumnViewer<TYPE_TIME> viewer(column);
