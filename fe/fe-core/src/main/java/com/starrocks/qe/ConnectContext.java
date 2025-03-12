@@ -252,6 +252,9 @@ public class ConnectContext {
     // `insert into table select external table`. Currently, this feature only supports hive table.
     private Optional<Boolean> useConnectorMetadataCache = Optional.empty();
 
+    // Whether leader is transferred during executing stmt
+    private boolean isLeaderTransferred = false;
+
     public StmtExecutor getExecutor() {
         return executor;
     }
@@ -1258,6 +1261,14 @@ public class ConnectContext {
             getState().setOk(0L, 0,
                     String.format("set session variables from user property failed: %s", e.getMessage()));
         }
+    }
+
+    public boolean isLeaderTransferred() {
+        return isLeaderTransferred;
+    }
+
+    public void setIsLeaderTransferred(boolean isLeaderTransferred) {
+        this.isLeaderTransferred = isLeaderTransferred;
     }
 
     /**

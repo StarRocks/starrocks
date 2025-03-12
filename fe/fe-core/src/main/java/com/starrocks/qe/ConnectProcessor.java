@@ -906,7 +906,7 @@ public class ConnectProcessor {
         ctx.setCommand(MysqlCommand.COM_SLEEP);
     }
 
-    public void loop() {
+    protected void loopForTest() {
         while (!ctx.isKilled()) {
             try {
                 processOnce();
