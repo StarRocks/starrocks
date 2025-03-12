@@ -181,6 +181,8 @@ enum TSchemaTableType {
 
     SCH_CLUSTER_SNAPSHOTS,
     SCH_CLUSTER_SNAPSHOT_JOBS,
+
+    SCH_KEYWORDS,
 }
 
 enum THdfsCompression {

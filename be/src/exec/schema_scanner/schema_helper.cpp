@@ -240,6 +240,13 @@ Status SchemaHelper::get_cluster_snapshot_jobs_info(const SchemaScannerState& st
             state, [&req, &res](FrontendServiceConnection& client) { client->getClusterSnapshotJobsInfo(*res, req); });
 }
 
+Status SchemaHelper::get_keywords(const SchemaScannerState& state, const TGetKeywordsRequest& request,
+                                  TGetKeywordsResponse* response) {
+    return _call_rpc(state, [&request, &response](FrontendServiceConnection& client) {
+        client->getKeywords(*response, request);
+    });
+}
+
 void fill_data_column_with_null(Column* data_column) {
     auto* nullable_column = down_cast<NullableColumn*>(data_column);
     nullable_column->append_nulls(1);
