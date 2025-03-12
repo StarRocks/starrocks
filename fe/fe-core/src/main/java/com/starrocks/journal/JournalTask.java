@@ -32,6 +32,7 @@ public class JournalTask implements Future<Boolean> {
     // count down latch, the producer which called logEdit() will wait on it.
     // JournalWriter will call notify() after log is committed.
     protected CountDownLatch latch;
+    private Exception executeException;
     // JournalWrite will commit immediately if received a log with betterCommitBeforeTime > now
     protected long betterCommitBeforeTimeInNano;
     private final long startTimeNano;
@@ -57,6 +58,11 @@ public class JournalTask implements Future<Boolean> {
     }
 
     public void markAbort() {
+        markAbort(null);
+    }
+
+    public void markAbort(Exception e) {
+        executeException = e;
         isSucceed = false;
         latch.countDown();
     }
@@ -82,6 +88,9 @@ public class JournalTask implements Future<Boolean> {
     @Override
     public Boolean get() throws InterruptedException, ExecutionException {
         latch.await();
+        if (executeException != null) {
+            throw new ExecutionException(executeException);
+        }
         return isSucceed;
     }
 
@@ -90,6 +99,9 @@ public class JournalTask implements Future<Boolean> {
             throws InterruptedException, ExecutionException, TimeoutException {
         if (!latch.await(timeout, unit)) {
             return false;
+        }
+        if (executeException != null) {
+            throw new ExecutionException(executeException);
         }
         return isSucceed;
     }
