@@ -53,6 +53,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static com.starrocks.common.util.PropertyAnalyzer.PROPERTIES_REPLICATION_NUM;
@@ -93,7 +94,7 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToLiteralExprValues = new HashMap<>();
         this.idToMultiValues = new HashMap<>();
         this.idToMultiLiteralExprValues = new HashMap<>();
-        this.idToIsTempPartition = new HashMap<>();
+        this.idToIsTempPartition = new ConcurrentHashMap<>();
     }
 
     public ListPartitionInfo() {
@@ -104,7 +105,7 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToMultiLiteralExprValues = new HashMap<>();
         this.deprecatedColumns = new ArrayList<>();
         this.partitionColumnIds = new ArrayList<>();
-        this.idToIsTempPartition = new HashMap<>();
+        this.idToIsTempPartition = new ConcurrentHashMap<>();
     }
 
     public static class ListPartitionValue implements Comparable<ListPartitionValue> {
@@ -686,7 +687,7 @@ public class ListPartitionInfo extends PartitionInfo {
         info.idToMultiLiteralExprValues = Maps.newHashMap(this.idToMultiLiteralExprValues);
         info.idToValues = Maps.newHashMap(this.idToValues);
         info.idToLiteralExprValues = Maps.newHashMap(this.idToLiteralExprValues);
-        info.idToIsTempPartition = Maps.newHashMap(this.idToIsTempPartition);
+        info.idToIsTempPartition = new ConcurrentHashMap<>(this.idToIsTempPartition);
         info.automaticPartition = this.automaticPartition;
         return info;
     }
@@ -705,7 +706,7 @@ public class ListPartitionInfo extends PartitionInfo {
         this.idToMultiLiteralExprValues = new HashMap<>();
         this.idToValues = new HashMap<>();
         this.idToLiteralExprValues = new HashMap<>();
-        this.idToIsTempPartition = new HashMap<>();
+        this.idToIsTempPartition = new ConcurrentHashMap<>();
 
         for (Map.Entry<Long, Long> entry : partitionOldIdToNewId.entrySet()) {
             Long oldId = entry.getKey();
