@@ -15,6 +15,7 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.google.common.base.Preconditions;
+import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
@@ -30,8 +31,11 @@ import com.starrocks.sql.spm.SPMFunctions;
 import org.apache.commons.math3.util.Precision;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.statistics.StatisticsEstimateUtils.computeCompoundStatsWithMultiColumnOptimize;
 
 public class PredicateStatisticsCalculator {
     public static Statistics statisticsCalculate(ScalarOperator predicate, Statistics statistics) {
@@ -310,6 +314,13 @@ public class PredicateStatisticsCalculator {
             }
 
             if (predicate.isAnd()) {
+                Pair<Map<ColumnRefOperator, ConstantOperator>, List<ScalarOperator>> extracted =
+                        Utils.separateEqualityPredicates(predicate);
+
+                if (extracted.first.size() > 1) {
+                    return computeCompoundStatsWithMultiColumnOptimize(predicate, statistics);
+                }
+
                 Statistics leftStatistics = predicate.getChild(0).accept(this, null);
                 Statistics andStatistics =
                         predicate.getChild(1).accept(new BaseCalculatingVisitor(leftStatistics), null);
@@ -391,6 +402,13 @@ public class PredicateStatisticsCalculator {
             }
 
             if (predicate.isAnd()) {
+                Pair<Map<ColumnRefOperator, ConstantOperator>, List<ScalarOperator>> extracted =
+                        Utils.separateEqualityPredicates(predicate);
+
+                if (extracted.first.size() > 1) {
+                    return computeCompoundStatsWithMultiColumnOptimize(predicate, statistics);
+                }
+
                 Statistics leftStatistics = predicate.getChild(0).accept(this, null);
                 Statistics andStatistics = predicate.getChild(1)
                         .accept(new LargeOrCalculatingVisitor(leftStatistics), null);
@@ -441,5 +459,6 @@ public class PredicateStatisticsCalculator {
             });
             return builder.build();
         }
+
     }
 }
