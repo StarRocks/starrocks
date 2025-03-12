@@ -851,8 +851,9 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
         Assert.assertEquals(3, baseTableVisibleVersionMap.get(tbl1.getId()).get("p100").getVersion());
     }
 
-    private PartitionBasedMvRefreshProcessor createProcessor(MaterializedView mv) {
+    private PartitionBasedMvRefreshProcessor createProcessor(TaskRun taskRun, MaterializedView mv) throws Exception {
         TaskRunContext context = new TaskRunContext();
+        context.setTaskRun(taskRun);
         context.setCtx(connectContext);
         context.getCtx().setDatabase("test");
         MvTaskRunContext mvContext = new MvTaskRunContext(context);
@@ -886,7 +887,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
         initAndExecuteTaskRun(taskRun);
         materializedView.getTableProperty().setPartitionRefreshNumber(3);
 
-        PartitionBasedMvRefreshProcessor processor = createProcessor(materializedView);
+        PartitionBasedMvRefreshProcessor processor = createProcessor(taskRun, materializedView);
         processor.filterPartitionByRefreshNumber(materializedView.getPartitionNames(), Sets.newHashSet(), materializedView);
         MvTaskRunContext mvContext = processor.getMvContext();
         Assert.assertEquals("2022-03-01", mvContext.getNextPartitionStart());
@@ -924,7 +925,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
 
         materializedView.getTableProperty().setPartitionRefreshNumber(1);
 
-        PartitionBasedMvRefreshProcessor processor = createProcessor(materializedView);
+        PartitionBasedMvRefreshProcessor processor = createProcessor(taskRun, materializedView);
         Set<String> allPartitions = new HashSet<>(materializedView.getPartitionNames());
 
         // ascending refresh

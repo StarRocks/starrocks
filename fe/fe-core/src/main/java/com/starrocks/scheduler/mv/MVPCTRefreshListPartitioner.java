@@ -51,7 +51,6 @@ import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.common.SyncPartitionUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.commons.collections4.CollectionUtils;
-import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Iterator;
@@ -62,13 +61,23 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
+<<<<<<< HEAD
     private static final Logger LOG = LogManager.getLogger(MVPCTRefreshListPartitioner.class);
+=======
+    private final ListPartitionDiffer differ;
+    private final Logger logger;
+>>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
 
     public MVPCTRefreshListPartitioner(MvTaskRunContext mvContext,
                                        TaskRunContext context,
                                        Database db,
                                        MaterializedView mv) {
         super(mvContext, context, db, mv);
+<<<<<<< HEAD
+=======
+        this.differ = new ListPartitionDiffer(mv, false);
+        this.logger = MVTraceUtils.getLogger(mv, MVPCTRefreshListPartitioner.class);
+>>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
     }
 
     @Override
@@ -83,7 +92,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         try {
             result = ListPartitionDiffer.computeListPartitionDiff(mv, false);
             if (result == null) {
-                LOG.warn("compute list partition diff failed: mv: {}", mv.getName());
+                logger.warn("compute list partition diff failed, result is null");
                 return false;
             }
         } finally {
@@ -131,6 +140,37 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             mvContext.setRefBaseTableListPartitionMap(refBaseTablePartitionMap);
             mvContext.setExternalRefBaseTableMVPartitionMap(result.getRefBaseTableMVPartitionMap());
         }
+<<<<<<< HEAD
+=======
+        logger.info("The process of synchronizing materialized view [{}] delete partitions list [{}]",
+                mv.getName(), deletes);
+
+        // add partitions
+        final Map<String, String> partitionProperties = MvUtils.getPartitionProperties(mv);
+        final DistributionDesc distributionDesc = MvUtils.getDistributionDesc(mv);
+        final Map<String, PCell> adds = partitionDiff.getAdds();
+        // filter by partition ttl
+        filterPartitionsByTTL(adds, true);
+        // add partitions for mv
+        addListPartitions(db, mv, adds, partitionProperties, distributionDesc);
+        logger.info("The process of synchronizing materialized view [{}] add partitions list [{}]",
+                mv.getName(), adds);
+
+        // add into mv context
+        result.mvPartitionToCells.putAll(adds);
+        final Map<Table, Map<String, PCell>> refBaseTablePartitionMap = result.refBaseTablePartitionMap;
+        // base table -> Map<partition name -> mv partition names>
+        final Map<Table, Map<String, Set<String>>> baseToMvNameRef =
+                differ.generateBaseRefMap(refBaseTablePartitionMap, result.mvPartitionToCells);
+        // mv partition name -> Map<base table -> base partition names>
+        final Map<String, Map<Table, Set<String>>> mvToBaseNameRef =
+                differ.generateMvRefMap(result.mvPartitionToCells, refBaseTablePartitionMap);
+        mvContext.setMVToCellMap(result.mvPartitionToCells);
+        mvContext.setRefBaseTableMVIntersectedPartitions(baseToMvNameRef);
+        mvContext.setMvRefBaseTableIntersectedPartitions(mvToBaseNameRef);
+        mvContext.setRefBaseTableToCellMap(refBaseTablePartitionMap);
+        mvContext.setExternalRefBaseTableMVPartitionMap(result.getRefBaseTableMVPartitionMap());
+>>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
         return true;
     }
 
@@ -143,7 +183,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         }
         Map<String, PListCell> baseListPartitionMap = basePartitionMaps.get(refBaseTable);
         if (baseListPartitionMap == null) {
-            LOG.warn("Generate incremental partition predicate failed, " +
+            logger.warn("Generate incremental partition predicate failed, " +
                     "basePartitionMaps:{} contains no refBaseTable:{}", basePartitionMaps, refBaseTable);
             return null;
         }
@@ -151,6 +191,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             return new BoolLiteral(true);
         }
 
+<<<<<<< HEAD
         List<Expr> sourceTablePartitionList = Lists.newArrayList();
         List<Column> partitionCols = refBaseTable.getPartitionColumns();
         Map<Table, Column> partitionTableAndColumn = mv.getRefBaseTablePartitionColumns();
@@ -162,6 +203,25 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         Column refPartitionColumn = partitionTableAndColumn.get(refBaseTable);
         int refIndex = ListPartitionDiffer.getRefBaseTableIdx(refBaseTable, refPartitionColumn);
         Type partitionType = partitionCols.get(refIndex).getType();
+=======
+        // base table's partition columns, not mv's partition columns
+        Map<Table, List<Column>> refBaseTablePartitionColumns = mv.getRefBaseTablePartitionColumns();
+        if (refBaseTablePartitionColumns == null || !refBaseTablePartitionColumns.containsKey(refBaseTable)) {
+            logger.warn("Generate incremental partition failed, partitionTableAndColumn {} contains no ref table {}",
+                    refBaseTablePartitionColumns, refBaseTable);
+            return null;
+        }
+        // base table's partition columns that are referred by mv
+        List<Column> refPartitionColumns = refBaseTablePartitionColumns.get(refBaseTable);
+        if (refPartitionColumns.size() != mvPartitionSlotRefs.size()) {
+            logger.warn("Generate incremental partition failed, refPartitionColumns size {} != mvPartitionSlotRefs size {}",
+                    refPartitionColumns.size(), mvPartitionSlotRefs.size());
+            return null;
+        }
+        return genPartitionPredicate(refBaseTable, refBaseTablePartitionNames, mvPartitionSlotRefs,
+                refPartitionColumns, baseListPartitionMap);
+    }
+>>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
 
         boolean isContainsNullPartition = false;
         for (String tablePartitionName : refBaseTablePartitionNames) {
@@ -216,27 +276,27 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             }
         } else {
             // check the ref base table
-            Set<String> needRefreshMvPartitionNames = getMvPartitionNamesToRefresh(mvListPartitionNames);
+            Set<String> mvToRefreshPartitionNames = getMvPartitionNamesToRefresh(mvListPartitionNames);
             Map<Table, Set<String>> baseChangedPartitionNames =
-                    getBasePartitionNamesByMVPartitionNames(needRefreshMvPartitionNames);
+                    getBasePartitionNamesByMVPartitionNames(mvToRefreshPartitionNames);
             if (baseChangedPartitionNames.isEmpty()) {
-                LOG.info("Cannot get associated base table change partitions from mv's refresh partitions {}, mv: {}",
-                        needRefreshMvPartitionNames, mv.getName());
-                return needRefreshMvPartitionNames;
+                logger.info("Cannot get associated base table change partitions from mv's refresh partitions {}",
+                        mvToRefreshPartitionNames);
+                return mvToRefreshPartitionNames;
             }
             // because the relation of partitions between materialized view and base partition table is n : m,
             // should calculate the candidate partitions recursively.
             if (isCalcPotentialRefreshPartition()) {
-                LOG.info("Start calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
-                        " baseChangedPartitionNames: {}", needRefreshMvPartitionNames, baseChangedPartitionNames);
-                SyncPartitionUtils.calcPotentialRefreshPartition(needRefreshMvPartitionNames, baseChangedPartitionNames,
+                logger.info("Start calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
+                        " baseChangedPartitionNames: {}", mvToRefreshPartitionNames, baseChangedPartitionNames);
+                SyncPartitionUtils.calcPotentialRefreshPartition(mvToRefreshPartitionNames, baseChangedPartitionNames,
                         mvContext.getRefBaseTableMVIntersectedPartitions(),
                         mvContext.getMvRefBaseTableIntersectedPartitions(),
                         mvPotentialPartitionNames);
-                LOG.info("Finish calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
-                        " baseChangedPartitionNames: {}", needRefreshMvPartitionNames, baseChangedPartitionNames);
+                logger.info("Finish calcPotentialRefreshPartition, needRefreshMvPartitionNames: {}," +
+                        " baseChangedPartitionNames: {}", mvToRefreshPartitionNames, baseChangedPartitionNames);
             }
-            return needRefreshMvPartitionNames;
+            return mvToRefreshPartitionNames;
         }
     }
 
@@ -293,6 +353,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         return materializedView.getValidListPartitionMap(lastPartitionNum).keySet();
     }
 
+<<<<<<< HEAD
     /**
      * Filter partitions by partition_ttl_number, save the kept partitions and return the next task run partition values.
      * @param inputPartitions the partitions to refresh/add
@@ -303,6 +364,20 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                                                     int filterNumber) {
         if (filterNumber <= 0 || filterNumber >= inputPartitions.size()) {
             return null;
+=======
+    @Override
+    public void filterPartitionByRefreshNumber(Set<String> mvPartitionsToRefresh,
+                                               Set<String> mvPotentialPartitionNames, boolean tentative) {
+        Map<String, PCell> partitionToCells = Maps.newHashMap();
+        Map<String, PListCell> listPartitionMap = mv.getListPartitionItems();
+        for (String partitionName : mvPartitionsToRefresh) {
+            PListCell listCell = listPartitionMap.get(partitionName);
+            if (listCell == null) {
+                logger.warn("Partition {} is not found in materialized view {}", partitionName, mv.getName());
+                continue;
+            }
+            partitionToCells.put(partitionName, listCell);
+>>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
         }
         // TODO: Sort by List Partition's value is weird because there maybe meaningless or un-sortable,
         // users should take care of `partition_ttl_number` for list partition.
@@ -325,6 +400,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             // remove the partition which is not reserved
             inputPartitions.remove(entry.getKey());
         }
+<<<<<<< HEAD
         LOG.info("Filter partitions by partition_ttl_number, ttl_number:{}, result:{}, remains:{}",
                 filterNumber, inputPartitions, nextPartitionCells);
         return nextPartitionCells;
@@ -345,6 +421,10 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
         }
         int refreshNumber = mv.getTableProperty().getPartitionRefreshNumber();
         Set<PListCell> nextPartitionValues = filterPartitionsByNumber(mappedPartitionsToRefresh, refreshNumber);
+=======
+        logger.info("Filter partitions by partition_ttl_number, ttl_number:{}, result:{}, remains:{}",
+                filterNumber, toRefreshPartitions, nextPartitionValues);
+>>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
         // do filter input mvPartitionsToRefresh since it's a reference
         mvPartitionsToRefresh.retainAll(mappedPartitionsToRefresh.keySet());
         if (CollectionUtils.isEmpty(nextPartitionValues)) {
@@ -374,14 +454,14 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                     new MultiItemListPartitionDesc(false, mvPartitionName, partitionItems, partitionProperties);
             AddPartitionClause addPartitionClause =
                     new AddPartitionClause(multiItemListPartitionDesc, distributionDesc, partitionProperties, false);
-            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(materializedView);
+            AlterTableClauseAnalyzer analyzer = new AlterTableClauseAnalyzer(mv);
             analyzer.analyze(mvContext.getCtx(), addPartitionClause);
             try {
                 GlobalStateMgr.getCurrentState().getLocalMetastore().addPartitions(
-                        mvContext.getCtx(), database, materializedView.getName(), addPartitionClause);
+                        mvContext.getCtx(), database, mv.getName(), addPartitionClause);
             } catch (Exception e) {
                 throw new DmlException("add list partition failed: %s, db: %s, table: %s", e, e.getMessage(),
-                        database.getFullName(), materializedView.getName());
+                        database.getFullName(), mv.getName());
             }
         }
     }
