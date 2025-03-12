@@ -358,6 +358,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_MAX_REORDER_NODE_USE_GREEDY = "cbo_max_reorder_node_use_greedy";
     public static final String CBO_ENABLE_REPLICATED_JOIN = "cbo_enable_replicated_join";
     public static final String CBO_USE_CORRELATED_JOIN_ESTIMATE = "cbo_use_correlated_join_estimate";
+    public static final String CBO_USE_CORRELATED_PREDICATE_ESTIMATE = "cbo_use_correlated_predicate_estimate";
     public static final String ALWAYS_COLLECT_LOW_CARD_DICT = "always_collect_low_card_dict";
     public static final String ALWAYS_COLLECT_LOW_CARD_DICT_ON_LAKE = "always_collect_low_card_dict_on_lake";
     public static final String CBO_ENABLE_LOW_CARDINALITY_OPTIMIZE = "cbo_enable_low_cardinality_optimize";
@@ -1143,6 +1144,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VariableMgr.VarAttr(name = CBO_USE_CORRELATED_JOIN_ESTIMATE, flag = VariableMgr.INVISIBLE)
     private boolean useCorrelatedJoinEstimate = true;
+
+    @VariableMgr.VarAttr(name = CBO_USE_CORRELATED_PREDICATE_ESTIMATE)
+    private boolean useCorrelatedPredicateEstimate = true;
 
     @VariableMgr.VarAttr(name = CBO_USE_NTH_EXEC_PLAN, flag = VariableMgr.INVISIBLE)
     private int useNthExecPlan = 0;
@@ -3659,6 +3663,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setUseCorrelatedJoinEstimate(boolean useCorrelatedJoinEstimate) {
         this.useCorrelatedJoinEstimate = useCorrelatedJoinEstimate;
+    }
+
+    public boolean isUseCorrelatedPredicateEstimate() {
+        return useCorrelatedPredicateEstimate;
+    }
+
+    public void setUseCorrelatedPredicateEstimate(boolean useCorrelatedPredicateEstimate) {
+        this.useCorrelatedPredicateEstimate = useCorrelatedPredicateEstimate;
     }
 
     public boolean isAlwaysCollectDict() {
