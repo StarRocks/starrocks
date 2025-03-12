@@ -1824,7 +1824,11 @@ public:
 
         // wrap nullable and const column for result
         if (is_nullable_array) {
+<<<<<<< HEAD
             result_column = NullableColumn::create(std::move(result_column), array_null_column);
+=======
+            result_column = NullableColumn::create(std::move(result_column), array_null_column->clone());
+>>>>>>> 7b5e9d61f6 ([BugFix] Fix array contains reuse null column (#56810))
             result_column->check_or_die();
         }
         if (is_const_array && is_const_target) {
