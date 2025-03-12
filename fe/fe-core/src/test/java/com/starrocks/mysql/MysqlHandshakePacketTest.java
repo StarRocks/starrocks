@@ -60,39 +60,39 @@ public class MysqlHandshakePacketTest {
         ByteBuffer buffer = serializer.toByteBuffer();
 
         // assert protocol version
-        Assert.assertEquals(10, MysqlProto.readInt1(buffer));
+        Assert.assertEquals(10, MysqlCodec.readInt1(buffer));
         // server version
-        Assert.assertEquals("8.0.33", new String(MysqlProto.readNulTerminateString(buffer)));
+        Assert.assertEquals("8.0.33", new String(MysqlCodec.readNulTerminateString(buffer)));
         // connection id
-        Assert.assertEquals(1090, MysqlProto.readInt4(buffer));
+        Assert.assertEquals(1090, MysqlCodec.readInt4(buffer));
         // plugin data 1
-        byte[] pluginData1 = MysqlProto.readFixedString(buffer, 8);
-        Assert.assertEquals(0, MysqlProto.readInt1(buffer));
+        byte[] pluginData1 = MysqlCodec.readFixedString(buffer, 8);
+        Assert.assertEquals(0, MysqlCodec.readInt1(buffer));
         int flags = 0;
-        flags = MysqlProto.readInt2(buffer);
+        flags = MysqlCodec.readInt2(buffer);
         // char set
-        Assert.assertEquals(33, MysqlProto.readInt1(buffer));
+        Assert.assertEquals(33, MysqlCodec.readInt1(buffer));
         // status flags
-        Assert.assertEquals(0, MysqlProto.readInt2(buffer));
+        Assert.assertEquals(0, MysqlCodec.readInt2(buffer));
         // capability flags
-        flags |= MysqlProto.readInt2(buffer) << 16;
+        flags |= MysqlCodec.readInt2(buffer) << 16;
         Assert.assertEquals(MysqlCapability.DEFAULT_CAPABILITY.getFlags(), flags);
         // length of plugin data
-        Assert.assertEquals(21, MysqlProto.readInt1(buffer));
+        Assert.assertEquals(21, MysqlCodec.readInt1(buffer));
         // length of plugin data
         byte[] toCheck = new byte[10];
-        byte[] reserved = MysqlProto.readFixedString(buffer, 10);
+        byte[] reserved = MysqlCodec.readFixedString(buffer, 10);
         for (int i = 0; i < 10; ++i) {
             Assert.assertEquals(toCheck[i], reserved[i]);
         }
-        byte[] pluginData2 = MysqlProto.readFixedString(buffer, 12);
+        byte[] pluginData2 = MysqlCodec.readFixedString(buffer, 12);
         byte[] pluginData = Bytes.concat(pluginData1, pluginData2);
         for (int i = 0; i < 20; ++i) {
             Assert.assertEquals(buf[i], pluginData[i]);
         }
 
         // one byte
-        Assert.assertEquals(0, MysqlProto.readInt1(buffer));
+        Assert.assertEquals(0, MysqlCodec.readInt1(buffer));
         Assert.assertEquals(22, buffer.remaining());
     }
 
