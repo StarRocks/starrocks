@@ -33,6 +33,11 @@ public class MockTaskRunProcessor implements TaskRunProcessor {
     }
 
     @Override
+    public void prepare(TaskRunContext context) throws Exception {
+        // do nothing
+    }
+
+    @Override
     public void processTaskRun(TaskRunContext context) throws Exception {
         if (sleepTimeMs > 0) {
             Thread.sleep(sleepTimeMs);
