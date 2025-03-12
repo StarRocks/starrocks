@@ -34,6 +34,7 @@ import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import mockit.Mocked;
+import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -93,6 +94,67 @@ public class WarehouseManagerEPackTest {
     }
 
     @Test
+    public void testCreateWarehouse() {
+        long warehouseId = 345;
+        new MockUp<StarOSAgentEpack>() {
+            @Mock
+            public long createWorkerGroup(String size, int replicaNumber, ReplicationType replicationType,
+                                          WarmupLevel warmupLevel) throws DdlException {
+                return warehouseId;
+            }
+        };
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public EditLog getEditLog() {
+                return editLog;
+            }
+        };
+
+        { // the warehouse is created with default properties
+            WarehouseManagerEPack mgr = new WarehouseManagerEPack();
+            CreateWarehouseStmt createStmt = new CreateWarehouseStmt(false, "wh1", Maps.newHashMap(), "");
+            ExceptionChecker.expectThrowsNoException(() -> mgr.createWarehouse(createStmt));
+
+            Warehouse warehouse = mgr.getWarehouse("wh1");
+            Assert.assertNotNull(warehouse);
+            Assert.assertTrue(warehouse instanceof LocalWarehouse);
+            WarehouseProperty property = ((LocalWarehouse) warehouse).getProperty();
+            Assert.assertEquals(new WarehouseProperty(), property);
+        }
+
+        { // the warehouse is created with customized properties
+            WarehouseManagerEPack mgr = new WarehouseManagerEPack();
+            HashMap<String, String> props = Maps.newHashMap();
+            props.put("compute_replica", "2");
+            props.put("replication_type", "async");
+            props.put("warmup_level", "all");
+            CreateWarehouseStmt createStmt = new CreateWarehouseStmt(false, "wh2", props, "");
+            ExceptionChecker.expectThrowsNoException(() -> mgr.createWarehouse(createStmt));
+
+            Warehouse warehouse = mgr.getWarehouse("wh2");
+            Assert.assertNotNull(warehouse);
+            Assert.assertTrue(warehouse instanceof LocalWarehouse);
+            WarehouseProperty property = ((LocalWarehouse) warehouse).getProperty();
+            WarehouseProperty expected = new WarehouseProperty(2, WarehouseProperty.ReplicationType.ASYNC,
+                    WarehouseProperty.WarmupLevelType.ALL);
+            Assert.assertEquals(expected, property);
+        }
+        { // Unknown/Unsupported properties
+            WarehouseManagerEPack mgr = new WarehouseManagerEPack();
+            HashMap<String, String> props = Maps.newHashMap();
+            props.put("compute_replica", "2");
+            props.put("replication_type", "async");
+            props.put("ReplicationType", "async");
+            props.put("warmup_level", "all");
+            props.put("replication_num", "1");
+            CreateWarehouseStmt createStmt = new CreateWarehouseStmt(false, "wh2", props, "");
+            DdlException exception = Assert.assertThrows(DdlException.class, () -> mgr.createWarehouse(createStmt));
+            Assert.assertTrue(exception.getMessage(), exception.getMessage().contains("ReplicationType"));
+            Assert.assertTrue(exception.getMessage(), exception.getMessage().contains("replication_num"));
+        }
+    }
+
+    @Test
     public void testAlterWarehouse() throws DdlException {
         new MockUp<StarOSAgentEpack>() {
             @Mock
@@ -121,6 +183,45 @@ public class WarehouseManagerEPackTest {
             WarehouseManagerEPack mgr = new WarehouseManagerEPack();
             mgr.initDefaultWarehouse();
             mgr.alterWarehouse(alterStmt);
+        }
+        {
+            Map<String, String> m = new HashMap<>();
+            m.put("warmup_level", "ALL");
+            AlterWarehouseStmt alterStmt = new AlterWarehouseStmt("default_warehouse", m);
+            WarehouseManagerEPack mgr = new WarehouseManagerEPack();
+            mgr.initDefaultWarehouse();
+            mgr.alterWarehouse(alterStmt);
+        }
+        {
+            Map<String, String> m = new HashMap<>();
+            m.put("warmup_level", "Meta");
+            m.put("replication_type", "aSYNC");
+            AlterWarehouseStmt alterStmt = new AlterWarehouseStmt("default_warehouse", m);
+            WarehouseManagerEPack mgr = new WarehouseManagerEPack();
+            mgr.initDefaultWarehouse();
+            mgr.alterWarehouse(alterStmt);
+            Warehouse warehouse = mgr.getWarehouse("default_warehouse");
+            Assert.assertTrue(warehouse instanceof  LocalWarehouse);
+            WarehouseProperty property = ((LocalWarehouse) warehouse).getProperty();
+            Assert.assertEquals(WarehouseProperty.ReplicationType.ASYNC, property.getReplicationType());
+            Assert.assertEquals(WarehouseProperty.WarmupLevelType.META, property.getWarmupLevel());
+        }
+
+        {
+            Map<String, String> m = new HashMap<>();
+            // incorrect one
+            m.put("_warmup_", "Meta");
+            m.put("+replication+", "aSYNC");
+            // correct one
+            m.put("warmup_level", "Meta");
+            m.put("replication_type", "aSYNC");
+            AlterWarehouseStmt alterStmt = new AlterWarehouseStmt("default_warehouse", m);
+            WarehouseManagerEPack mgr = new WarehouseManagerEPack();
+            mgr.initDefaultWarehouse();
+
+            DdlException exception = Assert.assertThrows(DdlException.class, () -> mgr.alterWarehouse(alterStmt));
+            Assert.assertTrue(exception.getMessage(), exception.getMessage().contains("_warmup_"));
+            Assert.assertTrue(exception.getMessage(), exception.getMessage().contains("+replication+"));
         }
     }
 }

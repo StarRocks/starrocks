@@ -4,6 +4,7 @@ package com.starrocks.epack.warehouse;
 
 import com.google.common.base.Preconditions;
 import com.staros.proto.ReplicationType;
+import com.staros.proto.WarmupLevel;
 import com.staros.util.LockCloseable;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
@@ -37,6 +38,7 @@ import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -157,19 +159,6 @@ public class WarehouseManagerEPack extends WarehouseManager {
         return warehouse.getAnyAvailableCluster().getNextComputeNodeHostId();
     }
 
-    private WarehouseProperty.ReplicationType convertStringToReplicationType(String replicationType)
-            throws DdlException {
-        if (replicationType.equalsIgnoreCase(WarehouseProperty.ReplicationType.SYNC.toString())) {
-            return WarehouseProperty.ReplicationType.SYNC;
-        } else if (replicationType.equalsIgnoreCase(WarehouseProperty.ReplicationType.ASYNC.toString())) {
-            return WarehouseProperty.ReplicationType.ASYNC;
-        } else if (replicationType.equalsIgnoreCase(WarehouseProperty.ReplicationType.NONE.toString())) {
-            return WarehouseProperty.ReplicationType.NONE;
-        } else {
-            throw new DdlException("warehouse replication type can only be SYNC or ASYNC or NONE");
-        }
-    }
-
     @Override
     public void createWarehouse(CreateWarehouseStmt stmt) throws DdlException {
         if (RunMode.getCurrentRunMode() == RunMode.SHARED_NOTHING) {
@@ -187,10 +176,12 @@ public class WarehouseManagerEPack extends WarehouseManager {
                 ErrorReport.reportDdlException(ErrorCode.ERR_WAREHOUSE_EXISTS, String.format("name: %s", warehouseName));
             }
             WarehouseProperty warehouseProperty = new WarehouseProperty();
-            Map<String, String> properties = stmt.getProperties();
-            if (properties != null) {
-                int computeReplica = Integer.parseInt(properties.getOrDefault(WarehouseProperty.PROPERTY_COMPUTE_REPLICA,
-                        String.valueOf(WarehouseProperty.DEFAULT_REPLICA_NUMBER)));
+            if (stmt.getProperties() != null && !stmt.getProperties().isEmpty()) {
+                Map<String, String> properties = new HashMap<>(stmt.getProperties());
+
+                int computeReplica =
+                        Integer.parseInt(properties.getOrDefault(WarehouseProperty.PROPERTY_COMPUTE_REPLICA,
+                                String.valueOf(WarehouseProperty.DEFAULT_REPLICA_NUMBER)));
                 if (computeReplica <= 0) {
                     throw new DdlException("warehouse compute replica can not be <= 0");
                 }
@@ -199,12 +190,25 @@ public class WarehouseManagerEPack extends WarehouseManager {
                             Config.lake_warehouse_max_compute_replica);
                 }
                 warehouseProperty.setComputeReplica(computeReplica);
+                properties.remove(WarehouseProperty.PROPERTY_COMPUTE_REPLICA);
 
+                // handle 'replication_type': {none, sync, async}, default to: none
                 String replicationType = properties.getOrDefault(WarehouseProperty.PROPERTY_REPLICATION_TYPE,
                         WarehouseProperty.ReplicationType.NONE.toString());
-                warehouseProperty.setReplicationType(convertStringToReplicationType(replicationType));
-            }
+                warehouseProperty.setReplicationType(WarehouseProperty.replicationTypeFromString(replicationType));
+                properties.remove(WarehouseProperty.PROPERTY_REPLICATION_TYPE);
 
+                // handle 'warmup_level': {none, meta, index, all}, default to: none
+                String warmupLevel = properties.getOrDefault(WarehouseProperty.PROPERTY_WARMUP_LEVEL,
+                        WarehouseProperty.WarmupLevelType.NONE.toString());
+                warehouseProperty.setWarmupLevel(WarehouseProperty.warmupLevelTypeFromString(warmupLevel));
+                properties.remove(WarehouseProperty.PROPERTY_WARMUP_LEVEL);
+
+                if (!properties.isEmpty()) {
+                    throw new DdlException(String.format("Unknown warehouse properties: {%s}",
+                            String.join(", ", properties.keySet())));
+                }
+            }
             long id = GlobalStateMgr.getCurrentState().getNextId();
             long clusterId = GlobalStateMgr.getCurrentState().getNextId();
             String comment = stmt.getComment();
@@ -213,9 +217,10 @@ public class WarehouseManagerEPack extends WarehouseManager {
             for (Cluster cluster : wh.getClusters().values()) {
                 try {
                     ReplicationType replicationType = toStarOSReplicationType(warehouseProperty.getReplicationType());
+                    WarmupLevel warmupLevel = toStarOSWarmupLevel(warehouseProperty.getWarmupLevel());
                     StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
                     cluster.setWorkerGroupId(starOSAgent.createWorkerGroup("x0", warehouseProperty.getComputeReplica(),
-                                             replicationType));
+                                             replicationType, warmupLevel));
                 } catch (DdlException e) {
                     LOG.warn(e);
                     throw new DdlException("create warehouse " + wh.getName() + " failed, reason: " + e);
@@ -226,8 +231,7 @@ public class WarehouseManagerEPack extends WarehouseManager {
             idToWh.put(wh.getId(), wh);
             EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
             editLog.logEdit(OperationType.OP_CREATE_WAREHOUSE, wh);
-            LOG.info("createWarehouse whName = " + warehouseName + ", id = " + id + ", " +
-                    "comment = " + comment);
+            LOG.info("createWarehouse whName = {}, id = {}, comment = {}", warehouseName, id, comment);
         }
     }
 
@@ -342,12 +346,15 @@ public class WarehouseManagerEPack extends WarehouseManager {
             Preconditions.checkState(nameToWh.containsKey(warehouseName),
                     "Warehouse '%s' doesn't exist", warehouseName);
 
-            Map<String, String> properties = stmt.getProperties();
-            if (properties == null || properties.isEmpty()) {
+            if (stmt.getProperties() == null || stmt.getProperties().isEmpty()) {
                 return;
             }
+            // make a copy of the properties, need to modify the map during the processing
+            Map<String, String> properties = new HashMap<>(stmt.getProperties());
             LocalWarehouse warehouse = (LocalWarehouse) nameToWh.get(warehouseName);
             WarehouseProperty warehouseProperty = new WarehouseProperty(warehouse.getProperty());
+
+            // handle update of 'compute_replica'
             if (properties.get(WarehouseProperty.PROPERTY_COMPUTE_REPLICA) != null) {
                 int computeReplica = Integer.parseInt(properties.get(WarehouseProperty.PROPERTY_COMPUTE_REPLICA));
                 if (computeReplica <= 0) {
@@ -358,27 +365,44 @@ public class WarehouseManagerEPack extends WarehouseManager {
                             Config.lake_warehouse_max_compute_replica);
                 }
                 warehouseProperty.setComputeReplica(computeReplica);
+                properties.remove(WarehouseProperty.PROPERTY_COMPUTE_REPLICA);
             }
+            // handle update of 'replication_type'
             if (properties.get(WarehouseProperty.PROPERTY_REPLICATION_TYPE) != null) {
                 String replicationType = properties.get(WarehouseProperty.PROPERTY_REPLICATION_TYPE);
-                warehouseProperty.setReplicationType(convertStringToReplicationType(replicationType));
+                warehouseProperty.setReplicationType(WarehouseProperty.replicationTypeFromString(replicationType));
+                properties.remove(WarehouseProperty.PROPERTY_REPLICATION_TYPE);
+            }
+            // handle update of 'warmup_level'
+            if (properties.get(WarehouseProperty.PROPERTY_WARMUP_LEVEL) != null) {
+                String warmupLevel = properties.get(WarehouseProperty.PROPERTY_WARMUP_LEVEL);
+                warehouseProperty.setWarmupLevel(WarehouseProperty.warmupLevelTypeFromString(warmupLevel));
+                properties.remove(WarehouseProperty.PROPERTY_WARMUP_LEVEL);
             }
 
-            // TODO: operation below is not atomic
-            StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
-            for (Cluster cluster : warehouse.getClusters().values()) {
-                try {
-                    ReplicationType replicationType = toStarOSReplicationType(warehouseProperty.getReplicationType());
-                    starOSAgent.updateWorkerGroup(cluster.getWorkerGroupId(), warehouseProperty.getComputeReplica(),
-                            replicationType);
-                } catch (DdlException e) {
-                    LOG.warn(e);
-                    throw new DdlException("alter warehouse " + warehouse.getName() + " failed, reason: " + e);
-                }
+            if (!properties.isEmpty()) {
+                throw new DdlException(
+                        String.format("Unknown warehouse properties: {%s}", String.join(", ", properties.keySet())));
             }
-            warehouse.setProperty(warehouseProperty);
-            EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
-            editLog.logEdit(OperationType.OP_ALTER_WAREHOUSE, warehouse);
+
+            if (!warehouseProperty.equals(warehouse.getProperty())) { // some changes are made
+                // TODO: operation below is not atomic
+                StarOSAgent starOSAgent = GlobalStateMgr.getCurrentState().getStarOSAgent();
+                for (Cluster cluster : warehouse.getClusters().values()) {
+                    try {
+                        ReplicationType replicationType = toStarOSReplicationType(warehouseProperty.getReplicationType());
+                        WarmupLevel warmupLevel = toStarOSWarmupLevel(warehouseProperty.getWarmupLevel());
+                        starOSAgent.updateWorkerGroup(cluster.getWorkerGroupId(), warehouseProperty.getComputeReplica(),
+                                replicationType, warmupLevel);
+                    } catch (DdlException e) {
+                        LOG.warn(e);
+                        throw new DdlException("alter warehouse " + warehouse.getName() + " failed, reason: " + e);
+                    }
+                }
+                warehouse.setProperty(warehouseProperty);
+                EditLog editLog = GlobalStateMgr.getCurrentState().getEditLog();
+                editLog.logEdit(OperationType.OP_ALTER_WAREHOUSE, warehouse);
+            }
         }
     }
 
@@ -411,14 +435,25 @@ public class WarehouseManagerEPack extends WarehouseManager {
         return getWarehouse(Config.lake_background_warehouse);
     }
 
-    public static com.staros.proto.ReplicationType toStarOSReplicationType(
+    public static ReplicationType toStarOSReplicationType(
             WarehouseProperty.ReplicationType replicationType)
             throws DdlException {
         return switch (replicationType) {
-            case NONE -> com.staros.proto.ReplicationType.NO_REPLICATION;
-            case SYNC -> com.staros.proto.ReplicationType.SYNC;
-            case ASYNC -> com.staros.proto.ReplicationType.ASYNC;
+            case NONE -> ReplicationType.NO_REPLICATION;
+            case SYNC -> ReplicationType.SYNC;
+            case ASYNC -> ReplicationType.ASYNC;
             default -> throw new DdlException("Unknown replication type " + replicationType);
+        };
+    }
+
+    public static WarmupLevel toStarOSWarmupLevel(WarehouseProperty.WarmupLevelType warmupLevelType)
+            throws DdlException {
+        return switch (warmupLevelType) {
+            case NONE -> WarmupLevel.WARMUP_NOTHING;
+            case META -> WarmupLevel.WARMUP_META;
+            case INDEX -> WarmupLevel.WARMUP_INDEX;
+            case ALL -> WarmupLevel.WARMUP_ALL;
+            default -> throw new DdlException("Unknown warmup level type " + warmupLevelType);
         };
     }
 }
