@@ -181,7 +181,7 @@ enum TSchemaTableType {
 
     SCH_CLUSTER_SNAPSHOTS,
     SCH_CLUSTER_SNAPSHOT_JOBS,
-
+    SCH_KEYWORDS,
     // Used by epack
     STARROCKS_POLICY_REFERENCES = 20000
 }

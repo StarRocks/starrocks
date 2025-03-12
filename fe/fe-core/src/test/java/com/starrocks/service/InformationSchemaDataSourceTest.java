@@ -23,6 +23,8 @@ import com.starrocks.scheduler.TaskManager;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TGetKeywordsRequest;
+import com.starrocks.thrift.TGetKeywordsResponse;
 import com.starrocks.thrift.TGetPartitionsMetaRequest;
 import com.starrocks.thrift.TGetPartitionsMetaResponse;
 import com.starrocks.thrift.TGetTablesConfigRequest;
@@ -30,6 +32,7 @@ import com.starrocks.thrift.TGetTablesConfigResponse;
 import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTasksParams;
+import com.starrocks.thrift.TKeywordInfo;
 import com.starrocks.thrift.TPartitionMetaInfo;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTableInfo;
@@ -49,6 +52,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 public class InformationSchemaDataSourceTest {
 
@@ -370,5 +374,53 @@ public class InformationSchemaDataSourceTest {
         starRocksAssert.query("select state, error_message" +
                         " from information_schema.task_runs where state = 'SUCCESS' ")
                 .explainContains("SCAN SCHEMA");
+    }
+
+    @Test
+    public void testGetKeywords() throws Exception {
+        starRocksAssert.withEnableMV();
+
+        FrontendServiceImpl impl = new FrontendServiceImpl(exeEnv);
+
+        TGetKeywordsRequest req = new TGetKeywordsRequest();
+        TAuthInfo authInfo = new TAuthInfo();
+        authInfo.setPattern("%");
+        authInfo.setUser("root");
+        authInfo.setUser_ip("%");
+        req.setAuth_info(authInfo);
+
+        TGetKeywordsResponse response = impl.getKeywords(req);
+        List<TKeywordInfo> keywordList = response.getKeywords();
+
+        Assert.assertNotNull("Keywords list should not be null", keywordList);
+        Assert.assertFalse("Keywords list should not be empty", keywordList.isEmpty());
+
+        List<String> keywordNames = keywordList.stream()
+                .map(TKeywordInfo::getKeyword)
+                .collect(Collectors.toList());
+
+        Assert.assertTrue("Keywords should contain 'SELECT'", keywordNames.contains("SELECT"));
+        Assert.assertTrue("Keywords should contain 'INSERT'", keywordNames.contains("INSERT"));
+        Assert.assertTrue("Keywords should contain 'UPDATE'", keywordNames.contains("UPDATE"));
+        Assert.assertTrue("Keywords should contain 'DELETE'", keywordNames.contains("DELETE"));
+        Assert.assertTrue("Keywords should contain 'TABLE'", keywordNames.contains("TABLE"));
+        Assert.assertTrue("Keywords should contain 'INDEX'", keywordNames.contains("INDEX"));
+        Assert.assertTrue("Keywords should contain 'VIEW'", keywordNames.contains("VIEW"));
+        Assert.assertTrue("Keywords should contain 'USER'", keywordNames.contains("USER"));
+        Assert.assertTrue("Keywords should contain 'PASSWORD'", keywordNames.contains("PASSWORD"));
+
+        TKeywordInfo selectKeyword = keywordList.stream()
+                .filter(k -> k.getKeyword().equals("SELECT"))
+                .findFirst()
+                .orElse(null);
+        Assert.assertNotNull("SELECT keyword should be present", selectKeyword);
+        Assert.assertTrue("SELECT keyword should be reserved", selectKeyword.isReserved());
+
+        TKeywordInfo userKeyword = keywordList.stream()
+                .filter(k -> k.getKeyword().equals("USER"))
+                .findFirst()
+                .orElse(null);
+        Assert.assertNotNull("USER keyword should be present", userKeyword);
+        Assert.assertFalse("USER keyword should not be reserved", userKeyword.isReserved());
     }
 }
