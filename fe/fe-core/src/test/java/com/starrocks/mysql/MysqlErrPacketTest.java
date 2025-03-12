@@ -43,15 +43,15 @@ public class MysqlErrPacketTest {
         ByteBuffer buffer = serializer.toByteBuffer();
 
         // assert indicator
-        Assert.assertEquals(0xff, MysqlProto.readInt1(buffer));
+        Assert.assertEquals(0xff, MysqlCodec.readInt1(buffer));
         // error code
-        Assert.assertEquals(1064, MysqlProto.readInt2(buffer));
+        Assert.assertEquals(1064, MysqlCodec.readInt2(buffer));
         // sql state marker
-        Assert.assertEquals('#', MysqlProto.readInt1(buffer));
+        Assert.assertEquals('#', MysqlCodec.readInt1(buffer));
         // sql state
-        Assert.assertEquals("HY000", new String(MysqlProto.readFixedString(buffer, 5)));
+        Assert.assertEquals("HY000", new String(MysqlCodec.readFixedString(buffer, 5)));
         // sql state
-        Assert.assertEquals("error", new String(MysqlProto.readEofString(buffer)));
+        Assert.assertEquals("error", new String(MysqlCodec.readEofString(buffer)));
 
         Assert.assertEquals(0, buffer.remaining());
     }
@@ -66,16 +66,16 @@ public class MysqlErrPacketTest {
         ByteBuffer buffer = serializer.toByteBuffer();
 
         // assert indicator
-        Assert.assertEquals(0xff, MysqlProto.readInt1(buffer));
+        Assert.assertEquals(0xff, MysqlCodec.readInt1(buffer));
         // error code
-        Assert.assertEquals(1064, MysqlProto.readInt2(buffer));
+        Assert.assertEquals(1064, MysqlCodec.readInt2(buffer));
         // sql state marker
-        Assert.assertEquals('#', MysqlProto.readInt1(buffer));
+        Assert.assertEquals('#', MysqlCodec.readInt1(buffer));
         // sql state
-        Assert.assertEquals("HY000", new String(MysqlProto.readFixedString(buffer, 5)));
+        Assert.assertEquals("HY000", new String(MysqlCodec.readFixedString(buffer, 5)));
         // sql state
         // NOTE: we put one space if MysqlErrPacket's errorMessage is null or empty
-        Assert.assertEquals("Unknown error", new String(MysqlProto.readEofString(buffer)));
+        Assert.assertEquals("Unknown error", new String(MysqlCodec.readEofString(buffer)));
 
         Assert.assertEquals(0, buffer.remaining());
     }

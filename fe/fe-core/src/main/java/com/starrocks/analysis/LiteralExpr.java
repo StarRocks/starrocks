@@ -39,7 +39,7 @@ import com.google.common.collect.ImmutableMap;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.NotImplementedException;
-import com.starrocks.mysql.MysqlProto;
+import com.starrocks.mysql.MysqlCodec;
 import com.starrocks.sql.ast.AstVisitor;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
@@ -295,19 +295,19 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
             return 0;
         }
         // get and advance 1 byte
-        int len = MysqlProto.readInt1(data);
+        int len = MysqlCodec.readInt1(data);
         if (len == 252) {
             if (maxLen < 3) {
                 return 0;
             }
             // get and advance 2 bytes
-            return MysqlProto.readInt2(data);
+            return MysqlCodec.readInt2(data);
         } else if (len == 253) {
             if (maxLen < 4) {
                 return 0;
             }
             // get and advance 3 bytes
-            return MysqlProto.readInt3(data);
+            return MysqlCodec.readInt3(data);
         } else if (len == 254) {
             /*
             In our client-server protocol all numbers bigger than 2^24
@@ -319,8 +319,8 @@ public abstract class LiteralExpr extends Expr implements Comparable<LiteralExpr
             if (maxLen < 9) {
                 return 0;
             }
-            len = MysqlProto.readInt4(data);
-            MysqlProto.readFixedString(data, 4);
+            len = MysqlCodec.readInt4(data);
+            MysqlCodec.readFixedString(data, 4);
             return len;
         } else if (len == 255) {
             return 0;

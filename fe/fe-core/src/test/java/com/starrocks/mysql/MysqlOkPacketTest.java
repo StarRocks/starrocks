@@ -41,22 +41,22 @@ public class MysqlOkPacketTest {
         ByteBuffer buffer = serializer.toByteBuffer();
 
         // assert OK packet indicator 0x00
-        Assert.assertEquals(0x00, MysqlProto.readInt1(buffer));
+        Assert.assertEquals(0x00, MysqlCodec.readInt1(buffer));
 
         // assert affect rows vint: 0
-        Assert.assertEquals(0x00, MysqlProto.readVInt(buffer));
+        Assert.assertEquals(0x00, MysqlCodec.readVInt(buffer));
 
         // assert last insert id, vint: 0
-        Assert.assertEquals(0x00, MysqlProto.readVInt(buffer));
+        Assert.assertEquals(0x00, MysqlCodec.readVInt(buffer));
 
         // assert status flags, int2: 0
-        Assert.assertEquals(0x00, MysqlProto.readInt2(buffer));
+        Assert.assertEquals(0x00, MysqlCodec.readInt2(buffer));
 
         // assert warnings, int2: 0
-        Assert.assertEquals(0x00, MysqlProto.readInt2(buffer));
+        Assert.assertEquals(0x00, MysqlCodec.readInt2(buffer));
 
         // assert info, eof string: "OK"
-        // Assert.assertEquals("OK", new String(MysqlProto.readEofString(buffer)));
+        // Assert.assertEquals("OK", new String(MysqlCodec.readEofString(buffer)));
 
         Assert.assertEquals(0, buffer.remaining());
     }
