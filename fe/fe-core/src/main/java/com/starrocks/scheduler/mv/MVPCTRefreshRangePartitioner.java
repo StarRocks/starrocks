@@ -101,12 +101,8 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         Range<PartitionKey> rangeToInclude = SyncPartitionUtils.createRange(start, end, partitionColumn);
         PartitionDiffResult result = differ.computePartitionDiff(rangeToInclude);
         if (result == null) {
-<<<<<<< HEAD
             // TODO: throw exception?
-            LOG.warn("compute range partition diff failed: mv: {}", mv.getName());
-=======
             logger.warn("compute range partition diff failed: mv: {}", mv.getName());
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
             return false;
         }
 
@@ -220,11 +216,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
         String end = mvRefreshParams.getRangeEnd();
         boolean force = mvRefreshParams.isForce();
         Set<String> mvRangePartitionNames = getMVPartitionNamesWithTTL(mv, mvRefreshParams, isAutoRefresh);
-<<<<<<< HEAD
-        LOG.info("Get partition names by range with partition limit, start: {}, end: {}, force:{}, " +
-=======
-        logger.info("Get partition names by range with partition limit, mv name: {}, start: {}, end: {}, force:{}, " +
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
+        logger.info("Get partition names by range with partition limit, start: {}, end: {}, force:{}, " +
                         "partitionTTLNumber: {}, isAutoRefresh: {}, mvRangePartitionNames: {}, isRefreshMvBaseOnNonRefTables:{}",
                 start, end, force, partitionTTLNumber, isAutoRefresh, mvRangePartitionNames, isRefreshMvBaseOnNonRefTables);
 
@@ -353,7 +345,7 @@ public final class MVPCTRefreshRangePartitioner extends MVPCTRefreshPartitioner 
                     toRefreshPartitions, isMockPartitionIds);
             // remove the expired partitions
             if (CollectionUtils.isNotEmpty(expiredPartitionNames)) {
-                LOG.info("Filter partitions by partition_retention_condition, ttl_condition:{}, expired:{}",
+                logger.info("Filter partitions by partition_retention_condition, ttl_condition:{}, expired:{}",
                         ttlCondition, expiredPartitionNames);
                 // remove expired partition names from toRefreshPartitions
                 expiredPartitionNames.stream().forEach(toRefreshPartitions::remove);

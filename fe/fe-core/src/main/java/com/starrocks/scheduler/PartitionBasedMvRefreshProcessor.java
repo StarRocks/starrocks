@@ -89,11 +89,6 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections.CollectionUtils;
-<<<<<<< HEAD
-import org.apache.logging.log4j.LogManager;
-=======
-import org.apache.commons.lang3.StringUtils;
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
@@ -1100,13 +1095,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                     }
                 }
             }
-<<<<<<< HEAD
         } catch (UserException e) {
-            LOG.warn("Materialized view compute partition change failed", DebugUtil.getRootStackTrace(e));
-=======
-        } catch (StarRocksException e) {
             logger.warn("Materialized view compute partition change failed", DebugUtil.getRootStackTrace(e));
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
             return true;
         }
         return false;
@@ -1143,15 +1133,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         ConnectContext ctx = mvContext.getCtx();
 
         if (mvContext.getTaskRun().isKilled()) {
-<<<<<<< HEAD
-            LOG.warn("[QueryId:{}] refresh materialized view {} is killed", ctx.getQueryId(),
-                    materializedView.getName());
-            throw new UserException("User Cancelled");
-=======
             logger.warn("[QueryId:{}] refresh materialized view {} is killed", ctx.getQueryId(),
                     mv.getName());
-            throw new StarRocksException("User Cancelled");
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
+            throw new UserException("User Cancelled");
         }
 
         StmtExecutor executor = StmtExecutor.newInternalExecutor(ctx, insertStmt);
@@ -1432,32 +1416,4 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     public Map<Long, TableSnapshotInfo> getSnapshotBaseTables() {
         return snapshotBaseTables;
     }
-<<<<<<< HEAD
 }
-=======
-
-    private String getPostRun(ConnectContext ctx, MaterializedView mv) {
-        // check whether it's enabled to analyze MV task after task run for each task run,
-        // so the analyze_for_mv can be set in session variable dynamically
-        if (mv == null) {
-            return "";
-        }
-        return TaskBuilder.getAnalyzeMVStmt(ctx, mv.getName());
-    }
-
-    @Override
-    public void postTaskRun(TaskRunContext context) throws Exception {
-        // recreate post run context for each task run
-        final ConnectContext ctx = context.getCtx();
-        final String postRun = getPostRun(ctx, mv);
-        // visible for tests
-        if (mvContext != null) {
-            mvContext.setPostRun(postRun);
-        }
-        context.setPostRun(postRun);
-        if (StringUtils.isNotEmpty(postRun)) {
-            ctx.executeSql(postRun);
-        }
-    }
-}
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))

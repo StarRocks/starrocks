@@ -110,7 +110,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             for (String mvPartitionName : deletes.keySet()) {
                 dropPartition(db, mv, mvPartitionName);
             }
-            LOG.info("The process of synchronizing materialized view [{}] delete partitions list [{}]",
+            logger.info("The process of synchronizing materialized view [{}] delete partitions list [{}]",
                     mv.getName(), deletes);
 
             // add partitions
@@ -121,13 +121,12 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             filterPartitionsByTTL(adds, true);
             // add partitions for mv
             addListPartitions(db, mv, adds, partitionProperties, distributionDesc);
-            LOG.info("The process of synchronizing materialized view [{}] add partitions list [{}]",
+            logger.info("The process of synchronizing materialized view [{}] add partitions list [{}]",
                     mv.getName(), adds);
 
             // add into mv context
             result.mvPartitionToCells.putAll(adds);
         }
-<<<<<<< HEAD
         {
             final Map<Table, Map<String, PCell>> refBaseTablePartitionMap = result.refBaseTablePartitionMap;
             // base table -> Map<partition name -> mv partition names>
@@ -143,36 +142,6 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
             mvContext.setRefBaseTableToCellMap(refBaseTablePartitionMap);
             mvContext.setExternalRefBaseTableMVPartitionMap(result.getRefBaseTableMVPartitionMap());
         }
-=======
-        logger.info("The process of synchronizing materialized view [{}] delete partitions list [{}]",
-                mv.getName(), deletes);
-
-        // add partitions
-        final Map<String, String> partitionProperties = MvUtils.getPartitionProperties(mv);
-        final DistributionDesc distributionDesc = MvUtils.getDistributionDesc(mv);
-        final Map<String, PCell> adds = partitionDiff.getAdds();
-        // filter by partition ttl
-        filterPartitionsByTTL(adds, true);
-        // add partitions for mv
-        addListPartitions(db, mv, adds, partitionProperties, distributionDesc);
-        logger.info("The process of synchronizing materialized view [{}] add partitions list [{}]",
-                mv.getName(), adds);
-
-        // add into mv context
-        result.mvPartitionToCells.putAll(adds);
-        final Map<Table, Map<String, PCell>> refBaseTablePartitionMap = result.refBaseTablePartitionMap;
-        // base table -> Map<partition name -> mv partition names>
-        final Map<Table, Map<String, Set<String>>> baseToMvNameRef =
-                differ.generateBaseRefMap(refBaseTablePartitionMap, result.mvPartitionToCells);
-        // mv partition name -> Map<base table -> base partition names>
-        final Map<String, Map<Table, Set<String>>> mvToBaseNameRef =
-                differ.generateMvRefMap(result.mvPartitionToCells, refBaseTablePartitionMap);
-        mvContext.setMVToCellMap(result.mvPartitionToCells);
-        mvContext.setRefBaseTableMVIntersectedPartitions(baseToMvNameRef);
-        mvContext.setMvRefBaseTableIntersectedPartitions(mvToBaseNameRef);
-        mvContext.setRefBaseTableToCellMap(refBaseTablePartitionMap);
-        mvContext.setExternalRefBaseTableMVPartitionMap(result.getRefBaseTableMVPartitionMap());
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
         return true;
     }
 
@@ -462,7 +431,7 @@ public final class MVPCTRefreshListPartitioner extends MVPCTRefreshPartitioner {
                     toRefreshPartitions, isMockPartitionIds);
             // remove the expired partitions
             if (CollectionUtils.isNotEmpty(expiredPartitionNames)) {
-                LOG.info("Filter partitions by partition_retention_condition, ttl_condition:{}, expired:{}",
+                logger.info("Filter partitions by partition_retention_condition, ttl_condition:{}, expired:{}",
                         ttlCondition, expiredPartitionNames);
                 expiredPartitionNames.stream()
                         .forEach(toRefreshPartitions::remove);

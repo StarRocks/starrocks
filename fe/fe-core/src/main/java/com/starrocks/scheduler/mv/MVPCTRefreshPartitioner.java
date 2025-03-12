@@ -36,12 +36,6 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AlterTableClauseAnalyzer;
 import com.starrocks.sql.ast.DropPartitionClause;
 import com.starrocks.sql.common.DmlException;
-<<<<<<< HEAD
-import org.apache.logging.log4j.LogManager;
-=======
-import com.starrocks.sql.common.PCell;
-import org.apache.commons.collections4.CollectionUtils;
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
 import org.apache.logging.log4j.Logger;
 
 import java.util.HashMap;
@@ -309,31 +303,4 @@ public abstract class MVPCTRefreshPartitioner {
         }
         return result;
     }
-<<<<<<< HEAD
-=======
-
-    /**
-     * Filter partitions by ttl, save the kept partitions and return the next task run partition values.
-     * @param toRefreshPartitions the partitions to refresh/add
-     * @return the next task run partition list cells after the reserved partition_ttl_number
-     */
-    protected void filterPartitionsByTTL(Map<String, PCell> toRefreshPartitions,
-                                         boolean isMockPartitionIds) {
-        if (!CollectionUtils.sizeIsEmpty(toRefreshPartitions)) {
-            // filter partitions by partition_retention_condition
-            String ttlCondition = mv.getTableProperty().getPartitionRetentionCondition();
-            if (!Strings.isNullOrEmpty(ttlCondition)) {
-                List<String> expiredPartitionNames = getExpiredPartitionsByRetentionCondition(db, mv, ttlCondition,
-                        toRefreshPartitions, isMockPartitionIds);
-                // remove the expired partitions
-                if (CollectionUtils.isNotEmpty(expiredPartitionNames)) {
-                    logger.info("Filter partitions by partition_retention_condition, ttl_condition:{}, expired:{}",
-                            ttlCondition, expiredPartitionNames);
-                    expiredPartitionNames.stream()
-                            .forEach(toRefreshPartitions::remove);
-                }
-            }
-        }
-    }
->>>>>>> d04ceffcaa ([Refactor] Refactor PartitionBasedMvRefreshProcessor for better logging (#52794))
 }
