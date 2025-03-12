@@ -108,6 +108,14 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     RuntimeProfile::Counter* total_row_groups = nullptr;
     RuntimeProfile::Counter* filtered_row_groups = nullptr;
 
+    RuntimeProfile::Counter* statistics_tried_counter = nullptr;
+    RuntimeProfile::Counter* statistics_success_counter = nullptr;
+    RuntimeProfile::Counter* page_index_tried_counter = nullptr;
+    RuntimeProfile::Counter* page_index_success_counter = nullptr;
+    RuntimeProfile::Counter* page_index_filter_group_counter = nullptr;
+    RuntimeProfile::Counter* bloom_filter_tried_counter = nullptr;
+    RuntimeProfile::Counter* bloom_filter_success_counter = nullptr;
+
     ADD_COUNTER(root, kParquetProfileSectionPrefix, TUnit::NONE);
     request_bytes_read = ADD_CHILD_COUNTER(root, "RequestBytesRead", TUnit::BYTES, kParquetProfileSectionPrefix);
     request_bytes_read_uncompressed =
@@ -148,6 +156,17 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     page_index_timer = ADD_CHILD_TIMER(root, "PageIndexTime", kParquetProfileSectionPrefix);
     total_row_groups = ADD_CHILD_COUNTER(root, "TotalRowGroups", TUnit::UNIT, kParquetProfileSectionPrefix);
     filtered_row_groups = ADD_CHILD_COUNTER(root, "FilteredRowGroups", TUnit::UNIT, kParquetProfileSectionPrefix);
+    ADD_CHILD_COUNTER(root, "ReaderFilterCounter", TUnit::NONE, kParquetProfileSectionPrefix);
+    statistics_tried_counter = ADD_CHILD_COUNTER(root, "StatisticsTriedCounter", TUnit::UNIT, "ReaderFilterCounter");
+    statistics_success_counter =
+            ADD_CHILD_COUNTER(root, "StatisticsSuccessCounter", TUnit::UNIT, "ReaderFilterCounter");
+    page_index_tried_counter = ADD_CHILD_COUNTER(root, "PageIndexTriedCounter", TUnit::UNIT, "ReaderFilterCounter");
+    page_index_success_counter = ADD_CHILD_COUNTER(root, "PageIndexSuccessCounter", TUnit::UNIT, "ReaderFilterCounter");
+    page_index_filter_group_counter =
+            ADD_CHILD_COUNTER(root, "PageIndexFilterGroupCounter", TUnit::UNIT, "ReaderFilterCounter");
+    bloom_filter_tried_counter = ADD_CHILD_COUNTER(root, "BloomFilterTriedCounter", TUnit::UNIT, "ReaderFilterCounter");
+    bloom_filter_success_counter =
+            ADD_CHILD_COUNTER(root, "BloomFilterSuccessCounter", TUnit::UNIT, "ReaderFilterCounter");
 
     COUNTER_UPDATE(request_bytes_read, _app_stats.request_bytes_read);
     COUNTER_UPDATE(request_bytes_read_uncompressed, _app_stats.request_bytes_read_uncompressed);
@@ -176,6 +195,15 @@ void HdfsParquetScanner::do_update_counter(HdfsScanProfile* profile) {
     COUNTER_UPDATE(page_index_timer, _app_stats.page_index_ns);
     COUNTER_UPDATE(total_row_groups, _app_stats.parquet_total_row_groups);
     COUNTER_UPDATE(filtered_row_groups, _app_stats.parquet_filtered_row_groups);
+
+    COUNTER_UPDATE(statistics_tried_counter, _app_stats._optimzation_counter.statistics_tried_counter);
+    COUNTER_UPDATE(statistics_success_counter, _app_stats._optimzation_counter.statistics_success_counter);
+    COUNTER_UPDATE(page_index_tried_counter, _app_stats._optimzation_counter.page_index_tried_counter);
+    COUNTER_UPDATE(page_index_success_counter, _app_stats._optimzation_counter.page_index_success_counter);
+    COUNTER_UPDATE(page_index_filter_group_counter, _app_stats._optimzation_counter.page_index_filter_group_counter);
+    COUNTER_UPDATE(bloom_filter_tried_counter, _app_stats._optimzation_counter.bloom_filter_tried_counter);
+    COUNTER_UPDATE(bloom_filter_success_counter, _app_stats._optimzation_counter.bloom_filter_success_counter);
+
     if (_scanner_ctx.conjuncts_manager != nullptr &&
         _runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
         root->add_info_string("ParquetPredicateTreeFilter", _scanner_ctx.predicate_tree.root().debug_string());

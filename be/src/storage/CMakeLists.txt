@@ -107,10 +107,8 @@ set(STORAGE_FILES
     rowset/segment_rewriter.cpp
     rowset/segment_group.cpp
     rowset/storage_page_decoder.cpp
-    rowset/block_split_bloom_filter.cpp
     rowset/bloom_filter_index_reader.cpp
     rowset/bloom_filter_index_writer.cpp
-    rowset/bloom_filter.cpp
     rowset/parsed_page.cpp
     rowset/zone_map_index.cpp
     rowset/segment_iterator.cpp

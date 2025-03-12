@@ -21,7 +21,9 @@ namespace starrocks::parquet {
 
 enum ColumnContentType { VALUE, DICT_CODE };
 
-enum ColumnIOType { PAGE_INDEX, PAGES };
+enum ColumnIOType { INVALID = 0, PAGE_INDEX = 1, PAGES = 2, BLOOM_FILTER = 4 };
+
+using ColumnIOTypeFlags = int32_t;
 
 class ParquetUtils {
 public:
