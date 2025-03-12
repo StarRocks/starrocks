@@ -33,8 +33,7 @@ public:
     int64_t mem_usage() const { return percentile->mem_usage(); }
 
     std::unique_ptr<PercentileValue> percentile;
-    double targetQuantile = -1.0;
-    bool is_null = true;
+    double targetQuantile = std::numeric_limits<double>::infinity();
 };
 
 class PercentileApproxAggregateFunctionBase
@@ -60,7 +59,6 @@ public:
         int64_t prev_memory = data(state).percentile->mem_usage();
         data(state).percentile->merge(src_percentile.percentile.get());
         data(state).targetQuantile = quantile;
-        data(state).is_null = false;
         ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
     }
 
@@ -75,10 +73,6 @@ public:
 
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         auto* data_column = down_cast<DoubleColumn*>(to);
-        if (data(state).is_null) {
-            data_column->append_default();
-            return;
-        }
         double result = data(state).percentile->quantile(data(state).targetQuantile);
         data_column->append_numbers(&result, sizeof(result));
     }
@@ -109,17 +103,15 @@ public:
         // argument 0
         const auto* data_column = down_cast<const DoubleColumn*>(columns[0]);
         // argument 1
-        if (columns[1]->only_null()) {
-            ctx->set_error("For percentile_approx the second argument is expected to be non-null.", false);
-            return;
-        }
+        DCHECK(columns[1]->is_constant());
         DCHECK(!columns[1]->is_null(0));
-
+        // first update
+        if (UNLIKELY(data(state).targetQuantile == std::numeric_limits<double>::infinity())) {
+            data(state).targetQuantile = columns[1]->get(0).get_double();
+        }
         double column_value = data_column->get_data()[row_num];
         int64_t prev_memory = data(state).percentile->mem_usage();
         data(state).percentile->add(implicit_cast<float>(column_value));
-        data(state).targetQuantile = columns[1]->get(0).get_double();
-        data(state).is_null = false;
         ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
     }
 
@@ -184,12 +176,10 @@ public:
         int64_t weight = columns[1]->get(real_row_num).get_int64();
         // argument 2
         DCHECK(columns[2]->is_constant());
-        if (columns[2]->only_null()) {
-            ctx->set_error("For percentile_approx the second argument is expected to be non-null.", false);
-            return;
-        }
         DCHECK(!columns[2]->is_null(0));
-        data(state).targetQuantile = columns[2]->get(0).get_double();
+        if (UNLIKELY(data(state).targetQuantile == std::numeric_limits<double>::infinity())) {
+            data(state).targetQuantile = columns[2]->get(0).get_double();
+        }
 
         double column_value = data_column->get_data()[row_num];
         int64_t prev_memory = data(state).percentile->mem_usage();
@@ -197,7 +187,6 @@ public:
         if (LIKELY(weight != 0)) {
             data(state).percentile->add(implicit_cast<float>(column_value), weight);
         }
-        data(state).is_null = false;
         ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
     }
 
@@ -232,12 +221,14 @@ public:
                     result->get_offset()[i + 1] = new_size;
                 }
             } else {
+                // TODO: optimize for empty weight but should not happen frequently
+                PercentileValue empty_percentile;
+                static size_t delta_size = sizeof(double) + empty_percentile.serialize_size();
                 for (size_t i = 0; i < chunk_size; ++i) {
-                    PercentileValue percentile;
-                    size_t new_size = old_size + sizeof(double) + percentile.serialize_size();
+                    size_t new_size = old_size + delta_size;
                     bytes.resize(new_size);
                     memcpy(bytes.data() + old_size, &quantile, sizeof(double));
-                    percentile.serialize(bytes.data() + old_size + sizeof(double));
+                    empty_percentile.serialize(bytes.data() + old_size + sizeof(double));
                     old_size = new_size;
                     result->get_offset()[i + 1] = new_size;
                 }
