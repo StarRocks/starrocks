@@ -447,3 +447,14 @@ DROP TABLE t_information_schema_generated_column_2;
 
 select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where TABLE_NAME = 't_information_schema_generated_column_1';
 select COLUMN_NAME, GENERATION_EXPRESSION from information_schema.columns where TABLE_NAME = 't_information_schema_generated_column_2';
+
+-- name: test_fix_adding_and_col_partial_update_conflict
+CREATE TABLE t_fix_adding_and_col_partial_update_conflict ( id BIGINT NOT NULL, v1 BIGINT NOT NULL, v2 BIGINT NOT NULL) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+insert into t_fix_adding_and_col_partial_update_conflict values (1,2,3),(2,3,4),(3,4,5);
+SET partial_update_mode = "column";
+UPDATE t_fix_adding_and_col_partial_update_conflict SET v2 = 400 where id = 2;
+delete from t_fix_adding_and_col_partial_update_conflict where id % 2 = 1;
+alter table t_fix_adding_and_col_partial_update_conflict add column newcol bigint as v2 * 100;
+function: wait_alter_table_finish()
+select * from t_fix_adding_and_col_partial_update_conflict;
+drop table t_fix_adding_and_col_partial_update_conflict;
