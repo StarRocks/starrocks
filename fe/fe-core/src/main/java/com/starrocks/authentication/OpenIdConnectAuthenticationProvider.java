@@ -15,8 +15,8 @@
 package com.starrocks.authentication;
 
 import com.nimbusds.jose.jwk.JWKSet;
+import com.starrocks.mysql.MysqlCodec;
 import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.mysql.MysqlProto;
 import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.UserAuthOption;
@@ -57,8 +57,8 @@ public class OpenIdConnectAuthenticationProvider implements AuthenticationProvid
         try {
             ByteBuffer authBuffer = ByteBuffer.wrap(authResponse);
             //1 Byte for capability mysql client
-            MysqlProto.readInt1(authBuffer);
-            byte[] idToken = MysqlProto.readLenEncodedString(authBuffer);
+            MysqlCodec.readInt1(authBuffer);
+            byte[] idToken = MysqlCodec.readLenEncodedString(authBuffer);
             JWKSet jwkSet = GlobalStateMgr.getCurrentState().getJwkMgr().getJwkSet(jwksUrl);
             OpenIdConnectVerifier.verify(new String(idToken), user, jwkSet, principalFiled, requireIssuer, requireAudience);
         } catch (Exception e) {
