@@ -296,9 +296,10 @@ Status UnionNode::_move_const_chunk(ChunkPtr& dest_chunk) {
 void UnionNode::_clone_column(ChunkPtr& dest_chunk, const ColumnPtr& src_column, const SlotDescriptor* dest_slot,
                               size_t row_count) {
     if (src_column->is_nullable() || !dest_slot->is_nullable()) {
-        dest_chunk->append_column(src_column->clone(), dest_slot->id());
+        dest_chunk->append_column((std::move(*src_column)).mutate(), dest_slot->id());
     } else {
-        ColumnPtr nullable_column = NullableColumn::create(src_column->clone(), NullColumn::create(row_count, 0));
+        ColumnPtr nullable_column =
+                NullableColumn::create((std::move(*src_column)).mutate(), NullColumn::create(row_count, 0));
         dest_chunk->append_column(nullable_column, dest_slot->id());
     }
 }

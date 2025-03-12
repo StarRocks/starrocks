@@ -39,7 +39,7 @@ struct DecimalDecimalCast {
 
         // source type and target type has the same logical type and scale
         if (to_scale == from_scale && Type == ResultType) {
-            auto result = column->clone();
+            auto result = (std::move(*column)).mutate();
             ColumnHelper::cast_to_raw<Type>(result.get())->set_precision(to_precision);
             return result;
         }

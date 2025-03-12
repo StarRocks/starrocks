@@ -55,7 +55,7 @@ public:
 
         // left all false and not null
         if (l_falses == l->size()) {
-            return l->clone();
+            return Column::mutate(std::move(l));
         }
 
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
@@ -134,7 +134,7 @@ public:
         int l_trues = ColumnHelper::count_true_with_notnull(l);
         // left all true and not null
         if (l_trues == l->size()) {
-            return l->clone();
+            return Column::mutate(std::move(l));
         }
 
         ASSIGN_OR_RETURN(auto r, _children[1]->evaluate_checked(context, ptr));
