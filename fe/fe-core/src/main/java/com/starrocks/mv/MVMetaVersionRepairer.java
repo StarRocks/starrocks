@@ -104,6 +104,8 @@ public class MVMetaVersionRepairer {
         long maxChangedTableRefreshTime =
                 MvUtils.getMaxTablePartitionInfoRefreshTime(Lists.newArrayList(changedVersions));
         MVVersionManager.updateEditLogAfterVersionMetaChanged(mv, maxChangedTableRefreshTime);
+        LOG.info("Update edit log after version changed for mv {}, maxChangedTableRefreshTime:{}",
+                mv.getName(), maxChangedTableRefreshTime);
     }
 
     /**
