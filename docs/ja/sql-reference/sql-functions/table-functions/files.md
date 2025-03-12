@@ -300,6 +300,24 @@ StarRocks は現在、HDFS へのシンプル認証、AWS S3 および GCS へ�
 
 `list_files_only` が `true` に設定されている場合、`data_format` を指定する必要はありません。
 
+`list_recursively` を `false` に設定することで、指定したディレクトリ以下のファイルを非再帰的にリストアップしたい場合は、パラメータ `path` の末尾に `/*` を付けなければならない。
+
+詳細については、[Return](#return) を参照してください。
+
+#### list_recursively
+
+`list_files_only` に加えて、StarRocks はファイルとディレクトリを再帰的にリストする `list_recursively` もサポートしています。`list_recursively` は `list_files_only` が `true` に設定されているときのみ有効です。デフォルト値は `false` である。
+
+```SQL
+"list_files_only" = "true",
+"list_recursively" = "true"
+```
+
+`list_files_only` と `list_recursively` の両方が `true` に設定されている場合、StarRocks は以下の処理を行う：
+
+- 指定された `path` がファイルの場合 (具体的に指定されているか、ワイルドカードで表現されているかに関わらず)、StarRocks はそのファイルの情報を表示します。
+- 指定された `path` がディレクトリの場合 (具体的に指定されているか、ワイルドカードで表されているか、また `/` や `/*` でサフィックスされているかどうかに関わらず)、StarRocks はそのディレクトリ以下のすべてのファイルとサブディレクトリを表示します。
+
 詳細については、[Return](#return) を参照してください。
 
 ### Return
@@ -423,6 +441,50 @@ SELECT と共に使用すると、FILES() はファイル内のデータをテ�
   | s3://bucket/4.parquet | 5224 |      0 | 2024-08-15 11:32:14 |
   +-----------------------+------+--------+---------------------+
   4 rows in set (0.03 sec)
+  ```
+
+- `list_files_only` と `list_recursively` を `true` に設定してファイルをクエリすると、システムはファイルとディレクトリを再帰的にリストアップする。
+
+  `s3://bucket/list/` というパスに以下のファイルとサブディレクトリがあるとする：
+
+  ```Plain
+  s3://bucket/list/
+  ├── basic1.csv
+  ├── basic2.csv
+  ├── orc0
+  │   └── orc1
+  │       └── basic_type.orc
+  ├── orc1
+  │   └── basic_type.orc
+  └── parquet
+      └── basic_type.parquet
+  ```
+
+  ファイルとディレクトリを再帰的にリストアップする：
+
+  ```Plain
+  SELECT * FROM FILES(
+      "path"="s3://bucket/list/",
+      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "list_files_only" = "true", 
+      "list_recursively" = "true"
+  );
+  +---------------------------------------------+------+--------+---------------------+
+  | PATH                                        | SIZE | IS_DIR | MODIFICATION_TIME   |
+  +---------------------------------------------+------+--------+---------------------+
+  | s3://bucket/list                            |    0 |      1 | 2024-12-24 22:15:59 |
+  | s3://bucket/list/basic1.csv                 |   52 |      0 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/basic2.csv                 |   34 |      0 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/orc0                       |    0 |      1 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/orc0/orc1                  |    0 |      1 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/orc0/orc1/basic_type.orc   | 1027 |      0 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/orc1                       |    0 |      1 | 2024-12-24 22:16:00 |
+  | s3://bucket/list/orc1/basic_type.orc        | 1027 |      0 | 2024-12-24 22:16:00 |
+  | s3://bucket/list/parquet                    |    0 |      1 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/parquet/basic_type.parquet | 2281 |      0 | 2024-12-24 11:35:53 |
+  +---------------------------------------------+------+--------+---------------------+
+  10 rows in set (0.04 sec)
   ```
 
 #### DESC FILES()
