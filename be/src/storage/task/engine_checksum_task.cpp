@@ -150,8 +150,12 @@ Status EngineChecksumTask::_compute_checksum() {
         return st;
     }
 
-    LOG(INFO) << "success to finish compute checksum. checksum=" << checksum << ", tablet_id=" << _tablet_id
-              << ", version=" << _version << " , cost_time=" << (butil::gettimeofday_us() - begin_us) << "us";
+    int64_t cost_time = butil::gettimeofday_us() - begin_us;
+
+    if (cost_time >= 30000000 /** 30s **/) {
+        LOG(INFO) << "success to finish compute checksum. checksum=" << checksum << ", tablet_id=" << _tablet_id
+                  << ", version=" << _version << " , cost_time=" << cost_time << "us";
+    }
     *_checksum = checksum;
     return Status::OK();
 }
