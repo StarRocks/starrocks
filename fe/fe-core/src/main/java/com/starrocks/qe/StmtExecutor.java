@@ -130,11 +130,8 @@ import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.FeExecuteCoordinator;
 import com.starrocks.server.GlobalStateMgr;
-<<<<<<< HEAD
-import com.starrocks.server.RunMode;
-=======
 import com.starrocks.server.GracefulExitFlag;
->>>>>>> 8e6ee37f07 ([Feature] Support graceful exit for FE (#56106))
+import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
