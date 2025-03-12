@@ -3558,7 +3558,7 @@ static StatusOr<ColumnPtr> hyperscan_vec_evaluate(const BinaryColumn* src, Strin
 
     // no match in row
     if (match_info_chain_in_one_row.info_chain.empty()) {
-        return src->clone();
+        return (std::move(*src)).mutate();
     }
 
     auto data_count = [&]() {
