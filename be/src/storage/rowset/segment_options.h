@@ -111,6 +111,18 @@ public:
 
     VectorSearchOptionPtr vector_search_option = nullptr;
 
+<<<<<<< HEAD
+=======
+    // Data sampling by block-level, which is a core-component of TABLE-SAMPLE feature
+    // 1. Regular block smapling: Bernoulli sampling on page-id
+    // 2. Partial-Sorted block: leverage data ordering to improve the evenness
+    TTableSampleOptions sample_options;
+
+    bool enable_join_runtime_filter_pushdown = false;
+
+    bool read_by_generated_column_adding = false;
+
+>>>>>>> 715d524c43 ([BugFix] Fix data unconsistent if add a new generated column which ref a normal column which contains cols file for pk table (#56695))
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;
 
