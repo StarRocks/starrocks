@@ -17,7 +17,7 @@
 #ifdef __AVX2__
 #include <emmintrin.h>
 #include <immintrin.h>
-#elif defined(__ARM_NEON__) && defined(__aarch64__)
+#elif defined(__ARM_NEON) && defined(__aarch64__)
 #include <arm_acle.h>
 #include <arm_neon.h>
 #endif
@@ -27,6 +27,7 @@
 
 #include "column/type_traits.h"
 #include "gutil/port.h"
+#include "gutil/strings/fastmem.h"
 #include "simd/simd_utils.h"
 #include "types/logical_type.h"
 
@@ -35,32 +36,50 @@ namespace starrocks {
 #ifdef __AVX2__
 template <typename T, bool left_const = false, bool right_const = false, std::enable_if_t<sizeof(T) == 1, int> = 1>
 inline void avx2_select_if(uint8_t*& selector, T*& dst, const T*& a, const T*& b, int size) {
+    constexpr int batch_width = 32;
+    constexpr int data_size = sizeof(T);
+
+    __m256i vec_a = left_const ? _mm256_set1_epi8(*a) : _mm256_setzero_si256();
+    __m256i vec_b = right_const ? _mm256_set1_epi8(*b) : _mm256_setzero_si256();
+
     const T* dst_end = dst + size;
-    while (dst + 32 < dst_end) {
+    while (dst + batch_width < dst_end) {
         __m256i loaded_mask = _mm256_loadu_si256(reinterpret_cast<__m256i*>(selector));
         loaded_mask = _mm256_cmpeq_epi8(loaded_mask, _mm256_setzero_si256());
         loaded_mask = ~loaded_mask;
-        __m256i vec_a;
-        __m256i vec_b;
-        if constexpr (!left_const) {
-            vec_a = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(a));
+
+        const uint32_t mask = _mm256_movemask_epi8(loaded_mask);
+        if (mask == 0) { // Select all the rhs.
+            if constexpr (right_const) {
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst), vec_b);
+            } else {
+                strings::memcpy_inlined(dst, b, batch_width * data_size);
+            }
+        } else if (mask == 0xFFFF'FFFF) { // Select all the lhs.
+            if constexpr (left_const) {
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst), vec_a);
+            } else {
+                strings::memcpy_inlined(dst, a, batch_width * data_size);
+            }
         } else {
-            vec_a = _mm256_set1_epi8(*a);
+            if constexpr (!left_const) {
+                vec_a = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(a));
+            }
+            if constexpr (!right_const) {
+                vec_b = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(b));
+            }
+
+            __m256i res = _mm256_blendv_epi8(vec_b, vec_a, loaded_mask);
+            _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst), res);
         }
-        if constexpr (!right_const) {
-            vec_b = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(b));
-        } else {
-            vec_b = _mm256_set1_epi8(*b);
-        }
-        __m256i res = _mm256_blendv_epi8(vec_b, vec_a, loaded_mask);
-        _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst), res);
-        dst += 32;
-        selector += 32;
+
+        dst += batch_width;
+        selector += batch_width;
         if (!left_const) {
-            a += 32;
+            a += batch_width;
         }
         if (!right_const) {
-            b += 32;
+            b += batch_width;
         }
     }
 }
@@ -106,116 +125,139 @@ constexpr bool could_use_common_select_if() {
 // implentment int16/int32/float/int64/double SIMD select_if
 template <typename T, bool left_const = false, bool right_const = false>
 inline void avx2_select_if_common_implement(uint8_t*& selector, T*& dst, const T*& a, const T*& b, int size) {
-    const T* dst_end = dst + size;
+    constexpr int batch_width = 32;
     constexpr int data_size = sizeof(T);
 
-    while (dst + 32 < dst_end) {
+    const __m256i const_vec_a = left_const ? SIMDUtils::set_data(*a) : _mm256_setzero_si256();
+    const __m256i const_vec_b = right_const ? SIMDUtils::set_data(*b) : _mm256_setzero_si256();
+
+    const T* dst_end = dst + size;
+    while (dst + batch_width < dst_end) {
         // load selector mask from selector
         __m256i loaded_mask = _mm256_loadu_si256(reinterpret_cast<__m256i*>(selector));
         loaded_mask = _mm256_cmpeq_epi8(loaded_mask, _mm256_setzero_si256());
         loaded_mask = ~loaded_mask;
         uint32_t mask = _mm256_movemask_epi8(loaded_mask);
 
-        __m256i vec_a[data_size];
-        __m256i vec_b[data_size];
-        __m256i vec_dst[data_size];
-
-        // load data from data vector
-        for (int i = 0; i < data_size; ++i) {
-            if constexpr (!left_const) {
-                vec_a[i] = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(a) + i);
+        if (mask == 0) { // Select all the rhs.
+            if constexpr (right_const) {
+                for (int i = 0; i < data_size; ++i) {
+                    _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst) + i, const_vec_b);
+                }
             } else {
-                vec_a[i] = SIMDUtils::set_data(*a);
+                strings::memcpy_inlined(dst, b, batch_width * data_size);
             }
-            if constexpr (!right_const) {
-                vec_b[i] = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(b) + i);
+        } else if (mask == 0xFFFF'FFFF) { // Select all the lhs.
+            if constexpr (left_const) {
+                for (int i = 0; i < data_size; ++i) {
+                    _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst) + i, const_vec_a);
+                }
             } else {
-                vec_b[i] = SIMDUtils::set_data(*b);
+                strings::memcpy_inlined(dst, a, batch_width * data_size);
             }
-        }
+        } else {
+            __m256i vec_a[data_size];
+            __m256i vec_b[data_size];
+            __m256i vec_dst[data_size];
 
-        // Each loop can handle the size of the selection vector,
-        // using int16 as an example,
-        // because each mask outer loop has to handle 32 int16, but since m256 can only handle 16 int16,
-        // we need to use two loops to handle 16 each, so each loop needs to use 0xFFFF to get 16 bits to process.
+            // load data from data vector
+            for (int i = 0; i < data_size; ++i) {
+                if constexpr (!left_const) {
+                    vec_a[i] = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(a) + i);
+                } else {
+                    vec_a[i] = const_vec_a;
+                }
+                if constexpr (!right_const) {
+                    vec_b[i] = _mm256_loadu_si256(reinterpret_cast<const __m256i*>(b) + i);
+                } else {
+                    vec_b[i] = const_vec_b;
+                }
+            }
 
-        // In addition, since data_size is constexpr, the loop here will be expanded by the compiler
-        constexpr uint32_t mask_table[] = {0, 0xFFFFFFFF, 0xFFFF, 0, 0xFF, 0, 0, 0, 0x0F, 0, 0, 0, 0, 0, 0, 0, 0x03};
-        constexpr uint8_t each_loop_handle_sz = 32 / data_size;
-        for (int i = 0; i < data_size; ++i) {
-            uint32_t select_mask = mask & mask_table[data_size];
-            // how to get mask from load mask
-            __m256i select_vector;
-            if constexpr (data_size == 2) {
-                // First expand the 16 bits into m256
-                // each bit expand to 4 bytes
-                // 0b0110 -> 0x00 0x00 0x00 0x01 0x00 0x01 0x00 0x00
-                select_vector = _mm256_set1_epi16(select_mask);
-                // set is usually a more costly operation, but since it is a constant,
-                // there is no need to worry about the performance impact
-                // data_mask could help acquire bit at x in locate x
-                const __m256i data_mask = _mm256_setr_epi16(0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x100,
-                                                            0x200, 0x400, 0x800, 0x1000, 0x2000, 0x4000, 0x8000);
-                // eg: input vec is (0xabcd), (0xabcd)...x16
-                // data_mask bitwise and input_vec was
-                // (0xabcd and 0x01),(0xabcd and 0x02)...x16
-                // then select_vector was the expended of 16 bits mask
-                select_vector &= data_mask;
-                // AVX/AVX2 couldn't provide a compare not equal
-                // we use compare and NOT instead of it
-                select_vector = _mm256_cmpeq_epi16(select_vector, _mm256_setzero_si256());
-                select_vector = ~select_vector;
-            } else if constexpr (data_size == 4) {
-                select_vector = _mm256_set1_epi8(select_mask);
-                // the same method as int16
-                // expand 8 bits into m256
-                // each bit expand to 4 bytes
-                // clang-format off
+            // Each loop can handle the size of the selection vector,
+            // using int16 as an example,
+            // because each mask outer loop has to handle 32 int16, but since m256 can only handle 16 int16,
+            // we need to use two loops to handle 16 each, so each loop needs to use 0xFFFF to get 16 bits to process.
+
+            // In addition, since data_size is constexpr, the loop here will be expanded by the compiler
+            constexpr uint32_t mask_table[] = {0, 0xFFFFFFFF, 0xFFFF, 0, 0xFF, 0, 0, 0,   0x0F,
+                                               0, 0,          0,      0, 0,    0, 0, 0x03};
+            constexpr uint8_t each_loop_handle_sz = 32 / data_size;
+            for (int i = 0; i < data_size; ++i) {
+                uint32_t select_mask = mask & mask_table[data_size];
+                // how to get mask from load mask
+                __m256i select_vector;
+                if constexpr (data_size == 2) {
+                    // First expand the 16 bits into m256
+                    // each bit expand to 4 bytes
+                    // 0b0110 -> 0x00 0x00 0x00 0x01 0x00 0x01 0x00 0x00
+                    select_vector = _mm256_set1_epi16(select_mask);
+                    // set is usually a more costly operation, but since it is a constant,
+                    // there is no need to worry about the performance impact
+                    // data_mask could help acquire bit at x in locate x
+                    const __m256i data_mask = _mm256_setr_epi16(0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x100,
+                                                                0x200, 0x400, 0x800, 0x1000, 0x2000, 0x4000, 0x8000);
+                    // eg: input vec is (0xabcd), (0xabcd)...x16
+                    // data_mask bitwise and input_vec was
+                    // (0xabcd and 0x01),(0xabcd and 0x02)...x16
+                    // then select_vector was the expended of 16 bits mask
+                    select_vector &= data_mask;
+                    // AVX/AVX2 couldn't provide a compare not equal
+                    // we use compare and NOT instead of it
+                    select_vector = _mm256_cmpeq_epi16(select_vector, _mm256_setzero_si256());
+                    select_vector = ~select_vector;
+                } else if constexpr (data_size == 4) {
+                    select_vector = _mm256_set1_epi8(select_mask);
+                    // the same method as int16
+                    // expand 8 bits into m256
+                    // each bit expand to 4 bytes
+                    // clang-format off
                 const __m256i data_mask = _mm256_setr_epi8(
-                        0x00, 0x00, 0x00, 0x01, 
-                        0x00, 0x00, 0x00, 0x02, 
-                        0x00, 0x00, 0x00, 0x04, 
+                        0x00, 0x00, 0x00, 0x01,
+                        0x00, 0x00, 0x00, 0x02,
+                        0x00, 0x00, 0x00, 0x04,
                         0x00, 0x00, 0x00, 0x08,
-                        0x00, 0x00, 0x00, 0x10, 
-                        0x00, 0x00, 0x00, 0x20, 
-                        0x00, 0x00, 0x00, 0x40, 
+                        0x00, 0x00, 0x00, 0x10,
+                        0x00, 0x00, 0x00, 0x20,
+                        0x00, 0x00, 0x00, 0x40,
                         0x00, 0x00, 0x00, 0x80);
-                // clang-format on
-                select_vector &= data_mask;
-                select_vector = _mm256_cmpeq_epi32(select_vector, _mm256_setzero_si256());
-                select_vector = ~select_vector;
-            } else if constexpr (data_size == 8) {
-                select_vector = _mm256_set1_epi8(select_mask);
-                // the same method as int16
-                // each bit expand to 8 bytes
-                // clang-format off
+                    // clang-format on
+                    select_vector &= data_mask;
+                    select_vector = _mm256_cmpeq_epi32(select_vector, _mm256_setzero_si256());
+                    select_vector = ~select_vector;
+                } else if constexpr (data_size == 8) {
+                    select_vector = _mm256_set1_epi8(select_mask);
+                    // the same method as int16
+                    // each bit expand to 8 bytes
+                    // clang-format off
                 const __m256i data_mask = _mm256_setr_epi8(
-                        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 
+                        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01,
                         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02,
-                        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 
+                        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04,
                         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08);
-                // clang-format on
-                select_vector &= data_mask;
-                select_vector = _mm256_cmpeq_epi64(select_vector, _mm256_setzero_si256());
-                select_vector = ~select_vector;
+                    // clang-format on
+                    select_vector &= data_mask;
+                    select_vector = _mm256_cmpeq_epi64(select_vector, _mm256_setzero_si256());
+                    select_vector = ~select_vector;
+                }
+                // use blendv
+                vec_dst[i] = _mm256_blendv_epi8(vec_b[i], vec_a[i], select_vector);
+
+                mask >>= each_loop_handle_sz;
             }
-            // use blendv
-            vec_dst[i] = _mm256_blendv_epi8(vec_b[i], vec_a[i], select_vector);
 
-            mask >>= each_loop_handle_sz;
+            for (int i = 0; i < data_size; ++i) {
+                _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst) + i, vec_dst[i]);
+            }
         }
 
-        for (int i = 0; i < data_size; ++i) {
-            _mm256_storeu_si256(reinterpret_cast<__m256i*>(dst) + i, vec_dst[i]);
-        }
-
-        dst += 32;
-        selector += 32;
+        dst += batch_width;
+        selector += batch_width;
         if (!left_const) {
-            a += 32;
+            a += batch_width;
         }
         if (!right_const) {
-            b += 32;
+            b += batch_width;
         }
     }
 }
@@ -232,127 +274,179 @@ inline void neon_select_if_common_implement(uint8_t*& selector, T*& dst, const T
     constexpr int data_size = sizeof(T);
     constexpr int neon_width = 16; // NEON register width is 128 bits (16 bytes)
 
+    auto get_const_vec = [](const T* ptr) {
+        if constexpr (data_size == 1) {
+            return vdupq_n_u8(*reinterpret_cast<const uint8_t*>(ptr));
+        } else if constexpr (data_size == 2) {
+            return vdupq_n_u16(*reinterpret_cast<const uint16_t*>(ptr));
+        } else if constexpr (data_size == 4) {
+            return vdupq_n_u32(*reinterpret_cast<const uint32_t*>(ptr));
+        } else if constexpr (data_size == 8) {
+            return vdupq_n_u64(*reinterpret_cast<const uint64_t*>(ptr));
+        }
+    };
+    using VecType = decltype(get_const_vec(nullptr));
+    VecType vec_a = left_const ? get_const_vec(a) : VecType{};
+    VecType vec_b = left_const ? get_const_vec(b) : VecType{};
+
     // Process 16 bytes of data at a time
     while (dst + neon_width < dst_end) {
         // Load 16 selector masks
-        uint8x16_t loaded_mask = vld1q_u8(selector);
-        // vceqq_u8: Compare each element in two NEON registers, returns 0xFF if equal, 0x00 if not
-        loaded_mask = vceqq_u8(loaded_mask, vdupq_n_u8(0));
-        // vmvnq_u8: Bitwise NOT of each element in NEON register, so non-zero becomes 0xFF, zero becomes 0x00
-        loaded_mask = vmvnq_u8(loaded_mask);
+        uint8x16_t select_lhs_mask = vld1q_u8(selector);
+        // select_lhs_mask[i] = select_lhs_mask[i] != 0 ? 0xFF : 0x00
+        select_lhs_mask = vtstq_u8(select_lhs_mask, select_lhs_mask);
 
-        if constexpr (data_size == 1) { // int8/uint8/bool
-            // Load vector a
-            uint8x16_t vec_a;
-            if constexpr (!left_const) {
-                vec_a = vld1q_u8(reinterpret_cast<const uint8_t*>(a));
+        if constexpr (data_size == 1) {            // int8/uint8/bool
+            if (vmaxvq_u8(select_lhs_mask) == 0) { // Select all the rhs.
+                if constexpr (right_const) {
+                    vst1q_u8(reinterpret_cast<uint8_t*>(dst), vec_b);
+                } else {
+                    strings::memcpy_inlined(dst, b, neon_width * data_size);
+                }
+            } else if (vminvq_u8(select_lhs_mask)) { // Select all the lhs.
+                if constexpr (left_const) {
+                    vst1q_u8(reinterpret_cast<uint8_t*>(dst), vec_a);
+                } else {
+                    strings::memcpy_inlined(dst, a, neon_width * data_size);
+                }
             } else {
-                vec_a = vdupq_n_u8(*reinterpret_cast<const uint8_t*>(a));
-            }
-
-            // Load vector b
-            uint8x16_t vec_b;
-            if constexpr (!right_const) {
-                vec_b = vld1q_u8(reinterpret_cast<const uint8_t*>(b));
-            } else {
-                vec_b = vdupq_n_u8(*reinterpret_cast<const uint8_t*>(b));
-            }
-
-            // Select result based on mask
-            uint8x16_t result = vbslq_u8(loaded_mask, vec_a, vec_b);
-
-            // Store result
-            vst1q_u8(reinterpret_cast<uint8_t*>(dst), result);
-
-        } else if constexpr (data_size == 2) { // int16
-            // Process 2 groups, each handling 8 int16
-            for (int i = 0; i < 2; i++) {
-                // Load vector a
-                uint16x8_t vec_a;
                 if constexpr (!left_const) {
-                    // vld1q_u16: Load 8 consecutive 16-bit values into NEON register
-                    vec_a = vld1q_u16(reinterpret_cast<const uint16_t*>(a) + i * 8);
-                } else {
-                    // vdupq_n_u16: Copy a 16-bit value to all elements in the register
-                    vec_a = vdupq_n_u16(*reinterpret_cast<const uint16_t*>(a));
+                    vec_a = vld1q_u8(reinterpret_cast<const uint8_t*>(a));
                 }
 
-                uint16x8_t vec_b;
                 if constexpr (!right_const) {
-                    vec_b = vld1q_u16(reinterpret_cast<const uint16_t*>(b) + i * 8);
-                } else {
-                    vec_b = vdupq_n_u16(*reinterpret_cast<const uint16_t*>(b));
+                    vec_b = vld1q_u8(reinterpret_cast<const uint8_t*>(b));
                 }
-
-                // Convert first 8 uint8 masks to uint16 masks using lookup table, effectively duplicating each uint8
-                uint8x16_t index = {0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7};
-                uint8x16_t mask = vqtbl1q_u8(loaded_mask, index);
 
                 // Select result based on mask
-                uint16x8_t result = vbslq_u16(vreinterpretq_u16_u8(mask), vec_a, vec_b);
+                uint8x16_t result = vbslq_u8(select_lhs_mask, vec_a, vec_b);
 
-                vst1q_u16(reinterpret_cast<uint16_t*>(dst) + i * 8, result);
-                loaded_mask = vextq_u8(loaded_mask, loaded_mask, 8);
+                // Store result
+                vst1q_u8(reinterpret_cast<uint8_t*>(dst), result);
             }
-        } else if constexpr (data_size == 4) { // int32/float
-            // Process 4 groups, each handling 4 int32
-            for (int i = 0; i < 4; i++) {
-                uint32x4_t vec_a;
-                if constexpr (!left_const) {
-                    vec_a = vld1q_u32(reinterpret_cast<const uint32_t*>(a) + i * 4);
+        } else if constexpr (data_size == 2) {     // int16
+            if (vmaxvq_u8(select_lhs_mask) == 0) { // Select all the rhs.
+                if constexpr (right_const) {
+                    for (int i = 0; i < 2; i++) {
+                        vst1q_u16(reinterpret_cast<uint16_t*>(dst) + i * 8, vec_b);
+                    }
                 } else {
-                    vec_a = vdupq_n_u32(*reinterpret_cast<const uint32_t*>(a));
+                    strings::memcpy_inlined(dst, b, neon_width * data_size);
                 }
-
-                uint32x4_t vec_b;
-                if constexpr (!right_const) {
-                    vec_b = vld1q_u32(reinterpret_cast<const uint32_t*>(b) + i * 4);
+            } else if (vminvq_u8(select_lhs_mask)) { // Select all the lhs.
+                if constexpr (left_const) {
+                    for (int i = 0; i < 2; i++) {
+                        vst1q_u16(reinterpret_cast<uint16_t*>(dst) + i * 8, vec_a);
+                    }
                 } else {
-                    vec_b = vdupq_n_u32(*reinterpret_cast<const uint32_t*>(b));
+                    strings::memcpy_inlined(dst, a, neon_width * data_size);
                 }
+            } else {
+                // Process 2 groups, each handling 8 int16
+                for (int i = 0; i < 2; i++) {
+                    if constexpr (!left_const) {
+                        // vld1q_u16: Load 8 consecutive 16-bit values into NEON register
+                        vec_a = vld1q_u16(reinterpret_cast<const uint16_t*>(a) + i * 8);
+                    }
 
-                uint8x16_t index = {0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3};
-                uint8x16_t mask = vqtbl1q_u8(loaded_mask, index);
+                    if constexpr (!right_const) {
+                        vec_b = vld1q_u16(reinterpret_cast<const uint16_t*>(b) + i * 8);
+                    }
 
-                uint32x4_t result = vbslq_u32(vreinterpretq_u32_u8(mask), vec_a, vec_b);
+                    // Convert first 8 uint8 masks to uint16 masks using lookup table, effectively duplicating each uint8
+                    uint8x16_t index = {0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7};
+                    uint8x16_t mask = vqtbl1q_u8(select_lhs_mask, index);
 
-                vst1q_u32(reinterpret_cast<uint32_t*>(dst) + i * 4, result);
-                loaded_mask = vextq_u8(loaded_mask, loaded_mask, 4);
+                    // Select result based on mask
+                    uint16x8_t result = vbslq_u16(vreinterpretq_u16_u8(mask), vec_a, vec_b);
+
+                    vst1q_u16(reinterpret_cast<uint16_t*>(dst) + i * 8, result);
+                    select_lhs_mask = vextq_u8(select_lhs_mask, select_lhs_mask, 8);
+                }
             }
-        } else if constexpr (data_size == 8) { // int64/double
-            // Process 8 groups, each handling 2 int64
-            for (int i = 0; i < 8; i++) {
-                uint64x2_t vec_a;
-                if constexpr (!left_const) {
-                    vec_a = vld1q_u64(reinterpret_cast<const uint64_t*>(a) + i * 2);
+        } else if constexpr (data_size == 4) {     // int32/float
+            if (vmaxvq_u8(select_lhs_mask) == 0) { // Select all the rhs.
+                if constexpr (right_const) {
+                    for (int i = 0; i < 4; i++) {
+                        vst1q_u32(reinterpret_cast<uint32_t*>(dst) + i * 4, vec_b);
+                    }
                 } else {
-                    vec_a = vdupq_n_u64(*reinterpret_cast<const uint64_t*>(a));
+                    strings::memcpy_inlined(dst, b, neon_width * data_size);
                 }
-
-                uint64x2_t vec_b;
-                if constexpr (!right_const) {
-                    vec_b = vld1q_u64(reinterpret_cast<const uint64_t*>(b) + i * 2);
+            } else if (vminvq_u8(select_lhs_mask)) { // Select all the lhs.
+                if constexpr (left_const) {
+                    for (int i = 0; i < 4; i++) {
+                        vst1q_u32(reinterpret_cast<uint32_t*>(dst) + i * 4, vec_a);
+                    }
                 } else {
-                    vec_b = vdupq_n_u64(*reinterpret_cast<const uint64_t*>(b));
+                    strings::memcpy_inlined(dst, a, neon_width * data_size);
                 }
+            } else {
+                // Process 4 groups, each handling 4 int32
+                for (int i = 0; i < 4; i++) {
+                    if constexpr (!left_const) {
+                        vec_a = vld1q_u32(reinterpret_cast<const uint32_t*>(a) + i * 4);
+                    }
 
-                uint8x16_t index = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1};
-                uint8x16_t mask = vqtbl1q_u8(loaded_mask, index);
+                    if constexpr (!right_const) {
+                        vec_b = vld1q_u32(reinterpret_cast<const uint32_t*>(b) + i * 4);
+                    }
 
-                uint64x2_t result = vbslq_u64(vreinterpretq_u64_u8(mask), vec_a, vec_b);
+                    uint8x16_t index = {0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3};
+                    uint8x16_t mask = vqtbl1q_u8(select_lhs_mask, index);
 
-                vst1q_u64(reinterpret_cast<uint64_t*>(dst) + i * 2, result);
+                    uint32x4_t result = vbslq_u32(vreinterpretq_u32_u8(mask), vec_a, vec_b);
 
-                loaded_mask = vextq_u8(loaded_mask, loaded_mask, 2);
+                    vst1q_u32(reinterpret_cast<uint32_t*>(dst) + i * 4, result);
+                    select_lhs_mask = vextq_u8(select_lhs_mask, select_lhs_mask, 4);
+                }
+            }
+        } else if constexpr (data_size == 8) {     // int64/double
+            if (vmaxvq_u8(select_lhs_mask) == 0) { // Select all the rhs.
+                if constexpr (right_const) {
+                    for (int i = 0; i < 8; i++) {
+                        vst1q_u64(reinterpret_cast<uint64_t*>(dst) + i * 2, vec_b);
+                    }
+                } else {
+                    strings::memcpy_inlined(dst, b, neon_width * data_size);
+                }
+            } else if (vminvq_u8(select_lhs_mask)) { // Select all the lhs.
+                if constexpr (left_const) {
+                    for (int i = 0; i < 8; i++) {
+                        vst1q_u64(reinterpret_cast<uint64_t*>(dst) + i * 2, vec_a);
+                    }
+                } else {
+                    strings::memcpy_inlined(dst, a, neon_width * data_size);
+                }
+            } else {
+                // Process 8 groups, each handling 2 int64
+                for (int i = 0; i < 8; i++) {
+                    if constexpr (!left_const) {
+                        vec_a = vld1q_u64(reinterpret_cast<const uint64_t*>(a) + i * 2);
+                    }
+
+                    if constexpr (!right_const) {
+                        vec_b = vld1q_u64(reinterpret_cast<const uint64_t*>(b) + i * 2);
+                    }
+
+                    uint8x16_t index = {0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 1, 1};
+                    uint8x16_t mask = vqtbl1q_u8(select_lhs_mask, index);
+
+                    uint64x2_t result = vbslq_u64(vreinterpretq_u64_u8(mask), vec_a, vec_b);
+
+                    vst1q_u64(reinterpret_cast<uint64_t*>(dst) + i * 2, result);
+
+                    select_lhs_mask = vextq_u8(select_lhs_mask, select_lhs_mask, 2);
+                }
             }
         }
 
         dst += 16;
         selector += 16;
-        if (!left_const) {
+        if constexpr (!left_const) {
             a += 16;
         }
-        if (!right_const) {
+        if constexpr (!right_const) {
             b += 16;
         }
     }
