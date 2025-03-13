@@ -49,21 +49,13 @@ public class RestoreClusterSnapshotMgr {
     private boolean oldResetElectionGroup;
     private RestoredSnapshotInfo restoredSnapshotInfo;
 
-<<<<<<< HEAD
-    private RestoreClusterSnapshotMgr(String clusterSnapshotYamlFile) throws UserException, IOException {
-=======
-    private RestoreClusterSnapshotMgr(String clusterSnapshotYamlFile) throws StarRocksException {
->>>>>>> 63de64df43 ([Enhancement] Support automatically choosing the latest automated cluster snapshot to restore (#56546))
+    private RestoreClusterSnapshotMgr(String clusterSnapshotYamlFile) throws UserException {
         config = ClusterSnapshotConfig.load(clusterSnapshotYamlFile);
         downloadSnapshot();
         updateConfig();
     }
 
-<<<<<<< HEAD
-    public static void init(String clusterSnapshotYamlFile, String[] args) throws UserException, IOException {
-=======
-    public static void init(String clusterSnapshotYamlFile, String[] args) throws StarRocksException {
->>>>>>> 63de64df43 ([Enhancement] Support automatically choosing the latest automated cluster snapshot to restore (#56546))
+    public static void init(String clusterSnapshotYamlFile, String[] args) throws UserException {
         for (String arg : args) {
             if (arg.equalsIgnoreCase("-cluster_snapshot")) {
                 LOG.info("FE start to restore from a cluster snapshot (-cluster_snapshot)");
@@ -132,11 +124,7 @@ public class RestoreClusterSnapshotMgr {
         Config.bdbje_reset_election_group = oldResetElectionGroup;
     }
 
-<<<<<<< HEAD
-    private void downloadSnapshot() throws UserException, IOException {
-=======
-    private void downloadSnapshot() throws StarRocksException {
->>>>>>> 63de64df43 ([Enhancement] Support automatically choosing the latest automated cluster snapshot to restore (#56546))
+    private void downloadSnapshot() throws UserException {
         ClusterSnapshotConfig.ClusterSnapshot clusterSnapshot = config.getClusterSnapshot();
         if (clusterSnapshot == null) {
             return;
@@ -160,7 +148,7 @@ public class RestoreClusterSnapshotMgr {
             List<FileStatus> fileStatusList = HdfsUtil.listFileMeta(pathPattern,
                     new BrokerDesc(clusterSnapshot.getStorageVolume().getProperties()), false);
             if (fileStatusList.isEmpty() || fileStatusList.get(0).isFile()) {
-                throw new StarRocksException("No cluster snapshot found in path " + pathPattern);
+                throw new UserException("No cluster snapshot found in path " + pathPattern);
             }
             snapshotImagePath = fileStatusList.get(0).getPath().toString();
         }
@@ -172,7 +160,7 @@ public class RestoreClusterSnapshotMgr {
     }
 
     private void collectSnapshotInfoAfterDownloaded(String snapshotImagePath, String localImagePath)
-            throws StarRocksException {
+            throws UserException {
         long feImageJournalId = 0L;
         long starMgrImageJournalId = 0L;
 
@@ -183,12 +171,12 @@ public class RestoreClusterSnapshotMgr {
             feImageJournalId = storageFe.getImageJournalId();
             starMgrImageJournalId = storageStarMgr.getImageJournalId();
         } catch (Exception e) {
-            throw new StarRocksException("Failed to get local image version", e);
+            throw new UserException("Failed to get local image version", e);
         }
 
         int lastSlashIndex = snapshotImagePath.lastIndexOf('/');
         if (lastSlashIndex < 0) {
-            throw new StarRocksException("Failed to get snapshot name from snapshot path " + snapshotImagePath);
+            throw new UserException("Failed to get snapshot name from snapshot path " + snapshotImagePath);
         }
 
         String restoredSnapshotName = snapshotImagePath.substring(lastSlashIndex + 1);
