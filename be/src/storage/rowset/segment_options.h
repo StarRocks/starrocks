@@ -108,6 +108,7 @@ public:
     bool has_preaggregation = true;
 
     bool read_by_generated_column_adding = false;
+
 public:
     Status convert_to(SegmentReadOptions* dst, const std::vector<LogicalType>& new_types, ObjectPool* obj_pool) const;
 
