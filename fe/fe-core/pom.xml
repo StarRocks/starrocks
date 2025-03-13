@@ -1132,7 +1132,7 @@ under the License.
                 <artifactId>jprotobuf-precompile-plugin</artifactId>
                 <version>2.2.12</version>
                 <configuration>
-                    <filterClassPackage>com.starrocks</filterClassPackage>
+                    <filterClassPackage>com.starrocks.proto;com.starrocks.rpc;com.starrocks.server</filterClassPackage>
                     <generateProtoFile>true</generateProtoFile>
                     <compileDependencies>true</compileDependencies>
                 </configuration>

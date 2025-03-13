@@ -72,6 +72,7 @@ import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
 import com.starrocks.authentication.FileGroupProvider;
 import com.starrocks.authentication.GroupProvider;
+import com.starrocks.authentication.LDAPGroupProvider;
 import com.starrocks.authentication.OIDCSecurityIntegration;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UnixGroupProvider;
@@ -354,7 +355,8 @@ public class GsonUtils {
     private static final RuntimeTypeAdapterFactory<GroupProvider> GROUP_PROVIDER_RUNTIME_TYPE_ADAPTER_FACTORY =
             RuntimeTypeAdapterFactory.of(GroupProvider.class, "clazz")
                     .registerSubtype(FileGroupProvider.class, "FileGroupProvider")
-                    .registerSubtype(UnixGroupProvider.class, "UnixGroupProvider");
+                    .registerSubtype(UnixGroupProvider.class, "UnixGroupProvider")
+                    .registerSubtype(LDAPGroupProvider.class, "LDAPGroupProvider");
 
     private static final RuntimeTypeAdapterFactory<Warehouse> WAREHOUSE_TYPE_ADAPTER_FACTORY = RuntimeTypeAdapterFactory
             .of(Warehouse.class, "clazz")

@@ -90,14 +90,14 @@ public class MysqlAuthPacket extends MysqlPacket {
     @Override
     public boolean readFrom(ByteBuffer buffer) {
         // read capability four byte, which CLIENT_PROTOCOL_41 must be set
-        capability = new MysqlCapability(MysqlProto.readInt4(buffer));
+        capability = new MysqlCapability(MysqlCodec.readInt4(buffer));
         if (!capability.isProtocol41()) {
             return false;
         }
         // max packet size
-        maxPacketSize = MysqlProto.readInt4(buffer);
+        maxPacketSize = MysqlCodec.readInt4(buffer);
         // character set. only support 33(utf-8)?
-        characterSet = MysqlProto.readInt1(buffer);
+        characterSet = MysqlCodec.readInt1(buffer);
         // reserved 23 bytes
         buffer.position(buffer.position() + 23);
 
@@ -106,22 +106,22 @@ public class MysqlAuthPacket extends MysqlPacket {
             return true;
         }
         // user name
-        userName = new String(MysqlProto.readNulTerminateString(buffer));
+        userName = new String(MysqlCodec.readNulTerminateString(buffer));
         if (capability.isPluginAuthDataLengthEncoded()) {
-            authResponse = MysqlProto.readLenEncodedString(buffer);
+            authResponse = MysqlCodec.readLenEncodedString(buffer);
         } else if (capability.isSecureConnection()) {
-            int len = MysqlProto.readInt1(buffer);
-            authResponse = MysqlProto.readFixedString(buffer, len);
+            int len = MysqlCodec.readInt1(buffer);
+            authResponse = MysqlCodec.readFixedString(buffer, len);
         } else {
-            authResponse = MysqlProto.readNulTerminateString(buffer);
+            authResponse = MysqlCodec.readNulTerminateString(buffer);
         }
         // DB to use
         if (buffer.remaining() > 0 && capability.isConnectedWithDb()) {
-            database = new String(MysqlProto.readNulTerminateString(buffer));
+            database = new String(MysqlCodec.readNulTerminateString(buffer));
         }
         // plugin name to plugin
         if (buffer.remaining() > 0 && capability.isPluginAuth()) {
-            pluginName = new String(MysqlProto.readNulTerminateString(buffer));
+            pluginName = new String(MysqlCodec.readNulTerminateString(buffer));
         }
         // connect attrs
         if (buffer.remaining() > 0 && capability.isConnectAttrs()) {
@@ -140,21 +140,21 @@ public class MysqlAuthPacket extends MysqlPacket {
         String value = "";
         connectAttributes = Maps.newHashMap();
         try {
-            long allAttrLength = MysqlProto.readVInt(buffer);
+            long allAttrLength = MysqlCodec.readVInt(buffer);
             long curDealLen = 0;
             while (buffer.remaining() > 0 && allAttrLength - curDealLen > 0) {
                 key = value = "";
-                long keyLength = MysqlProto.readVInt(buffer);
+                long keyLength = MysqlCodec.readVInt(buffer);
 
                 if (buffer.remaining() >= keyLength) {
-                    key = new String(MysqlProto.readFixedString(buffer, (int) keyLength));
+                    key = new String(MysqlCodec.readFixedString(buffer, (int) keyLength));
                 } else {
                     return connectAttributes;
                 }
                 curDealLen += keyLength;
-                long valLength = MysqlProto.readVInt(buffer);
+                long valLength = MysqlCodec.readVInt(buffer);
                 if (buffer.remaining() >= valLength) {
-                    value = new String(MysqlProto.readFixedString(buffer, (int) valLength));
+                    value = new String(MysqlCodec.readFixedString(buffer, (int) valLength));
                 } else {
                     // only parse key success
                     connectAttributes.put(key, "");

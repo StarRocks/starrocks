@@ -23,9 +23,9 @@
 #include "storage/olap_common.h" // ColumnId
 #include "storage/range.h"
 #include "storage/rowset/bitmap_index_reader.h"
-#include "storage/rowset/bloom_filter.h"
 #include "storage/types.h"
 #include "storage/zone_map_detail.h"
+#include "util/bloom_filter.h"
 #include "util/string_parser.hpp"
 
 namespace starrocks {

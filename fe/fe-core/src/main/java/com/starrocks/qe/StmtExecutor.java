@@ -133,6 +133,7 @@ import com.starrocks.qe.feedback.skeleton.SkeletonNode;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.qe.scheduler.FeExecuteCoordinator;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.GracefulExitFlag;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.ExecuteEnv;
 import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
@@ -205,6 +206,7 @@ import com.starrocks.sql.optimizer.cost.feature.CostPredictor;
 import com.starrocks.sql.optimizer.dump.QueryDumpInfo;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalValuesOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.statistic.AnalyzeJob;
 import com.starrocks.statistic.AnalyzeMgr;
@@ -520,6 +522,7 @@ public class StmtExecutor {
         long beginTimeInNanoSecond = TimeUtils.getStartTime();
         context.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
         context.setIsForward(false);
+        context.setIsLeaderTransferred(false);
 
         // set execution id.
         // Try to use query id as execution id when execute first time.
@@ -857,6 +860,12 @@ public class StmtExecutor {
             }
 
             recordExecStatsIntoContext();
+
+            if (GracefulExitFlag.isGracefulExit() && context.isLeaderTransferred() && !isInternalStmt) {
+                LOG.info("leader is transferred during executing, forward to new leader");
+                isForwardToLeaderOpt = Optional.of(true);
+                forwardToLeader();
+            }
         }
     }
 
@@ -1633,19 +1642,19 @@ public class StmtExecutor {
             throw new SemanticException("Table %s is not found", tableName.toString());
         }
 
+        AnalyzeMgr analyzeMgr = GlobalStateMgr.getCurrentState().getAnalyzeMgr();
+        StatisticStorage statisticStorage = GlobalStateMgr.getCurrentState().getStatisticStorage();
         if (dropStatsStmt.isExternal()) {
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalAnalyzeStatus(table.getUUID());
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropExternalBasicStatsData(table.getUUID());
-
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().removeExternalBasicStatsMeta(tableName.getCatalog(),
-                    tableName.getDb(), tableName.getTbl());
+            analyzeMgr.dropExternalAnalyzeStatus(table.getUUID());
+            analyzeMgr.dropExternalBasicStatsData(table.getUUID());
+            analyzeMgr.removeExternalBasicStatsMeta(tableName.getCatalog(), tableName.getDb(), tableName.getTbl());
             List<String> columns = table.getBaseSchema().stream().map(Column::getName).collect(Collectors.toList());
-            GlobalStateMgr.getCurrentState().getStatisticStorage().expireConnectorTableColumnStatistics(table, columns);
+            statisticStorage.expireConnectorTableColumnStatistics(table, columns);
         } else {
             List<String> columns = table.getBaseSchema().stream().filter(d -> !d.isAggregated()).map(Column::getName)
                     .collect(Collectors.toList());
-            GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropMultiColumnStatsMetaAndData(
-                    StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
+            analyzeMgr.dropMultiColumnStatsMetaAndData(StatisticUtils.buildConnectContext(), Sets.newHashSet(table.getId()));
+            statisticStorage.expireMultiColumnStatistics(table.getId());
 
             if (!dropStatsStmt.isMultiColumn()) {
                 GlobalStateMgr.getCurrentState().getAnalyzeMgr().dropAnalyzeStatus(table.getId());

@@ -53,6 +53,8 @@ import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.thrift.TAuthInfo;
+import com.starrocks.thrift.TGetKeywordsRequest;
+import com.starrocks.thrift.TGetKeywordsResponse;
 import com.starrocks.thrift.TGetPartitionsMetaRequest;
 import com.starrocks.thrift.TGetPartitionsMetaResponse;
 import com.starrocks.thrift.TGetTablesConfigRequest;
@@ -61,6 +63,7 @@ import com.starrocks.thrift.TGetTablesInfoRequest;
 import com.starrocks.thrift.TGetTablesInfoResponse;
 import com.starrocks.thrift.TGetTemporaryTablesInfoRequest;
 import com.starrocks.thrift.TGetTemporaryTablesInfoResponse;
+import com.starrocks.thrift.TKeywordInfo;
 import com.starrocks.thrift.TPartitionMetaInfo;
 import com.starrocks.thrift.TTableConfigInfo;
 import com.starrocks.thrift.TTableInfo;
@@ -137,6 +140,73 @@ public class InformationSchemaDataSource {
         }
         return new AuthDbRequestResult(authorizedDbs, currentUser);
     }
+
+    // keywords
+    public static TGetKeywordsResponse generateKeywordsResponse(TGetKeywordsRequest request) throws TException {
+        TGetKeywordsResponse resp = new TGetKeywordsResponse();
+        List<TKeywordInfo> keywordList = new ArrayList<>();
+
+        AuthDbRequestResult result = getAuthDbRequestResult(request.getAuth_info());
+
+        if (result.authorizedDbs.isEmpty()) {
+            resp.setKeywords(keywordList);
+            return resp;
+        }
+        class KeywordElement {
+            public KeywordElement(String keyword, boolean reserved) {
+                this.keyword = keyword;
+                this.reserved = reserved;
+            }
+            public String getKeyword() {
+                return keyword;
+            }
+            public String keyword;
+            public boolean reserved;
+        }
+
+        TreeSet<KeywordElement> sortedKeywords = new TreeSet<>(Comparator.comparing(KeywordElement::getKeyword));
+
+        List<KeywordElement> keywords = new ArrayList<>();
+        keywords.add(new KeywordElement("SELECT", true));
+        keywords.add(new KeywordElement("INSERT", true));
+        keywords.add(new KeywordElement("UPDATE", true));
+        keywords.add(new KeywordElement("DELETE", true));
+        keywords.add(new KeywordElement("TABLE", true));
+        keywords.add(new KeywordElement("INDEX", true));
+        keywords.add(new KeywordElement("VIEW", true));
+        keywords.add(new KeywordElement("USER", false));
+        keywords.add(new KeywordElement("PASSWORD", false));
+        sortedKeywords.addAll(keywords);
+
+        long startTableIdOffset = request.isSetStart_table_id_offset() ? request.getStart_table_id_offset() : 0;
+        boolean startOffsetReached = startTableIdOffset == 0;
+        long currentOffset = 0;
+
+        for (KeywordElement ele : sortedKeywords) {
+            if (!startOffsetReached) {
+                if (currentOffset == startTableIdOffset) {
+                    startOffsetReached = true;
+                }
+                currentOffset++;
+                continue;
+            }
+
+            TKeywordInfo keywordInfo = new TKeywordInfo();
+            keywordInfo.setKeyword(ele.keyword);
+            keywordInfo.setReserved(ele.reserved);
+            keywordList.add(keywordInfo);
+
+            if (keywordList.size() >= 10000) {
+                resp.setNext_table_id_offset(currentOffset + 1);
+                break;
+            }
+            currentOffset++;
+        }
+
+        resp.setKeywords(keywordList);
+        return resp;
+    }
+
 
     private static class AuthDbRequestResult {
         public final List<String> authorizedDbs;

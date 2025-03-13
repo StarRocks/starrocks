@@ -2230,7 +2230,7 @@ public class Config extends ConfigBase {
     public static long connector_table_query_trigger_analyze_max_pending_task_num = 100;
 
     @ConfField(mutable = true)
-    public static long connector_table_query_trigger_analyze_schedule_interval = 30; // unit: second, default 30s
+    public static long connector_table_query_trigger_task_schedule_interval = 30; // unit: second, default 30s
 
     /**
      * If set to true, Planner will try to select replica of tablet on same host as this Frontend.
@@ -2482,6 +2482,12 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long iceberg_metadata_cache_max_entry_size = 8388608L;
+
+    /**
+     * paimon metadata cache preheat, default false
+     */
+    @ConfField(mutable = true)
+    public static boolean enable_paimon_refresh_manifest_files = false;
 
     /**
      * fe will call es api to get es index shard info every es_state_sync_interval_secs
@@ -3556,4 +3562,18 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = false)
     public static int max_spm_cache_baseline_size = 200;
+
+    /**
+     * The process must be stopped after the load balancing detection becomes Unhealthy,
+     * otherwise the new connection will still be forwarded to the machine where the FE node is located,
+     * causing the connection to fail.
+     */
+    @ConfField(mutable = true)
+    public static long min_graceful_exit_time_second = 15;
+
+    /**
+     * timeout for graceful exit
+     */
+    @ConfField(mutable = true)
+    public static long max_graceful_exit_time_second = 60;
 }

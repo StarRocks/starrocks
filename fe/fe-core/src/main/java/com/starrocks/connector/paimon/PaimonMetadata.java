@@ -22,6 +22,7 @@ import com.starrocks.catalog.PaimonTable;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.connector.ColumnTypeConverter;
@@ -65,7 +66,6 @@ import org.apache.paimon.table.source.DataSplit;
 import org.apache.paimon.table.source.InnerTableScan;
 import org.apache.paimon.table.source.ReadBuilder;
 import org.apache.paimon.table.source.Split;
-import org.apache.paimon.table.system.PartitionsTable;
 import org.apache.paimon.table.system.SchemasTable;
 import org.apache.paimon.table.system.SnapshotsTable;
 import org.apache.paimon.types.DataField;
@@ -74,11 +74,14 @@ import org.apache.paimon.types.DataTypeChecks;
 import org.apache.paimon.types.DateType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.DateTimeUtils;
+import org.apache.paimon.utils.PartitionPathUtils;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -150,39 +153,21 @@ public class PaimonMetadata implements ConnectorMetadata {
             partitionColumnTypes.add(dataTableRowType.getTypeAt(dataTableRowType.getFieldIndex(partitionColumnName)));
         }
 
-        Identifier partitionTableIdentifier = new Identifier(databaseName, String.format("%s%s", tableName, "$partitions"));
-        RecordReaderIterator<InternalRow> iterator = null;
         try {
-            PartitionsTable table = (PartitionsTable) paimonNativeCatalog.getTable(partitionTableIdentifier);
-            RowType partitionTableRowType = table.rowType();
-            DataType lastUpdateTimeType = partitionTableRowType.getTypeAt(partitionTableRowType
-                    .getFieldIndex("last_update_time"));
-            int[] projected = new int[] {0, 1, 2, 3, 4};
-            RecordReader<InternalRow> recordReader = table.newReadBuilder().withProjection(projected)
-                    .newRead().createReader(table.newScan().plan());
-            iterator = new RecordReaderIterator<>(recordReader);
-            while (iterator.hasNext()) {
-                InternalRow rowData = iterator.next();
-                String partitionStr = rowData.getString(0).toString();
-                org.apache.paimon.data.Timestamp lastUpdateTime = rowData.getTimestamp(4,
-                        DataTypeChecks.getPrecision(lastUpdateTimeType));
-                String[] partitionValues = partitionStr.replace("[", "").replace("]", "")
-                        .split(",");
-                Partition partition =
-                        getPartition(rowData.getLong(1), rowData.getLong(2), rowData.getLong(3),
-                                partitionColumnNames, partitionColumnTypes, partitionValues, lastUpdateTime);
-                this.partitionInfos.put(partition.getPartitionName(), partition);
+            List<org.apache.paimon.partition.Partition> partitions = paimonNativeCatalog.listPartitions(identifier);
+            for (org.apache.paimon.partition.Partition partition : partitions) {
+                String partitionPath = PartitionPathUtils.generatePartitionPath(partition.spec(), dataTableRowType);
+                String[] partitionValues = Arrays.stream(partitionPath.split("/"))
+                        .map(part -> part.split("=")[1])
+                        .toArray(String[]::new);
+                Partition srPartition = getPartition(partition.recordCount(),
+                        partition.fileSizeInBytes(), partition.fileCount(),
+                        partitionColumnNames, partitionColumnTypes, partitionValues,
+                        Timestamp.fromEpochMillis(partition.lastFileCreationTime()));
+                this.partitionInfos.put(srPartition.getPartitionName(), srPartition);
             }
-        } catch (Exception e) {
+        } catch (Catalog.TableNotExistException e) {
             LOG.error("Failed to update partition info of paimon table {}.{}.", databaseName, tableName, e);
-        } finally {
-            if (iterator != null) {
-                try {
-                    iterator.close();
-                } catch (Exception e) {
-                    LOG.error("Failed to update partition info of paimon table {}.{}.", databaseName, tableName, e);
-                }
-            }
         }
     }
 
@@ -192,7 +177,7 @@ public class PaimonMetadata implements ConnectorMetadata {
                                    List<String> partitionColumnNames,
                                    List<DataType> partitionColumnTypes,
                                    String[] partitionValues,
-                                   org.apache.paimon.data.Timestamp lastUpdateTime) {
+                                   Timestamp lastUpdateTime) {
         if (partitionValues.length != partitionColumnNames.size()) {
             String errorMsg = String.format("The length of partitionValues %s is not equal to " +
                     "the partitionColumnNames %s.", partitionValues.length, partitionColumnNames.size());
@@ -214,10 +199,9 @@ public class PaimonMetadata implements ConnectorMetadata {
 
         return new Partition(partitionName, convertToSystemDefaultTime(lastUpdateTime),
                 recordCount, fileSizeInBytes, fileCount);
-
     }
 
-    private Long convertToSystemDefaultTime(org.apache.paimon.data.Timestamp lastUpdateTime) {
+    private Long convertToSystemDefaultTime(Timestamp lastUpdateTime) {
         LocalDateTime localDateTime = lastUpdateTime.toLocalDateTime();
         ZoneId zoneId = ZoneId.systemDefault();
         ZonedDateTime zonedDateTime = localDateTime.atZone(zoneId);
@@ -533,15 +517,14 @@ public class PaimonMetadata implements ConnectorMetadata {
             DataType updateTimeType = rowType.getTypeAt(rowType.getFieldIndex("update_time"));
             int[] projected = new int[] {0, 6};
             PredicateBuilder predicateBuilder = new PredicateBuilder(rowType);
-            Predicate equal = predicateBuilder.equal(predicateBuilder.indexOf("schema_id"), 0);
+            Predicate equal = predicateBuilder.equal(predicateBuilder.indexOf("schema_id"), 0L);
             RecordReader<InternalRow> recordReader = table.newReadBuilder().withProjection(projected)
                     .withFilter(equal).newRead().createReader(table.newScan().plan());
             iterator = new RecordReaderIterator<>(recordReader);
             while (iterator.hasNext()) {
                 InternalRow rowData = iterator.next();
                 Long schemaIdValue = rowData.getLong(0);
-                org.apache.paimon.data.Timestamp updateTime = rowData
-                        .getTimestamp(1, DataTypeChecks.getPrecision(updateTimeType));
+                Timestamp updateTime = rowData.getTimestamp(1, DataTypeChecks.getPrecision(updateTimeType));
                 if (schemaIdValue == 0) {
                     return updateTime.getMillisecond();
                 }
@@ -577,8 +560,7 @@ public class PaimonMetadata implements ConnectorMetadata {
             iterator = new RecordReaderIterator<>(recordReader);
             while (iterator.hasNext()) {
                 InternalRow rowData = iterator.next();
-                org.apache.paimon.data.Timestamp commitTime = rowData
-                        .getTimestamp(0, DataTypeChecks.getPrecision(commitTimeType));
+                Timestamp commitTime = rowData.getTimestamp(0, DataTypeChecks.getPrecision(commitTimeType));
                 if (convertToSystemDefaultTime(commitTime) > lastCommitTime) {
                     lastCommitTime = convertToSystemDefaultTime(commitTime);
                 }
@@ -622,5 +604,51 @@ public class PaimonMetadata implements ConnectorMetadata {
             }
         }
         return result;
+    }
+
+    @Override
+    public void refreshTable(String srDbName, Table table, List<String> partitionNames, boolean onlyCachedPartitions) {
+        String tableName = table.getCatalogTableName();
+        Identifier identifier = new Identifier(srDbName, tableName);
+        paimonNativeCatalog.invalidateTable(identifier);
+        try {
+            ((PaimonTable) table).setPaimonNativeTable(paimonNativeCatalog.getTable(identifier));
+            if (partitionNames != null && !partitionNames.isEmpty()) {
+                // todo: paimon does not support to refresh an exact partition
+                this.refreshPartitionInfo(identifier);
+            } else {
+                this.refreshPartitionInfo(identifier);
+            }
+            // Preheat manifest files, disabled by default
+            if (Config.enable_paimon_refresh_manifest_files) {
+                if (partitionNames == null || partitionNames.isEmpty()) {
+                    ((PaimonTable) table).getNativeTable().newReadBuilder().newScan().plan();
+                } else {
+                    List<String> partitionColumnNames = table.getPartitionColumnNames();
+                    Map<String, String> partitionSpec = new HashMap<>();
+                    for (String partitionName : partitionNames) {
+                        partitionSpec.put(String.join(",", partitionColumnNames), partitionName);
+                    }
+                    ((PaimonTable) table).getNativeTable().newReadBuilder()
+                            .withPartitionFilter(partitionSpec).newScan().plan();
+                }
+            }
+            tables.put(identifier, table);
+        } catch (Exception e) {
+            LOG.error("Failed to refresh table {}.{}.{}.", catalogName, srDbName, tableName, e);
+        }
+    }
+
+    private void refreshPartitionInfo(Identifier identifier) {
+        if (paimonNativeCatalog instanceof CachingCatalog) {
+            try {
+                paimonNativeCatalog.invalidateTable(identifier);
+                ((CachingCatalog) paimonNativeCatalog).refreshPartitions(identifier);
+            } catch (Catalog.TableNotExistException e) {
+                throw new RuntimeException(e);
+            }
+        } else {
+            LOG.warn("Current catalog {} does not support cache.", catalogName);
+        }
     }
 }

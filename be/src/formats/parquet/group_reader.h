@@ -123,9 +123,12 @@ public:
     const tparquet::RowGroup* get_row_group_metadata() const;
     Status get_next(ChunkPtr* chunk, size_t* row_count);
     void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
-                           ColumnIOType type = ColumnIOType::PAGES);
+                           ColumnIOTypeFlags types = ColumnIOType::PAGES);
 
     SparseRange<uint64_t> get_range() const { return _range; }
+    SparseRange<uint64_t>& get_range() { return _range; }
+    const bool get_is_group_filtered() const { return _is_group_filtered; }
+    bool& get_is_group_filtered() { return _is_group_filtered; }
 
 private:
     void _set_end_offset(int64_t value) { _end_offset = value; }

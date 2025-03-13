@@ -36,6 +36,8 @@ public class StatsConstants {
     public static final int STATISTIC_BATCH_VERSION_V5 = 9;
     public static final int STATISTIC_DATA_VERSION_V2 = 10;
     public static final int STATISTIC_MULTI_COLUMN_VERSION = 12;
+    public static final int STATISTIC_QUERY_MULTI_COLUMN_VERSION = 13;
+
 
 
     public static final ImmutableSet<Integer> STATISTIC_SUPPORTED_VERSION =
@@ -53,6 +55,7 @@ public class StatsConstants {
                     .add(STATISTIC_BATCH_VERSION_V5)
                     .add(STATISTIC_DATA_VERSION_V2)
                     .add(STATISTIC_MULTI_COLUMN_VERSION)
+                    .add(STATISTIC_QUERY_MULTI_COLUMN_VERSION)
                     .build();
 
     public static final int STATISTICS_PARTITION_UPDATED_THRESHOLD = 10;

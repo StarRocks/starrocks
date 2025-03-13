@@ -62,7 +62,7 @@ Status GlobalDictCodeColumnIterator::decode_string_dict_codes(const Column& code
     auto& res_data = *container;
 #ifndef NDEBUG
     for (size_t i = 0; i < size; ++i) {
-        DCHECK(code_data[i] <= size);
+        DCHECK(code_data[i] <= _dict_size);
         if (code_data[i] < 0) {
             DCHECK(output_nullable);
         }

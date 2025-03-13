@@ -414,6 +414,67 @@ TEST_F(SpillTest, unsorted_process) {
     }
 }
 
+struct FailedGuard {
+    bool scoped_begin() const { return false; }
+    void scoped_end() const {}
+};
+
+TEST_F(SpillTest, yield_with_failed_guard) {
+    ObjectPool pool;
+    // order by id_int
+    TExprBuilder order_by_slots_builder;
+    order_by_slots_builder << TYPE_INT;
+    auto order_by_slots = order_by_slots_builder.get_res();
+    // full data id_int, id_smallint
+    std::vector<bool> nullables = {false, false};
+    TExprBuilder tuple_slots_builder;
+    tuple_slots_builder << TYPE_INT << TYPE_SMALLINT;
+    auto tuple_slots = tuple_slots_builder.get_res();
+
+    auto ctx_st = no_partition_context(&pool, &dummy_rt_st, order_by_slots, tuple_slots);
+    ASSERT_OK(ctx_st.status());
+    auto ctx = ctx_st.value();
+
+    auto& tuple = ctx->sort_exprs.sort_tuple_slot_expr_ctxs();
+
+    // create chunk
+    RandomChunkBuilder chunk_builder;
+
+    // create spilled factory
+    // auto factory_options = SpilledFactoryOptions(ctx->partition_nums, ctx->parition_exprs, ctx->sort_exprs, ctx->sort_descs, false);
+    auto factory = spill::make_spilled_factory();
+
+    // create spiller
+    SpilledOptions spill_options;
+    // 4 buffer chunk
+    spill_options.mem_table_pool_size = 4;
+    // file size: 1M
+    spill_options.spill_mem_table_bytes_size = 1 * 1024 * 1024;
+    // spill format type
+    spill_options.spill_type = spill::SpillFormaterType::SPILL_BY_COLUMN;
+
+    spill_options.block_manager = dummy_block_mgr.get();
+
+    auto chunk_empty = chunk_builder.gen(tuple, nullables);
+
+    auto spiller = factory->create(spill_options);
+    spiller->set_metrics(metrics);
+    SpillerCaller<spill::RawSpillerWriter*, spill::SpillerReader*> caller(spiller.get());
+    ASSERT_OK(spiller->prepare(&dummy_rt_st));
+
+    size_t test_loop = 1024;
+    std::vector<ChunkPtr> holder;
+    {
+        for (size_t i = 0; i < test_loop; ++i) {
+            auto chunk = chunk_builder.gen(tuple, nullables);
+            ASSERT_OK(caller.spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+            ASSERT_OK(spiller->_spilled_task_status);
+            holder.push_back(chunk);
+        }
+        ASSERT_OK(caller.flush<SyncExecutor>(&dummy_rt_st, FailedGuard{}));
+    }
+}
+
 TEST_F(SpillTest, order_by_process) {
     ObjectPool pool;
     // order by id_int
@@ -553,6 +614,18 @@ TEST_F(SpillTest, partition_process) {
             holder.push_back(chunk);
         }
         ASSERT_OK(spiller->flush<SyncExecutor>(&dummy_rt_st, EmptyMemGuard{}));
+    }
+
+    {
+        for (size_t i = 0; i < test_loop; ++i) {
+            auto chunk = chunk_builder.gen(tuple, nullables);
+            auto hash_column = spill::SpillHashColumn::create(chunk->num_rows());
+            chunk->append_column(std::move(hash_column), -1);
+            ASSERT_OK(spiller->spill<SyncExecutor>(&dummy_rt_st, chunk, EmptyMemGuard{}));
+            ASSERT_OK(spiller->_spilled_task_status);
+            holder.push_back(chunk);
+        }
+        ASSERT_OK(spiller->flush<SyncExecutor>(&dummy_rt_st, FailedGuard{}));
     }
 }
 
