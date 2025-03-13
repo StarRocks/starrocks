@@ -270,7 +270,7 @@ public class HeartbeatMgr extends FrontendDaemon {
                     copiedMasterInfo.setDisabled_disks(((Backend) computeNode).getDisabledDisks());
                     copiedMasterInfo.setDecommissioned_disks(((Backend) computeNode).getDecommissionedDisks());
                     copiedMasterInfo.setNode_type(TNodeType.Backend);
-                }else{
+                } else {
                     copiedMasterInfo.setNode_type(TNodeType.Compute);
                 }
                 THeartbeatResult result = ThriftRPCRequestExecutor.callNoRetry(
