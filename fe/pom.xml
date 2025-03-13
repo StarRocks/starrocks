@@ -61,9 +61,6 @@ under the License.
         <kudu.version>1.17.1</kudu.version>
         <hikaricp.version>3.4.5</hikaricp.version>
         <kafka-clients.version>3.4.0</kafka-clients.version>
-<<<<<<< HEAD
-        <io.netty.version>4.1.118.Final</io.netty.version>
-=======
         <arrow.version>18.0.0</arrow.version>
         <grpc.version>1.63.0</grpc.version>
         <io.netty.version>4.1.118.Final</io.netty.version>
@@ -77,7 +74,6 @@ under the License.
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
         <iceberg.version>1.7.1</iceberg.version>
         <staros.version>3.4-rc4</staros.version>
->>>>>>> 0d96aceafc ([Enhancement] fix CVEs and refactor fe pom.xml (#56725))
     </properties>
 
     <profiles>
@@ -391,27 +387,6 @@ under the License.
                 <version>1.9</version>
             </dependency>
 
-<<<<<<< HEAD
-=======
-            <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-precompile-plugin -->
-            <dependency>
-                <groupId>com.baidu</groupId>
-                <artifactId>jprotobuf-precompile-plugin</artifactId>
-                <version>2.2.12</version>
-                <scope>provided</scope>
-                <exclusions>
-                    <exclusion>
-                        <groupId>org.apache.maven</groupId>
-                        <artifactId>maven-core</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.codehaus.plexus</groupId>
-                        <artifactId>plexus-utils</artifactId>
-                    </exclusion>
-                </exclusions>
-            </dependency>
-
->>>>>>> 0d96aceafc ([Enhancement] fix CVEs and refactor fe pom.xml (#56725))
             <dependency>
                 <groupId>commons-io</groupId>
                 <artifactId>commons-io</artifactId>

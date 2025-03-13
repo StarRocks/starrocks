@@ -37,15 +37,7 @@ under the License.
     <properties>
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
-<<<<<<< HEAD
-        <jacoco.version>0.8.7</jacoco.version>
-        <iceberg.version>1.7.1</iceberg.version>
-        <paimon.version>1.0.1</paimon.version>
-        <delta-kernel.version>4.0.0rc1</delta-kernel.version>
-        <staros.version>3.3.2</staros.version>
-=======
         <jacoco.version>0.8.8</jacoco.version>
->>>>>>> 0d96aceafc ([Enhancement] fix CVEs and refactor fe pom.xml (#56725))
         <python>python</python>
     </properties>
 
@@ -217,15 +209,6 @@ under the License.
             <classifier>jar-with-dependencies</classifier>
         </dependency>
 
-<<<<<<< HEAD
-=======
-        <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-precompile-plugin -->
-        <dependency>
-            <groupId>com.baidu</groupId>
-            <artifactId>jprotobuf-precompile-plugin</artifactId>
-        </dependency>
-
->>>>>>> 0d96aceafc ([Enhancement] fix CVEs and refactor fe pom.xml (#56725))
         <!-- https://mvnrepository.com/artifact/com.baidu/jprotobuf-rpc-common -->
         <dependency>
             <groupId>com.baidu</groupId>
@@ -311,7 +294,6 @@ under the License.
         </dependency>
 
         <dependency>
-<<<<<<< HEAD
             <groupId>de.javakaffee</groupId>
             <artifactId>kryo-serializers</artifactId>
             <version>0.45</version>
@@ -321,10 +303,6 @@ under the License.
                     <artifactId>kryo</artifactId>
                 </exclusion>
             </exclusions>
-=======
-            <groupId>org.apache.httpcomponents.client5</groupId>
-            <artifactId>httpclient5</artifactId>
->>>>>>> 0d96aceafc ([Enhancement] fix CVEs and refactor fe pom.xml (#56725))
         </dependency>
 
         <dependency>
@@ -482,22 +460,12 @@ under the License.
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-sql_2.12</artifactId>
-<<<<<<< HEAD
-            <scope>provided</scope>
-            <exclusions>
-                <exclusion>
-                    <artifactId>orc-core</artifactId>
-                    <groupId>org.apache.orc</groupId>
-                </exclusion>
-            </exclusions>
-=======
         </dependency>
 
         <!--  https://mvnrepository.com/artifact/org.apache.spark/spark-catalyst_2.12 -->
         <dependency>
             <groupId>org.apache.spark</groupId>
             <artifactId>spark-catalyst_2.12</artifactId>
->>>>>>> 0d96aceafc ([Enhancement] fix CVEs and refactor fe pom.xml (#56725))
         </dependency>
 
         <!-- https://mvnrepository.com/artifact/com.fasterxml.uuid/java-uuid-generator -->
@@ -747,15 +715,6 @@ under the License.
             <artifactId>mssql-jdbc</artifactId>
         </dependency>
 
-<<<<<<< HEAD
-=======
-        <!-- https://mvnrepository.com/artifact/com.mysql/mysql-connector-j -->
-        <dependency>
-            <groupId>com.mysql</groupId>
-            <artifactId>mysql-connector-j</artifactId>
-        </dependency>
-
->>>>>>> 0d96aceafc ([Enhancement] fix CVEs and refactor fe pom.xml (#56725))
         <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->
         <dependency>
             <groupId>com.mockrunner</groupId>
@@ -842,85 +801,15 @@ under the License.
             <version>2.3.2</version>
         </dependency>
 
-<<<<<<< HEAD
-=======
-        <dependency>
-            <groupId>io.grpc</groupId>
-            <artifactId>grpc-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.grpc</groupId>
-            <artifactId>grpc-netty-shaded</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.grpc</groupId>
-            <artifactId>grpc-protobuf</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.grpc</groupId>
-            <artifactId>grpc-stub</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>io.grpc</groupId>
-            <artifactId>grpc-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.arrow</groupId>
-            <artifactId>arrow-vector</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.arrow</groupId>
-            <artifactId>arrow-memory-netty</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.arrow</groupId>
-            <artifactId>flight-core</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.arrow</groupId>
-            <artifactId>flight-sql</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.arrow</groupId>
-            <artifactId>flight-sql-jdbc-driver</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.arrow</groupId>
-            <artifactId>arrow-jdbc</artifactId>
-        </dependency>
-
         <dependency>
             <groupId>software.amazon.awssdk</groupId>
             <artifactId>bundle</artifactId>
         </dependency>
->>>>>>> 0d96aceafc ([Enhancement] fix CVEs and refactor fe pom.xml (#56725))
     </dependencies>
 
     <build>
         <finalName>starrocks-fe</finalName>
         <plugins>
-<<<<<<< HEAD
-=======
-            <!-- fe proto precompile plugin-->
-            <plugin>
-                <groupId>com.baidu</groupId>
-                <artifactId>jprotobuf-precompile-plugin</artifactId>
-                <configuration>
-                    <filterClassPackage>com.starrocks.proto;com.starrocks.rpc;com.starrocks.server</filterClassPackage>
-                    <generateProtoFile>true</generateProtoFile>
-                    <compileDependencies>true</compileDependencies>
-                </configuration>
-                <executions>
-                    <execution>
-                        <phase>compile</phase>
-                        <goals>
-                            <goal>precompile</goal>
-                        </goals>
-                    </execution>
-                </executions>
-            </plugin>
->>>>>>> 0d96aceafc ([Enhancement] fix CVEs and refactor fe pom.xml (#56725))
             <!-- fe ut coverage-->
             <plugin>
                 <groupId>org.jacoco</groupId>

@@ -572,32 +572,6 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib
     fi
 
-<<<<<<< HEAD
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
-    cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/hadoop-azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
-    cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
-    cp -p ${STARROCKS_THIRDPARTY}/installed/gcs_connector/*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
-    cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop/
-
-    # remove zookeeper
-    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/zookeeper-3.8.3.jar
-    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/zookeeper-3.8.3.jar
-    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/avro-1.9.2.jar
-    rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/avro-1.9.2.jar
-
-    if [ "${BUILD_JAVA_EXT}" == "ON" ] ; then
-        # Only process the netty replacement if the java-ext is built as well
-        # https://avd.aquasec.com/nvd/2025/cve-2025-24970, replace 4.1.100.Final with 4.1.118.Final
-        rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/netty-*-4.1.100.Final*.jar
-        cp -f ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib/netty-*-4.1.118.Final*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs/lib/
-        rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/netty-*-4.1.100.Final*.jar
-        cp -f ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib/netty-*-4.1.118.Final*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/
-    fi
-=======
-    cp -r -p ${STARROCKS_HOME}/be/extension/python-udf/src/flight_server.py ${STARROCKS_OUTPUT}/be/lib/py-packages
->>>>>>> 0d96aceafc ([Enhancement] fix CVEs and refactor fe pom.xml (#56725))
-
     MSG="${MSG} √ ${MSG_BE}"
 fi
 
