@@ -76,7 +76,7 @@ void HeartbeatServer::init_cluster_id_or_die() {
 void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMasterInfo& master_info) {
     //print heartbeat in every minute
     LOG_EVERY_N(INFO, 12) << "get heartbeat from FE. host:" << master_info.network_address.hostname
-                          << ", port:" << master_info.network_address.port << ", cluster id:" << master_info.cluster_id
+                          << ", port:" << master_info.network_address.port << ", cluster id:" << master_info.cluster_id << ", node type:" << master_info.node_type
                           << ", run_mode:" << master_info.run_mode << ", counter:" << google::COUNTER;
 
     if (master_info.encrypted != config::enable_transparent_data_encryption) {
@@ -188,6 +188,18 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
         if (!(master_info.backend_ip == LOCALHOST || master_info.backend_ip == LOCALHOST_IPV6)) {
             return Status::InternalError("FE heartbeat with localhost ip but BE is not deployed on the same machine");
         }
+    }
+
+    if (master_info.node_type == TNodeType::Backend && BackendOptions::is_cn()) {
+        LOG_EVERY_N(ERROR, 12)
+                << "FE heartbeat with BE node type,but the node is CN,node type mismatch!";
+        return Status::InternalError("Unmatched node type!");
+    }
+
+    if (master_info.node_type == TNodeType::Compute && !BackendOptions::is_cn()) {
+        LOG_EVERY_N(ERROR, 12)
+        << "FE heartbeat with CN node type,but the node is BE,node type mismatch!";
+        return Status::InternalError("Unmatched node type!");
     }
 
 #ifndef USE_STAROS
