@@ -742,7 +742,7 @@ Syntax:
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-SET ("key" = "value",...)
+SET ("key" = "value")
 ```
 
 Currently, StarRocks supports modifying the following table properties:
@@ -758,8 +758,12 @@ Currently, StarRocks supports modifying the following table properties:
 - `bucket_size` (supported since 3.2)
 - `base_compaction_forbidden_time_ranges` (supported since v3.2.13)
 
-Note:
-You can also modify the properties by merging into the above operation on column. See the [following examples](#examples).
+:::note
+
+- In most cases, you are only allowed to modify one property at a time. You can only modify multiple properties at a time only if these properties have the same prefix. Currently, only `dynamic_partition.` and `binlog.` are supported.
+- You can also modify the properties by merging into the above operation on column. See the [following examples](#examples).
+
+:::
 
 ### Swap
 
