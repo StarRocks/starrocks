@@ -90,7 +90,7 @@ TEST(HeartbeatServerTest, test_unmatched_node_type_heartbeat) {
     master_info.__set_node_type(TNodeType::Compute);
     res = server.compare_master_info(master_info);
     EXPECT_EQ(TStatusCode::OK, res.status().code());
-    
+
     BackendOptions::init(true);
     master_info.__set_node_type(TNodeType::Backend);
     res = server.compare_master_info(master_info);
