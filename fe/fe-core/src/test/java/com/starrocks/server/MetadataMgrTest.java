@@ -461,5 +461,10 @@ public class MetadataMgrTest {
         Assert.assertEquals(LOGICAL_ICEBERG_METADATA, metadataTableName.getTableType());
         Assert.assertEquals("iceberg_table$logical_iceberg_metadata", metadataTableName.getTableNameWithType());
         Assert.assertEquals("iceberg_table$logical_iceberg_metadata", metadataTableName.toString());
+
+        Assert.assertFalse(MetadataTableName.isMetadataTable("aaaaaaa"));
+        Assert.assertFalse(MetadataTableName.isMetadataTable("table$"));
+        Assert.assertFalse(MetadataTableName.isMetadataTable("table$unknown_type"));
+        Assert.assertTrue(MetadataTableName.isMetadataTable("table$logical_iceberg_metadata"));
     }
 }
