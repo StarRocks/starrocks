@@ -509,7 +509,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
 
     install -d ${STARROCKS_OUTPUT}/be/bin  \
                ${STARROCKS_OUTPUT}/be/conf \
-               ${STARROCKS_OUTPUT}/be/lib/hadoop \
+               ${STARROCKS_OUTPUT}/be/lib/hadoop-lib \
                ${STARROCKS_OUTPUT}/be/www  \
 
     cp -r -p ${STARROCKS_HOME}/be/output/bin/* ${STARROCKS_OUTPUT}/be/bin/
@@ -544,6 +544,8 @@ if [ ${BUILD_BE} -eq 1 ]; then
     cp -r -p ${STARROCKS_HOME}/be/output/www/* ${STARROCKS_OUTPUT}/be/www/
 
     if [ "${BUILD_JAVA_EXT}" == "ON" ]; then
+        cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/lib/native ${STARROCKS_OUTPUT}/be/lib/hadoop-lib/
+        cp -r -p ${STARROCKS_HOME}/java-extensions/hadoop-lib/target/hadoop-lib ${STARROCKS_OUTPUT}/be/lib/hadoop-lib/
         cp -r -p ${STARROCKS_HOME}/java-extensions/jdbc-bridge/target/starrocks-jdbc-bridge-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/udf-extensions/target/udf-extensions-jar-with-dependencies.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
         cp -r -p ${STARROCKS_HOME}/java-extensions/java-utils/target/starrocks-java-utils.jar ${STARROCKS_OUTPUT}/be/lib/jni-packages
@@ -570,6 +572,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
         cp -r -p ${STARROCKS_HOME}/java-extensions/hive-reader/target/starrocks-hive-reader.jar ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib
     fi
 
+<<<<<<< HEAD
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/common ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -r -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/hdfs ${STARROCKS_OUTPUT}/be/lib/hadoop/
     cp -p ${STARROCKS_THIRDPARTY}/installed/hadoop/share/hadoop/tools/lib/hadoop-azure-* ${STARROCKS_OUTPUT}/be/lib/hadoop/hdfs
@@ -591,6 +594,9 @@ if [ ${BUILD_BE} -eq 1 ]; then
         rm -f ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/netty-*-4.1.100.Final*.jar
         cp -f ${STARROCKS_OUTPUT}/be/lib/hive-reader-lib/netty-*-4.1.118.Final*.jar ${STARROCKS_OUTPUT}/be/lib/hadoop/common/lib/
     fi
+=======
+    cp -r -p ${STARROCKS_HOME}/be/extension/python-udf/src/flight_server.py ${STARROCKS_OUTPUT}/be/lib/py-packages
+>>>>>>> 0d96aceafc ([Enhancement] fix CVEs and refactor fe pom.xml (#56725))
 
     MSG="${MSG} √ ${MSG_BE}"
 fi
