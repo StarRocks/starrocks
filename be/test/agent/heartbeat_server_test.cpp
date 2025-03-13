@@ -16,6 +16,7 @@
 
 #include "gen_cpp/Types_types.h"
 #include "gtest/gtest.h"
+#include "service/backend_options.h"
 
 namespace starrocks {
 
@@ -50,7 +51,7 @@ TEST(HeartbeatServerTest, test_print_master_info_with_token_null) {
             "cluster_id=12345, epoch=100, token=<null>, backend_ip=192.168.1.1, "
             "http_port=<null>, heartbeat_flags=<null>, backend_id=<null>, "
             "min_active_txn_id=0, run_mode=<null>, disabled_disks=<null>, "
-            "decommissioned_disks=<null>, encrypted=<null>, stop_regular_tablet_report=<null>)";
+            "decommissioned_disks=<null>, encrypted=<null>, stop_regular_tablet_report=<null>, node_type=<null>)";
 
     EXPECT_EQ(server.print_master_info(master_info), expected_output);
 }
@@ -71,9 +72,19 @@ TEST(HeartbeatServerTest, test_print_master_info_with_token_hidden) {
             "cluster_id=12345, epoch=100, token=<hidden>, backend_ip=192.168.1.1, "
             "http_port=<null>, heartbeat_flags=<null>, backend_id=<null>, "
             "min_active_txn_id=0, run_mode=<null>, disabled_disks=<null>, "
-            "decommissioned_disks=<null>, encrypted=<null>, stop_regular_tablet_report=<null>)";
+            "decommissioned_disks=<null>, encrypted=<null>, stop_regular_tablet_report=<null>, node_type=<null>)";
 
     EXPECT_EQ(server.print_master_info(master_info), expected_output);
 }
 
+TEST(HeartbeatServerTest, test_unmatched_node_type_heartbeat) {
+    HeartbeatServer server;
+    TMasterInfo master_info;
+
+    BackendOptions::init(false);
+    master_info.__set_node_type(TNodeType::Backend);
+
+    StatusOr res = server.compare_master_info(master_info);
+    EXPECT_EQ(TStatusCode::INTERNAL_ERROR, res.status().code());
+}
 } // namespace starrocks
