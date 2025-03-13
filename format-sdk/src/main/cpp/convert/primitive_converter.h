@@ -153,6 +153,58 @@ public:
 
         return arrow::Status::OK();
     }
+
+    arrow::Result<std::shared_ptr<arrow::Array>> toArrowArray(const std::shared_ptr<Column>& column) override {
+        using ArrowBuilderType = typename arrow::TypeTraits<ArrowType>::BuilderType;
+
+        const auto& real_arrow_type = arrow::internal::checked_pointer_cast<ArrowType>(_arrow_type);
+        std::unique_ptr<ArrowBuilderType> builder =
+                std::make_unique<ArrowBuilderType>(_arrow_type, const_cast<arrow::MemoryPool*>(_pool));
+        size_t num_rows = column->size();
+        ARROW_RETURN_NOT_OK(builder->Reserve(num_rows));
+
+        for (size_t i = 0; i < num_rows; ++i) {
+            if (column->is_null(i)) {
+                ARROW_RETURN_NOT_OK(builder->AppendNull());
+                continue;
+            }
+
+            auto* data_column = ColumnHelper::get_data_column(column.get());
+            const SrCppType* column_data = down_cast<const SrColumnType*>(data_column)->get_data().data();
+            if constexpr (SR_TYPE == TYPE_DATE || SR_TYPE == TYPE_DATETIME) {
+                if constexpr (std::is_base_of_v<arrow::Date32Type, ArrowType>) {
+                    ARROW_RETURN_NOT_OK(builder->Append((column_data[i].to_unixtime() / MILLIS_PER_DAY)));
+                } else if constexpr (std::is_base_of_v<arrow::Date64Type, ArrowType>) {
+                    ARROW_RETURN_NOT_OK(builder->Append(column_data[i].to_unixtime()));
+                } else {
+                    auto millis = column_data[i].to_unixtime(_ctz);
+                    if (real_arrow_type->unit() == arrow::TimeUnit::MILLI) {
+                        ARROW_RETURN_NOT_OK(builder->Append(millis));
+                    } else if (real_arrow_type->unit() == arrow::TimeUnit::MICRO) {
+                        ARROW_RETURN_NOT_OK(builder->Append(millis * MICROS_PER_MILLIS));
+                    } else {
+                        return arrow::Status::Invalid("Unsupported timeunit ", real_arrow_type->unit());
+                    }
+                }
+            } else if constexpr (SR_TYPE == TYPE_DECIMAL32 || SR_TYPE == TYPE_DECIMAL64 || SR_TYPE == TYPE_DECIMAL128) {
+                int128_t c_value = column_data[i];
+                int64_t high = c_value >> 64;
+                uint64_t low = c_value;
+                arrow::Decimal128 value(high, low);
+                ARROW_RETURN_NOT_OK(builder->Append(value));
+            } else if constexpr (SR_TYPE == TYPE_LARGEINT) {
+                int128_t c_value = column_data[i];
+                int64_t high = c_value >> 64;
+                uint64_t low = c_value;
+                arrow::Decimal256 value(arrow::Decimal128(high, low));
+                ARROW_RETURN_NOT_OK(builder->Append(value));
+            } else {
+                ARROW_RETURN_NOT_OK(builder->Append((column_data[i])));
+            }
+        }
+
+        return builder->Finish();
+    }
 };
 
 } // namespace starrocks::lake::format

@@ -41,21 +41,13 @@ public class LibraryHelper {
     public static final String PROP_FORMAT_LIB_NAME = "com.starrocks.format.lib.name";
     public static final String PROP_FORMAT_WRAPPER_LIB_NAME = "com.starrocks.format.wrapper.lib.name";
 
-    static {
-        load();
+    private LibraryHelper() {
     }
-
-    public LibraryHelper() {
-    }
-
-    public native void releaseWriter(long writerAddress);
-
-    public native void releaseReader(long readerAddress);
 
     /**
      * Load starrocks_format.so and starrocks_format_wrapper.so.
      */
-    private static void load() {
+    public static synchronized void load() {
         long start = System.currentTimeMillis();
         try {
             // 1. load starrocks_format.so

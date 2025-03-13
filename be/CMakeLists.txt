@@ -912,7 +912,6 @@ set(STARROCKS_DEPENDENCIES
     arrow_flight_sql
     gRPC::grpc
     gRPC::grpc++
-    jemalloc # required by arrow
     parquet
     orc
     cctz
@@ -942,6 +941,13 @@ set(STARROCKS_DEPENDENCIES
     fiu
     ${WL_END_GROUP}
 )
+
+if (NOT BUILD_FORMAT_LIB)
+    set(STARROCKS_DEPENDENCIES
+            ${STARROCKS_DEPENDENCIES}
+            jemalloc # required by arrow
+    )
+endif()
 
 if (${WITH_STARCACHE} STREQUAL "ON")
     set(STARROCKS_DEPENDENCIES

@@ -22,7 +22,7 @@
 namespace starrocks::lake::format {
 class ColumnConverter;
 
-using ColumnConverterVector = std::vector<std::shared_ptr<ColumnConverter> >;
+using ColumnConverterVector = std::vector<std::shared_ptr<ColumnConverter>>;
 
 constexpr int32_t ARROW_CONVERTER_ID(arrow::Type::type arrow_type_id, LogicalType sr_logical_type) {
     DCHECK(arrow_type_id >= arrow::Type::NA && arrow_type_id < arrow::Type::MAX_ID)
@@ -36,9 +36,9 @@ constexpr int32_t ARROW_CONVERTER_ID(arrow::Type::type arrow_type_id, LogicalTyp
 class ColumnConverter {
 public:
     // Create a Converter for the given data type
-    static arrow::Result<std::shared_ptr<ColumnConverter> > create(const std::shared_ptr<arrow::DataType>& arrow_type,
-                                                                   const std::shared_ptr<Field>& sr_field,
-                                                                   const arrow::MemoryPool* pool);
+    static arrow::Result<std::shared_ptr<ColumnConverter>> create(const std::shared_ptr<arrow::DataType>& arrow_type,
+                                                                  const std::shared_ptr<Field>& sr_field,
+                                                                  const arrow::MemoryPool* pool);
 
     static arrow::Result<ColumnConverterVector> create_children_converter(
             const std::shared_ptr<arrow::DataType>& arrow_type, const std::shared_ptr<Field>& sr_field,
@@ -58,8 +58,13 @@ public:
      */
     virtual arrow::Status toSrColumn(std::shared_ptr<arrow::Array> array, ColumnPtr& column) = 0;
 
+    /**
+     * Convert starrocks column to arrow array.
+     */
+    virtual arrow::Result<std::shared_ptr<arrow::Array>> toArrowArray(const std::shared_ptr<Column>& column) = 0;
+
 protected:
-    arrow::Result<std::shared_ptr<arrow::Buffer> > convert_null_bitmap(const Buffer<uint8_t>& null_bytes);
+    arrow::Result<std::shared_ptr<arrow::Buffer>> convert_null_bitmap(const Buffer<uint8_t>& null_bytes);
 
     static ColumnPtr get_data_column(const ColumnPtr& column);
 
@@ -71,7 +76,7 @@ protected:
 
     const arrow::MemoryPool* _pool;
 
-    std::vector<std::shared_ptr<ColumnConverter> > _children;
+    std::vector<std::shared_ptr<ColumnConverter>> _children;
 };
 
 } // namespace starrocks::lake::format
