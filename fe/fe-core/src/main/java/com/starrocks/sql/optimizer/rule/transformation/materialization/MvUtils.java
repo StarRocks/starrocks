@@ -112,7 +112,6 @@ import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.optimizer.transformer.TransformerContext;
 import com.starrocks.sql.parser.ParsingException;
 import com.starrocks.sql.util.Box;
-import org.apache.commons.collections4.CollectionUtils;
 import org.apache.commons.collections4.SetUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -136,19 +135,6 @@ import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVRewrite;
 
 public class MvUtils {
     private static final Logger LOG = LogManager.getLogger(MvUtils.class);
-
-    public static boolean hasRelatedMVs(Set<Table> tablesToCheck) {
-        if (tablesToCheck.isEmpty()) {
-            return false;
-        }
-        for (Table table : tablesToCheck) {
-            Set<MvId> mvIds = table.getRelatedMaterializedViews();
-            if (CollectionUtils.isNotEmpty(mvIds)) {
-                return true;
-            }
-        }
-        return false;
-    }
 
     public static Set<MaterializedViewWrapper> getRelatedMvs(ConnectContext connectContext,
                                                              int maxLevel,
