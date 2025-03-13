@@ -27,8 +27,10 @@ import com.starrocks.sql.ast.SetCatalogStmt;
 import com.starrocks.sql.ast.ShowStmt;
 import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UseCatalogStmt;
+import org.apache.hadoop.util.Sets;
 
 import java.util.Map;
+import java.util.Set;
 
 import static com.starrocks.server.CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog;
 import static com.starrocks.sql.ast.CreateCatalogStmt.TYPE;
@@ -37,6 +39,10 @@ public class CatalogAnalyzer {
     private static final String CATALOG = "CATALOG";
 
     private static final String WHITESPACE = "\\s+";
+
+    private static final Set<String> NOT_SUPPORT_ALTER_PROPERTIES = Sets.newHashSet(
+            "type"
+    );
 
     public static void analyze(StatementBase stmt, ConnectContext session) {
         new CatalogAnalyzerVisitor().visit(stmt, session);
@@ -126,7 +132,9 @@ public class CatalogAnalyzer {
                 Map<String, String> properties = modifyTablePropertiesClause.getProperties();
 
                 for (Map.Entry<String, String> property : properties.entrySet()) {
-                    if (!property.getKey().equals("ranger.plugin.hive.service.name")) {
+                    String confName = property.getKey();
+
+                    if (NOT_SUPPORT_ALTER_PROPERTIES.contains(confName)) {
                         throw new SemanticException("Not support alter catalog property " + property.getKey());
                     }
                 }
