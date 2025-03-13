@@ -14,6 +14,7 @@
 #pragma once
 
 #include <arrow/array.h>
+#include <arrow/c/abi.h>
 #include <arrow/c/bridge.h>
 #include <arrow/result.h>
 #include <arrow/type.h>
@@ -51,9 +52,9 @@ namespace starrocks::lake::format {
  */
 class StarRocksFormatWriter {
 public:
-    static arrow::Result<StarRocksFormatWriter*> create(int64_t tablet_id, const std::string& tablet_root_path,
-                                                        int64_t txn_id, const ArrowSchema* output_schema,
-                                                        const std::unordered_map<std::string, std::string>& options);
+    static arrow::Result<StarRocksFormatWriter*> create(int64_t tablet_id, std::string tablet_root_path, int64_t txn_id,
+                                                        const ArrowSchema* output_schema,
+                                                        const std::unordered_map<std::string, std::string> options);
 
     /**
      * Create a starrocks format writer instance, which bound to a specific tablet.
@@ -64,10 +65,9 @@ public:
      * @param output_schema The table schema that the target tablet belongs.
      * @param options key-value parameters, e.g. S3 connection authentication configuration.
      */
-    static arrow::Result<StarRocksFormatWriter*> create(int64_t tablet_id, const std::string& tablet_root_path,
-                                                        int64_t txn_id,
-                                                        const std::shared_ptr<arrow::Schema>& output_schema,
-                                                        const std::unordered_map<std::string, std::string>& options);
+    static arrow::Result<StarRocksFormatWriter*> create(int64_t tablet_id, std::string tablet_root_path, int64_t txn_id,
+                                                        const std::shared_ptr<arrow::Schema> output_schema,
+                                                        const std::unordered_map<std::string, std::string> options);
 
     virtual ~StarRocksFormatWriter() = default;
 

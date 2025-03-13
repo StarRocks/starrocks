@@ -25,4 +25,6 @@ constexpr const char* SR_FORMAT_USING_COLUMN_UID = "starrocks.format.using_colum
 
 constexpr const char* SR_FORMAT_QUERY_PLAN = "starrocks.format.query_plan";
 
+constexpr const char* SR_FORMAT_COLUMN_ID = "starrocks.format.column.id";
+
 } // namespace starrocks::lake::format

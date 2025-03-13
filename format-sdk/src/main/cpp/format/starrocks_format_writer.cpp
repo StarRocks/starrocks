@@ -20,6 +20,7 @@
 
 // project dependencies
 #include "convert/starrocks_arrow_converter.h"
+#include "fmt/format.h"
 #include "format_utils.h"
 #include "starrocks_format_writer.h"
 
@@ -129,7 +130,7 @@ private:
             } else if (is_del(f.path)) {
                 op_write->add_dels(std::move(f.path));
             } else {
-                return Status::InternalError(fmt::format("unknown file {}", f.path));
+                return Status::InternalError(fmt::format("Unknown file {}", f.path));
             }
         }
         op_write->mutable_rowset()->set_num_rows(_tablet_writer->num_rows());
@@ -140,10 +141,10 @@ private:
 
     Status save_txn_log(const TxnLogPtr& log) {
         if (UNLIKELY(!log->has_tablet_id())) {
-            return Status::InvalidArgument("missing tablet id in txn log");
+            return Status::InvalidArgument("Missing tablet id in txn log");
         }
         if (UNLIKELY(!log->has_txn_id())) {
-            return Status::InvalidArgument("missing id in txn log");
+            return Status::InvalidArgument("Missing id in txn log");
         }
 
         auto txn_log_path = _loc_provider->txn_log_location(log->tablet_id(), log->txn_id());
@@ -158,7 +159,6 @@ private:
         // TODO: construct prefix in LocationProvider
         std::string prefix = fmt::format("{:016X}_", _tablet_id);
         auto root = _loc_provider->metadata_root_location(_tablet_id);
-
         auto scan_cb = [&](std::string_view name) {
             if (HasPrefixString(name, prefix)) {
                 objects.emplace_back(join_path(root, name));
@@ -195,17 +195,17 @@ private:
 /* static methods */
 
 arrow::Result<StarRocksFormatWriter*> StarRocksFormatWriter::create(
-        int64_t tablet_id, const std::string& tablet_root_path, int64_t txn_id, const ArrowSchema* output_arrow_schema,
-        const std::unordered_map<std::string, std::string>& options) {
+        int64_t tablet_id, const std::string tablet_root_path, int64_t txn_id, const ArrowSchema* output_arrow_schema,
+        const std::unordered_map<std::string, std::string> options) {
     ARROW_ASSIGN_OR_RAISE(std::shared_ptr<arrow::Schema> output_schema,
                           arrow::ImportSchema(const_cast<struct ArrowSchema*>(output_arrow_schema)));
     return create(tablet_id, std::move(tablet_root_path), txn_id, std::move(output_schema), std::move(options));
 }
 
 arrow::Result<StarRocksFormatWriter*> StarRocksFormatWriter::create(
-        int64_t tablet_id, const std::string& tablet_root_path, int64_t txn_id,
-        const std::shared_ptr<arrow::Schema>& output_schema,
-        const std::unordered_map<std::string, std::string>& options) {
+        int64_t tablet_id, const std::string tablet_root_path, int64_t txn_id,
+        const std::shared_ptr<arrow::Schema> output_schema,
+        const std::unordered_map<std::string, std::string> options) {
     StarRocksFormatWriterImpl* format_writer = new StarRocksFormatWriterImpl(
             tablet_id, std::move(tablet_root_path), txn_id, std::move(output_schema), std::move(options));
     return format_writer;
