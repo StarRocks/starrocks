@@ -78,7 +78,7 @@ MySQL [example_db]> SHOW CREATE TABLE t\G
 `ALTER TABLE ADD INDEX` または `DROP INDEX` を実行して全文インバーテッドインデックスを削除します。
 
 ```SQL
-DROP INDEX index idx on t;
+DROP INDEX idx on t;
 ALTER TABLE t DROP index idx;
 ```
 
