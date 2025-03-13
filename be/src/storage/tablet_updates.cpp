@@ -1898,7 +1898,7 @@ Status TabletUpdates::_wait_for_version(const EditVersion& version, int64_t time
         if (!is_compaction && now - wait_start > timeout_ms) {
             string msg = strings::Substitute("wait_for_version timeout($0ms) version:$1 $2", now - wait_start,
                                              version.to_string(), _debug_string(false, true));
-            LOG(WARNING) << msg;
+            LOG_IF(WARNING, !is_compaction) << msg;
             return Status::TimedOut(msg);
         }
     }
