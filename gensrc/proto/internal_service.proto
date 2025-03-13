@@ -131,6 +131,10 @@ message PTransmitRuntimeFilterParams {
     // When merge node starts to broadcast this rf(millseconds since unix epoch).
     optional int64 broadcast_timestamp = 10;
     optional bool is_pipeline = 11;
+    // 12,13,14 only used for skew join optimization
+    optional bool is_skew_broadcast_join = 12;
+    optional PTypeDesc columnType = 13;
+    optional int32 skew_shuffle_filter_id = 14;
 };
 
 message PTransmitRuntimeFilterResult {

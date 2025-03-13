@@ -53,17 +53,19 @@ using OpTRuntimeBloomFilterBuildParams = std::vector<std::optional<RuntimeMember
 // Parameters used to build runtime bloom-filters.
 struct RuntimeMembershipFilterBuildParam {
     RuntimeMembershipFilterBuildParam(bool multi_partitioned, bool eq_null, bool is_empty, Columns columns,
-                                      MutableRuntimeFilterPtr runtime_filter)
+                                      MutableRuntimeFilterPtr runtime_filter, const TypeDescriptor& type_descriptor)
             : multi_partitioned(multi_partitioned),
               eq_null(eq_null),
               is_empty(is_empty),
               columns(std::move(columns)),
-              runtime_filter(std::move(runtime_filter)) {}
+              runtime_filter(std::move(runtime_filter)),
+              type_descriptor(type_descriptor) {}
     bool multi_partitioned;
     bool eq_null;
     bool is_empty;
     Columns columns;
     MutableRuntimeFilterPtr runtime_filter;
+    TypeDescriptor type_descriptor;
 };
 
 // RuntimeFilterCollector contains runtime in-filters and bloom-filters, it is stored in RuntimeFilerHub

@@ -72,8 +72,6 @@ Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
             return Status::OK();
         }
         DCHECK_EQ(runtime_filter->size(), build_runtime_filters.size());
-        std::list<RuntimeFilterBuildDescriptor*> build_descs(build_runtime_filters.begin(),
-                                                             build_runtime_filters.end());
         for (size_t i = 0; i < build_runtime_filters.size(); ++i) {
             build_runtime_filters[i]->set_or_intersect_filter((*runtime_filter)[i]);
             auto rf = build_runtime_filters[i]->runtime_filter();
@@ -83,7 +81,8 @@ Status PartitionSortSinkOperator::push_chunk(RuntimeState* state, const ChunkPtr
                     _hub, _plan_node_id,
                     std::make_unique<RuntimeFilterCollector>(RuntimeInFilterList{}, std::move(lst)));
         }
-        state->runtime_filter_port()->publish_runtime_filters(build_descs);
+
+        state->runtime_filter_port()->publish_runtime_filters(build_runtime_filters);
     }
 
     return Status::OK();
