@@ -30,11 +30,8 @@ import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
-import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
-import org.junit.jupiter.params.provider.MethodSource;
 
 import java.util.List;
 import java.util.Optional;
@@ -161,9 +158,9 @@ public class MVLifecycleAutoKeeperTest {
         testHelper("default_catalog", "ssb", "automv_db", queryList);
     }
 
-    @ParameterizedTest(name = "{0}")
-    @MethodSource("nextQuery")
-    @Ignore
+    // @ParameterizedTest(name = "{0}")
+    // @MethodSource("nextQuery")
+    // @Ignore
     public void testSingleSsbQuery(String queryName) throws Throwable {
         if (new Random().nextInt(5) != 0) {
             return;
