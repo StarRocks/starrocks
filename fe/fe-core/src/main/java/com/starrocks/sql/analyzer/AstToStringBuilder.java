@@ -1942,9 +1942,11 @@ public class AstToStringBuilder {
 
         // Properties
         Map<String, String> properties = new HashMap<>();
-        try {
-            properties = new HashMap<>(table.getProperties());
-        } catch (NotImplementedException e) {
+        if (table.getType() != JDBC) {
+            try {
+                properties = new HashMap<>(table.getProperties());
+            } catch (NotImplementedException e) {
+            }
         }
 
         // Location

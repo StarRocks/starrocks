@@ -36,6 +36,13 @@ select * from db_json_${uuid0}.t1;
 -- result:
 1	{"c1": 1}
 -- !result
+show create table db_json_${uuid0}.t1;
+-- result:
+t1	CREATE TABLE `t1` (
+  `c1` int(11) DEFAULT NULL,
+  `c2` varchar(1073741824) DEFAULT NULL
+);
+-- !result
 set catalog default_catalog;
 -- result:
 -- !result
