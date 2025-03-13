@@ -37,15 +37,7 @@ under the License.
     <properties>
         <starrocks.home>${basedir}/../../</starrocks.home>
         <fe_ut_parallel>${env.FE_UT_PARALLEL}</fe_ut_parallel>
-<<<<<<< HEAD
-        <jacoco.version>0.8.7</jacoco.version>
-        <iceberg.version>1.7.1</iceberg.version>
-        <paimon.version>1.0.1</paimon.version>
-        <delta-kernel.version>4.0.0rc1</delta-kernel.version>
-        <staros.version>3.4-rc4</staros.version>
-=======
         <jacoco.version>0.8.8</jacoco.version>
->>>>>>> 0d96aceafc ([Enhancement] fix CVEs and refactor fe pom.xml (#56725))
         <python>python</python>
     </properties>
 
@@ -740,15 +732,6 @@ under the License.
             <artifactId>mssql-jdbc</artifactId>
         </dependency>
 
-<<<<<<< HEAD
-=======
-        <!-- https://mvnrepository.com/artifact/com.mysql/mysql-connector-j -->
-        <dependency>
-            <groupId>com.mysql</groupId>
-            <artifactId>mysql-connector-j</artifactId>
-        </dependency>
-
->>>>>>> 0d96aceafc ([Enhancement] fix CVEs and refactor fe pom.xml (#56725))
         <!-- https://mvnrepository.com/artifact/com.mockrunner/mockrunner-jdbc -->
         <dependency>
             <groupId>com.mockrunner</groupId>

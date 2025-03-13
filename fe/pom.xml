@@ -64,8 +64,6 @@ under the License.
         <arrow.version>18.0.0</arrow.version>
         <grpc.version>1.63.0</grpc.version>
         <io.netty.version>4.1.118.Final</io.netty.version>
-<<<<<<< HEAD
-=======
         <puppycrawl.version>10.21.1</puppycrawl.version>
         <aws-v2-sdk.version>2.29.52</aws-v2-sdk.version>
         <avro.version>1.11.4</avro.version>
@@ -76,7 +74,6 @@ under the License.
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
         <iceberg.version>1.7.1</iceberg.version>
         <staros.version>3.4-rc4</staros.version>
->>>>>>> 0d96aceafc ([Enhancement] fix CVEs and refactor fe pom.xml (#56725))
     </properties>
 
     <profiles>
