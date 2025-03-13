@@ -124,7 +124,7 @@ public:
                                                  TClusterSnapshotJobsResponse* res);
 
     static Status get_applicable_roles(const SchemaScannerState& state, const TGetApplicableRolesRequest& request,
-                                             TGetApplicableRolesResponse* response);
+                                       TGetApplicableRolesResponse* response);
 
     static Status get_keywords(const SchemaScannerState& state, const TGetKeywordsRequest& request,
                                TGetKeywordsResponse* response);

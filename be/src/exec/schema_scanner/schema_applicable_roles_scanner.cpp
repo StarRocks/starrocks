@@ -67,8 +67,10 @@ Status SchemaApplicableRolesScanner::start(RuntimeState* state) {
         applicable_roles_req.__set_auth_info(auth_info);
         applicable_roles_req.__set_start_table_id_offset(table_id_offset);
         TGetApplicableRolesResponse applicable_roles_response;
-        RETURN_IF_ERROR(SchemaHelper::get_applicable_roles(_ss_state, applicable_roles_req, &applicable_roles_response));
-        _applicable_roles_vec.insert(_applicable_roles_vec.end(), applicable_roles_response.roles.begin(), applicable_roles_response.roles.end());
+        RETURN_IF_ERROR(
+                SchemaHelper::get_applicable_roles(_ss_state, applicable_roles_req, &applicable_roles_response));
+        _applicable_roles_vec.insert(_applicable_roles_vec.end(), applicable_roles_response.roles.begin(),
+                                     applicable_roles_response.roles.end());
         table_id_offset = applicable_roles_response.next_table_id_offset;
         if (!table_id_offset) {
             break;

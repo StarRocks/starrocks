@@ -241,9 +241,8 @@ Status SchemaHelper::get_cluster_snapshot_jobs_info(const SchemaScannerState& st
 }
 
 Status SchemaHelper::get_applicable_roles(const SchemaScannerState& state, const TGetApplicableRolesRequest& req,
-                                        TGetApplicableRolesResponse* res) {
-    return _call_rpc(
-            state, [&req, &res](FrontendServiceConnection& client) { client->getApplicableRoles(*res, req); });
+                                          TGetApplicableRolesResponse* res) {
+    return _call_rpc(state, [&req, &res](FrontendServiceConnection& client) { client->getApplicableRoles(*res, req); });
 }
 
 Status SchemaHelper::get_keywords(const SchemaScannerState& state, const TGetKeywordsRequest& request,
