@@ -4,6 +4,32 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.1
+
+リリース日: 2025年3月12日
+
+### 新機能と改善点
+
+- Data Lake 分析で Delta Lake の Deletion Vector をサポートしました。
+- セキュアビューをサポートしました。セキュアビューを作成することで、基となるテーブルの SELECT 権限を持たないユーザーが、ビューをクエリできないようにできます（そのユーザーがビュー自体の SELECT 権限を持っていたとしても）。
+- Sketch HLL ([`ds_hll_count_distinct`](https://docs.starrocks.io/docs/sql-reference/sql-functions/aggregate-functions/ds_hll_count_distinct/)) をサポートしました。`approx_count_distinct`と比較して、より高精度な近似重複排除が可能になります。
+- 共有データクラスタで、クラスターリカバリのための自動 Snapshot 作成をサポートしました。
+- 共有データクラスタの Storage Volume が Azure Data Lake Storage Gen2 をサポートしました。
+- MySQL プロトコルを使用した StarRocks への接続で SSL 認証をサポートしました。これにより、クライアントと StarRocks クラスター間のデータ通信が不正アクセスから保護されます。
+
+### バグ修正
+
+以下の問題を修正しました：
+
+- OLAP ビューがマテリアライズドビューの処理ロジックに影響を与える問題を修正しました。[#52989](https://github.com/StarRocks/starrocks/pull/52989)
+- 1 つのレプリカが見つからない場合、他のレプリカがいくつ成功してもトランザクションが失敗する問題を修正しました。（修正後は、大多数のレプリカが成功すればトランザクションが完了するようになりました。）[#55212](https://github.com/StarRocks/starrocks/pull/55212)
+- Alive 状態が false のノードに Stream Load がスケジュールされるとインポートが失敗する問題を修正しました。[#55371](https://github.com/StarRocks/starrocks/pull/55371)
+- クラスター Snapshot 内のファイルが誤って削除される問題を修正しました。[#56338](https://github.com/StarRocks/starrocks/pull/56338)
+
+### 動作の変更
+
+- グレースフルシャットダウンのデフォルト設定を「無効」から「有効」に変更しました。関連するBE/CNパラメータ `loop_count_wait_fragments_finish` のデフォルト値が `2` に変更され、システムは実行中のクエリが完了するまで最大20秒待機するようになりました。[#56002](https://github.com/StarRocks/starrocks/pull/56002)
+
 ## 3.4.0
 
 リリース日: 2025年1月24日
