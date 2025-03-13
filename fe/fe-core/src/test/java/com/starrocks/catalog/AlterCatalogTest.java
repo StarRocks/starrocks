@@ -14,6 +14,7 @@
 package com.starrocks.catalog;
 
 import com.starrocks.common.AnalysisException;
+import com.starrocks.common.DdlException;
 import com.starrocks.persist.AlterCatalogLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.DDLStmtExecutor;
@@ -64,20 +65,32 @@ public class AlterCatalogTest {
 
         try {
             DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
-                    "alter catalog hive0 set (\"ranger.plugin.hive.service.name2\"  =  \"hive_catalog_2\");",
+                    "alter catalog hive0 set (\"type\"  =  \"hudi\");",
                     connectContext), connectContext);
             Assert.fail();
         } catch (AnalysisException e) {
         }
 
+        try {
+            DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                    "alter catalog hive0 set (\"hive.metastore.uris\"  =  \"xx\");",
+                    connectContext), connectContext);
+            Assert.fail();
+        } catch (DdlException e) {
+        }
+
         DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
                 "alter catalog hive0 set (\"ranger.plugin.hive.service.name\"  =  \"hive0\");",
+                connectContext), connectContext);
+        DDLStmtExecutor.execute(UtFrameUtils.parseStmtWithNewParser(
+                "alter catalog hive0 set (\"enable_cache_list_names\"  =  \"true\");",
                 connectContext), connectContext);
 
         Map<String, Catalog> catalogMap = connectContext.getGlobalStateMgr().getCatalogMgr().getCatalogs();
         Catalog catalog = catalogMap.get("hive0");
         Map<String, String> properties = catalog.getConfig();
         Assert.assertEquals("hive0", properties.get("ranger.plugin.hive.service.name"));
+        Assert.assertEquals("true", properties.get("enable_cache_list_names"));
     }
 
     @Test
@@ -91,6 +104,7 @@ public class AlterCatalogTest {
 
         Map<String, String> properties = new HashMap<>();
         properties.put("ranger.plugin.hive.service.name", "hive0");
+        properties.put("enable_cache_list_names", "true");
         AlterCatalogLog log = new AlterCatalogLog("hive0", properties);
         GlobalStateMgr.getCurrentState().getCatalogMgr().replayAlterCatalog(log);
 
@@ -98,6 +112,7 @@ public class AlterCatalogTest {
         Catalog catalog = catalogMap.get("hive0");
         properties = catalog.getConfig();
         Assert.assertEquals("hive0", properties.get("ranger.plugin.hive.service.name"));
+        Assert.assertEquals("true", properties.get("enable_cache_list_names"));
     }
 
     @Test
