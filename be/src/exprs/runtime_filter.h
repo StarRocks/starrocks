@@ -34,6 +34,7 @@
 #include "util/hash_util.hpp"
 
 namespace starrocks {
+struct SkewBroadcastRfMaterial;
 // 0x1. initial global runtime filter impl
 // 0x2. change simd-block-filter hash function.
 // 0x3. Fix serialize problem
@@ -1110,6 +1111,16 @@ public:
         }
     }
 
+    void insert_into_hash_partitions(const CppType& value) {
+        DCHECK(!_hash_partition_bf.empty());
+        size_t hash = compute_hash(value);
+        for (auto& bf : _hash_partition_bf) {
+            if (LIKELY(bf.can_use())) {
+                bf.insert_hash(hash);
+            }
+        }
+    }
+
     void insert_null() { _has_null = true; }
 
     void evaluate(const Column* input_column, RunningContext* ctx) const override {
@@ -1453,6 +1464,11 @@ public:
 
     void insert(const CppType& value) {
         bloom_filter().insert(value);
+        min_max_filter().insert(value);
+    }
+
+    void insert_skew_values(const CppType& value) {
+        bloom_filter().insert_into_hash_partitions(value);
         min_max_filter().insert(value);
     }
 

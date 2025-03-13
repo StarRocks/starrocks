@@ -120,8 +120,10 @@ public:
     // Append a LocalExchangeSinkOperator to the tail of each pipeline.
     // Create a new pipeline with a LocalExchangeSourceOperator.
     // These local exchange sink operators and the source operator share a passthrough exchanger.
+    // pass_through_type specify how to move chunk from prev pipeline to new pipeline.
     OpFactories maybe_gather_pipelines_to_one(RuntimeState* state, int32_t plan_node_id,
-                                              std::vector<OpFactories>& pred_operators_list);
+                                              std::vector<OpFactories>& pred_operators_list,
+                                              LocalExchanger::PassThroughType pass_through_type);
 
     OpFactories maybe_interpolate_collect_stats(RuntimeState* state, int32_t plan_node_id, OpFactories& pred_operators);
 

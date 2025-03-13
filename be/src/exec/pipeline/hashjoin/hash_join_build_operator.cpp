@@ -105,6 +105,23 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     auto& partial_in_filters = _join_builder->get_runtime_in_filters();
     auto& partial_bloom_filter_build_params = _join_builder->get_runtime_bloom_filter_build_params();
     auto& partial_bloom_filters = _join_builder->get_runtime_bloom_filters();
+    // for skew join's boradcast site, we need key column for runtime filter
+    std::vector<ColumnPtr> keyColumns;
+    std::vector<bool> null_safe;
+    std::vector<TypeDescriptor> type_descs;
+    if (_join_builder->is_skew_join() && _distribution_mode == TJoinDistributionMode::BROADCAST) {
+        keyColumns.reserve(partial_bloom_filter_build_params.size());
+        null_safe.reserve(partial_bloom_filter_build_params.size());
+        type_descs.reserve(partial_bloom_filter_build_params.size());
+        for (auto& param : partial_bloom_filter_build_params) {
+            if (UNLIKELY(!param.has_value())) {
+                return Status::InternalError("skew join build rf failed");
+            }
+            keyColumns.emplace_back(param.value().column);
+            null_safe.emplace_back(param.value().eq_null);
+            type_descs.emplace_back(param.value()._type_descriptor);
+        }
+    }
 
     auto mem_tracker = state->query_ctx()->mem_tracker();
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(mem_tracker.get());
@@ -165,8 +182,9 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
                 COUNTER_UPDATE(_join_builder->build_metrics().partial_runtime_bloom_filter_bytes, total_bf_bytes);
             }
 
-            // publish runtime bloom-filters
-            state->runtime_filter_port()->publish_runtime_filters(bloom_filters);
+            // publish runtime bloom
+            state->runtime_filter_port()->publish_runtime_filters(bloom_filters, std::cref(keyColumns),
+                                                                  std::cref(null_safe), std::cref(type_descs));
             // move runtime filters into RuntimeFilterHub.
             runtime_filter_hub()->set_collector(_plan_node_id,
                                                 std::make_unique<RuntimeFilterCollector>(std::move(in_filters)));

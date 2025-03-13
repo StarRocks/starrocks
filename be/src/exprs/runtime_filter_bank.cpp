@@ -14,6 +14,9 @@
 
 #include "exprs/runtime_filter_bank.h"
 
+#include <runtime/runtime_filter_worker.h>
+#include <serde/column_array_serde.h>
+
 #include <memory>
 #include <thread>
 
@@ -110,6 +113,90 @@ int RuntimeFilterHelper::deserialize_runtime_filter(ObjectPool* pool, RuntimeFil
     return version;
 }
 
+size_t RuntimeFilterHelper::max_runtime_filter_serialized_size_for_skew_boradcast_join(const ColumnPtr& column) {
+    size_t size = RF_VERSION_SZ;
+    size += (sizeof(bool) + sizeof(size_t) + sizeof(bool) + sizeof(bool));
+    size += serde::ColumnArraySerde::max_serialized_size(*column);
+    return size;
+}
+
+size_t RuntimeFilterHelper::serialize_runtime_filter_for_skew_broadcast_join(const ColumnPtr& column, bool eq_null,
+                                                                             uint8_t* data) {
+    size_t offset = 0;
+#define JRF_COPY_FIELD_TO(field)                  \
+    memcpy(data + offset, &field, sizeof(field)); \
+    offset += sizeof(field);
+    // put version at the head.
+    JRF_COPY_FIELD_TO(RF_VERSION_V2);
+    JRF_COPY_FIELD_TO(eq_null);
+    size_t num_rows = column->size();
+    JRF_COPY_FIELD_TO(num_rows);
+    bool is_nullable = column->is_nullable();
+    JRF_COPY_FIELD_TO(is_nullable)
+    bool is_const = column->is_constant();
+    JRF_COPY_FIELD_TO(is_const);
+
+    uint8_t* cur = data + offset;
+    cur = serde::ColumnArraySerde::serialize(*column, cur);
+    offset += (cur - (data + offset));
+
+    return offset;
+}
+
+// |version|eq_null|num_rows|is_null|is_const|type|column_data|
+int RuntimeFilterHelper::deserialize_runtime_filter_for_skew_broadcast_join(ObjectPool* pool,
+                                                                            SkewBroadcastRfMaterial** material,
+                                                                            const uint8_t* data, size_t size,
+                                                                            const PTypeDesc& ptype) {
+    *material = nullptr;
+    SkewBroadcastRfMaterial* rf_material = pool->add(new SkewBroadcastRfMaterial());
+    size_t offset = 0;
+
+#define JRF_COPY_FIELD_FROM(field)                \
+    memcpy(&field, data + offset, sizeof(field)); \
+    offset += sizeof(field);
+
+    // read version first.
+    uint8_t version = 0;
+    JRF_COPY_FIELD_FROM(version);
+    if (version != RF_VERSION_V2) {
+        LOG(WARNING) << "unrecognized version:" << version;
+        return 0;
+    }
+
+    // read eq_null
+    bool eq_null;
+    JRF_COPY_FIELD_FROM(eq_null);
+
+    // read key column [num_rows,is_null, is_const,type,column_data]
+    size_t num_rows = 0;
+    JRF_COPY_FIELD_FROM(num_rows);
+
+    bool is_null;
+    JRF_COPY_FIELD_FROM(is_null);
+
+    bool is_const;
+    JRF_COPY_FIELD_FROM(is_const);
+
+    TypeDescriptor type_descriptor = TypeDescriptor::from_protobuf(ptype);
+
+    auto columnPtr = ColumnHelper::create_column(type_descriptor, is_null, is_const, num_rows);
+
+    const uint8_t* cur = data + offset;
+    cur = serde::ColumnArraySerde::deserialize(cur, columnPtr.get());
+    offset += (cur - (data + offset));
+
+    DCHECK(offset == size);
+
+    rf_material->build_type = type_descriptor.type;
+    rf_material->eq_null = eq_null;
+    rf_material->key_column = columnPtr;
+
+    *material = rf_material;
+    return version;
+}
+
+template <bool insert_into_single_bf>
 struct FilterIniter {
     template <LogicalType ltype>
     auto operator()(const ColumnPtr& column, size_t column_offset, RuntimeFilter* expr, bool eq_null) {
@@ -120,7 +207,11 @@ struct FilterIniter {
             const auto& data_array = GetContainer<ltype>::get_data(nullable_column->data_column().get());
             for (size_t j = column_offset; j < data_array.size(); j++) {
                 if (!nullable_column->is_null(j)) {
-                    filter->insert(data_array[j]);
+                    if constexpr (insert_into_single_bf) {
+                        filter->insert(data_array[j]);
+                    } else {
+                        filter->insert_skew_values(data_array[j]);
+                    }
                 } else {
                     if (eq_null) {
                         filter->insert_null();
@@ -130,7 +221,11 @@ struct FilterIniter {
         } else {
             const auto& data_array = GetContainer<ltype>::get_data(column.get());
             for (size_t j = column_offset; j < data_array.size(); j++) {
-                filter->insert(data_array[j]);
+                if constexpr (insert_into_single_bf) {
+                    filter->insert(data_array[j]);
+                } else {
+                    filter->insert_skew_values(data_array[j]);
+                }
             }
         }
         return nullptr;
@@ -138,11 +233,11 @@ struct FilterIniter {
 };
 
 Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, LogicalType type, RuntimeFilter* filter,
-                                                      size_t column_offset, bool eq_null) {
+                                                      size_t column_offset, bool eq_null, bool insert_into_bf) {
     if (column->has_large_column()) {
         return Status::NotSupported("unsupported build runtime filter for large binary column");
     }
-    type_dispatch_filter(type, nullptr, FilterIniter(), column, column_offset, filter, eq_null);
+    type_dispatch_filter(type, nullptr, FilterIniter(), column, column_offset, filter, eq_null, insert_into_bf);
     return Status::OK();
 }
 
@@ -218,6 +313,13 @@ Status RuntimeFilterBuildDescriptor::init(ObjectPool* pool, const TRuntimeFilter
     if (desc.__isset.broadcast_grf_destinations) {
         _broadcast_grf_destinations = desc.broadcast_grf_destinations;
     }
+    if (desc.__isset.is_borad_cast_join_in_skew) {
+        _is_broad_cast_in_skew = desc.is_borad_cast_join_in_skew;
+    }
+    if (desc.__isset.skew_shuffle_filter_id) {
+        _skew_shuffle_filter_id = desc.skew_shuffle_filter_id;
+    }
+
     WithLayoutMixin::init(desc);
     RETURN_IF_ERROR(Expr::create_expr_tree(pool, desc.build_expr, &_build_expr_ctx, state));
     return Status::OK();

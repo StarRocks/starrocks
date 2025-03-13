@@ -14,10 +14,13 @@
 
 #pragma once
 
+#include <exec/pipeline/runtime_filter_types.h>
+
 #include <atomic>
 #include <cstdint>
 #include <map>
 #include <memory>
+#include <optional>
 #include <thread>
 #include <vector>
 
@@ -49,7 +52,12 @@ class RuntimeFilterPort {
 public:
     RuntimeFilterPort(RuntimeState* state) : _state(state) {}
     void add_listener(RuntimeFilterProbeDescriptor* rf_desc);
-    void publish_runtime_filters(std::list<RuntimeFilterBuildDescriptor*>& rf_descs);
+    // keyColumns and null_safe are only used for skew join's boradcast join
+    void publish_runtime_filters(
+            const std::vector<RuntimeFilterBuildDescriptor*>& rf_descs,
+            std::optional<std::reference_wrapper<const std::vector<ColumnPtr>>> keyColumns = std::nullopt,
+            std::optional<std::reference_wrapper<const std::vector<bool>>> null_safe = std::nullopt,
+            std::optional<std::reference_wrapper<const std::vector<TypeDescriptor>>> type_descs = std::nullopt);
     void publish_local_colocate_filters(std::list<RuntimeFilterBuildDescriptor*>& rf_descs);
     // receiver runtime filter allocated in this fragment instance(broadcast join generate it)
     // or allocated in this query(shuffle join generate global runtime filter)
@@ -58,8 +66,18 @@ public:
     std::string listeners(int32_t filter_id);
 
 private:
+    void publish_skew_boradcast_runtime_filters(RuntimeFilterBuildDescriptor* rf_desc, const ColumnPtr& keyColumn,
+                                                bool null_safe, const TypeDescriptor& type_desc);
+    void static prepare_params(PTransmitRuntimeFilterParams& params, RuntimeState* state,
+                               RuntimeFilterBuildDescriptor* rf_desc);
     std::map<int32_t, std::list<RuntimeFilterProbeDescriptor*>> _listeners;
     RuntimeState* _state;
+};
+
+struct SkewBroadcastRfMaterial {
+    LogicalType build_type;
+    bool eq_null;
+    ColumnPtr key_column;
 };
 
 class RuntimeFilterMergerStatus {
@@ -73,9 +91,12 @@ public:
               current_size(other.current_size),
               max_size(other.max_size),
               stop(other.stop),
+              is_skew_join(other.is_skew_join),
               recv_first_filter_ts(other.recv_first_filter_ts),
               recv_last_filter_ts(other.recv_last_filter_ts),
               broadcast_filter_ts(other.broadcast_filter_ts) {}
+    // merge skew_broadcast_rf_material into out's _hash_partition_bf
+    Status _merge_skew_broadcast_runtime_filter(RuntimeFilter* out);
     // which be number send this rf.
     std::unordered_set<int32_t> arrives;
     // how many partitioned rf we expect
@@ -87,13 +108,19 @@ public:
     size_t max_size = 0;
     bool stop = false;
     bool can_use_bf = true;
+    bool is_skew_join;
 
+    // only set when skew join optimization is used
+    SkewBroadcastRfMaterial* skew_broadcast_rf_material = nullptr;
     // statistics.
     // timestamp in ms since unix epoch;
     // we care about diff not abs value.
     int64_t recv_first_filter_ts = 0;
     int64_t recv_last_filter_ts = 0;
     int64_t broadcast_filter_ts = 0;
+
+    // only send once
+    bool isSent = false;
 };
 
 // RuntimeFilterMerger is to merge partitioned RF
@@ -103,6 +130,7 @@ public:
     RuntimeFilterMerger(ExecEnv* env, const UniqueId& query_id, const TQueryOptions& query_options, bool is_pipeline);
     Status init(const TRuntimeFilterParams& params);
     void merge_runtime_filter(PTransmitRuntimeFilterParams& params);
+    void store_skew_broadcast_join_runtime_filter(PTransmitRuntimeFilterParams& params);
 
 private:
     void _send_total_runtime_filter(int rf_version, int32_t filter_id);
@@ -122,7 +150,9 @@ enum EventType {
     RECEIVE_PART_RF = 3,
     SEND_PART_RF = 4,
     SEND_BROADCAST_GRF = 5,
-    MAX_COUNT,
+    SEND_SKEW_JOIN_BROADCAST_RF = 6,
+    RECEIVE_SKEW_JOIN_BROADCAST_RF = 7,
+    MAX_COUNT
 };
 
 inline std::string EventTypeToString(EventType type) {
@@ -135,10 +165,14 @@ inline std::string EventTypeToString(EventType type) {
         return "OPEN_QUERY";
     case RECEIVE_PART_RF:
         return "RECEIVE_PART_RF";
+    case SEND_SKEW_JOIN_BROADCAST_RF:
+        return "SEND_SKEW_JOIN_BROADCAST_RF";
     case SEND_PART_RF:
         return "SEND_PART_RF";
     case SEND_BROADCAST_GRF:
         return "SEND_BROADCAST_GRF";
+    case RECEIVE_SKEW_JOIN_BROADCAST_RF:
+        return "RECEIVE_SKEW_JOIN_BROADCAST_RF";
     default:
         break;
     }
@@ -186,7 +220,7 @@ public:
     void execute();
     void send_part_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                   const std::vector<starrocks::TNetworkAddress>& addrs, int timeout_ms,
-                                  int64_t rpc_http_min_size);
+                                  int64_t rpc_http_min_size, EventType type);
     void send_broadcast_runtime_filter(PTransmitRuntimeFilterParams&& params,
                                        const std::vector<TRuntimeFilterDestination>& destinations, int timeout_ms,
                                        int64_t rpc_http_min_size);
@@ -210,7 +244,7 @@ private:
 
     void _deliver_part_runtime_filter(std::vector<TNetworkAddress>&& transmit_addrs,
                                       PTransmitRuntimeFilterParams&& params, int transmit_timeout_ms,
-                                      int64_t rpc_http_min_size);
+                                      int64_t rpc_http_min_size, const std::string& msg);
 
     bool _reach_queue_limit();
 
