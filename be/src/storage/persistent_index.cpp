@@ -2158,11 +2158,13 @@ Status ShardByLengthMutableIndex::load(const MutableIndexMetaPB& meta) {
         MonotonicStopWatch watch;
         watch.start();
         // do load snapshot
-        if (!load_snapshot(ar, dumped_shard_idxes)) {
-            std::string err_msg = strings::Substitute("failed load snapshot from file $0", index_file_name);
-            LOG(WARNING) << err_msg;
-            return Status::InternalError(err_msg);
-        }
+        TRY_CATCH_BAD_ALLOC({
+            if (!load_snapshot(ar, dumped_shard_idxes)) {
+                std::string err_msg = strings::Substitute("failed load snapshot from file $0", index_file_name);
+                LOG(WARNING) << err_msg;
+                return Status::InternalError(err_msg);
+            }
+        });
         // special case, snapshot file was written by phmap::BinaryOutputArchive which does not use system profiled API
         // so add read stats manually
         IOProfiler::add_read(snapshot_size, watch.elapsed_time());
