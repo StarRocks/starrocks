@@ -300,13 +300,11 @@ StarRocks は現在、HDFS へのシンプル認証、AWS S3 および GCS へ�
 
 `list_files_only` が `true` に設定されている場合、`data_format` を指定する必要はありません。
 
-`list_recursively` を `false` に設定することで、指定したディレクトリ以下のファイルを非再帰的にリストアップしたい場合は、パラメータ `path` の末尾に `/*` を付けなければならない。
-
 詳細については、[Return](#return) を参照してください。
 
 #### list_recursively
 
-`list_files_only` に加えて、StarRocks はファイルとディレクトリを再帰的にリストする `list_recursively` もサポートしています。`list_recursively` は `list_files_only` が `true` に設定されているときのみ有効です。デフォルト値は `false` である。
+StarRocks はファイルとディレクトリを再帰的にリストする `list_recursively` もサポートしています。`list_recursively` は `list_files_only` が `true` に設定されているときのみ有効です。デフォルト値は `false` である。
 
 ```SQL
 "list_files_only" = "true",
@@ -316,7 +314,7 @@ StarRocks は現在、HDFS へのシンプル認証、AWS S3 および GCS へ�
 `list_files_only` と `list_recursively` の両方が `true` に設定されている場合、StarRocks は以下の処理を行う：
 
 - 指定された `path` がファイルの場合 (具体的に指定されているか、ワイルドカードで表現されているかに関わらず)、StarRocks はそのファイルの情報を表示します。
-- 指定された `path` がディレクトリの場合 (具体的に指定されているか、ワイルドカードで表されているか、また `/` や `/*` でサフィックスされているかどうかに関わらず)、StarRocks はそのディレクトリ以下のすべてのファイルとサブディレクトリを表示します。
+- 指定された `path` がディレクトリの場合 (具体的に指定されているか、ワイルドカードで表されているか、また `/` でサフィックスされているかどうかに関わらず)、StarRocks はそのディレクトリ以下のすべてのファイルとサブディレクトリを表示します。
 
 詳細については、[Return](#return) を参照してください。
 
@@ -485,6 +483,23 @@ SELECT と共に使用すると、FILES() はファイル内のデータをテ�
   | s3://bucket/list/parquet/basic_type.parquet | 2281 |      0 | 2024-12-24 11:35:53 |
   +---------------------------------------------+------+--------+---------------------+
   10 rows in set (0.04 sec)
+  ```
+
+  このパスで `orc*` にマッチするファイルとディレクトリを非再帰的にリストアップする：
+
+  ```Plain
+  SELECT * FROM FILES(
+      "path"="s3://bucket/list/orc*", 
+      "list_files_only" = "true", 
+      "list_recursively" = "false"
+  );
+  +--------------------------------------+------+--------+---------------------+
+  | PATH                                 | SIZE | IS_DIR | MODIFICATION_TIME   |
+  +--------------------------------------+------+--------+---------------------+
+  | s3://bucket/list/orc0/orc1           |    0 |      1 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/orc1/basic_type.orc | 1027 |      0 | 2024-12-24 22:16:00 |
+  +--------------------------------------+------+--------+---------------------+
+  2 rows in set (0.03 sec)
   ```
 
 #### DESC FILES()

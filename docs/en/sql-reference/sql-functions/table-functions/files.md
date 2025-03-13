@@ -302,13 +302,11 @@ From v3.4.0 onwards, FILES() supports only list the files when reading them.
 
 Please note that you do not need to specify `data_format` when `list_files_only` is set to `true`.
 
-If you want to list the files under the specified directory in a non-recursive way (by setting `list_recursively` to `false`), the parameter `path` must be suffixed by `/*`.
-
 For more information, see [Return](#return).
 
 #### list_recursively
 
-In addition to `list_files_only`, StarRocks also supports `list_recursively` to list the files and directories recursively. `list_recursively` only takes effect when `list_files_only` is set to `true`. The default value is `false`.
+StarRocks further supports `list_recursively` to list the files and directories recursively. `list_recursively` only takes effect when `list_files_only` is set to `true`. The default value is `false`.
 
 ```SQL
 "list_files_only" = "true",
@@ -318,7 +316,7 @@ In addition to `list_files_only`, StarRocks also supports `list_recursively` to 
 When both `list_files_only` and `list_recursively` are set to `true`, StarRocks will do the follows:
 
 - If the specified `path` is a file (whether it is specified specifically or represented by wildcards), StarRocks will show the information of the file.
-- If the specified `path` is a directory (whether it is specified specifically or represented by wildcards, and whether or not it is suffixed by `/` or `/*`), StarRocks will show all the files and sub-directories under this directory.
+- If the specified `path` is a directory (whether it is specified specifically or represented by wildcards, and whether or not it is suffixed by `/`), StarRocks will show all the files and sub-directories under this directory.
 
 For more information, see [Return](#return).
 
@@ -488,6 +486,24 @@ When used with SELECT, FILES() returns the data in the file as a table.
   +---------------------------------------------+------+--------+---------------------+
   10 rows in set (0.04 sec)
   ```
+
+  Lists files and directories matching `orc*` in this path in a non-recursive way:
+
+  ```Plain
+  SELECT * FROM FILES(
+      "path"="s3://bucket/list/orc*", 
+      "list_files_only" = "true", 
+      "list_recursively" = "false"
+  );
+  +--------------------------------------+------+--------+---------------------+
+  | PATH                                 | SIZE | IS_DIR | MODIFICATION_TIME   |
+  +--------------------------------------+------+--------+---------------------+
+  | s3://bucket/list/orc0/orc1           |    0 |      1 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/orc1/basic_type.orc | 1027 |      0 | 2024-12-24 22:16:00 |
+  +--------------------------------------+------+--------+---------------------+
+  2 rows in set (0.03 sec)
+  ```
+
 
 #### DESC FILES()
 
