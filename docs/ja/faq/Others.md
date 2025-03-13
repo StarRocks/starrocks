@@ -244,3 +244,24 @@ StarRocks 2.1 以降のバージョンのみが関数のデフォルト値を指
 ## BE ノードに追加のディスクを追加できますか？
 
 はい。BE の設定項目 `storage_root_path` で指定されたディレクトリにディスクを追加できます。
+
+## ローディングタスクとパーティション作成タスクの同時実行によるエクスプレッション・パーティションの競合を防ぐにはどうすればよいですか？
+
+現在、式に基づくパーティション化を使用するテーブルでは、ロードタスクで作成されたパーティションと ALTER TABLE タスクで作成されたパーティションが競合します。ロードタスクが優先されるため、競合する ALTER タスクは失敗します。この問題を回避するには、以下の回避策を検討してください：
+
+- 粗い時間ベースのパーティション（例えば、日または月によるパーティション）を使用する場合、ALTER 操作が時間の境界を越えるのを防ぐことができ、パーティション作成の失敗のリスクを減らすことができます。
+- きめ細かい時間ベースのパーティションを使用する場合（例えば、時間単位のパーティション）、将来の時間範囲のパーティションを手動で作成し、ロードタスクによって作成された新しいパーティションによって ALTER 操作が中断されないようにすることができます。[EXPLAIN ANALYZE](../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN_ANALYZE.md) 機能を使用して、トランザクションをコミットせずに INSERT ステートメントを実行してパーティション作成をトリガすることができます。これにより、実際のデータに影響を与えることなく、必要なパーティションを作成できます。次の例は、今後 8 時間分のパーティションを作成する方法を示しています：
+
+```SQL
+CREATE TABLE t(
+    event_time DATETIME
+)
+PARTITION BY date_trunc('hour', event_time);
+
+EXPLAIN ANALYZE
+INSERT INTO t (event_time)
+SELECT DATE_ADD(NOW(), INTERVAL d hour)
+FROM table(generate_series(0, 8)) AS g(d);
+
+SHOW PARTITION FROM t;
+```
