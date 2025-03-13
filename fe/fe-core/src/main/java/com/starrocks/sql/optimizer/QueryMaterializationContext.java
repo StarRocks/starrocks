@@ -36,6 +36,7 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rewrite.ReplaceColumnRefRewriter;
 import com.starrocks.sql.optimizer.rewrite.ScalarOperatorRewriter;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvRewriteStrategy;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.PredicateSplit;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -78,6 +79,8 @@ public class QueryMaterializationContext {
 
     // mv contexts that query has been rewritten successfully by materialized view
     private Set<MaterializationContext> rewrittenSuccessMVContexts = Sets.newHashSet();
+
+    private MvRewriteStrategy.MVRewriteStage currentRewriteStage = MvRewriteStrategy.MVRewriteStage.PHASE0;
 
     /**
      * It's used to record the cache stats of `mvQueryContextCache`.
@@ -280,5 +283,13 @@ public class QueryMaterializationContext {
                     final int level = mvContext.getLevel();
                     return validCandidateMVs.stream().anyMatch(mv -> mv.getLevel() > level);
                 });
+    }
+
+    public MvRewriteStrategy.MVRewriteStage getCurrentRewriteStage() {
+        return currentRewriteStage;
+    }
+
+    public void setCurrentRewriteStage(MvRewriteStrategy.MVRewriteStage currentRewriteStage) {
+        this.currentRewriteStage = currentRewriteStage;
     }
 }

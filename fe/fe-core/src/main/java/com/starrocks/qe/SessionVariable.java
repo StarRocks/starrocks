@@ -2055,7 +2055,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
      * Materialized view rewrite related mv limit: how many related MVs would be considered for rewrite to a query?
      */
     @VarAttr(name = CBO_MATERIALIZED_VIEW_REWRITE_RELATED_MVS_LIMIT, flag = VariableMgr.INVISIBLE)
-    private int cboMaterializedViewRewriteRelatedMVsLimit = 64;
+    private int cboMaterializedViewRewriteRelatedMVsLimit = 16;
 
     @VarAttr(name = QUERY_EXCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
     private String queryExcludingMVNames = "";
