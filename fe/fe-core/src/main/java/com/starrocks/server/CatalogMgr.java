@@ -163,8 +163,6 @@ public class CatalogMgr {
         }
     }
 
-<<<<<<< HEAD
-=======
     private void reCreatCatalog(Catalog catalog, Map<String, String> alterProperties, boolean isReplay) throws DdlException {
         String catalogName = catalog.getName();
         String type = catalog.getType();
@@ -217,17 +215,6 @@ public class CatalogMgr {
         }
     }
 
-    public void dropCatalogForRestore(Catalog catalog, boolean isReplay) {
-        if (!isReplay && catalogExists(catalog.getName())) {
-            DropCatalogStmt stmt = new DropCatalogStmt(catalog.getName());
-            dropCatalog(stmt);
-        } else if (isReplay) {
-            DropCatalogLog dropCatalogLog = new DropCatalogLog(catalog.getName());
-            replayDropCatalog(dropCatalogLog);
-        }
-    }
-
->>>>>>> 1acf89f27c ([Enhancement] support alter hive/hudi catalog's properties (#56212))
     public void dropCatalog(DropCatalogStmt stmt) {
         String catalogName = stmt.getName();
         readLock();
