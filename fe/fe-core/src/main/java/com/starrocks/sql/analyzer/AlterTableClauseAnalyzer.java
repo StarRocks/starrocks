@@ -528,6 +528,10 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 }
             }
 
+            if (ExpressionAnalyzer.containsHighOrderFunctionWithLambda(expr)) {
+                throw new SemanticException("Generated Column don't support high order function with lambda");
+            }
+
             // check if the expression refers to other generated columns
             List<SlotRef> slots = Lists.newArrayList();
             expr.collect(SlotRef.class, slots);
@@ -634,6 +638,10 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                     if (fn.isAggregateFunction()) {
                         throw new SemanticException("Generated Column don't support aggregation function");
                     }
+                }
+
+                if (ExpressionAnalyzer.containsHighOrderFunctionWithLambda(expr)) {
+                    throw new SemanticException("Generated Column don't support high order function with lambda");
                 }
 
                 // check if the expression refers to other generated columns
@@ -791,6 +799,10 @@ public class AlterTableClauseAnalyzer implements AstVisitor<Void, ConnectContext
                 if (fn.isAggregateFunction()) {
                     throw new SemanticException("Generated Column don't support aggregation function");
                 }
+            }
+
+            if (ExpressionAnalyzer.containsHighOrderFunctionWithLambda(expr)) {
+                throw new SemanticException("Generated Column don't support high order function with lambda");
             }
 
             // check if the expression refers to other generated columns

@@ -1145,3 +1145,32 @@ select * from t_fix_adding_and_col_partial_update_conflict;
 drop table t_fix_adding_and_col_partial_update_conflict;
 -- result:
 -- !result
+-- name: prohibit_lambda_for_generated_column
+CREATE TABLE t_prohibit_lambda_for_generated_column ( id BIGINT NOT NULL, v1 ARRAY<int> NOT NULL, gc_1 ARRAY<BIGINT> AS array_map(x -> x + 1, v1)) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+-- result:
+E: (1064, "Generated Column don't support high order function with lambda.")
+-- !result
+CREATE TABLE t_prohibit_lambda_for_generated_column ( id BIGINT NOT NULL, v1 ARRAY<int> NOT NULL) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+-- result:
+-- !result
+alter table t_prohibit_lambda_for_generated_column add column gc_1 ARRAY<BIGINT> AS array_map(x -> x + 1, v1);
+-- result:
+E: (1064, "Generated Column don't support high order function with lambda.")
+-- !result
+alter table t_prohibit_lambda_for_generated_column add column (gc_1 ARRAY<BIGINT> AS array_map(x -> x + 1, v1), gc_2 ARRAY<BIGINT> AS array_map(x -> x + 2, v1));
+-- result:
+E: (1064, "Generated Column don't support high order function with lambda.")
+-- !result
+drop table t_prohibit_lambda_for_generated_column;
+-- result:
+-- !result
+CREATE TABLE t_prohibit_lambda_for_generated_column ( id BIGINT NOT NULL, v1 ARRAY<int> NOT NULL, gc_1 BIGINT AS array_sum(v1)) Primary KEY (id) DISTRIBUTED BY HASH(id) BUCKETS 1 PROPERTIES("replication_num" = "1", "replicated_storage" = "true", "fast_schema_evolution" = "true");
+-- result:
+-- !result
+alter table t_prohibit_lambda_for_generated_column modify column gc_1 ARRAY<BIGINT> AS array_map(x -> x + 1, v1);
+-- result:
+E: (1064, "Generated Column don't support high order function with lambda.")
+-- !result
+drop table t_prohibit_lambda_for_generated_column;
+-- result:
+-- !result

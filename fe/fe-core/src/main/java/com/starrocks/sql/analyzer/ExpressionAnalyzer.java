@@ -155,7 +155,20 @@ public class ExpressionAnalyzer {
         bottomUpAnalyze(visitor, expression, scope);
     }
 
-    private boolean isArrayHighOrderFunction(Expr expr) {
+    public static boolean containsHighOrderFunctionWithLambda(Expr expr) {
+        List<FunctionCallExpr> functions = Lists.newArrayList();
+        expr.collect(FunctionCallExpr.class, functions);
+        List<FunctionCallExpr> highOrderFunctions = functions.stream()
+                                                    .filter(f -> isHighOrderFunction(f)).collect(Collectors.toList());
+        for (FunctionCallExpr highOrderFunction : highOrderFunctions) {
+            if (highOrderFunction.hasLambdaFunction(highOrderFunction)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isArrayHighOrderFunction(Expr expr) {
         if (expr instanceof FunctionCallExpr) {
             if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_MAP) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.ARRAY_FILTER) ||
@@ -172,7 +185,7 @@ public class ExpressionAnalyzer {
         return false;
     }
 
-    private boolean isMapHighOrderFunction(Expr expr) {
+    private static boolean isMapHighOrderFunction(Expr expr) {
         if (expr instanceof FunctionCallExpr) {
             if (((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.MAP_FILTER) ||
                     ((FunctionCallExpr) expr).getFnName().getFunction().equals(FunctionSet.TRANSFORM_VALUES) ||
@@ -184,7 +197,7 @@ public class ExpressionAnalyzer {
         return false;
     }
 
-    private boolean isHighOrderFunction(Expr expr) {
+    private static boolean isHighOrderFunction(Expr expr) {
         return isArrayHighOrderFunction(expr) || isMapHighOrderFunction(expr);
     }
 

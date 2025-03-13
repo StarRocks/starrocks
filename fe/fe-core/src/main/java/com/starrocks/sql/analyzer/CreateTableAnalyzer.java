@@ -235,6 +235,11 @@ public class CreateTableAnalyzer {
                 throw new SemanticException(e.getMessage());
             }
 
+            if (columnDef.isGeneratedColumn() &&
+                    ExpressionAnalyzer.containsHighOrderFunctionWithLambda(columnDef.generatedColumnExpr())) {
+                throw new SemanticException("Generated Column don't support high order function with lambda");
+            }
+
             if (columnDef.isAutoIncrement()) {
                 if (columnDef.getType() != Type.BIGINT) {
                     throw new SemanticException("The AUTO_INCREMENT column must be BIGINT", columnDef.getPos());
