@@ -261,7 +261,7 @@ SQL 错误 [1064] [42000]: Table[external_t] is not a OLAP/ELASTICSEARCH/HIVE ta
 目前，对于使用表达式分区策略的表，导入任务期间创建的分区会与 ALTER TABLE 任务创建的分区发生冲突。由于导入任务具有优先级，任何冲突的 ALTER 任务都将失败。为避免出现此问题，请考虑以下方式规避：
 
 - 如果使用粒度较大的时间分区（例如，按日或月分区），可以避免 ALTER 操作跨越时间边界执行，从而降低分区创建失败的风险。
-- 如果使用粒度较小的时间分区（例如，按小时分区），则可以手动创建未来一段时间的分区，从而保证 ALTER 任务执行过程中不会有导入任务创建新分区。此外，还可以使用 [EXPLAIN ANALYZE](../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN_ANALYZE.md) 功能，在不 Commit 事务的情况下执行 INSERT 语句，从而触发分区创建。这样就可以在不影响实际数据的情况下创建必要的分区。下面的示例演示了如何为未来 8 小时创建分区：
+- 如果使用粒度较小的时间分区（例如，按小时分区），则可以手动创建未来一段时间的分区，从而保证 ALTER 任务执行过程中不会有导入任务创建新分区。建议使用 [EXPLAIN ANALYZE](../sql-reference/sql-statements/cluster-management/plan_profile/EXPLAIN_ANALYZE.md) 功能，在不 Commit 事务的情况下执行 INSERT 语句，从而触发分区创建。这样就可以在不影响实际数据的情况下创建必要的分区。下面的示例演示了如何为未来 8 小时创建分区：
 
 ```SQL
 CREATE TABLE t(
