@@ -348,7 +348,7 @@ public class GlobalStateMgr {
     // false if default_warehouse is not created.
     private boolean isDefaultWarehouseCreated = false;
 
-    private FrontendNodeType feType;
+    private volatile FrontendNodeType feType;
 
     // The time when this node becomes leader.
     private long dominationStartTimeMs;
