@@ -17,6 +17,7 @@ package com.starrocks.authentication;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.sql.analyzer.SemanticException;
 
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -25,6 +26,9 @@ import java.util.Map;
  */
 public abstract class SecurityIntegration {
     public static final String SECURITY_INTEGRATION_PROPERTY_TYPE_KEY = "type";
+    public static final String SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER = "group_provider";
+    public static final String SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN = "permitted_groups";
+
     @SerializedName(value = "n")
     protected String name;
     /**
@@ -61,4 +65,21 @@ public abstract class SecurityIntegration {
     }
 
     public abstract void checkProperty() throws SemanticException;
+
+    public List<String> getGroupProviderName() {
+        String property = propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_PROPERTY_GROUP_PROVIDER);
+        if (property == null || property.isBlank()) {
+            return List.of();
+        }
+        return List.of(property.split(",\\s*"));
+    }
+
+    public List<String> getGroupAllowedLoginList() {
+        String property = propertyMap.get(SecurityIntegration.SECURITY_INTEGRATION_GROUP_ALLOWED_LOGIN);
+        if (property == null || property.isBlank()) {
+            return List.of();
+        } else {
+            return List.of(property.split(",\\s*"));
+        }
+    }
 }

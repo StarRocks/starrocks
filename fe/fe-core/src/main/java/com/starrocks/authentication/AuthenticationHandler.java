@@ -14,6 +14,7 @@
 
 package com.starrocks.authentication;
 
+import com.google.common.base.Joiner;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.ErrorCode;
@@ -23,13 +24,16 @@ import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 public class AuthenticationHandler {
     private static final Logger LOG = LogManager.getLogger(AuthenticationHandler.class);
 
     public static UserIdentity authenticate(ConnectContext context, String user, String remoteHost,
-                                    byte[] authResponse, byte[] randomString) throws AuthenticationException {
+                                            byte[] authResponse, byte[] randomString) throws AuthenticationException {
         String usePasswd = authResponse.length == 0 ? "NO" : "YES";
         if (user == null || user.isEmpty()) {
             throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, "", usePasswd);
@@ -38,6 +42,9 @@ public class AuthenticationHandler {
         AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
 
         UserIdentity authenticatedUser = null;
+        List<String> groupProviderName = null;
+        List<String> authenticatedGroupList = null;
+
         if (Config.enable_auth_check) {
             String[] authChain = Config.authentication_chain;
 
@@ -58,6 +65,8 @@ public class AuthenticationHandler {
                                     AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin());
                             provider.authenticate(user, remoteHost, authResponse, randomString, matchedUserIdentity.getValue());
                             authenticatedUser = matchedUserIdentity.getKey();
+
+                            groupProviderName = List.of(Config.group_provider);
                         } catch (AuthenticationException e) {
                             LOG.debug("failed to authenticate for native, user: {}@{}, error: {}",
                                     user, remoteHost, e.getMessage());
@@ -75,6 +84,13 @@ public class AuthenticationHandler {
                         provider.authenticate(user, remoteHost, authResponse, randomString, userAuthenticationInfo);
                         // the ephemeral user is identified as 'username'@'auth_mechanism'
                         authenticatedUser = UserIdentity.createEphemeralUserIdent(user, securityIntegration.getName());
+
+                        groupProviderName = securityIntegration.getGroupProviderName();
+                        if (groupProviderName == null) {
+                            groupProviderName = List.of(Config.group_provider);
+                        }
+
+                        authenticatedGroupList = securityIntegration.getGroupAllowedLoginList();
                     } catch (AuthenticationException e) {
                         LOG.debug("failed to authenticate, user: {}@{}, security integration: {}, error: {}",
                                 user, remoteHost, securityIntegration, e.getMessage());
@@ -89,6 +105,7 @@ public class AuthenticationHandler {
                 throw new AuthenticationException(ErrorCode.ERR_AUTHENTICATION_FAIL, user, usePasswd);
             } else {
                 authenticatedUser = matchedUserIdentity.getKey();
+                groupProviderName = List.of(Config.group_provider);
             }
         }
 
@@ -103,6 +120,32 @@ public class AuthenticationHandler {
         }
         context.setQualifiedUser(user);
 
+        Set<String> groups = getGroups(authenticatedUser, groupProviderName);
+        context.setGroups(groups);
+
+        if (authenticatedGroupList != null && !authenticatedGroupList.isEmpty()) {
+            Set<String> intersection = new HashSet<>(groups);
+            intersection.retainAll(authenticatedGroupList);
+            if (intersection.isEmpty()) {
+                throw new AuthenticationException(ErrorCode.ERR_GROUP_ACCESS_DENY, user, Joiner.on(",").join(groups));
+            }
+        }
+
         return authenticatedUser;
+    }
+
+    public static Set<String> getGroups(UserIdentity userIdentity, List<String> groupProviderList) {
+        AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+
+        HashSet<String> groups = new HashSet<>();
+        for (String groupProviderName : groupProviderList) {
+            GroupProvider groupProvider = authenticationMgr.getGroupProvider(groupProviderName);
+            if (groupProvider == null) {
+                continue;
+            }
+            groups.addAll(groupProvider.getGroup(userIdentity));
+        }
+
+        return groups;
     }
 }

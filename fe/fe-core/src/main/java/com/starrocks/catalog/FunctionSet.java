@@ -534,8 +534,8 @@ public class FunctionSet {
     public static final String SESSION_USER = "session_user";
 
     public static final String CURRENT_USER = "current_user";
-
     public static final String CURRENT_ROLE = "current_role";
+    public static final String CURRENT_GROUP = "current_group";
 
     public static final String AGG_STATE_SUFFIX = "_state";
     public static final String AGG_STATE_UNION_SUFFIX = "_union";
@@ -761,6 +761,7 @@ public class FunctionSet {
             .add(SESSION_USER)
             .add(CURRENT_USER)
             .add(CURRENT_ROLE)
+            .add(CURRENT_GROUP)
             .build();
 
     public static final java.util.function.Function<Type, ArrayType> APPROX_TOP_N_RET_TYPE_BUILDER =

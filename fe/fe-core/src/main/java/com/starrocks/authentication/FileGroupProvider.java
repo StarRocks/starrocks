@@ -14,6 +14,7 @@
 
 package com.starrocks.authentication;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.starrocks.StarRocksFE;
 import com.starrocks.common.DdlException;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -59,12 +60,7 @@ public class FileGroupProvider extends GroupProvider {
         try {
             InputStream fileInputStream = null;
             try {
-                if (groupFileUrl.startsWith("http://") || groupFileUrl.startsWith("https://")) {
-                    fileInputStream = new URL(groupFileUrl).openStream();
-                } else {
-                    String filePath = StarRocksFE.STARROCKS_HOME_DIR + "/conf/" + groupFileUrl;
-                    fileInputStream = new FileInputStream(filePath);
-                }
+                fileInputStream = getPath(groupFileUrl);
 
                 String s = readInputStreamToString(fileInputStream, StandardCharsets.UTF_8);
                 for (String line : s.split("\r?\n")) {
@@ -104,6 +100,16 @@ public class FileGroupProvider extends GroupProvider {
                 throw new SemanticException("missing required property: " + s);
             }
         });
+    }
+
+    @VisibleForTesting
+    public InputStream getPath(String groupFileUrl) throws IOException {
+        if (groupFileUrl.startsWith("http://") || groupFileUrl.startsWith("https://")) {
+            return new URL(groupFileUrl).openStream();
+        } else {
+            String filePath = StarRocksFE.STARROCKS_HOME_DIR + "/conf/" + groupFileUrl;
+            return new FileInputStream(filePath);
+        }
     }
 
     public static String readInputStreamToString(final InputStream stream, final Charset charset) throws IOException {
