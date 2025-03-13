@@ -1,8 +1,0 @@
-# ignore protobuf cve temporary
-CVE-2024-7254
-# ignore commons-io-2.11.0.jar introduced by odps-reader
-CVE-2024-47554
-# ignore avro-1.11.3.jar introduced by iceberg-core-1.6.0
-CVE-2024-47561
-# ingore nimbus-jose-jwt-9.31.jar
-CVE-2023-52428
