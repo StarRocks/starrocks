@@ -704,7 +704,7 @@ alterMaterializedViewStatement
         tableRenameClause |
         modifyPropertiesClause |
         swapTableClause )
-    | ALTER MATERIALIZED VIEW mvName=qualifiedName statusDesc
+    | ALTER MATERIALIZED VIEW mvName=qualifiedName statusDesc (WITH NO_VALIDATION)?
     ;
 
 refreshMaterializedViewStatement
