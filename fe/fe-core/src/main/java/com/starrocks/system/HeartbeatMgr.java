@@ -56,7 +56,16 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.system.HeartbeatResponse.HbStatus;
-import com.starrocks.thrift.*;
+import com.starrocks.thrift.TBackendInfo;
+import com.starrocks.thrift.TBrokerOperationStatus;
+import com.starrocks.thrift.TBrokerOperationStatusCode;
+import com.starrocks.thrift.TBrokerPingBrokerRequest;
+import com.starrocks.thrift.TBrokerVersion;
+import com.starrocks.thrift.THeartbeatResult;
+import com.starrocks.thrift.TMasterInfo;
+import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TStatusCode;
+import com.starrocks.thrift.TNodeType;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 

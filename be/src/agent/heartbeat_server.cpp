@@ -198,7 +198,7 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
 
     if (master_info.node_type == TNodeType::Compute && !BackendOptions::is_cn()) {
         LOG_EVERY_N(ERROR, 12)
-        << "FE heartbeat with CN node type,but the node is BE,node type mismatch!";
+                << "FE heartbeat with CN node type,but the node is BE,node type mismatch!";
         return Status::InternalError("Unmatched node type!");
     }
 
