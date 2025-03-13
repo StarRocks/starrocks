@@ -41,6 +41,7 @@
 #include "exec/schema_scanner/schema_fe_tablet_schedules_scanner.h"
 #include "exec/schema_scanner/schema_keywords_scanner.h"
 #include "exec/schema_scanner/schema_load_tracking_logs_scanner.h"
+#include "exec/schema_scanner/schema_applicable_roles_scanner.h"
 #include "exec/schema_scanner/schema_loads_scanner.h"
 #include "exec/schema_scanner/schema_materialized_views_scanner.h"
 #include "exec/schema_scanner/schema_partitions_meta_scanner.h"
@@ -226,6 +227,8 @@ std::unique_ptr<SchemaScanner> SchemaScanner::create(TSchemaTableType::type type
         return std::make_unique<SchemaClusterSnapshotsScanner>();
     case TSchemaTableType::SCH_CLUSTER_SNAPSHOT_JOBS:
         return std::make_unique<SchemaClusterSnapshotJobsScanner>();
+    case TSchemaTableType::SCH_APPLICABLE_ROLES:
+        return std::make_unique<SchemaApplicableRolesScanner>();
     case TSchemaTableType::SCH_KEYWORDS:
         return std::make_unique<SchemaKeywordsScanner>();
     default:
