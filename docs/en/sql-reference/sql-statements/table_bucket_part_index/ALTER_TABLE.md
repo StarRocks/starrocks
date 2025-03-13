@@ -512,6 +512,38 @@ Syntax:
 DROP INDEX index_name;
 ```
 
+<<<<<<< HEAD
+=======
+### Modify table properties
+
+Syntax:
+
+```sql
+ALTER TABLE [<db_name>.]<tbl_name>
+SET ("key" = "value")
+```
+
+Currently, StarRocks supports modifying the following table properties:
+
+- `replication_num`
+- `default.replication_num`
+- `storage_cooldown_ttl`
+- `storage_cooldown_time`
+- Dynamic partitioning related properties
+- `enable_persistent_index`
+- `bloom_filter_columns`
+- `colocate_with`
+- `bucket_size` (supported since 3.2)
+- `base_compaction_forbidden_time_ranges` (supported since v3.2.13)
+
+:::note
+
+- In most cases, you are only allowed to modify one property at a time. You can only modify multiple properties at a time only if these properties have the same prefix. Currently, only `dynamic_partition.` and `binlog.` are supported.
+- You can also modify the properties by merging into the above operation on column. See the [following examples](#examples).
+
+:::
+
+>>>>>>> 1c50f5cc86 ([Doc] Not support modify multiple table properties (#56665))
 ### Swap
 
 Swap supports atomic exchange of two tables.
