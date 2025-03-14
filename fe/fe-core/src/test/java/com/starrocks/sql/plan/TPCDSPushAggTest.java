@@ -32,11 +32,13 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
     @BeforeAll
     public static void beforeAll() {
         FeConstants.unitTestView = false;
+        connectContext.getSessionVariable().setEnableMaterializedViewRewrite(false);
     }
 
     @AfterAll
     public static void afterAll() {
         FeConstants.unitTestView = true;
+        connectContext.getSessionVariable().setEnableMaterializedViewRewrite(true);
     }
 
     private void check(int mode, String sql, int aggNum) throws Exception {

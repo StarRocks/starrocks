@@ -54,6 +54,11 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
+<<<<<<< HEAD
+=======
+import com.starrocks.sql.optimizer.rule.mv.MaterializedViewWrapper;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator;
+>>>>>>> 4490faa747 ([Enhancement] Enable enable_materialized_view_multi_stages_rewrite by default (#56805))
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 import org.apache.commons.collections4.CollectionUtils;
@@ -180,12 +185,15 @@ public class TextMatchBasedRewriteRule extends Rule {
             try {
                 Set<Table> queryTables = MvUtils.getAllTables(input).stream().collect(Collectors.toSet());
                 int maxLevel = connectContext.getSessionVariable().getNestedMvRewriteMaxLevel();
-                Set<MaterializedView> relatedMvs = MvUtils.getRelatedMvs(connectContext, maxLevel, queryTables);
-                String mvNames = Joiner.on(",").join(relatedMvs.stream()
+                Set<MaterializedViewWrapper> relatedMVWrappers = MvUtils.getRelatedMvs(connectContext, maxLevel, queryTables);
+                String mvNames = Joiner.on(",").join(relatedMVWrappers.stream()
+                        .map(mvWithLevel -> mvWithLevel.getMV())
                         .map(mv -> mv.getName()).collect(Collectors.toList()));
                 LOG.warn("Related MVs: {}", mvNames);
                 LOG.warn("Query Key: {}", ast);
-                List<CachingMvPlanContextBuilder.AstKey> candidates = instance.getAstsOfRelatedMvs(relatedMvs);
+                Set<MaterializedView> relatedMVs = relatedMVWrappers.stream()
+                        .map(mvWithLevel -> mvWithLevel.getMV()).collect(Collectors.toSet());
+                List<CachingMvPlanContextBuilder.AstKey> candidates = instance.getAstsOfRelatedMvs(relatedMVs);
                 for (CachingMvPlanContextBuilder.AstKey cacheKey : candidates) {
                     LOG.warn("Cached Key: {}", cacheKey);
                 }
@@ -253,13 +261,46 @@ public class TextMatchBasedRewriteRule extends Rule {
                     continue;
                 }
 
+<<<<<<< HEAD
                 // do: text match based mv rewrite
                 OptExpression rewritten = doTextMatchBasedRewrite(context, mvPlanContext, mv, input);
+=======
+                final Set<Table> queryTables = MvUtils.getAllTables(mvPlan).stream().collect(Collectors.toSet());
+                final MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
+                        mv, mvPlanContext, mvUpdateInfo, queryTables, 0);
+                final LogicalOlapScanOperator mvScanOperator = mvContext.getScanMvOperator();
+                final List<ColumnRefOperator>  mvScanOutputColumns = MvUtils.getMvScanOutputColumnRefs(mv, mvScanOperator);
+
+                // if mv is partitioned, and some partitions are outdated, then compensate it
+                final Set<String> partitionNamesToRefresh = mvUpdateInfo.getMvToRefreshPartitionNames();
+                OptExpression mvCompensatePlan = null;
+                if (CollectionUtils.isEmpty(partitionNamesToRefresh)) {
+                    mvCompensatePlan = OptExpression.create(mvScanOperator);
+                } else {
+                    // if mv's query rewrite consistency mode is FORCE_MV, then do not compensate it because its
+                    // partition compensation is not exactly by union rewrite, see {@class PartitionRetentionTableCompensation}.
+                    if (mvUpdateInfo.getQueryRewriteConsistencyMode() == TableProperty.QueryRewriteConsistencyMode.FORCE_MV) {
+                        return null;
+                    }
+                    logMVRewrite(context, this, "Partitioned MV {} is outdated which " +
+                                    "contains some partitions to be refreshed: {}, compensate it with union rewrite",
+                            mv.getName(), partitionNamesToRefresh);
+                    mvCompensatePlan = MvPartitionCompensator.getMvTransparentPlan(mvContext, input, mvScanOutputColumns);
+                }
+
+                // do text based rewrite
+                OptExpression rewritten = doTextMatchBasedRewrite(context, mvPlanContext, mvPlan,
+                        mvScanOutputColumns, mvCompensatePlan, input);
+>>>>>>> 4490faa747 ([Enhancement] Enable enable_materialized_view_multi_stages_rewrite by default (#56805))
                 if (rewritten != null) {
                     IMaterializedViewMetricsEntity mvEntity =
                             MaterializedViewMetricsRegistry.getInstance().getMetricsEntity(mv.getMvId());
                     mvEntity.increaseQueryTextBasedMatchedCount(1L);
                     OptimizerTraceUtil.logMVRewrite(context, this, "TEXT_BASED_REWRITE: {}", REWRITE_SUCCESS);
+<<<<<<< HEAD
+=======
+                    context.getQueryMaterializationContext().addRewrittenSuccessMVContext(mvContext);
+>>>>>>> 4490faa747 ([Enhancement] Enable enable_materialized_view_multi_stages_rewrite by default (#56805))
                     return rewritten;
                 }
             }
