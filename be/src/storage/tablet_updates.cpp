@@ -4275,11 +4275,7 @@ Status TabletUpdates::convert_from(const std::shared_ptr<Tablet>& base_tablet, i
         writer_context.gtid = src_rowset->rowset_meta()->gtid();
 
         std::unique_ptr<RowsetWriter> rowset_writer;
-        status = RowsetFactory::create_rowset_writer(writer_context, &rowset_writer);
-        if (!status.ok()) {
-            LOG(INFO) << err_msg_header << "build rowset writer failed";
-            return Status::InternalError("build rowset writer failed");
-        }
+        RETURN_IF_ERROR(RowsetFactory::create_rowset_writer(writer_context, &rowset_writer));
         ChunkIteratorPtr seg_iterator;
         if (res.value().empty()) {
             seg_iterator = new_empty_iterator(base_schema, config::vector_chunk_size);
