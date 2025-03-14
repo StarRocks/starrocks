@@ -46,6 +46,9 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
     public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
         TabletSampleManager tabletSampleManager = TabletSampleManager.init(properties, table);
         SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo();
+        if (sampleInfo.getMaxSampleTabletNum() == 0) {
+            throw new RuntimeException("No valid non-empty tablet available for sampling");
+        }
 
         ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, table,
                 sampleInfo);

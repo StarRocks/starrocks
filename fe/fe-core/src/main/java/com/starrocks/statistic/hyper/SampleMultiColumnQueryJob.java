@@ -40,6 +40,9 @@ public class SampleMultiColumnQueryJob extends MultiColumnQueryJob {
         super(context, db, table, columnStats);
         this.manager = sampleManager;
         this.sampleInfo = sampleManager.generateSampleInfo();
+        if (this.sampleInfo.getMaxSampleTabletNum() == 0) {
+            throw new RuntimeException("No valid non-empty tablet available for sampling");
+        }
     }
 
     @Override
