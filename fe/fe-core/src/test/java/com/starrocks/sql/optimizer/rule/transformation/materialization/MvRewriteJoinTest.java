@@ -72,6 +72,22 @@ public class MvRewriteJoinTest extends MVTestBase {
                 ")\n" +
                 "DISTRIBUTED BY HASH(k1);");
 
+        starRocksAssert.withTable("CREATE TABLE test_partition_tbl3 (\n" +
+                " k1 date NOT NULL,\n" +
+                " v1 INT,\n" +
+                " v2 INT)\n" +
+                " DUPLICATE KEY(k1)\n" +
+                " PARTITION BY RANGE(k1)\n" +
+                " (\n" +
+                "   PARTITION p1 VALUES LESS THAN ('2020-01-01'),\n" +
+                "   PARTITION p2 VALUES LESS THAN ('2020-02-01'),\n" +
+                "   PARTITION p3 VALUES LESS THAN ('2020-03-01'),\n" +
+                "   PARTITION p4 VALUES LESS THAN ('2020-04-01'),\n" +
+                "   PARTITION p5 VALUES LESS THAN ('2020-05-01'),\n" +
+                "   PARTITION p6 VALUES LESS THAN ('2020-06-01')\n" +
+                ")\n" +
+                "DISTRIBUTED BY HASH(k1);");
+
         cluster.runSql("test", "insert into test_partition_tbl1 values (\"2019-01-01\",1,1),(\"2019-01-01\",1,2)," +
                 "(\"2019-01-01\",2,1),(\"2019-01-01\",2,2),\n" +
                 "(\"2020-01-11\",1,1),(\"2020-01-11\",1,2),(\"2020-01-11\",2,1),(\"2020-01-11\",2,2),\n" +
@@ -244,7 +260,97 @@ public class MvRewriteJoinTest extends MVTestBase {
 
         starRocksAssert.dropMaterializedView("test_partition_tbl1_colocate_mv1");
         starRocksAssert.dropMaterializedView("test_partition_tbl1_colocate_mv2");
+    }
 
+    // test mv rewrite conflicts with topn push down
+    @Test
+    public void testMVRewriteJoinWithTopN1() throws Exception {
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_mv1\n" +
+                "PARTITION BY k1\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                "REFRESH MANUAL\n" +
+                "AS SELECT a.k1, a.v1, a.v2, b.v1 as b_v1\n" +
+                "FROM test_partition_tbl1 as a left join test_partition_tbl2 as b on a.k1=b.k1;");
 
+        {
+            // if mv rewrite mode is default, should not be rewritten
+            connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(false);
+            String query = "select a.k1, a.v2 FROM test_partition_tbl1 as a left join test_partition_tbl2 as b " +
+                    "on a.k1=b.k1 order by 1 limit 3;";
+            String plan = getFragmentPlan(query);
+            System.out.println(plan);
+            PlanTestBase.assertNotContains("test_mv1");
+        }
+        connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(true);
+        {
+            // if mv rewrite mode is force, should be rewritten
+            String query = "select a.k1, a.v2 FROM test_partition_tbl1 as a left join test_partition_tbl2 as b " +
+                    "on a.k1=b.k1 order by 1 limit 3;";
+            String plan = getFragmentPlan(query);
+            System.out.println(plan);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        {
+            // if mv rewrite mode is force, should be rewritten
+            String query = "select a.k1, a.v2 FROM test_partition_tbl1 as a left join test_partition_tbl2 as b " +
+                    "on a.k1=b.k1 order by 1 limit 3;";
+            String plan = getFragmentPlan(query);
+            System.out.println(plan);
+            PlanTestBase.assertContains(plan, "test_mv1");
+        }
+        connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(false);
+        starRocksAssert.dropMaterializedView("test_mv1");
+    }
+
+    // test mv rewrite conflicts with topn push down
+    @Test
+    public void testMVRewriteJoinWithTopN2() throws Exception {
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_mv1\n" +
+                "PARTITION BY k1\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                "REFRESH MANUAL\n" +
+                "AS SELECT a.k1, a.v1, a.v2, b.v1 as b_v1\n" +
+                "FROM test_partition_tbl1 as a left join test_partition_tbl2 as b on a.k1=b.k1;");
+        createAndRefreshMv("CREATE MATERIALIZED VIEW test_mv2\n" +
+                "PARTITION BY k1\n" +
+                "DISTRIBUTED BY HASH(k1) BUCKETS 10\n" +
+                "REFRESH MANUAL\n" +
+                "AS SELECT a.k1, a.b_v1, a.v2, b.v1 \n" +
+                "FROM test_mv1 as a left join test_partition_tbl3 as b on a.k1=b.k1;");
+        {
+            // if mv rewrite mode is default, should not be rewritten
+            connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(false);
+            String query = "select a.k1, a.v2 FROM test_partition_tbl1 a " +
+                    " left join test_partition_tbl2 b on a.k1=b.k1 " +
+                    " left join test_partition_tbl3 c on a.k1=c.k1 " +
+                    " order by 1 limit 3;";
+            String plan = getFragmentPlan(query);
+            System.out.println(plan);
+            PlanTestBase.assertNotContains("test_mv1", "test_mv2");
+        }
+        connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(true);
+        {
+            // if mv rewrite mode is default, should be rewritten
+            String query = "select a.k1, a.v2 FROM test_partition_tbl1 a " +
+                    " left join test_partition_tbl2 b on a.k1=b.k1 " +
+                    " left join test_partition_tbl3 c on a.k1=c.k1 " +
+                    " order by 1 limit 3;";
+            String plan = getFragmentPlan(query);
+            System.out.println(plan);
+            PlanTestBase.assertContains(plan, "test_mv2");
+        }
+        {
+            // if mv rewrite mode is default, should be rewritten
+            String query = "select a.k1, a.v2 FROM test_partition_tbl1 a " +
+                    " left join test_partition_tbl2 b on a.k1=b.k1 " +
+                    " left join test_partition_tbl3 c on a.k1=c.k1 " +
+                    " where b.v1=1 and c.v1=1 order by 1 limit 3;";
+            String plan = getFragmentPlan(query, "MV");
+            System.out.println(plan);
+            PlanTestBase.assertContains(plan, "test_mv2");
+        }
+        connectContext.getSessionVariable().setEnableMaterializedViewMultiStagesRewrite(false);
+        starRocksAssert.dropMaterializedView("test_mv1");
+        starRocksAssert.dropMaterializedView("test_mv2");
     }
 }

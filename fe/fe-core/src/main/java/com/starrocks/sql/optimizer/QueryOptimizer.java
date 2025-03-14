@@ -397,16 +397,17 @@ public class QueryOptimizer extends Optimizer {
         return tree;
     }
 
-    private void ruleBasedMaterializedViewRewrite(OptExpression tree,
-                                                  TaskContext rootTaskContext,
-                                                  ColumnRefSet requiredColumns) {
+    private void ruleBasedMaterializedViewRewriteStage2(OptExpression tree,
+                                                        TaskContext rootTaskContext,
+                                                        ColumnRefSet requiredColumns) {
         // skip if mv rewrite is disabled
         if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null) {
             return;
         }
+        context.getQueryMaterializationContext().setCurrentRewriteStage(MvRewriteStrategy.MVRewriteStage.PHASE2);
 
         // do rule based mv rewrite if needed
-        if (!context.getQueryMaterializationContext().hasRewrittenSuccess()) {
+        if (context.getQueryMaterializationContext().isNeedsFurtherMVRewrite()) {
             doRuleBasedMaterializedViewRewrite(tree, rootTaskContext);
         }
 
@@ -457,11 +458,13 @@ public class QueryOptimizer extends Optimizer {
         }
     }
 
-    private void doMVRewriteWithMultiStages(OptExpression tree,
-                                            TaskContext rootTaskContext) {
+    private void ruleBasedMaterializedViewRewriteStage1(OptExpression tree,
+                                                        TaskContext rootTaskContext) {
         if (!mvRewriteStrategy.enableMaterializedViewRewrite || !mvRewriteStrategy.mvStrategy.isMultiStages()) {
             return;
         }
+        context.getQueryMaterializationContext().setCurrentRewriteStage(MvRewriteStrategy.MVRewriteStage.PHASE1);
+
         scheduler.rewriteOnce(tree, rootTaskContext, RuleSet.PARTITION_PRUNE_RULES);
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeProjectWithChildRule());
@@ -551,7 +554,7 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteIterative(tree, rootTaskContext, new MergeTwoProjectRule());
 
         // rule-based materialized view rewrite: early stage
-        doMVRewriteWithMultiStages(tree, rootTaskContext);
+        ruleBasedMaterializedViewRewriteStage1(tree, rootTaskContext);
         context.setEnableJoinEquivalenceDerive(true);
         context.setEnableJoinPredicatePushDown(true);
 
@@ -600,7 +603,8 @@ public class QueryOptimizer extends Optimizer {
 
         // Add a config to decide whether to rewrite sync mv.
         if (!optimizerOptions.isRuleDisable(TF_MATERIALIZED_VIEW)
-                && sessionVariable.isEnableSyncMaterializedViewRewrite()) {
+                && sessionVariable.isEnableSyncMaterializedViewRewrite()
+                && !context.getQueryMaterializationContext().hasRewrittenSuccess()) {
             // Split or predicates to union all so can be used by mv rewrite to choose the best sort key indexes.
             // TODO: support adaptive for or-predicates to union all.
             if (SplitScanORToUnionRule.isForceRewrite()) {
@@ -661,7 +665,7 @@ public class QueryOptimizer extends Optimizer {
         scheduler.rewriteOnce(tree, rootTaskContext, new PushDownTopNBelowUnionRule());
 
         // rule based materialized view rewrite
-        ruleBasedMaterializedViewRewrite(tree, rootTaskContext, requiredColumns);
+        ruleBasedMaterializedViewRewriteStage2(tree, rootTaskContext, requiredColumns);
 
         // this rewrite rule should be after mv.
         scheduler.rewriteOnce(tree, rootTaskContext, RewriteSimpleAggToHDFSScanRule.SCAN_NO_PROJECT);
