@@ -152,16 +152,9 @@ void AggregatorParams::init() {
         VLOG_ROW << fn.name.function_name << " is arg nullable " << desc.nodes[0].has_nullable_child;
         VLOG_ROW << fn.name.function_name << " is result nullable " << desc.nodes[0].is_nullable;
 
-<<<<<<< HEAD
         if (fn.name.function_name == "count") {
             std::vector<FunctionContext::TypeDesc> arg_typedescs;
             agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT), arg_typedescs, false, false};
-=======
-        auto& func_name = fn.name.function_name;
-        if (func_name == FUNCTION_COUNT) {
-            // count function is always not nullable
-            agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT), {}, false, false};
->>>>>>> d36eecf840 ([Enhancement] Support percentile_approx_weighted function (#56654))
         } else {
             TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
             TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
@@ -171,20 +164,12 @@ void AggregatorParams::init() {
             for (auto& type : fn.arg_types) {
                 arg_typedescs.push_back(AnyValUtil::column_type_to_type_desc(TypeDescriptor::from_thrift(type)));
             }
-<<<<<<< HEAD
 
             const bool is_input_nullable = has_outer_join_child || desc.nodes[0].has_nullable_child;
             agg_fn_types[i] = {return_type, serde_type, arg_typedescs, is_input_nullable, desc.nodes[0].is_nullable};
             agg_fn_types[i].is_always_nullable_result =
                     ALWAYS_NULLABLE_RESULT_AGG_FUNCS.contains(fn.name.function_name);
             if (fn.name.function_name == "array_agg" || fn.name.function_name == "group_concat") {
-=======
-            TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
-            TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
-            agg_fn_types[i] = {return_type, serde_type, arg_typedescs, has_nullable_child, is_nullable};
-            agg_fn_types[i].is_always_nullable_result = ALWAYS_NULLABLE_RESULT_AGG_FUNCS.contains(func_name);
-            if (func_name == "array_agg" || func_name == "group_concat") {
->>>>>>> d36eecf840 ([Enhancement] Support percentile_approx_weighted function (#56654))
                 // set order by info
                 if (fn.aggregate_fn.__isset.is_asc_order && fn.aggregate_fn.__isset.nulls_first &&
                     !fn.aggregate_fn.is_asc_order.empty()) {
