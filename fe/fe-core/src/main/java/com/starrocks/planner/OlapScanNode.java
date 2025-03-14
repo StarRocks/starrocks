@@ -46,13 +46,18 @@ import com.google.common.collect.Sets;
 import com.starrocks.alter.SchemaChangeHandler;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -109,6 +114,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -1197,6 +1203,60 @@ public class OlapScanNode extends ScanNode {
         planNode.setConjuncts(normalizer.normalizeExprs(normalizer.getConjunctsByPlanNodeId(this)));
     }
 
+    // Partition by exprs as follows can be decomposed
+    // 1. SlotRef
+    // 2. date_trunc
+    // 3. str2date(dt, '%Y-%m-%d')
+    private boolean isDecomposablePartitionExpr(Expr expr) {
+        if (expr.getClass().equals(SlotRef.class)) {
+            return true;
+        }
+        if (!expr.getClass().equals(FunctionCallExpr.class)) {
+            return false;
+        }
+        FunctionCallExpr fcall = (FunctionCallExpr) expr;
+        String fname = fcall.getFnName().getFunction();
+        if (fname.equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+            return true;
+        } else if (fname.equalsIgnoreCase(FunctionSet.STR2DATE)) {
+            return expr.getChild(1).getClass().equals(StringLiteral.class) &&
+                    ((StringLiteral) expr.getChild(1)).getValue().startsWith("%Y-%m-%d");
+        } else {
+            return false;
+        }
+    }
+
+    private boolean isDecomposablePartitionInfo(PartitionInfo partitionInfo) {
+        // TODO (by satanson): predicates' decomposition
+        //  At present, we support predicates' decomposition on RangePartition with single-column partition key.
+        //  in the future, predicates' decomposition on RangePartition with multi-column partition key will be
+        //  supported.
+        if (!partitionInfo.isRangePartition()) {
+            return false;
+        }
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+        if (rangePartitionInfo.getPartitionColumns().size() != 1) {
+            return false;
+        }
+        if (rangePartitionInfo.getClass().equals(RangePartitionInfo.class)) {
+            return true;
+        }
+
+        Predicate<List<Expr>> isDecomposable = exprs -> exprs.stream()
+                .allMatch(this::isDecomposablePartitionExpr);
+
+        if (rangePartitionInfo.getClass().equals(ExpressionRangePartitionInfo.class)) {
+            ExpressionRangePartitionInfo exprRangePartitionInfo = (ExpressionRangePartitionInfo) rangePartitionInfo;
+            return isDecomposable.test(exprRangePartitionInfo.getPartitionExprs());
+        }
+
+        if (rangePartitionInfo.getClass().equals(ExpressionRangePartitionInfoV2.class)) {
+            ExpressionRangePartitionInfoV2 exprRangePartitionInfo = (ExpressionRangePartitionInfoV2) rangePartitionInfo;
+            return isDecomposable.test(exprRangePartitionInfo.getPartitionExprs());
+        }
+        return false;
+    }
+
     @Override
     public void normalizeConjuncts(FragmentNormalizer normalizer, TNormalPlanNode planNode, List<Expr> conjuncts) {
         if (!normalizer.isProcessingLeftNode()) {
@@ -1206,12 +1266,8 @@ public class OlapScanNode extends ScanNode {
             return;
         }
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
-        // TODO (by satanson): predicates' decomposition
-        //  At present, we support predicates' decomposition on RangePartition with single-column partition key.
-        //  in the future, predicates' decomposition on RangePartition with multi-column partition key will be
-        //  supported.
-        if (partitionInfo.isRangePartition() &&
-                ((RangePartitionInfo) partitionInfo).getPartitionColumns().size() == 1) {
+
+        if (isDecomposablePartitionInfo(partitionInfo)) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             conjuncts = decomposeRangePredicates(normalizer, planNode, rangePartitionInfo, conjuncts);
         } else {
