@@ -375,8 +375,8 @@ public class FullStatisticsCollectJob extends StatisticsCollectJob {
 
         VelocityContext context = new VelocityContext();
         context.put("tableId", tableId);
-        context.put("targetPartitionId", sourcePartitionId);
-        context.put("sourcePartitionId", targetPartitionId);
+        context.put("targetPartitionId", targetPartitionId);
+        context.put("sourcePartitionId", sourcePartitionId);
         {
             StringWriter sw = new StringWriter();
             DEFAULT_VELOCITY_ENGINE.evaluate(context, sw, "", OVERWRITE_PARTITION_TEMPLATE);
