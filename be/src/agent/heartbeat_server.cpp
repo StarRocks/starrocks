@@ -77,7 +77,8 @@ void HeartbeatServer::heartbeat(THeartbeatResult& heartbeat_result, const TMaste
     //print heartbeat in every minute
     LOG_EVERY_N(INFO, 12) << "get heartbeat from FE. host:" << master_info.network_address.hostname
                           << ", port:" << master_info.network_address.port << ", cluster id:" << master_info.cluster_id
-                          << ", node type:" << (master_info.__isset.node_type? master_info.node_type: "N/A")
+                          << ", node type:"
+                          << (master_info.__isset.node_type ? std::to_string(master_info.node_type) : "N/A")
                           << ", run_mode:" << master_info.run_mode << ", counter:" << google::COUNTER;
 
     if (master_info.encrypted != config::enable_transparent_data_encryption) {
