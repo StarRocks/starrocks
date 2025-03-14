@@ -502,6 +502,8 @@ TEST_F(TabletMgrTest, RsVersionMapTest) {
     }
     tablet->modify_rowsets_without_lock(to_add, to_remove, &to_replace);
     ASSERT_EQ(to_replace.size(), 3);
+
+    ASSERT_TRUE(tablet->get_average_row_size() > 0);
 }
 
 TEST_F(TabletMgrTest, RemoveTabletInDiskDisable) {
