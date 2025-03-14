@@ -76,7 +76,7 @@ class LocalPartitionTopnContext {
     friend class ManagedFunctionStates<LocalPartitionTopnContext>;
 
 public:
-    LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs, bool enable_pre_agg,
+    LocalPartitionTopnContext(const std::vector<TExpr>& t_partition_exprs, bool has_nullable_key, bool enable_pre_agg,
                               const std::vector<TExpr>& t_pre_agg_exprs,
                               const std::vector<TSlotId>& t_pre_agg_output_slot_id,
                               const std::vector<ExprContext*>& sort_exprs, std::vector<bool> is_asc_order,
@@ -191,7 +191,7 @@ public:
                                      bool enable_pre_agg, const std::vector<TExpr>& t_pre_agg_exprs,
                                      const std::vector<TSlotId>& t_pre_agg_output_slot_id, int64_t offset,
                                      int64_t limit, std::string sort_keys,
-                                     const std::vector<OrderByType>& order_by_types,
+                                     const std::vector<OrderByType>& order_by_types, bool has_outer_join_child,
                                      const std::vector<RuntimeFilterBuildDescriptor*>& rfs);
 
     Status prepare(RuntimeState* state);
@@ -213,5 +213,6 @@ private:
     int64_t _offset;
     int64_t _partition_limit;
     const std::string _sort_keys;
+    bool _has_outer_join_child;
 };
 } // namespace starrocks::pipeline
