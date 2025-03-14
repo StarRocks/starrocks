@@ -1549,7 +1549,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     public void postTaskRun(TaskRunContext context) throws Exception {
         // recreate post run context for each task run
         final ConnectContext ctx = context.getCtx();
-        final String postRun = getPostRun(ctx, materializedView);
+        final String postRun = getPostRun(ctx, mv);
         // visible for tests
         if (mvContext != null) {
             mvContext.setPostRun(postRun);
