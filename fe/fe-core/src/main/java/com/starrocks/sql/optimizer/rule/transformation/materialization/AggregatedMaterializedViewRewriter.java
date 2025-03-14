@@ -707,16 +707,9 @@ public class AggregatedMaterializedViewRewriter extends MaterializedViewRewriter
             CallOperator aggCall = (CallOperator) entry.getValue();
 
             // Aggregate must be CallOperator
-<<<<<<< HEAD
             CallOperator newAggregate = getRollupAggregate(context, equationRewriter, queryColumnSet, aggCall);
             if (newAggregate == null) {
-                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
-=======
-            Pair<CallOperator, EquivalentShuttleContext> rewritten = getRollupAggregate(context, equationRewriter,
-                    queryColumnSet, aggCall);
-            if (rewritten == null || rewritten.first == null) {
                 OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
->>>>>>> 4490faa747 ([Enhancement] Enable enable_materialized_view_multi_stages_rewrite by default (#56805))
                         "Rewrite aggregate function failed, cannot get rollup function: {}",
                         aggCall.toString());
                 return null;

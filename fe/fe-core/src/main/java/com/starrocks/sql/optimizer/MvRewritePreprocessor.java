@@ -64,12 +64,9 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalViewScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
-<<<<<<< HEAD
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
-=======
 import com.starrocks.sql.optimizer.rule.mv.MVCorrelation;
->>>>>>> 4490faa747 ([Enhancement] Enable enable_materialized_view_multi_stages_rewrite by default (#56805))
 import com.starrocks.sql.optimizer.rule.mv.MVUtils;
 import com.starrocks.sql.optimizer.rule.mv.MaterializedViewWrapper;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
@@ -120,12 +117,8 @@ public class MvRewritePreprocessor {
             // use a new context rather than reuse the existed context to avoid cache conflict.
             try {
                 // 1. get related mvs for all input tables
-<<<<<<< HEAD
-                Set<MaterializedView> relatedMVs = getRelatedMVs(queryTables, context.getOptimizerConfig().isRuleBased());
-=======
                 Set<MaterializedViewWrapper> relatedMVs =
-                        getRelatedMVs(queryTables, context.getOptimizerOptions().isRuleBased());
->>>>>>> 4490faa747 ([Enhancement] Enable enable_materialized_view_multi_stages_rewrite by default (#56805))
+                        getRelatedMVs(queryTables, context.getOptimizerConfig().isRuleBased());
                 if (relatedMVs.isEmpty()) {
                     return;
                 }
@@ -688,11 +681,7 @@ public class MvRewritePreprocessor {
                 }
                 logMVPrepare(mv, "MV compensate partition predicate: {}", mvPartialPartitionPredicates);
                 MaterializationContext materializationContext = buildMaterializationContext(context, mv, mvPlanContext,
-<<<<<<< HEAD
-                        mvPartialPartitionPredicates, mvUpdateInfo, queryTables);
-=======
-                        mvUpdateInfo, queryTables, wrapper.getLevel());
->>>>>>> 4490faa747 ([Enhancement] Enable enable_materialized_view_multi_stages_rewrite by default (#56805))
+                        mvPartialPartitionPredicates, mvUpdateInfo, queryTables, wrapper.getLevel());
                 if (materializationContext == null) {
                     continue;
                 }
@@ -830,11 +819,7 @@ public class MvRewritePreprocessor {
         MaterializationContext materializationContext =
                 new MaterializationContext(context, copiedMV, mvPlan, context.getColumnRefFactory(),
                         mvPlanContext.getRefFactory(), baseTables, intersectingTables,
-<<<<<<< HEAD
-                        mvPartialPartitionPredicates, mvUpdateInfo, mvOutputColumns);
-=======
-                        mvUpdateInfo, mvOutputColumns, level);
->>>>>>> 4490faa747 ([Enhancement] Enable enable_materialized_view_multi_stages_rewrite by default (#56805))
+                        mvPartialPartitionPredicates, mvUpdateInfo, mvOutputColumns, level);
         // generate scan mv plan here to reuse it in rule applications
         LogicalOlapScanOperator scanMvOp = createScanMvOperator(mv,
                 materializationContext.getQueryRefFactory(), mvUpdateInfo.getMvToRefreshPartitionNames());

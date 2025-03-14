@@ -158,11 +158,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         logMVRewrite(context, this, "MV to refresh partition info: {}", mvUpdateInfo);
 
         MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
-<<<<<<< HEAD
-                mv, mvPlanContext, ConstantOperator.TRUE, mvUpdateInfo, queryTables);
-=======
-                mv, mvPlanContext, mvUpdateInfo, queryTables, 0);
->>>>>>> 4490faa747 ([Enhancement] Enable enable_materialized_view_multi_stages_rewrite by default (#56805))
+                mv, mvPlanContext, ConstantOperator.TRUE, mvUpdateInfo, queryTables, 0);
 
         Map<Column, ColumnRefOperator> columnToColumnRefMap = olapScanOperator.getColumnMetaToColRefMap();
         // use ordered output columns to ensure the order of output columns if the mv contains order-by clause.
@@ -210,11 +206,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         mvUpdateInfo.addMvToRefreshPartitionNames(mv.getPartitionNames());
 
         MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
-<<<<<<< HEAD
-                mv, mvPlanContext, ConstantOperator.TRUE, mvUpdateInfo, queryTables);
-=======
-                mv, mvPlanContext, mvUpdateInfo, queryTables, 0);
->>>>>>> 4490faa747 ([Enhancement] Enable enable_materialized_view_multi_stages_rewrite by default (#56805))
+                mv, mvPlanContext, ConstantOperator.TRUE, mvUpdateInfo, queryTables, 0);
         logMVRewrite(mvContext, "Get mv transparent plan failed, and redirect to mv's defined query");
         Map<Column, ColumnRefOperator> columnToColumnRefMap = olapScanOperator.getColumnMetaToColRefMap();
         List<Column> mvColumns = mv.getBaseSchema();

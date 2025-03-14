@@ -93,12 +93,8 @@ public class MaterializationContext {
     private MVCompensation mvMVCompensation = null;
 
     // Cache partition compensates predicates for each ScanNode and isCompensate pair.
-<<<<<<< HEAD
     private Map<Pair<LogicalScanOperator, Boolean>, List<ScalarOperator>> scanOpToPartitionCompensatePredicates;
-=======
-    private Map<LogicalScanOperator, List<ScalarOperator>> scanOpToPartitionCompensatePredicates;
     private final int level;
->>>>>>> 4490faa747 ([Enhancement] Enable enable_materialized_view_multi_stages_rewrite by default (#56805))
 
     public MaterializationContext(OptimizerContext optimizerContext,
                                   MaterializedView mv,
