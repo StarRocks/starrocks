@@ -2594,6 +2594,7 @@ informationFunctionExpression
     | name = USER '(' ')'
     | name = CURRENT_USER ('(' ')')?
     | name = CURRENT_ROLE ('(' ')')?
+    | name = CURRENT_GROUP ('(' ')')?
     ;
 
 specialDateTimeExpression

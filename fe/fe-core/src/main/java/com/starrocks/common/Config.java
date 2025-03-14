@@ -3541,6 +3541,12 @@ public class Config extends ConfigBase {
     @ConfField(mutable = false)
     public static String oidc_required_audience = "";
 
+    /**
+     * The name of the group provider. If there are multiple, separate them with commas.
+     */
+    @ConfField(mutable = true)
+    public static String[] group_provider = {};
+
     @ConfField(mutable = true)
     public static boolean transaction_state_print_partition_info = true;
 
