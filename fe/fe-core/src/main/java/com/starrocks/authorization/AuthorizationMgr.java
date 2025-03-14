@@ -1779,4 +1779,69 @@ public class AuthorizationMgr {
     public Set<Long> getAllRoleIds(UserIdentity user) throws PrivilegeException {
         return getRoleIdsByUser(user);
     }
+
+    // get the list of roles for the current user
+    public List<RolePrivilegeCollectionV2> getApplicableRoles(UserIdentity user) throws PrivilegeException {
+        List<RolePrivilegeCollectionV2> applicableRoles = new ArrayList<>();
+        userReadLock();
+        try {
+            Set<Long> roleIds = getRoleIdsByUser(user);
+            roleReadLock();
+            try {
+                for (Long roleId : roleIds) {
+                    RolePrivilegeCollectionV2 rolePrivilegeCollection = roleIdToPrivilegeCollection.get(roleId);
+                    if (rolePrivilegeCollection != null) {
+                        applicableRoles.add(rolePrivilegeCollection);
+                    }
+                }
+            } finally {
+                roleReadUnlock();
+            }
+        } finally {
+            userReadUnlock();
+        }
+        return applicableRoles;
+    }
+
+    public boolean isRoleGrantable(UserIdentity user, String roleName) {
+        roleReadLock();
+        try {
+            Long roleId = roleNameToId.get(roleName);
+            if (roleId == null) {
+                return false;
+            }
+            RolePrivilegeCollectionV2 rolePrivilegeCollection = roleIdToPrivilegeCollection.get(roleId);
+            return rolePrivilegeCollection != null && rolePrivilegeCollection.isGrantable();
+        } finally {
+            roleReadUnlock();
+        }
+    }
+
+    public boolean isRoleDefault(UserIdentity user, String roleName) {
+        userReadLock();
+        try {
+            UserPrivilegeCollectionV2 userPrivilegeCollection = userToPrivilegeCollection.get(user);
+            if (userPrivilegeCollection == null) {
+                return false;
+            }
+            Long roleId = roleNameToId.get(roleName);
+            return roleId != null && userPrivilegeCollection.getDefaultRoleIds().contains(roleId);
+        } finally {
+            userReadUnlock();
+        }
+    }
+
+    public boolean isRoleMandatory(UserIdentity user, String roleName) {
+        roleReadLock();
+        try {
+            Long roleId = roleNameToId.get(roleName);
+            if (roleId == null) {
+                return false;
+            }
+            RolePrivilegeCollectionV2 rolePrivilegeCollection = roleIdToPrivilegeCollection.get(roleId);
+            return rolePrivilegeCollection != null && rolePrivilegeCollection.isMandatory();
+        } finally {
+            roleReadUnlock();
+        }
+    }
 }

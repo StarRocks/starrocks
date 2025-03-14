@@ -34,6 +34,12 @@ public class RolePrivilegeCollectionV2 extends PrivilegeCollectionV2 {
     private Set<Long> subRoleIds;
     @SerializedName(value = "c")
     private String comment;
+    @SerializedName(value = "g")
+    private boolean isGrantable;
+    @SerializedName(value = "d")
+    private boolean isDefault;
+    @SerializedName(value = "m")
+    private boolean isMandatory;
 
     public enum RoleFlags {
         MUTABLE(1),
@@ -134,6 +140,9 @@ public class RolePrivilegeCollectionV2 extends PrivilegeCollectionV2 {
             throws PrivilegeException {
         assertMutable();
         super.grant(type, privilegeTypes, objects, isGrant);
+        if (isGrant) {
+            isGrantable = true;
+        }
     }
 
     public void grantWithoutAssertMutable(ObjectType type, List<PrivilegeType> privilegeTypes,
@@ -150,5 +159,17 @@ public class RolePrivilegeCollectionV2 extends PrivilegeCollectionV2 {
 
     public RolePrivilegeCollectionV2 cloneSelf() {
         return GsonUtils.GSON.fromJson(GsonUtils.GSON.toJson(this), RolePrivilegeCollectionV2.class);
+    }
+
+    public boolean isGrantable() {
+        return isGrantable;
+    }
+
+    public boolean isDefault() {
+        return isDefault;
+    }
+
+    public boolean isMandatory() {
+        return isMandatory;
     }
 }
