@@ -191,14 +191,16 @@ StatusOr<HeartbeatServer::CmpResult> HeartbeatServer::compare_master_info(const 
         }
     }
 
-    if (master_info.node_type == TNodeType::Backend && BackendOptions::is_cn()) {
-        LOG_EVERY_N(ERROR, 12) << "FE heartbeat with BE node type,but the node is CN,node type mismatch!";
-        return Status::InternalError("Unmatched node type!");
-    }
+    if (master_info.__isset.node_type) {
+        if (master_info.node_type == TNodeType::Backend && BackendOptions::is_cn()) {
+            LOG_EVERY_N(ERROR, 12) << "FE heartbeat with BE node type,but the node is CN,node type mismatch!";
+            return Status::InternalError("expect to be BE but actually CN,Unmatched node type!");
+        }
 
-    if (master_info.node_type == TNodeType::Compute && !BackendOptions::is_cn()) {
-        LOG_EVERY_N(ERROR, 12) << "FE heartbeat with CN node type,but the node is BE,node type mismatch!";
-        return Status::InternalError("Unmatched node type!");
+        if (master_info.node_type == TNodeType::Compute && !BackendOptions::is_cn()) {
+            LOG_EVERY_N(ERROR, 12) << "FE heartbeat with CN node type,but the node is BE,node type mismatch!";
+            return Status::InternalError("expect to be CN but actually BE,Unmatched node type!");
+        }
     }
 
 #ifndef USE_STAROS
