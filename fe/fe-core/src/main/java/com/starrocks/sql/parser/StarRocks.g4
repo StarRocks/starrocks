@@ -3067,4 +3067,5 @@ nonReserved
     | FIELD
     | ARRAY_ELEMENT
     | PERSISTENT
+    | NO_VALIDATION
     ;
