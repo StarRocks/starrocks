@@ -199,7 +199,7 @@ private:
     }
 };
 
-class MannWhitneyUTestAggregateFunction
+class MannWhitneyUTestAggregateFunction final
         : public AggregateFunctionBatchHelper<MannWhitneyAggregateState, MannWhitneyUTestAggregateFunction> {
 public:
     using DataColumn = RunTimeColumnType<TYPE_DOUBLE>;

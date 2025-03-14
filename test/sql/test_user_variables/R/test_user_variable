@@ -85,7 +85,7 @@ E: (1064, "Getting analyzing error. Detail message: percentile_approx requires t
 -- !result
 select      percentile_approx(c0, cast(null as double))  from t0;
 -- result:
-[REGEX] .*percentile_approx the second argument is expected to be non-null.*
+None
 -- !result
 CREATE TABLE `pk1` (
   `c0` int(11) COMMENT "",

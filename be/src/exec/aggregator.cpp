@@ -159,7 +159,8 @@ void AggregatorParams::init() {
         VLOG_ROW << fn.name.function_name << ", arg nullable " << desc.nodes[0].has_nullable_child
                  << ", result nullable " << desc.nodes[0].is_nullable;
 
-        if (fn.name.function_name == FUNCTION_COUNT) {
+        auto& func_name = fn.name.function_name;
+        if (func_name == FUNCTION_COUNT) {
             // count function is always not nullable
             agg_fn_types[i] = {TypeDescriptor(TYPE_BIGINT), TypeDescriptor(TYPE_BIGINT), {}, false, false};
         } else {
@@ -175,9 +176,8 @@ void AggregatorParams::init() {
             TypeDescriptor return_type = TypeDescriptor::from_thrift(fn.ret_type);
             TypeDescriptor serde_type = TypeDescriptor::from_thrift(fn.aggregate_fn.intermediate_type);
             agg_fn_types[i] = {return_type, serde_type, arg_typedescs, has_nullable_child, is_nullable};
-            agg_fn_types[i].is_always_nullable_result =
-                    ALWAYS_NULLABLE_RESULT_AGG_FUNCS.contains(fn.name.function_name);
-            if (fn.name.function_name == "array_agg" || fn.name.function_name == "group_concat") {
+            agg_fn_types[i].is_always_nullable_result = ALWAYS_NULLABLE_RESULT_AGG_FUNCS.contains(func_name);
+            if (func_name == "array_agg" || func_name == "group_concat") {
                 // set order by info
                 if (fn.aggregate_fn.__isset.is_asc_order && fn.aggregate_fn.__isset.nulls_first &&
                     !fn.aggregate_fn.is_asc_order.empty()) {
