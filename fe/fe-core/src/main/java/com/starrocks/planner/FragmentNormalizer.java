@@ -61,6 +61,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.Stack;
 import java.util.stream.Collectors;
@@ -578,11 +579,16 @@ public class FragmentNormalizer {
             if (range.isEmpty()) {
                 continue;
             }
-            range = toClosedOpenRange(range);
+            Optional<Range> optRange = Optional.empty();
+            try {
+                optRange = Optional.ofNullable(toClosedOpenRange(range));
+            } catch (Throwable ignored) {
+            }
+
             Pair<Long, Range<PartitionKey>> partitionKeyRange = rangeMap.get(i);
             // when the range is to total cover this partition, we also cache it
-            if (!range.isEmpty()) {
-                selectedRangeMap.put(partitionKeyRange.first, range.toString());
+            if (optRange.isPresent() && !optRange.get().isEmpty()) {
+                selectedRangeMap.put(partitionKeyRange.first, optRange.get().toString());
             }
         }
         // After we decompose the predicates, we should create a simple selectedRangeMap to turn on query cache if
