@@ -90,6 +90,7 @@ enum TExprNodeType {
   JIT_EXPR,
 
   MATCH_EXPR,
+  TRY_EXPR,
 }
 
 struct TAggregateExpr {
