@@ -1174,6 +1174,13 @@ under the License.
                 <version>${iceberg.version}</version>
             </dependency>
 
+            <!-- https://mvnrepository.com/artifact/io.grpc/grpc-netty-shaded -->
+            <dependency>
+                <groupId>io.grpc</groupId>
+                <artifactId>grpc-netty-shaded</artifactId>
+                <version>${grpc.version}</version>
+            </dependency>
+
             <dependency>
                 <groupId>com.starrocks</groupId>
                 <artifactId>starclient</artifactId>

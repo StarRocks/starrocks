@@ -651,6 +651,11 @@ under the License.
         </dependency>
 
         <dependency>
+            <groupId>io.grpc</groupId>
+            <artifactId>grpc-netty-shaded</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>com.starrocks</groupId>
             <artifactId>starclient</artifactId>
         </dependency>
