@@ -257,7 +257,7 @@ Status UpdateManager::publish_primary_key_tablet(const TxnLogPB_OpWrite& op_writ
             RETURN_IF_ERROR(_do_update(rowset_id, segment_id, state.upserts(segment_id), index, &new_deletes));
         } else {
             RETURN_IF_ERROR(_do_update_with_condition(params, rowset_id, segment_id, condition_column,
-                                                      state.upserts(segment_id), index, &new_deletes));
+                                                      state.upserts(segment_id)->pk_column, index, &new_deletes));
         }
         // 2.3 handle auto increment deletes
         if (state.auto_increment_deletes(segment_id) != nullptr) {
@@ -375,10 +375,14 @@ Status UpdateManager::publish_column_mode_partial_update(const TxnLogPB_OpWrite&
     return Status::OK();
 }
 
-Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const ColumnUniquePtr& upsert,
+Status UpdateManager::_do_update(uint32_t rowset_id, int32_t upsert_idx, const SegmentPKEncodeResultPtr& upsert,
                                  PrimaryIndex& index, DeletesMap* new_deletes) {
     TRACE_COUNTER_SCOPE_LATENCY_US("do_update_latency_us");
-    return index.upsert(rowset_id + upsert_idx, 0, *upsert, new_deletes);
+    for (; !upsert->done(); upsert->next()) {
+        auto current = upsert->current();
+        RETURN_IF_ERROR(index.upsert(rowset_id + upsert_idx, current.second, *current.first, new_deletes));
+    }
+    return upsert->status();
 }
 
 Status UpdateManager::_do_update_with_condition(const RowsetUpdateStateParams& params, uint32_t rowset_id,
