@@ -56,7 +56,7 @@ using BitmapRuntimeCppType = typename BitmapIntersectInternalKey<LT>::InternalKe
 
 template <LogicalType LT, typename T = BitmapRuntimeCppType<LT>, LogicalType ResultLT = IntersectCountResultLT<LT>,
           typename TResult = RunTimeCppType<ResultLT>>
-class IntersectCountAggregateFunction
+class IntersectCountAggregateFunction final
         : public AggregateFunctionBatchHelper<BitmapIntersectAggregateState<BitmapRuntimeCppType<LT>>,
                                               IntersectCountAggregateFunction<LT, T, ResultLT, TResult>> {
 public:

@@ -36,6 +36,8 @@ public:
 
     void add(float value) { _tdigest.add(value); }
 
+    void add(float value, int64_t weight) { _tdigest.add(value, static_cast<float>(weight)); }
+
     void merge(const PercentileValue* other) { _tdigest.merge(&other->_tdigest); }
 
     uint64_t serialize_size() const {
