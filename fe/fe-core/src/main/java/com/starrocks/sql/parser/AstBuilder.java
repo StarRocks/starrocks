@@ -2147,7 +2147,8 @@ public class AstBuilder extends StarRocksBaseVisitor<ParseNode> {
 
         if (context.statusDesc() != null) {
             String status = context.statusDesc().getText();
-            alterTableClause = new AlterMaterializedViewStatusClause(status, createPos(context));
+            boolean noValidation = context.NO_VALIDATION() != null;
+            alterTableClause = new AlterMaterializedViewStatusClause(status, noValidation, createPos(context));
         }
         // swap table
         if (context.swapTableClause() != null) {
