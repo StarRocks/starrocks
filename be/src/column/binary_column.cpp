@@ -569,11 +569,8 @@ const uint8_t* BinaryColumnBase<T>::deserialize_and_append(const uint8_t* pos) {
 template <typename T>
 void BinaryColumnBase<T>::deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) {
     // max size of one string is 2^32, so use uint32_t not T
-    T string_size = 0;
-    for (size_t i = 0; i < chunk_size; i++) {
-        string_size += *((uint32_t*)srcs[i].data);
-    }
-    _bytes.reserve(_bytes.size() + string_size);
+    uint32_t string_size = *((uint32_t*)srcs[0].data);
+    _bytes.reserve(chunk_size * string_size * 2);
     for (size_t i = 0; i < chunk_size; ++i) {
         srcs[i].data = (char*)deserialize_and_append((uint8_t*)srcs[i].data);
     }
