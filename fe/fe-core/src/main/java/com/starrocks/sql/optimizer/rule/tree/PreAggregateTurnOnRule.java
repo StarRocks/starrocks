@@ -89,6 +89,9 @@ public class PreAggregateTurnOnRule implements TreeRewriteRule {
                 .add(FunctionSet.MULTI_DISTINCT_COUNT)
                 .add(FunctionSet.APPROX_COUNT_DISTINCT)
                 .add(FunctionSet.DS_HLL_COUNT_DISTINCT)
+                .add(FunctionSet.DS_QUANTILE)
+                .add(FunctionSet.DS_FREQUENT)
+                .add(FunctionSet.DS_THETA)
                 .add(FunctionSet.BITMAP_UNION_INT.toUpperCase()).build();
 
         @Override
