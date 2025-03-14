@@ -33,6 +33,7 @@ import com.starrocks.catalog.Type;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
 
+import java.util.List;
 import java.util.Optional;
 
 public class FunctionAnalyzer {
