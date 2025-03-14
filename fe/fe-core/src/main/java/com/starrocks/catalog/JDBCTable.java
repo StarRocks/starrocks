@@ -279,6 +279,7 @@ public class JDBCTable extends Table {
         UNKNOWN,
         MYSQL,
         POSTGRES,
+        POSTGRESQL,
         ORACLE,
         MARIADB,
 
