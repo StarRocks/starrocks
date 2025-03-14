@@ -14,7 +14,6 @@
 
 package com.starrocks.planner;
 
-import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.MoreObjects;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Maps;
@@ -186,6 +185,44 @@ public class PaimonScanNode extends ScanNode {
 
         }
         scanNodePredicates.setSelectedPartitionIds(selectedPartitions.values());
+        traceJniMetrics();
+        traceDeletionVectorMetrics();
+    }
+
+    private void traceJniMetrics() {
+        int totalReaderCount = 0, jniReaderCount = 0;
+        long totalReaderLength = 0, jniReaderLength = 0;
+
+        for (TScanRangeLocations rangeLocation : scanRangeLocationsList) {
+            THdfsScanRange hdfsScanRange = rangeLocation.getScan_range().getHdfs_scan_range();
+            if (hdfsScanRange.use_paimon_jni_reader) {
+                jniReaderCount++;
+                jniReaderLength += hdfsScanRange.length;
+            }
+            totalReaderCount++;
+            totalReaderLength += hdfsScanRange.length;
+        }
+
+        String prefix = "Paimon.metadata.reader." + paimonTable.getCatalogTableName() + ".";
+        Tracers.record(EXTERNAL, prefix + "nativeReaderReadNum", String.valueOf(totalReaderCount - jniReaderCount));
+        Tracers.record(EXTERNAL, prefix + "nativeReaderReadBytes", (totalReaderLength - jniReaderLength) + " B");
+        Tracers.record(EXTERNAL, prefix + "jniReaderReadNum", String.valueOf(jniReaderCount));
+        Tracers.record(EXTERNAL, prefix + "jniReaderReadBytes", jniReaderLength + " B");
+    }
+
+    private void traceDeletionVectorMetrics() {
+        String prefix = "Paimon.metadata.deletionVector." + paimonTable.getCatalogTableName() + ".";
+        int deletionVectorCount = 0;
+        long deletionVectorReaderScanRange = 0;
+        for (TScanRangeLocations rangeLocation : scanRangeLocationsList) {
+            THdfsScanRange hdfsScanRange = rangeLocation.getScan_range().getHdfs_scan_range();
+            if (hdfsScanRange.getPaimon_deletion_file() != null) {
+                deletionVectorCount++;
+                deletionVectorReaderScanRange += hdfsScanRange.length - hdfsScanRange.offset;
+            }
+        }
+        Tracers.record(EXTERNAL, prefix + "count", String.valueOf(deletionVectorCount));
+        Tracers.record(EXTERNAL, prefix + "readBytes", String.valueOf(deletionVectorReaderScanRange));
     }
 
     private THdfsFileFormat fromType(String type) {
