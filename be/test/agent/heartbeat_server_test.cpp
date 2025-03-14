@@ -81,6 +81,10 @@ TEST(HeartbeatServerTest, test_unmatched_node_type_heartbeat) {
     HeartbeatServer server;
     TMasterInfo master_info;
 
+    // not set node type
+    StatusOr res = server.compare_master_info(master_info);
+    EXPECT_EQ(TStatusCode::OK, res.status().code());
+
     BackendOptions::init(false);
     master_info.__set_node_type(TNodeType::Backend);
     StatusOr res = server.compare_master_info(master_info);
@@ -95,11 +99,15 @@ TEST(HeartbeatServerTest, test_unmatched_node_type_heartbeat) {
     master_info.__set_node_type(TNodeType::Backend);
     res = server.compare_master_info(master_info);
     EXPECT_EQ(TStatusCode::INTERNAL_ERROR, res.status().code());
+    EXPECT_TRUE(res.status().message().find("Unmatched node type"));
+    EXPECT_TRUE(res.status().message().find("actually CN"));
 
     BackendOptions::init(false);
     master_info.__set_node_type(TNodeType::Compute);
     res = server.compare_master_info(master_info);
     EXPECT_EQ(TStatusCode::INTERNAL_ERROR, res.status().code());
+    EXPECT_TRUE(res.status().message().find("Unmatched node type"));
+    EXPECT_TRUE(res.status().message().find("actually BE"));
 }
 
 } // namespace starrocks
