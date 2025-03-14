@@ -18,6 +18,7 @@ package com.starrocks.sql.analyzer;
 import com.google.common.base.Strings;
 import com.starrocks.analysis.BinaryPredicate;
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.analysis.BoolLiteral;
 import com.starrocks.analysis.CompoundPredicate;
 import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.IntLiteral;
@@ -55,6 +56,7 @@ public class ShowTabletStmtAnalyzer {
         private String indexName = null;
         private Replica.ReplicaState replicaState = null;
         private ArrayList<OrderByPair> orderByPairs = null;
+        private Boolean isConsistent = null;
 
         public void analyze(ShowTabletStmt statement, ConnectContext session) {
             visit(statement, session);
@@ -138,6 +140,7 @@ public class ShowTabletStmtAnalyzer {
             statement.setReplicaState(replicaState);
             statement.setBackendId(backendId);
             statement.setOrderByPairs(orderByPairs);
+            statement.setIsConsistent(isConsistent);
             return null;
         }
 
@@ -203,6 +206,12 @@ public class ShowTabletStmtAnalyzer {
                         valid = false;
                         break;
                     }
+                } else if (leftKey.equalsIgnoreCase("IsConsistent")) {
+                    if (!(subExpr.getChild(1) instanceof BoolLiteral)) {
+                        valid = false;
+                        break;
+                    }
+                    isConsistent = ((BoolLiteral) subExpr.getChild(1)).getValue();
                 } else {
                     valid = false;
                     break;
@@ -212,7 +221,8 @@ public class ShowTabletStmtAnalyzer {
             if (!valid) {
                 throw new SemanticException("Where clause should looks like: Version = \"version\","
                         + " or state = \"NORMAL|ROLLUP|CLONE|DECOMMISSION\", or BackendId = 10000,"
-                        + " indexname=\"rollup_name\" or compound predicate with operator AND");
+                        + " indexname=\"rollup_name\" or IsConsistent=\"true|false\""
+                        + " or compound predicate with operator AND");
             }
         }
     }

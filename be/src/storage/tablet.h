@@ -349,6 +349,9 @@ public:
 
     void on_shutdown() override;
 
+    // get average row size
+    int64_t get_average_row_size();
+
 private:
     int64_t _mem_usage() { return sizeof(Tablet); }
 
