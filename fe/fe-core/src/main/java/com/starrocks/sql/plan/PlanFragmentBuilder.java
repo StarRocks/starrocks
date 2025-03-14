@@ -64,6 +64,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.IdGenerator;
+import com.starrocks.common.LocalExchangerType;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.connector.metadata.MetadataTable;
@@ -113,6 +114,7 @@ import com.starrocks.planner.SchemaScanNode;
 import com.starrocks.planner.SelectNode;
 import com.starrocks.planner.SetOperationNode;
 import com.starrocks.planner.SortNode;
+import com.starrocks.planner.SplitCastPlanFragment;
 import com.starrocks.planner.TableFunctionNode;
 import com.starrocks.planner.UnionNode;
 import com.starrocks.planner.stream.StreamAggNode;
@@ -152,6 +154,7 @@ import com.starrocks.sql.optimizer.operator.UKFKConstraints;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalAssertOneRowOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEConsumeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalCTEProduceOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalConcatenateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDecodeOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDeltaLakeScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
@@ -180,6 +183,8 @@ import com.starrocks.sql.optimizer.operator.physical.PhysicalRepeatOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSchemaScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalSetOperation;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSplitConsumeOperator;
+import com.starrocks.sql.optimizer.operator.physical.PhysicalSplitProduceOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTableFunctionTableScanOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalTopNOperator;
@@ -423,6 +428,18 @@ public class PlanFragmentBuilder {
         }
 
         return execPlan;
+    }
+
+    public static List<ColumnRefOperator> getShuffleColumns(HashDistributionSpec spec,
+                                                            ColumnRefFactory columnRefFactory) {
+        List<DistributionCol> columns = spec.getShuffleColumns();
+        Preconditions.checkState(!columns.isEmpty());
+
+        List<ColumnRefOperator> shuffleColumns = new ArrayList<>();
+        for (DistributionCol column : columns) {
+            shuffleColumns.add(columnRefFactory.getColumnRef(column.getColId()));
+        }
+        return shuffleColumns;
     }
 
     private static class PhysicalPlanTranslator extends OptExpressionVisitor<PlanFragment, ExecPlan> {
@@ -2430,27 +2447,8 @@ public class PlanFragmentBuilder {
             ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(),
                     inputFragment.getPlanRoot(), distribution.getDistributionSpec().getType());
             currentExecGroup.add(exchangeNode, true);
-            DataPartition dataPartition;
-            if (DistributionSpec.DistributionType.GATHER.equals(distribution.getDistributionSpec().getType())) {
-                dataPartition = DataPartition.UNPARTITIONED;
-            } else if (DistributionSpec.DistributionType.BROADCAST
-                    .equals(distribution.getDistributionSpec().getType())) {
-                dataPartition = DataPartition.UNPARTITIONED;
-            } else if (DistributionSpec.DistributionType.SHUFFLE.equals(distribution.getDistributionSpec().getType())) {
-                List<ColumnRefOperator> partitionColumns =
-                        getShuffleColumns((HashDistributionSpec) distribution.getDistributionSpec());
-                List<Expr> distributeExpressions =
-                        partitionColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
-                                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
-                                .collect(Collectors.toList());
-                dataPartition = DataPartition.hashPartitioned(distributeExpressions);
-            } else if (DistributionSpec.DistributionType.ROUND_ROBIN.equals(
-                    distribution.getDistributionSpec().getType())) {
-                dataPartition = DataPartition.RANDOM;
-            } else {
-                throw new StarRocksPlannerException("Unsupport exchange type : "
-                        + distribution.getDistributionSpec().getType(), INTERNAL_ERROR);
-            }
+            DataPartition dataPartition =
+                    translateDistributionToDataPartition(distribution.getDistributionSpec(), context);
             exchangeNode.setDataPartition(dataPartition);
 
             PlanFragment fragment =
@@ -2787,19 +2785,8 @@ public class PlanFragmentBuilder {
             return planFragment;
         }
 
-        private List<ColumnRefOperator> getShuffleColumns(HashDistributionSpec spec) {
-            List<DistributionCol> columns = spec.getShuffleColumns();
-            Preconditions.checkState(!columns.isEmpty());
-
-            List<ColumnRefOperator> shuffleColumns = new ArrayList<>();
-            for (DistributionCol column : columns) {
-                shuffleColumns.add(columnRefFactory.getColumnRef(column.getColId()));
-            }
-            return shuffleColumns;
-        }
-
         private List<Expr> getShuffleExprs(HashDistributionSpec hashDistributionSpec, ExecPlan context) {
-            List<ColumnRefOperator> shuffleColumns = getShuffleColumns(hashDistributionSpec);
+            List<ColumnRefOperator> shuffleColumns = getShuffleColumns(hashDistributionSpec, columnRefFactory);
             return shuffleColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
@@ -2884,8 +2871,7 @@ public class PlanFragmentBuilder {
             joinNode.setLimit(node.getLimit());
             joinNode.computeStatistics(optExpr.getStatistics());
             joinNode.setProbePartitionByExprs(probePartitionByExprs);
-            joinNode.setEnableLateMaterialization(
-                    ConnectContext.get().getSessionVariable().isJoinLateMaterialization());
+            joinNode.setEnableLateMaterialization(ConnectContext.get().getSessionVariable().isJoinLateMaterialization());
             // enable group execution for colocate join
             currentExecGroup = leftExecGroup;
             if (ConnectContext.get().getSessionVariable().isEnableGroupExecution()) {
@@ -3599,9 +3585,6 @@ public class PlanFragmentBuilder {
             List<Expr> conjuncts = predicates.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
                             new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
                     .collect(Collectors.toList());
-            ColumnRefSet requiredColsForFilter = new ColumnRefSet();
-            otherJoin.stream().forEach(e -> requiredColsForFilter.union(e.getUsedColumns()));
-            predicates.stream().forEach(e -> requiredColsForFilter.union(e.getUsedColumns()));
 
             return new JoinExprInfo(eqJoinConjuncts, otherJoinConjuncts, conjuncts);
         }
@@ -3686,28 +3669,12 @@ public class PlanFragmentBuilder {
                 leftFragment.mergeQueryDictExprs(rightFragment.getQueryGlobalDictExprs());
                 return leftFragment;
             } else if (distributionMode.equals(JoinNode.DistributionMode.PARTITIONED)) {
-                DataPartition lhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
-                        leftFragment.getDataPartition().getPartitionExprs());
-                DataPartition rhsJoinPartition = new DataPartition(TPartitionType.HASH_PARTITIONED,
-                        rightFragment.getDataPartition().getPartitionExprs());
-
-                leftFragment.getChild(0).setOutputPartition(lhsJoinPartition);
-                rightFragment.getChild(0).setOutputPartition(rhsJoinPartition);
-
+                PlanFragment joinFragment = new PlanFragment(context.getNextFragmentId(),
+                        joinNode, leftFragment.getChild(0).getOutputPartition());
                 // Currently, we always generate new fragment for PhysicalDistribution.
                 // So we need to remove exchange node only fragment for Join.
-                context.getFragments().remove(leftFragment);
-                context.getFragments().remove(rightFragment);
+                mergeChildFragmentsIntoParent(joinFragment, Lists.newArrayList(leftFragment, rightFragment), context);
 
-                PlanFragment joinFragment = new PlanFragment(context.getNextFragmentId(),
-                        joinNode, lhsJoinPartition);
-                joinFragment.addChildren(leftFragment.getChildren());
-                joinFragment.addChildren(rightFragment.getChildren());
-
-                joinFragment.mergeQueryGlobalDicts(leftFragment.getQueryGlobalDicts());
-                joinFragment.mergeQueryGlobalDicts(rightFragment.getQueryGlobalDicts());
-                joinFragment.mergeQueryDictExprs(leftFragment.getQueryGlobalDictExprs());
-                joinFragment.mergeQueryDictExprs(rightFragment.getQueryGlobalDictExprs());
                 context.getFragments().add(joinFragment);
 
                 return joinFragment;
@@ -3954,6 +3921,174 @@ public class PlanFragmentBuilder {
                     new PlanFragment(context.getNextFragmentId(), scanNode, DataPartition.RANDOM);
             context.getFragments().add(fragment);
             return fragment;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalSplitProducer(OptExpression optExpression, ExecPlan context) {
+            PlanFragment child = visit(optExpression.inputAt(0), context);
+            int splitId = ((PhysicalSplitProduceOperator) optExpression.getOp()).getSplitId();
+            context.getFragments().remove(child);
+            SplitCastPlanFragment splitProduce = new SplitCastPlanFragment(child);
+
+            context.getSplitProduceFragments().put(splitId, splitProduce);
+            context.getFragments().add(splitProduce);
+
+            return splitProduce;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalSplitConsumer(OptExpression optExpression, ExecPlan context) {
+            PhysicalSplitConsumeOperator consumerOperator = (PhysicalSplitConsumeOperator) optExpression.getOp();
+            int splitId = consumerOperator.getSplitId();
+
+            SplitCastPlanFragment splitProduceFragment =
+                    (SplitCastPlanFragment) context.getSplitProduceFragments().get(splitId);
+            ExchangeNode exchangeNode = new ExchangeNode(context.getNextNodeId(),
+                    splitProduceFragment.getPlanRoot(), consumerOperator.getDistributionSpec().getType());
+
+            DataPartition dataPartition =
+                    translateDistributionToDataPartition(consumerOperator.getDistributionSpec(), context);
+
+            this.currentExecGroup.add(exchangeNode, true);
+
+            exchangeNode.setDataPartition(dataPartition);
+            PlanFragment splitConsumeFragment =
+                    new PlanFragment(context.getNextFragmentId(), exchangeNode, dataPartition);
+            splitConsumeFragment.setQueryGlobalDicts(splitProduceFragment.getQueryGlobalDicts());
+            splitConsumeFragment.setQueryGlobalDictExprs(splitProduceFragment.getQueryGlobalDictExprs());
+            splitConsumeFragment.setLoadGlobalDicts(splitProduceFragment.getLoadGlobalDicts());
+            
+            if (consumerOperator.hasLimit()) {
+                splitConsumeFragment.getPlanRoot().setLimit(consumerOperator.getLimit());
+            }
+
+            ScalarOperatorToExpr.FormatterContext formatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+
+            splitProduceFragment.getDestNodeList().add(exchangeNode);
+            splitProduceFragment.getOutputPartitions().add(dataPartition);
+
+            splitProduceFragment.getSplitExprs()
+                    .add(ScalarOperatorToExpr.buildExecExpression(consumerOperator.getSplitPredicate(),
+                            formatterContext));
+            splitConsumeFragment.addChild(splitProduceFragment);
+            context.getFragments().add(splitConsumeFragment);
+            return splitConsumeFragment;
+        }
+
+        @Override
+        public PlanFragment visitPhysicalConcatenater(OptExpression optExpr, ExecPlan context) {
+            PlanFragment leftChild = visit(optExpr.inputAt(0), context);
+            PlanFragment rightChild = visit(optExpr.inputAt(1), context);
+
+            PhysicalConcatenateOperator mergeOperator = (PhysicalConcatenateOperator) optExpr.getOp();
+            TupleDescriptor mergeOperationTuple = context.getDescTbl().createTupleDescriptor();
+
+            UnionNode setOperationNode = new UnionNode(context.getNextNodeId(), mergeOperationTuple.getId());
+            if (rightChild.getPlanRoot() instanceof ExchangeNode) {
+                setOperationNode.setLocalExchangeType(LocalExchangerType.DIRECT);
+            }
+
+            for (ColumnRefOperator columnRefOperator : mergeOperator.getOutputColumnRefOp()) {
+                SlotDescriptor slotDesc = context.getDescTbl()
+                        .addSlotDescriptor(mergeOperationTuple, new SlotId(columnRefOperator.getId()));
+                slotDesc.setType(columnRefOperator.getType());
+                slotDesc.setIsMaterialized(true);
+                slotDesc.setIsNullable(columnRefOperator.isNullable());
+
+                context.getColRefToExpr().put(columnRefOperator, new SlotRef(columnRefOperator.toString(), slotDesc));
+            }
+
+            // all use union pass through, wchch means just output the input-chunk
+            setOperationNode.setFirstMaterializedChildIdx_(optExpr.arity());
+
+            currentExecGroup.add(setOperationNode, true);
+
+            List<Map<Integer, Integer>> outputSlotIdToChildSlotIdMaps = new ArrayList<>();
+
+            ScalarOperatorToExpr.FormatterContext formatterContext =
+                    new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr());
+            // materializedResultExprLists is actually useless, since all child is union-passthrough
+            // we add it just for pass check
+            List<List<Expr>> materializedResultExprLists = Lists.newArrayList();
+
+            for (int childIdx = 0; childIdx < optExpr.arity(); ++childIdx) {
+                Map<Integer, Integer> slotIdMap = new HashMap<>();
+                List<ColumnRefOperator> childOutput = mergeOperator.getChildOutputColumns().get(childIdx);
+                Preconditions.checkState(childOutput.size() == mergeOperator.getOutputColumnRefOp().size());
+                for (int columnIdx = 0; columnIdx < mergeOperator.getOutputColumnRefOp().size(); ++columnIdx) {
+                    Integer resultColumnIdx = mergeOperator.getOutputColumnRefOp().get(columnIdx).getId();
+                    slotIdMap.put(resultColumnIdx, childOutput.get(columnIdx).getId());
+                }
+                outputSlotIdToChildSlotIdMaps.add(slotIdMap);
+                Preconditions.checkState(slotIdMap.size() == mergeOperator.getOutputColumnRefOp().size());
+
+                List<Expr> materializedExpressions = Lists.newArrayList();
+                for (ColumnRefOperator ref : childOutput) {
+                    materializedExpressions.add(ScalarOperatorToExpr.buildExecExpression(ref, formatterContext));
+                }
+
+                materializedResultExprLists.add(materializedExpressions);
+            }
+            setOperationNode.setOutputSlotIdToChildSlotIdMaps(outputSlotIdToChildSlotIdMaps);
+            setOperationNode.setMaterializedResultExprLists_(materializedResultExprLists);
+
+            Preconditions.checkState(optExpr.getInputs().size() == mergeOperator.getChildOutputColumns().size());
+
+            // must add child before create new fragment, otherwise child's fragment won't change.
+            setOperationNode.addChild(leftChild.getPlanRoot());
+            setOperationNode.addChild(rightChild.getPlanRoot());
+
+            // mergeOperationFragment's data partition is the same as the first child shuffle join 's data partition
+            PlanFragment mergeOperationFragment = new PlanFragment(context.getNextFragmentId(), setOperationNode,
+                    leftChild.getDataPartition());
+
+            // left plan fragment is shuffle join, and right plan fragment can be broadcast join or exchange
+            // we always need to merge these two child plan fragments with mergeOperationFragment
+            mergeChildFragmentsIntoParent(mergeOperationFragment, Lists.newArrayList(leftChild, rightChild), context);
+
+            setOperationNode.setLimit(mergeOperator.getLimit());
+            setOperationNode.computeStatistics(optExpr.getStatistics());
+
+            context.getFragments().add(mergeOperationFragment);
+
+            return mergeOperationFragment;
+        }
+
+        private DataPartition translateDistributionToDataPartition(DistributionSpec distributionSpec,
+                                                                   ExecPlan context) {
+            DataPartition dataPartition;
+            if (DistributionSpec.DistributionType.GATHER.equals(distributionSpec.getType())) {
+                dataPartition = DataPartition.UNPARTITIONED;
+            } else if (DistributionSpec.DistributionType.BROADCAST
+                    .equals(distributionSpec.getType())) {
+                dataPartition = DataPartition.UNPARTITIONED;
+            } else if (DistributionSpec.DistributionType.SHUFFLE.equals(distributionSpec.getType())) {
+                List<ColumnRefOperator> partitionColumns =
+                        getShuffleColumns((HashDistributionSpec) distributionSpec, columnRefFactory);
+                List<Expr> distributeExpressions =
+                        partitionColumns.stream().map(e -> ScalarOperatorToExpr.buildExecExpression(e,
+                                        new ScalarOperatorToExpr.FormatterContext(context.getColRefToExpr())))
+                                .collect(Collectors.toList());
+                dataPartition = DataPartition.hashPartitioned(distributeExpressions);
+            } else if (DistributionSpec.DistributionType.ROUND_ROBIN.equals(
+                    distributionSpec.getType())) {
+                dataPartition = DataPartition.RANDOM;
+            } else {
+                throw new StarRocksPlannerException("Unsupport exchange type : "
+                        + distributionSpec.getType(), INTERNAL_ERROR);
+            }
+            return dataPartition;
+        }
+
+        private void mergeChildFragmentsIntoParent(PlanFragment parentFragment, List<PlanFragment> childFragments,
+                                                   ExecPlan context) {
+            for (PlanFragment fragment : childFragments) {
+                context.getFragments().remove(fragment);
+                parentFragment.addChildren(fragment.getChildren());
+                parentFragment.mergeQueryGlobalDicts(fragment.getQueryGlobalDicts());
+                parentFragment.mergeQueryDictExprs(fragment.getQueryGlobalDictExprs());
+            }
         }
     }
 }
