@@ -31,15 +31,21 @@ public class DropMaterializedViewStmt extends DdlStmt {
 
     private final boolean ifExists;
     private final TableName dbMvName;
+    private final boolean forceDrop;
 
     public DropMaterializedViewStmt(boolean ifExists, TableName dbMvName) {
-        this(ifExists, dbMvName, NodePosition.ZERO);
+        this(ifExists, dbMvName, false, NodePosition.ZERO);
     }
 
-    public DropMaterializedViewStmt(boolean ifExists, TableName dbMvName, NodePosition pos) {
+    public DropMaterializedViewStmt(boolean ifExists, TableName dbMvName, boolean forceDrop) {
+        this(ifExists, dbMvName, forceDrop, NodePosition.ZERO);
+    }
+
+    public DropMaterializedViewStmt(boolean ifExists, TableName dbMvName, boolean forceDrop, NodePosition pos) {
         super(pos);
         this.ifExists = ifExists;
         this.dbMvName = dbMvName;
+        this.forceDrop = forceDrop;
     }
 
     public boolean isSetIfExists() {
@@ -56,6 +62,10 @@ public class DropMaterializedViewStmt extends DdlStmt {
 
     public TableName getDbMvName() {
         return dbMvName;
+    }
+
+    public boolean isForceDrop() {
+        return this.forceDrop;
     }
 
     @Override
