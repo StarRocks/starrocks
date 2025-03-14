@@ -441,7 +441,7 @@ public class Optimizer {
         context.getQueryMaterializationContext().setCurrentRewriteStage(MvRewriteStrategy.MVRewriteStage.PHASE2);
 
         // do rule based mv rewrite
-        if (!context.getQueryMaterializationContext().hasRewrittenSuccess()) {
+        if (!context.getQueryMaterializationContext().isNeedsFurtherMVRewrite()) {
             doRuleBasedMaterializedViewRewrite(tree, rootTaskContext);
         }
 
