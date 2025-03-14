@@ -115,12 +115,8 @@ public class MvRewritePreprocessor {
             // use a new context rather than reuse the existed context to avoid cache conflict.
             try {
                 // 1. get related mvs for all input tables
-<<<<<<< HEAD
-                Set<MaterializedView> relatedMVs = getRelatedMVs(queryTables, context.getOptimizerConfig().isRuleBased());
-=======
                 Set<MaterializedViewWrapper> relatedMVs =
-                        getRelatedMVs(queryTables, context.getOptimizerOptions().isRuleBased());
->>>>>>> 4490faa747 ([Enhancement] Enable enable_materialized_view_multi_stages_rewrite by default (#56805))
+                        getRelatedMVs(queryTables, context.getOptimizerConfig().isRuleBased());
                 if (relatedMVs.isEmpty()) {
                     return;
                 }
