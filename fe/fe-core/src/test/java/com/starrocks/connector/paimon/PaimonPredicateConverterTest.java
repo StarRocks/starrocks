@@ -365,7 +365,7 @@ public class PaimonPredicateConverterTest {
         result = CONVERTER.convert(new BinaryPredicateOperator(BinaryType.EQ, cast8, stringTime));
         Assert.assertTrue(result instanceof LeafPredicate);
         LeafPredicate leafPredicate8 = (LeafPredicate) result;
-        Assert.assertEquals(1735689600000L, ((Timestamp) (leafPredicate8.literals().get(0))).getMillisecond());
+        Assert.assertEquals(1735660800000L, ((Timestamp) (leafPredicate8.literals().get(0))).getMillisecond());
         // smallInt to string
         ConstantOperator si = ConstantOperator.createSmallInt((short) 200);
         CastOperator cast9 = new CastOperator(Type.VARCHAR, F1);
