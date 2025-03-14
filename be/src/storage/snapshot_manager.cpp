@@ -811,6 +811,15 @@ Status SnapshotManager::assign_new_rowset_id(SnapshotMeta* snapshot_meta, const 
                                                             src_absolute_path, dst_absolute_path));
                             }
                         }
+                    } else if (index.index_type() == VECTOR) {
+                        std::string dst_index_link_path = IndexDescriptor::vector_index_file_path(
+                                clone_dir, new_rowset_id.to_string(), segment_n, index.index_id());
+                        std::string src_index_file_path = IndexDescriptor::vector_index_file_path(
+                                clone_dir, old_rowset_id.to_string(), segment_n, index.index_id());
+                        if (link(src_index_file_path.c_str(), dst_index_link_path.c_str()) != 0) {
+                            PLOG(WARNING) << "Fail to link " << src_index_file_path << " to " << dst_index_link_path;
+                            return Status::RuntimeError("Fail to link index data file");
+                        }
                     }
                 }
             }
