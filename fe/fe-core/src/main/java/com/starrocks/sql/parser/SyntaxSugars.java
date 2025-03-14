@@ -36,6 +36,8 @@ public class SyntaxSugars {
                 .put(FunctionSet.ILIKE, SyntaxSugars::ilike)
                 .put(FunctionSet.STRUCT, SyntaxSugars::struct)
                 .put(FunctionSet.APPROX_COUNT_DISTINCT_HLL_SKETCH, SyntaxSugars::hllSketchCount)
+                .put(FunctionSet.DS_HLL, SyntaxSugars::hllSketchCount)
+                .put(FunctionSet.DS_THETA_COUNT_DISTINCT, SyntaxSugars::thetaSketch)
                 .build();
     }
 
@@ -77,5 +79,12 @@ public class SyntaxSugars {
      */
     private static FunctionCallExpr hllSketchCount(FunctionCallExpr call) {
         return new FunctionCallExpr(FunctionSet.DS_HLL_COUNT_DISTINCT, call.getChildren());
+    }
+    
+    /*
+     * ds_theta_count_distinct(col) -> ds_theta(col)
+     */
+    private static FunctionCallExpr thetaSketch(FunctionCallExpr call) {
+        return new FunctionCallExpr(FunctionSet.DS_THETA, call.getChildren());
     }
 }
