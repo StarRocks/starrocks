@@ -222,15 +222,12 @@ public class Task implements Writable {
         return GsonUtils.GSON.fromJson(json, Task.class);
     }
 
-<<<<<<< HEAD
     @Override
     public void write(DataOutput out) throws IOException {
         String json = GsonUtils.GSON.toJson(this);
         Text.writeString(out, json);
     }
 
-=======
->>>>>>> b1f73712e9 ([BugFix] Enable change analyze_for_mv for each task run by session variable (#55057))
     @Override
     public String toString() {
         return "Task{" +
