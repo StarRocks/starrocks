@@ -78,10 +78,25 @@ public class OptimizerTraceUtil {
     /**
      * NOTE: Carefully use it, because the log would be print into the query profile, to help understanding why a
      * materialized view is not chose to rewrite the query.
+     *
+     * Used for mv preprocessor log, the log would be print into the query profile.
      */
     public static void logMVRewriteFailReason(String mvName, String format, Object... objects) {
         String str = MessageFormatter.arrayFormat(format, objects).getMessage();
         Tracers.reasoning(Tracers.Module.MV, "MV rewrite fail for {}: {} ", mvName, str);
+        logMVRewrite(mvName, format, objects);
+    }
+
+    /**
+     * Used for mv rewrite reason log, the log would be print into the query profile.
+     */
+    public static void logMVRewriteFailReason(MvRewriteContext mvContext, String format, Object... objects) {
+        final String mvName = mvContext.getMVName();
+        final String str = MessageFormatter.arrayFormat(format, objects).getMessage();
+        final OptimizerContext optimizerContext = mvContext.getMaterializationContext().getOptimizerContext();
+        final String memoPhase = optimizerContext.isInMemoPhase() ? "CBO" : "RBO";
+        final String stage = optimizerContext.getQueryMaterializationContext().getCurrentRewriteStage().name();
+        Tracers.reasoning(Tracers.Module.MV, "[{}] [{}] MV rewrite fail for {}: {} ", memoPhase, stage, mvName, str);
         logMVRewrite(mvName, format, objects);
     }
 
