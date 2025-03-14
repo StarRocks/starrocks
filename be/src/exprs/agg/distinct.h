@@ -231,6 +231,8 @@ struct AdaptiveSliceHashSet {
         }
     }
 
+    int64_t size() const { return distinct_size; }
+
     std::shared_ptr<SliceHashSetWithAggStateAllocator> set;
     std::shared_ptr<SliceTwoLevelHashSetWithAggStateAllocator> two_level_set;
     int64_t distinct_size = 0;
@@ -537,7 +539,7 @@ class DecimalDistinctAggregateFunction
 struct DictMergeState : DistinctAggregateStateV2<TYPE_VARCHAR, SumResultLT<TYPE_VARCHAR>> {
     DictMergeState() = default;
 
-    void update_over_limit() { over_limit = distinct_count() > dict_threshold; }
+    void update_over_limit() { over_limit = set.size() > dict_threshold; }
 
     bool over_limit = false;
     int dict_threshold = 255;
@@ -637,12 +639,12 @@ public:
         auto& agg_state = this->data(state);
 
         auto finalize = [](const DictMergeState& agg_state, Column* to) {
-            if (agg_state.distinct_count() == 0) {
+            if (agg_state.set.size() == 0) {
                 to->append_default();
                 return;
             }
             std::vector<int32_t> dict_ids;
-            dict_ids.resize(agg_state.distinct_count());
+            dict_ids.resize(agg_state.set.size());
 
             auto* binary_column = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(to));
             if (to->is_nullable()) {
