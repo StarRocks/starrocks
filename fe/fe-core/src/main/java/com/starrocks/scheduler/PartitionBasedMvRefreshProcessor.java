@@ -623,10 +623,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     private boolean isEnableMVRefreshQueryRewrite(ConnectContext ctx,
                                                   Set<Table> baseTables) {
-        Set<MaterializedView> relatedMvs = MvUtils.getRelatedMvs(ctx, 1, baseTables);
-        logger.info("refresh mv with related mvs: {}", relatedMvs);
-        // only enable mv rewrite when there are more than one related mvs
-        return relatedMvs.size() > 1;
+        return MvUtils.getRelatedMvs(ctx, 1, baseTables).size() > 1;
     }
 
     public MVTaskRunExtraMessage getMVTaskRunExtraMessage() {
