@@ -467,7 +467,7 @@ public class AggStateCombinatorTest extends MVTestBase {
                         String sql1 = "select k1, " + unionFnName + " from test_agg_state_table group by k1";
                         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
                         PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
-                                "     table: test_agg_state_table, rollup: test_agg_state_table");
+                                "     TABLE: test_agg_state_table, rollup: test_agg_state_table");
                     }
                 });
     }
@@ -518,7 +518,7 @@ public class AggStateCombinatorTest extends MVTestBase {
                         String sql1 = "select k1, " + unionFnName + " from test_agg_state_table group by k1";
                         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
                         PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
-                                "     table: test_agg_state_table, rollup: test_agg_state_table");
+                                "     TABLE: test_agg_state_table, rollup: test_agg_state_table");
                     }
                 });
     }
@@ -572,7 +572,7 @@ public class AggStateCombinatorTest extends MVTestBase {
                                 Joiner.on(",").join(unionColumns) + " from test_agg_state_table group by k1";
                         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
                         PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
-                                "     table: test_agg_state_table, rollup: test_agg_state_table");
+                                "     TABLE: test_agg_state_table, rollup: test_agg_state_table");
                     }
 
                     // test _merge
@@ -585,7 +585,7 @@ public class AggStateCombinatorTest extends MVTestBase {
                                 Joiner.on(",").join(mergeColumns) + " from test_agg_state_table group by k1";
                         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
                         PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
-                                "     table: test_agg_state_table, rollup: test_agg_state_table");
+                                "     TABLE: test_agg_state_table, rollup: test_agg_state_table");
                     }
                 });
     }
@@ -611,7 +611,7 @@ public class AggStateCombinatorTest extends MVTestBase {
             String sql1 = "select k1, " + Joiner.on(", ").join(stateColumns) + " from t1;";
             String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
             PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
-                    "     table: t1, rollup: t1");
+                    "     TABLE: t1, rollup: t1");
         }
         starRocksAssert.dropTable("t1");
     }
@@ -638,7 +638,7 @@ public class AggStateCombinatorTest extends MVTestBase {
         String sql1 = "select k1, " + Joiner.on(", ").join(stateColumns) + " from t1";
         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
         PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
-                "     table: t1, rollup: t1");
+                "     TABLE: t1, rollup: t1");
         starRocksAssert.dropTable("t1");
     }
 
@@ -665,7 +665,7 @@ public class AggStateCombinatorTest extends MVTestBase {
             PlanTestBase.assertContains(plan, "|  31 <-> approx_top_k_state[([27: c6, DOUBLE, true], 10, 100); " +
                     "args: DOUBLE,INT,INT; result: VARBINARY; args nullable: true; result nullable: true]");
             PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
-                    "     table: t1, rollup: t1");
+                    "     TABLE: t1, rollup: t1");
             break;
         }
         starRocksAssert.dropTable("t1");
@@ -742,7 +742,7 @@ public class AggStateCombinatorTest extends MVTestBase {
                     "result: VARBINARY; args nullable: true; result nullable: true]\n" +
                     "  |  cardinality: 1");
             PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
-                    "     table: t1, rollup: t1");
+                    "     TABLE: t1, rollup: t1");
         }
 
         // _union
@@ -773,7 +773,7 @@ public class AggStateCombinatorTest extends MVTestBase {
                     "multi_distinct_sum_union[([5: v3, VARBINARY, true]); args: VARBINARY; " +
                     "result: VARBINARY; args nullable: true; result nullable: true]");
             PlanTestBase.assertContains(plan, " 0:OlapScanNode\n" +
-                    "     table: test_agg_state_table, rollup: test_agg_state_table");
+                    "     TABLE: test_agg_state_table, rollup: test_agg_state_table");
         }
 
         // _merge
@@ -804,7 +804,7 @@ public class AggStateCombinatorTest extends MVTestBase {
                     "multi_distinct_sum_merge[([5: v3, VARBINARY, true]); args: VARBINARY; " +
                     "result: BIGINT; args nullable: true; result nullable: true]");
             PlanTestBase.assertContains(plan, " 0:OlapScanNode\n" +
-                    "     table: test_agg_state_table, rollup: test_agg_state_table");
+                    "     TABLE: test_agg_state_table, rollup: test_agg_state_table");
         }
         starRocksAssert.dropTable("t1");
         starRocksAssert.dropTable("test_agg_state_table");
@@ -861,7 +861,7 @@ public class AggStateCombinatorTest extends MVTestBase {
             PlanTestBase.assertContains(plan, "32 <-> array_agg_state[([26: c24, VARCHAR, true]); args: VARCHAR; " +
                     "result: struct<col1 array<varchar(100)>>; args nullable: true; result nullable: true]");
             PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
-                    "     table: t1, rollup: t1");
+                    "     TABLE: t1, rollup: t1");
         }
 
         // _union
@@ -873,7 +873,7 @@ public class AggStateCombinatorTest extends MVTestBase {
                     "struct<col1 array<varchar(100)>>, true]); args: INVALID_TYPE; result: " +
                     "struct<col1 array<varchar(100)>>; args nullable: true; result nullable: true]");
             PlanTestBase.assertContains(plan, " 0:OlapScanNode\n" +
-                    "     table: test_agg_state_table, rollup: test_agg_state_table");
+                    "     TABLE: test_agg_state_table, rollup: test_agg_state_table");
         }
 
         // _merge
@@ -885,7 +885,7 @@ public class AggStateCombinatorTest extends MVTestBase {
                     "array_agg_merge[([2: v0, struct<col1 array<varchar(100)>>, true]); args: INVALID_TYPE; " +
                     "result: ARRAY<VARCHAR(100)>; args nullable: true; result nullable: true]");
             PlanTestBase.assertContains(plan, " 0:OlapScanNode\n" +
-                    "     table: test_agg_state_table, rollup: test_agg_state_table");
+                    "     TABLE: test_agg_state_table, rollup: test_agg_state_table");
         }
         starRocksAssert.dropTable("t1");
         starRocksAssert.dropTable("test_agg_state_table");
@@ -926,7 +926,7 @@ public class AggStateCombinatorTest extends MVTestBase {
                                 Joiner.on(", ").join(stateColumns) + " from t1;";
                         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
                         PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
-                                "     table: t1, rollup: t1");
+                                "     TABLE: t1, rollup: t1");
                     }
                     // test _union
                     {
@@ -938,7 +938,7 @@ public class AggStateCombinatorTest extends MVTestBase {
                                 Joiner.on(", ").join(unionColumns) + " from test_agg_state_table group by k1;";
                         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
                         PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
-                                "     table: test_agg_state_table, rollup: test_agg_state_table");
+                                "     TABLE: test_agg_state_table, rollup: test_agg_state_table");
                     }
 
                     // test _merge
@@ -951,7 +951,7 @@ public class AggStateCombinatorTest extends MVTestBase {
                                 Joiner.on(",").join(mergeColumns) + " from test_agg_state_table group by k1;";
                         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql1);
                         PlanTestBase.assertContains(plan, "  0:OlapScanNode\n" +
-                                "     table: test_agg_state_table, rollup: test_agg_state_table");
+                                "     TABLE: test_agg_state_table, rollup: test_agg_state_table");
                     }
                 });
         starRocksAssert.dropTable("t1");
