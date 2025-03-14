@@ -86,11 +86,7 @@ import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import org.apache.commons.collections.CollectionUtils;
-<<<<<<< HEAD
-=======
 import org.apache.commons.lang3.StringUtils;
-import org.apache.logging.log4j.LogManager;
->>>>>>> b1f73712e9 ([BugFix] Enable change analyze_for_mv for each task run by session variable (#55057))
 import org.apache.logging.log4j.Logger;
 import org.apache.parquet.Strings;
 
