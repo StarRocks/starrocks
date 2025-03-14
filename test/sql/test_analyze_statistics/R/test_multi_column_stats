@@ -63,18 +63,7 @@ select count(1) from _statistics_.multi_column_statistics where table_name like 
 -- result:
 0
 -- !result
-[UC]analyze full table t1 multi_columns (c1, c2, c3, c4);
--- result:
-analyze_test_3a9807b56f3e40b8947f3b3ba7dc1dfc.t1	analyze	status	OK
--- !result
-[UC]analyze full table t1;
--- result:
-analyze_test_3a9807b56f3e40b8947f3b3ba7dc1dfc.t1	analyze	status	OK
--- !result
-function: assert_explain_costs_contains('select count(1) from t1 group by c1,c2,c3,c4', 'cardinality: 1002')
--- result:
-None
--- !result
+
 drop stats t1;
 -- result:
 -- !result

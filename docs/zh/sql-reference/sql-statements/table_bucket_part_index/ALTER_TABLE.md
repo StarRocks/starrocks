@@ -734,7 +734,7 @@ DROP INDEX index_name;
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-SET ("key" = "value",...)
+SET ("key" = "value")
 ```
 
 参数说明：
@@ -753,7 +753,13 @@ SET ("key" = "value",...)
   - `bucket_size`（自 3.2 版本支持）
   - `base_compaction_forbidden_time_ranges`（自 v3.2.13 版本支持）
 
-注意：修改表的属性也可以合并到 schema change <!--这个 schema change 除了column相关的alter table还包括啥--> 操作中来修改，见[示例](#示例)部分。
+
+:::note
+
+- 大多数情况下，一次只能修改一个属性。只有当多个属性的前缀相同时，才能同时修改多个属性。目前仅支持 `dynamic_partition.` 和 `binlog.`。
+- 修改表的属性也可以合并到 schema change 操作中来修改，见[示例](#示例)部分。
+
+:::
 
 ### Swap 将两个表原子替换
 
