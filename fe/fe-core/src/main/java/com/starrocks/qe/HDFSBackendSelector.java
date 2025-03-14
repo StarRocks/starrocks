@@ -396,7 +396,7 @@ public class HDFSBackendSelector implements BackendSelector {
         if (candidateWorker != null) {
             LOG.debug("[Gavin] record scan range with target node: {}, candidate node: {}:{}", worker.getHost(),
                     candidateWorker.getHost(), candidateWorker.getBeRpcPort());
-            scanRangeLocations.scan_range.hdfs_scan_range.setCandidate_node(
+            scanRangeParams.scan_range.hdfs_scan_range.setCandidate_node(
                     String.format("%s:%d", candidateWorker.getHost(), candidateWorker.getBrpcPort()));
         } else {
             LOG.error("record scan range with empty candidate");

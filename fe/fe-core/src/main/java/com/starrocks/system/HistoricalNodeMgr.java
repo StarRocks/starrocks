@@ -34,14 +34,11 @@ import java.util.stream.Collectors;
 
 public class HistoricalNodeMgr {
     private static final Logger LOG = LogManager.getLogger(HistoricalNodeMgr.class);
-    // TODO: Repace it with a session variable.
-    // 1min
     private ConcurrentHashMap<String, HistoricalNodeSet> whToComputeNodeIds;
-    //public static long kMinUpdateInterval = 60 * 1000;
+
     public HistoricalNodeMgr() {
         whToComputeNodeIds = new ConcurrentHashMap<>();
     }
-
 
     public void updateHistoricalBackendIds(List<Long> backendIds, long currentTime, String warehouse) {
         HistoricalNodeSet nodeSet = whToComputeNodeIds.computeIfAbsent(warehouse, k -> new HistoricalNodeSet());

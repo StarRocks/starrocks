@@ -373,8 +373,8 @@ TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
         // Record read latencyr to ensure cache latency > remote latency
         // so all blocks read from remote.
         for (size_t i = 0; i < kAdaptorWindowSize; ++i) {
-            cache->record_read_cache(read_size, 1000000000);
-            cache->record_read_remote(read_size, 10);
+            cache->record_read_local_cache(read_size, 1000000000);
+            cache->record_read_remote_storage(read_size, 10, true);
         }
         char buffer[read_size];
         read_stream_data(&cache_stream, 0, read_size, buffer);
@@ -387,8 +387,8 @@ TEST_F(CacheInputStreamTest, test_read_with_adaptor) {
         // Record read latencyr to ensure cache latency < remote latency
         // so all blocks read from cache.
         for (size_t i = 0; i < kAdaptorWindowSize; ++i) {
-            cache->record_read_cache(read_size, 10);
-            cache->record_read_remote(read_size, 1000000000);
+            cache->record_read_local_cache(read_size, 10);
+            cache->record_read_remote_storage(read_size, 1000000000, true);
         }
         char buffer[read_size];
         read_stream_data(&cache_stream, 0, read_size, buffer);
@@ -484,6 +484,43 @@ TEST_F(CacheInputStreamTest, test_peek) {
         auto str_view = res.value();
         ASSERT_EQ(str_view.length(), peek_size);
     }
+}
+
+TEST_F(CacheInputStreamTest, test_try_peer_cache) {
+    CacheOptions options = cache_options();
+    ASSERT_OK(BlockCache::instance()->init(options));
+
+    const int64_t block_count = 3;
+
+    int64_t data_size = block_size * block_count;
+    char data[data_size + 1];
+    gen_test_data(data, data_size, block_size);
+
+    const std::string file_name = "test_try_peer_cache";
+    std::shared_ptr<io::SeekableInputStream> stream(new MockSeekableInputStream(data, data_size));
+    std::shared_ptr<io::SharedBufferedInputStream> sb_stream(
+            new io::SharedBufferedInputStream(stream, file_name, data_size));
+    io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
+    cache_stream.set_enable_populate_cache(true);
+    cache_stream.set_
+    auto& stats = cache_stream.stats();
+
+    // first read from backend
+    for (int i = 0; i < block_count; ++i) {
+        char buffer[block_size];
+        read_stream_data(&cache_stream, i * block_size, block_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
+    }
+    ASSERT_EQ(stats.read_cache_count, 0);
+    ASSERT_EQ(stats.write_cache_count, block_count);
+
+    // first read from cache
+    for (int i = 0; i < block_count; ++i) {
+        char buffer[block_size];
+        read_stream_data(&cache_stream, i * block_size, block_size, buffer);
+        ASSERT_TRUE(check_data_content(buffer, block_size, 'a' + i));
+    }
+    ASSERT_EQ(stats.read_cache_count, block_count);
 }
 
 } // namespace starrocks::io
