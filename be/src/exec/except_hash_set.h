@@ -84,7 +84,11 @@ public:
     Status erase_duplicate_row(RuntimeState* state, const ChunkPtr& chunk, const std::vector<ExprContext*>& exprs,
                                BufferState* buffer_state);
 
+<<<<<<< HEAD
     void deserialize_to_columns(KeyVector& keys, const Columns& key_columns, size_t chunk_size);
+=======
+    Status deserialize_to_columns(KeyVector& keys, Columns& key_columns, size_t chunk_size);
+>>>>>>> f44ae3e90b ([BugFix] fix ObjectColumn::max_one_element_serialize_size (#56911))
 
     int64_t mem_usage(BufferState* buffer_state);
 
