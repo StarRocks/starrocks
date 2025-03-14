@@ -573,7 +573,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         if (Config.enable_materialized_view_spill &&
                 !mvSessionVariable.isEnableSpill() &&
                 !mvProperty.getProperties().containsKey(MV_SESSION_ENABLE_SPILL)) {
-            mvSessionVariable.setEnableSpill(Config.enable_mv_refresh_collect_profile);
+            mvSessionVariable.setEnableSpill(true);
         }
 
         if (!mvProperty.getProperties().containsKey(MV_SESSION_INSERT_TIMEOUT)
@@ -588,7 +588,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         // enable profile by default for mv refresh task
         if (!isMVPropertyContains(SessionVariable.ENABLE_PROFILE)) {
-            mvSessionVariable.setEnableProfile(true);
+            mvSessionVariable.setEnableProfile(Config.enable_mv_refresh_collect_profile);
         }
         // set the default new_planner_optimize_timeout for mv refresh
         if (!isMVPropertyContains(SessionVariable.NEW_PLANNER_OPTIMIZER_TIMEOUT)) {
