@@ -16,7 +16,5 @@ scan:
     - "**/kudu-client-1.17.1.jar"
     # paimon required
     - "**/paimon-bundle-1.0.1.jar"
-    # spark core requred
-    - "**/spark-core_2.12-3.4.4.jar"
     # aws sdk bundle
     - "**/bundle-2.29.52.jar"
