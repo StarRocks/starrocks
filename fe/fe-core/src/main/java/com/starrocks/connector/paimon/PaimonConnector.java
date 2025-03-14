@@ -36,6 +36,7 @@ import org.apache.paimon.catalog.CachingCatalog;
 import org.apache.paimon.catalog.Catalog;
 import org.apache.paimon.catalog.CatalogContext;
 import org.apache.paimon.catalog.CatalogFactory;
+import org.apache.paimon.fs.hadoop.HadoopFileIOLoader;
 import org.apache.paimon.options.Options;
 
 import java.util.Map;
@@ -203,7 +204,13 @@ public class PaimonConnector implements Connector {
             }
             Configuration configuration = new Configuration();
             hdfsEnvironment.getCloudConfiguration().applyToConfiguration(configuration);
-            this.paimonNativeCatalog = CatalogFactory.createCatalog(CatalogContext.create(getPaimonOptions(), configuration));
+            if (!catalogType.equalsIgnoreCase("dlf-paimon") && getPaimonOptions().get(WAREHOUSE.key()).startsWith("dls")) {
+                this.paimonNativeCatalog = CatalogFactory.createCatalog(CatalogContext.create(getPaimonOptions(),
+                        configuration, new HadoopFileIOLoader(), new HadoopFileIOLoader()));
+            } else {
+                this.paimonNativeCatalog = CatalogFactory.createCatalog(
+                        CatalogContext.create(getPaimonOptions(), configuration));
+            }
             if (this.paimonNativeCatalog instanceof CachingCatalog) {
                 GlobalStateMgr.getCurrentState().getConnectorTableMetadataProcessor()
                         .registerPaimonCatalog(catalogName, this.paimonNativeCatalog);
@@ -211,9 +218,9 @@ public class PaimonConnector implements Connector {
         } catch (Exception e) {
             if (e instanceof NullPointerException ||
                     (e.getMessage() != null && e.getMessage().contains(DLF_AUTH_USER_NAME))) {
-                throw new StarRocksConnectorException("Current user is not a ram user.");
+                throw new StarRocksConnectorException("Current user is not a ram user.", e);
             }
-            throw new StarRocksConnectorException("Error creating a paimon catalog. " + e.getMessage());
+            throw new StarRocksConnectorException("Error creating a paimon catalog.", e);
         }
         return paimonNativeCatalog;
     }
