@@ -344,7 +344,8 @@ public class FunctionAnalyzer {
                 || fnName.getFunction().equals(FunctionSet.MAX)
                 || fnName.getFunction().equals(FunctionSet.NDV)
                 || fnName.getFunction().equals(FunctionSet.APPROX_COUNT_DISTINCT)
-                || fnName.getFunction().equals(FunctionSet.DS_HLL_COUNT_DISTINCT))
+                || fnName.getFunction().equals(FunctionSet.DS_HLL_COUNT_DISTINCT)
+                || fnName.getFunction().equals(FunctionSet.DS_FREQUENT))
                 && !arg.getType().canApplyToNumeric()) {
             throw new SemanticException(Type.NOT_SUPPORT_AGG_ERROR_MSG);
         }
@@ -563,12 +564,53 @@ public class FunctionAnalyzer {
             // check the second parameter: tgt_type
             if (argSize == 3) {
                 if (!(functionCallExpr.getChild(2) instanceof StringLiteral)) {
-                    throw new SemanticException(fnName + " 's second parameter's data type is wrong ");
+                    throw new SemanticException(fnName + " 's third parameter's data type is wrong ");
                 }
                 String tgtType = ((LiteralExpr) functionCallExpr.getChild(2)).getStringValue();
                 if (!SUPPORTED_TGT_TYPES.contains(tgtType)) {
                     throw new SemanticException(
                             fnName + " third  parameter'value should be in HLL_4/HLL_6/HLL_8");
+                }
+            }
+        }
+        
+        // ds_frequent
+        if (fnName.getFunction().equals(FunctionSet.DS_FREQUENT)) {
+            int argSize = functionCallExpr.getChildren().size();
+            if (argSize > 4) {
+                throw new SemanticException(fnName + " requires one/two/three/four parameters: ds_frequent(" +
+                        "col, counter_num, lg_max_map_size, lg_start_map_size)");
+            }
+            if (argSize >= 2) {
+                if (!(functionCallExpr.getChild(1) instanceof IntLiteral)) {
+                    throw new SemanticException(fnName + " 's second parameter's data type is wrong.");
+                }
+                long counterNum = ((LiteralExpr) functionCallExpr.getChild(1)).getLongValue();
+                if (counterNum < 1) {
+                    throw new SemanticException(
+                            fnName + " second parameter'value must be greater than 1.");
+                }
+            }
+
+            if (argSize >= 3) {
+                if (!(functionCallExpr.getChild(2) instanceof IntLiteral)) {
+                    throw new SemanticException(fnName + " 's third parameter's data type is wrong.");
+                }
+                long lgMaxMapSize = ((LiteralExpr) functionCallExpr.getChild(2)).getLongValue();
+                if (lgMaxMapSize < 3 || lgMaxMapSize > 21) {
+                    throw new SemanticException(
+                            fnName + " third parameter'value should be between 3 and 21.");
+                }
+            }
+
+            if (argSize == 4) {
+                if (!(functionCallExpr.getChild(3) instanceof IntLiteral)) {
+                    throw new SemanticException(fnName + " 's third parameter's data type is wrong.");
+                }
+                long lgStartMapSize = ((LiteralExpr) functionCallExpr.getChild(3)).getLongValue();
+                if (lgStartMapSize < 3 || lgStartMapSize > 21) {
+                    throw new SemanticException(
+                            fnName + " fourth parameter'value should be between 3 and 21.");
                 }
             }
         }
