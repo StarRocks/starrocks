@@ -243,6 +243,10 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         return result;
     }
 
+    public List<ColumnIdExpr> getPartitionColumnIdExprs() {
+        return partitionExprs;
+    }
+
     public int getPartitionExprsSize() {
         return partitionExprs.size();
     }
