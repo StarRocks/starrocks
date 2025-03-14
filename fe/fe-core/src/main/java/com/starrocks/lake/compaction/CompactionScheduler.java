@@ -98,16 +98,17 @@ public class CompactionScheduler extends Daemon {
 
     @Override
     protected void runOneCycle() {
-        cleanPhysicalPartition();
+        List<PartitionIdentifier> deletedPartitionIdentifiers = cleanPhysicalPartition();
 
         // Schedule compaction tasks only when this is a leader FE and all edit logs have finished replay.
         if (stateMgr.isLeader() && stateMgr.isReady()) {
-            schedule();
+            abortStaleCompaction(deletedPartitionIdentifiers);
+            scheduleNewCompaction();
             history.changeMaxSize(Config.lake_compaction_history_size);
         }
     }
 
-    private void schedule() {
+    private void scheduleNewCompaction() {
         // Check whether there are completed compaction jobs.
         for (Iterator<Map.Entry<PartitionIdentifier, CompactionJob>> iterator = runningCompactions.entrySet().iterator();
                 iterator.hasNext(); ) {
@@ -203,6 +204,19 @@ public class CompactionScheduler extends Daemon {
         }
     }
 
+    private void abortStaleCompaction(List<PartitionIdentifier> deletedCompactionIdentifiers) {
+        if (deletedCompactionIdentifiers == null || deletedCompactionIdentifiers.isEmpty()) {
+            return;
+        }
+
+        for (PartitionIdentifier partitionIdentifier : deletedCompactionIdentifiers) {
+            CompactionJob job = runningCompactions.get(partitionIdentifier);
+            if (job != null) {
+                job.abort();
+            }
+        }
+    }
+
     private void abortTransactionIgnoreException(CompactionJob job, String reason) {
         try {
             List<TabletCommitInfo> finishedTablets = job.buildTabletCommitInfo();
@@ -224,16 +238,22 @@ public class CompactionScheduler extends Daemon {
         return aliveComputeNodes.size() * 16;
     }
 
-    private void cleanPhysicalPartition() {
+    // return deleted partition
+    private List<PartitionIdentifier> cleanPhysicalPartition() {
         long now = System.currentTimeMillis();
         if (now - lastPartitionCleanTime >= PARTITION_CLEAN_INTERVAL_SECOND * 1000L) {
-            compactionManager.getAllPartitions()
+            List<PartitionIdentifier> deletedPartitionIdentifiers = compactionManager.getAllPartitions()
                     .stream()
                     .filter(p -> !MetaUtils.isPhysicalPartitionExist(stateMgr, p.getDbId(), p.getTableId(), p.getPartitionId()))
-                    .filter(p -> !runningCompactions.containsKey(p)) // Ignore those partitions in runningCompactions
-                    .forEach(compactionManager::removePartition);
+                    .collect(Collectors.toList());
+
+            // ignore those partitions in runningCompactions
+            deletedPartitionIdentifiers
+                    .filter(p -> !runningCompactions.containsKey(p)).forEach(compactionManager::removePartition);
             lastPartitionCleanTime = now;
+            return deletedPartitionIdentifiers;
         }
+        return null;
     }
 
     private CompactionJob startCompaction(PartitionStatisticsSnapshot partitionStatisticsSnapshot) {
