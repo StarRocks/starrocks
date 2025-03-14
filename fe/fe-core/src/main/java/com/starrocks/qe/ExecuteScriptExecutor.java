@@ -69,6 +69,7 @@ public class ExecuteScriptExecutor {
             binding.setVariable("LOG", LOG);
             binding.setVariable("out", sb);
             binding.setVariable("globalState", GlobalStateMgr.getCurrentState());
+            binding.setVariable("metastore", GlobalStateMgr.getCurrentState().getLocalMetastore());
             GroovyShell shell = new GroovyShell(binding);
             shell.evaluate(stmt.getScript());
             ctx.getState().setOk();
