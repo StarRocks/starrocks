@@ -161,7 +161,6 @@ BUILD_FE=
 BUILD_SPARK_DPP=
 BUILD_HIVE_UDF=
 CLEAN=
-RUN_UT=
 WITH_GCOV=OFF
 WITH_BENCH=OFF
 WITH_CLANG_TIDY=OFF
@@ -244,7 +243,6 @@ if [ $# == 1 ] ; then
     BUILD_HIVE_UDF=1
     BUILD_FORMAT_LIB=0
     CLEAN=0
-    RUN_UT=0
 elif [[ $OPTS =~ "-j " ]] && [ $# == 3 ]; then
     # default. `sh build.sh -j 32`
     BUILD_BE=1
@@ -253,7 +251,6 @@ elif [[ $OPTS =~ "-j " ]] && [ $# == 3 ]; then
     BUILD_HIVE_UDF=1
     BUILD_FORMAT_LIB=0
     CLEAN=0
-    RUN_UT=0
     PARALLEL=$2
 else
     BUILD_BE=0
@@ -262,7 +259,6 @@ else
     BUILD_SPARK_DPP=0
     BUILD_HIVE_UDF=0
     CLEAN=0
-    RUN_UT=0
     while true; do
         case "$1" in
             --be) BUILD_BE=1 ; shift ;;
@@ -271,7 +267,6 @@ else
             --spark-dpp) BUILD_SPARK_DPP=1 ; shift ;;
             --hive-udf) BUILD_HIVE_UDF=1 ; shift ;;
             --clean) CLEAN=1 ; shift ;;
-            --ut) RUN_UT=1   ; shift ;;
             --with-gcov) WITH_GCOV=ON; shift ;;
             --without-gcov) WITH_GCOV=OFF; shift ;;
             --enable-shared-data|--use-staros) USE_STAROS=ON; shift ;;
@@ -321,7 +316,6 @@ echo "Get params:
     BUILD_HIVE_UDF              -- $BUILD_HIVE_UDF
     CCACHE                      -- ${CCACHE}
     CLEAN                       -- $CLEAN
-    RUN_UT                      -- $RUN_UT
     WITH_GCOV                   -- $WITH_GCOV
     WITH_BENCH                  -- $WITH_BENCH
     WITH_CLANG_TIDY             -- $WITH_CLANG_TIDY
