@@ -335,6 +335,10 @@ public class Log4jConfig extends XmlConfiguration {
     }
 
     private static void reconfig() throws IOException {
+        // config java util logging
+        java.util.logging.LogManager.getLogManager().reset();
+        org.slf4j.bridge.SLF4JBridgeHandler.install();
+
         String xmlConfTemplate = generateActiveLog4jXmlConfig();
         if (!FeConstants.runningUnitTest && !FeConstants.isReplayFromQueryDump) {
             System.out.println("=====");
