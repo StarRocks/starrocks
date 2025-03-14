@@ -199,7 +199,7 @@ public:
     const TupleDescriptor* tuple_descriptor(RuntimeState* state) const override;
 
     // always enable shared scan for cloud native table
-    bool always_shared_scan() const override { return true; }
+    bool always_shared_scan(TScanRangeParams* scan_range) const override { return true; }
 
     StatusOr<pipeline::MorselQueuePtr> convert_scan_range_to_morsel_queue(
             const std::vector<TScanRangeParams>& scan_ranges, int node_id, int32_t pipeline_dop,

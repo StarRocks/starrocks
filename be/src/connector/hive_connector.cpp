@@ -49,6 +49,11 @@ DataSourcePtr HiveDataSourceProvider::create_data_source(const TScanRange& scan_
     return std::make_unique<HiveDataSource>(this, scan_range);
 }
 
+bool HiveDataSourceProvider::always_shared_scan(TScanRangeParams* scan_range) const {
+    return scan_range && !(scan_range->scan_range.hdfs_scan_range.__isset.use_kudu_jni_reader &&
+                           scan_range->scan_range.hdfs_scan_range.use_kudu_jni_reader);
+}
+
 const TupleDescriptor* HiveDataSourceProvider::tuple_descriptor(RuntimeState* state) const {
     return state->desc_tbl().get_tuple_descriptor(_hdfs_scan_node.tuple_id);
 }
