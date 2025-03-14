@@ -36,7 +36,7 @@ UNKNOWN Operation Type xxx
 
 1. すべての FE ノードを停止します。
 2. すべての FE ノードのメタデータディレクトリ `meta_dir` をバックアップします。
-3. すべての FE ノードの設定ファイル **fe.conf** に設定 `ignore_unknown_log_id = true` を追加します。
+3. すべての FE ノードの設定ファイル **fe.conf** に設定 `metadata_ignore_unknown_operation_type = true` を追加します。
 4. すべての FE ノードを起動し、データとメタデータが完全であるか確認します。
 5. データとメタデータが完全である場合、次のステートメントを実行してメタデータのイメージファイルを作成します。
 
@@ -111,7 +111,7 @@ Caused by: com.sleepycat.je.rep.ReplicaWriteException: (JE 18.3.16) Problem clos
         at com.sleepycat.je.rep.impl.node.Replica$ReplayThread.run(Replica.java:1225) ~[starrocks-bdb-je-18.3.16.jar:?]
 ```
 
-この問題は、失敗した FE ノードの BDBJE バージョン (v18.3.16) が Leader FE ノードのバージョン (v7.3.7) と一致しない場合に発生します。
+この問題は、失敗した FE ノードの BDBJE バージョン (v18.3.*) が Leader FE ノードのバージョン (v7.3.7) と一致しない場合に発生します。
 
 次の手順に従ってこの問題を修正できます。
 
@@ -147,18 +147,6 @@ Caused by: com.sleepycat.je.rep.ReplicaWriteException: (JE 18.3.16) Problem clos
    ```
 
 5. 失敗したノードが正常な状態に回復した後、クラスター内の BDBJE パッケージを **starrocks-bdb-je-18.3.16.jar** にアップグレードする必要があります (または StarRocks クラスターを v3.0 以降にアップグレードします)。この際、まず Follower を、次に Leader をアップグレードします。
-
-##### InsufficientReplicasException
-
-次のエラーメッセージに基づいてこの問題を特定できます。
-
-```Plain
-com.sleepycat.je.rep.InsufficientReplicasException: (JE 7.3.7) Commit policy: SIMPLE_MAJORITY required 1 replica. But none were active with this master.
-```
-
-この問題は、Leader ノードまたは Follower ノードが過剰なメモリリソースを使用し、Full GC が発生する場合に発生します。
-
-この問題を解決するには、JVM ヒープサイズを増やすか、G1 GC アルゴリズムを使用することができます。
 
 ##### InsufficientLogException
 
@@ -204,27 +192,6 @@ Caused by: com.sleepycat.je.EnvironmentFailureException: Environment invalid bec
 この問題は、元の Leader ノードがハングし、再びアクティブになるときに、存続している Follower ノードが新しい Leader ノードを選出しようとしている場合に発生します。Follower ノードは元の Leader ノードと新しい接続を確立しようとします。しかし、Leader ノードは古い接続がまだ存在するため、接続要求を拒否します。要求が拒否されると、Follower ノードは環境を無効として設定し、この例外をスローします。
 
 この問題を解決するには、JVM ヒープサイズを増やすか、G1 GC アルゴリズムを使用することができます。
-
-##### Latch timeout. com.sleepycat.je.log.LogbufferPool_FullLatch
-
-次のエラーメッセージに基づいてこの問題を特定できます。
-
-```Plain
-Environment invalid because of previous exception: xxx Latch timeout. com.sleepycat.je.log.LogbufferPool_FullLatch xxx'
-        at com.sleepycat.je.EnvironmentFailureException.unexpectedState(EnvironmentFailureException.java:459)
-        at com.sleepycat.je.latch.LatchSupport.handleTimeout(LatchSupport.java:211)
-        at com.sleepycat.je.latch.LatchWithStatsImpl.acquireExclusive(LatchWithStatsImpl.java:87)
-        at com.sleepycat.je.log.LogBufferPool.bumpCurrent(LogBufferPool.java:527)
-        at com.sleepycat.je.log.LogManager.flushInternal(LogManager.java:1373)
-        at com.sleepycat.je.log.LogManager.flushNoSync(LogManager.java:1337)
-        at com.sleepycat.je.log.LogFlusher$FlushTask.run(LogFlusher.java:232)
-        at java.util.TimerThread.mainLoop(Timer.java:555)
-        at java.util.TimerThread.run(Timer.java:505)
-```
-
-この問題は、FE ノードのローカルディスクに過剰な負荷がかかっている場合に発生します。
-
-この問題を解決するには、FE メタデータ用に専用のディスクを割り当てるか、高性能なディスクに交換することができます。
 
 ##### DatabaseNotFoundException
 
@@ -281,6 +248,32 @@ catch exception when replaying
 :::
 
 次の手順に従ってこの問題を修正できます。
+
+##### エラージャーナル ID を無視する（推奨）
+
+1. すべての FE ノードを停止します。
+2. すべての FE ノードのメタデータディレクトリ `meta_dir` をバックアップします。
+3. ログから誤ったジャーナル ID を見つけます。以下のログの `xxx` は、誤ったジャーナル ID を表します。
+
+   ```Plain
+   got interrupt exception or inconsistent exception when replay journal xxx, will exit
+   ```
+
+4. すべての **fe.conf** ファイルに以下の設定を追加し、FE ノードを起動します。
+
+   ```Plain
+   metadata_journal_skip_bad_journal_ids=xxx
+   ```
+
+5. それでも起動しない場合は、ステップ 3 で新しい失敗したジャーナル ID を特定し、**fe.conf** に追加してから、以前の設定を変更せずにノードを再起動します。
+
+   ```Plain
+   metadata_journal_skip_bad_journal_ids=xxx,yyy
+   ```
+
+6. 上記の手順を実行してもシステムが起動しない場合、または失敗したジャーナル ID が多すぎる場合は、リカバリモードに進みます。
+
+##### リカバリモード
 
 1. すべての FE ノードを停止します。
 2. すべての FE ノードのメタデータディレクトリ `meta_dir` をバックアップします。
@@ -343,7 +336,7 @@ Follower ノードの過半数が稼働していない場合、FE グループ�
   2024-01-24 08:21:44.754 UTC INFO [172.26.92.139_29917_1698226672727] Current group size: 3
   ```
 
-この問題を解決するには、クラスター内のすべての Follower ノードを起動する必要があります。再起動できない場合は、[最後の手段](#7-measure-of-the-last-resort) を参照してください。
+この問題を解決するには、クラスター内のすべての Follower ノードを起動する必要があります。再起動できない場合は、[最後の手段](#10-最後の手段) を参照してください。
 
 ### 2. ノードの IP が変更された
 
@@ -435,7 +428,74 @@ jstat -gcutil pid 1000 1000
 
 この問題を解決するには、JVM ヒープサイズを増やす必要があります。
 
-### 7. 最後の手段
+### 7. Latch timeout. com.sleepycat.je.log.LogbufferPool_FullLatch
+
+次のエラーメッセージに基づいてこの問題を特定できます。
+
+```Plain
+Environment invalid because of previous exception: xxx Latch timeout. com.sleepycat.je.log.LogbufferPool_FullLatch xxx'
+        at com.sleepycat.je.EnvironmentFailureException.unexpectedState(EnvironmentFailureException.java:459)
+        at com.sleepycat.je.latch.LatchSupport.handleTimeout(LatchSupport.java:211)
+        at com.sleepycat.je.latch.LatchWithStatsImpl.acquireExclusive(LatchWithStatsImpl.java:87)
+        at com.sleepycat.je.log.LogBufferPool.bumpCurrent(LogBufferPool.java:527)
+        at com.sleepycat.je.log.LogManager.flushInternal(LogManager.java:1373)
+        at com.sleepycat.je.log.LogManager.flushNoSync(LogManager.java:1337)
+        at com.sleepycat.je.log.LogFlusher$FlushTask.run(LogFlusher.java:232)
+        at java.util.TimerThread.mainLoop(Timer.java:555)
+        at java.util.TimerThread.run(Timer.java:505)
+```
+
+この問題は、FE ノードのローカルディスクに過剰な負荷がかかっている場合に発生します。
+
+この問題を解決するには、FE メタデータ用に専用のディスクを割り当てるか、高性能なディスクに交換することができます。
+
+### 8. InsufficientReplicasException
+
+次のエラーメッセージに基づいてこの問題を特定できます。
+
+```Plain
+com.sleepycat.je.rep.InsufficientReplicasException: (JE 7.3.7) Commit policy: SIMPLE_MAJORITY required 1 replica. But none were active with this master.
+```
+
+この問題は、Leader ノードまたは Follower ノードが過剰なメモリリソースを使用し、Full GC が発生する場合に発生します。
+
+この問題を解決するには、JVM ヒープサイズを増やすか、G1 GC アルゴリズムを使用することができます。
+
+### 9. UnknownMasterException
+
+次のエラーメッセージに基づいてこの問題を特定できます。
+
+```Plain
+com.sleepycat.je.rep.UnknownMasterException: (JE 18.3.16) Could not determine master from helpers at:[/xxx.xxx.xxx.xxx:9010, /xxx.xxx.xxx.xxx:9010]
+        at com.sleepycat.je.rep.elections.Learner.findMaster(Learner.java:443) ~[starrocks-bdb-je-18.3.16.jar:?]
+        at com.sleepycat.je.rep.util.ReplicationGroupAdmin.getMasterSocket(ReplicationGroupAdmin.java:186) ~[starrocks-bdb-je-18.3.16.jar:?]
+        at com.sleepycat.je.rep.util.ReplicationGroupAdmin.doMessageExchange(ReplicationGroupAdmin.java:607) ~[starrocks-bdb-je-18.3.16.jar:?]
+        at com.sleepycat.je.rep.util.ReplicationGroupAdmin.getGroup(ReplicationGroupAdmin.java:406) ~[starrocks-bdb-je-18.3.16.jar:?]
+        at com.starrocks.ha.BDBHA.getElectableNodes(BDBHA.java:178) ~[starrocks-fe.jar:?]
+        at com.starrocks.common.proc.FrontendsProcNode.getFrontendsInfo(FrontendsProcNode.java:96) ~[starrocks-fe.jar:?]
+        at com.starrocks.common.proc.FrontendsProcNode.fetchResult(FrontendsProcNode.java:80) ~[starrocks-fe.jar:?]
+        at com.starrocks.sql.ast.ShowProcStmt.getMetaData(ShowProcStmt.java:74) ~[starrocks-fe.jar:?]
+        at com.starrocks.qe.ShowExecutor.handleShowProc(ShowExecutor.java:872) ~[starrocks-fe.jar:?]
+        at com.starrocks.qe.ShowExecutor.execute(ShowExecutor.java:286) ~[starrocks-fe.jar:?]
+        at com.starrocks.qe.StmtExecutor.handleShow(StmtExecutor.java:1574) ~[starrocks-fe.jar:?]
+        at com.starrocks.qe.StmtExecutor.execute(StmtExecutor.java:688) ~[starrocks-fe.jar:?]
+        at com.starrocks.qe.ConnectProcessor.handleQuery(ConnectProcessor.java:336) ~[starrocks-fe.jar:?]
+        at com.starrocks.qe.ConnectProcessor.dispatch(ConnectProcessor.java:530) ~[starrocks-fe.jar:?]
+        at com.starrocks.qe.ConnectProcessor.processOnce(ConnectProcessor.java:838) ~[starrocks-fe.jar:?]
+        at com.starrocks.mysql.nio.ReadListener.lambda$handleEvent$0(ReadListener.java:69) ~[starrocks-fe.jar:?]
+        at java.util.concurrent.ThreadPoolExecutor.runWorker(ThreadPoolExecutor.java:1128) ~[?:?]
+        at java.util.concurrent.ThreadPoolExecutor$Worker.run(ThreadPoolExecutor.java:628) ~[?:?]
+        at java.lang.Thread.run(Thread.java:829) ~[?:?]
+```
+
+`SHOW FRONTENDS` を実行する際、リーダー FE ノードが見つからない場合、いくつかの理由が考えられる：
+
+- FE ノードの半分以上がフル GC 中であり、その時間が著しく長い場合。
+- または、ログに `java.lang.OutOfMemoryError: Java heap space` というキーワードが含まれている場合。
+
+これはメモリが不足しているためである。JVM のメモリ割り当てを増やす必要がある。
+
+### 10. 最後の手段
 
 :::warning
 
@@ -455,19 +515,11 @@ jstat -gcutil pid 1000 1000
 2. すべての FE ノードのメタデータディレクトリ `meta_dir` をバックアップします。
 3. **FE ノードをホストするすべてのサーバー** で次のコマンドを実行して、最新のメタデータを持つノードを特定します。
 
-   - StarRocks v2.5 以前の場合:
-
-     ```Bash
-     java -jar fe/lib/je-7.3.7.jar DbPrintLog -h meta/bdb/ -vd
-     ```
-
-   - StarRocks v3.0 以降の場合:
-
-     ```Bash
-     # ノードが使用する正確な .jar パッケージをコマンドで指定する必要があります。
-     # パッケージは StarRocks バージョンによって異なります。
-     java -jar fe/lib/starrocks-bdb-je-18.3.16.jar DbPrintLog -h meta/bdb/ -vd
-     ```
+   ```Bash
+   # ノードが使用する正確な .jar パッケージをコマンドで指定する必要があります。
+   # パッケージは StarRocks バージョンによって異なります。
+   java -jar fe/lib/starrocks-bdb-je-18.3.16.jar DbPrintLog -h meta/bdb/ -vd
+   ```
 
    例の出力:
 

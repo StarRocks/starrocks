@@ -78,7 +78,7 @@ MySQL [example_db]> SHOW CREATE TABLE t\G
 Execute `ALTER TABLE ADD INDEX` or `DROP INDEX` to delete full-text inverted indexes.
 
 ```SQL
-DROP INDEX index idx on t;
+DROP INDEX idx on t;
 ALTER TABLE t DROP index idx;
 ```
 

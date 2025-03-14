@@ -17,7 +17,6 @@
 
 package com.starrocks.format;
 
-import com.starrocks.format.jni.LibraryHelper;
 import org.apache.arrow.c.ArrowArray;
 import org.apache.arrow.c.ArrowSchema;
 import org.apache.arrow.c.Data;
@@ -27,20 +26,11 @@ import org.apache.arrow.vector.VectorSchemaRoot;
 import org.apache.arrow.vector.types.pojo.Schema;
 
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.Optional;
 
 import static java.util.Objects.requireNonNull;
 
-public class StarRocksWriter implements AutoCloseable {
-
-    private static final LibraryHelper LIB_HELPER = new LibraryHelper();
-
-    /**
-     * The c++ StarRocksFormatWriter pointer
-     */
-    private long nativeWriterPoint = 0L;
-
-    private final AtomicBoolean released = new AtomicBoolean(false);
+public class StarRocksWriter extends DataAccessor {
 
     private final BufferAllocator allocator;
     private final Schema schema;
@@ -49,7 +39,7 @@ public class StarRocksWriter implements AutoCloseable {
                            String tabletRootPath,
                            long txnId,
                            Schema schema,
-                           Map<String, String> config) {
+                           Config config) {
         this.allocator = new RootAllocator();
         this.schema = requireNonNull(schema, "Null schema.");
         if (null == schema.getFields() || schema.getFields().isEmpty()) {
@@ -59,61 +49,52 @@ public class StarRocksWriter implements AutoCloseable {
         ArrowSchema arrowSchema = ArrowSchema.allocateNew(allocator);
         Data.exportSchema(allocator, schema, null, arrowSchema);
 
-        this.nativeWriterPoint = createNativeWriter(
+        this.nativePointer = createNativeWriter(
                 tabletId,
                 txnId,
                 arrowSchema.memoryAddress(),
                 requireNonNull(tabletRootPath, "Null tablet root path."),
-                requireNonNull(config, "Null config."));
+                requireNonNull(config, "Null config.").toMap()
+        );
+
+        Optional.ofNullable(config.getUnreleasedWarningThreshold())
+                .ifPresent(this::checkUnreleasedInstances);
     }
 
     public void open() {
-        checkAndDo(() -> nativeOpen(nativeWriterPoint));
+        checkAndDo(() -> nativeOpen(nativePointer));
     }
 
-    public long write(VectorSchemaRoot root) {
-        return checkAndDo(() -> {
+    public void write(VectorSchemaRoot root) {
+        checkAndDo(() -> {
             try (ArrowArray array = ArrowArray.allocateNew(allocator)) {
                 Data.exportVectorSchemaRoot(allocator, root, null, array);
-                return nativeWrite(nativeWriterPoint, array.memoryAddress());
+                nativeWrite(nativePointer, array.memoryAddress());
             }
         });
     }
 
-    public long flush() {
-        return checkAndDo(() -> nativeFlush(nativeWriterPoint));
+    public void flush() {
+        checkAndDo(() -> nativeFlush(nativePointer));
     }
 
-    public long finish() {
-        return checkAndDo(() -> nativeFinish(nativeWriterPoint));
+    public void finish() {
+        checkAndDo(() -> nativeFinish(nativePointer));
     }
 
     @Override
     public void close() throws Exception {
-        checkAndDo(() -> nativeClose(nativeWriterPoint));
+        checkAndDo(() -> nativeClose(nativePointer));
+        this.release();
     }
 
-    public void release() {
-        if (released.compareAndSet(false, true)) {
-            LIB_HELPER.releaseWriter(nativeWriterPoint);
-            nativeWriterPoint = 0L;
-        }
+    @Override
+    protected void doRelease(long nativePointer) {
+        nativeRelease(nativePointer);
     }
 
     public BufferAllocator getAllocator() {
         return allocator;
-    }
-
-    private <T, E extends Exception> T checkAndDo(ThrowingSupplier<T, E> supplier) throws E {
-        if (0 == nativeWriterPoint) {
-            throw new IllegalStateException("Native writer may not be created correctly.");
-        }
-
-        if (released.get()) {
-            throw new IllegalStateException("Native writer is released.");
-        }
-
-        return supplier.get();
     }
 
     /* native methods */
@@ -124,14 +105,16 @@ public class StarRocksWriter implements AutoCloseable {
                                           String tableRootPath,
                                           Map<String, String> options);
 
-    public native long nativeOpen(long nativeWriter);
+    public native void nativeOpen(long nativePointer);
 
-    public native long nativeWrite(long nativeWriter, long arrowArray);
+    public native void nativeWrite(long nativePointer, long arrowArray);
 
-    public native long nativeFlush(long nativeWriter);
+    public native void nativeFlush(long nativePointer);
 
-    public native long nativeFinish(long nativeWriter);
+    public native void nativeFinish(long nativePointer);
 
-    public native long nativeClose(long nativeWriter);
+    public native void nativeClose(long nativePointer);
+
+    public native void nativeRelease(long nativePointer);
 
 }

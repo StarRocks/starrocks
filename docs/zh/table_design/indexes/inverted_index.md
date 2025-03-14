@@ -96,7 +96,7 @@ PROPERTIES (
 执行 `ALTER TABLE ADD INDEX`或者 `DROP INDEX` 删除全文倒排索引。
 
 ```SQL
-DROP INDEX index idx on t;
+DROP INDEX idx on t;
 ALTER TABLE t DROP index idx;
 ```
 

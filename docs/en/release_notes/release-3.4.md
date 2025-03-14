@@ -4,6 +4,32 @@ displayed_sidebar: docs
 
 # StarRocks version 3.4
 
+## 3.4.1
+
+Release Date: March 12, 2025
+
+### New Features and Enhancements
+
+- Data lake analytics supports Deletion Vector in Delta Lake.
+- Supports secure views. By creating a secure view, you can prevent users without the SELECT privilege on the referenced base tables from querying the view (even if they have the SELECT privilege on the view).
+- Supports for Sketch HLL ([`ds_hll_count_distinct`](https://docs.starrocks.io/docs/sql-reference/sql-functions/aggregate-functions/ds_hll_count_distinct/)). Compared to `approx_count_distinct`, this function provides higher-precision approximate deduplication.
+- Shared-data clusters support automatic snapshot creation for cluster recovery.
+- Storage Volume in the shared-data clusters supports Azure Data Lake Storage Gen2.
+- Supports SSL authentication for connections to StarRocks via the MySQL protocol, ensuring that data transmitted between the client and the StarRocks cluster cannot be read by unauthorized users.
+
+### Bug Fixes
+
+The following issues have been fixed:
+
+- An issue where OLAP views affected the materialized view processing logic. [#52989](https://github.com/StarRocks/starrocks/pull/52989)
+- Write transactions would fail if one replica was not found, regardless of how many replicas had successfully committed. (After the fix, the transaction succeeds as long as the majority replicas succeed. [#55212](https://github.com/StarRocks/starrocks/pull/55212)
+- Stream Load fails when a node with an Alive status of false was scheduled. [#55371](https://github.com/StarRocks/starrocks/pull/55371)
+- Files in cluster snapshots were mistakenly deleted. [#56338](https://github.com/StarRocks/starrocks/pull/56338)
+
+### Behavior Changes
+
+- Graceful shutdown is now enabled by default (previously it was disabled). The default value of the related BE/CN parameter `loop_count_wait_fragments_finish` has been changed to `2`, meaning that the system will wait up to 20 seconds for running queries to complete. [#56002](https://github.com/StarRocks/starrocks/pull/56002)
+
 ## 3.4.0
 
 Release date: January 24, 2025

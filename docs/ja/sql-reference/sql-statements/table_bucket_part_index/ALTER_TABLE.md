@@ -710,7 +710,7 @@ DROP INDEX index_name;
 
 ```sql
 ALTER TABLE [<db_name>.]<tbl_name>
-SET ("key" = "value",...)
+SET ("key" = "value")
 ```
 
 現在、StarRocksは次のテーブルプロパティの変更をサポートしています:
@@ -726,8 +726,12 @@ SET ("key" = "value",...)
 - `bucket_size` (v3.2以降でサポート)
 - `base_compaction_forbidden_time_ranges` (v3.2.13以降でサポート)
 
-注意:
-上記の操作にマージすることでプロパティを変更することもできます。詳細は[以下の例](#examples)を参照してください。
+:::note
+
+- ほとんどの場合、一度に変更できるプロパティは 1 つだけです。一度に複数のプロパティを変更できるのは、これらのプロパティが同じ接頭辞を持つ場合だけです。現在のところ、`dynamic_partition.` と `binlog.` だけがサポートされている。
+- 上記の操作にマージすることでプロパティを変更することもできます。詳細は[以下の例](#examples)を参照してください。
+
+:::
 
 ### スワップ
 

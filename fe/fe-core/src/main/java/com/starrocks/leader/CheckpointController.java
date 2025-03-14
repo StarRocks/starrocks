@@ -251,6 +251,7 @@ public class CheckpointController extends FrontendDaemon {
 
         if (belongToGlobalStateMgr) {
             downloadImage(ImageFormatVersion.v2, imageDir + "/v2");
+            GlobalStateMgr.getCurrentState().setImageJournalId(journalId);
         }
     }
 
@@ -269,11 +270,7 @@ public class CheckpointController extends FrontendDaemon {
         MetaHelper.downloadImageFile(url, MetaService.DOWNLOAD_TIMEOUT_SECOND * 1000, String.valueOf(journalId), dir);
 
         // clean the old images
-        String dirToClean = imageDir;
-        if (imageFormatVersion == ImageFormatVersion.v2) {
-            dirToClean = imageDir + "/v2";
-        }
-        MetaCleaner cleaner = new MetaCleaner(dirToClean);
+        MetaCleaner cleaner = new MetaCleaner(imageDir);
         cleaner.clean();
     }
 
