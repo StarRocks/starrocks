@@ -122,6 +122,10 @@ struct MatchInfoChain {
     std::vector<MatchInfo> info_chain;
 };
 
+struct LowerUpperState {
+    std::function<StatusOr<ColumnPtr>(const ColumnPtr&)> impl_func;
+};
+
 class StringFunctions {
 public:
     /**
@@ -230,6 +234,8 @@ public:
      * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(lower);
+    static Status lower_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status lower_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [string_value]
@@ -237,6 +243,8 @@ public:
      * @return: BinaryColumn
      */
     DEFINE_VECTORIZED_FN(upper);
+    static Status upper_prepare(FunctionContext* context, FunctionContext::FunctionStateScope scope);
+    static Status upper_close(FunctionContext* context, FunctionContext::FunctionStateScope scope);
 
     /**
      * @param: [string_value]
