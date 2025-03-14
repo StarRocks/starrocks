@@ -1961,6 +1961,23 @@ struct TFinishCheckpointResponse {
     1: optional Status.TStatus status;
 }
 
+struct TListRecycleBinCatalogsParams {
+    1: optional Types.TUserIdentity user_ident
+}
+
+struct TListRecycleBinCatalogsInfo {
+    1: optional string type
+    2: optional string name
+    3: optional i64 dbid
+    4: optional i64 tableid
+    5: optional i64 partitionid
+    6: optional i64 droptime
+}
+
+struct TListRecycleBinCatalogsResult {
+    1: optional list<TListRecycleBinCatalogsInfo> recyclebin_catalogs
+}
+
 // Batch fetching partition meta info by a list of tablet ids
 // FIXME: add auth info to the request, so the API will be secured
 struct TPartitionMetaRequest {
@@ -2135,6 +2152,7 @@ service FrontendService {
     TStartCheckpointResponse startCheckpoint(1: TStartCheckpointRequest request)
 
     TFinishCheckpointResponse finishCheckpoint(1: TFinishCheckpointRequest request)
+    TListRecycleBinCatalogsResult listRecycleBinCatalogs(1: TListRecycleBinCatalogsParams params)
 
     TPartitionMetaResponse getPartitionMeta(TPartitionMetaRequest request)
 
