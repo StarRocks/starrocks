@@ -55,6 +55,7 @@ public class ShowTabletStmt extends ShowStmt {
     private long backendId;
     private String indexName;
     private Replica.ReplicaState replicaState;
+    private Boolean isConsistent;
     private ArrayList<OrderByPair> orderByPairs;
 
     private boolean isShowSingleTablet;
@@ -154,6 +155,10 @@ public class ShowTabletStmt extends ShowStmt {
         return indexName;
     }
 
+    public Boolean getIsConsistent() {
+        return isConsistent;
+    }
+
     public List<OrderByPair> getOrderByPairs() {
         return orderByPairs;
     }
@@ -172,6 +177,10 @@ public class ShowTabletStmt extends ShowStmt {
 
     public void setIndexName(String indexName) {
         this.indexName = indexName;
+    }
+
+    public void setIsConsistent(Boolean isConsistent) {
+        this.isConsistent = isConsistent;
     }
 
     public void setReplicaState(Replica.ReplicaState replicaState) {

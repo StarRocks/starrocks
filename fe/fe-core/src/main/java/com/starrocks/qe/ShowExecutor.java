@@ -1730,7 +1730,7 @@ public class ShowExecutor {
                                     LocalTabletsProcDir procDir = new LocalTabletsProcDir(db, olapTable, index);
                                     tabletInfos.addAll(procDir.fetchComparableResult(
                                             statement.getVersion(), statement.getBackendId(), statement.getReplicaState(),
-                                            hideIpPort));
+                                            statement.getIsConsistent(), hideIpPort));
                                 }
                                 if (sizeLimit > -1 && CollectionUtils.isEmpty(statement.getOrderByPairs())
                                         && tabletInfos.size() >= sizeLimit) {

@@ -304,7 +304,8 @@ public class CheckConsistencyJob {
                 Iterator<Map.Entry<Long, Long>> iter = checksumMap.entrySet().iterator();
                 while (iter.hasNext()) {
                     Map.Entry<Long, Long> entry = iter.next();
-                    if (tablet.getReplicaByBackendId(entry.getKey()) == null) {
+                    Replica replica = tablet.getReplicaByBackendId(entry.getKey());
+                    if (replica == null) {
                         LOG.debug("tablet[{}]'s replica in backend[{}] does not exist. remove from checksumMap",
                                     tabletId, entry.getKey());
                         iter.remove();
@@ -315,6 +316,9 @@ public class CheckConsistencyJob {
                         LOG.debug("tablet[{}] has unfinished replica check sum task. backend[{}]",
                                     tabletId, entry.getKey());
                         isFinished = false;
+                    } else {
+                        // set replica's checksum
+                        replica.setChecksum(entry.getValue());
                     }
                 }
 

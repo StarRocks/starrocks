@@ -1901,6 +1901,21 @@ void Tablet::remove_all_delta_column_group_cache() const {
     return remove_all_delta_column_group_cache_unlocked();
 }
 
+// get average row size
+int64_t Tablet::get_average_row_size() {
+    if (_updates) {
+        return _updates->get_average_row_size();
+    } else {
+        int64_t total_row_size = 0;
+        int64_t total_row_count = 0;
+        for (const auto& version_rowset : _rs_version_map) {
+            total_row_size += version_rowset.second->total_row_size();
+            total_row_count += version_rowset.second->num_rows();
+        }
+        return total_row_count == 0 ? 0 : total_row_size / total_row_count;
+    }
+}
+
 void Tablet::remove_all_delta_column_group_cache_unlocked() const {
     // Only use for non-primary key tablet
     if (_updates != nullptr) {
