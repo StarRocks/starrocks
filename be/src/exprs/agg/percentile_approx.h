@@ -27,19 +27,16 @@ namespace starrocks {
 struct PercentileApproxState {
 public:
     PercentileApproxState() : percentile(new PercentileValue()) {}
+    explicit PercentileApproxState(double compression) : percentile(new PercentileValue(compression)) {}
     ~PercentileApproxState() = default;
 
     int64_t mem_usage() const { return percentile->mem_usage(); }
 
     std::unique_ptr<PercentileValue> percentile;
-    double targetQuantile = std::numeric_limits<double>::infinity();
+    double targetQuantile = -1.0;
+    bool is_null = true;
 };
 
-<<<<<<< HEAD
-class PercentileApproxAggregateFunction final
-        : public AggregateFunctionBatchHelper<PercentileApproxState, PercentileApproxAggregateFunction> {
-public:
-=======
 class PercentileApproxAggregateFunctionBase
         : public AggregateFunctionBatchHelper<PercentileApproxState, PercentileApproxAggregateFunctionBase> {
 protected:
@@ -103,7 +100,6 @@ public:
         return compression;
     }
 
->>>>>>> d36eecf840 ([Enhancement] Support percentile_approx_weighted function (#56654))
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         // argument 0
         const auto* data_column = down_cast<const DoubleColumn*>(columns[0]);
@@ -120,54 +116,6 @@ public:
         ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
     }
 
-<<<<<<< HEAD
-    void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
-        Slice src;
-        if (column->is_nullable()) {
-            if (column->is_null(row_num)) {
-                return;
-            }
-            const auto* nullable_column = down_cast<const NullableColumn*>(column);
-            src = nullable_column->data_column()->get(row_num).get_slice();
-        } else {
-            const auto* binary_column = down_cast<const BinaryColumn*>(column);
-            src = binary_column->get_slice(row_num);
-        }
-        double quantile;
-        memcpy(&quantile, src.data, sizeof(double));
-
-        PercentileApproxState src_percentile;
-        src_percentile.targetQuantile = quantile;
-        src_percentile.percentile->deserialize((char*)src.data + sizeof(double));
-        int64_t prev_memory = data(state).percentile->mem_usage();
-        data(state).percentile->merge(src_percentile.percentile.get());
-        data(state).targetQuantile = quantile;
-        data(state).is_null = false;
-        ctx->add_mem_usage(data(state).percentile->mem_usage() - prev_memory);
-    }
-
-    void serialize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
-        size_t size = data(state).percentile->serialize_size();
-        uint8_t result[size + sizeof(double)];
-        memcpy(result, &(data(state).targetQuantile), sizeof(double));
-        data(state).percentile->serialize(result + sizeof(double));
-
-        if (to->is_nullable()) {
-            auto* column = down_cast<NullableColumn*>(to);
-            if (data(state).is_null) {
-                column->append_default();
-            } else {
-                down_cast<BinaryColumn*>(column->data_column().get())->append(Slice(result, size));
-                column->null_column_data().push_back(0);
-            }
-        } else {
-            auto* column = down_cast<BinaryColumn*>(to);
-            column->append(Slice(result, size));
-        }
-    }
-
-=======
->>>>>>> d36eecf840 ([Enhancement] Support percentile_approx_weighted function (#56654))
     void convert_to_serialize_format(FunctionContext* ctx, const Columns& src, size_t chunk_size,
                                      ColumnPtr* dst) const override {
         // argument 0
