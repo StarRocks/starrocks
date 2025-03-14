@@ -44,7 +44,7 @@ under the License.
         <jprotobuf.version>2.4.23</jprotobuf.version>
         <log4j.version>2.19.0</log4j.version>
         <jackson.version>2.15.2</jackson.version>
-        <spark.version>3.4.4</spark.version>
+        <spark.version>3.5.5</spark.version>
         <tomcat.version>8.5.70</tomcat.version>
         <parquet.version>1.14.0</parquet.version>
         <hadoop.version>3.4.1</hadoop.version>
