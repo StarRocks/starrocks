@@ -1432,7 +1432,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
-    public void testEmptyTablet() {
+    public void testEmptyTablet() throws Exception {
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("stats");
         OlapTable olapTable = (OlapTable) starRocksAssert.getTable("stats", "tempty");
 
@@ -1441,7 +1441,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.ONCE,
                 Maps.newHashMap());
         NativeAnalyzeStatus analyzeStatus = new NativeAnalyzeStatus();
-        Assertions.assertThrows(RuntimeException.class, () -> job.collect(connectContext, analyzeStatus));
+        job.collect(connectContext, analyzeStatus);
+        Assertions.assertEquals(100, analyzeStatus.getProgress());
     }
 
     @Test

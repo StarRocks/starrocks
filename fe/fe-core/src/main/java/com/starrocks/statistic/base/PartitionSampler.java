@@ -108,9 +108,6 @@ public class PartitionSampler {
                     low.getTotalTablets();
             long sampleTablets = highSampleTablets.size() + mediumHighSampleTablets.size()
                     + mediumLowSampleTablets.size() + lowSampleTablets.size();
-            if (totalTablets == 0 || sampleTablets == 0) {
-                throw new RuntimeException("No valid non-empty tablet available for sampling");
-            }
 
             partitionSampleMaps.put(partitionId,
                     new SampleInfo(sampleTablets * 1.0 / totalTablets, sampleRows, totalRows, highSampleTablets,
