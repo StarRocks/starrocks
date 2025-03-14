@@ -645,6 +645,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String ENABLE_MATERIALIZED_VIEW_SINGLE_TABLE_VIEW_DELTA_REWRITE =
             "enable_materialized_view_single_table_view_delta_rewrite";
     public static final String ANALYZE_FOR_MV = "analyze_mv";
+    public static final String ANALYZE_FOR_MV_V2 = "analyze_mv_v2";
     public static final String QUERY_EXCLUDING_MV_NAMES = "query_excluding_mv_names";
     public static final String QUERY_INCLUDING_MV_NAMES = "query_including_mv_names";
     public static final String ENABLE_MATERIALIZED_VIEW_REWRITE_GREEDY_MODE =
@@ -2063,8 +2064,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VarAttr(name = QUERY_INCLUDING_MV_NAMES, flag = VariableMgr.INVISIBLE)
     private String queryIncludingMVNames = "";
 
-    @VarAttr(name = ANALYZE_FOR_MV)
-    private String analyzeTypeForMV = "sample";
+    // no trigger to analyze table for mv by default
+    @VarAttr(name = ANALYZE_FOR_MV_V2, alias = ANALYZE_FOR_MV, show = ANALYZE_FOR_MV)
+    private String analyzeTypeForMV = "";
 
     // if enable_big_query_log = true and cpu/io cost of a query exceeds the related threshold,
     // the information will be written to the big query log
