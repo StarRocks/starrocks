@@ -632,15 +632,19 @@ void PInternalServiceImplBase<T>::_fetch_datacache(google::protobuf::RpcControll
                << ", offset: " << request->offset() << ", size: " << request->size();
 
     BlockCache* block_cache = BlockCache::instance();
-    ReadCacheOptions options;
-    IOBuffer buf;
-    st = block_cache->read_buffer(request->cache_key(), request->offset(), request->size(), &buf, &options);
-    if (st.ok()) {
-        cntl->response_attachment().swap(buf.raw_buf());
+    if (!block_cache || !block_cache->available()) {
+        st = Status::ServiceUnavailable("block cache is unavailable");
     } else {
-        LOG(WARNING) << "failed to fetch datacache, req_id: " << request->request_id() << ", reason: "
-                     << st.message();
+        ReadCacheOptions options;
+        IOBuffer buf;
+        st = block_cache->read_buffer(request->cache_key(), request->offset(), request->size(), &buf, &options);
+        if (st.ok()) {
+            cntl->response_attachment().swap(buf.raw_buf());
+        }
     }
+    LOG_IF(WARNING, !st.ok()) << "failed to fetch datacache, req_id: " << request->request_id() << ", reason: "
+                              << st.message();
+
     if (done != nullptr) {
         // NOTE: only when done is not null, we can set response status
         st.to_protobuf(response->mutable_status());

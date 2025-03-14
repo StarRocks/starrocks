@@ -53,25 +53,27 @@ Status PeerCacheWrapper::read_buffer(const std::string& key, size_t off, size_t 
     VLOG_CACHE << "[Gavin] start fetch datacache, request_id: " << request.request_id()
                << ", cache_id: " << HashUtil::hash64(key.data(), key.size(), 0)
                << ", offset: " << off << ", size: " << size;
-    stub->fetch_datacache(&cntl, &request, &response, nullptr);
     Status st;
-    if (cntl.Failed()) {
-        st = Status::InternalError(cntl.ErrorText());
-        LOG(WARNING) << "failed to send fetch_datacache rpc, err: " << st;
-        return st;
-    }
-    st = response.status();
-    if (!st.ok()) {
-        LOG(WARNING) << "fetch datacache rpc failed, err: " << st;
-        return st;
-    }
-    cntl.response_attachment().swap(buffer->raw_buf());
+    do {
+        stub->fetch_datacache(&cntl, &request, &response, nullptr);
+        if (cntl.Failed()) {
+            st = Status::InternalError(cntl.ErrorText());
+            LOG(WARNING) << "failed to send fetch_datacache rpc, err: " << st;
+            break;
+        }
+        st = response.status();
+        if (!st.ok()) {
+            LOG(WARNING) << "fetch datacache rpc failed, err: " << st;
+            break;
+        }
+        cntl.response_attachment().swap(buffer->raw_buf());
+    } while (false);
+
     VLOG_CACHE << "[Gavin] finish read buffer from peer node: " << options->remote_host
                << ", cache_id: " << HashUtil::hash64(key.data(), key.size(), 0)
                << ", offset: " << off << ", size: " << buffer->size()
                << ", request_id: " << request.request_id() << ", st: " << st
                << ", buf: " << buffer << ", latency_us: " << GetCurrentTimeMicros() - begin_us;
-
     return st;
 }
 
