@@ -81,7 +81,7 @@ TEST(HeartbeatServerTest, test_unmatched_node_type_heartbeat) {
     HeartbeatServer server;
     TMasterInfo master_info;
 
-    // not set node type
+    // not set node type.
     StatusOr res = server.compare_master_info(master_info);
     EXPECT_EQ(TStatusCode::OK, res.status().code());
 
