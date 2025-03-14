@@ -92,7 +92,7 @@ StatusOr<ChunkPtr> ExceptContext::pull_chunk(RuntimeState* state) {
         }
 
         // 3. Serialize remained keys to the dest columns.
-        _hash_set->deserialize_to_columns(_remained_keys, dst_columns, num_remained_keys);
+        RETURN_IF_ERROR(_hash_set->deserialize_to_columns(_remained_keys, dst_columns, num_remained_keys));
 
         // 4. Add dest columns to the dest chunk.
         for (size_t i = 0; i < dst_columns.size(); i++) {

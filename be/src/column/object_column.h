@@ -129,6 +129,7 @@ public:
     void deserialize_and_append_batch(Buffer<Slice>& srcs, size_t chunk_size) override;
 
     uint32_t serialize_size(size_t idx) const override;
+    uint32_t max_one_element_serialize_size() const override;
 
     MutableColumnPtr clone_empty() const override { return this->create(); }
 
