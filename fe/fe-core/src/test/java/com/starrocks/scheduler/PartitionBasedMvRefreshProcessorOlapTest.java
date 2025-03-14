@@ -2494,7 +2494,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVRefreshTestBase 
                             (obj) -> {
                                 final String mvName = (String) obj;
                                 final Database db =
-                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(DB_NAME);
+                                        GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("test");
                                 final MaterializedView mv =
                                         ((MaterializedView) GlobalStateMgr.getCurrentState().getLocalMetastore()
                                                 .getTable(db.getFullName(), mvName));
