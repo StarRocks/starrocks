@@ -1,0 +1,142 @@
+-- name: test_table_function_elimination
+CREATE TABLE `t0` (
+  `id` int(11) NULL COMMENT "",
+  `xs` array<int(11)> NULL COMMENT ""
+) ENGINE=OLAP 
+DUPLICATE KEY(`id`)
+PROPERTIES (
+"replication_num" = "1"
+);
+-- result:
+-- !result
+insert into t0 values
+(1,NULL),
+(2,NULL),
+(3,NULL),
+(4,NULL),
+(5,NULL),
+(6,NULL),
+(7,NULL),
+(8,NULL),
+(9,NULL),
+(10,NULL),
+(11,[NULL]),
+(12,[NULL,NULL]),
+(13,[NULL,NULL,NULL]),
+(14,[NULL,NULL,NULL,NULL]),
+(15,[NULL,NULL,NULL,NULL,NULL]),
+(16,[NULL,NULL,NULL,NULL,NULL,NULL]),
+(17,[NULL,NULL,NULL,NULL,NULL,NULL,NULL]),
+(18,[NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL]),
+(19,[NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL]),
+(20,[NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL]),
+(1,[11,12,13,14]),
+(2,[21,22,23,24]),
+(3,[31,32,33,34]),
+(4,[41,42,43,44]),
+(5,[51,52,53,54]),
+(6,[61,62,63,64]),
+(7,[71,72,73,74]),
+(8,[81,82,83,84]),
+(9,[91,92,93,94]),
+(10,[101,102,103,104]),
+(11,[111,112,113,114]),
+(12,[121,122,123,124]),
+(13,[131,132,133,134]),
+(14,[141,142,143,144]),
+(15,[151,152,153,154]),
+(16,[161,162,163,164]),
+(17,[171,172,173,174]),
+(18,[181,182,183,184]),
+(19,[191,192,193,194]),
+(20,[201,202,203,204]),
+(21,[211,212,213,214]),
+(22,[221,222,223,224]),
+(23,[231,232,233,234]),
+(24,[241,242,243,244]),
+(25,[251,252,253,254]),
+(26,[261,262,263,264]),
+(27,[271,272,273,274]),
+(28,[281,282,283,284]),
+(29,[291,292,293,294]),
+(30,[301,302,303,304]);
+-- result:
+-- !result
+with cte1 as (
+select count(1) N1 from t0 inner join lateral unnest(t0.xs) t1(x) on true
+),
+cte2 as (
+select count(id) N2 from t0 inner join lateral unnest(t0.xs) t1(x) on true
+),
+cte3 as (
+select count(id) N3 from t0 inner join lateral unnest(t0.xs) t1(x) on true where coalesce(murmur_hash3_32(t1.x), -1)!=0
+)
+select assert_true(N1 > 0 and N1 = N2 and N2 = N3) from cte1, cte2, cte3;
+-- result:
+1
+-- !result
+with cte1 as (
+select count(1) N1 from t0 left join lateral unnest(t0.xs) t1(x) on true
+),
+cte2 as (
+select count(id) N2 from t0 left join lateral unnest(t0.xs) t1(x) on true
+),
+cte3 as (
+select count(id) N3 from t0 left join lateral unnest(t0.xs) t1(x) on true where coalesce(murmur_hash3_32(t1.x), -1)!=0
+)
+select assert_true(N1 > 0 and N1 = N2 and N2 = N3) from cte1, cte2, cte3;
+-- result:
+1
+-- !result
+with cte1 as (
+select count(1) N1 from t0 inner join lateral unnest(t0.xs) t1(x) on true where t0.xs is not NULL
+),
+cte2 as (
+select count(id) N2 from t0 inner join lateral unnest(t0.xs) t1(x) on true where t0.xs is not NULL 
+),
+cte3 as (
+select count(id) N3 from t0 inner join lateral unnest(t0.xs) t1(x) on true where t0.xs is not NULL and coalesce(murmur_hash3_32(t1.x), -1)!=0
+)
+select assert_true(N1 > 0 and N1 = N2 and N2 = N3) from cte1, cte2, cte3;
+-- result:
+1
+-- !result
+with cte1 as (
+select count(1) N1 from t0 left join lateral unnest(t0.xs) t1(x) on true where t0.xs is not NULL
+),
+cte2 as (
+select count(id) N2 from t0 left join lateral unnest(t0.xs) t1(x) on true where t0.xs is not NULL 
+),
+cte3 as (
+select count(id) N3 from t0 left join lateral unnest(t0.xs) t1(x) on true where t0.xs is not NULL and coalesce(murmur_hash3_32(t1.x), -1)!=0
+)
+select assert_true(N1 > 0 and N1 = N2 and N2 = N3) from cte1, cte2, cte3;
+-- result:
+1
+-- !result
+with cte1 as (
+select count(1) N1 from t0 left join lateral unnest(t0.xs) t1(x) on true where id >20
+),
+cte2 as (
+select count(id) N2 from t0 left join lateral unnest(t0.xs) t1(x) on true where id >20
+),
+cte3 as (
+select count(id) N3 from t0 left join lateral unnest(t0.xs) t1(x) on true where id >20 and coalesce(murmur_hash3_32(t1.x), -1)!=0
+)
+select assert_true(N1 > 0 and N1 = N2 and N2 = N3) from cte1, cte2, cte3;
+-- result:
+1
+-- !result
+with cte1 as (
+select count(1) N1 from t0 inner join lateral unnest(t0.xs) t1(x) on true where id >20
+),
+cte2 as (
+select count(id) N2 from t0 inner join lateral unnest(t0.xs) t1(x) on true where id >20
+),
+cte3 as (
+select count(id) N3 from t0 inner join lateral unnest(t0.xs) t1(x) on true where id >20 and coalesce(murmur_hash3_32(t1.x), -1)!=0
+)
+select assert_true(N1 > 0 and N1 = N2 and N2 = N3) from cte1, cte2, cte3;
+-- result:
+1
+-- !result

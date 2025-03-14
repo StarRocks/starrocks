@@ -15,7 +15,6 @@
 #include "table_function_operator.h"
 
 namespace starrocks::pipeline {
-
 void TableFunctionOperator::close(RuntimeState* state) {
     if (_table_function != nullptr && _table_function_state != nullptr) {
         (void)_table_function->close(state, _table_function_state);
@@ -25,7 +24,8 @@ void TableFunctionOperator::close(RuntimeState* state) {
 }
 
 bool TableFunctionOperator::has_output() const {
-    if (!_table_function_result.first.empty() && _next_output_row < _table_function_result.first[0]->size()) {
+    if (!_table_function_result.first.empty() && _table_function_result.second->size() > 1 &&
+        _next_output_row < _table_function_result.second->get_data().back()) {
         return true;
     }
     if (_input_chunk != nullptr && _table_function_state != nullptr &&
@@ -126,7 +126,8 @@ StatusOr<ChunkPtr> TableFunctionOperator::pull_chunk(RuntimeState* state) {
     }
 
     while (output_columns[0]->size() < max_chunk_size) {
-        if (!_table_function_result.first.empty() && _next_output_row < _table_function_result.first[0]->size()) {
+        if (!_table_function_result.first.empty() && _table_function_result.second->size() > 1 &&
+            _next_output_row < _table_function_result.second->get_data().back()) {
             _copy_result(output_columns, max_chunk_size);
         } else if (_table_function_state->processed_rows() < _input_chunk->num_rows()) {
             RETURN_IF_ERROR(_process_table_function(state));
@@ -200,19 +201,20 @@ Status TableFunctionOperator::reset_state(RuntimeState* state, const std::vector
 }
 
 void TableFunctionOperator::_copy_result(Columns& columns, uint32_t max_output_size) {
-    DCHECK_LE(_next_output_row, _table_function_result.first[0]->size());
+    DCHECK(_table_function_result.second->size() > 1 &&
+           _next_output_row < _table_function_result.second->get_data().back());
     DCHECK_LT(_next_output_row_offset, _table_function_result.second->size());
     uint32_t curr_output_size = columns[0]->size();
     const auto& fn_result_cols = _table_function_result.first;
     const auto& offsets_col = _table_function_result.second;
-    while (curr_output_size < max_output_size && _next_output_row < fn_result_cols[0]->size()) {
+    while (curr_output_size < max_output_size && _next_output_row < offsets_col->get_data().back()) {
         uint32_t start = _next_output_row;
         uint32_t end = offsets_col->get_data()[_next_output_row_offset + 1];
         DCHECK_GE(start, offsets_col->get_data()[_next_output_row_offset]);
         DCHECK_LE(start, end);
         uint32_t copy_rows = std::min(end - start, max_output_size - curr_output_size);
         VLOG(2) << "_next_output_row=" << _next_output_row << " start=" << start << " end=" << end
-                << " copy_rows=" << copy_rows << " input_size=" << fn_result_cols[0]->size()
+                << " copy_rows=" << copy_rows << " input_size=" << offsets_col->get_data().back()
                 << " _next_output_row_offset=" << _next_output_row_offset
                 << " _input_index_of_first_result=" << _input_index_of_first_result;
 
@@ -245,5 +247,4 @@ void TableFunctionOperator::_copy_result(Columns& columns, uint32_t max_output_s
         }
     }
 }
-
 } // namespace starrocks::pipeline
