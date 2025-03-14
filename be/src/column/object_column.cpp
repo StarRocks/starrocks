@@ -173,7 +173,20 @@ uint32_t ObjectColumn<T>::serialize(size_t idx, uint8_t* pos) {
 }
 
 template <typename T>
+<<<<<<< HEAD
 uint32_t ObjectColumn<T>::serialize_default(uint8_t* pos) {
+=======
+uint32_t ObjectColumn<T>::max_one_element_serialize_size() const {
+    uint32_t max_size = 0;
+    for (size_t idx = 0; idx < size(); idx++) {
+        max_size = std::max(serialize_size(idx), max_size);
+    }
+    return max_size;
+}
+
+template <typename T>
+uint32_t ObjectColumn<T>::serialize_default(uint8_t* pos) const {
+>>>>>>> f44ae3e90b ([BugFix] fix ObjectColumn::max_one_element_serialize_size (#56911))
     DCHECK(false) << "Don't support object column serialize";
     return 0;
 }
