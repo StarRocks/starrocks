@@ -97,7 +97,7 @@ probe runtime filters:
 - filter_id = 4, probe_expr = (26: O_ORDERKEY)
 column statistics:
 * O_ORDERKEY-->[1.0, 6.0E8, 0.0, 8.0, 7.29413E7] ESTIMATE
-* O_ORDERSTATUS-->[-Infinity, Infinity, 0.0, 1.0, 1.0] MCV: [[O:73204400][F:72941300][P:3854300]] ESTIMATE
+* O_ORDERSTATUS-->[-Infinity, Infinity, 0.0, 1.0, 3.0] MCV: [[O:73204400][F:72941300][P:3854300]] ESTIMATE
 
 PLAN FRAGMENT 3(F01)
 
