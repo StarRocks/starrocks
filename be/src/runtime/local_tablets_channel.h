@@ -185,6 +185,9 @@ private:
     void _update_primary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
     void _update_secondary_replica_profile(DeltaWriter* writer, RuntimeProfile* profile);
 
+    void _diagnose_primary_replica_stack_trace(int64_t tablet_id, const PUniqueId& load_id,
+                                               AsyncDeltaWriter* async_delta_writer);
+
     LoadChannel* _load_channel;
 
     TabletsChannelKey _key;
