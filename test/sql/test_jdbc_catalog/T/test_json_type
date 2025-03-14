@@ -20,6 +20,8 @@ properties
 -- query
 set catalog jdbc_catalog_${uuid0};
 select * from db_json_${uuid0}.t1;
+-- make sure no sensitive info exposed
+show create table db_json_${uuid0}.t1;
 set catalog default_catalog;
 
 -- drop mysql table
