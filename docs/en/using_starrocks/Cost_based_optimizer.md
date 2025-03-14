@@ -478,7 +478,6 @@ The task ID for a manual collection task can be obtained from SHOW ANALYZE STATU
 
 | **FE configuration item**        | **Type** | **Default value** | **Description**                                              |
 | ------------------------------------ | -------- | ----------------- | ------------------------------------------------------------ |
-| statistic_collect_concurrency        | INT      | 3                 | The maximum number of manual collection tasks that can run in parallel. The value defaults to 3, which means you can run a maximum of three manual collections tasks in parallel. If the value is exceeded, incoming tasks will be in the PENDING state, waiting to be scheduled. |
 | statistic_manager_sleep_time_sec     | LONG     | 60                | The interval at which metadata is scheduled. Unit: seconds. The system performs the following operations based on this interval:Create tables for storing statistics.Delete statistics that have been deleted.Delete expired statistics. |
 | statistic_analyze_status_keep_second | LONG     | 259200            | The duration to retain the history of collection tasks. Unit: seconds. Default value: 259200 (3 days). |
 
