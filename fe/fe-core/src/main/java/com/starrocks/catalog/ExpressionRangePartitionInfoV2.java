@@ -245,7 +245,19 @@ public class ExpressionRangePartitionInfoV2 extends RangePartitionInfo
         return partitionExprs;
     }
 
+<<<<<<< HEAD
     public void setPartitionExprs(List<Expr> partitionExprs) {
+=======
+    public List<ColumnIdExpr> getPartitionColumnIdExprs() {
+        return partitionExprs;
+    }
+
+    public int getPartitionExprsSize() {
+        return partitionExprs.size();
+    }
+
+    public void setPartitionExprs(List<ColumnIdExpr> partitionExprs) {
+>>>>>>> 7b82d5fe2b ([BugFix] MV partitioned by non-SlotRef Expr can not be decomposed in query cache (#56871))
         this.partitionExprs = partitionExprs;
     }
 

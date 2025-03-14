@@ -182,8 +182,54 @@ public class ExpressionRangePartitionInfo extends RangePartitionInfo implements 
         return partitionExprs;
     }
 
+<<<<<<< HEAD
     public void setPartitionExprs(List<Expr> partitionExprs) {
         this.partitionExprs = partitionExprs;
+=======
+    public List<Expr> getPartitionExprs(Map<ColumnId, Column> idToColumn) {
+        List<Expr> result = new ArrayList<>(partitionExprs.size());
+        for (ColumnIdExpr columnIdExpr : partitionExprs) {
+            result.add(columnIdExpr.convertToColumnNameExpr(idToColumn));
+        }
+        return result;
+    }
+
+    public List<ColumnIdExpr> getPartitionColumnIdExprs() {
+        return partitionExprs;
+    }
+
+    @Override
+    public List<Column> getPartitionColumns(Map<ColumnId, Column> idToColumn) {
+        List<Column> columns = MetaUtils.getColumnsByColumnIds(idToColumn, partitionColumnIds);
+        for (int i = 0; i < columns.size(); i++) {
+            Expr expr = partitionExprs.get(i).convertToColumnNameExpr(idToColumn);
+            Column column = columns.get(i);
+            if (expr.getType().getPrimitiveType() != PrimitiveType.INVALID_TYPE
+                    && expr.getType().getPrimitiveType() != column.getType().getPrimitiveType()) {
+                Column newColumn = new Column(column);
+                newColumn.setType(expr.getType());
+                columns.set(i, newColumn);
+            }
+        }
+        return columns;
+    }
+
+    @Override
+    public int getPartitionColumnsSize() {
+        return partitionColumnIds.size();
+    }
+
+    public List<Expr> getPartitionExprs(List<Column> schema) {
+        List<Expr> result = new ArrayList<>(partitionExprs.size());
+        for (ColumnIdExpr columnIdExpr : partitionExprs) {
+            result.add(columnIdExpr.convertToColumnNameExpr(schema));
+        }
+        return result;
+    }
+
+    public int getPartitionExprsSize() {
+        return partitionExprs.size();
+>>>>>>> 7b82d5fe2b ([BugFix] MV partitioned by non-SlotRef Expr can not be decomposed in query cache (#56871))
     }
 
     @Override
