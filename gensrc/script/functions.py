@@ -717,6 +717,7 @@ vectorized_functions = [
     [90015, 'to_bitmap', False, False, 'BITMAP', ['BIGINT'], 'BitmapFunctions::to_bitmap<TYPE_BIGINT>'],
     [90016, 'to_bitmap', False, False, 'BITMAP', ['LARGEINT'], 'BitmapFunctions::to_bitmap<TYPE_LARGEINT>'],
     [90020, 'bitmap_hash', False, False, 'BITMAP', ['VARCHAR'], 'BitmapFunctions::bitmap_hash'],
+    [90021, 'bitmap_hash64', False, False, 'BITMAP', ['VARCHAR'], 'BitmapFunctions::bitmap_hash64'],
     [90030, 'bitmap_count', True, False, 'BIGINT', ['BITMAP'], 'BitmapFunctions::bitmap_count'],
     [90040, 'bitmap_empty', False, False, 'BITMAP', [], 'BitmapFunctions::bitmap_empty'],
     [90050, 'bitmap_or', False, False, 'BITMAP', ['BITMAP', 'BITMAP'], 'BitmapFunctions::bitmap_or'],
