@@ -187,7 +187,7 @@ Status ExceptNode::get_next(RuntimeState* state, ChunkPtr* chunk, bool* eos) {
 
         {
             SCOPED_TIMER(_get_result_timer);
-            _hash_set->deserialize_to_columns(_remained_keys, result_columns, read_index);
+            RETURN_IF_ERROR(_hash_set->deserialize_to_columns(_remained_keys, result_columns, read_index));
         }
 
         for (size_t i = 0; i < result_columns.size(); i++) {
