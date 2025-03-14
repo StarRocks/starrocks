@@ -53,6 +53,8 @@ struct ParquetField;
 struct TypeDescriptor;
 class ObjectCache;
 
+class ObjectCache;
+
 } // namespace starrocks
 
 namespace starrocks::parquet {
