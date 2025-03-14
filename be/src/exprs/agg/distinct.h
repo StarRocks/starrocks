@@ -62,7 +62,7 @@ struct DistinctAggregateState<LT, SumLT, FixedLengthLTGuard<LT>> {
 
     void prefetch(T key) { set.prefetch(key); }
 
-    int64_t disctint_count() const { return set.size(); }
+    int64_t distinct_count() const { return set.size(); }
 
     size_t serialize_size() const {
         size_t size = set.dump_bound();
@@ -219,7 +219,7 @@ struct AdaptiveSliceHashSet {
         }
     }
 
-    void fill_vector(std::vector<std::string> values) const {
+    void fill_vector(std::vector<std::string>& values) const {
         if (set != nullptr) {
             for (const auto& v : *set) {
                 values.emplace_back(v.data, v.size);
@@ -249,7 +249,7 @@ struct DistinctAggregateState<LT, SumLT, StringLTGuard<LT>> {
         set.lazy_emplace_with_hash(mem_pool, raw_key, hash);
     }
 
-    int64_t disctint_count() const { return set.distinct_size; }
+    int64_t distinct_count() const { return set.distinct_size; }
 
     size_t serialize_size() const { return set.serialize_size(); }
 
@@ -290,7 +290,7 @@ struct DistinctAggregateStateV2<LT, SumLT, FixedLengthLTGuard<LT>> {
 
     void prefetch(T key) { set.prefetch(key); }
 
-    int64_t disctint_count() const { return set.size(); }
+    int64_t distinct_count() const { return set.size(); }
 
     size_t serialize_size() const {
         size_t size = set.size() * sizeof(T) + sizeof(size_t);
@@ -506,7 +506,7 @@ public:
     void finalize_to_column(FunctionContext* ctx, ConstAggDataPtr __restrict state, Column* to) const override {
         DCHECK(!to->is_nullable());
         if constexpr (DistinctType == AggDistinctType::COUNT) {
-            down_cast<Int64Column*>(to)->append(this->data(state).disctint_count());
+            down_cast<Int64Column*>(to)->append(this->data(state).distinct_count());
         } else if constexpr (DistinctType == AggDistinctType::SUM && is_starrocks_arithmetic<T>::value) {
             to->append_datum(Datum(this->data(state).sum_distinct()));
         }
@@ -537,7 +537,7 @@ class DecimalDistinctAggregateFunction
 struct DictMergeState : DistinctAggregateStateV2<TYPE_VARCHAR, SumResultLT<TYPE_VARCHAR>> {
     DictMergeState() = default;
 
-    void update_over_limit() { over_limit = set.distinct_size > dict_threshold; }
+    void update_over_limit() { over_limit = distinct_count() > dict_threshold; }
 
     bool over_limit = false;
     int dict_threshold = 255;
@@ -591,45 +591,6 @@ public:
         agg_state.update_over_limit();
     }
 
-    void update_batch_single_state(FunctionContext* ctx, size_t chunk_size, const Column** columns,
-                                   AggDataPtr __restrict state) const override {
-        auto& agg_state = this->data(state);
-        MemPool* mem_pool = ctx->mem_pool();
-
-        // if dict size greater than DICT_DECODE_MAX_SIZE. we return a FAKE dictionary
-        if (agg_state.over_limit) {
-            return;
-        }
-
-        const Column* column = nullptr;
-
-        if (columns[0]->is_array()) {
-            const auto* array_column = down_cast<const ArrayColumn*>(columns[0]);
-            column = array_column->elements_column().get();
-        } else {
-            column = columns[0];
-        }
-
-        if (column->is_nullable()) {
-            const auto& null_column = down_cast<const NullableColumn&>(*column);
-            const auto& null_data = null_column.immutable_null_column_data();
-            const auto& binary_column = down_cast<const BinaryColumn&>(null_column.data_column_ref());
-
-            for (size_t i = 0; i < binary_column.size(); ++i) {
-                if (!null_data[i]) {
-                    agg_state.update(mem_pool, binary_column.get_slice(i));
-                }
-            }
-            agg_state.over_limit = agg_state.disctint_count() > DICT_DECODE_MAX_SIZE;
-        } else {
-            const auto& binary_column = down_cast<const BinaryColumn&>(*column);
-            for (size_t i = 0; i < binary_column.size(); ++i) {
-                agg_state.update(mem_pool, binary_column.get_slice(i));
-            }
-            agg_state.over_limit = agg_state.disctint_count() > DICT_DECODE_MAX_SIZE;
-        }
-    }
-
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         auto& agg_state = this->data(state);
 
@@ -676,12 +637,12 @@ public:
         auto& agg_state = this->data(state);
 
         auto finalize = [](const DictMergeState& agg_state, Column* to) {
-            if (agg_state.disctint_count() == 0) {
+            if (agg_state.distinct_count() == 0) {
                 to->append_default();
                 return;
             }
             std::vector<int32_t> dict_ids;
-            dict_ids.resize(agg_state.disctint_count());
+            dict_ids.resize(agg_state.distinct_count());
 
             auto* binary_column = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(to));
             if (to->is_nullable()) {
