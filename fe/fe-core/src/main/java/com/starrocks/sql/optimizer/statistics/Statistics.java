@@ -109,6 +109,10 @@ public class Statistics {
         return columnStatistics;
     }
 
+    public Map<Set<ColumnRefOperator>, MultiColumnCombinedStats> getMultiColumnCombinedStats() {
+        return multiColumnCombinedStats;
+    }
+
     public Map<ColumnRefOperator, ColumnStatistic> getOutputColumnsStatistics(ColumnRefSet outputColumns) {
         Map<ColumnRefOperator, ColumnStatistic> outputColumnsStatistics = Maps.newHashMap();
         for (Map.Entry<ColumnRefOperator, ColumnStatistic> entry : columnStatistics.entrySet()) {
