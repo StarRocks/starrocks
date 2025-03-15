@@ -344,6 +344,7 @@ public class FunctionAnalyzer {
                 || fnName.getFunction().equals(FunctionSet.MAX)
                 || fnName.getFunction().equals(FunctionSet.NDV)
                 || fnName.getFunction().equals(FunctionSet.APPROX_COUNT_DISTINCT)
+                || fnName.getFunction().equals(FunctionSet.DS_THETA_COUNT_DISTINCT)
                 || fnName.getFunction().equals(FunctionSet.DS_HLL_COUNT_DISTINCT))
                 && !arg.getType().canApplyToNumeric()) {
             throw new SemanticException(Type.NOT_SUPPORT_AGG_ERROR_MSG);
@@ -537,7 +538,7 @@ public class FunctionAnalyzer {
             // check the second parameter: tgt_type
             if (argSize == 3) {
                 if (!(functionCallExpr.getChild(2) instanceof StringLiteral)) {
-                    throw new SemanticException(fnName + " 's second parameter's data type is wrong ");
+                    throw new SemanticException(fnName + " 's third parameter's data type is wrong ");
                 }
                 String tgtType = ((LiteralExpr) functionCallExpr.getChild(2)).getStringValue();
                 if (!SUPPORTED_TGT_TYPES.contains(tgtType)) {
