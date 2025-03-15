@@ -54,6 +54,7 @@ import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.Rule;
 import com.starrocks.sql.optimizer.rule.RuleType;
+import com.starrocks.sql.optimizer.rule.mv.MaterializedViewWrapper;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.transformer.MVTransformerContext;
 import org.apache.commons.collections4.CollectionUtils;
@@ -180,12 +181,15 @@ public class TextMatchBasedRewriteRule extends Rule {
             try {
                 Set<Table> queryTables = MvUtils.getAllTables(input).stream().collect(Collectors.toSet());
                 int maxLevel = connectContext.getSessionVariable().getNestedMvRewriteMaxLevel();
-                Set<MaterializedView> relatedMvs = MvUtils.getRelatedMvs(connectContext, maxLevel, queryTables);
-                String mvNames = Joiner.on(",").join(relatedMvs.stream()
+                Set<MaterializedViewWrapper> relatedMVWrappers = MvUtils.getRelatedMvs(connectContext, maxLevel, queryTables);
+                String mvNames = Joiner.on(",").join(relatedMVWrappers.stream()
+                        .map(mvWithLevel -> mvWithLevel.getMV())
                         .map(mv -> mv.getName()).collect(Collectors.toList()));
                 LOG.warn("Related MVs: {}", mvNames);
                 LOG.warn("Query Key: {}", ast);
-                List<CachingMvPlanContextBuilder.AstKey> candidates = instance.getAstsOfRelatedMvs(relatedMvs);
+                Set<MaterializedView> relatedMVs = relatedMVWrappers.stream()
+                        .map(mvWithLevel -> mvWithLevel.getMV()).collect(Collectors.toSet());
+                List<CachingMvPlanContextBuilder.AstKey> candidates = instance.getAstsOfRelatedMvs(relatedMVs);
                 for (CachingMvPlanContextBuilder.AstKey cacheKey : candidates) {
                     LOG.warn("Cached Key: {}", cacheKey);
                 }
