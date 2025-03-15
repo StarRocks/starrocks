@@ -322,8 +322,7 @@ bool OrcRowReaderFilter::filterOnPickStringDictionary(
 Status HdfsOrcScanner::build_iceberg_delete_builder() {
     if (_scanner_params.deletes.empty()) return Status::OK();
     SCOPED_RAW_TIMER(&_app_stats.iceberg_delete_file_build_ns);
-    const IcebergDeleteBuilder iceberg_delete_builder(_scanner_params.fs, _scanner_params.path, &_need_skip_rowids,
-                                                      _scanner_params.datacache_options);
+    const IcebergDeleteBuilder iceberg_delete_builder(_scanner_params.fs, _scanner_params.path, _scanner_params.materialize_slots, &_need_skip_rowids);
 
     for (const auto& tdelete_file : _scanner_params.deletes) {
         RETURN_IF_ERROR(iceberg_delete_builder.build_orc(_runtime_state->timezone(), *tdelete_file,
