@@ -406,8 +406,7 @@ public class Optimizer {
     private void ruleBasedMaterializedViewRewriteStage2(OptExpression tree,
                                                         TaskContext rootTaskContext,
                                                         ColumnRefSet requiredColumns) {
-        if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null ||
-                context.getQueryMaterializationContext().hasRewrittenSuccess()) {
+        if (!mvRewriteStrategy.enableMaterializedViewRewrite || context.getQueryMaterializationContext() == null) {
             return;
         }
         context.getQueryMaterializationContext().setCurrentRewriteStage(MvRewriteStrategy.MVRewriteStage.PHASE2);
