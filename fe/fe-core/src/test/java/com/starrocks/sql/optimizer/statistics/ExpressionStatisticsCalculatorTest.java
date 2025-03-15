@@ -632,4 +632,28 @@ public class ExpressionStatisticsCalculatorTest {
         Assert.assertEquals(columnStatistic.getMaxValue(), 2.534021856E11, 0.001);
         Assert.assertEquals(columnStatistic.getMinValue(), -28800.0, 0.001);
     }
+
+    @Test
+    public void testIF() {
+        ColumnRefOperator column = new ColumnRefOperator(1, Type.INT, "column", true);
+        BinaryPredicateOperator condition = new BinaryPredicateOperator(BinaryType.EQ, column, ConstantOperator.createInt(1));
+        ColumnRefOperator left = new ColumnRefOperator(0, Type.INT, "left", true);
+        ColumnRefOperator right = new ColumnRefOperator(1, Type.INT, "right", true);
+
+        ColumnStatistic columnStatistic = new ColumnStatistic(-300, 300, 0, 0, 300);
+        ColumnStatistic leftStatistic = new ColumnStatistic(-100, 100, 0, 0, 100);
+        ColumnStatistic rightStatistic = new ColumnStatistic(100, 200, 0, 0, 100);
+
+        Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(300);
+        builder.addColumnStatistic(column, columnStatistic);
+        builder.addColumnStatistic(left, leftStatistic);
+        builder.addColumnStatistic(right, rightStatistic);
+
+        CallOperator callOperator = new CallOperator(FunctionSet.IF, Type.INT, Lists.newArrayList(condition, left, right));
+        ColumnStatistic ifStatistic = ExpressionStatisticCalculator.calculate(callOperator, builder.build());
+        Assert.assertEquals(ifStatistic.getDistinctValuesCount(), 200, 0.001);
+        Assert.assertEquals(ifStatistic.getMaxValue(), 200, 0.001);
+        Assert.assertEquals(ifStatistic.getMinValue(), -100, 0.001);
+    }
 }
