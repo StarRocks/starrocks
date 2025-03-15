@@ -1308,6 +1308,46 @@ TEST_F(AvroScannerTest, test_map_to_json) {
         const JsonValue* json = chunk->get(0)[3].get_json();
         EXPECT_EQ("{\"ele1\": 4294967297, \"ele2\": 4294967298}", json->to_string_uncheck());
     }
+
+    { // parse map type with json path
+        std::vector<TypeDescriptor> types;
+        types.emplace_back(TYPE_BOOLEAN); // booleantype
+        types.emplace_back(TYPE_BIGINT);  // longtype
+        types.emplace_back(TYPE_DOUBLE);  // doubletype
+        types.emplace_back(TYPE_JSON);    // maptype
+        types.emplace_back(TYPE_BIGINT);  // map_ele1
+        types.emplace_back(TYPE_BIGINT);  // map_ele2
+
+        std::vector<TBrokerRangeDesc> ranges;
+        TBrokerRangeDesc range;
+        range.format_type = TFileFormatType::FORMAT_AVRO;
+        range.__set_path(data_path);
+        range.__isset.jsonpaths = true;
+        range.jsonpaths =
+                R"(["$.booleantype", "$.longtype", "$.doubletype", "$.maptype", "$.maptype.ele1", "$.maptype.ele2"])";
+        ranges.emplace_back(range);
+
+        auto scanner = create_avro_scanner(types, ranges,
+                                           {"booleantype", "longtype", "doubletype", "maptype", "map_ele1", "map_ele2"},
+                                           avro_helper.schema_text);
+        Status st = scanner->open();
+        ASSERT_TRUE(st.ok());
+
+        auto st2 = scanner->get_next();
+        ASSERT_TRUE(st2.ok());
+
+        ChunkPtr chunk = st2.value();
+        EXPECT_EQ(6, chunk->num_columns());
+        EXPECT_EQ(1, chunk->num_rows());
+        EXPECT_EQ(1, chunk->get(0)[0].get_int8());
+        EXPECT_EQ(4294967296, chunk->get(0)[1].get_int64());
+        EXPECT_FLOAT_EQ(1.234567, chunk->get(0)[2].get_double());
+        const JsonValue* json = chunk->get(0)[3].get_json();
+        EXPECT_EQ("{\"ele1\": 4294967297, \"ele2\": 4294967298}", json->to_string_uncheck());
+        // two more fields parsed separately from maptype
+        EXPECT_EQ(4294967297, chunk->get(0)[4].get_int64());
+        EXPECT_EQ(4294967298, chunk->get(0)[5].get_int64());
+    }
 }
 
 TEST_F(AvroScannerTest, test_root_array) {
