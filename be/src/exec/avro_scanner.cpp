@@ -664,7 +664,9 @@ Status AvroScanner::_extract_field(const avro_value_t& input_value, const std::v
             }
         }
 
-        if (UNLIKELY(avro_value_get_type(&cur_value) != AVRO_RECORD)) {
+        auto value_type = avro_value_get_type(&cur_value);
+        // map shares the similar processing of record
+        if (UNLIKELY(value_type != AVRO_RECORD && value_type != AVRO_MAP)) {
             if (i == paths.size() - 1) {
                 break;
             } else {
