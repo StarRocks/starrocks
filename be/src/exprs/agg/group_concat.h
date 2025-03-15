@@ -42,7 +42,7 @@ struct GroupConcatAggregateState {
 
 template <LogicalType LT, typename T = RunTimeCppType<LT>, LogicalType ResultLT = GroupConcatResultLT<LT>,
           typename TResult = RunTimeCppType<ResultLT>>
-class GroupConcatAggregateFunction
+class GroupConcatAggregateFunction final
         : public AggregateFunctionBatchHelper<GroupConcatAggregateState,
                                               GroupConcatAggregateFunction<LT, T, ResultLT, TResult>> {
 public:
@@ -336,7 +336,7 @@ struct GroupConcatAggregateStateV2 {
 // group_concat(cast(a to string), cast(b to string) order by a, b), resulting to keeping 4 columns, but it only needs
 // keep 2 columns in intermediate results.
 // 3. refactor order-by and distinct function to a combinator to clean the code.
-class GroupConcatAggregateFunctionV2
+class GroupConcatAggregateFunctionV2 final
         : public AggregateFunctionBatchHelper<GroupConcatAggregateStateV2, GroupConcatAggregateFunctionV2> {
 public:
     // group_concat(a, b order by c, d), the arguments are a,b,',',c,d
