@@ -479,7 +479,7 @@ if [ ${BUILD_BE} -eq 1 ] || [ ${BUILD_FORMAT_LIB} -eq 1 ] ; then
         if [ ${CLEAN} -eq 1 ]; then
             ${MVN_CMD} clean
         fi
-        ${MVN_CMD} $addon_mvn_opts package -DskipTests
+        ${MVN_CMD} $addon_mvn_opts package -DskipTests -T 1C
         cd ${STARROCKS_HOME}
     else
         echo "Skip Building Java Extensions"
@@ -509,9 +509,9 @@ if [ ${FE_MODULES}x != ""x ]; then
     if [ ${CLEAN} -eq 1 ]; then
         ${MVN_CMD} clean
     fi
-    ${MVN_CMD} $addon_mvn_opts package -am -pl ${FE_MODULES} -DskipTests
+    ${MVN_CMD} $addon_mvn_opts package -am -pl ${FE_MODULES} -DskipTests -T 1C
     cd ${STARROCKS_HOME}/java-extensions
-    ${MVN_CMD} $addon_mvn_opts package -am -pl hadoop-ext -DskipTests
+    ${MVN_CMD} $addon_mvn_opts package -am -pl hadoop-ext -DskipTests -T 1C
     cd ${STARROCKS_HOME}
 fi
 
