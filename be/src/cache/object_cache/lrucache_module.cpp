@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "cache/object_cache/cache_types.h"
 #include "cache/object_cache/lrucache_module.h"
 
 #include <butil/fast_rand.h>
@@ -22,6 +23,7 @@ namespace starrocks {
 
 LRUCacheModule::LRUCacheModule(const ObjectCacheOptions& options) : _options(options) {
     _cache.reset(new_lru_cache(_options.capacity));
+    _initialized.store(true, std::memory_order_release);
 }
 
 LRUCacheModule::~LRUCacheModule() {

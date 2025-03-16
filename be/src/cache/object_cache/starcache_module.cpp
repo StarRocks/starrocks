@@ -12,12 +12,17 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include "cache/object_cache/cache_types.h"
 #include "cache/object_cache/starcache_module.h"
 
 #include "cache/status.h"
 #include "common/logging.h"
 
 namespace starrocks {
+
+StarCacheModule::StarCacheModule(const std::shared_ptr<starcache::StarCache>& star_cache) : _cache(star_cache) {
+    _initialized.store(true, std::memory_order_release);
+}
 
 Status StarCacheModule::insert(const std::string& key, void* value, size_t size, size_t charge,
                                ObjectCacheDeleter deleter, ObjectCacheHandlePtr* handle,
@@ -131,7 +136,11 @@ const ObjectCacheMetrics StarCacheModule::metrics() const {
 }
 
 Status StarCacheModule::prune() {
-    return to_status(_cache->update_mem_quota(0, false));
+    if (_cache != nullptr) {
+        return to_status(_cache->update_mem_quota(0, false));
+    } else {
+        return Status::OK();
+    }
 }
 
 Status StarCacheModule::shutdown() {
