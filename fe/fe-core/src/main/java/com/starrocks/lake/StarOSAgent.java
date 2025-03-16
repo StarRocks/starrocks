@@ -34,6 +34,8 @@ import com.staros.proto.PlacementPreference;
 import com.staros.proto.PlacementRelationship;
 import com.staros.proto.QuitMetaGroupInfo;
 import com.staros.proto.ReplicaInfo;
+import com.staros.proto.ReplicaInfoSnapshot;
+import com.staros.proto.ReplicaInfoSnapshotList;
 import com.staros.proto.ReplicationType;
 import com.staros.proto.ServiceInfo;
 import com.staros.proto.ShardGroupInfo;
@@ -578,6 +580,10 @@ public class StarOSAgent {
                 return Optional.of(beId);
             }
         }
+        return updateNodeIdByWorkerInfo(info);
+    }
+
+    private Optional<Long> updateNodeIdByWorkerInfo(WorkerInfo info) {
         String workerAddr = info.getIpPort();
         String[] hostPorts = workerAddr.split(":");
         String host = hostPorts[0];
@@ -607,8 +613,8 @@ public class StarOSAgent {
         }
         if (result.isPresent()) {
             try (LockCloseable ignored = new LockCloseable(rwLock.writeLock())) {
-                workerToId.put(workerAddr, workerId);
-                workerToNode.put(workerId, result.get());
+                workerToId.put(workerAddr, info.getWorkerId());
+                workerToNode.put(info.getWorkerId(), result.get());
             }
         }
         return result;
@@ -640,11 +646,9 @@ public class StarOSAgent {
         return ids.iterator().next();
     }
 
-    public List<Long> getAllNodeIdsByShard(long shardId, long workerGroupId)
-            throws StarRocksException {
+    public List<Long> getAllNodeIdsByShard(long shardId, long workerGroupId) throws StarRocksException {
         try {
-            ShardInfo shardInfo = getShardInfo(shardId, workerGroupId);
-            return getAllNodeIdsByShard(shardInfo);
+            return getAllNodeIdsInWorkerGroupByShard(shardId, workerGroupId);
         } catch (StarClientException e) {
             throw new StarRocksException(e);
         }
@@ -658,6 +662,32 @@ public class StarOSAgent {
                 .forEach(x -> x.ifPresent(nodeIds::add));
 
         return nodeIds;
+    }
+
+    public List<Long> getAllNodeIdsInWorkerGroupByShard(long shardId, long workerGroupId) throws StarClientException {
+        List<ReplicaInfoSnapshotList> snapshotLists =
+                client.getReplicaWorkerInfoSnapshotList(serviceId, Lists.newArrayList(shardId), workerGroupId);
+        // as there is only one shard in the previous request, the size of snapshotList should be 1
+        Preconditions.checkState(snapshotLists.size() == 1);
+        List<ReplicaInfoSnapshot> snapshotList = snapshotLists.get(0).getReplicaSnapshotList();
+        List<Long> nodeIds = new ArrayList<>();
+        for (ReplicaInfoSnapshot snapshot : snapshotList) {
+            Optional<Long> opt = getOrUpdateNodeIdByReplicaSnapshot(snapshot.getWorkerId());
+            opt.ifPresent(nodeIds::add);
+        }
+        return nodeIds;
+    }
+
+    private Optional<Long> getOrUpdateNodeIdByReplicaSnapshot(long workerId) throws StarClientException {
+        try (LockCloseable ignored = new LockCloseable(rwLock.readLock())) {
+            // get the backend id directly from workerToBackend
+            Long beId = workerToNode.get(workerId);
+            if (beId != null) {
+                return Optional.of(beId);
+            }
+        }
+        WorkerInfo info = client.getWorkerInfo(serviceId, workerId);
+        return updateNodeIdByWorkerInfo(info);
     }
 
     public void createMetaGroup(long metaGroupId, List<Long> shardGroupIds) throws DdlException {
