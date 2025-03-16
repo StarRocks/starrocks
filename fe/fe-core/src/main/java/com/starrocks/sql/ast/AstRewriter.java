@@ -105,7 +105,7 @@ public class AstRewriter<C> implements AstVisitor<ParseNode, C> {
     }
 
     @Override
-    public ParseNode visitSubquery(SubqueryRelation node, C context) {
+    public ParseNode visitSubqueryRelation(SubqueryRelation node, C context) {
         return visit(node.getQueryStatement());
     }
 
@@ -136,7 +136,7 @@ public class AstRewriter<C> implements AstVisitor<ParseNode, C> {
     }
 
     @Override
-    public ParseNode visitSubquery(Subquery node, C context) {
+    public ParseNode visitSubqueryExpr(Subquery node, C context) {
         visit(node.getQueryStatement());
         return node;
     }

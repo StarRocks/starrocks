@@ -71,7 +71,7 @@ public class DebugRelationTracer implements AstVisitor<String, String> {
     }
 
     @Override
-    public String visitSubquery(SubqueryRelation node, String indent) {
+    public String visitSubqueryRelation(SubqueryRelation node, String indent) {
         return "SubqueryRelation{\n" + indent + "  alias=" +
                 (node.getAlias() == null ? "anonymous" : node.getAlias()) + "\n" +
                 indent + "  query=" +

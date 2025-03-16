@@ -120,7 +120,7 @@ public class CollectAstVisitor implements AstVisitor<Void, Void> {
     }
 
     @Override
-    public Void visitSubquery(SubqueryRelation node, Void context) {
+    public Void visitSubqueryRelation(SubqueryRelation node, Void context) {
         return visit(node.getQueryStatement(), context);
     }
 
@@ -191,7 +191,7 @@ public class CollectAstVisitor implements AstVisitor<Void, Void> {
     }
 
     @Override
-    public Void visitSubquery(Subquery node, Void context) {
+    public Void visitSubqueryExpr(Subquery node, Void context) {
         return visit(node.getQueryStatement(), context);
     }
 }
