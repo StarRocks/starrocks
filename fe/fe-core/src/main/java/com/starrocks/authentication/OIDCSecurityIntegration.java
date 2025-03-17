@@ -14,7 +14,6 @@
 
 package com.starrocks.authentication;
 
-import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.sql.analyzer.SemanticException;
 
 import java.util.Arrays;
@@ -23,8 +22,6 @@ import java.util.Map;
 import java.util.Set;
 
 public class OIDCSecurityIntegration extends SecurityIntegration {
-    public static final String TYPE = AuthPlugin.AUTHENTICATION_OPENID_CONNECT.name();
-
     public static final String OIDC_JWKS_URL = "oidc_jwks_url";
     public static final String OIDC_PRINCIPAL_FIELD = "oidc_principal_field";
     public static final String OIDC_REQUIRED_ISSUER = "oidc_required_issuer";

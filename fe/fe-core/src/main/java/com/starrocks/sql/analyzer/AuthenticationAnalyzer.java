@@ -17,10 +17,10 @@ import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.AuthenticationProvider;
 import com.starrocks.authentication.AuthenticationProviderFactory;
-import com.starrocks.authentication.PlainPasswordAuthenticationProvider;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.common.Config;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterUserStmt;
@@ -104,7 +104,7 @@ public class AuthenticationAnalyzer {
         private UserAuthenticationInfo analyzeAuthOption(UserIdentity userIdentity, UserAuthOption userAuthOption) {
             String authPluginUsing;
             if (userAuthOption == null || userAuthOption.getAuthPlugin() == null) {
-                authPluginUsing = PlainPasswordAuthenticationProvider.PLUGIN_NAME;
+                authPluginUsing = AuthPlugin.Server.MYSQL_NATIVE_PASSWORD.toString();
             } else {
                 authPluginUsing = userAuthOption.getAuthPlugin();
             }
