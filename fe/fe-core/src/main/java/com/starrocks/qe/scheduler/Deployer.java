@@ -17,6 +17,8 @@ package com.starrocks.qe.scheduler;
 import com.google.api.client.util.Sets;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableList;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.profile.Timer;
@@ -40,9 +42,14 @@ import org.apache.logging.log4j.Logger;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 import static com.starrocks.qe.scheduler.dag.FragmentInstanceExecState.DeploymentResult;
@@ -52,6 +59,9 @@ import static com.starrocks.qe.scheduler.dag.FragmentInstanceExecState.Deploymen
  */
 public class Deployer {
     private static final Logger LOG = LogManager.getLogger(Deployer.class);
+
+    private static final ExecutorService EXECUTOR = Executors.newFixedThreadPool(Config.max_fragment_deploy_threads,
+            new ThreadFactoryBuilder().setNameFormat("fragment-deployer-%d").build());
 
     private final JobSpec jobSpec;
     private final ExecutionDAG executionDAG;
@@ -107,9 +117,17 @@ public class Deployer {
 
         if (enablePlanSerializeConcurrently) {
             try (Timer ignored = Tracers.watchScope(Tracers.Module.SCHEDULER, "DeploySerializeConcurrencyTime")) {
-                threeStageExecutionsToDeploy.stream().parallel().forEach(
-                        executions -> executions.stream().parallel()
-                                .forEach(FragmentInstanceExecState::serializeRequest));
+                List<Future<?>> futures = new LinkedList<>();
+                for (List<FragmentInstanceExecState> executions : threeStageExecutionsToDeploy) {
+                    for (FragmentInstanceExecState execState : executions) {
+                        futures.add(EXECUTOR.submit(execState::serializeRequest));
+                    }
+                }
+                for (Future<?> future : futures) {
+                    future.get();
+                }
+            } catch (ExecutionException | InterruptedException e) {
+                throw new RuntimeException(e);
             }
         }
 

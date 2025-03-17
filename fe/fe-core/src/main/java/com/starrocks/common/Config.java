@@ -3579,4 +3579,10 @@ public class Config extends ConfigBase {
      */
     @ConfField(mutable = true)
     public static long max_graceful_exit_time_second = 60;
+
+    /**
+     * The maximum number of threads used to serialize fragments.
+     */
+    @ConfField(mutable = true)
+    public static int max_fragment_deploy_threads = getRuntime().availableProcessors();
 }
