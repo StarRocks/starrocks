@@ -16,6 +16,7 @@
 
 #include "exec/aggregate/agg_hash_set.h"
 #include "exec/exec_node.h"
+#include "runtime/current_thread.h"
 #include "runtime/mem_tracker.h"
 
 namespace starrocks {
@@ -92,7 +93,7 @@ Status ExceptHashSet<HashSet>::erase_duplicate_row(RuntimeState* state, const Ch
 }
 
 template <typename HashSet>
-void ExceptHashSet<HashSet>::deserialize_to_columns(KeyVector& keys, Columns& key_columns, size_t chunk_size) {
+Status ExceptHashSet<HashSet>::deserialize_to_columns(KeyVector& keys, Columns& key_columns, size_t chunk_size) {
     for (auto& key_column : key_columns) {
         DCHECK(!key_column->is_constant());
         // Because the serialized key is always nullable,
@@ -103,8 +104,9 @@ void ExceptHashSet<HashSet>::deserialize_to_columns(KeyVector& keys, Columns& ke
             }
         }
 
-        key_column->deserialize_and_append_batch(keys, chunk_size);
+        TRY_CATCH_BAD_ALLOC(key_column->deserialize_and_append_batch(keys, chunk_size));
     }
+    return Status::OK();
 }
 
 template <typename HashSet>
