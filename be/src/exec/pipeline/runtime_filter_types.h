@@ -65,7 +65,8 @@ struct RuntimeMembershipFilterBuildParam {
     bool is_empty;
     Columns columns;
     MutableRuntimeFilterPtr runtime_filter;
-    TypeDescriptor type_descriptor;
+    // used for skew join
+    TypeDescriptor _type_descriptor;
 };
 
 // RuntimeFilterCollector contains runtime in-filters and bloom-filters, it is stored in RuntimeFilerHub

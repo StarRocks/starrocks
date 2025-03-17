@@ -422,8 +422,14 @@ struct FilterIniter {
     }
 };
 
+<<<<<<< HEAD
 Status RuntimeFilterHelper::fill_runtime_filter(const ColumnPtr& column, LogicalType type, RuntimeFilter* filter,
                                                 size_t column_offset, bool eq_null, bool is_skew_join) {
+=======
+Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, LogicalType type, RuntimeFilter* filter,
+                                                      size_t column_offset, bool eq_null,
+                                                      bool for_skew_broadcast_join) {
+>>>>>>> 88a045abd1 (refactor rf)
     if (column->has_large_column()) {
         return Status::NotSupported("unsupported build runtime filter for large binary column");
     }
