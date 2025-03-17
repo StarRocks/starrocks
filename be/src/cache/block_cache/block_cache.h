@@ -85,9 +85,7 @@ public:
     DataCacheEngineType engine_type();
 
 #ifdef WITH_STARCACHE
-    std::shared_ptr<starcache::StarCache> starcache_instance() {
-        return _kv_cache->starcache_instance();
-    }
+    std::shared_ptr<starcache::StarCache> starcache_instance() { return _kv_cache->starcache_instance(); }
 #endif
 
     static const size_t MAX_BLOCK_SIZE;
