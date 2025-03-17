@@ -1264,9 +1264,6 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
             parentStmtExecutor.registerSubStmtExecutor(executor);
         }
         ctx.setStmtId(STMT_ID_GENERATOR.incrementAndGet());
-        ctx.getSessionVariable().setEnableInsertStrict(false);
-        // enable profile by default for mv refresh task
-        ctx.getSessionVariable().setEnableProfile(true);
         logger.info("[QueryId:{}] start to refresh materialized view {}", ctx.getQueryId(), mv.getName());
         try {
             executor.handleDMLStmtWithProfile(execPlan, insertStmt);
