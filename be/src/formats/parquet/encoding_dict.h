@@ -25,6 +25,7 @@
 #include "formats/parquet/encoding.h"
 #include "simd/simd.h"
 #include "util/coding.h"
+#include "util/cpu_info.h"
 #include "util/rle_encoding.h"
 #include "util/slice.h"
 
@@ -84,7 +85,7 @@ private:
 
 class CacheAwareDictDecoder : public Decoder {
 public:
-    CacheAwareDictDecoder() { _set_dict_size_threshold(); }
+    CacheAwareDictDecoder() { _dict_size_threshold = CpuInfo::get_l2_cache_size(); }
     ~CacheAwareDictDecoder() override = default;
 
     Status next_batch(size_t count, ColumnContentType content_type, Column* dst, const FilterData* filter) override {
@@ -130,13 +131,6 @@ protected:
     RleBatchDecoder<uint32_t> _rle_batch_reader;
 
 private:
-    static const size_t DEFAULT_L2_CACHE_SIZE = 1 * 1024 * 1024;
-    void _set_dict_size_threshold() {
-        const auto& cache_sizes = CpuInfo::get_cache_sizes();
-        auto l2_cache_size = cache_sizes[CpuInfo::L2_CACHE];
-        _dict_size_threshold = l2_cache_size ? l2_cache_size : DEFAULT_L2_CACHE_SIZE;
-    }
-
     size_t _dict_size_threshold = 0;
 };
 
