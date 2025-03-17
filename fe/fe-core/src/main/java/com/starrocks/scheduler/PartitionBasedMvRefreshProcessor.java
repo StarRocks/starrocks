@@ -126,6 +126,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
     private MaterializedView mv;
     private Logger logger;
     private MvTaskRunContext mvContext;
+    // only trigger to post process when mv has been refreshed successfully
+    private boolean isNeedToTriggerPostProcess = false;
 
     // Collect all bases tables of the mv to be updated meta after mv refresh success.
     // format :     table id -> <base table info, snapshot table>
@@ -201,6 +203,8 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
                 // update metrics
                 mvEntity.increaseRefreshJobStatus(status);
                 connectContext.getState().setOk();
+                // only trigger to post process when mv has been refreshed successfully
+                this.isNeedToTriggerPostProcess = status == RefreshJobStatus.SUCCESS;
             }
         } catch (Exception e) {
             if (mvEntity != null) {
@@ -584,7 +588,7 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
         }
         // enable profile by default for mv refresh task
         if (!isMVPropertyContains(SessionVariable.ENABLE_PROFILE)) {
-            mvSessionVariable.setEnableProfile(true);
+            mvSessionVariable.setEnableProfile(Config.enable_mv_refresh_collect_profile);
         }
         // set the default new_planner_optimize_timeout for mv refresh
         if (!isMVPropertyContains(SessionVariable.NEW_PLANNER_OPTIMIZER_TIMEOUT)) {
@@ -1426,6 +1430,9 @@ public class PartitionBasedMvRefreshProcessor extends BaseTaskRunProcessor {
 
     @Override
     public void postTaskRun(TaskRunContext context) throws Exception {
+        if (!isNeedToTriggerPostProcess) {
+            return;
+        }
         // recreate post run context for each task run
         final ConnectContext ctx = context.getCtx();
         final String postRun = getPostRun(ctx, mv);
