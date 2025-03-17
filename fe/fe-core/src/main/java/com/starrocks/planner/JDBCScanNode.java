@@ -114,7 +114,7 @@ public class JDBCScanNode extends ScanNode {
         JDBCResource resource = (JDBCResource) GlobalStateMgr.getCurrentState().getResourceMgr()
                 .getResource(table.getResourceName());
         // Compatible with jdbc catalog
-        String jdbcURI = resource != null ? resource.getProperty(JDBCResource.URI) : table.getProperty(JDBCResource.URI);
+        String jdbcURI = resource != null ? resource.getProperty(JDBCResource.URI) : table.getConnectInfo(JDBCResource.URI);
         return jdbcURI.startsWith("jdbc:mysql");
     }
 

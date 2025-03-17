@@ -51,7 +51,7 @@ public class JDBCTable extends Table {
     @SerializedName(value = "rn")
     private String resourceName;
 
-    private Map<String, String> properties;
+    private Map<String, String> connectInfo;
     private String catalogName;
     private String dbName;
     private List<Column> partitionColumns;
@@ -107,12 +107,11 @@ public class JDBCTable extends Table {
         return partitionColumns;
     }
 
-    @Override
-    public Map<String, String> getProperties() {
-        if (properties == null) {
-            this.properties = new HashMap<>();
+    public Map<String, String> getConnectInfo() {
+        if (connectInfo == null) {
+            this.connectInfo = new HashMap<>();
         }
-        return properties;
+        return connectInfo;
     }
 
     @Override
@@ -120,8 +119,8 @@ public class JDBCTable extends Table {
         return partitionColumns == null || partitionColumns.size() == 0;
     }
 
-    public String getProperty(String propertyKey) {
-        return properties.get(propertyKey);
+    public String getConnectInfo(String connectInfoKey) {
+        return connectInfo.get(connectInfoKey);
     }
 
     private void validate(Map<String, String> properties) throws DdlException {
@@ -146,7 +145,7 @@ public class JDBCTable extends Table {
             } else {
                 jdbcTable = properties.get(JDBCTable.JDBC_TABLENAME);
             }
-            this.properties = properties;
+            this.connectInfo = properties;
             return;
         }
 
@@ -220,14 +219,14 @@ public class JDBCTable extends Table {
             tJDBCTable.setJdbc_user(resource.getProperty(JDBCResource.USER));
             tJDBCTable.setJdbc_passwd(resource.getProperty(JDBCResource.PASSWORD));
         } else {
-            String uri = properties.get(JDBCResource.URI);
+            String uri = connectInfo.get(JDBCResource.URI);
             String driverName = buildCatalogDriveName(uri);
             tJDBCTable.setJdbc_driver_name(driverName);
-            tJDBCTable.setJdbc_driver_url(properties.get(JDBCResource.DRIVER_URL));
-            tJDBCTable.setJdbc_driver_checksum(properties.get(JDBCResource.CHECK_SUM));
-            tJDBCTable.setJdbc_driver_class(properties.get(JDBCResource.DRIVER_CLASS));
+            tJDBCTable.setJdbc_driver_url(connectInfo.get(JDBCResource.DRIVER_URL));
+            tJDBCTable.setJdbc_driver_checksum(connectInfo.get(JDBCResource.CHECK_SUM));
+            tJDBCTable.setJdbc_driver_class(connectInfo.get(JDBCResource.DRIVER_CLASS));
 
-            if (properties.get(JDBC_TABLENAME) != null) {
+            if (connectInfo.get(JDBC_TABLENAME) != null) {
                 tJDBCTable.setJdbc_url(uri);
             } else {
                 int delimiterIndex = uri.indexOf("?");
@@ -240,8 +239,8 @@ public class JDBCTable extends Table {
                 }
             }
             tJDBCTable.setJdbc_table(jdbcTable);
-            tJDBCTable.setJdbc_user(properties.get(JDBCResource.USER));
-            tJDBCTable.setJdbc_passwd(properties.get(JDBCResource.PASSWORD));
+            tJDBCTable.setJdbc_user(connectInfo.get(JDBCResource.USER));
+            tJDBCTable.setJdbc_passwd(connectInfo.get(JDBCResource.PASSWORD));
         }
 
         TTableDescriptor tTableDescriptor = new TTableDescriptor(getId(), TTableType.JDBC_TABLE,
@@ -256,7 +255,7 @@ public class JDBCTable extends Table {
     }
 
     public ProtocolType getProtocolType() {
-        String uri = properties.get(JDBCResource.URI);
+        String uri = connectInfo.get(JDBCResource.URI);
         if (StringUtils.isEmpty(uri)) {
             return ProtocolType.UNKNOWN;
         }
