@@ -634,6 +634,7 @@ struct TJDBCScanNode {
   3: optional list<string> columns
   4: optional list<string> filters
   5: optional i64 limit
+  6: optional list<string> session_variable_hints
 }
 
 // If you find yourself changing this struct, see also TOlapScanNode

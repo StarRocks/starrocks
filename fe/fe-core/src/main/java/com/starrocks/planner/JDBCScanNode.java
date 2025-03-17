@@ -28,6 +28,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.JDBCResource;
 import com.starrocks.catalog.JDBCTable;
 import com.starrocks.common.StarRocksException;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.thrift.TExplainLevel;
@@ -35,9 +36,11 @@ import com.starrocks.thrift.TJDBCScanNode;
 import com.starrocks.thrift.TPlanNode;
 import com.starrocks.thrift.TPlanNodeType;
 import com.starrocks.thrift.TScanRangeLocations;
+import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 /**
  * full scan on JDBC table.
@@ -46,6 +49,7 @@ public class JDBCScanNode extends ScanNode {
 
     private final List<String> columns = new ArrayList<>();
     private final List<String> filters = new ArrayList<>();
+    private final List<String> sessionVariableHints = new ArrayList<>();
     private String tableName;
     private JDBCTable table;
 
@@ -66,12 +70,14 @@ public class JDBCScanNode extends ScanNode {
     public void finalizeStats(Analyzer analyzer) throws StarRocksException {
         createJDBCTableColumns();
         createJDBCTableFilters();
+        createJDBCTableSessionVariableHints();
         computeStats(analyzer);
     }
 
-    public void computeColumnsAndFilters() {
+    public void computeColumnsAndFiltersAndSessionVariables() {
         createJDBCTableColumns();
         createJDBCTableFilters();
+        createJDBCTableSessionVariableHints();
     }
 
     @Override
@@ -110,12 +116,21 @@ public class JDBCScanNode extends ScanNode {
         }
     }
 
-    private boolean isMysql() {
+    private String getJDBCResourceProperty(String propertyKey) {
         JDBCResource resource = (JDBCResource) GlobalStateMgr.getCurrentState().getResourceMgr()
                 .getResource(table.getResourceName());
         // Compatible with jdbc catalog
-        String jdbcURI = resource != null ? resource.getProperty(JDBCResource.URI) : table.getProperty(JDBCResource.URI);
+        return resource != null ? resource.getProperty(propertyKey) : table.getProperty(propertyKey);
+    }
+
+    private boolean isMysql() {
+        String jdbcURI = getJDBCResourceProperty(JDBCResource.URI);
         return jdbcURI.startsWith("jdbc:mysql");
+    }
+
+    private boolean isStarRocksTable() {
+        String databaseType = getJDBCResourceProperty(JDBCResource.DATABASE_TYPE);
+        return databaseType != null && databaseType.equalsIgnoreCase("starrocks");
     }
 
     private String getIdentifierSymbol() {
@@ -144,6 +159,89 @@ public class JDBCScanNode extends ScanNode {
         }
     }
 
+    private static final Pattern SESSION_VARIABLE_PATTERN = Pattern.compile(
+            "(@'[^']+'|@\"[^\"]+\"|@[A-Za-z0-9_]+|[A-Za-z0-9_]+)\\s*=\\s*('[^']*'|\"[^\"]*\"|\\d+)(?:,|$)"
+    );
+
+    private void createJDBCTableSessionVariableHints() {
+        String jdbcExternalTableSessionVariables =
+                ConnectContext.get().getSessionVariable().getJdbcExternalTableSessionVariables();
+        if (StringUtils.isEmpty(jdbcExternalTableSessionVariables)) {
+            return;
+        }
+        if (!isMysql()) {
+            throw new UnsupportedOperationException(
+                    String.format("Sending session variable to JDBC external table is only supported for MYSQL protocol")
+            );
+        }
+        boolean isStarRocksTable = isStarRocksTable();
+
+        // Split the input into 'variableName=variableValue' string assignments and iterate over each assignment
+        String[] jdbcExternalTableVariableAssignments =
+                jdbcExternalTableSessionVariables.split(",(?=(?:[^']*'[^']*')*[^']*$)");
+
+        // Collect session variables and user defined variables
+        List<String> userVariableAssignments = new ArrayList<>();
+        List<String> sessionVariableAssignments = new ArrayList<>();
+        for (String assignment : jdbcExternalTableVariableAssignments) {
+            String trimmedAssignment = assignment.trim();
+            validateSessionVariableAssignmentSyntax(trimmedAssignment);
+            // Check if user defined variable: starts with '@' e.g. @var1
+            if (trimmedAssignment.startsWith("@")) {
+                if (!isStarRocksTable) {
+                    // StarRocks table supports User Defined variable in query hint but not plain MySQL
+                    throw new UnsupportedOperationException("Sending user defined variables to JDBC external table is " +
+                            "only supported for \"database_type\" = 'starrocks'. " + "Invalid assignment: " + assignment +
+                            ". Please add \"database_type\" = \"starrocks\" to the JDBC resource properties on creation " +
+                            "if you intend to propagate user defined variables to an external StarRocks cluster.");
+                }
+                userVariableAssignments.add(trimmedAssignment);
+            } else {
+                sessionVariableAssignments.add(trimmedAssignment);
+            }
+        }
+
+        // Construct SET_VAR hint for session variables and add to sessionVariableHints (get sent to jdbc_connector.cpp)
+        if (!sessionVariableAssignments.isEmpty()) {
+            StringBuilder setVarHintClause = new StringBuilder();
+            if (isStarRocksTable) {
+                // To set more than 1 session variable for StarRocks cluster, use 1x SET_VAR hint and use
+                // comma separated variable assignments
+                // https://docs.starrocks.io/docs/sql-reference/System_variable/#set-variables-in-a-single-query-statement
+                setVarHintClause.append("/*+ SET_VAR\n  (\n  ");
+                setVarHintClause.append(String.join(",\n  ", sessionVariableAssignments));
+                setVarHintClause.append("\n  ) */\n");
+            } else {
+                // For standard MySQL, set each session variable with its own SET_VAR hint
+                // https://dev.mysql.com/doc/refman/8.4/en/optimizer-hints.html#optimizer-hints-set-var
+                for (String assignment : sessionVariableAssignments) {
+                    setVarHintClause.append("/*+ SET_VAR(").append(assignment).append(") */\n");
+                }
+            }
+            sessionVariableHints.add(setVarHintClause.toString());
+        }
+
+        // Construct SET_USER_VARIABLE hint and add to sessionVariableHints to get sent to jdbc_connector.cpp
+        if (!userVariableAssignments.isEmpty()) {
+            sessionVariableHints.add("/*+ SET_USER_VARIABLE(" + String.join(", ", userVariableAssignments) + ") */\n");
+        }
+    }
+
+    private void validateSessionVariableAssignmentSyntax(String sessionVariableAssignment) {
+        int equalIndex = sessionVariableAssignment.indexOf('=');
+        if (equalIndex == -1) {
+            throw new IllegalArgumentException("Malformed session variable assignment: " + sessionVariableAssignment);
+        }
+        if (!SESSION_VARIABLE_PATTERN.matcher(sessionVariableAssignment).matches()) {
+            throw new IllegalArgumentException("Invalid session variable format for " +
+                    "jdbc_external_table_session_variables. Invalid assignment: " + sessionVariableAssignment +
+                    ". Supports MySQL system variables or StarRocks user defined variables. " +
+                    "Values can be a quoted string or a numeric value. For example: " +
+                    "@my_var='some_value' or my_var=123. The entire string should be a comma separated string " +
+                    "of variables e.g. \"@my_var='some_value',my_var2=123\"");
+        }
+    }
+
     @Override
     public boolean canUseRuntimeAdaptiveDop() {
         return true;
@@ -158,6 +256,7 @@ public class JDBCScanNode extends ScanNode {
         msg.jdbc_scan_node.setColumns(columns);
         msg.jdbc_scan_node.setFilters(filters);
         msg.jdbc_scan_node.setLimit(limit);
+        msg.jdbc_scan_node.setSession_variable_hints(sessionVariableHints);
     }
 
     @Override

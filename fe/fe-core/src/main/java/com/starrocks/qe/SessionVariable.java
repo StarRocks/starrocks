@@ -842,6 +842,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     // regexp predicate is less efficient than like predicates.
     public static final String LIKE_PREDICATE_CONSOLIDATE_MIN = "like_predicate_consolidate_min";
 
+    // To propagate JDBC session variables in a JDBC connection string for JDBC External Table.
+    // Currently only supported for MYSQL protocol.
+    public static final String JDBC_EXTERNAL_TABLE_SESSION_VARIABLES = "jdbc_external_table_session_variables";
+
     public static final String CONNECTOR_REMOTE_FILE_ASYNC_QUEUE_SIZE = "connector_remote_file_async_queue_size";
     public static final String CONNECTOR_REMOTE_FILE_ASYNC_TASK_SIZE = "connector_remote_file_async_task_size";
     public static final String ENABLE_CONNECTOR_INCREMENTAL_SCAN_RANGES = "enable_connector_incremental_scan_ranges";
@@ -2350,6 +2354,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CHOOSE_EXECUTE_INSTANCES_MODE)
     private String chooseExecuteInstancesMode = LOCALITY.name();
+
+    @VarAttr(name = JDBC_EXTERNAL_TABLE_SESSION_VARIABLES)
+    private String jdbcExternalTableSessionVariables = "";
 
     @VarAttr(name = ENABLE_PREDICATE_MOVE_AROUND)
     private boolean enablePredicateMoveAround = true;
@@ -4543,6 +4550,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setLikePredicateConsolidateMin(int value) {
         this.likePredicateConsolidateMin = value;
+    }
+
+    public void setJdbcExternalTableSessionVariables(String jdbcExternalTableSessionVariables) {
+        this.jdbcExternalTableSessionVariables = jdbcExternalTableSessionVariables;
+    }
+    public String getJdbcExternalTableSessionVariables() {
+        return jdbcExternalTableSessionVariables;
     }
 
     public String getCustomQueryId() {
