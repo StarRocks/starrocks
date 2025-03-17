@@ -20,6 +20,9 @@
 #include "util/threadpool.h"
 
 namespace starrocks {
+
+class ThreadPoolToken;
+
 namespace lake {
 
 class LoadSpillBlockMergeExecutor {
@@ -30,6 +33,8 @@ public:
 
     ThreadPool* get_thread_pool() { return _merge_pool.get(); }
     Status refresh_max_thread_num();
+
+    std::unique_ptr<ThreadPoolToken> create_token();
 
 private:
     // ThreadPool for merge.

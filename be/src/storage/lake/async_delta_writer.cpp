@@ -123,6 +123,7 @@ private:
 
     std::unique_ptr<DeltaWriter> _writer{};
     bthread::ExecutionQueueId<TaskPtr> _queue_id{kInvalidQueueId};
+    std::unique_ptr<ThreadPoolToken> _block_merge_token{};
     StackTraceMutex<bthread::Mutex> _mtx{};
     // _status、_opened and _closed are protected by _mtx
     Status _status{};
@@ -206,8 +207,7 @@ inline int AsyncDeltaWriterImpl::execute(void* meta, bthread::TaskIterator<Async
             } else if (delta_writer->has_spill_block()) {
                 // If there are spill blocks, we merge them using another thread pool
                 auto merge_task = std::make_shared<MergeBlockTask>(finish_task, async_writer);
-                auto res = StorageEngine::instance()->load_spill_block_merge_executor()->get_thread_pool()->submit(
-                        merge_task);
+                auto res = async_writer->_block_merge_token->submit(merge_task);
                 if (!res.ok()) {
                     st.update(res);
                     LOG_IF(ERROR, !st.ok()) << "Fail to submit merge task: " << st;
@@ -253,6 +253,9 @@ inline Status AsyncDeltaWriterImpl::do_open() {
     if (int r = bthread::execution_queue_start(&_queue_id, &opts, execute, this); r != 0) {
         _queue_id.value = kInvalidQueueId;
         return Status::InternalError(fmt::format("fail to create bthread execution queue: {}", r));
+    }
+    if (_block_merge_token == nullptr) {
+        _block_merge_token = StorageEngine::instance()->load_spill_block_merge_executor()->create_token();
     }
     return _writer->open();
 }
@@ -313,6 +316,12 @@ inline void AsyncDeltaWriterImpl::close() {
         l.unlock();
 
         TEST_SYNC_POINT("AsyncDeltaWriterImpl::close:2");
+
+        // Wait for block merge finished.
+        if (_block_merge_token != nullptr) {
+            _block_merge_token->shutdown();
+            _block_merge_token.reset();
+        }
 
         // After the execution_queue been `stop()`ed all incoming `write()` and `finish()` requests
         // will fail immediately.
