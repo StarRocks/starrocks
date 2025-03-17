@@ -532,6 +532,7 @@ vectorized_functions = [
 
     [50262, 'to_iso8601', True, False, 'VARCHAR', ['DATETIME'], 'TimeFunctions::datetime_to_iso8601'],
     [50263, 'to_iso8601', True, False, 'VARCHAR', ['DATE'], 'TimeFunctions::date_to_iso8601'],
+    [50264, 'from_iso8601_date', True, False, 'VARCHAR', ['VARCHAR'], 'TimeFunctions::from_iso8601_date'],
     [50250, 'time_to_sec', True, False, 'BIGINT', ['TIME'], 'TimeFunctions::time_to_sec'],
 
     # unix timestamp extended version to int64

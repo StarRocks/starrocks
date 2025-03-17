@@ -56,6 +56,8 @@ public:
 
     bool from_string(const char* date_str, size_t len);
 
+    bool from_iso8601_string(const char* str, size_t len);
+
     inline void to_date(int* year, int* month, int* day) const;
 
     bool get_weeks_of_year_with_cache(int* weeks) const;
@@ -73,6 +75,8 @@ public:
      *  - 6: Saturday
      */
     int weekday() const;
+
+    int weekday_iso() const;
 
     void trunc_to_day();
     void trunc_to_month();
