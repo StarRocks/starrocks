@@ -64,6 +64,7 @@ import com.starrocks.thrift.TBrokerVersion;
 import com.starrocks.thrift.THeartbeatResult;
 import com.starrocks.thrift.TMasterInfo;
 import com.starrocks.thrift.TNetworkAddress;
+import com.starrocks.thrift.TNodeType;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -277,6 +278,9 @@ public class HeartbeatMgr extends FrontendDaemon {
                 if (computeNode instanceof Backend) {
                     copiedMasterInfo.setDisabled_disks(((Backend) computeNode).getDisabledDisks());
                     copiedMasterInfo.setDecommissioned_disks(((Backend) computeNode).getDecommissionedDisks());
+                    copiedMasterInfo.setNode_type(TNodeType.Backend);
+                } else {
+                    copiedMasterInfo.setNode_type(TNodeType.Compute);
                 }
                 THeartbeatResult result = ThriftRPCRequestExecutor.callNoRetry(
                         ThriftConnectionPool.beHeartbeatPool,
