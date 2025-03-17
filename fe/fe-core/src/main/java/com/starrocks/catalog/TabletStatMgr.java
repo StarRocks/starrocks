@@ -244,6 +244,7 @@ public class TabletStatMgr extends FrontendDaemon {
         BasicStatsMeta meta = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getTableBasicStatsMeta(tableId);
         if (meta != null) {
             meta.setUpdateRows(totalRowCount);
+            meta.resetDeltaRows();
         }
     }
 

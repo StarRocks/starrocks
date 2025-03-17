@@ -185,7 +185,7 @@ public class BasicStatsMeta implements Writable {
     }
 
     public void setUpdateRows(Long updateRows) {
-        this.updateRows = updateRows;
+         this.updateRows = updateRows;
     }
 
     public void increaseDeltaRows(Long delta) {
