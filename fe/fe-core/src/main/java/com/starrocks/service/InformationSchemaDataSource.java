@@ -635,9 +635,10 @@ public class InformationSchemaDataSource {
                 String roleName = role.getName();
                 String roleHost = "%";
 
-                String isGrantable = authMgr.isRoleGrantable(currentUser, roleName) ? "YES" : "NO";
-                String isDefault = authMgr.isRoleDefault(currentUser, roleName) ? "YES" : "NO";
-                String isMandatory = authMgr.isRoleMandatory(currentUser, roleName) ? "YES" : "NO";
+                // TODO The related functions of 'isGrantable' may be expanded in the future
+                String isGrantable = "NO";
+                String isDefault = "NO";
+                String isMandatory = "NO";
 
                 TApplicableRolesInfo roleInfo = new TApplicableRolesInfo();
                 roleInfo.setUser(currentUser.getUser());

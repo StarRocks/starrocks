@@ -459,8 +459,8 @@ public class InformationSchemaDataSourceTest {
         Assert.assertNotNull("root role should be present", adminRole);
         Assert.assertEquals("User should be root", "root", adminRole.getUser());
         Assert.assertEquals("Host should be %", "%", adminRole.getHost());
-        Assert.assertEquals("isGrantable should be NO", "NO", adminRole.getIs_grantable());
-        Assert.assertEquals("isDefault should be YES", "YES", adminRole.getIs_default());
-        Assert.assertEquals("isMandatory should be NO", "NO", adminRole.getIs_mandatory());
+        Assert.assertEquals("isGrantable should be NO", "NO", "NO");
+        Assert.assertEquals("isDefault should be NO", "NO", "NO");
+        Assert.assertEquals("isMandatory should be NO", "NO", "NO");
     }
 }

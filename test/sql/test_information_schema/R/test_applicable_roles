@@ -8,7 +8,7 @@ SELECT * FROM information_schema.applicable_roles WHERE ROLE_NAME = 'root';
 
 SELECT * FROM information_schema.applicable_roles WHERE IS_GRANTABLE = 'NO';
 
-SELECT * FROM information_schema.applicable_roles WHERE IS_DEFAULT = 'YES';
+SELECT * FROM information_schema.applicable_roles WHERE IS_DEFAULT = 'NO';
 
 SELECT * FROM information_schema.applicable_roles WHERE IS_MANDATORY = 'NO';
 

@@ -103,9 +103,10 @@ public class SystemId {
     public static final long FE_METRICS_ID = 42L;
 
     public static final long TEMP_TABLES_ID = 43L;
-    public static final long APPLICABLE_ROLES_ID = 45L;
 
     public static final long KEYWORDS_ID = 44L;
+
+    public static final long APPLICABLE_ROLES_ID = 45L;
 
     public static final long SYS_DB_ID = 100L;
 

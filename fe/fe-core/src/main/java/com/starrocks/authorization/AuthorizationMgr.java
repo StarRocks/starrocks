@@ -1802,46 +1802,4 @@ public class AuthorizationMgr {
         }
         return applicableRoles;
     }
-
-    public boolean isRoleGrantable(UserIdentity user, String roleName) {
-        roleReadLock();
-        try {
-            Long roleId = roleNameToId.get(roleName);
-            if (roleId == null) {
-                return false;
-            }
-            RolePrivilegeCollectionV2 rolePrivilegeCollection = roleIdToPrivilegeCollection.get(roleId);
-            return rolePrivilegeCollection != null && rolePrivilegeCollection.isGrantable();
-        } finally {
-            roleReadUnlock();
-        }
-    }
-
-    public boolean isRoleDefault(UserIdentity user, String roleName) {
-        userReadLock();
-        try {
-            UserPrivilegeCollectionV2 userPrivilegeCollection = userToPrivilegeCollection.get(user);
-            if (userPrivilegeCollection == null) {
-                return false;
-            }
-            Long roleId = roleNameToId.get(roleName);
-            return roleId != null && userPrivilegeCollection.getDefaultRoleIds().contains(roleId);
-        } finally {
-            userReadUnlock();
-        }
-    }
-
-    public boolean isRoleMandatory(UserIdentity user, String roleName) {
-        roleReadLock();
-        try {
-            Long roleId = roleNameToId.get(roleName);
-            if (roleId == null) {
-                return false;
-            }
-            RolePrivilegeCollectionV2 rolePrivilegeCollection = roleIdToPrivilegeCollection.get(roleId);
-            return rolePrivilegeCollection != null && rolePrivilegeCollection.isMandatory();
-        } finally {
-            roleReadUnlock();
-        }
-    }
 }
