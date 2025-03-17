@@ -646,3 +646,58 @@ DROP TABLE t_auto_increment_partial_update_only;
 DROP DATABASE test_auto_increment_partial_update_only;
 -- result:
 -- !result
+-- name: test_auto_increment_insert_partial_update
+ADMIN SET FRONTEND CONFIG ("auto_increment_cache_size" = "0");
+CREATE TABLE `t_auto_increment_insert_partial_update` (
+  `k` STRING NOT NULL COMMENT "",
+  `v1` BIGINT AUTO_INCREMENT,
+  `created` datetime NULL DEFAULT CURRENT_TIMESTAMP COMMENT ""
+) ENGINE=OLAP 
+PRIMARY KEY(`k`)
+DISTRIBUTED BY HASH(`k`) BUCKETS 1
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true"
+);
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (k) values (1);
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (k) values (1),(2);
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (k) values (1),(2),(3);
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (k) values (1),(2),(3),(4);
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (k) values (1),(2),(3),(4);
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (k) values (1),(2),(3),(4);
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (k) values (1),(2),(3),(4);
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (k) values (1),(2),(3),(4);
+-- result:
+-- !result
+insert into t_auto_increment_insert_partial_update (k) values (1),(2),(5);
+-- result:
+-- !result
+SELECT k, v1 from t_auto_increment_insert_partial_update ORDER BY k;
+-- result:
+1	1
+2	2
+3	3
+4	4
+5	5
+-- !result
+DROP TABLE t_auto_increment_insert_partial_update force;
+-- result:
+-- !result
