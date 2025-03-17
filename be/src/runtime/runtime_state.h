@@ -389,6 +389,9 @@ public:
     int64_t max_spill_read_buffer_bytes_per_driver() const {
         return _spill_options.has_value() ? _spill_options->max_spill_read_buffer_bytes_per_driver : INT64_MAX;
     }
+    int64_t spill_hash_join_probe_op_max_bytes() const {
+        return _spill_options.has_value() ? _spill_options->spill_hash_join_probe_op_max_bytes : 1LL << 31;
+    }
 
     bool error_if_overflow() const {
         return _query_options.__isset.overflow_mode && _query_options.overflow_mode == TOverflowMode::REPORT_ERROR;

@@ -51,6 +51,7 @@ struct SpillableHashJoinProbeMetrics {
     RuntimeProfile::Counter* probe_shuffle_timer = nullptr;
     RuntimeProfile::HighWaterMarkCounter* prober_peak_memory_usage = nullptr;
     RuntimeProfile::HighWaterMarkCounter* build_partition_peak_memory_usage = nullptr;
+    RuntimeProfile::HighWaterMarkCounter* peak_processing_partition_count = nullptr;
 };
 
 class SpillableHashJoinProbeOperator final : public HashJoinProbeOperator {
@@ -78,6 +79,10 @@ public:
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state) override;
 
     void set_probe_spiller(std::shared_ptr<spill::Spiller> spiller) { _probe_spiller = std::move(spiller); }
+
+    void set_degree_of_parallelism(int32_t degree_of_parallelism) { _degree_of_parallelism = degree_of_parallelism; }
+
+    void set_spill_hash_join_probe_op_max_bytes(int64_t op_bytes) { _spill_hash_join_probe_op_max_bytes = op_bytes; }
 
 private:
     bool spilled() const;
@@ -129,6 +134,9 @@ private:
 
     bool _is_finished = false;
     bool _is_finishing = false;
+
+    int32_t _degree_of_parallelism;
+    int64_t _spill_hash_join_probe_op_max_bytes;
 
     NoBlockCountDownLatch _latch;
     mutable std::mutex _mutex;
