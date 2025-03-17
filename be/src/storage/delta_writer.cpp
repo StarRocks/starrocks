@@ -121,6 +121,23 @@ bool DeltaWriter::is_partial_update_with_sort_key_conflict(const PartialUpdateMo
                                                            const std::vector<int32_t>& referenced_column_ids,
                                                            const std::vector<ColumnId>& sort_key_idxes,
                                                            size_t num_key_columns) {
+    std::stringstream referenced_column_ids_str;
+    for (size_t i = 0; i < referenced_column_ids.size(); ++i) {
+        if (i > 0) {
+            referenced_column_ids_str << ", ";
+        }
+        referenced_column_ids_str << referenced_column_ids[i];
+    }
+    LOG(INFO) << "referenced_column_ids: " << referenced_column_ids_str.str();
+
+    std::stringstream sort_key_idxes_str;
+    for (size_t i = 0; i < sort_key_idxes.size(); ++i) {
+        if (i > 0) {
+            sort_key_idxes_str << ", ";
+        }
+        sort_key_idxes_str << sort_key_idxes[i];
+    }
+    LOG(INFO) << "sort_key_idxes: " << sort_key_idxes_str.str();
     // In the current implementation, UNKNOWN_MODE and AUTO_MODE can be considered as ROW_MODE
     if (partial_update_mode == PartialUpdateMode::ROW_MODE || partial_update_mode == PartialUpdateMode::AUTO_MODE ||
         partial_update_mode == PartialUpdateMode::UNKNOWN_MODE ||
@@ -259,6 +276,8 @@ Status DeltaWriter::_init() {
     // maybe partial update, change to partial tablet schema
     if (_tablet_schema->keys_type() == KeysType::PRIMARY_KEYS && partial_cols_num < real_num_columns) {
         writer_context.referenced_column_ids.reserve(partial_cols_num);
+        std::ostringstream referenced_column_name_str;
+        std::ostringstream referenced_column_ids_str;
         for (auto i = 0; i < partial_cols_num; ++i) {
             const auto& slot_col_name = (*_opt.slots)[i]->col_name();
             int32_t index = _tablet_schema->field_index(slot_col_name);
@@ -269,8 +288,16 @@ Status DeltaWriter::_init() {
                 _set_state(kAborted, st);
                 return st;
             }
+            if (i > 0) {
+                referenced_column_ids_str << ", ";
+                referenced_column_name_str << ", ";
+            }
+            referenced_column_name_str << slot_col_name;
+            referenced_column_ids_str << index;
             writer_context.referenced_column_ids.push_back(index);
         }
+        LOG(INFO) << "referenced_column_name_str: " << referenced_column_name_str.str();
+        LOG(INFO) << "referenced_column_ids_str: " << referenced_column_ids_str.str();
         if (_opt.partial_update_mode == PartialUpdateMode::ROW_MODE) {
             // no need to control memtable row when using column mode, because we don't need to fill missing column
             int64_t average_row_size = _tablet->updates()->get_average_row_size();
@@ -286,10 +313,12 @@ Status DeltaWriter::_init() {
         }
         auto sort_key_idxes = _tablet_schema->sort_key_idxes();
         std::sort(sort_key_idxes.begin(), sort_key_idxes.end());
+        LOG(INFO) << "_partial_schema_with_sort_key_conflict before check: " << _partial_schema_with_sort_key_conflict;
         if (is_partial_update_with_sort_key_conflict(_opt.partial_update_mode, writer_context.referenced_column_ids,
                                                      sort_key_idxes, _tablet_schema->num_key_columns())) {
             _partial_schema_with_sort_key_conflict = true;
         }
+        LOG(INFO) << "_partial_schema_with_sort_key_conflict after check: " << _partial_schema_with_sort_key_conflict;
         if (!_opt.merge_condition.empty()) {
             writer_context.merge_condition = _opt.merge_condition;
         }
