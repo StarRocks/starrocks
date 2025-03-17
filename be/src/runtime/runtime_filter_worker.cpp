@@ -122,7 +122,6 @@ void RuntimeFilterPort::publish_runtime_filters_for_skew_broadcast_join(
 
     for (size_t i = 0; i < rf_descs.size(); i++) {
         auto* rf_desc = rf_descs[i];
-        auto* filter = rf_desc->runtime_filter();
         DCHECK(rf_desc->is_broad_cast_in_skew());
         // when enable_partitioned_hash_join is true, one runtime filter's key column can be split to multiple columns
         // since skew broadcast join' build side data size is small, we just accumulate columns into a whole column for Convenience
@@ -316,7 +315,7 @@ Status RuntimeFilterMergerStatus::_merge_skew_broadcast_runtime_filter(RuntimeFi
     // because we can't know which element should be used when insert one row(need partition columns and partition exprs)
     return RuntimeFilterHelper::fill_runtime_filter(
             skew_broadcast_rf_material->key_column, skew_broadcast_rf_material->build_type, out,
-            kHashJoinKeyColumnOffset, skew_broadcast_rf_material->eq_null, false);
+            kHashJoinKeyColumnOffset, skew_broadcast_rf_material->eq_null, true);
 }
 
 RuntimeFilterMerger::RuntimeFilterMerger(ExecEnv* env, const UniqueId& query_id, const TQueryOptions& query_options,

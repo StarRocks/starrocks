@@ -192,8 +192,7 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
                 state->runtime_filter_port()->publish_runtime_filters_for_skew_broadcast_join(bloom_filters, keyColumns,
                                                                                               null_safe, type_descs);
             } else {
-                state->runtime_filter_port()->publish_runtime_filters(bloom_filters, std::cref(keyColumns),
-                                                                      std::cref(null_safe), std::cref(type_descs));
+                state->runtime_filter_port()->publish_runtime_filters(bloom_filters);
             }
 
             // move runtime filters into RuntimeFilterHub.
