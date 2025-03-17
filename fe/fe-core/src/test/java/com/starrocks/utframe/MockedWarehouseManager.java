@@ -41,6 +41,7 @@ public class MockedWarehouseManager extends WarehouseManager {
     private final Map<Long, List<Long>> warehouseIdToComputeNodeIds = new HashMap<>();
     private final List<Long> computeNodeIdSetAssignedToTablet = new ArrayList<>();
     private final Set<ComputeNode> computeNodeSetAssignedToTablet = new HashSet<>();
+    private final List<ComputeNode> aliveComputeNodes = new ArrayList<>();
 
     private Long computeNodeId = 1000L;
     private boolean throwUnknownWarehouseException = false;
@@ -126,6 +127,16 @@ public class MockedWarehouseManager extends WarehouseManager {
 
     @Override
     public List<ComputeNode> getAliveComputeNodes(long warehouseId) {
+        if (!aliveComputeNodes.isEmpty()) {
+            return aliveComputeNodes;
+        }
         return new ArrayList<>(computeNodeSetAssignedToTablet);
+    }
+
+    public void setAliveComputeNodes(List<ComputeNode> computeNodes) {
+        aliveComputeNodes.clear();
+        if (computeNodes != null) {
+            aliveComputeNodes.addAll(computeNodes);
+        }
     }
 }
