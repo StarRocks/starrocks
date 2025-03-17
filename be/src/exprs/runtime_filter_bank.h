@@ -41,6 +41,7 @@ class RuntimeBloomFilterBuildParam;
 }
 
 namespace starrocks {
+struct SkewBroadcastRfMaterial;
 class RowDescriptor;
 class MemTracker;
 class ExecEnv;
@@ -65,6 +66,8 @@ public:
     static RuntimeFilter* create_join_runtime_filter(ObjectPool* pool, LogicalType type, int8_t join_mode);
 
     // ====================================
+    static Status fill_runtime_bloom_filter(const ColumnPtr& column, LogicalType type, RuntimeFilter* filter,
+                                     size_t column_offset, bool eq_null, bool for_skew_broadcast_join);
     static Status fill_runtime_bloom_filter(const Columns& columns, LogicalType type, RuntimeFilter* filter,
                                             size_t column_offset, bool eq_null);
     static Status fill_runtime_bloom_filter(const starrocks::pipeline::RuntimeBloomFilterBuildParam& param,
@@ -76,10 +79,6 @@ public:
     // create min/max predicate from filter.
     static void create_min_max_value_predicate(ObjectPool* pool, SlotId slot_id, LogicalType slot_type,
                                                const RuntimeFilter* filter, Expr** min_max_predicate);
-
-private:
-    Status fill_runtime_bloom_filter(const ColumnPtr& column, LogicalType type, RuntimeFilter* filter,
-                                     size_t column_offset, bool eq_null, bool for_skew_broadcast_join);
 };
 
 // how to generate & publish this runtime filter

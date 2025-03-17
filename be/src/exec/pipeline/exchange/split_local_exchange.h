@@ -30,6 +30,8 @@ public:
               _opened_source_opcount(num_consumers, 0),
               _chunk_size(chunk_size) {}
 
+    bool support_event_scheduler() const override { return true; }
+
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
     Status init_metrics(RuntimeProfile* profile, bool is_first_sink_driver) override;
