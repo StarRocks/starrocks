@@ -475,5 +475,7 @@ CREATE TABLE `t1_create_like_error` (
                 "storage_format" = "v2"
                 );
 create table t2_create_like_error like t1_create_like_error;
+INSERT INTO t2_create_like_error values(now(), 1, 2, 3);
+SELECT k5, k6, k7, col_array from t2_create_like_error;
 DROP TABLE t1_create_like_error;
 DROP TABLE t2_create_like_error;
