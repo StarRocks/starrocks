@@ -84,6 +84,16 @@ LoadChannel::LoadChannel(LoadChannelMgr* mgr, LakeTabletManager* lake_tablet_mgr
     _index_num = ADD_COUNTER(_profile, "IndexNum", TUnit::UNIT);
     ADD_COUNTER(_profile, "LoadMemoryLimit", TUnit::BYTES)->set(_mem_tracker->limit());
     _peak_memory_usage = ADD_PEAK_COUNTER(_profile, "PeakMemoryUsage", TUnit::BYTES);
+<<<<<<< HEAD
+=======
+    _deserialize_chunk_count = ADD_COUNTER(_profile, "DeserializeChunkCount", TUnit::UNIT);
+    _deserialize_chunk_timer = ADD_TIMER(_profile, "DeserializeChunkTime");
+    _profile_report_count = ADD_COUNTER(_profile, "ProfileReportCount", TUnit::UNIT);
+    _profile_report_timer = ADD_TIMER(_profile, "ProfileReportTime");
+    _profile_serialized_size = ADD_COUNTER(_profile, "ProfileSerializedSize", TUnit::BYTES);
+    _open_request_count = ADD_COUNTER(_profile, "OpenRequestCount", TUnit::UNIT);
+    _open_request_pending_timer = ADD_TIMER(_profile, "OpenRequestPendingTime");
+>>>>>>> be73d38b5f ([Enhancement] Move delta write open out of brpc worker (#56517))
 }
 
 LoadChannel::~LoadChannel() {
@@ -105,11 +115,15 @@ void LoadChannel::set_profile_config(const PLoadChannelProfileConfig& config) {
     }
 }
 
-void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request,
-                       PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
+void LoadChannel::open(const LoadChannelOpenContext& open_context) {
+    int64_t start_time_ns = MonotonicNanos();
+    COUNTER_UPDATE(_open_request_count, 1);
+    COUNTER_UPDATE(_open_request_pending_timer, (start_time_ns - open_context.receive_rpc_time_ns));
+    const PTabletWriterOpenRequest& request = *open_context.request;
+    PTabletWriterOpenResult* response = open_context.response;
     _span->AddEvent("open_index", {{"index_id", request.index_id()}});
     auto scoped = trace::Scope(_span);
-    ClosureGuard done_guard(done);
+    ClosureGuard done_guard(open_context.done);
 
     _last_updated_time.store(time(nullptr), std::memory_order_relaxed);
     bool is_lake_tablet = request.has_is_lake_tablet() && request.is_lake_tablet();
@@ -150,6 +164,8 @@ void LoadChannel::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& r
     if (config::enable_load_colocate_mv) {
         response->set_is_repeated_chunk(true);
     }
+    int64_t cost_ms = (MonotonicNanos() - start_time_ns) / 1000000;
+    _check_and_log_timeout_rpc("tablet writer open", cost_ms, request.timeout_ms());
 }
 
 void LoadChannel::_add_chunk(Chunk* chunk, const PTabletWriterAddChunkRequest& request,
@@ -217,6 +233,10 @@ void LoadChannel::add_chunks(const PTabletWriterAddChunksRequest& req, PTabletWr
     StarRocksMetrics::instance()->load_channel_add_chunks_total.increment(1);
     StarRocksMetrics::instance()->load_channel_add_chunks_duration_us.increment(watch.elapsed_time() / 1000);
     report_profile(response, config::pipeline_print_profile);
+<<<<<<< HEAD
+=======
+    _check_and_log_timeout_rpc("tablet writer add chunk", total_time_us / 1000, timeout_ms);
+>>>>>>> be73d38b5f ([Enhancement] Move delta write open out of brpc worker (#56517))
 }
 
 void LoadChannel::add_segment(brpc::Controller* cntl, const PTabletWriterAddSegmentRequest* request,
@@ -387,5 +407,27 @@ void LoadChannel::report_profile(PTabletWriterAddBatchResult* result, bool print
         return;
     }
     result->set_load_channel_profile((char*)buf, len);
+}
+
+void LoadChannel::_check_and_log_timeout_rpc(const std::string& rpc_name, int64_t cost_ms, int64_t timeout_ms) {
+    if (cost_ms <= timeout_ms) {
+        return;
+    }
+    // update profile
+    auto channels = _get_all_channels();
+    for (auto& channel : channels) {
+        channel->update_profile();
+    }
+
+    std::stringstream ss;
+    _root_profile->pretty_print(&ss);
+    if (timeout_ms > config::load_rpc_slow_log_frequency_threshold_seconds * 1000) {
+        LOG(WARNING) << rpc_name << " timeout. txn_id=" << _txn_id << ", cost=" << cost_ms
+                     << "ms, timeout=" << timeout_ms << "ms, profile=" << ss.str();
+    } else {
+        // reduce slow log print frequency if the log job is small batch and high frequency
+        LOG_EVERY_N(WARNING, 10) << rpc_name << " timeout. txn_id=" << _txn_id << ", cost=" << cost_ms
+                                 << "ms, timeout=" << timeout_ms << "ms, profile=" << ss.str();
+    }
 }
 } // namespace starrocks
