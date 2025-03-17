@@ -261,7 +261,7 @@ private:
             }
         }
     }
-    RunTimeColumnType<Type>::Ptr col;
+    typename RunTimeColumnType<Type>::Ptr col;
     std::default_random_engine& _re;
 };
 
