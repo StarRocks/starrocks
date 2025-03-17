@@ -218,6 +218,8 @@ JdoOptions_t JindoClientFactory::get_or_create_jindo_opts(const S3URI& uri, cons
         for (const auto& pair : options) {
             jdo_setOption(jdo_options, pair.first.c_str(), pair.second.c_str());
         }
+    }
+    if (!ak_id.empty() && !ak_secret.empty()) {
         jdo_setOption(jdo_options, "fs.oss.provider.endpoint", "");
         jdo_setOption(jdo_options, "fs.oss.provider.format", "");
     }
