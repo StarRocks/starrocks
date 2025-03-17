@@ -30,12 +30,13 @@ void SplitLocalExchanger::close(RuntimeState* state) {
     Expr::close(_split_expr_ctxs, state);
 }
 
-Status SplitLocalExchanger::init_metrics(RuntimeProfile* profile) {
-    _peak_memory_usage_counter = profile->AddHighWaterMarkCounter(
-            "ExchangerPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
-    _peak_buffer_row_size_counter = profile->AddHighWaterMarkCounter(
-            "ExchangerPeakBufferRowSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
-
+Status SplitLocalExchanger::init_metrics(RuntimeProfile* profile, bool is_first_sink_driver) {
+    if (is_first_sink_driver) {
+        _peak_memory_usage_counter = profile->AddHighWaterMarkCounter(
+                "ExchangerPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+        _peak_buffer_row_size_counter = profile->AddHighWaterMarkCounter(
+                "ExchangerPeakBufferRowSize", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
+    }
     return Status::OK();
 }
 

@@ -34,7 +34,6 @@
 #include "util/hash_util.hpp"
 
 namespace starrocks {
-struct SkewBroadcastRfMaterial;
 // 0x1. initial global runtime filter impl
 // 0x2. change simd-block-filter hash function.
 // 0x3. Fix serialize problem
