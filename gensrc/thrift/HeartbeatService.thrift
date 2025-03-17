@@ -34,6 +34,11 @@ struct TMasterInfo {
     11: optional list<string> disabled_disks
     12: optional list<string> decommissioned_disks
     13: optional bool encrypted;
+<<<<<<< HEAD
+=======
+    14: optional bool stop_regular_tablet_report; // used for upgrade/downgrade compatibility, can be removed after 3.5
+    15: optional Types.TNodeType node_type
+>>>>>>> e3912783cb ([Enhancement]  FE sends node type along with heartbeat to BE/CN (#56874))
 }
 
 struct TBackendInfo {
