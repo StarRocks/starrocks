@@ -28,15 +28,15 @@ use test_db_${uuid0};
 -- case1: partital hit
 CREATE MATERIALIZED VIEW mv1 PARTITION BY date_trunc('month',dt) REFRESH MANUAL AS SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt;
 REFRESH MATERIALIZED VIEW mv1 WITH SYNC MODE;
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;", "mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;", "mv1")
 SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;
 
 insert into hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} VALUES (3,"2020-06-15");
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;", "mv1")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;", "mv1")
 SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;
 
 insert into hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} VALUES (3,"2020-06-25");
-function: check_hit_materialized_view("SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;", "mv1", "UNION")
+function: print_hit_materialized_view("SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;", "mv1", "UNION")
 SELECT dt,sum(num) FROM hive_catalog_${uuid0}.hive_db_${uuid0}.hive_tbl_${uuid0} GROUP BY dt ORDER BY 1;
 
 set catalog hive_catalog_${uuid0};
@@ -76,14 +76,14 @@ as select k1, k2, v1 from mock_tbl;
 refresh materialized view test_mv_with_many_to_many with sync mode;
 
 select * from test_mv_with_many_to_many order by k1, k2;
-function: check_hit_materialized_view("select k1, k2, v1 from mock_tbl;", "test_mv_with_many_to_many")
-function: check_hit_materialized_view("select k1, k2, v1 from mock_tbl where k1 >= '2021-07-23' and k1 < '2021-07-26';", "test_mv_with_many_to_many")
-function: check_hit_materialized_view("select k1, k2, v1 from mock_tbl where k1 >= '2021-07-29' and k1 < '2021-08-02';", "test_mv_with_many_to_many")
+function: print_hit_materialized_view("select k1, k2, v1 from mock_tbl;", "test_mv_with_many_to_many")
+function: print_hit_materialized_view("select k1, k2, v1 from mock_tbl where k1 >= '2021-07-23' and k1 < '2021-07-26';", "test_mv_with_many_to_many")
+function: print_hit_materialized_view("select k1, k2, v1 from mock_tbl where k1 >= '2021-07-29' and k1 < '2021-08-02';", "test_mv_with_many_to_many")
 
 insert into mock_tbl values ('2021-07-29',3,10), ('2021-08-02',3,10);
 refresh materialized view test_mv_with_many_to_many with sync mode;
 select * from test_mv_with_many_to_many order by k1, k2;
-function: check_hit_materialized_view("select k1, k2, v1 from mock_tbl;", "test_mv_with_many_to_many")
+function: print_hit_materialized_view("select k1, k2, v1 from mock_tbl;", "test_mv_with_many_to_many")
 
 drop table mock_tbl;
 drop materialized view test_mv_with_many_to_many;
@@ -104,7 +104,7 @@ DISTRIBUTED BY HASH(`k2`) BUCKETS 3
 PROPERTIES (
 "replication_num" = "1"
 );
-insert into mock_tbl values('2021-07-01',2,10), ('2021-08-02',2,10), ('2021-09-03',2,10);
+insert into mock_tbl values('2021-07-01',2,10), ('2021-08-01',2,10), ('2021-08-02',2,10), ('2021-09-03',2,10);
 
 create materialized view test_mv_with_one_to_many 
 partition by date_trunc('day',k1) 
@@ -114,15 +114,22 @@ properties('replication_num' = '1', 'partition_refresh_number'='1')
 as select k1, k2, v1 from mock_tbl;
 refresh materialized view test_mv_with_one_to_many with sync mode;
 
-select * from test_mv_with_one_to_many order by k1, k2;
-function: check_hit_materialized_view("select k1, k2, v1 from mock_tbl;", "test_mv_with_one_to_many")
-function: check_hit_materialized_view("select k1, k2, v1 from mock_tbl where k1 >= '2021-07-23' and k1 < '2021-07-26';", "test_mv_with_one_to_many")
-function: check_hit_materialized_view("select k1, k2, v1 from mock_tbl where k1 >= '2021-07-29' and k1 < '2021-08-02';", "test_mv_with_one_to_many")
+function: print_hit_materialized_view("select k1, k2, v1 from mock_tbl;", "test_mv_with_one_to_many")
+function: print_hit_materialized_view("select k1, k2, v1 from mock_tbl where k1 >= '2021-07-23' and k1 < '2021-07-26';", "test_mv_with_one_to_many")
+function: print_hit_materialized_view("select k1, k2, v1 from mock_tbl where k1 >= '2021-07-29' and k1 < '2021-08-02';", "test_mv_with_one_to_many")
+select * from test_mv_with_one_to_many order by k1, k2 limit 3;
+select k1, k2, v1 from mock_tbl where k1 >= '2021-07-23' and k1 < '2021-07-26' order by k1, k2 limit 3;
+select k1, k2, v1 from mock_tbl where k1 >= '2021-07-29' and k1 < '2021-08-02' order by k1, k2 limit 3;
 
 insert into mock_tbl values ('2021-08-02',3,10), ('2021-09-03',3,10);
 refresh materialized view test_mv_with_one_to_many with sync mode;
-select * from test_mv_with_one_to_many order by k1;
-function: check_hit_materialized_view("select k1, k2, v1 from mock_tbl;", "test_mv_with_one_to_many")
+
+function: print_hit_materialized_view("select k1, k2, v1 from mock_tbl;", "test_mv_with_one_to_many")
+function: print_hit_materialized_view("select k1, k2, v1 from mock_tbl where k1 >= '2021-07-23' and k1 < '2021-07-26';", "test_mv_with_one_to_many")
+function: print_hit_materialized_view("select k1, k2, v1 from mock_tbl where k1 >= '2021-07-29' and k1 < '2021-08-02';", "test_mv_with_one_to_many")
+select * from test_mv_with_one_to_many order by k1, k2 limit 3;
+select k1, k2, v1 from mock_tbl where k1 >= '2021-07-23' and k1 < '2021-07-26' order by k1, k2 limit 3;
+select k1, k2, v1 from mock_tbl where k1 >= '2021-07-29' and k1 < '2021-08-02' order by k1, k2 limit 3;
 
 drop table mock_tbl;
 drop materialized view test_mv_with_one_to_many;
