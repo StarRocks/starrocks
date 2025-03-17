@@ -205,6 +205,7 @@ public:
     METRIC_DEFINE_INT_COUNTER(load_bytes_total, MetricUnit::BYTES);
 
     // Metrics for LoadChannel
+    METRICS_DEFINE_THREAD_POOL(load_channel);
     // The number that LoadChannel#add_chunks is accessed
     METRIC_DEFINE_INT_COUNTER(load_channel_add_chunks_total, MetricUnit::OPERATIONS);
     // The number that LoadChannel#add_chunks eos is accessed

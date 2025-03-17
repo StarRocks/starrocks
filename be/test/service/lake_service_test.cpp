@@ -23,6 +23,7 @@
 #include "gutil/strings/util.h"
 #include "runtime/exec_env.h"
 #include "runtime/load_channel_mgr.h"
+#include "service/brpc_service_test_util.h"
 #include "storage/chunk_helper.h"
 #include "storage/lake/fixed_location_provider.h"
 #include "storage/lake/join_path.h"
@@ -35,6 +36,7 @@
 #include "testutil/assert.h"
 #include "testutil/id_generator.h"
 #include "testutil/sync_point.h"
+#include "util/await.h"
 #include "util/bthreads/util.h"
 #include "util/countdown_latch.h"
 #include "util/defer_op.h"
@@ -1890,7 +1892,9 @@ TEST_F(LakeServiceTest, test_abort_txn2) {
         ptablet->set_partition_id(partition_id);
         ptablet->set_tablet_id(metadata->id());
 
-        load_mgr->open(nullptr, request, &response, nullptr);
+        MockClosure closure;
+        load_mgr->open(nullptr, request, &response, &closure);
+        ASSERT_TRUE(Awaitility().timeout(60000).until([&] { return closure.has_run(); }));
         ASSERT_EQ(TStatusCode::OK, response.status().status_code()) << response.status().error_msgs(0);
     }
 

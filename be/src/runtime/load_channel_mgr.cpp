@@ -51,6 +51,41 @@
 
 namespace starrocks {
 
+class ChannelOpenTask final : public Runnable {
+public:
+    ChannelOpenTask(LoadChannelMgr* load_channel_mgr, LoadChannelOpenContext open_context)
+            : _load_channel_mgr(load_channel_mgr), _open_context(std::move(open_context)) {}
+
+    ~ChannelOpenTask() override {
+        if (!_is_done) {
+            cancel(Status::ServiceUnavailable("Thread pool was shut down"));
+        }
+    }
+
+    void run() override {
+        if (_try_mark_done()) {
+            _load_channel_mgr->_open(_open_context);
+        }
+    }
+
+    void cancel(const Status& status) {
+        if (_try_mark_done()) {
+            ClosureGuard closure_guard(_open_context.done);
+            status.to_protobuf(_open_context.response->mutable_status());
+        }
+    }
+
+private:
+    bool _try_mark_done() {
+        bool old = false;
+        return _is_done.compare_exchange_strong(old, true);
+    }
+
+    LoadChannelMgr* _load_channel_mgr;
+    LoadChannelOpenContext _open_context;
+    std::atomic<bool> _is_done{false};
+};
+
 // Calculate the memory limit for a single load job.
 static int64_t calc_job_max_load_memory(int64_t mem_limit_in_req, int64_t total_mem_limit) {
     // mem_limit_in_req == -1 means no limit for single load.
@@ -85,6 +120,7 @@ LoadChannelMgr::~LoadChannelMgr() {
 }
 
 void LoadChannelMgr::close() {
+    _async_rpc_pool->shutdown();
     std::lock_guard l(_lock);
     for (auto iter = _load_channels.begin(); iter != _load_channels.end();) {
         iter->second->cancel();
@@ -96,12 +132,43 @@ void LoadChannelMgr::close() {
 Status LoadChannelMgr::init(MemTracker* mem_tracker) {
     _mem_tracker = mem_tracker;
     RETURN_IF_ERROR(_start_bg_worker());
+    int num_threads = config::load_channel_rpc_thread_pool_num;
+    if (num_threads <= 0) {
+        num_threads = CpuInfo::num_cores();
+    }
+    RETURN_IF_ERROR(ThreadPoolBuilder("load_channel")
+                            .set_min_threads(std::min(5, num_threads))
+                            .set_max_threads(num_threads)
+                            .set_max_queue_size(config::load_channel_rpc_thread_pool_queue_size)
+                            .set_idle_timeout(MonoDelta::FromMilliseconds(60000))
+                            .build(&_async_rpc_pool));
+    REGISTER_THREAD_POOL_METRICS(load_channel, _async_rpc_pool.get());
     return Status::OK();
 }
 
 void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest& request,
                           PTabletWriterOpenResult* response, google::protobuf::Closure* done) {
-    ClosureGuard done_guard(done);
+    LoadChannelOpenContext open_context;
+    open_context.cntl = cntl;
+    open_context.request = &request;
+    open_context.response = response;
+    open_context.done = done;
+    open_context.receive_rpc_time_ns = MonotonicNanos();
+    if (!config::enable_load_channel_rpc_async) {
+        _open(open_context);
+        return;
+    }
+    auto task = std::make_shared<ChannelOpenTask>(this, std::move(open_context));
+    Status status = _async_rpc_pool->submit(task);
+    if (!status.ok()) {
+        task->cancel(status);
+    }
+}
+
+void LoadChannelMgr::_open(LoadChannelOpenContext open_context) {
+    ClosureGuard done_guard(open_context.done);
+    const PTabletWriterOpenRequest& request = *open_context.request;
+    PTabletWriterOpenResult* response = open_context.response;
     if (!request.encryption_meta().empty()) {
         Status st = KeyCache::instance().refresh_keys(request.encryption_meta());
         if (!st.ok()) {
@@ -143,7 +210,8 @@ void LoadChannelMgr::open(brpc::Controller* cntl, const PTabletWriterOpenRequest
             return;
         }
     }
-    channel->open(cntl, request, response, done_guard.release());
+    done_guard.release();
+    channel->open(open_context);
 }
 
 void LoadChannelMgr::add_chunk(const PTabletWriterAddChunkRequest& request, PTabletWriterAddBatchResult* response) {
