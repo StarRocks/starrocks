@@ -15,16 +15,16 @@
 // specific language governing permissions and limitations
 // under the License.
 
+// let gcov to calculate code coverage for byte_buffer.h
+#pragma GCC push_options
+#pragma GCC optimize("no-inline")
+
 #include "util/byte_buffer.h"
 
 #include <gtest/gtest.h>
 
 #include "common/logging.h"
 #include "testutil/assert.h"
-
-// let gcov to calculate code coverage for byte_buffer.h
-#pragma GCC push_options
-#pragma GCC optimize("no-inline")
 
 namespace starrocks {
 
