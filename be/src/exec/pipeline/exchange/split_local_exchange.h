@@ -32,7 +32,7 @@ public:
 
     Status prepare(RuntimeState* state) override;
     void close(RuntimeState* state) override;
-    Status init_metrics(RuntimeProfile* profile) override;
+    Status init_metrics(RuntimeProfile* profile, bool is_first_sink_driver) override;
     Status push_chunk(const ChunkPtr& chunk, int32_t sink_driver_sequence) override;
     StatusOr<ChunkPtr> pull_chunk(RuntimeState* state, int32_t consuemr_index) override;
     bool can_pull_chunk(int32_t consumer_index) const override;
