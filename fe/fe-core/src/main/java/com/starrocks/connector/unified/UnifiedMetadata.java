@@ -56,6 +56,7 @@ import static com.starrocks.catalog.Table.TableType.HUDI;
 import static com.starrocks.catalog.Table.TableType.ICEBERG;
 import static com.starrocks.catalog.Table.TableType.KUDU;
 import static com.starrocks.catalog.Table.TableType.PAIMON;
+import static com.starrocks.connector.paimon.PaimonConnector.PAIMON_CATALOG_WAREHOUSE;
 import static java.util.Objects.requireNonNull;
 
 public class UnifiedMetadata implements ConnectorMetadata {
@@ -118,6 +119,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
     private ConnectorMetadata metadataOfTable(String dbName, String tblName) {
         Table.TableType type = getTableType(dbName, tblName);
         if (!metadataMap.containsKey(type)) {
+            if (type == PAIMON) {
+                throw new SemanticException("You should configure {} for " + type.name(), PAIMON_CATALOG_WAREHOUSE);
+            }
             throw new SemanticException("Unified catalog doesn't support " + type.name());
         }
         return metadataMap.get(type);
@@ -129,6 +133,9 @@ public class UnifiedMetadata implements ConnectorMetadata {
             type = HIVE;
         }
         if (!metadataMap.containsKey(type)) {
+            if (type == PAIMON) {
+                throw new SemanticException("You should configure {} for " + type.name(), PAIMON_CATALOG_WAREHOUSE);
+            }
             throw new SemanticException("Unified catalog doesn't support " + type.name());
         }
         return metadataMap.get(type);
