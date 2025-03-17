@@ -14,64 +14,43 @@
 
 package com.starrocks.statistic.base;
 
-import com.starrocks.catalog.Type;
 import com.starrocks.statistic.sample.SampleInfo;
-import org.apache.commons.lang.StringEscapeUtils;
-
-import static com.starrocks.sql.optimizer.statistics.ColumnStatistic.DEFAULT_COLLECTION_SIZE;
 
 /*
  * For describe how to collect statistics on different column type
  */
-public abstract class ColumnStats {
+public interface ColumnStats {
+    long getTypeSize();
 
-    protected final String columnName;
+    String getColumnNameStr();
 
-    protected final Type columnType;
+    String getQuotedColumnName();
 
-    protected ColumnStats(String columnName, Type columnType) {
-        this.columnName = columnName;
-        this.columnType = columnType;
+    String getCombinedMultiColumnKey();
+
+    String getMax();
+
+    String getMin();
+
+    String getCollectionSize();
+
+    String getFullDataSize();
+
+    String getFullNullCount();
+
+    String getNDV();
+
+    String getSampleDateSize(SampleInfo info);
+
+    String getSampleNullCount(SampleInfo info);
+
+    String getSampleNDV(SampleInfo info);
+
+    default boolean supportData() {
+        return false;
     }
 
-    public boolean supportMeta() {
-        return columnType.canStatistic() && !columnType.getPrimitiveType().isCharFamily();
+    default boolean supportMeta() {
+        return false;
     }
-
-    public boolean supportData() {
-        return columnType.canStatistic();
-    }
-
-    public long getTypeSize() {
-        return columnType.getTypeSize();
-    }
-
-    public String getColumnNameStr() {
-        return StringEscapeUtils.escapeSql(columnName);
-    }
-
-    public String getQuotedColumnName() {
-        return "`" + columnName + "`";
-    }
-
-    public abstract String getMax();
-
-    public abstract String getMin();
-
-    public String getCollectionSize() {
-        return String.valueOf(DEFAULT_COLLECTION_SIZE);
-    }
-
-    public abstract String getFullDateSize();
-
-    public String getFullNullCount() {
-        return "COUNT(*) - COUNT(" + getQuotedColumnName() + ")";
-    }
-
-    public abstract String getNDV();
-
-    public abstract String getSampleDateSize(SampleInfo info);
-
-    public abstract String getSampleNullCount(SampleInfo info);
-
 }

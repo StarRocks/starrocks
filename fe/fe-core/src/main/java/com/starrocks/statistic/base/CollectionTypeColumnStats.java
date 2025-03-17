@@ -19,13 +19,13 @@ import com.starrocks.catalog.MapType;
 import com.starrocks.catalog.Type;
 import com.starrocks.statistic.sample.SampleInfo;
 
-public class CollectionTypeColumnStats extends ColumnStats {
+public class CollectionTypeColumnStats extends BaseColumnStats {
     public CollectionTypeColumnStats(String columnName, Type columnType) {
         super(columnName, columnType);
     }
 
     @Override
-    public String getFullDateSize() {
+    public String getFullDataSize() {
         long elementTypeSize = columnType.isArrayType() ? ((ArrayType) columnType).getItemType().getTypeSize() :
                 ((MapType) columnType).getKeyType().getTypeSize() + ((MapType) columnType).getValueType().getTypeSize();
         return "COUNT(*) * " + elementTypeSize + " * " + getCollectionSize();

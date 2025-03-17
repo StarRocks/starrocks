@@ -64,8 +64,8 @@ public class SubFieldColumnStats extends PrimitiveTypeColumnStats {
     }
 
     @Override
-    public String getFullDateSize() {
-        return isComplexType ? complexStats.getFullDateSize() : super.getFullDateSize();
+    public String getFullDataSize() {
+        return isComplexType ? complexStats.getFullDataSize() : super.getFullDataSize();
     }
 
     @Override

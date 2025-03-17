@@ -217,8 +217,6 @@ public class ExternalAnalyzeStatus implements AnalyzeStatus, Writable {
         return new ShowResultSet(META_DATA, rows);
     }
 
-
-
     public static ExternalAnalyzeStatus read(DataInput in) throws IOException {
         String s = Text.readString(in);
         return GsonUtils.GSON.fromJson(s, ExternalAnalyzeStatus.class);

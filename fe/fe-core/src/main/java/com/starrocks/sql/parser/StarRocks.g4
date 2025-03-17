@@ -1515,10 +1515,11 @@ analyzeColumnClause
     | qualifiedName  (',' qualifiedName)*                       #regularColumns
     | ALL COLUMNS                                               #allColumns
     | PREDICATE COLUMNS                                         #predicateColumns
+    | MULTI_COLUMNS '(' qualifiedName  (',' qualifiedName)* ')' #combinedMultiColumns
     ;
 
 dropStatsStatement
-    : DROP STATS qualifiedName
+    : DROP (MULTI_COLUMNS)? STATS qualifiedName
     ;
 
 histogramStatement:
@@ -3358,7 +3359,7 @@ nonReserved
     | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS
-    | MASKING | MANUAL | MAP | MAPPING | MAPPINGS | MATCH | MATERIALIZED | MAX | MEMBER | MEMBERS | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS
+    | MASKING | MANUAL | MAP | MAPPING | MAPPINGS | MATCH | MATERIALIZED | MAX | MEMBER | MEMBERS | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTI_COLUMNS
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE | OFF
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLAN | PLUGIN | PLUGINS | POLICY | POLICIES

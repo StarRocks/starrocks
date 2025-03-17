@@ -134,7 +134,7 @@ public class StatisticsSQLTest extends PlanTestBase {
         List<String> columnNames = Lists.newArrayList("v3", "j1", "s1");
         List<Type> columnTypes = Lists.newArrayList(Type.BIGINT, Type.JSON, Type.STRING);
         TabletSampleManager tabletSampleManager = TabletSampleManager.init(Maps.newHashMap(), t0);
-        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo(db.getFullName(), t0.getName());
+        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo();
 
         ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, t0,
                 sampleInfo);
@@ -303,7 +303,7 @@ public class StatisticsSQLTest extends PlanTestBase {
                 continue;
             }
             TabletSampleManager tabletSampleManager = TabletSampleManager.init(Maps.newHashMap(), t0);
-            SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo(db.getFullName(), t0.getName());
+            SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo();
             String sql = sampleInfo.generatePrimitiveTypeColumnTask(t0.getId(), db.getId(), t0.getName(), db.getFullName(),
                     Lists.newArrayList(new PrimitiveTypeColumnStats(column.getName(), column.getType())),
                     tabletSampleManager);

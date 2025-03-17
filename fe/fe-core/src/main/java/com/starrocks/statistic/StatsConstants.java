@@ -35,6 +35,8 @@ public class StatsConstants {
     public static final int STATISTIC_PARTITION_VERSION = 11;
     public static final int STATISTIC_BATCH_VERSION_V5 = 9;
     public static final int STATISTIC_DATA_VERSION_V2 = 10;
+    public static final int STATISTIC_MULTI_COLUMN_VERSION = 12;
+
 
     public static final ImmutableSet<Integer> STATISTIC_SUPPORTED_VERSION =
             ImmutableSet.<Integer>builder()
@@ -50,6 +52,7 @@ public class StatsConstants {
                     .add(STATISTIC_PARTITION_VERSION)
                     .add(STATISTIC_BATCH_VERSION_V5)
                     .add(STATISTIC_DATA_VERSION_V2)
+                    .add(STATISTIC_MULTI_COLUMN_VERSION)
                     .build();
 
     public static final int STATISTICS_PARTITION_UPDATED_THRESHOLD = 10;
@@ -59,6 +62,8 @@ public class StatsConstants {
     public static final String EXTERNAL_FULL_STATISTICS_TABLE_NAME = "external_column_statistics";
     public static final String HISTOGRAM_STATISTICS_TABLE_NAME = "histogram_statistics";
     public static final String EXTERNAL_HISTOGRAM_STATISTICS_TABLE_NAME = "external_histogram_statistics";
+    public static final String MULTI_COLUMN_STATISTICS_TABLE_NAME = "multi_column_statistics";
+
 
     public static final String INFORMATION_SCHEMA = "information_schema";
 
@@ -99,11 +104,24 @@ public class StatsConstants {
     public static final String INIT_SAMPLE_STATS_PROPERTY = "('" + INIT_SAMPLE_STATS_JOB + "' = 'true')";
 
     public static final String TABLE_PROPERTY_SEPARATOR = ",\n\"";
+    public static final String COLUMN_ID_SEPARATOR = "#";
 
     public enum AnalyzeType {
         SAMPLE,
         FULL,
-        HISTOGRAM
+        // For compatibility with older versions， we can't drop HISTOGRAM from this enum.
+        HISTOGRAM,
+    }
+
+    // used to record statistics type for multi-columns.
+    // For version compatibility, single-column statistics are not recorded StatisticsType
+    public enum StatisticsType {
+        // for single column statistics
+        COMMON,
+        // for single column histogram
+        HISTOGRAM,
+        // for multi-column combined ndv
+        MCDISTINCT
     }
 
     public enum ScheduleType {

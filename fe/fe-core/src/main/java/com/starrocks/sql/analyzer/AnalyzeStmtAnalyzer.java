@@ -34,6 +34,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
+import com.starrocks.sql.ast.AnalyzeMultiColumnDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.AnalyzeTypeDesc;
 import com.starrocks.sql.ast.AstVisitor;
@@ -113,13 +114,33 @@ public class AnalyzeStmtAnalyzer {
         public Void visitAnalyzeStatement(AnalyzeStmt statement, ConnectContext session) {
             statement.getTableName().normalization(session);
             Table analyzeTable = MetaUtils.getSessionAwareTable(session, null, statement.getTableName());
-
+            AnalyzeTypeDesc analyzeTypeDesc = statement.getAnalyzeTypeDesc();
             if (StatisticUtils.statisticDatabaseBlackListCheck(statement.getTableName().getDb())) {
                 throw new SemanticException("Forbidden collect database: %s", statement.getTableName().getDb());
             }
 
             // ANALYZE TABLE xxx (col1, col2, ...)
             List<Expr> columns = statement.getColumns();
+
+            if (analyzeTypeDesc instanceof AnalyzeMultiColumnDesc) {
+                if (columns.size() <= 1) {
+                    throw new SemanticException("must greater than 1 column on multi-column combined analyze statement");
+                }
+
+                if (columns.size() > Config.statistics_max_multi_column_combined_num) {
+                    throw new SemanticException("column size " + columns.size() + " exceeded max size of " +
+                            Config.statistics_max_multi_column_combined_num + " on multi-column combined analyze statement");
+                }
+
+                if (statement.getPartitionNames() != null) {
+                    throw new SemanticException("not support specify partition names on multi-column analyze statement");
+                }
+
+                if (statement.isAsync()) {
+                    throw new SemanticException("not support async analyze on multi-column analyze statement");
+                }
+            }
+
             if (CollectionUtils.isNotEmpty(columns)) {
                 Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
                 // The actual column name, avoiding case sensitivity issues
@@ -189,7 +210,10 @@ public class AnalyzeStmtAnalyzer {
                     throw new SemanticException(
                             "Analyze external table only support hive, iceberg, deltalake, paimon and odps table",
                             statement.getTableName().toString());
+                } else if (analyzeTypeDesc instanceof AnalyzeMultiColumnDesc) {
+                    throw new SemanticException("Don't support analyze multi-columns combined statistics on external table");
                 }
+
                 statement.setExternal(true);
             } else if (CatalogMgr.ResourceMappingCatalog.isResourceMappingCatalog(analyzeTable.getCatalogName())) {
                 throw new SemanticException("Don't support analyze external table created by resource mapping");

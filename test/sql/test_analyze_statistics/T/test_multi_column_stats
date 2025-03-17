@@ -1,0 +1,22 @@
+-- name: test_multi_column_stats
+
+create database analyze_test_${uuid0};
+use analyze_test_${uuid0};
+
+create table t1(c1 int, c2 bigint, c3 string, c4 string)
+properties('replication_num'='1');
+
+insert into t1 values (1, 1, 's1', 's1');
+insert into t1 values (2, 2, 's2', 's2');
+insert into t1 values (3, 3, 's3', 's3');
+
+[UC]analyze full table t1 multi_columns (c1, c2);
+select count(1) from _statistics_.multi_column_statistics where table_name like "%t1%" and column_names = "c1,c2";
+drop multi_column stats t1;
+
+select count(1) from _statistics_.multi_column_statistics where table_name like "%t1%" and column_names = "c1,c2";
+[UC]analyze sample table t1 multi_columns (c1, c2);
+select count(1) from _statistics_.multi_column_statistics where table_name like "%t1%" and column_names = "c1,c2";
+drop stats t1;
+select count(1) from _statistics_.multi_column_statistics where table_name like "%t1%" and column_names = "c1,c2";
+

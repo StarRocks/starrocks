@@ -72,6 +72,9 @@ private:
     Status _fill_statistic_histogram_external(int version, const Columns& columns, const Chunk* chunk,
                                               TFetchDataResult* result);
 
+    Status _fill_multi_columns_statistics_data(int version, const Columns& columns, const Chunk* chunk,
+                                               TFetchDataResult* result);
+
 private:
     const std::vector<ExprContext*>& _output_expr_ctxs;
     RuntimeProfile::Counter* _serialize_timer = nullptr;

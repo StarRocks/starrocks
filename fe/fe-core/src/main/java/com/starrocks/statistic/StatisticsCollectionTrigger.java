@@ -194,7 +194,7 @@ public class StatisticsCollectionTrigger {
                                 StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
                                         new ArrayList<>(partitionIds), null, null,
                                         analyzeType, StatsConstants.ScheduleType.ONCE,
-                                        analyzeStatus.getProperties()), analyzeStatus, false);
+                                        analyzeStatus.getProperties(), List.of(), List.of()), analyzeStatus, false);
                     });
         } catch (Throwable e) {
             LOG.error("failed to submit statistic collect job", e);
