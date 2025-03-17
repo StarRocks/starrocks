@@ -408,7 +408,6 @@ public:
             index.resize(res_num);
             elem_size = res_num;
         }
-        array_col->elements_column()->reserve(array_col->elements_column()->size() + elem_size);
         if (index.empty()) {
             array_col->elements_column()->append(*res, 0, elem_size);
         } else {
