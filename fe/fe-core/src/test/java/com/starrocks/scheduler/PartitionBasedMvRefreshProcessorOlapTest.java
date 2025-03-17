@@ -1036,6 +1036,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             Assert.assertTrue(execPlan.getConnectContext().getSessionVariable().isEnableSpill());
+            Assert.assertFalse(execPlan.getConnectContext().getSessionVariable().isEnableProfile());
         }
 
         {
@@ -1050,6 +1051,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
             MvTaskRunContext mvContext = processor.getMvContext();
             ExecPlan execPlan = mvContext.getExecPlan();
             Assert.assertFalse(execPlan.getConnectContext().getSessionVariable().isEnableSpill());
+            Assert.assertFalse(execPlan.getConnectContext().getSessionVariable().isEnableProfile());
 
             Config.enable_materialized_view_spill = true;
         }
@@ -2626,7 +2628,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                                         taskRun.getProcessor();
                                 final MvTaskRunContext mvTaskRunContext = processor.getMvContext();
                                 final String postRun = mvTaskRunContext.getPostRun();
-                                Assert.assertTrue(postRun.contains("ANALYZE TABLE "));
+                                Assert.assertFalse(postRun.contains("ANALYZE TABLE "));
                             });
                 }
         );
