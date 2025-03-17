@@ -37,9 +37,8 @@ package com.starrocks.mysql;
 import com.google.common.base.Strings;
 import com.starrocks.authentication.AuthenticationException;
 import com.starrocks.authentication.AuthenticationHandler;
-import com.starrocks.authentication.AuthenticationMgr;
-import com.starrocks.authentication.OIDCSecurityIntegration;
-import com.starrocks.authentication.OpenIdConnectAuthenticationProvider;
+import com.starrocks.authentication.AuthenticationProvider;
+import com.starrocks.authentication.AuthenticationProviderFactory;
 import com.starrocks.authentication.SecurityIntegration;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.common.Config;
@@ -47,6 +46,7 @@ import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.mysql.privilege.AuthPlugin;
 import com.starrocks.mysql.ssl.SSLContextLoader;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -54,6 +54,7 @@ import com.starrocks.sql.ast.UserIdentity;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Map;
@@ -141,42 +142,12 @@ public class MysqlProto {
         }
 
         // StarRocks support the Protocol::AuthSwitchRequest to tell client which auth plugin is using
-        String user = authPacket.getUser();
-        String authPluginName = authPacket.getPluginName();
-        String switchAuthPlugin = switchAuthPlugin(user, authPluginName, context);
-        if (switchAuthPlugin != null && !switchAuthPlugin.equals(authPluginName)) {
-            // 1. clear the serializer
-            serializer.reset();
-            // 2. build the auth switch request and send to the client
-            if (switchAuthPlugin.equals(MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT)) {
-                if (GlobalStateMgr.getCurrentState().getAuthenticationMgr().isSupportKerberosAuth()) {
-                    try {
-                        handshakePacket.buildKrb5AuthRequest(serializer, context.getRemoteIP(), authPacket.getUser());
-                    } catch (Exception e) {
-                        ErrorReport.report("Building handshake with kerberos error, msg: %s", e.getMessage());
-                        sendResponsePacket(context);
-                        return new NegotiateResult(authPacket, NegotiateState.KERBEROS_HANDSHAKE_FAILED);
-                    }
-                } else {
-                    ErrorReport.report(ErrorCode.ERR_AUTH_PLUGIN_NOT_LOADED, "authentication_kerberos");
-                    sendResponsePacket(context);
-                    return new NegotiateResult(authPacket, NegotiateState.KERBEROS_PLUGIN_NOT_LOADED);
-                }
-            } else {
-                handshakePacket.buildAuthSwitchRequest(serializer, switchAuthPlugin);
-            }
-            authPluginName = switchAuthPlugin;
-            channel.sendAndFlush(serializer.toByteBuffer());
-            // Server receive auth switch response packet from client.
-            ByteBuffer authSwitchResponse = channel.fetchOnePacket();
-            if (authSwitchResponse == null) {
-                // receive response failed.
-                LOG.warn("read auth switch response failed for user {}", authPacket.getUser());
-                return new NegotiateResult(authPacket, NegotiateState.READ_AUTH_SWITCH_PKG_FAILED);
-            }
-            // 3. the client use default password plugin of StarRocks to dispose
-            // password
-            authPacket.setAuthResponse(MysqlCodec.readEofString(authSwitchResponse));
+        try {
+            switchAuthPlugin(authPacket, context);
+        } catch (AuthenticationException e) {
+            // receive response failed.
+            LOG.warn("read auth switch response failed for user {}", authPacket.getUser());
+            return new NegotiateResult(authPacket, NegotiateState.READ_AUTH_SWITCH_PKG_FAILED);
         }
 
         // change the capability of serializer
@@ -184,9 +155,8 @@ public class MysqlProto {
         serializer.setCapability(context.getCapability());
 
         // NOTE: when we behind proxy, we need random string sent by proxy.
-        byte[] randomString =
-                Objects.equals(authPluginName, MysqlHandshakePacket.CLEAR_PASSWORD_PLUGIN_NAME) ?
-                        null : handshakePacket.getAuthPluginData();
+        byte[] randomString = Objects.equals(authPacket.getPluginName(), AuthPlugin.Client.MYSQL_CLEAR_PASSWORD.toString()) ?
+                null : handshakePacket.getAuthPluginData();
         try {
             AuthenticationHandler.authenticate(context, authPacket.getUser(), context.getMysqlChannel().getRemoteIp(),
                     authPacket.getAuthResponse(), randomString);
@@ -206,70 +176,6 @@ public class MysqlProto {
             }
         }
         return new NegotiateResult(authPacket, NegotiateState.OK);
-    }
-
-    private static String switchAuthPlugin(String user, String authPluginName, ConnectContext context) {
-        Map.Entry<UserIdentity, UserAuthenticationInfo> localUser = context.getGlobalStateMgr().getAuthenticationMgr()
-                .getBestMatchedUserIdentity(user, context.getMysqlChannel().getRemoteIp());
-        if (localUser != null) {
-            // Older version mysql client does not send auth plugin info, like 5.1 version.
-            if (authPluginName == null) {
-                return null;
-            }
-
-            // kerberos
-            if (authPluginName.equals(MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT)) {
-                return MysqlHandshakePacket.AUTHENTICATION_KERBEROS_CLIENT;
-            }
-
-            UserAuthenticationInfo authInfo = localUser.getValue();
-            if (authInfo.getAuthPlugin().equalsIgnoreCase(OpenIdConnectAuthenticationProvider.PLUGIN_NAME)) {
-                return MysqlHandshakePacket.AUTHENTICATION_OPENID_CONNECT_CLIENT;
-            }
-
-            // Starting with MySQL 8.0.4, MySQL changed the default authentication plugin for MySQL client
-            // from mysql_native_password to caching_sha2_password.
-            // ref: https://mysqlserverteam.com/mysql-8-0-4-new-default-authentication-plugin-caching_sha2_password/
-            // But caching_sha2_password is not supported in starrocks. So switch to mysql_native_password.
-            if (!MysqlHandshakePacket.checkAuthPluginSameAsStarRocks(authPluginName)) {
-                return MysqlHandshakePacket.NATIVE_AUTH_PLUGIN_NAME;
-            }
-
-            return null;
-        } else {
-            String[] authChain = Config.authentication_chain;
-
-            AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
-            String securityType = null;
-            for (String authMechanism : authChain) {
-                if (authMechanism.equals(ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
-                    continue;
-                }
-
-                SecurityIntegration securityIntegration = authenticationMgr.getSecurityIntegration(authMechanism);
-                if (securityIntegration == null) {
-                    continue;
-                }
-
-                if (securityType == null) {
-                    securityType = securityIntegration.getType();
-                } else if (!securityType.equalsIgnoreCase(securityIntegration.getType())) {
-                    // There are multiple different types of security integration,
-                    // abandon switch authPlugin and use the type specified by the client.
-                    return null;
-                }
-            }
-
-            if (securityType == null) {
-                return null;
-            }
-
-            if (securityType.equalsIgnoreCase(OIDCSecurityIntegration.TYPE)) {
-                return MysqlHandshakePacket.AUTHENTICATION_OPENID_CONNECT_CLIENT;
-            }
-        }
-
-        return null;
     }
 
     private static MysqlAuthPacket readAuthPacket(ConnectContext context) throws IOException {
@@ -356,5 +262,77 @@ public class MysqlProto {
     }
 
     public record NegotiateResult(MysqlAuthPacket authPacket, NegotiateState state) {
+    }
+
+    private static void switchAuthPlugin(MysqlAuthPacket mysqlAuthPacket, ConnectContext context)
+            throws AuthenticationException, IOException {
+        String user = mysqlAuthPacket.getUser();
+        String authPluginName = mysqlAuthPacket.getPluginName();
+
+        // Older version mysql client does not send auth plugin info, like 5.1 version.
+        if (authPluginName == null) {
+            return;
+        }
+
+        String switchAuthPlugin = null;
+        AuthenticationProvider provider = null;
+
+        Map.Entry<UserIdentity, UserAuthenticationInfo> localUser = GlobalStateMgr.getCurrentState().getAuthenticationMgr()
+                .getBestMatchedUserIdentity(user, context.getMysqlChannel().getRemoteIp());
+        if (localUser != null) {
+            UserAuthenticationInfo authInfo = localUser.getValue();
+            switchAuthPlugin = AuthPlugin.covertFromServerToClient(authInfo.getAuthPlugin());
+            provider = AuthenticationProviderFactory.create(authInfo.getAuthPlugin());
+        } else {
+            for (String authMechanism : Config.authentication_chain) {
+                if (authMechanism.equals(ConfigBase.AUTHENTICATION_CHAIN_MECHANISM_NATIVE)) {
+                    continue;
+                }
+
+                //Because we only support Security Integration of the same type, we use the first non-Native type here.
+                SecurityIntegration securityIntegration =
+                        GlobalStateMgr.getCurrentState().getAuthenticationMgr().getSecurityIntegration(authMechanism);
+                switchAuthPlugin = AuthPlugin.covertFromServerToClient(securityIntegration.getType());
+                provider = securityIntegration.getAuthenticationProvider();
+                break;
+            }
+
+            if (provider == null) {
+                return;
+            }
+        }
+
+        byte[] authMoreDataPacket = null;
+        if (provider != null) {
+            authMoreDataPacket = provider.authMoreDataPacket(user, context.getMysqlChannel().getRemoteIp());
+        }
+
+        if (authMoreDataPacket != null || !authPluginName.equalsIgnoreCase(switchAuthPlugin)) {
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            if (!authPluginName.equalsIgnoreCase(switchAuthPlugin)) {
+                // AuthSwitchRequest Packet
+                MysqlCodec.writeInt1(outputStream, (byte) 0xfe);
+                MysqlCodec.writeNulTerminateString(outputStream, switchAuthPlugin);
+                if (authMoreDataPacket != null) {
+                    MysqlCodec.writeBytes(outputStream, authMoreDataPacket);
+                }
+                MysqlCodec.writeInt1(outputStream, 0);
+
+                mysqlAuthPacket.setPluginName(switchAuthPlugin);
+            } else {
+                // AuthMoreData Packet
+                MysqlCodec.writeInt1(outputStream, (byte) 0x01);
+                MysqlCodec.writeBytes(outputStream, authMoreDataPacket);
+            }
+
+            MysqlChannel channel = context.getMysqlChannel();
+            channel.sendAndFlush(ByteBuffer.wrap(outputStream.toByteArray()));
+            ByteBuffer authSwitchResponse = channel.fetchOnePacket();
+            if (authSwitchResponse == null) {
+                throw new AuthenticationException("read auth switch response failed for user " + user);
+            }
+
+            mysqlAuthPacket.setAuthResponse(MysqlCodec.readEofString(authSwitchResponse));
+        }
     }
 }
