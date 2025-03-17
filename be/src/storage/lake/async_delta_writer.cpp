@@ -254,7 +254,7 @@ inline Status AsyncDeltaWriterImpl::do_open() {
         _queue_id.value = kInvalidQueueId;
         return Status::InternalError(fmt::format("fail to create bthread execution queue: {}", r));
     }
-    if (_block_merge_token == NULL) {
+    if (_block_merge_token == nullptr) {
         _block_merge_token = StorageEngine::instance()->load_spill_block_merge_executor()->create_token();
     }
     return _writer->open();
@@ -318,7 +318,7 @@ inline void AsyncDeltaWriterImpl::close() {
         TEST_SYNC_POINT("AsyncDeltaWriterImpl::close:2");
 
         // Wait for block merge finished.
-        if (_block_merge_token != NULL) {
+        if (_block_merge_token != nullptr) {
             _block_merge_token->shutdown();
             _block_merge_token.reset();
         }
