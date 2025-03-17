@@ -111,11 +111,30 @@ std::string RuntimeFilterPort::listeners(int32_t filter_id) {
     return ss.str();
 }
 
-void RuntimeFilterPort::publish_runtime_filters(
-        const std::vector<RuntimeFilterBuildDescriptor*>& rf_descs,
-        std::optional<std::reference_wrapper<const std::vector<ColumnPtr>>> keyColumns,
-        std::optional<std::reference_wrapper<const std::vector<bool>>> null_safe,
-        std::optional<std::reference_wrapper<const std::vector<TypeDescriptor>>> type_descs) {
+void RuntimeFilterPort::publish_runtime_filters_for_skew_broadcast_join(
+        const std::vector<RuntimeFilterBuildDescriptor*>& rf_descs, const std::vector<Columns>& keyColumns,
+        const std::vector<bool>& null_safe, const std::vector<TypeDescriptor>& type_descs) {
+    for (auto* rf_desc : rf_descs) {
+        auto* filter = rf_desc->runtime_filter();
+        if (filter == nullptr) continue;
+        _state->runtime_filter_port()->receive_runtime_filter(rf_desc->filter_id(), filter);
+    }
+
+    for (size_t i = 0; i < rf_descs.size(); i++) {
+        auto* rf_desc = rf_descs[i];
+        auto* filter = rf_desc->runtime_filter();
+        DCHECK(rf_desc->is_broad_cast_in_skew());
+        // when enable_partitioned_hash_join is true, one runtime filter's key column can be split to multiple columns
+        // since skew broadcast join' build side data size is small, we just accumulate columns into a whole column for Convenience
+        auto column = keyColumns[i][0]->clone();
+        for (size_t j = 1; j < keyColumns[i].size(); j++) {
+            column->append(*keyColumns[i][j]);
+        }
+        publish_skew_boradcast_join_key_columns(rf_desc, column, null_safe[i], type_descs[i]);
+    }
+}
+
+void RuntimeFilterPort::publish_runtime_filters(const std::vector<RuntimeFilterBuildDescriptor*>& rf_descs) {
     RuntimeState* state = _state;
     for (auto* rf_desc : rf_descs) {
         auto* filter = rf_desc->runtime_filter();
@@ -135,19 +154,6 @@ void RuntimeFilterPort::publish_runtime_filters(
     for (size_t i = 0; i < rf_descs.size(); i++) {
         auto* rf_desc = rf_descs[i];
         auto* filter = rf_desc->runtime_filter();
-
-        // if is_broad_cast_in_skew, we need to send key column to remote instance
-        // although has_remote_targets is false
-        if (rf_desc->is_broad_cast_in_skew()) {
-            DCHECK(keyColumns.has_value());
-            DCHECK(null_safe.has_value());
-            DCHECK(type_descs.has_value());
-            auto& keyColumnsValue = keyColumns.value().get()[i];
-            bool eq_null = null_safe.value().get()[i];
-            const TypeDescriptor& type_desc = type_descs.value().get()[i];
-            publish_skew_boradcast_runtime_filters(rf_desc, keyColumnsValue, eq_null, type_desc);
-            continue;
-        }
 
         if (filter == nullptr || !rf_desc->has_remote_targets()) continue;
 
@@ -205,9 +211,9 @@ void RuntimeFilterPort::publish_runtime_filters(
     }
 }
 
-void RuntimeFilterPort::publish_skew_boradcast_runtime_filters(RuntimeFilterBuildDescriptor* rf_desc,
-                                                               const ColumnPtr& keyColumn, bool null_safe,
-                                                               const TypeDescriptor& type_desc) {
+void RuntimeFilterPort::publish_skew_boradcast_join_key_columns(RuntimeFilterBuildDescriptor* rf_desc,
+                                                                const ColumnPtr& keyColumn, bool null_safe,
+                                                                const TypeDescriptor& type_desc) {
     DCHECK(rf_desc->join_mode() == TRuntimeFilterBuildJoinMode::BORADCAST);
     DCHECK(!rf_desc->merge_nodes().empty());
 
@@ -233,9 +239,15 @@ void RuntimeFilterPort::publish_skew_boradcast_runtime_filters(RuntimeFilterBuil
             keyColumn, null_safe, reinterpret_cast<uint8_t*>(rf_data->data()));
     rf_data->resize(actual_size);
     *(params.mutable_columntype()) = type_desc.to_protobuf();
-    int64_t rpc_http_min_size = config::send_runtime_filter_via_http_rpc_min_size;
-
     int timeout_ms = config::send_rpc_runtime_filter_timeout_ms;
+    if (state->query_options().__isset.runtime_filter_send_timeout_ms) {
+        timeout_ms = state->query_options().runtime_filter_send_timeout_ms;
+    }
+
+    int64_t rpc_http_min_size = config::send_runtime_filter_via_http_rpc_min_size;
+    if (state->query_options().__isset.runtime_filter_rpc_http_min_size) {
+        rpc_http_min_size = state->query_options().runtime_filter_rpc_http_min_size;
+    }
     state->exec_env()->runtime_filter_worker()->send_part_runtime_filter(std::move(params), rf_desc->merge_nodes(),
                                                                          timeout_ms, rpc_http_min_size,
                                                                          EventType::SEND_SKEW_JOIN_BROADCAST_RF);

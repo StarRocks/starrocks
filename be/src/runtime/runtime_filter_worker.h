@@ -52,12 +52,13 @@ class RuntimeFilterPort {
 public:
     RuntimeFilterPort(RuntimeState* state) : _state(state) {}
     void add_listener(RuntimeFilterProbeDescriptor* rf_desc);
-    // keyColumns and null_safe are only used for skew join's boradcast join
-    void publish_runtime_filters(
-            const std::vector<RuntimeFilterBuildDescriptor*>& rf_descs,
-            std::optional<std::reference_wrapper<const std::vector<ColumnPtr>>> keyColumns = std::nullopt,
-            std::optional<std::reference_wrapper<const std::vector<bool>>> null_safe = std::nullopt,
-            std::optional<std::reference_wrapper<const std::vector<TypeDescriptor>>> type_descs = std::nullopt);
+    void publish_runtime_filters(const std::vector<RuntimeFilterBuildDescriptor*>& rf_descs);
+
+    void publish_runtime_filters_for_skew_broadcast_join(const std::vector<RuntimeFilterBuildDescriptor*>& rf_descs,
+                                                         const std::vector<Columns>& keyColumns,
+                                                         const std::vector<bool>& null_safe,
+                                                         const std::vector<TypeDescriptor>& type_descs);
+
     void publish_local_colocate_filters(std::list<RuntimeFilterBuildDescriptor*>& rf_descs);
     // receiver runtime filter allocated in this fragment instance(broadcast join generate it)
     // or allocated in this query(shuffle join generate global runtime filter)
@@ -66,8 +67,8 @@ public:
     std::string listeners(int32_t filter_id);
 
 private:
-    void publish_skew_boradcast_runtime_filters(RuntimeFilterBuildDescriptor* rf_desc, const ColumnPtr& keyColumn,
-                                                bool null_safe, const TypeDescriptor& type_desc);
+    void publish_skew_boradcast_join_key_columns(RuntimeFilterBuildDescriptor* rf_desc, const ColumnPtr& keyColumn,
+                                                 bool null_safe, const TypeDescriptor& type_desc);
     void static prepare_params(PTransmitRuntimeFilterParams& params, RuntimeState* state,
                                RuntimeFilterBuildDescriptor* rf_desc);
     std::map<int32_t, std::list<RuntimeFilterProbeDescriptor*>> _listeners;

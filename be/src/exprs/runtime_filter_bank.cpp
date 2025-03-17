@@ -233,18 +233,25 @@ struct FilterIniter {
 };
 
 Status RuntimeFilterHelper::fill_runtime_bloom_filter(const ColumnPtr& column, LogicalType type, RuntimeFilter* filter,
-                                                      size_t column_offset, bool eq_null, bool insert_into_bf) {
+                                                      size_t column_offset, bool eq_null,
+                                                      bool for_skew_broadcast_join) {
     if (column->has_large_column()) {
         return Status::NotSupported("unsupported build runtime filter for large binary column");
     }
-    type_dispatch_filter(type, nullptr, FilterIniter(), column, column_offset, filter, eq_null, insert_into_bf);
+
+    if (!for_skew_broadcast_join) {
+        type_dispatch_filter(type, nullptr, FilterIniter<true>(), column, column_offset, filter, eq_null);
+    } else {
+        type_dispatch_filter(type, nullptr, FilterIniter<false>(), column, column_offset, filter, eq_null);
+    }
+
     return Status::OK();
 }
 
 Status RuntimeFilterHelper::fill_runtime_bloom_filter(const Columns& columns, LogicalType type, RuntimeFilter* filter,
                                                       size_t column_offset, bool eq_null) {
     for (const auto& column : columns) {
-        RETURN_IF_ERROR(fill_runtime_bloom_filter(column, type, filter, column_offset, eq_null));
+        RETURN_IF_ERROR(fill_runtime_bloom_filter(column, type, filter, column_offset, eq_null, false));
     }
     return Status::OK();
 }

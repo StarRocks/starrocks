@@ -62,6 +62,7 @@ struct RuntimeBloomFilterBuildParam {
     bool is_empty;
     Columns columns;
     MutableRuntimeFilterPtr runtime_filter;
+    // used for skew join
     TypeDescriptor _type_descriptor;
 };
 
