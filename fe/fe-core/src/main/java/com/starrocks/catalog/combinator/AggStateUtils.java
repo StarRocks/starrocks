@@ -42,6 +42,7 @@ public class AggStateUtils {
                     .add(FunctionSet.MAX)
                     .add(FunctionSet.NDV)
                     .add(FunctionSet.DS_HLL_COUNT_DISTINCT)
+                    .add(FunctionSet.DS_THETA_COUNT_DISTINCT)
                     .add(FunctionSet.APPROX_COUNT_DISTINCT)
                     .add(FunctionSet.INTERSECT_COUNT)
                     .build();
