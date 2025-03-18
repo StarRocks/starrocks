@@ -1105,6 +1105,7 @@ public:
     }
 };
 
+DEFINE_FAIL_POINT(phmap_try_consume_mem_failed);
 class SliceMutableIndex : public MutableIndex {
 public:
     using KeyType = std::string;
@@ -1387,6 +1388,10 @@ public:
         RETURN_IF(!ar.load(&size), Status::Corruption("Pindex load snapshot size failed"));
         RETURN_IF(size == 0, Status::OK());
         TRY_CATCH_BAD_ALLOC(reserve(size));
+        FAIL_POINT_TRIGGER_EXECUTE(phmap_try_consume_mem_failed, {
+            CurrentThread::current().set_try_consume_mem_size(10);
+            return Status::MemoryLimitExceeded("error phmap size");
+        });
         for (auto i = 0; i < size; ++i) {
             size_t compose_key_size = 0;
             RETURN_IF(!ar.load(&compose_key_size),
