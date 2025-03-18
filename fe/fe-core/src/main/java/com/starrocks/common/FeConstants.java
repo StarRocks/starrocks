@@ -91,6 +91,9 @@ public class FeConstants {
     // Set this flag false to suppress showing fragment cost, when running FE unit tests.
     public static boolean showFragmentCost = true;
 
+    // set length for varchar, only set false for ut
+    public static boolean setLengthForVarchar = true;
+
     // set to true when replay from query dump
     public static boolean isReplayFromQueryDump = false;
     // set false to resolve ut
