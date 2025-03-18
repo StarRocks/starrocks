@@ -46,6 +46,8 @@ Status SpillableHashJoinProbeOperator::prepare(RuntimeState* state) {
             "SpillBuildPartitionPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
     metrics.prober_peak_memory_usage = _unique_metrics->AddHighWaterMarkCounter(
             "SpillProberPeakMemoryUsage", TUnit::BYTES, RuntimeProfile::Counter::create_strategy(TUnit::BYTES));
+    metrics.peak_processing_partition_count = _unique_metrics->AddHighWaterMarkCounter(
+            "SpillPeakProcessingPartitionCount", TUnit::UNIT, RuntimeProfile::Counter::create_strategy(TUnit::UNIT));
     RETURN_IF_ERROR(_probe_spiller->prepare(state));
     auto wg = state->fragment_ctx()->workgroup();
     return Status::OK();
@@ -456,6 +458,7 @@ StatusOr<ChunkPtr> SpillableHashJoinProbeOperator::pull_chunk(RuntimeState* stat
         _has_probe_remain = false;
         _builders.clear();
         COUNTER_SET(metrics.build_partition_peak_memory_usage, 0);
+        COUNTER_SET(metrics.peak_processing_partition_count, 0);
     }
 
     return nullptr;
@@ -478,18 +481,25 @@ void SpillableHashJoinProbeOperator::_acquire_next_partitions() {
     }
 
     size_t bytes_usage = 0;
+    size_t avaliable_bytes =
+            std::min<size_t>(_mem_resource_manager.operator_avaliable_memory_bytes(),
+                             static_cast<size_t>(_spill_hash_join_probe_op_max_bytes / _degree_of_parallelism));
     // process the partition in memory firstly
     if (_processing_partitions.empty()) {
         for (auto partition : _build_partitions) {
             if (partition->in_mem && !_processed_partitions.count(partition->partition_id)) {
-                _processing_partitions.emplace_back(partition);
-                bytes_usage += partition->bytes;
-                _pid_to_process_id.emplace(partition->partition_id, _processing_partitions.size() - 1);
+                if ((partition->mem_size + bytes_usage < avaliable_bytes || _processing_partitions.empty()) &&
+                    std::find(_processing_partitions.begin(), _processing_partitions.end(), partition) ==
+                            _processing_partitions.end()) {
+                    _processing_partitions.emplace_back(partition);
+                    bytes_usage += partition->mem_size;
+                    _pid_to_process_id.emplace(partition->partition_id, _processing_partitions.size() - 1);
+                    COUNTER_ADD(metrics.peak_processing_partition_count, 1);
+                }
             }
         }
     }
 
-    size_t avaliable_bytes = _mem_resource_manager.operator_avaliable_memory_bytes();
     // process the partition could be hold in memory
     if (_processing_partitions.empty()) {
         for (const auto* partition : _build_partitions) {
@@ -500,6 +510,7 @@ void SpillableHashJoinProbeOperator::_acquire_next_partitions() {
                     _processing_partitions.emplace_back(partition);
                     bytes_usage += partition->bytes;
                     _pid_to_process_id.emplace(partition->partition_id, _processing_partitions.size() - 1);
+                    COUNTER_ADD(metrics.peak_processing_partition_count, 1);
                 }
             }
         }
@@ -542,6 +553,7 @@ Status SpillableHashJoinProbeOperatorFactory::prepare(RuntimeState* state) {
     _spill_options->wg = state->fragment_ctx()->workgroup();
     _spill_options->enable_buffer_read = state->enable_spill_buffer_read();
     _spill_options->max_read_buffer_bytes = state->max_spill_read_buffer_bytes_per_driver();
+    _spill_options->spill_hash_join_probe_op_max_bytes = state->spill_hash_join_probe_op_max_bytes();
 
     return Status::OK();
 }
@@ -555,6 +567,8 @@ OperatorPtr SpillableHashJoinProbeOperatorFactory::create(int32_t degree_of_para
             _hash_joiner_factory->get_builder(degree_of_parallelism, driver_sequence));
 
     prober->set_probe_spiller(spiller);
+    prober->set_degree_of_parallelism(degree_of_parallelism);
+    prober->set_spill_hash_join_probe_op_max_bytes(_spill_options->spill_hash_join_probe_op_max_bytes);
 
     return prober;
 }
