@@ -41,6 +41,9 @@ struct HLLUnionBuilder {
 
             resolver->add_aggregate_mapping_variadic<lt, TYPE_BIGINT, HLLSketchState>(
                     "ds_hll_count_distinct", false, AggregateFactory::MakeHllSketchAggregateFunction<lt>());
+
+            resolver->add_aggregate_mapping_variadic<lt, TYPE_BIGINT, ThetaSketchState>(
+                    "ds_theta_count_distinct", false, AggregateFactory::MakeThetaSketchAggregateFunction<lt>());
         }
     }
 };
