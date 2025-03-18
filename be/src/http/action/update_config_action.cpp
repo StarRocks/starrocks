@@ -305,6 +305,10 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CREATE);
             return thread_pool->update_max_threads(config::create_tablet_worker_count);
         });
+        _config_callback.emplace("check_consistency_worker_count", [&]() -> Status {
+            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CHECK_CONSISTENCY);
+            return thread_pool->update_max_threads(std::max(1, config::check_consistency_worker_count));
+        });
         _config_callback.emplace("number_tablet_writer_threads", [&]() -> Status {
             LOG(INFO) << "set number_tablet_writer_threads:" << config::number_tablet_writer_threads;
             bthreads::ThreadPoolExecutor* executor = static_cast<bthreads::ThreadPoolExecutor*>(
@@ -368,6 +372,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         UPDATE_STARLET_CONFIG(starlet_delete_files_max_key_in_batch, delete_files_max_key_in_batch);
 #undef UPDATE_STARLET_CONFIG
 
+#ifndef BUILD_FORMAT_LIB
         _config_callback.emplace("starlet_filesystem_instance_cache_capacity", [&]() -> Status {
             LOG(INFO) << "set starlet_filesystem_instance_cache_capacity:"
                       << config::starlet_filesystem_instance_cache_capacity;
@@ -376,6 +381,8 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             }
             return Status::OK();
         });
+#endif
+
 #endif // USE_STAROS
     });
 

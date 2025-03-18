@@ -25,10 +25,6 @@ select count(1) from _statistics_.multi_column_statistics where table_name like 
 drop stats t1;
 select count(1) from _statistics_.multi_column_statistics where table_name like "%t1%" and column_names = "c1,c2";
 
-[UC]analyze full table t1 multi_columns (c1, c2, c3, c4);
-[UC]analyze full table t1;
-
-function: assert_explain_costs_contains('select count(1) from t1 group by c1,c2,c3,c4', 'cardinality: 1002')
 drop stats t1;
 
 

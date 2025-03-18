@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
 set(LIBRARY_OUTPUT_PATH "${BUILD_DIR}/src/starrocks_format")
@@ -42,7 +41,7 @@ set(STARROCKS_LIBS
     StarRocksGen
     Webserver
     TestUtil
-    BlockCache
+    Cache
     ${WL_END_GROUP}
 )
 
