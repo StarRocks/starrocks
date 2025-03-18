@@ -454,7 +454,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 }
 
                 GlobalStateMgr.getCurrentState().getAlterJobMgr().
-                        alterMaterializedViewStatus(materializedView, status, "", false, noValidation);
+                        alterMaterializedViewStatus(materializedView, status, "", false);
                 // for manual refresh type, do not refresh
                 if (materializedView.getRefreshScheme().getType() != MaterializedView.RefreshType.MANUAL) {
                     boolean force = !noValidation;
@@ -470,7 +470,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                                 "user use alter materialized view set status to inactive",
                         materializedView.getName(), materializedView.getId());
                 GlobalStateMgr.getCurrentState().getAlterJobMgr().
-                        alterMaterializedViewStatus(materializedView, status, MANUAL_INACTIVE_MV_REASON, false, noValidation);
+                        alterMaterializedViewStatus(materializedView, status, MANUAL_INACTIVE_MV_REASON, false);
             } else {
                 throw new AlterJobException("Unsupported modification materialized view status:" + status);
             }
@@ -506,7 +506,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
             // log edit log
             String status = AlterMaterializedViewStatusClause.INACTIVE;
             GlobalStateMgr.getCurrentState().getAlterJobMgr().
-                    alterMaterializedViewStatus(mv, status, reason, false, false);
+                    alterMaterializedViewStatus(mv, status, reason, false);
             AlterMaterializedViewStatusLog log = new AlterMaterializedViewStatusLog(mv.getDbId(),
                     mv.getId(), status, MANUAL_INACTIVE_MV_REASON);
             GlobalStateMgr.getCurrentState().getEditLog().logAlterMvStatus(log);
