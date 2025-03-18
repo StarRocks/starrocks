@@ -648,6 +648,7 @@ under the License.
             </dependency>
 
             <!-- https://mvnrepository.com/artifact/org.apache.spark/spark-launcher_2.12 -->
+            <!-- spark load required -->
             <dependency>
                 <groupId>org.apache.spark</groupId>
                 <artifactId>spark-launcher_2.12</artifactId>
