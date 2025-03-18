@@ -13,12 +13,12 @@
 // limitations under the License.
 
 #include "cache/object_cache/object_cache.h"
-#include "cache/object_cache/starcache_module.h"
-#include "cache/object_cache/lrucache_module.h"
 
 #include <gtest/gtest.h>
 
 #include "cache/block_cache/block_cache.h"
+#include "cache/object_cache/lrucache_module.h"
+#include "cache/object_cache/starcache_module.h"
 #include "fs/fs_util.h"
 #include "testutil/assert.h"
 
