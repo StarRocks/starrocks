@@ -295,10 +295,10 @@ public class PaimonMetadata implements ConnectorMetadata {
                     params.getFieldNames().stream().mapToInt(name -> (paimonTable.getFieldNames().indexOf(name))).toArray();
             List<Predicate> predicates = extractPredicates(paimonTable, params.getPredicate());
             boolean pruneManifestsByLimit = params.getLimit() != -1 && params.getLimit() < Integer.MAX_VALUE
-                    && onlyHasPartitionPredicate(table, predicate);
+                    && onlyHasPartitionPredicate(table, params.getPredicate());
             readBuilder = readBuilder.withFilter(predicates).withProjection(projected);
             if (pruneManifestsByLimit) {
-                readBuilder = readBuilder.withLimit((int) limit);
+                readBuilder = readBuilder.withLimit((int) params.getLimit());
             }
             InnerTableScan scan = (InnerTableScan) readBuilder.newScan();
             PaimonMetricRegistry paimonMetricRegistry = new PaimonMetricRegistry();

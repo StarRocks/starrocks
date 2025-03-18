@@ -62,6 +62,7 @@ import org.apache.paimon.catalog.CatalogFactory;
 import org.apache.paimon.catalog.Identifier;
 import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.data.BinaryRowWriter;
+import org.apache.paimon.data.BinaryString;
 import org.apache.paimon.data.GenericRow;
 import org.apache.paimon.data.InternalRow;
 import org.apache.paimon.data.Timestamp;
@@ -93,6 +94,7 @@ import org.apache.paimon.types.BooleanType;
 import org.apache.paimon.types.CharType;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.DataType;
+import org.apache.paimon.types.DataTypes;
 import org.apache.paimon.types.DoubleType;
 import org.apache.paimon.types.IntType;
 import org.apache.paimon.types.LocalZonedTimestampType;
@@ -421,27 +423,24 @@ public class PaimonMetadataTest {
 
         List<String> fieldNames = Lists.newArrayList("create_date", "user", "record_time");
 
-        PaimonMetadata metadata = new PaimonMetadata("paimon", new HdfsEnvironment(), catalog);
-        List<RemoteFileInfo> result = metadata.getRemoteFileInfos(
-                metadata.getTable("test_db", "test_table"),
-                null,
-                -1,
-                null,
-                fieldNames,
-                1);
+        HdfsEnvironment environment = new HdfsEnvironment();
+        ConnectorProperties properties = new ConnectorProperties(ConnectorType.PAIMON);
+
+        Table paimonTable = metadata.getTable("test_db", "test_table");
+
+        // no predicate, limit 1
+        PaimonMetadata metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+        GetRemoteFilesParams params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setLimit(1).build();
+        List<RemoteFileInfo> result = metadata.getRemoteFiles(paimonTable, params);
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         Assert.assertEquals(1, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
                 .getPaimonSplitsInfo().getPaimonSplits().size());
 
-        metadata = new PaimonMetadata("paimon", new HdfsEnvironment(), catalog);
-        result = metadata.getRemoteFileInfos(
-                metadata.getTable("test_db", "test_table"),
-                null,
-                -1,
-                null,
-                fieldNames,
-                -1);
+        // no predicate, no limit
+        metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+        params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setLimit(-1).build();
+        result = metadata.getRemoteFiles(paimonTable, params);
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         Assert.assertEquals(6, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
@@ -451,27 +450,21 @@ public class PaimonMetadataTest {
         ScalarOperator createDateEqualPredicate = new BinaryPredicateOperator(BinaryType.EQ, createDateColumn,
                 ConstantOperator.createVarchar(dateFormatter.format(now)));
 
-        metadata = new PaimonMetadata("paimon", new HdfsEnvironment(), catalog);
-        result = metadata.getRemoteFileInfos(
-                metadata.getTable("test_db", "test_table"),
-                null,
-                -1,
-                createDateEqualPredicate,
-                fieldNames,
-                1);
+        // partition predicate, limit 1
+        metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+        params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(createDateEqualPredicate)
+                .setLimit(1).build();
+        result = metadata.getRemoteFiles(paimonTable, params);
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         Assert.assertEquals(1, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
                 .getPaimonSplitsInfo().getPaimonSplits().size());
 
-        metadata = new PaimonMetadata("paimon", new HdfsEnvironment(), catalog);
-        result = metadata.getRemoteFileInfos(
-                metadata.getTable("test_db", "test_table"),
-                null,
-                -1,
-                createDateEqualPredicate,
-                fieldNames,
-                -1);
+        // partition predicate, no limit
+        metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+        params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(createDateEqualPredicate)
+                .setLimit(-1).build();
+        result = metadata.getRemoteFiles(paimonTable, params);
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         Assert.assertEquals(2, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
@@ -481,14 +474,11 @@ public class PaimonMetadataTest {
         ScalarOperator userEqualPredicate = new BinaryPredicateOperator(BinaryType.EQ, userColumn,
                 ConstantOperator.createVarchar("user_1"));
 
-        metadata = new PaimonMetadata("paimon", new HdfsEnvironment(), catalog);
-        result = metadata.getRemoteFileInfos(
-                metadata.getTable("test_db", "test_table"),
-                null,
-                -1,
-                userEqualPredicate,
-                fieldNames,
-                1);
+        // none partition predicate, limit 1
+        metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+        params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(userEqualPredicate)
+                .setLimit(1).build();
+        result = metadata.getRemoteFiles(paimonTable, params);
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         Assert.assertEquals(3, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
@@ -497,14 +487,12 @@ public class PaimonMetadataTest {
         ScalarOperator createDateGreaterPredicate = new BinaryPredicateOperator(BinaryType.GT, createDateColumn,
                 ConstantOperator.createVarchar(dateFormatter.format(now)));
 
-        metadata = new PaimonMetadata("paimon", new HdfsEnvironment(), catalog);
-        result = metadata.getRemoteFileInfos(
-                metadata.getTable("test_db", "test_table"),
-                null,
-                -1,
-                Utils.compoundAnd(createDateGreaterPredicate, userEqualPredicate),
-                fieldNames,
-                1);
+        // partition and none partition predicate, limit 1
+        metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+        params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames)
+                .setPredicate(Utils.compoundAnd(createDateGreaterPredicate, userEqualPredicate))
+                .setLimit(1).build();
+        result = metadata.getRemoteFiles(paimonTable, params);
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         Assert.assertEquals(2, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
@@ -521,14 +509,11 @@ public class PaimonMetadataTest {
         ScalarOperator createDateCoalescePredicate = new BinaryPredicateOperator(BinaryType.EQ, createDateCoalesce,
                 ConstantOperator.createVarchar(dateFormatter.format(now)));
 
-        metadata = new PaimonMetadata("paimon", new HdfsEnvironment(), catalog);
-        result = metadata.getRemoteFileInfos(
-                metadata.getTable("test_db", "test_table"),
-                null,
-                -1,
-                createDateCoalescePredicate,
-                fieldNames,
-                1);
+        // partition with function predicate, limit 1
+        metadata = new PaimonMetadata("paimon", environment, catalog, properties);
+        params = GetRemoteFilesParams.newBuilder().setFieldNames(fieldNames).setPredicate(createDateCoalescePredicate)
+                .setLimit(1).build();
+        result = metadata.getRemoteFiles(paimonTable, params);
         Assert.assertEquals(1, result.size());
         Assert.assertEquals(1, result.get(0).getFiles().size());
         Assert.assertEquals(6, ((PaimonRemoteFileDesc) result.get(0).getFiles().get(0))
