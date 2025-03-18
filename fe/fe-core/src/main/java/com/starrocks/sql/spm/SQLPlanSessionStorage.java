@@ -19,7 +19,7 @@ import com.starrocks.server.GlobalStateMgr;
 import java.util.List;
 import java.util.stream.Collectors;
 
-public class SQLPlanManager {
+class SQLPlanSessionStorage implements SQLPlanStorage {
     private final List<BaselinePlan> baselinePlans = Lists.newArrayList();
 
     public List<BaselinePlan> getAllBaselines() {
@@ -40,8 +40,8 @@ public class SQLPlanManager {
         baselinePlans.removeIf(p -> p.getId() == baseLineId);
     }
 
-    // for ut
     public void dropAllBaselinePlans() {
         baselinePlans.clear();
     }
+
 }

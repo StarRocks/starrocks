@@ -66,6 +66,7 @@ import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.scheduler.persist.TaskRunStatusChange;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.automv.lifecycle.MVChangeLog;
+import com.starrocks.sql.spm.BaselinePlan;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.statistic.BasicStatsMeta;
 import com.starrocks.statistic.ExternalAnalyzeJob;
@@ -93,6 +94,28 @@ public class EditLogDeserializer {
 
     private static final ImmutableMap<Short, Class<? extends Writable>> OPTYPE_TO_DESER_CLASS
             = ImmutableMap.<Short, Class<? extends Writable>>builder()
+            .put(OperationTypeEPack.OP_CREATE_ROLE_MAPPING, RoleMappingPersistInfo.class)
+            .put(OperationTypeEPack.OP_ALTER_ROLE_MAPPING, RoleMappingPersistInfo.class)
+            .put(OperationTypeEPack.OP_DROP_ROLE_MAPPING, RoleMappingPersistInfo.class)
+            .put(OperationTypeEPack.OP_CREATE_MASKING_POLICY, CreatePolicyLog.class)
+            .put(OperationTypeEPack.OP_CREATE_ROW_ACCESS_POLICY, CreatePolicyLog.class)
+            .put(OperationTypeEPack.OP_DROP_POLICY, DropPolicyLog.class)
+            .put(OperationTypeEPack.OP_ALTER_POLICY_SET_BODY, AlterPolicyLog.class)
+            .put(OperationTypeEPack.OP_ALTER_POLICY_SET_COMMENT, AlterPolicyLog.class)
+            .put(OperationTypeEPack.OP_ALTER_POLICY_RENAME, AlterPolicyLog.class)
+            .put(OperationTypeEPack.OP_APPLY_MASKING_POLICY, ApplyOrRevokeMaskingPolicyLog.class)
+            .put(OperationTypeEPack.OP_REVOKE_MASKING_POLICY, ApplyOrRevokeMaskingPolicyLog.class)
+            .put(OperationTypeEPack.OP_APPLY_ROW_ACCESS_POLICY, ApplyOrRevokeRowAccessPolicyLog.class)
+            .put(OperationTypeEPack.OP_REVOKE_ROW_ACCESS_POLICY, ApplyOrRevokeRowAccessPolicyLog.class)
+            .put(OperationTypeEPack.OP_CREATE_PASSWORD_POLICY, CreatePasswordPolicyLog.class)
+            .put(OperationTypeEPack.OP_DROP_PASSWORD_POLICY, DropPasswordPolicyLog.class)
+            .put(OperationTypeEPack.OP_SET_PASSWORD_POLICY, SetPasswordPolicyLog.class)
+            .put(OperationTypeEPack.OP_UNSET_PASSWORD_POLICY, UnsetPasswordPolicyLog.class)
+            .put(OperationTypeEPack.OP_CREATE_FAILOVER_GROUP, CreateFailoverGroupLog.class)
+            .put(OperationTypeEPack.OP_DROP_FAILOVER_GROUP, DropFailoverGroupLog.class)
+            .put(OperationTypeEPack.OP_UPDATE_FAILOVER_GROUP, UpdateFailoverGroupLog.class)
+            .put(OperationTypeEPack.OP_MV_CHANGE, MVChangeLog.class)
+
             .put(OperationType.OP_SAVE_TRANSACTION_ID_V2, TransactionIdInfo.class)
             .put(OperationType.OP_SAVE_AUTO_INCREMENT_ID, AutoIncrementInfo.class)
             .put(OperationType.OP_DELETE_AUTO_INCREMENT_ID, AutoIncrementInfo.class)
@@ -266,27 +289,8 @@ public class EditLogDeserializer {
             .put(OperationType.OP_DROP_SECURITY_INTEGRATION, SecurityIntegrationPersistInfo.class)
             .put(OperationType.OP_CREATE_GROUP_PROVIDER, GroupProviderLog.class)
             .put(OperationType.OP_DROP_GROUP_PROVIDER, GroupProviderLog.class)
-            .put(OperationTypeEPack.OP_CREATE_ROLE_MAPPING, RoleMappingPersistInfo.class)
-            .put(OperationTypeEPack.OP_ALTER_ROLE_MAPPING, RoleMappingPersistInfo.class)
-            .put(OperationTypeEPack.OP_DROP_ROLE_MAPPING, RoleMappingPersistInfo.class)
-            .put(OperationTypeEPack.OP_CREATE_MASKING_POLICY, CreatePolicyLog.class)
-            .put(OperationTypeEPack.OP_CREATE_ROW_ACCESS_POLICY, CreatePolicyLog.class)
-            .put(OperationTypeEPack.OP_DROP_POLICY, DropPolicyLog.class)
-            .put(OperationTypeEPack.OP_ALTER_POLICY_SET_BODY, AlterPolicyLog.class)
-            .put(OperationTypeEPack.OP_ALTER_POLICY_SET_COMMENT, AlterPolicyLog.class)
-            .put(OperationTypeEPack.OP_ALTER_POLICY_RENAME, AlterPolicyLog.class)
-            .put(OperationTypeEPack.OP_APPLY_MASKING_POLICY, ApplyOrRevokeMaskingPolicyLog.class)
-            .put(OperationTypeEPack.OP_REVOKE_MASKING_POLICY, ApplyOrRevokeMaskingPolicyLog.class)
-            .put(OperationTypeEPack.OP_APPLY_ROW_ACCESS_POLICY, ApplyOrRevokeRowAccessPolicyLog.class)
-            .put(OperationTypeEPack.OP_REVOKE_ROW_ACCESS_POLICY, ApplyOrRevokeRowAccessPolicyLog.class)
-            .put(OperationTypeEPack.OP_CREATE_PASSWORD_POLICY, CreatePasswordPolicyLog.class)
-            .put(OperationTypeEPack.OP_DROP_PASSWORD_POLICY, DropPasswordPolicyLog.class)
-            .put(OperationTypeEPack.OP_SET_PASSWORD_POLICY, SetPasswordPolicyLog.class)
-            .put(OperationTypeEPack.OP_UNSET_PASSWORD_POLICY, UnsetPasswordPolicyLog.class)
-            .put(OperationTypeEPack.OP_CREATE_FAILOVER_GROUP, CreateFailoverGroupLog.class)
-            .put(OperationTypeEPack.OP_DROP_FAILOVER_GROUP, DropFailoverGroupLog.class)
-            .put(OperationTypeEPack.OP_UPDATE_FAILOVER_GROUP, UpdateFailoverGroupLog.class)
-            .put(OperationTypeEPack.OP_MV_CHANGE, MVChangeLog.class)
+            .put(OperationType.OP_CREATE_SPM_BASELINE_LOG, BaselinePlan.class)
+            .put(OperationType.OP_DROP_SPM_BASELINE_LOG, BaselinePlan.class)
             .build();
 
     public static Writable deserialize(Short opCode, DataInput in) throws IOException {

@@ -13,9 +13,14 @@
 // limitations under the License.
 package com.starrocks.sql.spm;
 
-import java.time.LocalDateTime;
+import com.google.gson.annotations.SerializedName;
+import com.starrocks.common.io.Writable;
 
-public class BaselinePlan {
+import java.time.LocalDateTime;
+import java.util.Objects;
+
+public class BaselinePlan implements Writable {
+    @SerializedName("id")
     private long id;
 
     private final boolean isGlobal;
@@ -24,6 +29,7 @@ public class BaselinePlan {
     private final String bindSql;
     // bind sql without spm function, for bind query
     private final String bindSqlDigest;
+    @SerializedName("bindSqlHash")
     // bind sql hash, for fast search
     private final long bindSqlHash;
     // plan sql with hints
@@ -33,16 +39,26 @@ public class BaselinePlan {
 
     private final LocalDateTime updateTime;
 
+    public BaselinePlan(long id, long bindSqlHash) {
+        this.id = id;
+        this.bindSqlHash = bindSqlHash;
+        this.isGlobal = false;
+        this.bindSql = "";
+        this.bindSqlDigest = "";
+        this.planSql = "";
+        this.costs = 0;
+        this.updateTime = null;
+    }
+
     public BaselinePlan(boolean isGlobal, String bindSql, String bindSqlDigest,
-                        long bindSqlHash,
-                        String planSql, double costs) {
+                        long bindSqlHash, String planSql, double costs, LocalDateTime updateTime) {
         this.isGlobal = isGlobal;
         this.bindSql = bindSql;
         this.bindSqlDigest = bindSqlDigest;
         this.bindSqlHash = bindSqlHash;
         this.planSql = planSql;
         this.costs = costs;
-        this.updateTime = LocalDateTime.now();
+        this.updateTime = updateTime;
     }
 
     public long getId() {
@@ -79,6 +95,20 @@ public class BaselinePlan {
 
     public LocalDateTime getUpdateTime() {
         return updateTime;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+        BaselinePlan that = (BaselinePlan) o;
+        return id == that.id;
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(bindSqlHash);
     }
 
     @Override
