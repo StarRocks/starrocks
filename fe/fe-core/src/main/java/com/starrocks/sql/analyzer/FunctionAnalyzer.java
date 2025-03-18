@@ -344,7 +344,8 @@ public class FunctionAnalyzer {
                 || fnName.getFunction().equals(FunctionSet.MAX)
                 || fnName.getFunction().equals(FunctionSet.NDV)
                 || fnName.getFunction().equals(FunctionSet.APPROX_COUNT_DISTINCT)
-                || fnName.getFunction().equals(FunctionSet.DS_HLL_COUNT_DISTINCT))
+                || fnName.getFunction().equals(FunctionSet.DS_HLL_COUNT_DISTINCT)
+                || fnName.getFunction().equals(FunctionSet.DS_QUANTILE))
                 && !arg.getType().canApplyToNumeric()) {
             throw new SemanticException(Type.NOT_SUPPORT_AGG_ERROR_MSG);
         }
@@ -563,12 +564,58 @@ public class FunctionAnalyzer {
             // check the second parameter: tgt_type
             if (argSize == 3) {
                 if (!(functionCallExpr.getChild(2) instanceof StringLiteral)) {
-                    throw new SemanticException(fnName + " 's second parameter's data type is wrong ");
+                    throw new SemanticException(fnName + " 's third parameter's data type is wrong ");
                 }
                 String tgtType = ((LiteralExpr) functionCallExpr.getChild(2)).getStringValue();
                 if (!SUPPORTED_TGT_TYPES.contains(tgtType)) {
                     throw new SemanticException(
                             fnName + " third  parameter'value should be in HLL_4/HLL_6/HLL_8");
+                }
+            }
+        }
+
+        // ds_quantile
+        if (fnName.getFunction().equals(FunctionSet.DS_QUANTILE)) {
+            int argSize = functionCallExpr.getChildren().size();
+            if (argSize > 3 || argSize < 1) {
+                throw new SemanticException(fnName + " requires one/two/three parameters: ds_quantile(col, ranks, k)");
+            }
+            if (!functionCallExpr.getChild(0).getType().isNumericType()) {
+                throw new SemanticException(
+                        "ds_quantile requires the first parameter's type is numeric type");
+            }
+            if (argSize >= 2) {
+                if (functionCallExpr.getChild(1) instanceof ArrayExpr) {
+                    ArrayExpr ranksArrExpr = (ArrayExpr) functionCallExpr.getChild(1);
+                    int ranksSize = ranksArrExpr.getChildren().size();
+                    for (int i = 0; i < ranksSize; i++) {
+                        if (!(ranksArrExpr.getChild(i) instanceof DecimalLiteral)) {
+                            throw new SemanticException(fnName + " 's second parameter's data type is wrong.");
+                        }
+                        double rank = ((LiteralExpr) ranksArrExpr.getChild(i)).getDoubleValue();
+                        if (rank < 0 || rank > 1) {
+                            throw new SemanticException(
+                                    fnName + " rank should be between 0 and 1.");
+                        }
+                    }
+                } else if ((functionCallExpr.getChild(1) instanceof DecimalLiteral)) {
+                    double rank = ((LiteralExpr) functionCallExpr.getChild(1)).getDoubleValue();
+                    if (rank < 0 || rank > 1) {
+                        throw new SemanticException(
+                                fnName + " rank should be between 0 and 1.");
+                    }
+                } else {
+                    throw new SemanticException(fnName + " 's second parameter's data type is wrong.");
+                }
+            }
+            if (argSize == 3) {
+                if (!(functionCallExpr.getChild(2) instanceof IntLiteral)) {
+                    throw new SemanticException(fnName + " 's third parameter's data type is wrong.");
+                }
+                long k = ((LiteralExpr) functionCallExpr.getChild(2)).getLongValue();
+                if (k < 2 || k > 32768) {
+                    throw new SemanticException(
+                            fnName + " third parameter'value should be between 2 and 32768.");
                 }
             }
         }

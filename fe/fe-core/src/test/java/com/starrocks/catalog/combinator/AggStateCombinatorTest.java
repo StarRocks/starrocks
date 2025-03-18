@@ -195,6 +195,34 @@ public class AggStateCombinatorTest extends MVTestBase {
                 }
                 break;
             }
+            case FunctionSet.DS_QUANTILE: {
+                args.add(colTypes.get(argTypes.get(0)));
+                if (argTypes.size() == 2) {
+                    args.add("0.5");
+                } else {
+                    args.add("0.5");
+                    args.add("21");
+                }
+                break;
+            }
+            case FunctionSet.DS_FREQUENT: {
+                args.add(colTypes.get(argTypes.get(0)));
+                if (argTypes.size() == 2) {
+                    args.add("10");
+                } else if (argTypes.size() == 3) {
+                    args.add("10");
+                    args.add("12");
+                } else {
+                    args.add("10");
+                    args.add("12");
+                    args.add("5");
+                }
+                break;
+            }
+            case FunctionSet.DS_THETA: {
+                args.add("10");
+                break;
+            }
             case FunctionSet.WINDOW_FUNNEL: {
                 args.add("1800");
                 args.add(colTypes.get(argTypes.get(1)));

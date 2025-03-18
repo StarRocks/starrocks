@@ -31,7 +31,7 @@
 #include "exprs/agg/count.h"
 #include "exprs/agg/covariance.h"
 #include "exprs/agg/distinct.h"
-#include "exprs/agg/ds_hll_count_distinct.h"
+#include "exprs/agg/ds_agg.h"
 #include "exprs/agg/exchange_perf.h"
 #include "exprs/agg/group_concat.h"
 #include "exprs/agg/histogram.h"
@@ -190,9 +190,6 @@ public:
     static AggregateFunctionPtr MakeHllNdvAggregateFunction();
 
     template <LogicalType T>
-    static AggregateFunctionPtr MakeHllSketchAggregateFunction();
-
-    template <LogicalType T>
     static AggregateFunctionPtr MakeHllRawAggregateFunction();
 
     static AggregateFunctionPtr MakePercentileApproxAggregateFunction();
@@ -262,6 +259,9 @@ public:
 
     template <LogicalType LT>
     static auto MakeRetractMaxAggregateFunction();
+
+    template <LogicalType LT, SketchType ST>
+    static AggregateFunctionPtr MakeDataSketchesAggregateFunction();
 };
 
 // The function should be placed by alphabetical order
@@ -398,11 +398,6 @@ AggregateFunctionPtr AggregateFactory::MakeHllNdvAggregateFunction() {
 }
 
 template <LogicalType LT>
-AggregateFunctionPtr AggregateFactory::MakeHllSketchAggregateFunction() {
-    return std::make_shared<HllSketchAggregateFunction<LT>>();
-}
-
-template <LogicalType LT>
 AggregateFunctionPtr AggregateFactory::MakeHllRawAggregateFunction() {
     return std::make_shared<HllNdvAggregateFunction<LT, true>>();
 }
@@ -443,6 +438,11 @@ template <LogicalType LT>
 auto AggregateFactory::MakeRetractMaxAggregateFunction() {
     return std::make_shared<MaxMinAggregateFunctionRetractable<LT, MaxAggregateDataRetractable<LT>,
                                                                MaxElement<LT, MaxAggregateDataRetractable<LT>>>>();
+}
+
+template <LogicalType LT, SketchType ST>
+AggregateFunctionPtr AggregateFactory::MakeDataSketchesAggregateFunction() {
+    return std::make_shared<DataSketchesAggregateFunction<LT, ST>>();
 }
 
 } // namespace starrocks

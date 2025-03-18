@@ -38,9 +38,6 @@ struct HLLUnionBuilder {
 
             resolver->add_aggregate_mapping<lt, TYPE_BIGINT, HyperLogLog>(
                     "approx_count_distinct", false, AggregateFactory::MakeHllNdvAggregateFunction<lt>());
-
-            resolver->add_aggregate_mapping_variadic<lt, TYPE_BIGINT, HLLSketchState>(
-                    "ds_hll_count_distinct", false, AggregateFactory::MakeHllSketchAggregateFunction<lt>());
         }
     }
 };
@@ -57,10 +54,27 @@ struct ApproxTopKBuilder {
     }
 };
 
+struct DataSketchesBuilder {
+    template <LogicalType lt>
+    void operator()(AggregateFuncResolver* resolver) {
+        if constexpr (lt_is_fixedlength<lt> || lt_is_string<lt>) {
+            resolver->add_aggregate_mapping<lt, TYPE_BIGINT, DSSketchState<lt, SketchType::HLL>>(
+                    "ds_hll_count_distinct", false,
+                    AggregateFactory::MakeDataSketchesAggregateFunction<lt, SketchType::HLL>());
+        }
+        if constexpr (lt_is_integer<lt> || lt_is_float<lt>) {
+            resolver->add_aggregate_mapping<lt, TYPE_ARRAY, DSSketchState<lt, SketchType::QUANTILE>>(
+                    "ds_quantile", false,
+                    AggregateFactory::MakeDataSketchesAggregateFunction<lt, SketchType::QUANTILE>());
+        }
+    }
+};
+
 void AggregateFuncResolver::register_approx() {
     for (auto type : aggregate_types()) {
         type_dispatch_all(type, HLLUnionBuilder(), this);
         type_dispatch_all(type, ApproxTopKBuilder(), this);
+        type_dispatch_all(type, DataSketchesBuilder(), this);
     }
     add_aggregate_mapping<TYPE_HLL, TYPE_HLL, HyperLogLog>("hll_union", false,
                                                            AggregateFactory::MakeHllUnionAggregateFunction());
