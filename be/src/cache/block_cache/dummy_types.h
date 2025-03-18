@@ -18,15 +18,6 @@
 
 namespace starrocks {
 
-class DummyCacheHandle {
-public:
-    DummyCacheHandle() = default;
-    ~DummyCacheHandle() = default;
-
-    const void* ptr() { return nullptr; }
-    void release() {}
-};
-
 enum class DummyCacheStatus { NORMAL, UPDATING, ABNORMAL, LOADING };
 
 struct DummyCacheMetrics {

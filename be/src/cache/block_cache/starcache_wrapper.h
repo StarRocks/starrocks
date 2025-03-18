@@ -28,15 +28,9 @@ public:
 
     Status init(const CacheOptions& options) override;
 
-    Status write_buffer(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) override;
+    Status write(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) override;
 
-    Status write_object(const std::string& key, const void* ptr, size_t size, std::function<void()> deleter,
-                        DataCacheHandle* handle, WriteCacheOptions* options) override;
-
-    Status read_buffer(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
-                       ReadCacheOptions* options) override;
-
-    Status read_object(const std::string& key, DataCacheHandle* handle, ReadCacheOptions* options) override;
+    Status read(const std::string& key, size_t off, size_t size, IOBuffer* buffer, ReadCacheOptions* options) override;
 
     bool exist(const std::string& key) const override;
 
