@@ -101,6 +101,7 @@ public:
 
     const SchemaPtr& schema() const { return _schema; }
     SchemaPtr& schema() { return _schema; }
+    void reset_schema() { _schema.reset(); }
 
     const Columns& columns() const { return _columns; }
     Columns& columns() { return _columns; }
