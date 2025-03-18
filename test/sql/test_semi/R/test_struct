@@ -293,3 +293,14 @@ select cast(named_struct('1', 1, '2', 2, '3', 3) as STRUCT<a double, b string, c
 -- result:
 {"a":1,"b":"2","c":3}
 -- !result
+with input as (select struct([1, 2, 3], [4, 5, 6]) as s union all select struct([5, 6, 7], [6, 7]) as s) select s, s.col1 from input;
+-- result:
+{"col1":[1,2,3],"col2":[4,5,6]}	[1,2,3]
+{"col1":[5,6,7],"col2":[6,7]}	[5,6,7]
+-- !result
+with input as (select struct([1, 2, 3], [4, 5, 6]) as s union all select null as s union all select struct([5, 6, 7], [6, 7]) as s) select s.col1 from input;
+-- result:
+[1,2,3]
+None
+[5,6,7]
+-- !result
