@@ -263,7 +263,7 @@ public class AlterMaterializedViewTest {
         Assert.assertTrue(mv.isActive());
         baseTableVisibleVersionMap =
                 mv.getRefreshScheme().getAsyncRefreshContext().getBaseTableVisibleVersionMap();
-        Assert.assertTrue(!baseTableVisibleVersionMap.isEmpty());
+        Assert.assertTrue(baseTableVisibleVersionMap.isEmpty());
 
         alterMvSql = "alter materialized view mv_test1 INACTIVE";
         stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);

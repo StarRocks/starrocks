@@ -289,6 +289,13 @@ public class MaterializedView extends OlapTable implements GsonPreProcessable, G
             return mvPartitionNameRefBaseTablePartitionMap;
         }
 
+        public void clearVisibleVersionMap() {
+            LOG.info("Clear materialized view's version map");
+            this.baseTableInfoVisibleVersionMap.clear();
+            this.baseTableVisibleVersionMap.clear();
+            this.mvPartitionNameRefBaseTablePartitionMap.clear();
+        }
+
         public boolean isDefineStartTime() {
             return defineStartTime;
         }
