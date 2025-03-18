@@ -22,7 +22,7 @@ namespace starrocks {
 class StarCacheModule final : public ObjectCache {
 public:
     StarCacheModule() = delete;
-    StarCacheModule(const std::shared_ptr<starcache::StarCache>& star_cache);
+    StarCacheModule(std::shared_ptr<starcache::StarCache> star_cache);
     virtual ~StarCacheModule() = default;
 
     Status insert(const std::string& key, void* value, size_t size, size_t charge, ObjectCacheDeleter deleter,

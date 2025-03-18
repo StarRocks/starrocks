@@ -20,7 +20,7 @@
 
 namespace starrocks {
 
-StarCacheModule::StarCacheModule(const std::shared_ptr<starcache::StarCache>& star_cache) : _cache(star_cache) {
+StarCacheModule::StarCacheModule(std::shared_ptr<starcache::StarCache> star_cache) : _cache(std::move(star_cache)) {
     _initialized.store(true, std::memory_order_release);
 }
 
