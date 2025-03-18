@@ -358,6 +358,13 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_MAX_REORDER_NODE = "cbo_max_reorder_node";
     public static final String CBO_PRUNE_SHUFFLE_COLUMN_RATE = "cbo_prune_shuffle_column_rate";
     public static final String CBO_PUSH_DOWN_AGGREGATE_MODE = "cbo_push_down_aggregate_mode";
+<<<<<<< HEAD
+=======
+    public static final String CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN = "cbo_push_down_aggregate_on_broadcast_join";
+    public static final String CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN_ROW_COUNT_LIMIT =
+            "cbo_push_down_aggregate_on_broadcast_join_row_count_limit";
+    public static final String CBO_ENABLE_INTERSECT_ADD_DISTINCT = "cbo_enable_intersect_add_distinct";
+>>>>>>> a868d7dde4 ([BugFix] fix cardinality estimation on boolean constant value using mcv (#57031))
 
     public static final String CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW = "cbo_push_down_distinct_below_window";
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
@@ -1479,6 +1486,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             show = CBO_PUSH_DOWN_AGGREGATE_MODE, flag = VariableMgr.INVISIBLE)
     private int cboPushDownAggregateMode = -1;
 
+    @VarAttr(name = CBO_ENABLE_INTERSECT_ADD_DISTINCT)
+    private boolean cboEnableIntersectAddDistinct = true;
+
     // auto, global, local
     @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE, flag = VariableMgr.INVISIBLE)
     private String cboPushDownAggregate = "global";
@@ -1678,6 +1688,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableGroupExecution(boolean enableGroupExecution) {
         this.enableGroupExecution = enableGroupExecution;
+    }
+
+    public boolean isCboEnableIntersectAddDistinct() {
+        return cboEnableIntersectAddDistinct;
+    }
+
+    public void setCboEnableIntersectAddDistinct(boolean cboEnableIntersectAddDistinct) {
+        this.cboEnableIntersectAddDistinct = cboEnableIntersectAddDistinct;
     }
 
     // runtime dop requires join probe to wait for all builds to complete before executing.
