@@ -400,7 +400,10 @@ class StarRocksTableDefinitionParser(object):
             if issubclass(col_type, SET) and "" in type_args:
                 type_kw["retrieve_as_bitwise"] = True
 
-        type_instance = col_type(*type_args, **type_kw)
+        if col_type.__name__ == "LARGEINT":
+            type_instance = col_type()
+        else:
+            type_instance = col_type(*type_args, **type_kw)
 
         col_kw = {}
 
