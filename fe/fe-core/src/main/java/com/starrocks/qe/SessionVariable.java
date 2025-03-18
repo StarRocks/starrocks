@@ -4801,25 +4801,28 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
         this.backPressureThrottleTimeUpperBound = value;
     }
 
+    public boolean isEnableDataCacheSharing() {
+        return enableDataCacheSharing;
+    }
+
     public void setEnableDataCacheSharing(boolean enableDataCacheSharing) {
         this.enableDataCacheSharing = enableDataCacheSharing;
     }
 
-    public boolean isEnableDataCacheSharing() { return enableDataCacheSharing; }
-
-    public void setDataCacheSharingWorkPeriod(int datacacheSharingWorkPeriod) {
-        this.datacacheSharingWorkPeriod = datacacheSharingWorkPeriod;
-    }
     public int getDataCacheSharingWorkPeriod() {
         return datacacheSharingWorkPeriod;
     }
 
-    public void setHistoricalNodesMinUpdateInterval(int historicalNodesMinUpdateInterval) {
-        this.historicalNodesMinUpdateInterval = historicalNodesMinUpdateInterval;
+    public void setDataCacheSharingWorkPeriod(int datacacheSharingWorkPeriod) {
+        this.datacacheSharingWorkPeriod = datacacheSharingWorkPeriod;
     }
 
     public int getHistoricalNodesMinUpdateInterval() {
         return historicalNodesMinUpdateInterval;
+    }
+
+    public void setHistoricalNodesMinUpdateInterval(int historicalNodesMinUpdateInterval) {
+        this.historicalNodesMinUpdateInterval = historicalNodesMinUpdateInterval;
     }
 
     // Serialize to thrift object

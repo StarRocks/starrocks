@@ -38,7 +38,11 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 public class HDFSBackendSelectorTest {
     @Mocked
@@ -451,7 +455,7 @@ public class HDFSBackendSelectorTest {
             Assert.assertTrue(scanRangeParams.size() >= 1);
 
             TScanRangeParams first = scanRangeParams.get(0);
-            Assert.assertTrue(first.scan_range.hdfs_scan_range.isSetCandidate_node());;
+            Assert.assertTrue(first.scan_range.hdfs_scan_range.isSetCandidate_node());
         }
         Assert.assertEquals(scanRanges, scanRangeNumber);
     }
