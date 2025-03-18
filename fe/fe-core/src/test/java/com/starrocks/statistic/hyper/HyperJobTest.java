@@ -225,6 +225,13 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         List<String> columnNames = Lists.newArrayList("c4.b", "c6.c.b");
         List<Type> columnTypes = Lists.newArrayList(new ArrayType(Type.ANY_STRUCT), Type.INT);
 
+        new MockUp<SampleInfo>() {
+            @Mock
+            public List<TabletStats> getMediumHighWeightTablets() {
+                return List.of(new TabletStats(1, pid, 5000000));
+            }
+        };
+
         List<HyperQueryJob> jobs = HyperQueryJob.createSampleQueryJobs(connectContext, db, table, columnNames,
                 columnTypes, List.of(pid), 1, sampler);
 
@@ -234,7 +241,9 @@ public class HyperJobTest extends DistributedEnvPlanTestBase {
         List<String> sql = jobs.get(0).buildQuerySQL();
         Assert.assertEquals(2, sql.size());
 
-        assertContains(sql.get(1), "with base_cte_table as (SELECT * FROM `test`.`t_struct` LIMIT 200000) ");
+        assertContains(sql.get(1),
+                "with base_cte_table as ( SELECT * FROM (SELECT * FROM `test`.`t_struct` TABLET(1) SAMPLE" +
+                        "('percent'='10'))");
         assertContains(sql.get(1), "'c6.c.b', cast(0 as BIGINT), cast(4 * 0 as BIGINT), ");
         assertContains(sql.get(1), "hex(hll_serialize(IFNULL(hll_raw(`c6`.`c`.`b`), hll_empty()))), ");
         assertContains(sql.get(1), "cast((COUNT(*) - COUNT(`c6`.`c`.`b`)) * 0 / COUNT(*) as BIGINT), " +
