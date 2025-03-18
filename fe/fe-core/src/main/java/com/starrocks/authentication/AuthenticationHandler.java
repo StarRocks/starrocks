@@ -15,6 +15,7 @@
 package com.starrocks.authentication;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Preconditions;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.ErrorCode;
@@ -63,6 +64,7 @@ public class AuthenticationHandler {
                         try {
                             AuthenticationProvider provider =
                                     AuthenticationProviderFactory.create(matchedUserIdentity.getValue().getAuthPlugin());
+                            Preconditions.checkState(provider != null);
                             provider.authenticate(user, remoteHost, authResponse, randomString, matchedUserIdentity.getValue());
                             authenticatedUser = matchedUserIdentity.getKey();
 

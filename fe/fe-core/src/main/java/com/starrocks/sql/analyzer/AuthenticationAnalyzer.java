@@ -33,6 +33,8 @@ import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
 
+import java.util.Arrays;
+
 public class AuthenticationAnalyzer {
     public static void analyze(StatementBase statement, ConnectContext session) {
         new AuthenticationAnalyzerVisitor().analyze(statement, session);
@@ -109,11 +111,15 @@ public class AuthenticationAnalyzer {
                 authPluginUsing = userAuthOption.getAuthPlugin();
             }
 
+            AuthenticationProvider provider = AuthenticationProviderFactory.create(authPluginUsing);
+            if (provider == null) {
+                throw new SemanticException("Cannot find " + authPluginUsing
+                        + " from " + Arrays.toString(AuthPlugin.Client.values()));
+            }
             try {
-                AuthenticationProvider provider = AuthenticationProviderFactory.create(authPluginUsing);
                 return provider.analyzeAuthOption(userIdentity, userAuthOption);
             } catch (AuthenticationException e) {
-                throw new SemanticException("invalidate authentication: " + e.getMessage(), e);
+                throw new SemanticException(e.getMessage());
             }
         }
 

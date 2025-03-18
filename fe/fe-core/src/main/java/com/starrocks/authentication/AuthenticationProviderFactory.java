@@ -20,7 +20,7 @@ public class AuthenticationProviderFactory {
     private AuthenticationProviderFactory() {
     }
 
-    public static AuthenticationProvider create(String plugin) throws AuthenticationException {
+    public static AuthenticationProvider create(String plugin) {
         if (plugin == null) {
             return null;
         }

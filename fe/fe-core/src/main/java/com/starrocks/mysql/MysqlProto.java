@@ -264,7 +264,7 @@ public class MysqlProto {
     public record NegotiateResult(MysqlAuthPacket authPacket, NegotiateState state) {
     }
 
-    private static void switchAuthPlugin(MysqlAuthPacket mysqlAuthPacket, ConnectContext context)
+    public static void switchAuthPlugin(MysqlAuthPacket mysqlAuthPacket, ConnectContext context)
             throws AuthenticationException, IOException {
         String user = mysqlAuthPacket.getUser();
         String authPluginName = mysqlAuthPacket.getPluginName();
