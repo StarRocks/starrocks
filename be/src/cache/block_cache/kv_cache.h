@@ -30,11 +30,9 @@ namespace starrocks {
 // object cache and we'll deprecate it for some performance reasons. Now there is no need to
 // pay too much attention to the compatibility and upper-level abstraction of the cachelib interface.
 #ifdef WITH_STARCACHE
-using DataCacheHandle = starcache::ObjectHandle;
 using DataCacheMetrics = starcache::CacheMetrics;
 using DataCacheStatus = starcache::CacheStatus;
 #else
-using DataCacheHandle = DummyCacheHandle;
 using DataCacheMetrics = DummyCacheMetrics;
 using DataCacheStatus = DummyCacheStatus;
 #endif
@@ -49,17 +47,12 @@ public:
     virtual Status init(const CacheOptions& options) = 0;
 
     // Write data to cache
-    virtual Status write_buffer(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) = 0;
-
-    virtual Status write_object(const std::string& key, const void* ptr, size_t size, std::function<void()> deleter,
-                                DataCacheHandle* handle, WriteCacheOptions* options) = 0;
+    virtual Status write(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) = 0;
 
     // Read data from cache, it returns the data size if successful; otherwise the error status
     // will be returned.
-    virtual Status read_buffer(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
-                               ReadCacheOptions* options) = 0;
-
-    virtual Status read_object(const std::string& key, DataCacheHandle* handle, ReadCacheOptions* options) = 0;
+    virtual Status read(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
+                        ReadCacheOptions* options) = 0;
 
     virtual bool exist(const std::string& key) const = 0;
 

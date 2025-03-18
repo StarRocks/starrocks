@@ -148,6 +148,7 @@ public:
     Slice data() const { return _cache->value_slice(_handle); }
 
 private:
+    // TODO: Remove the `_cache` member because we use a singleton instance.
     ObjectCache* _cache = nullptr;
     ObjectCacheHandle* _handle = nullptr;
 

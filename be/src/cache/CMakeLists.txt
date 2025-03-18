@@ -21,7 +21,6 @@ set(EXECUTABLE_OUTPUT_PATH "${BUILD_DIR}/src/cache")
 set(CACHE_FILES
   block_cache/block_cache.cpp
   block_cache/io_buffer.cpp
-  block_cache/cache_options.h
   block_cache/datacache_utils.cpp
   block_cache/disk_space_monitor.cpp
   block_cache/block_cache_hit_rate_counter.hpp

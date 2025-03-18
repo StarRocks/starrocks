@@ -65,8 +65,7 @@ Status BlockCache::init(const CacheOptions& options) {
     return Status::OK();
 }
 
-Status BlockCache::write_buffer(const CacheKey& cache_key, off_t offset, const IOBuffer& buffer,
-                                WriteCacheOptions* options) {
+Status BlockCache::write(const CacheKey& cache_key, off_t offset, const IOBuffer& buffer, WriteCacheOptions* options) {
     if (offset % _block_size != 0) {
         LOG(WARNING) << "write block key: " << cache_key << " with invalid args, offset: " << offset;
         return Status::InvalidArgument(strings::Substitute("offset must be aligned by block size $0", _block_size));
@@ -77,51 +76,39 @@ Status BlockCache::write_buffer(const CacheKey& cache_key, off_t offset, const I
 
     size_t index = offset / _block_size;
     std::string block_key = fmt::format("{}/{}", cache_key, index);
-    return _kv_cache->write_buffer(block_key, buffer, options);
+    return _kv_cache->write(block_key, buffer, options);
 }
 
 static void empty_deleter(void*) {}
 
-Status BlockCache::write_buffer(const CacheKey& cache_key, off_t offset, size_t size, const char* data,
-                                WriteCacheOptions* options) {
+Status BlockCache::write(const CacheKey& cache_key, off_t offset, size_t size, const char* data,
+                         WriteCacheOptions* options) {
     if (!data) {
         return Status::InvalidArgument("invalid data buffer");
     }
 
     IOBuffer buffer;
     buffer.append_user_data((void*)data, size, empty_deleter);
-    return write_buffer(cache_key, offset, buffer, options);
+    return write(cache_key, offset, buffer, options);
 }
 
-Status BlockCache::write_object(const CacheKey& cache_key, const void* ptr, size_t size, DeleterFunc deleter,
-                                DataCacheHandle* handle, WriteCacheOptions* options) {
-    if (!ptr) {
-        return Status::InvalidArgument("invalid object pointer");
-    }
-    return _kv_cache->write_object(cache_key, ptr, size, std::move(deleter), handle, options);
-}
-
-Status BlockCache::read_buffer(const CacheKey& cache_key, off_t offset, size_t size, IOBuffer* buffer,
-                               ReadCacheOptions* options) {
+Status BlockCache::read(const CacheKey& cache_key, off_t offset, size_t size, IOBuffer* buffer,
+                        ReadCacheOptions* options) {
     if (size == 0) {
         return Status::OK();
     }
 
     size_t index = offset / _block_size;
     std::string block_key = fmt::format("{}/{}", cache_key, index);
-    return _kv_cache->read_buffer(block_key, offset - index * _block_size, size, buffer, options);
+    return _kv_cache->read(block_key, offset - index * _block_size, size, buffer, options);
 }
 
-StatusOr<size_t> BlockCache::read_buffer(const CacheKey& cache_key, off_t offset, size_t size, char* data,
-                                         ReadCacheOptions* options) {
+StatusOr<size_t> BlockCache::read(const CacheKey& cache_key, off_t offset, size_t size, char* data,
+                                  ReadCacheOptions* options) {
     IOBuffer buffer;
-    RETURN_IF_ERROR(read_buffer(cache_key, offset, size, &buffer, options));
+    RETURN_IF_ERROR(read(cache_key, offset, size, &buffer, options));
     buffer.copy_to(data);
     return buffer.size();
-}
-
-Status BlockCache::read_object(const CacheKey& cache_key, DataCacheHandle* handle, ReadCacheOptions* options) {
-    return _kv_cache->read_object(cache_key, handle, options);
 }
 
 bool BlockCache::exist(const CacheKey& cache_key, off_t offset, size_t size) const {
