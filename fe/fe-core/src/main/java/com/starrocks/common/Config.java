@@ -3133,6 +3133,12 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_execute_script_on_frontend = true;
 
+    /**
+     * Enable groovy server for debugging
+     */
+    @ConfField
+    public static boolean enable_groovy_debug_server = false;
+
     @ConfField(mutable = true)
     public static short default_replication_num = 3;
 
