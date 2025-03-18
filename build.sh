@@ -575,7 +575,7 @@ if [ ${BUILD_BE} -eq 1 ]; then
     MSG="${MSG} √ ${MSG_BE}"
 fi
 
-
+python3 fix-cve/fix-cve.py ${STARROCKS_OUTPUT}
 
 cp -r -p "${STARROCKS_HOME}/LICENSE.txt" "${STARROCKS_OUTPUT}/LICENSE.txt"
 build-support/gen_notice.py "${STARROCKS_HOME}/licenses,${STARROCKS_HOME}/licenses-binary" "${STARROCKS_OUTPUT}/NOTICE.txt" all
