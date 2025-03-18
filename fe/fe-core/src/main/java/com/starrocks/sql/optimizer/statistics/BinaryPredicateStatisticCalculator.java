@@ -16,6 +16,7 @@
 package com.starrocks.sql.optimizer.statistics;
 
 import com.starrocks.analysis.BinaryType;
+import com.starrocks.catalog.Type;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
@@ -113,12 +114,16 @@ public class BinaryPredicateStatisticCalculator {
             Histogram hist = columnStatistic.getHistogram();
             Map<String, Long> histogramTopN = columnStatistic.getHistogram().getMCV();
 
+            String constantStringValue = constantOperator.toString();
+            if (constantOperator.getType() == Type.BOOLEAN) {
+                constantStringValue = constantOperator.getBoolean() ? "1" : "0";
+            }
             // If there is a constant key in MCV, we use the MCV count to estimate the row count.
             // If it is not in MCV but in a bucket, we use the bucket info to estimate the row count.
             // If it is not in MCV and not in any bucket, we combine hist row count, total row count and bucket number
             // to estimate the row count.
-            if (histogramTopN.containsKey(constantOperator.toString())) {
-                double rowCountInHistogram = histogramTopN.get(constantOperator.toString());
+            if (histogramTopN.containsKey(constantStringValue)) {
+                double rowCountInHistogram = histogramTopN.get(constantStringValue);
                 predicateFactor = rowCountInHistogram / columnStatistic.getHistogram().getTotalRows();
                 double estimatedRows = statistics.getOutputRowCount() * (1 - columnStatistic.getNullsFraction())
                         * predicateFactor;
