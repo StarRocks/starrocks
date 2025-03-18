@@ -3104,6 +3104,12 @@ public class Config extends ConfigBase {
     @ConfField
     public static boolean enable_execute_script_on_frontend = true;
 
+    /**
+     * Enable groovy server for debugging
+     */
+    @ConfField
+    public static boolean enable_groovy_debug_server = false;
+
     @ConfField(mutable = true)
     public static short default_replication_num = 3;
 
@@ -3202,6 +3208,9 @@ public class Config extends ConfigBase {
 
     @ConfField(mutable = true, comment = "Whether enable to refresh materialized view in sync mode mergeable or not")
     public static boolean enable_mv_refresh_sync_refresh_mergeable = false;
+
+    @ConfField(mutable = true, comment = "Whether enable profile in refreshing materialized view or not by default")
+    public static boolean enable_mv_refresh_collect_profile = false;
 
     @ConfField(mutable = true, comment = "The max length for mv task run extra message's values(set/map) to avoid " +
             "occupying too much meta memory")

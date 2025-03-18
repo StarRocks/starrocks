@@ -101,9 +101,9 @@ public class MultiColumnHyperJobTest extends DistributedEnvPlanTestBase {
                 StatsConstants.AnalyzeType.SAMPLE, List.of(StatsConstants.StatisticsType.MCDISTINCT), new HashMap<>());
         Assert.assertEquals(1, jobs.size());
         String sql = ((MultiColumnQueryJob) jobs.get(0)).buildStatisticsQuery();
-        String expectedSql = "WITH base_cte_table as (SELECT * FROM (SELECT murmur_hash3_32(coalesce(`c1`, ''), " +
-                "coalesce(`c2`, ''), coalesce(`c3`, '')) as combined_column_key FROM `test`.`t_struct` TABLET(14434)" +
-                " SAMPLE('percent'='80', 'method'='by_block')) t_low)  SELECT\n" +
+        String expectedSql = "WITH base_cte_table as (SELECT murmur_hash3_32(coalesce(`c1`, ''), " +
+                "coalesce(`c2`, ''), coalesce(`c3`, '')) as combined_column_key FROM `test`.`t_struct` LIMIT 200000" +
+                ")  SELECT\n" +
                 "    cast(12 as INT),\n" +
                 "    '1#2#3',\n" +
                 "    cast(IFNULL(COUNT(1) + (sqrt(1 / SUM(t1.count)) - 1) * SUM(IF(t1.count = 1, 1, 0)), COUNT(1)) as BIGINT)\n" +

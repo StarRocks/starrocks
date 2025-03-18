@@ -203,6 +203,7 @@ private:
 };
 
 Status SpillMemTableSink::merge_blocks_to_segments() {
+    TEST_SYNC_POINT_CALLBACK("SpillMemTableSink::merge_blocks_to_segments", this);
     SCOPED_THREAD_LOCAL_MEM_SETTER(_merge_mem_tracker.get(), false);
     auto& groups = _block_manager->block_container()->block_groups();
     RETURN_IF(groups.empty(), Status::OK());

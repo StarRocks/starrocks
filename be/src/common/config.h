@@ -123,7 +123,7 @@ CONF_Int32(clone_worker_count, "3");
 // The count of thread to clone.
 CONF_Int32(storage_medium_migrate_count, "3");
 // The count of thread to check consistency.
-CONF_Int32(check_consistency_worker_count, "1");
+CONF_mInt32(check_consistency_worker_count, "1");
 // The count of thread to update scheam
 CONF_Int32(update_schema_worker_count, "3");
 // The count of thread to upload.
@@ -408,6 +408,15 @@ CONF_Int32(arrow_flight_port, "-1");
 CONF_Int64(load_data_reserve_hours, "4");
 // log error log will be removed after this time
 CONF_mInt64(load_error_log_reserve_hours, "48");
+// Whether to execute load channel RPC requests asynchronously, that is,
+// to run RPCs in a separate thread pool instead of within BRPC workers
+CONF_mBool(enable_load_channel_rpc_async, "true");
+// Maximum threads in load channel RPC thread pool. Default: -1 (auto-set to CPU cores),
+// aligning with brpc workers' default (brpc_num_threads) to keep compatible after
+// switching from sync to async mode
+CONF_mInt32(load_channel_rpc_thread_pool_num, "-1");
+// The queue size for Load channel rpc thread pool
+CONF_Int32(load_channel_rpc_thread_pool_queue_size, "1024000");
 CONF_mInt32(number_tablet_writer_threads, "16");
 CONF_mInt64(max_queueing_memtable_per_tablet, "2");
 // when memory limit exceed and memtable last update time exceed this time, memtable will be flushed

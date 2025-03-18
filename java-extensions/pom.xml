@@ -22,6 +22,7 @@
         <module>iceberg-metadata-reader</module>
         <module>kudu-reader</module>
         <module>common-runtime</module>
+        <module>hadoop-lib</module>
     </modules>
     <name>starrocks-java-extensions</name>
 
@@ -33,8 +34,8 @@
         <hikaricp.version>3.4.5</hikaricp.version>
         <compiler-plugin.version>3.8.1</compiler-plugin.version>
         <java-extensions.home>${basedir}</java-extensions.home>
-        <aws-v2-sdk.version>2.23.19</aws-v2-sdk.version>
-        <hadoop.version>3.4.0</hadoop.version>
+        <aws-v2-sdk.version>2.29.52</aws-v2-sdk.version>
+        <hadoop.version>3.4.1</hadoop.version>
         <iceberg.version>1.7.1</iceberg.version>
         <log4j2.version>2.23.1</log4j2.version>
         <junit.version>5.10.3</junit.version>
@@ -43,6 +44,10 @@
         <hadoop-ext.version>1.0.0</hadoop-ext.version>
         <java-utils.version>1.0.0</java-utils.version>
         <io.netty.version>4.1.118.Final</io.netty.version>
+        <protobuf-java.version>3.25.5</protobuf-java.version>
+        <nimbusds.version>9.37.2</nimbusds.version>
+        <commons-io.version>2.14.0</commons-io.version>
+        <gcs.connector.version>hadoop3-2.2.26</gcs.connector.version>
     </properties>
 
     <dependencyManagement>
@@ -77,6 +82,36 @@
                 <version>${io.netty.version}</version>
             </dependency>
 
+            <dependency>
+                <groupId>io.netty</groupId>
+                <artifactId>netty-transport-native-epoll</artifactId>
+                <version>${io.netty.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.google.protobuf</groupId>
+                <artifactId>protobuf-java</artifactId>
+                <version>${protobuf-java.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.velocity</groupId>
+                <artifactId>velocity-engine-core</artifactId>
+                <version>2.4.1</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.nimbusds</groupId>
+                <artifactId>nimbus-jose-jwt</artifactId>
+                <version>${nimbusds.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>commons-io</groupId>
+                <artifactId>commons-io</artifactId>
+                <version>${commons-io.version}</version>
+            </dependency>
+
             <!-- hadoop -->
             <dependency>
                 <groupId>org.apache.hadoop</groupId>
@@ -100,6 +135,14 @@
                         <!-- exclude io.netty, use our provided netty version to address CVE issue -->
                         <groupId>io.netty</groupId>
                         <artifactId>netty-transport-native-epoll</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>dnsjava</groupId>
+                        <artifactId>dnsjava</artifactId>
+                    </exclusion>
+                    <exclusion>
+                        <groupId>io.netty</groupId>
+                        <artifactId>netty-handler</artifactId>
                     </exclusion>
                 </exclusions>
             </dependency>
@@ -133,6 +176,67 @@
                         <artifactId>protobuf-java</artifactId>
                     </exclusion>
                 </exclusions>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-kms</artifactId>
+                <version>${hadoop.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-hdfs-rbf</artifactId>
+                <version>${hadoop.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-hdfs-httpfs</artifactId>
+                <version>${hadoop.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-nfs</artifactId>
+                <version>${hadoop.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-hdfs-nfs</artifactId>
+                <version>${hadoop.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-azure</artifactId>
+                <version>${hadoop.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-azure-datalake</artifactId>
+                <version>${hadoop.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-hdfs-native-client</artifactId>
+                <version>${hadoop.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.hadoop</groupId>
+                <artifactId>hadoop-registry</artifactId>
+                <version>${hadoop.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.google.cloud.bigdataoss</groupId>
+                <artifactId>gcs-connector</artifactId>
+                <version>${gcs.connector.version}</version>
+                <classifier>shaded</classifier>
             </dependency>
             <!-- hadoop -->
 
