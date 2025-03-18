@@ -136,11 +136,7 @@ const ObjectCacheMetrics StarCacheModule::metrics() const {
 }
 
 Status StarCacheModule::prune() {
-    if (_cache != nullptr) {
-        return to_status(_cache->update_mem_quota(0, false));
-    } else {
-        return Status::OK();
-    }
+    return to_status(_cache->update_mem_quota(0, false));
 }
 
 Status StarCacheModule::shutdown() {
