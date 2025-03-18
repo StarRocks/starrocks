@@ -170,6 +170,113 @@ mysql> select * from tj
 
 JSON 函数和运算符可以用于构造和处理 JSON 数据。具体说明，请参见 [JSON 函数和运算符](../../sql-functions/json-functions/overview-of-json-functions-and-operators.md)。
 
+## JSON Array 
+
+JSON 可以包含嵌套数据，例如 Array 中可以嵌套 Object、Array 或其他 JSON 数据类型。StarRocks 提供了丰富的函数和操作符来处理这些复杂的嵌套 JSON 数据结构。以下将介绍如何处理包含数组的 JSON 数据。
+
+假设 events 表中有一个 JSON 字段 event_data，其内容如下：
+```
+{
+  "user": "Alice",
+  "actions": [
+    {"type": "click", "timestamp": "2024-03-17T10:00:00Z", "quantity": 1},
+    {"type": "view", "timestamp": "2024-03-17T10:05:00Z", "quantity": 2},
+    {"type": "purchase", "timestamp": "2024-03-17T10:10:00Z", "quantity": 3}
+  ]
+}
+```
+
+以下示例将展示几种常见的 JSON 数组分析场景：
+
+1. 提取数组元素：从 actions 数组中提取特定字段，如 type、timestamp 等，并进行投影操作
+2. 数组展开：使用 json_each 函数将嵌套的 JSON 数组展开成多行多列的表格结构，便于后续分析
+3. 数组计算：结合 Array Functions 对数组元素进行过滤、转换和聚合计算，如统计特定类型的操作次数
+
+### 1. 提取 JSON 数组的元素
+
+如果要提取 JSON Array 中的某个嵌套元素，可以使用如下语法：
+- 其返回类型仍然是 JSON Array，可以使用 CAST 表达式进行类型转换
+```
+MySQL > SELECT json_query(event_data, '$.actions[*].type') as json_array FROM events;
++-------------------------------+
+| json_array                    |
++-------------------------------+
+| ["click", "view", "purchase"] |
++-------------------------------+
+
+MySQL > SELECT cast(json_query(event_data, '$.actions[*].type') as array<string>) array_string FROM events;
++-----------------------------+
+| array_string                |
++-----------------------------+
+| ["click","view","purchase"] |
++-----------------------------+
+```
+
+### 2. 使用 json_each 函数展开
+StarRocks 提供 `json_each` 函数进行 JSON 数组的展开，使其转换为多行数据。例如：
+```
+MySQL > select value from events, json_each(event_data->'actions');
++--------------------------------------------------------------------------+
+| value                                                                    |
++--------------------------------------------------------------------------+
+| {"quantity": 1, "timestamp": "2024-03-17T10:00:00Z", "type": "click"}    |
+| {"quantity": 2, "timestamp": "2024-03-17T10:05:00Z", "type": "view"}     |
+| {"quantity": 3, "timestamp": "2024-03-17T10:10:00Z", "type": "purchase"} |
++--------------------------------------------------------------------------+
+```
+
+如果需要将 type 和 timestamp 字段分别提取：
+```
+MySQL > select value->'timestamp', value->'type' from events, json_each(event_data->'actions');
++------------------------+---------------+
+| value->'timestamp'     | value->'type' |
++------------------------+---------------+
+| "2024-03-17T10:00:00Z" | "click"       |
+| "2024-03-17T10:05:00Z" | "view"        |
+| "2024-03-17T10:10:00Z" | "purchase"    |
++------------------------+---------------+
+```
+
+在此之后，JSON Array 的数据即变成我们熟悉的关系模型，可以使用常用的函数进行分析。
+
+### 3. 使用 Array Functions 来进行筛选和计算
+StarRocks 还支持 ARRAY 相关函数，与 JSON 函数结合使用可以实现更高效的查询。通过组合使用这些函数，您可以对 JSON 数组进行过滤、转换和聚合计算。以下示例展示了如何使用这些函数：
+```
+MySQL > 
+WITH step1 AS (
+ SELECT cast(event_data->'actions' as ARRAY<JSON>) as docs
+   FROM events
+)
+SELECT array_filter(doc -> get_json_string(doc, 'type') = 'click', docs) as clicks
+FROM step1
++---------------------------------------------------------------------------+
+| clicks                                                                    |
++---------------------------------------------------------------------------+
+| ['{"quantity": 1, "timestamp": "2024-03-17T10:00:00Z", "type": "click"}'] |
++---------------------------------------------------------------------------+
+```
+
+更进一步，可以结合其他的 ARRAY Function 对数组元素进行聚合计算：
+```
+MySQL > 
+WITH step1 AS (
+ SELECT cast(event_data->'actions' as ARRAY<JSON>) as docs
+   FROM events
+), step2 AS (
+    SELECT array_filter(doc -> get_json_string(doc, 'type') = 'click', docs) as clicks
+    FROM step1
+)
+SELECT array_sum(
+            array_map(doc -> get_json_double(doc, 'quantity'), clicks)
+            ) as click_amount
+FROM step2
++--------------+
+| click_amount |
++--------------+
+| 1.0          |
++--------------+
+```
+
 ## 限制和注意事项
 
 - 当前 JSON 类型数据支持的最大长度为 16 MB。
