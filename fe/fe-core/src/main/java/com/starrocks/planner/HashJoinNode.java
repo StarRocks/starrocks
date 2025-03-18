@@ -83,8 +83,7 @@ public class HashJoinNode extends JoinNode {
     }
 
     public void setSkewJoin(boolean skewJoin) {
-        isSkewJoin =
-                skewJoin && ConnectContext.get().getSessionVariable().isEnableOptimizerSkewJoinByBroadCastSkewValues();
+        isSkewJoin = skewJoin ;
     }
 
     public boolean isSkewShuffleJoin() {
