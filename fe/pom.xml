@@ -73,7 +73,12 @@ under the License.
         <paimon.version>1.0.1</paimon.version>
         <delta-kernel.version>4.0.0rc1</delta-kernel.version>
         <iceberg.version>1.7.1</iceberg.version>
+<<<<<<< HEAD
         <staros.version>3.3.2</staros.version>
+=======
+        <staros.version>3.4-rc5</staros.version>
+        <jetty.version>10.0.24</jetty.version>
+>>>>>>> 7d14d681b3 ([Enhancement] upgrade jetty to 10.0.24 to fix CVE-2024-22201 (#57010))
     </properties>
 
     <profiles>
@@ -1200,6 +1205,48 @@ under the License.
                 <version>1.1.10.5</version>
             </dependency>
 
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-client</artifactId>
+                <version>${jetty.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-server</artifactId>
+                <version>${jetty.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-io</artifactId>
+                <version>${jetty.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-webapp</artifactId>
+                <version>${jetty.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-servlet</artifactId>
+                <version>${jetty.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-util</artifactId>
+                <version>${jetty.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.eclipse.jetty</groupId>
+                <artifactId>jetty-util-ajax</artifactId>
+                <version>${jetty.version}</version>
+            </dependency>
+
             <!-- https://mvnrepository.com/artifact/org.apache.ranger/ranger-plugins-common -->
             <dependency>
                 <groupId>org.apache.ranger</groupId>
@@ -1207,24 +1254,12 @@ under the License.
                 <version>2.5.0</version>
                 <exclusions>
                     <exclusion>
-                        <groupId>com.amazonaws</groupId>
-                        <artifactId>aws-java-sdk-bundle</artifactId>
-                    </exclusion>
-                    <exclusion>
                         <groupId>org.elasticsearch</groupId>
                         <artifactId>*</artifactId>
                     </exclusion>
                     <exclusion>
                         <groupId>org.elasticsearch.client</groupId>
                         <artifactId>*</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <groupId>org.eclipse.jetty</groupId>
-                        <artifactId>jetty-client</artifactId>
-                    </exclusion>
-                    <exclusion>
-                        <artifactId>elasticsearch</artifactId>
-                        <groupId>org.elasticsearch</groupId>
                     </exclusion>
                     <exclusion>
                         <groupId>com.nimbusds</groupId>
