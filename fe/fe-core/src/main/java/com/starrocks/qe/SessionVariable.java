@@ -375,6 +375,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN = "cbo_push_down_aggregate_on_broadcast_join";
     public static final String CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN_ROW_COUNT_LIMIT =
             "cbo_push_down_aggregate_on_broadcast_join_row_count_limit";
+    public static final String CBO_ENABLE_INTERSECT_ADD_DISTINCT = "cbo_enable_intersect_add_distinct";
 
     public static final String CBO_PUSH_DOWN_DISTINCT_BELOW_WINDOW = "cbo_push_down_distinct_below_window";
     public static final String CBO_PUSH_DOWN_AGGREGATE = "cbo_push_down_aggregate";
@@ -388,6 +389,10 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
             "enable_rewrite_groupingsets_to_union_all";
     public static final String ENABLE_PARTITION_LEVEL_CARDINALITY_ESTIMATION =
             "enable_partition_level_cardinality_estimation";
+    public static final String ENABLE_OPTIMIZER_SKEW_JOIN_BY_QUERY_REWRITE =
+            "enable_optimize_skew_join_by_query_rewrite";
+    public static final String ENABLE_OPTIMIZER_SKEW_JOIN_BY_BROADCAST_SKEW_VALUES =
+            "enable_optimize_skew_join_by_broadcast_skew_values";
 
     public static final String CBO_USE_DB_LOCK = "cbo_use_lock_db";
     public static final String CBO_PREDICATE_SUBFIELD_PATH = "cbo_enable_predicate_subfield_path";
@@ -1433,8 +1438,15 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_REWRITE_GROUPINGSETS_TO_UNION_ALL)
     private boolean enableRewriteGroupingSetsToUnionAll = false;
 
+
     @VariableMgr.VarAttr(name = ENABLE_PARTITION_LEVEL_CARDINALITY_ESTIMATION, flag = VariableMgr.INVISIBLE)
     private boolean enablePartitionLevelCardinalityEstimation = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_SKEW_JOIN_BY_QUERY_REWRITE)
+    private boolean enableOptimizerSkewJoinByQueryRewrite = true;
+
+    @VariableMgr.VarAttr(name = ENABLE_OPTIMIZER_SKEW_JOIN_BY_BROADCAST_SKEW_VALUES)
+    private boolean enableOptimizerSkewJoinByBroadCastSkewValues = false;
 
     // value should be 0~4
     // 0 represents automatic selection, and 1, 2, 3, and 4 represent forced selection of AGG of
@@ -1586,6 +1598,9 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE_ON_BROADCAST_JOIN_ROW_COUNT_LIMIT, flag = VariableMgr.INVISIBLE)
     private long cboPushDownAggregateOnBroadcastJoinRowCountLimit = 250000;
+
+    @VarAttr(name = CBO_ENABLE_INTERSECT_ADD_DISTINCT)
+    private boolean cboEnableIntersectAddDistinct = true;
 
     // auto, global, local
     @VarAttr(name = CBO_PUSH_DOWN_AGGREGATE, flag = VariableMgr.INVISIBLE)
@@ -1803,6 +1818,14 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableGroupExecution(boolean enableGroupExecution) {
         this.enableGroupExecution = enableGroupExecution;
+    }
+
+    public boolean isCboEnableIntersectAddDistinct() {
+        return cboEnableIntersectAddDistinct;
+    }
+
+    public void setCboEnableIntersectAddDistinct(boolean cboEnableIntersectAddDistinct) {
+        this.cboEnableIntersectAddDistinct = cboEnableIntersectAddDistinct;
     }
 
     // runtime dop requires join probe to wait for all builds to complete before executing.
@@ -3657,6 +3680,22 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
 
     public void setEnableLowCardinalityOptimize(boolean enableLowCardinalityOptimize) {
         this.enableLowCardinalityOptimize = enableLowCardinalityOptimize;
+    }
+
+    public boolean isEnableOptimizerSkewJoinByBroadCastSkewValues() {
+        return enableOptimizerSkewJoinByBroadCastSkewValues;
+    }
+
+    public void setEnableOptimizerSkewJoinByBroadCastSkewValues(boolean enableOptimizerSkewJoinByBroadCastSkewValues) {
+        this.enableOptimizerSkewJoinByBroadCastSkewValues = enableOptimizerSkewJoinByBroadCastSkewValues;
+    }
+
+    public boolean isEnableOptimizerSkewJoinByQueryRewrite() {
+        return enableOptimizerSkewJoinByQueryRewrite;
+    }
+
+    public void setEnableOptimizerSkewJoinByQueryRewrite(boolean enableOptimizerSkewJoinByQueryRewrite) {
+        this.enableOptimizerSkewJoinByQueryRewrite = enableOptimizerSkewJoinByQueryRewrite;
     }
 
     public boolean isEnableColumnExprPredicate() {
