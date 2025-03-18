@@ -178,6 +178,9 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     private void tryUpdateHistoricalComputeNodes(String warehouse) {
+        if (!Config.enable_trace_historical_node) {
+            return;
+        }
         long currentTime = System.currentTimeMillis();
         if (needUpdateHistoricalNodes(currentTime, warehouse)) {
             updateHistoricalComputeNodes(warehouse, currentTime);
@@ -281,6 +284,9 @@ public class SystemInfoService implements GsonPostProcessable {
     }
 
     private void tryUpdateHistoricalBackends(String warehouse) {
+        if (!Config.enable_trace_historical_node) {
+            return;
+        }
         long currentTime = System.currentTimeMillis();
         if (needUpdateHistoricalNodes(currentTime, warehouse)) {
             updateHistoricalBackends(warehouse, currentTime);

@@ -28,7 +28,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 public class HistoricalNodeProcNode implements ProcNodeInterface {
     private static final List<String> TITLES = Collections.unmodifiableList(Arrays.asList(
-     "Warehouse", "BackendIDs", "ComputeNodeIDs", "UpdateTime"));
+            "Warehouse", "BackendIDs", "ComputeNodeIDs", "UpdateTime"));
 
     private GlobalStateMgr globalStateMgr;
 

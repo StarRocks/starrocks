@@ -14,7 +14,6 @@
 
 package com.starrocks.system;
 
-import com.google.common.collect.ImmutableList;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import org.junit.Assert;
@@ -43,6 +42,7 @@ public class HistoricalNodeMgrTest {
 
         Assert.assertEquals(historicalNodeMgr.getHistoricalBackendIds(warehouse).size(), backendIds.size());
         Assert.assertEquals(historicalNodeMgr.getLastUpdateTime(warehouse), updateTime);
+        Assert.assertEquals(historicalNodeMgr.getAllHistoricalNodeSet().size(), 1);
     }
 
     @Test
@@ -56,5 +56,6 @@ public class HistoricalNodeMgrTest {
 
         Assert.assertEquals(historicalNodeMgr.getHistoricalComputeNodeIds(warehouse).size(), computeNodeIds.size());
         Assert.assertEquals(historicalNodeMgr.getLastUpdateTime(warehouse), updateTime);
+        Assert.assertEquals(historicalNodeMgr.getAllHistoricalNodeSet().size(), 1);
     }
 }
