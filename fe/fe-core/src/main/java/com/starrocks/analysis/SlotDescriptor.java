@@ -42,6 +42,7 @@ import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnStats;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.FeConstants;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.thrift.TSlotDescriptor;
 import org.apache.logging.log4j.LogManager;
@@ -165,6 +166,8 @@ public class SlotDescriptor {
                         scalarType.getPrimitiveType(),
                         scalarType.getScalarPrecision(),
                         scalarType.getScalarScale());
+            } else if (this.originType.isVarchar() && FeConstants.setLengthForVarchar) {
+                this.type = ScalarType.createVarcharType(scalarType.getLength());
             } else {
                 this.type = ScalarType.createType(this.originType.getPrimitiveType());
             }

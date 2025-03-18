@@ -70,7 +70,7 @@ public class ReplayFromDumpTestBase {
         FeConstants.showScanNodeLocalShuffleColumnsInExplain = false;
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.showJoinLocalShuffleInExplain = false;
-
+        FeConstants.setLengthForVarchar = false;
         new MockUp<EditLog>() {
             @Mock
             protected void logEdit(short op, Writable writable) {

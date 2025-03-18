@@ -97,6 +97,15 @@ public class Projection {
         return commonSubOperatorMap;
     }
 
+    public Map<ColumnRefOperator, ScalarOperator> getAllMaps() {
+        Map<ColumnRefOperator, ScalarOperator> twoMaps = new HashMap<>();
+        twoMaps.putAll(columnRefMap);
+        if (commonSubOperatorMap != null) {
+            twoMaps.putAll(commonSubOperatorMap);
+        }
+        return twoMaps;
+    }
+
     // For sql: select *, to_bitmap(S_SUPPKEY) from table, we needn't apply global dict optimization
     // This method differ from `couldApplyStringDict` method is for ColumnRefOperator, we return false.
     public boolean needApplyStringDict(Set<Integer> childDictColumns) {
@@ -163,5 +172,19 @@ public class Projection {
     @Override
     public String toString() {
         return columnRefMap.values().toString();
+    }
+
+    public Projection deepClone() {
+        Map<ColumnRefOperator, ScalarOperator> clonedColumnRefMap = new HashMap<>();
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : columnRefMap.entrySet()) {
+            clonedColumnRefMap.put(entry.getKey(), entry.getValue());
+        }
+
+        Map<ColumnRefOperator, ScalarOperator> clonedCommonSubOperatorMap = new HashMap<>();
+        for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : commonSubOperatorMap.entrySet()) {
+            clonedCommonSubOperatorMap.put(entry.getKey(), entry.getValue());
+        }
+
+        return new Projection(clonedColumnRefMap, clonedCommonSubOperatorMap, needReuseLambdaDependentExpr);
     }
 }
