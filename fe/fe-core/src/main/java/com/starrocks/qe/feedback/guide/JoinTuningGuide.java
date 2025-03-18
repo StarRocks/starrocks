@@ -35,7 +35,6 @@ public abstract class JoinTuningGuide implements TuningGuide {
 
     protected static final long BROADCAST_THRESHOLD = 1000000;
 
-
     protected PhysicalHashJoinOperator buildJoinOperator(PhysicalHashJoinOperator joinOperator, boolean needCommute) {
         JoinOperator joinType = joinOperator.getJoinType();
         if (needCommute) {
@@ -47,7 +46,9 @@ public abstract class JoinTuningGuide implements TuningGuide {
                 joinOperator.getJoinHint(),
                 joinOperator.getLimit(),
                 joinOperator.getPredicate(),
-                joinOperator.getProjection());
+                joinOperator.getProjection(),
+                joinOperator.getSkewColumn(),
+                joinOperator.getSkewValues());
     }
 
     protected boolean isColocateJoin(OptExpression optExpression) {

@@ -22,16 +22,24 @@ import com.starrocks.sql.optimizer.operator.OperatorVisitor;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.List;
 import java.util.Objects;
 
 public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
+    private ScalarOperator skewColumn;
+    private List<ScalarOperator> skewValues;
     public PhysicalHashJoinOperator(JoinOperator joinType,
                                     ScalarOperator onPredicate,
                                     String joinHint,
                                     long limit,
                                     ScalarOperator predicate,
-                                    Projection projection) {
+                                    Projection projection,
+                                    ScalarOperator skewColumn,
+                                    List<ScalarOperator> skewValues) {
+
         super(OperatorType.PHYSICAL_HASH_JOIN, joinType, onPredicate, joinHint, limit, predicate, projection);
+        this.skewColumn = skewColumn;
+        this.skewValues = skewValues;
     }
 
     @Override
@@ -57,6 +65,14 @@ public class PhysicalHashJoinOperator extends PhysicalJoinOperator {
     @Override
     public String getJoinAlgo() {
         return "HASH";
+    }
+
+    public ScalarOperator getSkewColumn() {
+        return skewColumn;
+    }
+
+    public List<ScalarOperator> getSkewValues() {
+        return skewValues;
     }
 
     @Override
