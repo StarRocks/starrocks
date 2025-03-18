@@ -75,6 +75,10 @@ public class HistoricalNodeMgr {
         return nodeSet.getLastUpdateTime();
     }
 
+    public ConcurrentHashMap<String, HistoricalNodeSet> getAllHistoricalNodeSet() {
+        return whToComputeNodeIds;
+    }
+
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
         LOG.info("start save image for historical node manager");
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
