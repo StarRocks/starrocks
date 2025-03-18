@@ -200,7 +200,7 @@ public class AlterJobMgr {
     }
 
     public void alterMaterializedViewStatus(MaterializedView materializedView, String status, String reason, boolean isReplay) {
-        LOG.info("process change materialized view {} status to {}, isReplay: {}, noValidation: {}",
+        LOG.info("process change materialized view {} status to {}, isReplay: {}",
                 materializedView.getName(), status, isReplay);
         if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(status)) {
             ConnectContext context = ConnectContext.buildInner();
