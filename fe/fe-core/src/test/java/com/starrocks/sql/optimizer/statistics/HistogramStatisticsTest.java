@@ -243,4 +243,27 @@ public class HistogramStatisticsTest {
                 columnStatistic, eq35, Optional.of(ConstantOperator.createBigint(35)), statistics);
         Assert.assertEquals(961.53846, estimated.getOutputRowCount(), 0.001);
     }
+
+    @Test
+    public void testHitMCV() {
+        Map<String, Long> mcv = Maps.newHashMap();
+        mcv.put("0", 500L);
+        Histogram histogram = new Histogram(new ArrayList<>(), mcv);
+        ColumnRefOperator columnRefOperator = new ColumnRefOperator(0, Type.BOOLEAN, "b1", true);
+        ColumnStatistic columnStatistic = new ColumnStatistic(0, 1, 0, 4, 2, histogram, ColumnStatistic.StatisticType.ESTIMATE);
+        BinaryPredicateOperator eq10 = new BinaryPredicateOperator(
+                BinaryType.EQ,
+                columnRefOperator,
+                ConstantOperator.createBoolean(false));
+        Statistics.Builder builder = Statistics.builder();
+        builder.setOutputRowCount(100000);
+        builder.addColumnStatistic(columnRefOperator, columnStatistic);
+        Statistics statistics = builder.build();
+
+        // hit upper bound
+        Statistics estimated = BinaryPredicateStatisticCalculator.estimateColumnToConstantComparison(
+                Optional.of(columnRefOperator),
+                columnStatistic, eq10, Optional.of(ConstantOperator.createBoolean(false)), statistics);
+        Assert.assertEquals(500L, estimated.getOutputRowCount(), 0.001);
+    }
 }
