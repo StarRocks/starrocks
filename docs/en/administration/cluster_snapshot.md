@@ -19,7 +19,7 @@ In shared-data clusters, the CN state (data) is stored in object storage, but th
 
 - **Cluster snapshot**
 
-  A cluster snapshot refers to a snapshot of the cluster state at a certain moment. It contains all the objects in the cluster, such as catalogs, databases, tables, users & privileges, loading tasks, and more. It does not include all external dependent objects, such as configuration files dependent on external catalogs, and local UDF JAR packages.
+  A cluster snapshot refers to a snapshot of the cluster state at a certain moment. It contains all the objects in the cluster, such as catalogs, databases, tables, users & privileges, loading tasks, and more. It does not include all external dependent objects, such as configuration files of external catalogs, and local UDF JAR packages.
 
 - **Automating cluster snapshot**
 
