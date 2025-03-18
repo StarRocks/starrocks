@@ -12,11 +12,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "cache/object_cache/cache_types.h"
 #include "cache/object_cache/lrucache_module.h"
 
 #include <butil/fast_rand.h>
 
+#include "cache/object_cache/cache_types.h"
 #include "common/logging.h"
 
 namespace starrocks {

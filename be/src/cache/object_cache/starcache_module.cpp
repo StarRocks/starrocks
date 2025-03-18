@@ -12,9 +12,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "cache/object_cache/cache_types.h"
 #include "cache/object_cache/starcache_module.h"
 
+#include "cache/object_cache/cache_types.h"
 #include "cache/status.h"
 #include "common/logging.h"
 
