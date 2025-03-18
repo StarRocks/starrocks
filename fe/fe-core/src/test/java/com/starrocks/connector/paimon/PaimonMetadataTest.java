@@ -426,7 +426,7 @@ public class PaimonMetadataTest {
         HdfsEnvironment environment = new HdfsEnvironment();
         ConnectorProperties properties = new ConnectorProperties(ConnectorType.PAIMON);
 
-        Table paimonTable = metadata.getTable("test_db", "test_table");
+        PaimonTable paimonTable = (PaimonTable) metadata.getTable("test_db", "test_table");
 
         // no predicate, limit 1
         PaimonMetadata metadata = new PaimonMetadata("paimon", environment, catalog, properties);
