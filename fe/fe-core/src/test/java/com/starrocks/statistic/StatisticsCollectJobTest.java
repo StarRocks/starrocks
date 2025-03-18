@@ -49,6 +49,7 @@ import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 import org.junit.rules.ExpectedException;
 import org.junit.rules.TemporaryFolder;
 
@@ -208,6 +209,21 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         OlapTable structTable = (OlapTable) globalStateMgr.getDb("stats").getTable("struct_a");
         new ArrayList<>(structTable.getPartitions()).get(0).updateVisibleVersion(2);
         setTableStatistics(structTable, 20000000);
+
+        starRocksAssert.withTable("CREATE TABLE `tempty` (\n" +
+                "  `v1` bigint NOT NULL COMMENT \"\",\n" +
+                "  `count` int NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 30\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        OlapTable tempty = (OlapTable) globalStateMgr.getLocalMetastore().getDb("stats").getTable("tempty");
+        new ArrayList<>(tempty.getPartitions()).get(0).getDefaultPhysicalPartition().updateVisibleVersion(2);
+        setTableStatistics(tempty, 0L);
     }
 
     @Before
@@ -224,8 +240,13 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
+<<<<<<< HEAD
         Assert.assertEquals(7, jobs.size());
         Assert.assertTrue(jobs.get(0) instanceof FullStatisticsCollectJob);
+=======
+        Assert.assertEquals(8, jobs.size());
+        Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
+>>>>>>> fd87a51fe1 ([BugFix] fix the sample statistics in case of empty tablets (#56904))
         jobs = jobs.stream().sorted(Comparator.comparingLong(o -> o.getTable().getId())).collect(Collectors.toList());
         FullStatisticsCollectJob fullStatisticsCollectJob = (FullStatisticsCollectJob) jobs.get(0);
         Assert.assertTrue("[v1, v2, v3, v4, v5]".contains(
@@ -1233,7 +1254,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
         List<StatisticsCollectJob> allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
 
-        Assert.assertEquals(7, allJobs.size());
+        Assert.assertEquals(8, allJobs.size());
         Assert.assertTrue(allJobs.stream().anyMatch(j -> table.equals(j.getTable())));
 
         job = new NativeAnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null, null,
@@ -1300,6 +1321,20 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 olapTable, olapTable.getPartition("tcount"), "count", Type.INT);
         assertContains(sql, "`stats`.`tcount` partition `tcount`");
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+    }
+
+    @Test
+    public void testEmptyTablet() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("stats");
+        OlapTable olapTable = (OlapTable) starRocksAssert.getTable("stats", "tempty");
+
+        SampleStatisticsCollectJob job = new SampleStatisticsCollectJob(
+                db, olapTable, Lists.newArrayList("v1", "count"),
+                StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.ONCE,
+                Maps.newHashMap());
+        NativeAnalyzeStatus analyzeStatus = new NativeAnalyzeStatus();
+        job.collect(connectContext, analyzeStatus);
+        Assertions.assertEquals(100, analyzeStatus.getProgress());
     }
 
     @Test

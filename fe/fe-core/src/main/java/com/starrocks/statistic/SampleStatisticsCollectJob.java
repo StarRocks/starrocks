@@ -71,6 +71,7 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
         super(db, table, columnNames, columnTypes, type, scheduleType, properties);
     }
 
+<<<<<<< HEAD
     protected int splitColumns(long rowCount) {
         long splitSize;
         if (rowCount == 0) {
@@ -79,6 +80,54 @@ public class SampleStatisticsCollectJob extends StatisticsCollectJob {
             splitSize = Config.statistic_collect_max_row_count_per_query / rowCount + 1;
             if (splitSize > columnNames.size()) {
                 splitSize = columnNames.size();
+=======
+    @Override
+    public void collect(ConnectContext context, AnalyzeStatus analyzeStatus) throws Exception {
+        TabletSampleManager tabletSampleManager = TabletSampleManager.init(properties, table);
+        SampleInfo sampleInfo = tabletSampleManager.generateSampleInfo();
+        if (sampleInfo.getMaxSampleTabletNum() == 0) {
+            analyzeStatus.setProgress(100);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            return;
+        }
+
+        ColumnSampleManager columnSampleManager = ColumnSampleManager.init(columnNames, columnTypes, table,
+                sampleInfo);
+
+        // sample complex type column stats
+        if (!columnSampleManager.getComplexTypeStats().isEmpty()) {
+            String complexTypeColsTask = sampleInfo.generateComplexTypeColumnTask(table.getId(),
+                    db.getId(), table.getName(), db.getFullName(), columnSampleManager.getComplexTypeStats());
+            context.getSessionVariable().setExprChildrenLimit(
+                    Math.max(Config.expr_children_limit, columnSampleManager.getComplexTypeStats().size()));
+            collectStatisticSync(complexTypeColsTask, context);
+        }
+
+        List<List<ColumnStats>> columnStatsBatchList = columnSampleManager.splitPrimitiveTypeStats();
+        if (columnStatsBatchList.size() == 0) {
+            analyzeStatus.setProgress(100);
+            GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+            return;
+        }
+        context.getSessionVariable().setEnableAnalyzePhasePruneColumns(true);
+
+        // sample primitive type column stats
+        int finishedTaskNum = 0;
+        int totalTaskNum = columnStatsBatchList.size();
+        double recordStagePoint = 0.2;
+        for (List<ColumnStats> columnStatsBatch : columnStatsBatchList) {
+            String primitiveTypeColsTask = sampleInfo.generatePrimitiveTypeColumnTask(table.getId(),
+                    db.getId(), table.getName(), db.getFullName(), columnStatsBatch, tabletSampleManager);
+            context.getSessionVariable().setExprChildrenLimit(
+                    Math.max(Config.expr_children_limit, sampleInfo.getMaxSampleTabletNum()));
+            collectStatisticSync(primitiveTypeColsTask, context);
+
+            double progress = finishedTaskNum * 1.0 / totalTaskNum;
+            if (progress >= recordStagePoint) {
+                recordStagePoint += 0.2;
+                analyzeStatus.setProgress((long) Math.ceil(progress * 100));
+                GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
+>>>>>>> fd87a51fe1 ([BugFix] fix the sample statistics in case of empty tablets (#56904))
             }
         }
         // Supports a maximum of 64 tasks for a union,
