@@ -253,6 +253,11 @@ public class FunctionSet {
     public static final String APPROX_COUNT_DISTINCT = "approx_count_distinct";
     public static final String APPROX_COUNT_DISTINCT_HLL_SKETCH = "approx_count_distinct_hll_sketch";
     public static final String DS_HLL_COUNT_DISTINCT = "ds_hll_count_distinct";
+    public static final String DS_HLL = "ds_hll";
+    public static final String DS_QUANTILE = "ds_quantile";
+    public static final String DS_FREQUENT = "ds_frequent";
+    public static final String DS_THETA = "ds_theta";
+    public static final String DS_THETA_COUNT_DISTINCT = "ds_theta_count_distinct";
     public static final String APPROX_TOP_K = "approx_top_k";
     public static final String AVG = "avg";
     public static final String COUNT = "count";
@@ -629,6 +634,9 @@ public class FunctionSet {
                     .add(FunctionSet.UTC_TIMESTAMP)
                     .add(FunctionSet.MD5_SUM)
                     .add(FunctionSet.DS_HLL_COUNT_DISTINCT)
+                    .add(FunctionSet.DS_QUANTILE)
+                    .add(FunctionSet.DS_FREQUENT)
+                    .add(FunctionSet.DS_THETA)
                     .add(FunctionSet.MD5_SUM_NUMERIC)
                     .add(FunctionSet.BITMAP_EMPTY)
                     .add(FunctionSet.HLL_EMPTY)
@@ -1127,19 +1135,6 @@ public class FunctionSet {
                     Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
                     true, false, true));
 
-            // ds_hll_count_distinct(col)
-            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
-                    Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
-                    true, false, true));
-            // ds_hll_count_distinct(col, log_k)
-            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
-                    Lists.newArrayList(t, Type.INT), Type.BIGINT, Type.VARBINARY,
-                    true, false, true));
-            // ds_hll_count_distinct(col, log_k, tgt_type)
-            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
-                    Lists.newArrayList(t, Type.INT, Type.VARCHAR), Type.BIGINT, Type.VARBINARY,
-                    true, false, true));
-
             // HLL_RAW
             addBuiltin(AggregateFunction.createBuiltin(HLL_RAW,
                     Lists.newArrayList(t), Type.HLL, Type.VARBINARY,
@@ -1331,6 +1326,9 @@ public class FunctionSet {
 
         // causal inference functions.
         registerBuiltinHypothesisTestingFunctions();
+
+        // DataSketches functions.
+        registerBuiltinDsFunction();
     }
 
     private void registerBuiltinHypothesisTestingFunctions() {
@@ -1608,6 +1606,70 @@ public class FunctionSet {
         registerBuiltinForTypes.accept(Type.STRING_TYPES);
         registerBuiltinForTypes.accept(Type.DATE_TYPES);
     }
+
+    private void registerBuiltinDsFunction() {
+        for (Type t : Type.getSupportedTypes()) {
+            if (t.isFunctionType()) {
+                continue;
+            }
+            if (t.isNull()) {
+                continue; // NULL is handled through type promotion.
+            }
+            if (t.isChar()) {
+                continue; // promoted to STRING
+            }
+
+            if (t.isPseudoType()) {
+                continue; // promoted to pseudo
+            }
+
+            // ds_hll_count_distinct(col)
+            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
+                    Lists.newArrayList(t), Type.BIGINT, Type.VARBINARY,
+                    true, false, true));
+            // ds_hll_count_distinct(col, log_k)
+            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
+                    Lists.newArrayList(t, Type.INT), Type.BIGINT, Type.VARBINARY,
+                    true, false, true));
+            // ds_hll_count_distinct(col, log_k, tgt_type)
+            addBuiltin(AggregateFunction.createBuiltin(DS_HLL_COUNT_DISTINCT,
+                    Lists.newArrayList(t, Type.INT, Type.VARCHAR), Type.BIGINT, Type.VARBINARY,
+                    true, false, true));
+        }
+        
+        ImmutableList<Type> DS_FREQUENT_SUPPORTED_TYPES =
+                ImmutableList.<Type>builder()
+                        .addAll(Type.FLOAT_TYPES)
+                        .addAll(Type.INTEGER_TYPES)
+                        .addAll(Type.STRING_TYPES)
+                        .addAll(Type.DATE_TYPES)
+                        .build();
+        for (Type type : DS_FREQUENT_SUPPORTED_TYPES) {
+            ArrayType retType = DS_FREQUENT_RET_TYPE_BUILDER.apply(type);
+            addBuiltin(AggregateFunction.createBuiltin(DS_FREQUENT,
+                    Lists.newArrayList(type), retType, Type.VARBINARY,
+                    false, true, true));
+            addBuiltin(AggregateFunction.createBuiltin(DS_FREQUENT,
+                    Lists.newArrayList(type, Type.BIGINT), retType, Type.VARBINARY,
+                    false, true, true));
+            addBuiltin(AggregateFunction.createBuiltin(DS_FREQUENT,
+                    Lists.newArrayList(type, Type.BIGINT, Type.INT), retType, Type.VARBINARY,
+                    false, true, true));
+            addBuiltin(AggregateFunction.createBuiltin(DS_FREQUENT,
+                    Lists.newArrayList(type, Type.BIGINT, Type.INT, Type.INT), retType, Type.VARBINARY,
+                    false, true, true));
+        }
+    }
+
+    public static final java.util.function.Function<Type, ArrayType> DS_FREQUENT_RET_TYPE_BUILDER =
+            (Type itemType) -> {
+                List<StructField> fields = Lists.newArrayList();
+                fields.add(new StructField("value", itemType));
+                fields.add(new StructField("count", Type.BIGINT));
+                fields.add(new StructField("lower_bound", Type.BIGINT));
+                fields.add(new StructField("upper_bound", Type.BIGINT));
+                return new ArrayType(new StructType(fields, true));
+            };
 
     public List<Function> getBuiltinFunctions() {
         List<Function> builtinFunctions = Lists.newArrayList();
