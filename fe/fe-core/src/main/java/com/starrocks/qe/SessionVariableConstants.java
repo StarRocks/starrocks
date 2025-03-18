@@ -36,6 +36,10 @@ public class SessionVariableConstants {
 
     public static final String VARCHAR = "varchar";
 
+    public static final String ALWAYS = "always";
+
+    public static final String NEVER = "never";
+
     public enum ChooseInstancesMode {
 
         // the number of chosen instances is the same as the max number of instances from its children fragments

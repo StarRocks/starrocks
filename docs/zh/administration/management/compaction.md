@@ -156,8 +156,6 @@ mysql> SELECT * FROM information_schema.be_cloud_native_compactions;
 
 您可以动态配置以下 FE 参数。
 
-示例：
-
 ```SQL
 ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "-1");
 ```
@@ -171,11 +169,22 @@ ADMIN SET FRONTEND CONFIG ("lake_compaction_max_tasks" = "-1");
 - 描述：存算分离集群下允许同时执行的 Compaction 任务数。系统依据分区中 Tablet 数量来计算 Compaction 任务数。如果一个分区有 10 个 Tablet，那么对该分区作一次 Compaction 就会创建 10 个 Compaction 子任务。如果正在执行中的 Compaction 任务数超过该阈值，系统将不会创建新的 Compaction 任务。将该值设置为 `0` 表示禁止 Compaction，设置为 `-1` 表示系统依据自适应策略自动计算该值，即存活的 CN 数量乘以 16。
 - 引入版本：v3.1.0
 
+```SQL
+ADMIN SET FRONTEND CONFIG ("lake_compaction_disable_tables" = "11111;22222");
+```
+
+##### lake_compaction_disable_tables
+
+- 默认值：""
+- 类型：String
+- 单位：-
+- 是否动态：是
+- 描述：禁止对指定表发起 Compaction 任务，已发起的任务不会受到影响。此项的值为 Table ID，如有多个值，需使用分号(;)隔开。
+- 引入版本：v3.2.7
+
 #### CN 参数
 
 您可以动态配置以下 CN 参数。
-
-示例：
 
 ```SQL
 UPDATE information_schema.be_configs SET VALUE = 8 
@@ -219,8 +228,6 @@ WHERE name = "compact_threads";
 
 ### 手动触发 Compaction 任务
 
-从 v3.2.5 版本开始，您可以手动触发表或特定分区的 Compaction 任务。
-
 ```SQL
 -- 触发整个表的 Compaction 任务。
 ALTER TABLE <table_name> COMPACT;
@@ -241,6 +248,7 @@ CANCEL COMPACTION WHERE TXN_ID = <TXN_ID>;
 > **说明**
 >
 > - CANCEL COMPACTION 语句必须从 Leader FE 节点提交。
+> - CANCEL COMPACTION 只能用于未 Commit 的事务，即 `SHOW PROC '/compactions'` 返回中 `CommitTime` 为 NULL 的事务。
 > - CANCEL COMPACTION 为异步过程，您可以通过执行 `SHOW PROC '/compactions'` 查看任务是否取消。
 
 ## 最佳实践

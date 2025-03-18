@@ -63,7 +63,7 @@ public class PlanAdvisorExecutor {
                 if (!enablePlanAnalyzer) {
                     context.getSessionVariable().setEnablePlanAnalyzer(true);
                 }
-                StmtExecutor executor = new StmtExecutor(context, stmt.getQueryStmt());
+                StmtExecutor executor = StmtExecutor.newInternalExecutor(context, stmt.getQueryStmt());
                 executor.execute();
                 String result;
                 if (context.getState().isError()) {

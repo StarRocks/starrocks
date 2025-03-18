@@ -324,9 +324,9 @@ protected:
         TabletColumn int_column = create_int_value(0, STORAGE_AGGREGATE_NONE, true);
         array_column.add_sub_column(int_column);
 
-        auto src_offsets = UInt32Column::create();
-        auto src_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-        ColumnPtr src_column = ArrayColumn::create(src_elements, src_offsets);
+        UInt32Column::Ptr src_offsets = UInt32Column::create();
+        NullableColumn::Ptr src_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+        ArrayColumn::Ptr src_column = ArrayColumn::create(src_elements, src_offsets);
 
         // insert [1, 2, 3], [4, 5, 6]
         src_elements->append_datum(1);
@@ -404,9 +404,9 @@ protected:
                 auto st = iter->seek_to_first();
                 ASSERT_TRUE(st.ok()) << st.to_string();
 
-                auto dst_offsets = UInt32Column::create();
-                auto dst_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
-                auto dst_column = ArrayColumn::create(dst_elements, dst_offsets);
+                UInt32Column::Ptr dst_offsets = UInt32Column::create();
+                NullableColumn::Ptr dst_elements = NullableColumn::create(Int32Column::create(), NullColumn::create());
+                ArrayColumn::Ptr dst_column = ArrayColumn::create(dst_elements, dst_offsets);
                 size_t rows_read = src_column->size();
                 st = iter->next_batch(&rows_read, dst_column.get());
                 ASSERT_TRUE(st.ok());

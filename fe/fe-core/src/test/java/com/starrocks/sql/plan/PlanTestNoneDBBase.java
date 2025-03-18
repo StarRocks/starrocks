@@ -93,6 +93,7 @@ public class PlanTestNoneDBBase {
         FeConstants.enablePruneEmptyOutputScan = false;
         FeConstants.showJoinLocalShuffleInExplain = false;
         FeConstants.showFragmentCost = false;
+        FeConstants.setLengthForVarchar = false;
     }
 
     @Before
@@ -553,6 +554,7 @@ public class PlanTestNoneDBBase {
                 Assert.assertEquals(exceptString.toString(), ex.getMessage());
                 return true;
             }
+            ex.printStackTrace();
             Assert.fail("Planning failed, message: " + ex.getMessage() + ", sql: " + sql);
         }
 
@@ -890,7 +892,7 @@ public class PlanTestNoneDBBase {
         String sql = getFileContent(fileName);
         List<StatementBase> statements = SqlParser.parse(sql, connectContext.getSessionVariable().getSqlMode());
         for (StatementBase stmt : statements) {
-            StmtExecutor stmtExecutor = new StmtExecutor(connectContext, stmt);
+            StmtExecutor stmtExecutor = StmtExecutor.newInternalExecutor(connectContext, stmt);
             stmtExecutor.execute();
             Assert.assertEquals("", connectContext.getState().getErrorMessage());
         }

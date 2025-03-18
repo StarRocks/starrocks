@@ -28,7 +28,6 @@ import org.apache.commons.collections4.ListUtils;
 import org.apache.commons.collections4.MapUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.Collections;
@@ -99,11 +98,7 @@ public class BasicStatsMeta implements Writable {
         this.updateRows = updateRows;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String s = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, s);
-    }
+
 
     public static BasicStatsMeta read(DataInput in) throws IOException {
         String s = Text.readString(in);
@@ -142,6 +137,9 @@ public class BasicStatsMeta implements Writable {
         return properties;
     }
 
+    /**
+     * Return a number within [0,1] to indicate the health of table stats, 1 means all good.
+     */
     public double getHealthy() {
         Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
         OlapTable table = (OlapTable) GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), tableId);
@@ -159,9 +157,8 @@ public class BasicStatsMeta implements Writable {
             tableRowCount += partition.getRowCount();
             Optional<Long> statistic = tableStatistics.getOrDefault(partition.getId(), Optional.empty());
             cachedTableRowCount += statistic.orElse(0L);
-            LocalDateTime loadTime = StatisticUtils.getPartitionLastUpdateTime(partition);
 
-            if (partition.hasData() && !isUpdatedAfterLoad(loadTime)) {
+            if (!StatisticUtils.isPartitionStatsHealthy(partition, this, statistic.orElse(0L))) {
                 updatePartitionCount++;
             }
         }
@@ -243,6 +240,10 @@ public class BasicStatsMeta implements Writable {
 
     public void addColumnStatsMeta(ColumnStatsMeta columnStatsMeta) {
         this.columnStatsMetaMap.put(columnStatsMeta.getColumnName(), columnStatsMeta);
+    }
+
+    public void resetDeltaRows() {
+        this.deltaRows = 0;
     }
 
     public BasicStatsMeta clone() {

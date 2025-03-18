@@ -3,7 +3,7 @@ displayed_sidebar: docs
 sidebar_position: 0.9
 ---
 
-# Java UDFs
+# Java UDF
 
 From v2.2.0 onwards, you can compile user-defined functions (UDFs) to suit your specific business needs by using the Java programming language.
 

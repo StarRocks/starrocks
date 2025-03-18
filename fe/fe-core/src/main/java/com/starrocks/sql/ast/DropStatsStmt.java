@@ -22,13 +22,16 @@ import com.starrocks.sql.parser.NodePosition;
 public class DropStatsStmt extends StatementBase {
     private final TableName tbl;
     private boolean isExternal = false;
+    private boolean isMultiColumn = false;
+
     public DropStatsStmt(TableName tbl) {
-        this(tbl, NodePosition.ZERO);
+        this(tbl, false, NodePosition.ZERO);
     }
 
-    public DropStatsStmt(TableName tbl, NodePosition pos) {
+    public DropStatsStmt(TableName tbl, boolean isMultiColumn, NodePosition pos) {
         super(pos);
         this.tbl = tbl;
+        this.isMultiColumn = isMultiColumn;
     }
 
     public TableName getTableName() {
@@ -41,6 +44,10 @@ public class DropStatsStmt extends StatementBase {
 
     public void setExternal(boolean isExternal) {
         this.isExternal = isExternal;
+    }
+
+    public boolean isMultiColumn() {
+        return isMultiColumn;
     }
 
     @Override

@@ -174,7 +174,9 @@ public class Pipe implements GsonPostProcessable {
                     }
                 }
             }
-            this.properties.put(key, value);
+            if (this.properties != properties) {
+                this.properties.put(key, value);
+            }
         }
     }
 
@@ -248,7 +250,7 @@ public class Pipe implements GsonPostProcessable {
             if (StringUtils.isEmpty(file.insertLabel)) {
                 file.loadState = FileListRepo.PipeFileState.ERROR;
             } else {
-                TransactionStatus txnStatus = txnMgr.getLabelStatus(dbId, file.insertLabel);
+                TransactionStatus txnStatus = txnMgr.getLabelStatus(dbId, file.insertLabel).getStatus();
                 if (txnStatus == null || txnStatus.isFailed()) {
                     file.loadState = FileListRepo.PipeFileState.ERROR;
                 } else {
@@ -450,7 +452,7 @@ public class Pipe implements GsonPostProcessable {
                 recordTaskError(taskDesc, "create task failed");
                 return;
             }
-            SubmitResult result = taskManager.executeTaskAsync(task, new ExecuteOption(task.getSource().isMergeable()));
+            SubmitResult result = taskManager.executeTaskAsync(task, new ExecuteOption(task));
             taskDesc.onRunning();
             taskDesc.setFuture(result.getFuture());
             if (result.getStatus() != SubmitResult.SubmitStatus.SUBMITTED) {

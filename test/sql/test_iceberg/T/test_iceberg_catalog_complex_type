@@ -1,0 +1,31 @@
+-- name: test_iceberg_catalog_complex_type
+create external catalog ice_cat_${uuid0}
+properties
+(
+    "type" = "iceberg",
+    "iceberg.catalog.type" = "hive",
+    "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
+);
+set catalog ice_cat_${uuid0};
+create database ice_db_${uuid0};
+use ice_db_${uuid0};
+create table ice_tbl_${uuid0} (
+    name ARRAY<STRUCT<
+        user STRING,
+        family STRING,
+        given ARRAY<STRING>,
+        prefix ARRAY<STRING>,
+        suffix ARRAY<STRING>
+    >>
+);
+insert into ice_tbl_${uuid0} values ([named_struct('user', 'official', 'family', 'Glover433', 'given', ['Kira861'], 'prefix', ['Ms.'], 'suffix', NULL)]);
+
+select array_filter(x->x.`user` = 'official', name)[1].family from ice_cat_${uuid0}.ice_db_${uuid0}.ice_tbl_${uuid0};
+
+function: assert_explain_verbose_contains("select array_filter(x->x.`user` = 'official', name)[1].family from ice_cat_${uuid0}.ice_db_${uuid0}.ice_tbl_${uuid0}", "Pruned type: 1 <-> [ARRAY<struct<user varchar(1073741824), family varchar(1073741824), given array<varchar(1073741824)>, prefix array<varchar(1073741824)>, suffix array<varchar(1073741824)>>>]")
+
+drop table ice_tbl_${uuid0} force;
+drop database ice_db_${uuid0};
+drop catalog ice_cat_${uuid0};
+
+set catalog default_catalog;

@@ -85,17 +85,17 @@ public class ConnectorAnalyzeTaskQueueTest {
         queue.addPendingTask(tableUUID, task1);
         Assert.assertEquals(1, queue.getPendingTaskSize());
 
-        queue.scheduledPendingTask();
+        queue.schedulePendingTask();
         Assert.assertEquals(0, queue.getPendingTaskSize());
 
         ConnectorAnalyzeTask task2 = new ConnectorAnalyzeTask(tableTriple, Sets.newHashSet("o_custkey", "o_orderstatus"));
         queue.addPendingTask(tableUUID, task2);
 
         Config.connector_table_query_trigger_analyze_max_running_task_num = 0;
-        queue.scheduledPendingTask();
+        queue.schedulePendingTask();
         Assert.assertEquals(1, queue.getPendingTaskSize());
         Config.connector_table_query_trigger_analyze_max_running_task_num = 2;
-        queue.scheduledPendingTask();
+        queue.schedulePendingTask();
         Assert.assertEquals(0, queue.getPendingTaskSize());
     }
 }

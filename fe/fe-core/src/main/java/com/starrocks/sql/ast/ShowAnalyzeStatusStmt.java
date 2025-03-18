@@ -49,7 +49,7 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
         this.predicate = predicate;
     }
 
-    private static final ShowResultSetMetaData META_DATA =
+    public static final ShowResultSetMetaData META_DATA =
             ShowResultSetMetaData.builder()
                     .addColumn(new Column("Id", ScalarType.createVarchar(60)))
                     .addColumn(new Column("Database", ScalarType.createVarchar(60)))
@@ -81,8 +81,7 @@ public class ShowAnalyzeStatusStmt extends ShowStmt {
             if (table == null) {
                 throw new SemanticException("Table %s is not found", analyzeStatus.getTableName());
             }
-            Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
-                    context.getCurrentRoleIds(), analyzeStatus.getDbName(), table);
+            Authorizer.checkAnyActionOnTableLikeObject(context, analyzeStatus.getDbName(), table);
         } catch (Exception e) {
             LOG.warn("Failed to check privilege for show analyze status for table {}.", analyzeStatus.getTableName(), e);
             return null;

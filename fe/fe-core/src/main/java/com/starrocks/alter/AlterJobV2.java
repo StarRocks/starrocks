@@ -36,6 +36,7 @@ package com.starrocks.alter;
 
 import com.google.common.collect.Sets;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndexMeta;
@@ -49,11 +50,11 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import io.opentelemetry.api.trace.Span;
 import org.apache.hadoop.util.Lists;
 import org.apache.logging.log4j.LogManager;
@@ -65,6 +66,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 /*
  * Version 2 of AlterJob, for replacing the old version of AlterJob.
@@ -118,6 +122,8 @@ public abstract class AlterJobV2 implements Writable {
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     protected Span span;
+
+    protected Future<Boolean> publishVersionFuture = null;
 
     public AlterJobV2(long jobId, JobType jobType, long dbId, long tableId, String tableName, long timeoutMs) {
         this.jobId = jobId;
@@ -197,13 +203,17 @@ public abstract class AlterJobV2 implements Writable {
 
     public void createConnectContextIfNeeded() {
         if (ConnectContext.get() == null) {
-            ConnectContext context = new ConnectContext();
+            ConnectContext context = ConnectContext.buildInner();
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
             context.setCurrentUserIdentity(UserIdentity.ROOT);
             context.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
             context.setQualifiedUser(UserIdentity.ROOT.getUser());
             context.setThreadLocalInfo();
         }
+    }
+
+    public long getWarehouseId() {
+        return warehouseId;
     }
 
     /**
@@ -218,8 +228,10 @@ public abstract class AlterJobV2 implements Writable {
      */
     public synchronized void run() {
         if (isTimeout()) {
-            cancelImpl("Timeout");
-            return;
+            if (cancelInternal("Timeout")) {
+                // If this job can't be cancelled, we should execute it.
+                return;
+            }
         }
 
         // create connectcontext
@@ -240,6 +252,7 @@ public abstract class AlterJobV2 implements Writable {
                         break;
                     case FINISHED_REWRITING:
                         runFinishedRewritingJob();
+                        finishHook();
                         break;
                     default:
                         break;
@@ -249,13 +262,19 @@ public abstract class AlterJobV2 implements Writable {
                 } // else: handle the new state
             }
         } catch (AlterCancelException e) {
-            cancelImpl(e.getMessage());
+            cancelInternal(e.getMessage());
         }
+    }
+
+    protected boolean cancelInternal(String errMsg) {
+        boolean cancelled = cancelImpl(errMsg);
+        cancelHook(cancelled);
+        return cancelled;
     }
 
     public boolean cancel(String errMsg) {
         synchronized (this) {
-            return cancelImpl(errMsg);
+            return cancelInternal(errMsg);
         }
     }
 
@@ -318,6 +337,40 @@ public abstract class AlterJobV2 implements Writable {
     protected abstract void getInfo(List<List<Comparable>> infos);
 
     public abstract void replay(AlterJobV2 replayedJob);
+
+    protected boolean lakePublishVersion() {
+        return true;
+    }
+
+    protected boolean publishVersion() {
+        if (publishVersionFuture == null) {
+            Callable<Boolean> task = () -> {
+                return lakePublishVersion();
+            };
+            publishVersionFuture = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor().submit(task);
+            return false;
+        } else {
+            if (publishVersionFuture.isDone()) {
+                try {
+                    return publishVersionFuture.get();
+                } catch (InterruptedException | ExecutionException e) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+    }
+
+    private void finishHook() {
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+    }
+
+    protected void cancelHook(boolean cancelled) {
+        if (cancelled) {
+            WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+        }
+    }
 
     public static AlterJobV2 read(DataInput in) throws IOException {
         String json = Text.readString(in);

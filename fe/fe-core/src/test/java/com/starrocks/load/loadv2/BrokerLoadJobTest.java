@@ -55,6 +55,7 @@ import com.starrocks.load.EtlStatus;
 import com.starrocks.load.FailMsg;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.EditLog;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AlterLoadStmt;
 import com.starrocks.sql.ast.DataDescription;
@@ -387,9 +388,17 @@ public class BrokerLoadJobTest {
         brokerLoadJob2.unprotectedExecuteJob();
         txnOperated = true;
         txnStatusChangeReason = "broker load job timeout";
+        ConnectContext context = new ConnectContext();
+        context.setStartTime();
+        brokerLoadJob2.setConnectContext(context);
+        long createTimestamp = context.getStartTime() - 1;
+        brokerLoadJob2.createTimestamp = createTimestamp;
+        brokerLoadJob2.timeoutSecond = 0;
         brokerLoadJob2.afterAborted(txnState, txnOperated, txnStatusChangeReason);
         idToTasks = Deencapsulation.getField(brokerLoadJob2, "idToTasks");
         Assert.assertEquals(1, idToTasks.size());
+        Assert.assertTrue(brokerLoadJob2.createTimestamp > createTimestamp);
+        Assert.assertEquals(brokerLoadJob2.createTimestamp, context.getStartTime());
 
         // test when txnOperated is false
         BrokerLoadJob brokerLoadJob3 = new BrokerLoadJob();
@@ -412,7 +421,7 @@ public class BrokerLoadJobTest {
         idToTasks = Deencapsulation.getField(brokerLoadJob4, "idToTasks");
         Assert.assertEquals(1, idToTasks.size());
 
-        // test that timeout happens in loadin task before the job timeout
+        // test that timeout happens in loading task before the job timeout
         BrokerLoadJob brokerLoadJob5 = new BrokerLoadJob();
         new Expectations() {
             {

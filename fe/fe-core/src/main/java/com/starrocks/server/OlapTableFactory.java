@@ -338,11 +338,16 @@ public class OlapTableFactory implements AbstractTableFactory {
                     PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
             table.setIsInMemory(isInMemory);
 
-            Pair<Boolean, Boolean> analyzeRet = PropertyAnalyzer.analyzeEnablePersistentIndex(properties,
-                    table.getKeysType() == KeysType.PRIMARY_KEYS);
-            boolean enablePersistentIndex = analyzeRet.first;
-            boolean enablePersistentIndexByUser = analyzeRet.second;
-            if (enablePersistentIndex && table.isCloudNativeTable()) {
+            boolean enablePersistentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(properties);
+            if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+                if (!enablePersistentIndex) {
+                    // disable memory index
+                    throw new DdlException("In-Memory index is not supported, please create table with persistent index");
+                } else {
+                    table.setEnablePersistentIndex(enablePersistentIndex);
+                }
+            }
+            if (table.isCloudNativeTable() && table.getKeysType() == KeysType.PRIMARY_KEYS) {
                 TPersistentIndexType persistentIndexType;
                 try {
                     persistentIndexType = PropertyAnalyzer.analyzePersistentIndexType(properties);
@@ -358,19 +363,11 @@ public class OlapTableFactory implements AbstractTableFactory {
                                         isSetStoragePath()).collect(Collectors.toSet());
                 if (cnUnSetStoragePath.size() != 0 && persistentIndexType == TPersistentIndexType.LOCAL) {
                     // Check CN storage path when using local persistent index
-                    if (enablePersistentIndexByUser) {
-                        throw new DdlException("Cannot create cloud native table with local persistent index" +
-                                "when ComputeNode without storage_path, nodeId:" + cnUnSetStoragePath);
-                    } else {
-                        // if user has not requested persistent index, switch it to false
-                        enablePersistentIndex = false;
-                    }
+                    throw new DdlException("Cannot create cloud native table with local persistent index" +
+                            "when ComputeNode without storage_path, nodeId:" + cnUnSetStoragePath);
                 }
-                if (enablePersistentIndex) {
-                    table.setPersistentIndexType(persistentIndexType);
-                }
+                table.setPersistentIndexType(persistentIndexType);
             }
-            table.setEnablePersistentIndex(enablePersistentIndex);
 
             try {
                 table.setPrimaryIndexCacheExpireSec(PropertyAnalyzer.analyzePrimaryIndexCacheExpireSecProp(properties,
@@ -588,6 +585,7 @@ public class OlapTableFactory implements AbstractTableFactory {
             } catch (AnalysisException e) {
                 throw new DdlException(e.getMessage());
             }
+            Util.checkColumnSupported(baseSchema);
             int schemaHash = Util.schemaHash(schemaVersion, baseSchema, bfColumns, bfFpp);
 
             if (stmt.getSortKeys() != null) {
@@ -654,21 +652,31 @@ public class OlapTableFactory implements AbstractTableFactory {
             table.setCompressionLevel(compressionLevel);
 
             // partition live number
-            int partitionLiveNumber;
             if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_LIVE_NUMBER)) {
-                partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
+                int partitionLiveNumber = PropertyAnalyzer.analyzePartitionLiveNumber(properties, true);
                 table.setPartitionLiveNumber(partitionLiveNumber);
             }
 
             // analyze partition ttl duration
-            Pair<String, PeriodDuration> ttlDuration = null;
             if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
-                ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
+                Pair<String, PeriodDuration> ttlDuration = PropertyAnalyzer.analyzePartitionTTL(properties, true);
                 if (ttlDuration == null) {
                     throw new DdlException("Invalid partition ttl duration");
                 }
                 table.getTableProperty().getProperties().put(PropertyAnalyzer.PROPERTIES_PARTITION_TTL, ttlDuration.first);
                 table.getTableProperty().setPartitionTTL(ttlDuration.second);
+            }
+
+            // analyze partition retention condition
+            if (properties != null && properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+                String ttlCondition = PropertyAnalyzer.analyzePartitionRetentionCondition(db, table, properties,
+                        true, null);
+                if (ttlCondition == null) {
+                    throw new DdlException("Invalid partition retention condition");
+                }
+                table.getTableProperty().getProperties()
+                        .put(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION, ttlCondition);
+                table.getTableProperty().setPartitionRetentionCondition(ttlCondition);
             }
 
             try {

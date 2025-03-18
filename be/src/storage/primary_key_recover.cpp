@@ -26,7 +26,7 @@ Status PrimaryKeyRecover::recover() {
     LOG(INFO) << "PrimaryKeyRecover pre clean up finish. tablet_id: " << tablet_id();
 
     // 2. generate primary key schema
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     auto pkey_schema = generate_pkey_schema();
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         CHECK(false) << "create column for primary key encoder failed";

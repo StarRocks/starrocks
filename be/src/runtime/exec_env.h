@@ -39,9 +39,12 @@
 #include <unordered_map>
 
 #include "common/status.h"
+#include "exec/pipeline/pipeline_fwd.h"
+#include "exec/pipeline/schedule/pipeline_timer.h"
 #include "exec/query_cache/cache_manager.h"
 #include "exec/workgroup/work_group_fwd.h"
 #include "runtime/base_load_path_mgr.h"
+#include "runtime/mem_tracker.h"
 #include "storage/options.h"
 #include "util/threadpool.h"
 // NOTE: Be careful about adding includes here. This file is included by many files.
@@ -62,7 +65,6 @@ class LoadStreamMgr;
 class StreamContextMgr;
 class TransactionMgr;
 class BatchWriteMgr;
-class MemTracker;
 class MetricRegistry;
 class StorageEngine;
 class ThreadPool;
@@ -79,6 +81,8 @@ class RuntimeFilterCache;
 class ProfileReportWorker;
 class QuerySpillManager;
 class BlockCache;
+class ObjectCache;
+class StoragePageCache;
 struct RfTracePoint;
 
 class BackendServiceClient;
@@ -92,6 +96,7 @@ namespace pipeline {
 class DriverExecutor;
 class QueryContextManager;
 class DriverLimiter;
+class PipelineTimer;
 } // namespace pipeline
 
 namespace lake {
@@ -140,6 +145,11 @@ public:
     MemTracker* short_key_index_mem_tracker() { return _short_key_index_mem_tracker.get(); }
     MemTracker* compaction_mem_tracker() { return _compaction_mem_tracker.get(); }
     MemTracker* schema_change_mem_tracker() { return _schema_change_mem_tracker.get(); }
+    // The value of `page_cache_mem_tracker` is manually counted and is attached to the process_mem_tracker tree.
+    // It is not based on the `ThreadLocalMemTracker`.
+    // Therefore, when counting the memory, the `MemTracker::set` interface can be used,
+    // while the consume/release interfaces cannot be used.
+    // Otherwise, it will cause problems in the memory statistics of the process.
     MemTracker* page_cache_mem_tracker() { return _page_cache_mem_tracker.get(); }
     MemTracker* jit_cache_mem_tracker() { return _jit_cache_mem_tracker.get(); }
     MemTracker* update_mem_tracker() { return _update_mem_tracker.get(); }
@@ -151,8 +161,8 @@ public:
     MemTracker* datacache_mem_tracker() { return _datacache_mem_tracker.get(); }
     MemTracker* poco_connection_pool_mem_tracker() { return _poco_connection_pool_mem_tracker.get(); }
     MemTracker* jemalloc_metadata_traker() { return _jemalloc_metadata_tracker.get(); }
-    MemTracker* jemalloc_fragmentation_traker() { return _jemalloc_fragmentation_tracker.get(); }
-    std::vector<std::shared_ptr<MemTracker>>& mem_trackers() { return _mem_trackers; }
+    std::shared_ptr<MemTracker> get_mem_tracker_by_type(MemTrackerType type);
+    std::vector<std::shared_ptr<MemTracker>> mem_trackers() const;
 
     int64_t get_storage_page_cache_size();
     int64_t check_storage_page_cache_size(int64_t storage_cache_limit);
@@ -164,17 +174,13 @@ private:
     Status _init_mem_tracker();
     void _reset_tracker();
 
-    void _init_storage_page_cache();
-
-    template <class... Args>
-    std::shared_ptr<MemTracker> regist_tracker(Args&&... args);
+    std::shared_ptr<MemTracker> regist_tracker(MemTrackerType type, int64_t bytes_limit, MemTracker* parent);
 
     // root process memory tracker
     std::shared_ptr<MemTracker> _process_mem_tracker;
 
     // Track usage of jemalloc
     std::shared_ptr<MemTracker> _jemalloc_metadata_tracker;
-    std::shared_ptr<MemTracker> _jemalloc_fragmentation_tracker;
 
     // Limit the memory used by the query. At present, it can use 90% of the be memory limit
     std::shared_ptr<MemTracker> _query_pool_mem_tracker;
@@ -232,7 +238,35 @@ private:
     // The memory used for poco connection pool
     std::shared_ptr<MemTracker> _poco_connection_pool_mem_tracker;
 
-    std::vector<std::shared_ptr<MemTracker>> _mem_trackers;
+    std::map<MemTrackerType, std::shared_ptr<MemTracker>> _mem_tracker_map;
+};
+
+class CacheEnv {
+public:
+    static CacheEnv* GetInstance();
+
+    Status init(const std::vector<StorePath>& store_paths);
+    void destroy();
+
+    void try_release_resource_before_core_dump();
+
+    BlockCache* block_cache() const { return _block_cache.get(); }
+    ObjectCache* external_table_meta_cache() const { return _starcache_based_object_cache.get(); }
+    StoragePageCache* page_cache() const { return _page_cache.get(); }
+
+private:
+    Status _init_datacache();
+    Status _init_starcache_based_object_cache();
+    Status _init_lru_base_object_cache();
+    Status _init_page_cache();
+
+    GlobalEnv* _global_env;
+    std::vector<StorePath> _store_paths;
+
+    std::shared_ptr<BlockCache> _block_cache;
+    std::shared_ptr<ObjectCache> _starcache_based_object_cache;
+    std::shared_ptr<ObjectCache> _lru_based_object_cache;
+    std::shared_ptr<StoragePageCache> _page_cache;
 };
 
 // Execution environment for queries/plan fragments.
@@ -277,6 +311,7 @@ public:
     ThreadPool* streaming_load_thread_pool() { return _streaming_load_thread_pool; }
     ThreadPool* load_rowset_thread_pool() { return _load_rowset_thread_pool; }
     ThreadPool* load_segment_thread_pool() { return _load_segment_thread_pool; }
+    ThreadPool* put_combined_txn_log_thread_pool() { return _put_combined_txn_log_thread_pool; }
 
     pipeline::DriverExecutor* wg_driver_executor();
     workgroup::ScanExecutor* scan_executor();
@@ -320,6 +355,7 @@ public:
     pipeline::QueryContextManager* query_context_mgr() { return _query_context_mgr; }
 
     pipeline::DriverLimiter* driver_limiter() { return _driver_limiter; }
+    pipeline::PipelineTimer* pipeline_timer() const { return _pipeline_timer; }
 
     int64_t max_executor_threads() const { return _max_executor_threads; }
 
@@ -338,8 +374,6 @@ public:
     AgentServer* agent_server() const { return _agent_server; }
 
     query_cache::CacheManagerRawPtr cache_mgr() const { return _cache_mgr; }
-
-    BlockCache* block_cache() const { return _block_cache; }
 
     spill::DirManager* spill_dir_mgr() const { return _spill_dir_mgr.get(); }
 
@@ -367,6 +401,7 @@ private:
 
     ThreadPool* _load_segment_thread_pool = nullptr;
     ThreadPool* _load_rowset_thread_pool = nullptr;
+    ThreadPool* _put_combined_txn_log_thread_pool = nullptr;
 
     PriorityThreadPool* _udf_call_pool = nullptr;
     PriorityThreadPool* _pipeline_prepare_pool = nullptr;
@@ -378,6 +413,7 @@ private:
     pipeline::QueryContextManager* _query_context_mgr = nullptr;
     std::unique_ptr<workgroup::WorkGroupManager> _workgroup_manager;
     pipeline::DriverLimiter* _driver_limiter = nullptr;
+    pipeline::PipelineTimer* _pipeline_timer = nullptr;
     int64_t _max_executor_threads = 0; // Max thread number of executor
 
     BaseLoadPathMgr* _load_path_mgr = nullptr;
@@ -412,7 +448,6 @@ private:
 
     AgentServer* _agent_server = nullptr;
     query_cache::CacheManagerRawPtr _cache_mgr;
-    BlockCache* _block_cache = nullptr;
     std::shared_ptr<spill::DirManager> _spill_dir_mgr;
 };
 

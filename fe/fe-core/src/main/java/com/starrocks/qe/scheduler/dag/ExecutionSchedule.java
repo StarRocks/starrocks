@@ -23,7 +23,8 @@ import com.starrocks.thrift.TUniqueId;
 public interface ExecutionSchedule {
     void prepareSchedule(Coordinator coordinator, Deployer deployer, ExecutionDAG dag);
 
-    void schedule() throws RpcException, StarRocksException;
+    void schedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException;
 
     void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, StarRocksException;
+    void cancel();
 }

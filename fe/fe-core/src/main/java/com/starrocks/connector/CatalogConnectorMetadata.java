@@ -88,7 +88,8 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     private ConnectorMetadata metadataOfTable(String tableName) {
-        if (TableMetaMetadata.isMetadataTable(tableName)) {
+        // Paimon system table shares the same pattern, ignore it here
+        if (getTableType() != Table.TableType.PAIMON && TableMetaMetadata.isMetadataTable(tableName)) {
             return tableMetadata;
         }
         return null;
@@ -352,7 +353,7 @@ public class CatalogConnectorMetadata implements ConnectorMetadata {
     }
 
     @Override
-    public void alterView(AlterViewStmt stmt) throws DdlException, StarRocksException {
+    public void alterView(AlterViewStmt stmt) throws StarRocksException {
         normal.alterView(stmt);
     }
 

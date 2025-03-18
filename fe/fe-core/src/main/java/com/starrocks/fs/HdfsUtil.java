@@ -51,11 +51,12 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 public class HdfsUtil {
     private static final Logger LOG = LogManager.getLogger(HdfsUtil.class);
 
-    private static int READ_BUFFER_SIZE_B = 1024 * 1024;
+    private static final int READ_BUFFER_SIZE_B = 1024 * 1024;
 
     private static HdfsService hdfsService = new HdfsService();
 
@@ -63,6 +64,16 @@ public class HdfsUtil {
     public static void getTProperties(String path, BrokerDesc brokerDesc,  THdfsProperties tProperties) throws
             StarRocksException {
         hdfsService.getTProperties(path, brokerDesc.getProperties(), tProperties);
+    }
+
+    public static void copyToLocal(String srcPath, String destPath, Map<String, String> properties)
+            throws StarRocksException {
+        hdfsService.copyToLocal(srcPath, destPath, properties);
+    }
+
+    public static void copyFromLocal(String srcPath, String destPath, Map<String, String> properties)
+            throws StarRocksException {
+        hdfsService.copyFromLocal(srcPath, destPath, properties);
     }
 
     /**

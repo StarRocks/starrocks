@@ -27,11 +27,13 @@ import com.starrocks.connector.GetRemoteFilesParams;
 import com.starrocks.connector.RemoteFileInfo;
 import com.starrocks.connector.RemoteFileInfoDefaultSource;
 import com.starrocks.connector.RemoteFileInfoSource;
+import com.starrocks.connector.RemoteFilesSampleStrategy;
 import com.starrocks.connector.TableVersionRange;
 import com.starrocks.connector.iceberg.IcebergConnectorScanRangeSource;
 import com.starrocks.connector.iceberg.IcebergGetRemoteFilesParams;
 import com.starrocks.connector.iceberg.IcebergMORParams;
 import com.starrocks.connector.iceberg.IcebergRemoteSourceTrigger;
+import com.starrocks.connector.iceberg.IcebergTableMORParams;
 import com.starrocks.connector.iceberg.QueueIcebergRemoteFileInfoSource;
 import com.starrocks.credential.CloudConfiguration;
 import com.starrocks.credential.CloudConfigurationFactory;
@@ -64,12 +66,12 @@ public class IcebergScanNode extends ScanNode {
     private CloudConfiguration cloudConfiguration = null;
     protected Optional<Long> snapshotId;
     private IcebergConnectorScanRangeSource scanRangeSource = null;
-    private final List<IcebergMORParams> tableFullMORParams;
+    private final IcebergTableMORParams tableFullMORParams;
     private final IcebergMORParams morParams;
     private int selectedPartitionCount = -1;
 
     public IcebergScanNode(PlanNodeId id, TupleDescriptor desc, String planNodeName,
-                           List<IcebergMORParams> tableFullMORParams, IcebergMORParams morParams) {
+                           IcebergTableMORParams tableFullMORParams, IcebergMORParams morParams) {
         super(id, desc, planNodeName);
         this.icebergTable = (IcebergTable) desc.getTable();
         this.tableFullMORParams = tableFullMORParams;
@@ -144,11 +146,11 @@ public class IcebergScanNode extends ScanNode {
 
         // Hard coding here
         // Try to get tabular signed temporary credential
-        CloudConfiguration tabularTempCloudConfiguration = CloudConfigurationFactory.
-                buildCloudConfigurationForTabular(icebergTable.getNativeTable().io().properties());
-        if (tabularTempCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
+        CloudConfiguration vendedCredentialsCloudConfiguration = CloudConfigurationFactory.
+                buildCloudConfigurationForVendedCredentials(icebergTable.getNativeTable().io().properties());
+        if (vendedCredentialsCloudConfiguration.getCloudType() != CloudType.DEFAULT) {
             // If we get CloudConfiguration succeed from iceberg FileIO's properties, we just using it.
-            cloudConfiguration = tabularTempCloudConfiguration;
+            cloudConfiguration = vendedCredentialsCloudConfiguration;
         } else {
             CatalogConnector connector = GlobalStateMgr.getCurrentState().getConnectorMgr().getConnector(catalogName);
             Preconditions.checkState(connector != null,
@@ -187,7 +189,7 @@ public class IcebergScanNode extends ScanNode {
     }
 
     // for unit tests
-    public List<IcebergMORParams> getTableFullMORParams() {
+    public IcebergTableMORParams getTableFullMORParams() {
         return tableFullMORParams;
     }
 
@@ -237,6 +239,8 @@ public class IcebergScanNode extends ScanNode {
 
         if (detailLevel == TExplainLevel.VERBOSE) {
             HdfsScanNode.appendDataCacheOptionsInExplain(output, prefix, dataCacheOptions);
+            // for global dict
+            output.append(explainColumnDict(prefix));
 
             for (SlotDescriptor slotDescriptor : desc.getSlots()) {
                 Type type = slotDescriptor.getOriginType();
@@ -309,6 +313,11 @@ public class IcebergScanNode extends ScanNode {
 
     @Override
     protected boolean supportTopNRuntimeFilter() {
-        return !icebergTable.isV2Format();
+        return true;
+    }
+
+    @Override
+    public void setScanSampleStrategy(RemoteFilesSampleStrategy strategy) {
+        scanRangeSource.setSampleStrategy(strategy);
     }
 }

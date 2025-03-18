@@ -14,22 +14,26 @@
 
 package com.starrocks.connector.delta;
 
+import io.delta.kernel.internal.actions.DeletionVectorDescriptor;
 import io.delta.kernel.utils.FileStatus;
 import org.apache.commons.collections4.map.CaseInsensitiveMap;
 
 import java.util.Map;
 
-// FileScanTask represents one `AddFile` in DeltaLake.
+// FileScanTask represents one `AddFile` with DV in DeltaLake.
 // TODO: The file representations of different Catalogs will be unified later.
 public class FileScanTask {
     private final FileStatus fileStatus;
     private final long records;
     private final Map<String, String> partitionValues;
+    private final DeletionVectorDescriptor dv;
 
-    public FileScanTask(FileStatus fileStatus, long records, Map<String, String> partitionValues) {
+    public FileScanTask(FileStatus fileStatus, long records, Map<String, String> partitionValues,
+                        DeletionVectorDescriptor dv) {
         this.fileStatus = fileStatus;
         this.records = records;
         this.partitionValues = new CaseInsensitiveMap<>(partitionValues);
+        this.dv = dv;
     }
 
     public FileStatus getFileStatus() {
@@ -46,5 +50,9 @@ public class FileScanTask {
 
     public Map<String, String> getPartitionValues() {
         return partitionValues;
+    }
+
+    public DeletionVectorDescriptor getDv() {
+        return dv;
     }
 }

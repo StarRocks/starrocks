@@ -227,8 +227,6 @@ private:
     mutable bthread::Mutex _status_lock;
     Status _status = Status::OK();
 
-    std::set<int64_t> _immutable_partition_ids;
-
     std::map<string, string> _column_to_expr_value;
 
     // Profile counters
@@ -248,12 +246,18 @@ private:
     RuntimeProfile::Counter* _add_row_num = nullptr;
     // Accumulated time to wait for memtable flush in add_chunk()
     RuntimeProfile::Counter* _wait_flush_timer = nullptr;
+    // Accumulated time to submit write task to delta writer thread pool in add_chunk()
+    RuntimeProfile::Counter* _submit_write_task_timer = nullptr;
+    // Accumulated time to submit commit task to delta writer thread pool in add_chunk()
+    RuntimeProfile::Counter* _submit_commit_task_timer = nullptr;
     // Accumulated time to wait for async delta writers in add_chunk()
     RuntimeProfile::Counter* _wait_write_timer = nullptr;
     // Accumulated time to wait for secondary replicas in add_chunk()
     RuntimeProfile::Counter* _wait_replica_timer = nullptr;
     // Accumulated time to wait for txn persist in add_chunk()
     RuntimeProfile::Counter* _wait_txn_persist_timer = nullptr;
+    // Accumulated time to wait sender close in add_chunk()
+    RuntimeProfile::Counter* _wait_drain_sender_timer = nullptr;
 
     std::atomic<bool> _is_updating_profile{false};
     std::unique_ptr<RuntimeProfile> _tablets_profile;

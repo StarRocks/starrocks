@@ -16,6 +16,8 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.DdlException;
 import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
@@ -25,8 +27,6 @@ import com.starrocks.load.batchwrite.RequestCoordinatorBackendResult;
 import com.starrocks.load.batchwrite.TableId;
 import com.starrocks.load.streamload.StreamLoadHttpHeader;
 import com.starrocks.load.streamload.StreamLoadKvParams;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -99,8 +99,7 @@ public class StreamLoadMetaAction extends RestBaseAction {
             sendResult(request, response, responseResult);
         }
 
-        Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(), ConnectContext.get().getCurrentRoleIds(),
-                dbName, tableName, PrivilegeType.INSERT);
+        Authorizer.checkTableAction(ConnectContext.get(), dbName, tableName, PrivilegeType.INSERT);
 
         if (!enableBatchWrite) {
             processNormalStreamLoad(request, response, dbName, tableName);

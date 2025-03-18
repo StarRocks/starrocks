@@ -34,7 +34,6 @@ namespace starrocks::pipeline {
 class MemLimitedChunkQueueTest : public ::testing::Test {
 public:
     void SetUp() override {
-        ASSERT_OK(GlobalEnv::GetInstance()->init());
         TUniqueId dummy_query_id = generate_uuid();
         auto path = config::storage_root_path + "/spill_test_data/" + print_id(dummy_query_id);
         auto fs = FileSystem::Default();

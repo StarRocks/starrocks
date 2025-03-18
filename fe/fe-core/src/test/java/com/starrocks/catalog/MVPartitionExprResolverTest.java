@@ -26,7 +26,6 @@ import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.mv.analyzer.MVPartitionExpr;
 import com.starrocks.mv.analyzer.MVPartitionExprResolver;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.scheduler.MVRefreshTestBase;
 import com.starrocks.scheduler.PartitionBasedMvRefreshProcessor;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.TaskBuilder;
@@ -34,6 +33,7 @@ import com.starrocks.scheduler.TaskRun;
 import com.starrocks.scheduler.TaskRunBuilder;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.QueryStatement;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.utframe.UtFrameUtils;
@@ -44,12 +44,12 @@ import org.junit.Test;
 import java.util.Map;
 import java.util.Set;
 
-public class MVPartitionExprResolverTest extends MVRefreshTestBase {
+public class MVPartitionExprResolverTest extends MVTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
         // create connect context
-        MVRefreshTestBase.beforeClass();
+        MVTestBase.beforeClass();
         starRocksAssert.withDatabase("test").useDatabase("test");
         starRocksAssert.withTable("CREATE TABLE test.tbl1\n" +
                         "(\n" +

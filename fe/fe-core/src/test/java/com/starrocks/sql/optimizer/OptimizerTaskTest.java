@@ -39,7 +39,6 @@ import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.DistributionSpec;
 import com.starrocks.sql.optimizer.base.HashDistributionDesc;
 import com.starrocks.sql.optimizer.base.Ordering;
-import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.dump.MockDumpInfo;
 import com.starrocks.sql.optimizer.operator.AggType;
 import com.starrocks.sql.optimizer.operator.Operator;
@@ -55,11 +54,13 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalTopNOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalDistributionOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalHashAggregateOperator;
 import com.starrocks.sql.optimizer.operator.physical.PhysicalOlapScanOperator;
+import com.starrocks.sql.optimizer.operator.scalar.ArrayOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.CallOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ConstantOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rule.transformation.SplitTwoPhaseAggRule;
 import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mocked;
@@ -167,9 +168,8 @@ public class OptimizerTaskTest {
             }
         };
 
-        Optimizer optimizer = new Optimizer();
-        optimizer.optimize(ctx, logicOperatorTree, new PhysicalPropertySet(), new ColumnRefSet(),
-                columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
+        optimizer.optimize(logicOperatorTree, new ColumnRefSet());
         Memo memo = optimizer.getContext().getMemo();
         assertEquals(3, memo.getGroups().size());
         assertEquals(8, memo.getGroupExpressions().size());
@@ -255,9 +255,8 @@ public class OptimizerTaskTest {
             }
         };
 
-        Optimizer optimizer = new Optimizer();
-        optimizer.optimize(ctx, topJoin, new PhysicalPropertySet(), new ColumnRefSet(),
-                columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
+        optimizer.optimize(topJoin, new ColumnRefSet());
 
         Memo memo = optimizer.getContext().getMemo();
 
@@ -377,9 +376,8 @@ public class OptimizerTaskTest {
                                 scan4ColumnMap, Maps.newHashMap(), null,
                                 -1, null)));
 
-        Optimizer optimizer = new Optimizer();
-        optimizer.optimize(ctx, topJoin, new PhysicalPropertySet(), new ColumnRefSet(),
-                columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
+        optimizer.optimize(topJoin, new ColumnRefSet());
     }
 
     @Test
@@ -473,9 +471,8 @@ public class OptimizerTaskTest {
             }
         };
 
-        Optimizer optimizer = new Optimizer();
-        optimizer.optimize(ctx, topJoin, new PhysicalPropertySet(), new ColumnRefSet(),
-                columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
+        optimizer.optimize(topJoin, new ColumnRefSet());
     }
 
     @Test
@@ -620,9 +617,8 @@ public class OptimizerTaskTest {
             }
         };
 
-        Optimizer optimizer = new Optimizer();
-        optimizer.optimize(ctx, topJoin, new PhysicalPropertySet(), new ColumnRefSet(),
-                columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
+        optimizer.optimize(topJoin, new ColumnRefSet());
     }
 
     @Test
@@ -668,8 +664,9 @@ public class OptimizerTaskTest {
         outputColumns.addAll(outputColumns2);
         ColumnRefSet outputColumnsSet = new ColumnRefSet(outputColumns);
 
-        Optimizer optimizer = new Optimizer();
-        optimizer.optimize(ctx, logicOperatorTree, new PhysicalPropertySet(), outputColumnsSet, columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
+        optimizer.optimize(logicOperatorTree, outputColumnsSet);
+
         Memo memo = optimizer.getContext().getMemo();
 
         MemoStatusChecker checker = new MemoStatusChecker(memo, 2, outputColumnsSet);
@@ -713,10 +710,10 @@ public class OptimizerTaskTest {
                         new LogicalOlapScanOperator(olapTable3, scanColumnMap,
                                 Maps.newHashMap(), null, -1, null)));
 
-        Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, topJoin, new PhysicalPropertySet(),
-                new ColumnRefSet(Lists.newArrayList(column1)),
-                columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
+        OptExpression physicalTree = optimizer.optimize(topJoin,
+                new ColumnRefSet(List.of(column1)));
+
         assertEquals(physicalTree.getOp().getOpType(), OperatorType.PHYSICAL_NESTLOOP_JOIN);
         assertEquals(physicalTree.inputAt(0).getOp().getOpType(), OperatorType.PHYSICAL_NESTLOOP_JOIN);
         assertEquals(physicalTree.inputAt(1).getOp().getOpType(), OperatorType.PHYSICAL_DISTRIBUTION);
@@ -748,11 +745,13 @@ public class OptimizerTaskTest {
             }
         };
 
-        Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(), new ColumnRefSet(),
-                columnRefFactory);
+        ctx.getSessionVariable().setOptimizerExecuteTimeout(10000);
+        Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
+        OptExpression physicalTree = optimizer.optimize(expression, new ColumnRefSet());
+
         Operator root = physicalTree.getOp();
         assertEquals(root.getOpType(), OperatorType.PHYSICAL_LIMIT);
+        ctx.getSessionVariable().setOptimizerExecuteTimeout(3000);
     }
 
     @Test
@@ -781,9 +780,9 @@ public class OptimizerTaskTest {
                         new LogicalOlapScanOperator(olapTable1, scanColumnMap, Maps.newHashMap(), null,
                                 -1, null)));
 
-        Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
-                new ColumnRefSet(outputColumns1), columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
+        OptExpression physicalTree = optimizer.optimize(expression,
+                new ColumnRefSet(outputColumns1));
 
         assertEquals(OperatorType.PHYSICAL_OLAP_SCAN, physicalTree.getOp().getOpType());
         PhysicalOlapScanOperator physicalOlapScan = (PhysicalOlapScanOperator) physicalTree.getOp();
@@ -827,9 +826,10 @@ public class OptimizerTaskTest {
             }
         };
 
-        Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
-                new ColumnRefSet(outputColumns1), columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(
+                OptimizerFactory.mockContext(ctx, columnRefFactory));
+        OptExpression physicalTree = optimizer.optimize(expression,
+                new ColumnRefSet(outputColumns1));
 
         assertNotNull(physicalTree.getOp().getProjection());
         assertEquals(physicalTree.getOp().getOpType(), OperatorType.PHYSICAL_OLAP_SCAN);
@@ -899,9 +899,9 @@ public class OptimizerTaskTest {
 
         ColumnRefSet outputColumns = new ColumnRefSet(column2.getId());
 
-        Optimizer optimizer = new Optimizer();
         try {
-            optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
+            Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
+            optimizer.optimize(expression, outputColumns);
             fail("invalid plan. can not optimize success");
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 2: t2 in " +
@@ -915,8 +915,10 @@ public class OptimizerTaskTest {
             tmp.getSessionVariable().setJoinImplementationMode("auto");
             tmp.getSessionVariable().setEnablePlanValidation(false);
             tmp.setDumpInfo(new MockDumpInfo());
-            OptExpression expression1 = optimizer.optimize(tmp, expression, new PhysicalPropertySet(), outputColumns,
-                    columnRefFactory);
+
+            Optimizer optimizer = OptimizerFactory.create(
+                    OptimizerFactory.mockContext(ctx, columnRefFactory));
+            OptExpression expression1 = optimizer.optimize(expression, outputColumns);
             Map<ColumnRefOperator, CallOperator> aggs =
                     ((PhysicalHashAggregateOperator) expression1.getOp()).getAggregations();
             assertEquals(Type.INT, column2.getType());
@@ -992,9 +994,10 @@ public class OptimizerTaskTest {
 
         ColumnRefSet outputColumns = new ColumnRefSet(column5.getId());
 
-        Optimizer optimizer = new Optimizer();
         try {
-            optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
+            Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
+            optimizer.optimize(expression, outputColumns);
+
             fail("invalid plan. can not optimize success");
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 5: t5 in " +
@@ -1045,9 +1048,11 @@ public class OptimizerTaskTest {
             }
         };
 
-        Optimizer optimizer = new Optimizer();
         try {
-            optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
+            Optimizer optimizer = OptimizerFactory.create(
+                    OptimizerFactory.mockContext(ctx, columnRefFactory));
+            optimizer.optimize(expression, outputColumns);
+
             fail("invalid plan. can not optimize success");
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
@@ -1102,9 +1107,11 @@ public class OptimizerTaskTest {
             }
         };
 
-        Optimizer optimizer = new Optimizer();
         try {
-            optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
+            Optimizer optimizer = OptimizerFactory.create(
+                    OptimizerFactory.mockContext(ctx, columnRefFactory));
+            optimizer.optimize(expression, outputColumns);
+
             fail("invalid plan. can not optimize success");
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
@@ -1152,9 +1159,9 @@ public class OptimizerTaskTest {
 
         ColumnRefSet outputColumns = new ColumnRefSet(column2.getId());
 
-        Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
-                outputColumns, columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(
+                OptimizerFactory.mockContext(ctx, columnRefFactory));
+        OptExpression physicalTree = optimizer.optimize(expression, outputColumns);
 
         assertEquals(physicalTree.getLogicalProperty().getOutputColumns(), new ColumnRefSet(column2.getId()));
 
@@ -1207,9 +1214,9 @@ public class OptimizerTaskTest {
 
         ColumnRefSet outputColumns = new ColumnRefSet(column1.getId());
 
-        Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
-                outputColumns, columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(
+                OptimizerFactory.mockContext(ctx, columnRefFactory));
+        OptExpression physicalTree = optimizer.optimize(expression, outputColumns);
 
         Operator operator = physicalTree.getOp();
         assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
@@ -1279,9 +1286,11 @@ public class OptimizerTaskTest {
             }
         };
 
-        Optimizer optimizer = new Optimizer();
         try {
-            optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
+            Optimizer optimizer = OptimizerFactory.create(
+                    OptimizerFactory.mockContext(ctx, columnRefFactory));
+            optimizer.optimize(expression, outputColumns);
+
             fail("invalid plan. can not optimize success");
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
@@ -1340,9 +1349,10 @@ public class OptimizerTaskTest {
 
         ColumnRefSet outputColumns = new ColumnRefSet(Lists.newArrayList(column3, column2));
 
-        Optimizer optimizer = new Optimizer();
         try {
-            optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
+            Optimizer optimizer = OptimizerFactory.create(
+                    OptimizerFactory.mockContext(ctx, columnRefFactory));
+            optimizer.optimize(expression, outputColumns);
             fail("invalid plan. can not optimize success");
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
@@ -1401,9 +1411,10 @@ public class OptimizerTaskTest {
 
         ColumnRefSet outputColumns = new ColumnRefSet(Lists.newArrayList(column3));
 
-        Optimizer optimizer = new Optimizer();
         try {
-            optimizer.optimize(ctx, expression, new PhysicalPropertySet(), outputColumns, columnRefFactory);
+            Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
+            optimizer.optimize(expression, outputColumns);
+
             fail("invalid plan. can not optimize success");
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 3: t3 in " +
@@ -1456,9 +1467,8 @@ public class OptimizerTaskTest {
 
         ColumnRefSet outputColumns = new ColumnRefSet(column2.getId());
 
-        Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, topProject, new PhysicalPropertySet(),
-                outputColumns, columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
+        OptExpression physicalTree = optimizer.optimize(topProject, outputColumns);
 
         Operator operator = physicalTree.getOp();
         assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
@@ -1522,9 +1532,10 @@ public class OptimizerTaskTest {
 
         ColumnRefSet outputColumns = new ColumnRefSet(Lists.newArrayList(column6));
 
-        Optimizer optimizer = new Optimizer();
         try {
-            optimizer.optimize(ctx, root, new PhysicalPropertySet(), outputColumns, columnRefFactory);
+            Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
+            optimizer.optimize(root, outputColumns);
+
             fail("invalid plan. can not optimize success");
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage(), e.getMessage().contains("Type check failed. the type of arg 5: t5 in " +
@@ -1581,9 +1592,9 @@ public class OptimizerTaskTest {
 
         ColumnRefSet outputColumns = new ColumnRefSet(Lists.newArrayList(column4));
 
-        Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, root, new PhysicalPropertySet(),
-                outputColumns, columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(
+                OptimizerFactory.mockContext(ctx, columnRefFactory));
+        OptExpression physicalTree = optimizer.optimize(root, outputColumns);
 
         Operator operator = physicalTree.getOp();
         assertEquals(operator.getOpType(), OperatorType.PHYSICAL_HASH_AGG);
@@ -1634,9 +1645,8 @@ public class OptimizerTaskTest {
                                         null, -1,
                                         null))));
 
-        Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
-                new ColumnRefSet(outputColumns), columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
+        OptExpression physicalTree = optimizer.optimize(expression, new ColumnRefSet(outputColumns));
 
         assertNotNull(physicalTree.getOp().getProjection());
         assertEquals(physicalTree.getOp().getOpType(), OperatorType.PHYSICAL_OLAP_SCAN);
@@ -1683,9 +1693,8 @@ public class OptimizerTaskTest {
 
         OptExpression filter = OptExpression.create(new LogicalFilterOperator(predicate), project2);
 
-        Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, filter, new PhysicalPropertySet(),
-                new ColumnRefSet(outputColumns), columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
+        OptExpression physicalTree = optimizer.optimize(filter, new ColumnRefSet(outputColumns));
 
         assertNotNull(physicalTree.getOp().getProjection());
         Projection pp = physicalTree.getOp().getProjection();
@@ -1746,9 +1755,9 @@ public class OptimizerTaskTest {
                         new LogicalOlapScanOperator(olapTable1, scanColumnMap, Maps.newHashMap(), null, -1,
                                 null)));
 
-        Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
-                new ColumnRefSet(outputColumns), columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(
+                OptimizerFactory.mockContext(ctx, columnRefFactory));
+        OptExpression physicalTree = optimizer.optimize(expression, new ColumnRefSet(outputColumns));
 
         PhysicalOlapScanOperator olapScanOperator = (PhysicalOlapScanOperator) physicalTree.getOp();
         Projection projection = olapScanOperator.getProjection();
@@ -1832,9 +1841,8 @@ public class OptimizerTaskTest {
                 OptExpression.create(scan1),
                 OptExpression.create(scan2));
 
-        Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
-                new ColumnRefSet(outputColumns), columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
+        OptExpression physicalTree = optimizer.optimize(expression, new ColumnRefSet(outputColumns));
     }
 
     @Test
@@ -1930,9 +1938,8 @@ public class OptimizerTaskTest {
                 OptExpression.create(scan2));
         OptExpression topJoin = OptExpression.create(join2,
                 join1, OptExpression.create(scan3));
-        Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, topJoin, new PhysicalPropertySet(),
-                new ColumnRefSet(outputColumns), columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(OptimizerFactory.mockContext(ctx, columnRefFactory));
+        OptExpression physicalTree = optimizer.optimize(topJoin, new ColumnRefSet(outputColumns));
     }
 
     @Test
@@ -2029,9 +2036,10 @@ public class OptimizerTaskTest {
                 OptExpression.create(scan1),
                 OptExpression.create(scan2));
 
-        Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
-                new ColumnRefSet(outputColumns), columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(
+                OptimizerFactory.mockContext(ctx, columnRefFactory));
+        OptExpression physicalTree = optimizer.optimize(expression, new ColumnRefSet(outputColumns));
+
         assertEquals(physicalTree.getInputs().get(1).getOp().getOpType(), OperatorType.PHYSICAL_DISTRIBUTION);
         PhysicalDistributionOperator rightOperator =
                 (PhysicalDistributionOperator) physicalTree.getInputs().get(1).getOp();
@@ -2150,9 +2158,10 @@ public class OptimizerTaskTest {
                 OptExpression.create(scan1),
                 OptExpression.create(scan2));
 
-        Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
-                new ColumnRefSet(outputColumns), columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(
+                OptimizerFactory.mockContext(ctx, columnRefFactory));
+        OptExpression physicalTree = optimizer.optimize(expression, new ColumnRefSet(outputColumns));
+
         assertEquals(physicalTree.getInputs().get(1).getOp().getOpType(), OperatorType.PHYSICAL_DISTRIBUTION);
         PhysicalDistributionOperator rightOperator =
                 (PhysicalDistributionOperator) physicalTree.getInputs().get(1).getOp();
@@ -2275,9 +2284,9 @@ public class OptimizerTaskTest {
                 OptExpression.create(scan1),
                 OptExpression.create(scan2));
 
-        Optimizer optimizer = new Optimizer();
-        OptExpression physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
-                new ColumnRefSet(outputColumns), columnRefFactory);
+        Optimizer optimizer = OptimizerFactory.create(
+                OptimizerFactory.mockContext(ctx, columnRefFactory));
+        OptExpression physicalTree = optimizer.optimize(expression, new ColumnRefSet(outputColumns));
         assertEquals(physicalTree.getInputs().get(1).getOp().getOpType(), OperatorType.PHYSICAL_DISTRIBUTION);
         PhysicalDistributionOperator rightOperator =
                 (PhysicalDistributionOperator) physicalTree.getInputs().get(1).getOp();
@@ -2332,7 +2341,6 @@ public class OptimizerTaskTest {
             }
         };
 
-        optimizer = new Optimizer();
         expression = OptExpression.create(new LogicalJoinOperator(JoinOperator.INNER_JOIN, predicate),
                 OptExpression.create(new LogicalOlapScanOperator(olapTable1, scan1ColumnMap, Maps.newHashMap(),
                         DistributionSpec.createHashDistributionSpec(
@@ -2342,12 +2350,68 @@ public class OptimizerTaskTest {
                         DistributionSpec.createHashDistributionSpec(
                                 new HashDistributionDesc(Lists.newArrayList(this.column4.getId()),
                                         HashDistributionDesc.SourceType.LOCAL)), -1, null)));
-        physicalTree = optimizer.optimize(ctx, expression, new PhysicalPropertySet(),
-                new ColumnRefSet(outputColumns), columnRefFactory);
+        optimizer = OptimizerFactory.create(
+                OptimizerFactory.mockContext(ctx, columnRefFactory));
+        physicalTree = optimizer.optimize(expression, new ColumnRefSet(outputColumns));
+
         assertEquals(physicalTree.getInputs().get(1).getOp().getOpType(), OperatorType.PHYSICAL_DISTRIBUTION);
         rightOperator = (PhysicalDistributionOperator) physicalTree.getInputs().get(1).getOp();
         assertEquals(rightOperator.getDistributionSpec().getType(), DistributionSpec.DistributionType.BROADCAST);
         rightScan = (PhysicalOlapScanOperator) physicalTree.getInputs().get(1).getInputs().get(0).getOp();
         assertEquals(olapTable1.getId(), rightScan.getTable().getId());
+    }
+
+    @Test
+    public void testSplitAggregateRuleConstantColumns(@Mocked OlapTable olapTable1) {
+        ctx.getSessionVariable().setNewPlanerAggStage(2);
+
+        ColumnRefOperator column1 = columnRefFactory.create("t1", ScalarType.INT, true);
+        ColumnRefOperator column2 = columnRefFactory.create("agg", ScalarType.INT, true);
+
+        Map<ColumnRefOperator, Column> scanColumnMap = Maps.newHashMap();
+        scanColumnMap.put(column1, new Column());
+
+        List<ScalarOperator> arguments = new ArrayList<>();
+        arguments.add(column1);
+        arguments.add(new ConstantOperator("const_str", Type.VARCHAR));
+
+        List<ScalarOperator> arrayValues = new ArrayList<>();
+        arrayValues.add(new ConstantOperator(1, Type.INT));
+        arrayValues.add(new ConstantOperator(2, Type.INT));
+        arguments.add(new ArrayOperator(Type.INT, false, arrayValues));
+
+        List<ScalarOperator> functionArguments = new ArrayList<>();
+        CallOperator constFunction = new CallOperator("call", Type.INT, functionArguments);
+        arguments.add(constFunction);
+
+        List<Type> aggFnArguments = new ArrayList<>();
+        aggFnArguments.add(Type.INT);
+        aggFnArguments.add(Type.VARCHAR);
+        aggFnArguments.add(Type.ARRAY_INT);
+        aggFnArguments.add(Type.INT);
+        Function fn = new AggregateFunction(new FunctionName("agg_function"), aggFnArguments, Type.INT, Type.INT, false);
+        CallOperator aggFunction = new CallOperator("agg", Type.INT, arguments, fn);
+        Map<ColumnRefOperator, CallOperator> map = Maps.newHashMap();
+        map.put(column2, aggFunction);
+        LogicalAggregationOperator aggregationOperator =
+                new LogicalAggregationOperator(AggType.GLOBAL, Lists.newArrayList(column1), map);
+
+        OptExpression expression = OptExpression.create(aggregationOperator,
+                OptExpression.create(
+                        new LogicalOlapScanOperator(olapTable1, scanColumnMap, Maps.newHashMap(), null, -1,
+                                null)));
+
+        SplitTwoPhaseAggRule splitTwoPhaseAggRule = SplitTwoPhaseAggRule.getInstance();
+        List<OptExpression> list = splitTwoPhaseAggRule.transform(
+                expression, OptimizerFactory.mockContext(new ColumnRefFactory()));
+
+        assertEquals(OperatorType.LOGICAL_AGGR, list.get(0).getOp().getOpType());
+        LogicalAggregationOperator result = (LogicalAggregationOperator) list.get(0).getOp();
+
+        // The merge stage of the aggregate function should accept 3 constant columns.
+        assertEquals(AggType.GLOBAL, result.getType());
+        assertEquals(1, result.getAggregations().values().size());
+        assertEquals(OperatorType.CALL, result.getAggregations().get(column2).getOpType());
+        assertEquals(4, result.getAggregations().get(column2).getChildren().size());
     }
 }

@@ -49,7 +49,6 @@ import com.sleepycat.je.rep.NetworkRestore;
 import com.sleepycat.je.rep.NetworkRestoreConfig;
 import com.sleepycat.je.rep.NoConsistencyRequiredPolicy;
 import com.sleepycat.je.rep.NodeType;
-import com.sleepycat.je.rep.RepInternal;
 import com.sleepycat.je.rep.ReplicatedEnvironment;
 import com.sleepycat.je.rep.ReplicationConfig;
 import com.sleepycat.je.rep.ReplicationNode;
@@ -134,10 +133,12 @@ public class BDBEnvironment {
 
         // constructor
         String selfNodeHostPort = NetUtils.getHostPortInAccessibleFormat(selfNode.first, selfNode.second);
-
+        boolean isFirstTimeStartUp = false;
+    
         File dbEnv = new File(getBdbDir());
         if (!dbEnv.exists()) {
             dbEnv.mkdirs();
+            isFirstTimeStartUp = true;
         }
 
         Pair<String, Integer> helperNode = GlobalStateMgr.getCurrentState().getNodeMgr().getHelperNode();
@@ -147,7 +148,7 @@ public class BDBEnvironment {
                 helperHostPort, GlobalStateMgr.getCurrentState().isElectable());
 
         // setup
-        bdbEnvironment.setup();
+        bdbEnvironment.setup(isFirstTimeStartUp);
         return bdbEnvironment;
     }
 
@@ -165,14 +166,14 @@ public class BDBEnvironment {
     }
 
     // The setup() method opens the environment and database
-    protected void setup() throws JournalException, InterruptedException {
+    protected void setup(boolean isFirstTimeStartUp) throws JournalException, InterruptedException {
         this.closing = false;
         ensureHelperInLocal();
-        initConfigs(isElectable);
+        initConfigs(isFirstTimeStartUp);
         setupEnvironment();
     }
 
-    protected void initConfigs(boolean isElectable) throws JournalException {
+    protected void initConfigs(boolean isFirstTimeStartUp) throws JournalException {
         // Almost never used, just in case the master can not restart
         if (Config.bdbje_reset_election_group) {
             if (!isElectable) {
@@ -180,10 +181,12 @@ public class BDBEnvironment {
                 LOG.error(errMsg);
                 throw new JournalException(errMsg);
             }
-            DbResetRepGroup resetUtility = new DbResetRepGroup(envHome, STARROCKS_JOURNAL_GROUP, selfNodeName,
-                    selfNodeHostPort);
-            resetUtility.reset();
-            LOG.info("group has been reset.");
+            if (!isFirstTimeStartUp) {
+                DbResetRepGroup resetUtility = new DbResetRepGroup(envHome, STARROCKS_JOURNAL_GROUP, selfNodeName,
+                        selfNodeHostPort);
+                resetUtility.reset();
+                LOG.info("group has been reset.");
+            }
         }
 
         // set replication config
@@ -538,13 +541,6 @@ public class BDBEnvironment {
             closing = false;
         }
         return closeSuccess;
-    }
-
-    public void flushVLSNMapping() {
-        if (replicatedEnvironment != null) {
-            RepInternal.getRepImpl(replicatedEnvironment).getVLSNIndex()
-                    .flushToDatabase(Durability.COMMIT_SYNC);
-        }
     }
 
     private SyncPolicy getSyncPolicy(String policy) {

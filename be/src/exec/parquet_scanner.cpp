@@ -317,8 +317,8 @@ Status ParquetScanner::new_column(const arrow::DataType* arrow_type, const SlotD
 }
 
 Status ParquetScanner::convert_array_to_column(ConvertFuncTree* conv_func, size_t num_elements,
-                                               const arrow::Array* array, const ColumnPtr& column,
-                                               size_t batch_start_idx, size_t chunk_start_idx, Filter* chunk_filter,
+                                               const arrow::Array* array, ColumnPtr& column, size_t batch_start_idx,
+                                               size_t chunk_start_idx, Filter* chunk_filter,
                                                ArrowConvertContext* conv_ctx) {
     // for timestamp type, state->timezone which is specified by user. convert function
     // obtains timezone from array. thus timezone in array should be rectified to
@@ -441,6 +441,9 @@ Status ParquetScanner::next_batch() {
                     _last_file_scan_bytes += incr_bytes;
                     _state->update_num_bytes_scan_from_source(incr_bytes);
                 }
+            } else if (status.is_not_found() && (_file_scan_type == TFileScanType::FILES_INSERT ||
+                                                 _file_scan_type == TFileScanType::FILES_QUERY)) {
+                status = status.clone_and_append("Consider setting 'fill_mismatch_column_with' = 'null' property");
             }
             return status;
         }

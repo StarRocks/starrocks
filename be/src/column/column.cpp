@@ -21,7 +21,8 @@
 namespace starrocks {
 
 void Column::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& slice_sizes, size_t chunk_size,
-                                             uint32_t max_one_row_size, uint8_t* null_masks, bool has_null) {
+                                             uint32_t max_one_row_size, const uint8_t* null_masks,
+                                             bool has_null) const {
     uint32_t* sizes = slice_sizes.data();
 
     if (!has_null) {
@@ -42,7 +43,7 @@ void Column::serialize_batch_with_null_masks(uint8_t* dst, Buffer<uint32_t>& sli
     }
 }
 
-StatusOr<ColumnPtr> Column::downgrade_helper_func(ColumnPtr* col) {
+StatusOr<ColumnPtr> Column::downgrade_helper_func(Ptr* col) {
     auto ret = (*col)->downgrade();
     if (!ret.ok()) {
         return ret;
@@ -54,7 +55,7 @@ StatusOr<ColumnPtr> Column::downgrade_helper_func(ColumnPtr* col) {
     }
 }
 
-StatusOr<ColumnPtr> Column::upgrade_helper_func(ColumnPtr* col) {
+StatusOr<ColumnPtr> Column::upgrade_helper_func(Ptr* col) {
     auto ret = (*col)->upgrade_if_overflow();
     if (!ret.ok()) {
         return ret;

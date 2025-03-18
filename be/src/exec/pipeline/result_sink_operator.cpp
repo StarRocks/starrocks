@@ -36,6 +36,8 @@ Status ResultSinkOperator::prepare(RuntimeState* state) {
     // Create profile
     _unique_metrics->add_info_string("SinkType", to_string(_sink_type));
     auto profile = _unique_metrics.get();
+    _sender->attach_query_ctx(state->query_ctx()->get_shared_ptr());
+    _sender->attach_observer(state, observer());
 
     // Create writer based on sink type
     switch (_sink_type) {

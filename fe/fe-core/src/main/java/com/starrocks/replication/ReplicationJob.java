@@ -37,6 +37,7 @@ import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
+import com.starrocks.persist.ModifyTablePropertyOperationLog;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.system.Backend;
@@ -146,6 +147,9 @@ public class ReplicationJob implements GsonPostProcessable {
         @SerializedName(value = "version")
         private final long version;
 
+        @SerializedName(value = "dataVersion")
+        private final long dataVersion;
+
         @SerializedName(value = "srcVersion")
         private final long srcVersion;
 
@@ -155,10 +159,11 @@ public class ReplicationJob implements GsonPostProcessable {
         @SerializedName(value = "indexInfos")
         private final Map<Long, IndexInfo> indexInfos;
 
-        public PartitionInfo(long partitionId, long version, long srcVersion, long srcVersionEpoch,
-                Map<Long, IndexInfo> indexInfos) {
+        public PartitionInfo(long partitionId, long version, long dataVersion,
+                long srcVersion, long srcVersionEpoch, Map<Long, IndexInfo> indexInfos) {
             this.partitionId = partitionId;
             this.version = version;
+            this.dataVersion = dataVersion;
             this.srcVersion = srcVersion;
             this.srcVersionEpoch = srcVersionEpoch;
             this.indexInfos = indexInfos;
@@ -170,6 +175,10 @@ public class ReplicationJob implements GsonPostProcessable {
 
         public long getVersion() {
             return version;
+        }
+
+        public long getDataVersion() {
+            return dataVersion;
         }
 
         public long getSrcVersion() {
@@ -622,25 +631,27 @@ public class ReplicationJob implements GsonPostProcessable {
         Table.TableType tableType;
         long tableDataSize;
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
+        boolean needSetHasDelete = false;
 
         Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(request.database_id);
         if (db == null) {
             throw new MetaNotFoundException("Database " + request.database_id + " not found");
         }
 
+        Table table = db.getTable(request.table_id);
+        if (table == null) {
+            throw new MetaNotFoundException(
+                    "Table " + request.table_id + " in database " + db.getFullName() + " not found");
+        }
+        if (!(table instanceof OlapTable)) {
+            throw new MetaNotFoundException(
+                    "Table " + request.table_id + " in database " + db.getFullName() + " is not olap table");
+        }
+        OlapTable olapTable = (OlapTable) table;
+
         Locker locker = new Locker();
-        locker.lockDatabase(db.getId(), LockType.READ);
+        locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
         try {
-            Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), request.table_id);
-            if (table == null) {
-                throw new MetaNotFoundException(
-                        "Table " + request.table_id + " in database " + db.getFullName() + " not found");
-            }
-            if (!(table instanceof OlapTable)) {
-                throw new MetaNotFoundException(
-                        "Table " + request.table_id + " in database " + db.getFullName() + " is not olap table");
-            }
-            OlapTable olapTable = (OlapTable) table;
             tableType = olapTable.getType();
             tableDataSize = olapTable.getDataSize();
 
@@ -650,20 +661,43 @@ public class ReplicationJob implements GsonPostProcessable {
                     throw new MetaNotFoundException("Partition " + tPartitionInfo.partition_id + " in table "
                             + table.getName() + " in database " + db.getFullName() + " not found");
                 }
-                Preconditions.checkState(partition.getCommittedVersion() == partition.getVisibleVersion(),
+                Preconditions.checkState(partition.getCommittedDataVersion() == partition.getDataVersion(),
                         "Partition " + tPartitionInfo.partition_id + " in table " + table.getName()
                                 + " in database " + db.getFullName() + " publish version not finished");
-                Preconditions.checkState(partition.getVisibleVersion() <= tPartitionInfo.src_version,
-                        "Target visible version: " + partition.getVisibleVersion()
-                                + " is larger than source visible version: " + tPartitionInfo.src_version);
-                if (partition.getVisibleVersion() == tPartitionInfo.src_version) {
+                Preconditions.checkState(partition.getDataVersion() <= tPartitionInfo.src_version,
+                        "Target data version: " + partition.getDataVersion()
+                                + " is larger than source data version: " + tPartitionInfo.src_version);
+                if (partition.getDataVersion() == tPartitionInfo.src_version) {
                     continue;
                 }
                 PartitionInfo partitionInfo = initPartitionInfo(olapTable, tPartitionInfo, partition);
                 partitionInfos.put(partitionInfo.getPartitionId(), partitionInfo);
             }
+
+            if (!olapTable.hasDelete()) {
+                needSetHasDelete = true;
+            }
         } finally {
-            locker.unLockDatabase(db.getId(), LockType.READ);
+            locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.READ);
+        }
+
+        if (needSetHasDelete) {
+            locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+            try {
+                if (olapTable.hasDelete()) {
+                    needSetHasDelete = false;
+                } else {
+                    // Set has delete for tables replicated by starrocks data migration tool
+                    olapTable.setHasDelete();
+                }
+            } finally {
+                locker.unLockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
+            }
+
+            if (needSetHasDelete) {
+                ModifyTablePropertyOperationLog log = new ModifyTablePropertyOperationLog(db.getId(), table.getId());
+                GlobalStateMgr.getCurrentState().getEditLog().logSetHasDelete(log);
+            }
         }
 
         return new TableInfo(request.table_id, tableType, Table.TableType.OLAP, tableDataSize,
@@ -682,7 +716,7 @@ public class ReplicationJob implements GsonPostProcessable {
             IndexInfo indexInfo = initIndexInfo(olapTable, tIndexInfo, index);
             indexInfos.put(indexInfo.getIndexId(), indexInfo);
         }
-        return new PartitionInfo(tPartitionInfo.partition_id, partition.getVisibleVersion(),
+        return new PartitionInfo(tPartitionInfo.partition_id, partition.getVisibleVersion(), partition.getDataVersion(),
                 tPartitionInfo.src_version, tPartitionInfo.src_version_epoch, indexInfos);
     }
 
@@ -739,13 +773,13 @@ public class ReplicationJob implements GsonPostProcessable {
         Map<Long, PartitionInfo> partitionInfos = Maps.newHashMap();
         for (PhysicalPartition physicalPartition : table.getPhysicalPartitions()) {
             PhysicalPartition srcPartition = srcTable.getPhysicalPartition(physicalPartition.getName());
-            Preconditions.checkState(physicalPartition.getCommittedVersion() == physicalPartition.getVisibleVersion(),
+            Preconditions.checkState(physicalPartition.getCommittedDataVersion() == physicalPartition.getDataVersion(),
                     "Partition " + physicalPartition.getName() + " in table " + table.getName()
                             + " publish version not finished");
-            Preconditions.checkState(physicalPartition.getVisibleVersion() <= srcPartition.getVisibleVersion(),
-                    "Target visible version: " + physicalPartition.getVisibleVersion()
-                            + " is larger than source visible version: " + srcPartition.getVisibleVersion());
-            if (physicalPartition.getVisibleVersion() == srcPartition.getVisibleVersion()) {
+            Preconditions.checkState(physicalPartition.getDataVersion() <= srcPartition.getDataVersion(),
+                    "Target data version: " + physicalPartition.getDataVersion()
+                            + " is larger than source data version: " + srcPartition.getDataVersion());
+            if (physicalPartition.getDataVersion() == srcPartition.getDataVersion()) {
                 continue;
             }
             PartitionInfo partitionInfo = initPartitionInfo(table, srcTable, physicalPartition, srcPartition,
@@ -766,8 +800,8 @@ public class ReplicationJob implements GsonPostProcessable {
             IndexInfo indexInfo = initIndexInfo(table, srcTable, index, srcIndex, srcSystemInfoService);
             indexInfos.put(indexInfo.getIndexId(), indexInfo);
         }
-        return new PartitionInfo(partition.getId(), partition.getVisibleVersion(), srcPartition.getVisibleVersion(),
-                srcPartition.getVersionEpoch(), indexInfos);
+        return new PartitionInfo(partition.getId(), partition.getVisibleVersion(), partition.getDataVersion(),
+                srcPartition.getDataVersion(), srcPartition.getVersionEpoch(), indexInfos);
     }
 
     private static IndexInfo initIndexInfo(OlapTable table, OlapTable srcTable, MaterializedIndex index,
@@ -841,8 +875,14 @@ public class ReplicationJob implements GsonPostProcessable {
         ReplicationTxnCommitAttachment attachment = new ReplicationTxnCommitAttachment(
                 partitionVersions, partitionVersionEpochs);
 
-        GlobalStateMgr.getServingState().getGlobalTransactionMgr().commitTransaction(databaseId,
-                transactionId, tabletsCommitInfo.first, tabletsCommitInfo.second, attachment);
+        Locker locker = new Locker();
+        locker.lockTableWithIntensiveDbLock(databaseId, tableId, LockType.WRITE);
+        try {
+            GlobalStateMgr.getServingState().getGlobalTransactionMgr().commitTransaction(databaseId,
+                    transactionId, tabletsCommitInfo.first, tabletsCommitInfo.second, attachment);
+        } finally {
+            locker.unLockTableWithIntensiveDbLock(databaseId, tableId, LockType.WRITE);
+        }
     }
 
     private void abortTransaction(String reason) {
@@ -902,7 +942,8 @@ public class ReplicationJob implements GsonPostProcessable {
                                     tableId, partitionInfo.getPartitionId(), indexInfo.getIndexId(),
                                     tabletInfo.getTabletId(), getTabletType(tableType), transactionId,
                                     indexInfo.getSchemaHash(), partitionInfo.getVersion(),
-                                    srcToken, tabletInfo.getSrcTabletId(), getTabletType(srcTableType),
+                                    partitionInfo.getDataVersion(), srcToken,
+                                    tabletInfo.getSrcTabletId(), getTabletType(srcTableType),
                                     indexInfo.getSrcSchemaHash(), partitionInfo.getSrcVersion(),
                                     replicaInfo.getSrcBackends(),
                                     Config.replication_transaction_timeout_sec);
@@ -943,7 +984,7 @@ public class ReplicationJob implements GsonPostProcessable {
                         ReplicateSnapshotTask task = new ReplicateSnapshotTask(replicaInfo.getBackendId(), databaseId,
                                 tableId, partitionInfo.getPartitionId(), indexInfo.getIndexId(),
                                 tabletInfo.getTabletId(), getTabletType(tableType), transactionId,
-                                indexInfo.getSchemaHash(), partitionInfo.getVersion(),
+                                indexInfo.getSchemaHash(), partitionInfo.getVersion(), partitionInfo.getDataVersion(),
                                 srcToken, tabletInfo.getSrcTabletId(), getTabletType(srcTableType),
                                 indexInfo.getSrcSchemaHash(), partitionInfo.getSrcVersion(),
                                 flippedSrcSnapshotInfos, encryptionMeta);

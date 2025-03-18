@@ -52,6 +52,10 @@ public final class HistogramMetric extends Histogram {
         return Joiner.on(", ").join(labelStrings);
     }
 
+    public List<MetricLabel> getLabels() {
+        return labels;
+    }
+
     /**
      * Get the histogram name with tags in the format of "name_tag1=value1, tag2=value2"
      */

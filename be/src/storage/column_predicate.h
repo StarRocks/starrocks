@@ -48,6 +48,7 @@ class RuntimeState;
 class SlotDescriptor;
 class BitmapIndexIterator;
 struct NgramBloomFilterReaderOptions;
+class RuntimeFilterProbeDescriptor;
 } // namespace starrocks
 
 namespace starrocks {
@@ -79,6 +80,7 @@ enum class PredicateType {
     kExpr = 13,
     kTrue = 14,
     kMap = 15,
+    kPlaceHolder = 16,
 };
 
 std::ostream& operator<<(std::ostream& os, PredicateType p);
@@ -219,6 +221,7 @@ public:
     // bitmap index or bloom filter, the predicate operand should be right-padded with '\0'.
     virtual bool padding_zeros(size_t column_length) { return false; }
     const TypeInfo* type_info() const { return _type_info.get(); }
+    TypeInfoPtr type_info_ptr() const { return _type_info; }
 
 protected:
     constexpr static const char* kMsgTooManyItems = "too many bitmap filter items";
@@ -254,5 +257,7 @@ ColumnPredicate* new_column_null_predicate(const TypeInfoPtr& type, ColumnId, bo
 
 ColumnPredicate* new_column_dict_conjuct_predicate(const TypeInfoPtr& type_info, ColumnId id,
                                                    std::vector<uint8_t> dict_mapping);
+
+ColumnPredicate* new_column_placeholder_predicate(const TypeInfoPtr& type_info, ColumnId id);
 
 } //namespace starrocks

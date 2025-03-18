@@ -48,10 +48,16 @@ struct LowCardPercentileDispatcher {
 };
 
 void AggregateFuncResolver::register_others() {
-    add_aggregate_mapping_notnull<TYPE_BIGINT, TYPE_DOUBLE>("percentile_approx", false,
-                                                            AggregateFactory::MakePercentileApproxAggregateFunction());
-    add_aggregate_mapping_notnull<TYPE_DOUBLE, TYPE_DOUBLE>("percentile_approx", false,
-                                                            AggregateFactory::MakePercentileApproxAggregateFunction());
+    add_aggregate_mapping_variadic<TYPE_BIGINT, TYPE_DOUBLE, PercentileApproxState>(
+            "percentile_approx", false, AggregateFactory::MakePercentileApproxAggregateFunction());
+    add_aggregate_mapping_variadic<TYPE_DOUBLE, TYPE_DOUBLE, PercentileApproxState>(
+            "percentile_approx", false, AggregateFactory::MakePercentileApproxAggregateFunction());
+
+    add_aggregate_mapping_variadic<TYPE_BIGINT, TYPE_DOUBLE, PercentileApproxState>(
+            "percentile_approx_weighted", false, AggregateFactory::MakePercentileApproxWeightedAggregateFunction());
+    add_aggregate_mapping_variadic<TYPE_DOUBLE, TYPE_DOUBLE, PercentileApproxState>(
+            "percentile_approx_weighted", false, AggregateFactory::MakePercentileApproxWeightedAggregateFunction());
+
     add_aggregate_mapping<TYPE_PERCENTILE, TYPE_PERCENTILE, PercentileValue>(
             "percentile_union", false, AggregateFactory::MakePercentileUnionAggregateFunction());
 
@@ -75,7 +81,6 @@ void AggregateFuncResolver::register_others() {
     add_aggregate_mapping_variadic<TYPE_VARCHAR, TYPE_VARCHAR, GroupConcatAggregateState>(
             "group_concat", false, AggregateFactory::MakeGroupConcatAggregateFunction<TYPE_VARCHAR>());
 
-    add_array_mapping<TYPE_ARRAY, TYPE_VARCHAR>("dict_merge");
     add_array_mapping<TYPE_ARRAY, TYPE_ARRAY>("retention");
 
     // sum, avg, distinct_sum use decimal128 as intermediate or result type to avoid overflow
@@ -93,6 +98,8 @@ void AggregateFuncResolver::register_others() {
     add_general_mapping<AnyValueSemiState>("any_value", false, AggregateFactory::MakeAnyValueSemiAggregateFunction());
     add_general_mapping_notnull("array_agg2", false, AggregateFactory::MakeArrayAggAggregateFunctionV2());
     add_general_mapping_notnull("group_concat2", false, AggregateFactory::MakeGroupConcatAggregateFunctionV2());
+
+    add_general_mapping_notnull("dict_merge", false, AggregateFactory::MakeDictMergeAggregateFunction());
 }
 
 } // namespace starrocks

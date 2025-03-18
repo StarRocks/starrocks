@@ -28,6 +28,9 @@ import com.starrocks.analysis.NullLiteral;
 import com.starrocks.analysis.ParseNode;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.InternalCatalog;
@@ -36,9 +39,6 @@ import com.starrocks.catalog.Table;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.CsvFormat;
 import com.starrocks.common.Pair;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
@@ -644,8 +644,7 @@ public class DataDescription implements ParseNode {
         }
 
         try {
-            Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(),
-                    ConnectContext.get().getCurrentRoleIds(), fullDbName, tableName, PrivilegeType.INSERT);
+            Authorizer.checkTableAction(ConnectContext.get(), fullDbName, tableName, PrivilegeType.INSERT);
         } catch (AccessDeniedException e) {
             AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                     ConnectContext.get().getCurrentUserIdentity(),
@@ -655,8 +654,7 @@ public class DataDescription implements ParseNode {
 
         if (isLoadFromTable()) {
             try {
-                Authorizer.checkTableAction(ConnectContext.get().getCurrentUserIdentity(),
-                        ConnectContext.get().getCurrentRoleIds(), fullDbName, srcTableName, PrivilegeType.SELECT);
+                Authorizer.checkTableAction(ConnectContext.get(), fullDbName, srcTableName, PrivilegeType.SELECT);
             } catch (AccessDeniedException e) {
                 AccessDeniedException.reportAccessDenied(InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
                         ConnectContext.get().getCurrentUserIdentity(),

@@ -107,10 +107,8 @@ set(STORAGE_FILES
     rowset/segment_rewriter.cpp
     rowset/segment_group.cpp
     rowset/storage_page_decoder.cpp
-    rowset/block_split_bloom_filter.cpp
     rowset/bloom_filter_index_reader.cpp
     rowset/bloom_filter_index_writer.cpp
-    rowset/bloom_filter.cpp
     rowset/parsed_page.cpp
     rowset/zone_map_index.cpp
     rowset/segment_iterator.cpp
@@ -136,8 +134,10 @@ set(STORAGE_FILES
     column_not_in_predicate.cpp
     column_null_predicate.cpp
     column_or_predicate.cpp
+    column_and_predicate.cpp
     column_expr_predicate.cpp
     conjunctive_predicates.cpp
+    runtime_filter_predicate.cpp
     predicate_tree/predicate_tree.cpp
     convert_helper.cpp
     delete_predicates.cpp
@@ -214,6 +214,8 @@ set(STORAGE_FILES
     lake/cloud_native_index_compaction_task.cpp
     lake/metacache.cpp
     lake/lake_primary_key_recover.cpp
+    lake/load_spill_block_manager.cpp
+    lake/spill_mem_table_sink.cpp
     sstable/block_builder.cpp
     sstable/block.cpp
     sstable/coding.cpp

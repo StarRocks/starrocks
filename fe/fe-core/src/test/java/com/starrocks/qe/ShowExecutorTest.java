@@ -43,6 +43,7 @@ import com.starrocks.analysis.LabelName;
 import com.starrocks.analysis.SlotRef;
 import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TableName;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
 import com.starrocks.catalog.BaseTableInfo;
 import com.starrocks.catalog.Catalog;
 import com.starrocks.catalog.Column;
@@ -79,7 +80,6 @@ import com.starrocks.datacache.DataCacheMgr;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.persist.ColumnIdExpr;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
@@ -976,7 +976,7 @@ public class ShowExecutorTest {
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
-        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("testDb", (String) null);
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("default_catalog", "testDb", (String) null);
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         verifyShowMaterializedViewResult(resultSet);
@@ -984,7 +984,7 @@ public class ShowExecutorTest {
 
     @Test
     public void testShowMaterializedViewFromUnknownDatabase() throws DdlException, AnalysisException {
-        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("emptyDb", (String) null);
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("default_catalog", "emptyDb", (String) null);
 
         expectedEx.expect(SemanticException.class);
         expectedEx.expectMessage("Unknown database 'emptyDb'");
@@ -996,12 +996,12 @@ public class ShowExecutorTest {
         ctx.setCurrentUserIdentity(UserIdentity.ROOT);
         ctx.setCurrentRoleIds(Sets.newHashSet(PrivilegeBuiltinConstants.ROOT_ROLE_ID));
 
-        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("testDb", "bcd%");
+        ShowMaterializedViewsStmt stmt = new ShowMaterializedViewsStmt("default_catalog", "testDb", "bcd%");
 
         ShowResultSet resultSet = ShowExecutor.execute(stmt, ctx);
         Assert.assertFalse(resultSet.next());
 
-        stmt = new ShowMaterializedViewsStmt("testDb", "%test%");
+        stmt = new ShowMaterializedViewsStmt("default_catalog", "testDb", "%test%");
 
         resultSet = ShowExecutor.execute(stmt, ctx);
         verifyShowMaterializedViewResult(resultSet);
@@ -1043,7 +1043,7 @@ public class ShowExecutorTest {
         Assert.assertEquals("10", resultSet.getString(mvSchemaTable.size() - 5));
         Assert.assertEquals(expectedSqlText, resultSet.getString(mvSchemaTable.size() - 4));
         Assert.assertEquals("", resultSet.getString(mvSchemaTable.size() - 3));
-        Assert.assertEquals("VALID", resultSet.getString(mvSchemaTable.size() - 2));
+        Assert.assertTrue(resultSet.getString(mvSchemaTable.size() - 2).contains("UNKNOWN"));
         Assert.assertEquals("", resultSet.getString(mvSchemaTable.size() - 1));
         Assert.assertFalse(resultSet.next());
     }

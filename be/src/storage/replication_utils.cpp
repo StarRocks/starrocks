@@ -30,6 +30,7 @@
 #include "http/http_client.h"
 #include "runtime/client_cache.h"
 #include "service/backend_options.h"
+#include "util/network_util.h"
 #include "util/string_parser.hpp"
 #include "util/thrift_rpc_helper.h"
 
@@ -247,9 +248,9 @@ Status ReplicationUtils::download_remote_snapshot(
     return Status::OK();
 #else
 
-    std::string remote_url_prefix =
-            strings::Substitute("http://$0:$1$2?token=$3&type=V2&file=$4/$5/$6/", host, http_port, HTTP_REQUEST_PREFIX,
-                                remote_token, remote_snapshot_path, remote_tablet_id, remote_schema_hash);
+    std::string remote_url_prefix = strings::Substitute(
+            "http://$0$1?token=$2&type=V2&file=$3/$4/$5/", get_host_port(host, http_port), HTTP_REQUEST_PREFIX,
+            remote_token, remote_snapshot_path, remote_tablet_id, remote_schema_hash);
 
     std::vector<string> file_name_list;
     std::vector<int64_t> file_size_list;
@@ -286,7 +287,7 @@ Status ReplicationUtils::download_remote_snapshot(
             estimate_timeout_sec = config::replication_min_speed_time_seconds;
         }
 
-        VLOG(2) << "Downloading " << remote_file_url << ", bytes: " << file_size
+        VLOG(2) << "Downloading " << remote_file_name << ", bytes: " << file_size
                 << ", timeout: " << estimate_timeout_sec << "s";
 
         RETURN_IF_ERROR(download_remote_file(remote_file_url, estimate_timeout_sec,
@@ -322,8 +323,8 @@ StatusOr<std::string> ReplicationUtils::download_remote_snapshot_file(
 #else
 
     std::string remote_file_url = strings::Substitute(
-            "http://$0:$1$2?token=$3&type=V2&file=$4/$5/$6/$7", host, http_port, HTTP_REQUEST_PREFIX, remote_token,
-            remote_snapshot_path, remote_tablet_id, remote_schema_hash, file_name);
+            "http://$0$1?token=$2&type=V2&file=$3/$4/$5/$6", get_host_port(host, http_port), HTTP_REQUEST_PREFIX,
+            remote_token, remote_snapshot_path, remote_tablet_id, remote_schema_hash, file_name);
 
     std::string file_content;
     file_content.reserve(4 * 1024 * 1024);

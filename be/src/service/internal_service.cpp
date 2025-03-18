@@ -420,6 +420,11 @@ void PInternalServiceImplBase<T>::tablet_writer_cancel(google::protobuf::RpcCont
                                                        google::protobuf::Closure* done) {}
 
 template <typename T>
+void PInternalServiceImplBase<T>::load_diagnose(google::protobuf::RpcController* controller,
+                                                const PLoadDiagnoseRequest* request, PLoadDiagnoseResult* response,
+                                                google::protobuf::Closure* done) {}
+
+template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
                                                         const PExecPlanFragmentRequest* request) {
     auto ser_request = cntl->request_attachment().to_string();
@@ -550,7 +555,7 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
         }
         if (cancel_query_ctx) {
             // cancel query_id
-            query_ctx->cancel(Status::Cancelled(reason_string));
+            query_ctx->cancel(Status::Cancelled(reason_string), true);
         } else {
             // cancel fragment
             auto&& fragment_ctx = query_ctx->fragment_mgr()->get(tid);
@@ -1279,10 +1284,18 @@ void PInternalServiceImplBase<T>::stream_load(google::protobuf::RpcController* c
                                               google::protobuf::Closure* done) {
     ClosureGuard closure_guard(done);
     auto* cntl = static_cast<brpc::Controller*>(cntl_base);
-    BatchWriteMgr::receive_stream_load_rpc(_exec_env, cntl, request, response);
+    _exec_env->batch_write_mgr()->receive_stream_load_rpc(_exec_env, cntl, request, response);
+}
+
+template <typename T>
+void PInternalServiceImplBase<T>::update_transaction_state(google::protobuf::RpcController* cntl_base,
+                                                           const PUpdateTransactionStateRequest* request,
+                                                           PUpdateTransactionStateResponse* response,
+                                                           google::protobuf::Closure* done) {
+    ClosureGuard closure_guard(done);
+    _exec_env->batch_write_mgr()->update_transaction_state(request, response);
 }
 
 template class PInternalServiceImplBase<PInternalService>;
-template class PInternalServiceImplBase<doris::PBackendService>;
 
 } // namespace starrocks

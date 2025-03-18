@@ -239,6 +239,74 @@ SELECT * FROM table2;
 4 rows in set (0.01 sec)
 ```
 
+#### 合并 Stream Load 请求
+
+从 v3.4.0 开始，系统支持合并多个 Stream Load 请求。
+
+Merge Commit（合并提交）是针对 Stream Load 的优化设计，适用于高并发、小批量（从 KB 到数十 MB）的实时导入场景。在先前版本中，每个 Stream Load 请求都会生成一个事务和一个数据版本，这在高并发导入场景下会导致以下问题：
+
+- 过多的数据版本会影响查询性能，而限制版本数量可能会引发 `too many versions` 错误。
+- 通过 Compaction 合并数据版本会增加资源消耗。
+- 会生成大量小文件，增加 IOPS 和 I/O 延迟。存算分离模式下，还会提高云存储成本。
+- Leader FE 节点作为事务管理者可能成为单点瓶颈。
+
+Merge Commit 将一个时间窗口内的多个并发的 Stream Load 请求合并为一个事务，从而缓解这些问题。这种方式减少了高并发请求生成的事务和版本数量，从而提升导入性能。
+
+Merge Commit 支持同步模式和异步模式两种方式，每种方式各有优缺点，可以根据实际需求进行选择。
+
+- **同步模式**
+
+  服务器在合并的事务提交完成后才返回，确保导入成功且数据可见。
+
+- **异步模式**
+
+  服务器在接收到数据后立即返回，但不保证导入成功。
+
+| **模式**     | **优点**                                               | **缺点**                                            |
+| ------------ | ------------------------------------------------------------ | ------------------------------------------------------------ |
+| 同步模式  | <ul><li>确保请求返回时数据已持久化且可见。</li><li>保证同一客户端的多个顺序发送的请求按序执行。</li></ul> | 单个客户端的每个请求会被阻塞，直至服务器合并窗口结束。如果窗口过大，可能会降低单个客户端的数据处理能力。 |
+| 异步模式 | 客户端可以在不等待服务器关闭合并窗口的情况下发送后续导入请求，提高导入吞吐量。 | <ul><li>返回时不保证数据已持久化或可见。客户端需要在稍后验证事务状态。</li><li>不保证同一客户端的多个顺序发送的请求按序执行。</li></ul> |
+
+##### 提交导入作业
+
+- 使用以下命令发起一个启用了 Merge Commit 功能的 Stream Load 作业，模式为同步模式，合并窗口设置为 `5000` 毫秒，并行度设置为 `2`：
+
+  ```Bash
+  curl --location-trusted -u <username>:<password> \
+      -H "Expect:100-continue" \
+      -H "column_separator:," \
+      -H "columns: id, name, score" \
+      -H "enable_merge_commit:true" \
+      -H "merge_commit_interval_ms:5000" \
+      -H "merge_commit_parallel:2" \
+      -T example1.csv -XPUT \
+      http://<fe_host>:<fe_http_port>/api/mydatabase/table1/_stream_load
+  ```
+
+- 使用以下命令发起一个启用了 Merge Commit 功能的 Stream Load 作业，模式为异步模式，合并窗口设置为 `60000` 毫秒，并行度设置为 `2`：
+
+  ```Bash
+  curl --location-trusted -u <username>:<password> \
+      -H "Expect:100-continue" \
+      -H "column_separator:," \
+      -H "columns: id, name, score" \
+      -H "enable_merge_commit:true" \
+      -H "merge_commit_async:true" \
+      -H "merge_commit_interval_ms:60000" \
+      -H "merge_commit_parallel:2" \
+      -T example1.csv -XPUT \
+      http://<fe_host>:<fe_http_port>/api/mydatabase/table1/_stream_load
+  ```
+
+:::note
+
+- Merge Commit 仅支持单库单表的**同构**导入请求合并。“同构”是指的 Stream Load 的参数完全一致，包括：公共参数、JSON 格式参数、CSV 格式参数、`opt_properties` 以及 Merge Commit 参数。
+- 导入 CSV 格式的数据时，需要确保每行数据结尾都有行分隔符，不支持 `skip_header`。
+- 服务器会自动生成事务标签，手动指定标签会被忽略。
+- Merge Commit 会将多个导入请求合并到一个事务中。如果某个请求存在数据质量问题，则事务中的所有请求都会失败。
+
+:::
+
 #### 查看 Stream Load 导入进度
 
 导入作业结束后，StarRocks 会以 JSON 格式返回本次导入作业的结果信息，具体请参见 STREAM LOAD 文档中“[返回值](../sql-reference/sql-statements/loading_unloading/STREAM_LOAD.md#返回值)”章节。

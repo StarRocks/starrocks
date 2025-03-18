@@ -188,13 +188,10 @@ class StarRocksDDLCompiler(MySQLDDLCompiler):
                 if column.primary_key:
                     first_pk = True
             except exc.CompileError as ce:
-                util.raise_(
-                    exc.CompileError(
-                        util.u("(in table '%s', column '%s'): %s")
-                        % (table.description, column.name, ce.args[0])
-                    ),
-                    from_=ce,
-                )
+                raise exc.CompileError(
+                    "(in table '%s', column '%s'): %s"
+                    % (table.description, column.name, ce.args[0])
+                ) from ce
 
         # N.B. Primary Key is specified in post_create_table
         #  Indexes are created by SQLA after the creation of the table using CREATE INDEX
@@ -429,7 +426,7 @@ class StarRocksDialect(MySQLDialect_pymysql):
             ).exec_driver_sql(st)
         except exc.DBAPIError as e:
             if self._extract_error_code(e.orig) == 1146:
-                util.raise_(exc.NoSuchTableError(full_name), replace_context=e)
+                raise exc.NoSuchTableError(full_name) from e
             else:
                 raise
         index_results = self._compat_fetchall(rp, charset=charset)

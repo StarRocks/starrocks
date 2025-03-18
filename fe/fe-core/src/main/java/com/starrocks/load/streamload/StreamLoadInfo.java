@@ -282,9 +282,6 @@ public class StreamLoadInfo {
         streamLoadInfo.setOptionalFromStreamLoad(params);
         String warehouseName = params.getWarehouse().orElse(DEFAULT_WAREHOUSE_NAME);
         Warehouse warehouse = GlobalStateMgr.getCurrentState().getWarehouseMgr().getWarehouse(warehouseName);
-        if (warehouse == null) {
-            throw new StarRocksException(String.format("Warehouse [%s] does not exist", warehouseName));
-        }
         streamLoadInfo.setWarehouseId(warehouse.getId());
         return streamLoadInfo;
     }

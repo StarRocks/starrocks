@@ -169,6 +169,7 @@ struct TSpillOptions {
   22: optional TSpillToRemoteStorageOptions spill_to_remote_storage_options;
   23: optional bool enable_spill_buffer_read;
   24: optional i64 max_spill_read_buffer_bytes_per_driver;
+  25: optional i64 spill_hash_join_probe_op_max_bytes;
 }
 
 // Query options with their respective defaults
@@ -321,9 +322,16 @@ struct TQueryOptions {
 
   141: optional i32 datacache_evict_probability;
 
+  142: optional bool enable_pipeline_event_scheduler;
+
   150: optional map<string, string> ann_params;
   151: optional double pq_refine_factor;
   152: optional double k_factor;
+
+  160: optional bool enable_join_runtime_filter_pushdown;
+
+  170: optional bool enable_parquet_reader_bloom_filter;
+  171: optional bool enable_parquet_reader_page_index;
 }
 
 // A scan range plus the parameters needed to execute that scan.
@@ -334,6 +342,12 @@ struct TScanRangeParams {
   3: optional bool empty = false;
   // if there is no more scan range from this scan node.
   4: optional bool has_more = false;
+}
+
+struct TExecDebugOption {
+  1: optional Types.TPlanNodeId debug_node_id
+  2: optional PlanNodes.TDebugAction debug_action
+  3: optional i32 value
 }
 
 // Parameters for a single execution instance of a particular TPlanFragment
@@ -359,11 +373,6 @@ struct TPlanFragmentExecParams {
   // The number of output partitions is destinations.size().
   5: list<DataSinks.TPlanFragmentDestination> destinations
 
-  // Debug options: perform some action in a particular phase of a particular node
-  6: optional Types.TPlanNodeId debug_node_id
-  7: optional PlanNodes.TExecNodePhase debug_phase
-  8: optional PlanNodes.TDebugAction debug_action
-
   // Id of this fragment in its role as a sender.
   9: optional i32 sender_id
   10: optional i32 num_senders
@@ -382,7 +391,10 @@ struct TPlanFragmentExecParams {
 
   70: optional i32 pipeline_sink_dop
 
-  73: optional bool report_when_finish;
+  73: optional bool report_when_finish
+
+  // Debug options: perform some action in a particular phase of a particular node
+  74: optional list<TExecDebugOption> exec_debug_options
 }
 
 // Global query parameters assigned by the coordinator.

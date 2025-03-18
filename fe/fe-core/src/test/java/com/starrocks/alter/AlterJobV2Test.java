@@ -383,5 +383,6 @@ public class AlterJobV2Test {
                     GlobalStateMgr.getCurrentState().getSchemaChangeHandler().getAlterJobsV2().get(alterJobV2Old.jobId);
 
         Assert.assertEquals(alterJobV2Old.jobId, alterJobV2New.jobId);
+        Assert.assertTrue(alterJobV2Old.lakePublishVersion());
     }
 }

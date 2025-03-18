@@ -60,6 +60,8 @@ import com.starrocks.proto.PQueryStatistics;
 import com.starrocks.proto.PTriggerProfileReportResult;
 import com.starrocks.proto.PUpdateFailPointStatusRequest;
 import com.starrocks.proto.PUpdateFailPointStatusResponse;
+import com.starrocks.proto.PUpdateTransactionStateRequest;
+import com.starrocks.proto.PUpdateTransactionStateResponse;
 import com.starrocks.proto.PublishLogVersionBatchRequest;
 import com.starrocks.proto.PublishLogVersionRequest;
 import com.starrocks.proto.PublishLogVersionResponse;
@@ -534,6 +536,11 @@ public class MockedBackend {
 
         public Future<PProcessDictionaryCacheResult> processDictionaryCache(PProcessDictionaryCacheRequest request) {
             return null;
+        }
+
+        @Override
+        public Future<PUpdateTransactionStateResponse> updateTransactionState(PUpdateTransactionStateRequest request) {
+            throw new NotImplementedException("TODO");
         }
     }
 

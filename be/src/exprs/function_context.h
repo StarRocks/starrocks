@@ -22,6 +22,7 @@
 #include <string>
 #include <vector>
 
+#include "column/column.h"
 #include "common/status.h"
 #include "runtime/types.h"
 #include "types/logical_type.h"
@@ -35,7 +36,6 @@ class Column;
 class Slice;
 struct JavaUDAFContext;
 struct NgramBloomFilterState;
-using ColumnPtr = std::shared_ptr<Column>;
 
 class FunctionContext {
 public:
@@ -128,7 +128,7 @@ public:
     // Return true if it's constant and not null
     bool is_notnull_constant_column(int i) const;
 
-    std::shared_ptr<starrocks::Column> get_constant_column(int arg_idx) const;
+    ColumnPtr get_constant_column(int arg_idx) const;
 
     bool is_udf() { return _is_udf; }
     void set_is_udf(bool is_udf) { this->_is_udf = is_udf; }
@@ -145,7 +145,7 @@ public:
     /// it.
     FunctionContext* clone(MemPool* pool);
 
-    void set_constant_columns(std::vector<ColumnPtr> columns) { _constant_columns = std::move(columns); }
+    void set_constant_columns(Columns columns) { _constant_columns = std::move(columns); }
 
     MemPool* mem_pool() { return _mem_pool; }
 
@@ -205,7 +205,7 @@ private:
     // TODO: support complex type
     std::vector<FunctionContext::TypeDesc> _arg_types;
 
-    std::vector<ColumnPtr> _constant_columns;
+    Columns _constant_columns;
 
     // Indicates whether this context has been closed. Used for verification/debugging.
     bool _is_udf = false;

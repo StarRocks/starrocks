@@ -326,6 +326,21 @@ public:
 
     const TJoinOp::type& join_type() const { return _join_type; }
 
+    void attach_probe_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _builder_observable.add_observer(state, observer);
+    }
+    void attach_build_observer(RuntimeState* state, pipeline::PipelineObserver* observer) {
+        _probe_observable.add_observer(state, observer);
+    }
+
+    // build status changed. notify probe
+    auto defer_notify_probe() {
+        return DeferOp([this]() { _builder_observable.notify_source_observers(); });
+    }
+    auto defer_notify_build() {
+        return DeferOp([this]() { _probe_observable.notify_source_observers(); });
+    }
+
 private:
     static bool _has_null(const ColumnPtr& column);
 
@@ -336,9 +351,9 @@ private:
         for (auto& expr_ctx : expr_ctxs) {
             ASSIGN_OR_RETURN(auto column_ptr, expr_ctx->evaluate(chunk.get()));
             if (column_ptr->only_null()) {
-                ColumnPtr column = ColumnHelper::create_column(expr_ctx->root()->type(), true);
+                MutableColumnPtr column = ColumnHelper::create_column(expr_ctx->root()->type(), true);
                 column->append_nulls(chunk->num_rows());
-                key_columns.emplace_back(column);
+                key_columns.emplace_back(std::move(column));
             } else if (column_ptr->is_constant()) {
                 auto* const_column = ColumnHelper::as_raw_column<ConstColumn>(column_ptr);
                 const_column->data_column()->assign(chunk->num_rows(), 0);
@@ -463,6 +478,10 @@ private:
     size_t _hash_table_build_rows{};
     bool _mor_reader_mode = false;
     bool _enable_late_materialization = false;
+
+    // probe side notify build observe
+    pipeline::Observable _builder_observable;
+    pipeline::Observable _probe_observable;
 };
 
 } // namespace starrocks

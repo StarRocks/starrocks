@@ -19,7 +19,7 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.JoinOperator;
-import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.Table;
 import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.JoinHelper;
 import com.starrocks.sql.optimizer.OptExpression;
@@ -31,8 +31,8 @@ import com.starrocks.sql.optimizer.operator.OperatorBuilderFactory;
 import com.starrocks.sql.optimizer.operator.Projection;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
-import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalProjectOperator;
+import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.scalar.BinaryPredicateOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
@@ -98,16 +98,13 @@ public class UniquenessBasedTablePruneRule implements TreeRewriteRule {
 
         @Override
         public Boolean visitLogicalTableScan(OptExpression optExpression, Void context) {
-            if (!(optExpression.getOp() instanceof LogicalOlapScanOperator)) {
-                return visit(optExpression, context);
-            }
-            LogicalOlapScanOperator scanOp = optExpression.getOp().cast();
-            OlapTable table = (OlapTable) scanOp.getTable();
+            LogicalScanOperator scanOp = optExpression.getOp().cast();
+            Table table = scanOp.getTable();
             if (!table.hasUniqueConstraints()) {
                 return visit(optExpression, context);
             }
             Map<String, ColumnRefOperator> nameToColRefMap = scanOp.getColumnNameToColRefMap();
-            List<ColumnRefSet> uniqueKeys = table.getUniqueConstraints().stream().map(uc ->
+            List<ColumnRefSet> uniqueKeys = table.  getUniqueConstraints().stream().map(uc ->
                     new ColumnRefSet(uc.getUniqueColumnNames(table).stream().map(nameToColRefMap::get)
                             .collect(Collectors.toList()))).collect(Collectors.toList());
             uniqueKeys = propagateThroughProjection(optExpression, uniqueKeys);
@@ -277,7 +274,7 @@ public class UniquenessBasedTablePruneRule implements TreeRewriteRule {
         public Optional<OptExpression> visit(OptExpression optExpression, ColumnRefSet context) {
             return Optional.empty();
         }
-        
+
         private Optional<OptExpression> pruneJoin(OptExpression optExpression, OptExpression retainedChd,
                                                   OptExpression prunedChd) {
             Operator joinOp = optExpression.getOp();

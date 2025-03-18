@@ -46,11 +46,9 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.FileTableFunctionRelation;
 import com.starrocks.sql.ast.InsertStmt;
-import com.starrocks.sql.ast.InsertStmt.ColumnMatchPolicy;
 import com.starrocks.sql.ast.LoadStmt;
 import com.starrocks.sql.ast.PartitionNames;
 import com.starrocks.sql.ast.QueryRelation;
-import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.Relation;
 import com.starrocks.sql.ast.SelectListItem;
 import com.starrocks.sql.ast.SelectRelation;
@@ -217,13 +215,34 @@ public class InsertAnalyzer {
             }
         }
 
+        // Set insert stmt target columns using select output columns if match column by name
+        QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
+        if (insertStmt.isColumnMatchByName()) {
+            if (query instanceof ValuesRelation) {
+                throw new SemanticException("Insert match column by name does not support values()");
+            }
+
+            Set<String> selectColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
+            for (String colName : query.getColumnOutputNames()) {
+                if (!selectColumnNames.add(colName)) {
+                    ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, colName);
+                }
+            }
+
+            Preconditions.checkState(insertStmt.getTargetColumnNames() == null);
+            // column name is case insensitive
+            insertStmt.setTargetColumnNames(
+                    query.getColumnOutputNames().stream().map(String::toLowerCase).collect(Collectors.toList()));
+        }
+
         // Build target columns
         List<Column> targetColumns;
         Set<String> mentionedColumns = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
         if (insertStmt.getTargetColumnNames() == null) {
             if (table instanceof OlapTable) {
-                targetColumns = new ArrayList<>(((OlapTable) table).getBaseSchemaWithoutGeneratedColumn());
-                mentionedColumns.addAll(((OlapTable) table).getBaseSchemaWithoutGeneratedColumn().stream().map(Column::getName)
+                OlapTable olapTable = (OlapTable) table;
+                targetColumns = new ArrayList<>(olapTable.getBaseSchemaWithoutGeneratedColumn());
+                mentionedColumns.addAll(olapTable.getBaseSchemaWithoutGeneratedColumn().stream().map(Column::getName)
                         .collect(Collectors.toSet()));
             } else {
                 targetColumns = new ArrayList<>(table.getBaseSchema());
@@ -265,8 +284,10 @@ public class InsertAnalyzer {
         if (!insertStmt.usePartialUpdate()) {
             for (Column column : table.getBaseSchema()) {
                 Column.DefaultValueType defaultValueType = column.getDefaultValueType();
-                if (defaultValueType == Column.DefaultValueType.NULL && !column.isAllowNull() &&
-                        !column.isAutoIncrement() && !column.isGeneratedColumn() &&
+                if (defaultValueType == Column.DefaultValueType.NULL &&
+                        !column.isAllowNull() &&
+                        !column.isAutoIncrement() &&
+                        !column.isGeneratedColumn() &&
                         !mentionedColumns.contains(column.getName())) {
                     StringBuilder msg = new StringBuilder();
                     for (String s : mentionedColumns) {
@@ -286,34 +307,9 @@ public class InsertAnalyzer {
         }
 
         // check target and source columns match
-        QueryRelation query = insertStmt.getQueryStatement().getQueryRelation();
-        if (insertStmt.isColumnMatchByPosition()) {
-            if (query.getRelationFields().size() != mentionedColumnSize) {
-                ErrorReport.reportSemanticException(ErrorCode.ERR_INSERT_COLUMN_COUNT_MISMATCH, mentionedColumnSize,
-                        query.getRelationFields().size());
-            }
-        } else {
-            Preconditions.checkState(insertStmt.isColumnMatchByName());
-            if (query instanceof ValuesRelation) {
-                throw new SemanticException("Insert match column by name does not support values()");
-            }
-
-            Set<String> selectColumnNames = Sets.newTreeSet(String.CASE_INSENSITIVE_ORDER);
-            for (String colName : insertStmt.getQueryStatement().getQueryRelation().getColumnOutputNames()) {
-                if (!selectColumnNames.add(colName)) {
-                    ErrorReport.reportSemanticException(ErrorCode.ERR_DUP_FIELDNAME, colName);
-                }
-            }
-            if (!selectColumnNames.containsAll(mentionedColumns)) {
-                mentionedColumns.removeAll(selectColumnNames);
-                ErrorReport.reportSemanticException(
-                        ErrorCode.ERR_INSERT_COLUMN_NAME_MISMATCH, "Target", String.join(", ", mentionedColumns), "source");
-            }
-            if (!mentionedColumns.containsAll(selectColumnNames)) {
-                selectColumnNames.removeAll(mentionedColumns);
-                ErrorReport.reportSemanticException(
-                        ErrorCode.ERR_INSERT_COLUMN_NAME_MISMATCH, "Source", String.join(", ", selectColumnNames), "target");
-            }
+        if (query.getRelationFields().size() != mentionedColumnSize) {
+            ErrorReport.reportSemanticException(ErrorCode.ERR_INSERT_COLUMN_COUNT_MISMATCH, mentionedColumnSize,
+                    query.getRelationFields().size());
         }
 
         // check default value expr
@@ -339,23 +335,17 @@ public class InsertAnalyzer {
         if (session.getDumpInfo() != null) {
             session.getDumpInfo().addTable(insertStmt.getTableName().getDb(), table);
         }
+
+        // Set table function table used for load
+        List<FileTableFunctionRelation> relations =
+                AnalyzerUtils.collectFileTableFunctionRelation(insertStmt.getQueryStatement());
+        for (FileTableFunctionRelation relation : relations) {
+            ((TableFunctionTable) relation.getTable()).setFilesTableType(TableFunctionTable.FilesTableType.LOAD);
+        }
     }
 
     private static void analyzeProperties(InsertStmt insertStmt, ConnectContext session) {
         Map<String, String> properties = insertStmt.getProperties();
-
-        // column match by related properties
-        // parse the property and remove it for 'LoadStmt.checkProperties' validation
-        if (properties.containsKey(InsertStmt.PROPERTY_MATCH_COLUMN_BY)) {
-            String property = properties.remove(InsertStmt.PROPERTY_MATCH_COLUMN_BY);
-            ColumnMatchPolicy columnMatchPolicy = ColumnMatchPolicy.fromString(property);
-            if (columnMatchPolicy == null) {
-                String msg = String.format("%s (case insensitive)", String.join(", ", ColumnMatchPolicy.getCandidates()));
-                ErrorReport.reportSemanticException(
-                        ErrorCode.ERR_INVALID_VALUE, InsertStmt.PROPERTY_MATCH_COLUMN_BY, property, msg);
-            }
-            insertStmt.setColumnMatchPolicy(columnMatchPolicy);
-        }
 
         // check common properties
         // use session variable if not set max_filter_ratio, strict_mode, timeout property
@@ -377,15 +367,13 @@ public class InsertAnalyzer {
         }
 
         // push down some properties to file table function
-        QueryStatement queryStatement = insertStmt.getQueryStatement();
-        if (queryStatement != null) {
-            List<FileTableFunctionRelation> relations = AnalyzerUtils.collectFileTableFunctionRelation(queryStatement);
-            for (FileTableFunctionRelation relation : relations) {
-                Map<String, String> tableFunctionProperties = relation.getProperties();
-                for (String property : PUSH_DOWN_PROPERTIES_SET) {
-                    if (properties.containsKey(property)) {
-                        tableFunctionProperties.put(property, properties.get(property));
-                    }
+        List<FileTableFunctionRelation> relations =
+                AnalyzerUtils.collectFileTableFunctionRelation(insertStmt.getQueryStatement());
+        for (FileTableFunctionRelation relation : relations) {
+            Map<String, String> tableFunctionProperties = relation.getProperties();
+            for (String property : PUSH_DOWN_PROPERTIES_SET) {
+                if (properties.containsKey(property)) {
+                    tableFunctionProperties.put(property, properties.get(property));
                 }
             }
         }

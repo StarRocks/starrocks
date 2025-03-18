@@ -23,13 +23,13 @@ import com.starrocks.common.util.DateUtils;
 import com.starrocks.load.pipe.PipeFileRecord;
 import com.starrocks.load.pipe.PipeId;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.qe.StmtExecutor;
-import com.starrocks.server.WarehouseManager;
-import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TResultBatch;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Mock;
 import mockit.MockUp;
@@ -37,6 +37,7 @@ import mockit.Mocked;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.Path;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Ignore;
 import org.junit.Test;
 
@@ -50,12 +51,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class FileListRepoTest {
 
-    @Mocked
-    private WarehouseManager warehouseManager;
-
-    public FileListRepoTest() {
-        warehouseManager = new WarehouseManager();
-        warehouseManager.initDefaultWarehouse();
+    @Before
+    public void setUp() {
+        UtFrameUtils.mockInitWarehouseEnv();
     }
 
     @Test
@@ -185,7 +183,7 @@ public class FileListRepoTest {
     }
 
     private void mockExecutor() {
-        new MockUp<RepoExecutor>() {
+        new MockUp<SimpleExecutor>() {
             private boolean ddlExecuted = false;
 
             @Mock
@@ -216,11 +214,11 @@ public class FileListRepoTest {
                 return true;
             }
         };
-        RepoExecutor executor = RepoExecutor.getInstance();
+        SimpleExecutor executor = SimpleExecutor.getRepoExecutor();
         RepoCreator creator = RepoCreator.getInstance();
 
         // failed for the first time
-        new MockUp<RepoExecutor>() {
+        new MockUp<SimpleExecutor>() {
             @Mock
             public void executeDDL(String sql) {
                 throw new RuntimeException("ddl failed");
@@ -238,7 +236,7 @@ public class FileListRepoTest {
             }
         };
         AtomicInteger changed = new AtomicInteger(0);
-        new MockUp<RepoExecutor>() {
+        new MockUp<SimpleExecutor>() {
             @Mock
             public void executeDDL(String sql) {
                 changed.addAndGet(1);
@@ -267,7 +265,7 @@ public class FileListRepoTest {
         FileListTableRepo repo = new FileListTableRepo();
         repo.setPipeId(new PipeId(1, 1));
         RepoAccessor accessor = RepoAccessor.getInstance();
-        RepoExecutor executor = RepoExecutor.getInstance();
+        SimpleExecutor executor = SimpleExecutor.getRepoExecutor();
         new Expectations(executor) {
             {
                 executor.executeDQL(anyString);
@@ -384,7 +382,7 @@ public class FileListRepoTest {
             }
         };
 
-        RepoExecutor executor = RepoExecutor.getInstance();
+        SimpleExecutor executor = SimpleExecutor.getRepoExecutor();
         new Expectations(executor) {
             {
                 executor.executeDML(
@@ -412,11 +410,9 @@ public class FileListRepoTest {
             }
         };
 
-        RepoExecutor executor = RepoExecutor.getInstance();
+        SimpleExecutor executor = SimpleExecutor.getRepoExecutor();
 
         Assert.assertTrue(executor.executeDQL("select now()").isEmpty());
-
-        Assert.assertThrows(SemanticException.class, () -> executor.executeDML("insert into a.b values (1) "));
 
         Assert.assertThrows(RuntimeException.class, () -> executor.executeDDL("create table a (id int) "));
     }
@@ -427,7 +423,7 @@ public class FileListRepoTest {
         FileListTableRepo repo = new FileListTableRepo();
         repo.setPipeId(new PipeId(1, 1));
         RepoAccessor accessor = RepoAccessor.getInstance();
-        RepoExecutor executor = RepoExecutor.getInstance();
+        SimpleExecutor executor = SimpleExecutor.getRepoExecutor();
 
         new Expectations(executor) {
             {

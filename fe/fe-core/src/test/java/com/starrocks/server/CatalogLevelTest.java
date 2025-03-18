@@ -17,6 +17,7 @@ package com.starrocks.server;
 
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.IcebergTable;
@@ -24,7 +25,6 @@ import com.starrocks.catalog.Type;
 import com.starrocks.connector.hive.HiveMetaClient;
 import com.starrocks.connector.hive.HiveMetastoreApiConverter;
 import com.starrocks.connector.hive.HiveMetastoreTest;
-import com.starrocks.privilege.AccessDeniedException;
 import com.starrocks.qe.DDLStmtExecutor;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.Authorizer;
@@ -83,24 +83,21 @@ public class CatalogLevelTest {
 
         AnalyzeTestUtil.getConnectContext().setCurrentUserIdentity(new UserIdentity("u1", "%"));
         Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
-                AnalyzeTestUtil.getConnectContext().getCurrentUserIdentity(),
-                AnalyzeTestUtil.getConnectContext().getCurrentRoleIds(), "hive_catalog", "hive_db"));
+                AnalyzeTestUtil.getConnectContext(), "hive_catalog", "hive_db"));
 
         String grantSql = "grant all on CATALOG hive_catalog to u1";
         GrantPrivilegeStmt grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql,
                 AnalyzeTestUtil.getConnectContext());
         DDLStmtExecutor.execute(grantPrivilegeStmt,  AnalyzeTestUtil.getConnectContext());
         Assert.assertThrows(AccessDeniedException.class, () -> Authorizer.checkAnyActionOnOrInDb(
-                AnalyzeTestUtil.getConnectContext().getCurrentUserIdentity(),
-                AnalyzeTestUtil.getConnectContext().getCurrentRoleIds(), "hive_catalog", "hive_db"));
+                AnalyzeTestUtil.getConnectContext(), "hive_catalog", "hive_db"));
 
         grantSql = "grant ALL on DATABASE hive_catalog.hive_db to u1";
         grantPrivilegeStmt = (GrantPrivilegeStmt) UtFrameUtils.parseStmtWithNewParser(grantSql,
                 AnalyzeTestUtil.getConnectContext());
         DDLStmtExecutor.execute(grantPrivilegeStmt,  AnalyzeTestUtil.getConnectContext());
         Authorizer.checkAnyActionOnOrInDb(
-                AnalyzeTestUtil.getConnectContext().getCurrentUserIdentity(),
-                AnalyzeTestUtil.getConnectContext().getCurrentRoleIds(), "hive_catalog", "hive_db");
+                AnalyzeTestUtil.getConnectContext(), "hive_catalog", "hive_db");
     }
 
     @Test

@@ -85,15 +85,16 @@ public class InsertLoadJob extends LoadJob {
     }
 
     public InsertLoadJob(String label, long dbId, long tableId, long txnId, String loadId, String user, long createTimestamp,
-            TLoadJobType type, long timeout, Coordinator coordinator) throws MetaNotFoundException {
+                         long timeout, long warehouseId, Coordinator coordinator) {
         super(dbId, label);
         this.tableId = tableId;
         this.createTimestamp = createTimestamp;
         this.loadStartTimestamp = createTimestamp;
         this.state = JobState.LOADING;
         this.jobType = EtlJobType.INSERT;
-        this.loadType = type;
+        this.loadType = coordinator.getLoadJobType();
         this.timeoutSecond = timeout;
+        this.warehouseId = warehouseId;
         this.coordinator = coordinator;
         this.loadIds.add(loadId);
         this.transactionId = txnId;
@@ -139,6 +140,7 @@ public class InsertLoadJob extends LoadJob {
             this.coordinator = null;
         } finally {
             writeUnlock();
+            GlobalStateMgr.getCurrentState().getGlobalTransactionMgr().getCallbackFactory().removeCallback(this.id);
         }
         // persistent
         GlobalStateMgr.getCurrentState().getEditLog().logEndLoadJob(
@@ -282,5 +284,9 @@ public class InsertLoadJob extends LoadJob {
 
     @Override
     public void replayOnVisible(TransactionState txnState) {
+    }
+
+    public long getTableId() {
+        return tableId;
     }
 }

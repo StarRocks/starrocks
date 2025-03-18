@@ -1,0 +1,45 @@
+-- name: test_olap_partition_scan_limit
+create database olap_partition_scan_limit_test_db;
+-- result:
+-- !result
+use olap_partition_scan_limit_test_db;
+-- result:
+-- !result
+CREATE TABLE olap_partition_scan_limit_test_table (
+  `a` varchar(65533),
+  `b` varchar(65533),
+  `ds` date
+) ENGINE=OLAP
+DUPLICATE KEY(`a`)
+PARTITION BY RANGE(`ds`)
+(
+START ("2024-09-20") END ("2024-09-27") EVERY (INTERVAL 1 DAY)
+)
+DISTRIBUTED BY HASH(`a`)
+PROPERTIES (
+"replication_num" = "1",
+"in_memory" = "false",
+"enable_persistent_index" = "true",
+"replicated_storage" = "true",
+"storage_medium" = "HDD",
+"compression" = "LZ4"
+);
+-- result:
+-- !result
+insert into olap_partition_scan_limit_test_table(a,b,ds) values('1','a','2024-09-20'),('2','a','2024-09-21'),('3','a','2024-09-22'),('4','a','2024-09-23'),('5','a','2024-09-24'),('6','a','2024-09-25'),('7','a','2024-09-26');
+-- result:
+-- !result
+select count(*) from olap_partition_scan_limit_test_table where ds>='2024-09-22';
+-- result:
+5
+-- !result
+set scan_olap_partition_num_limit=3;
+-- result:
+-- !result
+select count(*) from olap_partition_scan_limit_test_table where ds>='2024-09-22';
+-- result:
+E: (1064, 'Exceeded the limit of number of olap table partitions to be scanned. Number of partitions allowed: 3, number of partitions to be scanned: 5. Please adjust the SQL or change the limit by set variable scan_olap_partition_num_limit.')
+-- !result
+set scan_olap_partition_num_limit=0;
+-- result:
+-- !result

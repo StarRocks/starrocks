@@ -51,8 +51,8 @@ import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.analyzer.AstToStringBuilder;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.sql.ast.DropTableStmt;
-import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.statistics.ColumnStatistic;
@@ -116,7 +116,8 @@ public class HiveMetadataTest {
         client = new HiveMetastoreTest.MockedHiveMetaClient();
         metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
-                metastore, executorForHmsRefresh, 100, 10, 1000, false);
+                metastore, executorForHmsRefresh, executorForHmsRefresh,
+                100, 10, 1000, false);
         hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration(), MetastoreType.HMS, "hive_catalog");
 
         hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
@@ -132,7 +133,7 @@ public class HiveMetadataTest {
         // create connect context
         connectContext = UtFrameUtils.createDefaultCtx();
         columnRefFactory = new ColumnRefFactory();
-        optimizerContext = new OptimizerContext(new Memo(), columnRefFactory, connectContext);
+        optimizerContext = OptimizerFactory.mockContext(connectContext, columnRefFactory);
         hiveMetadata = new HiveMetadata("hive_catalog", new HdfsEnvironment(), hmsOps, fileOps, statisticsProvider,
                 Optional.empty(), executorForHmsRefresh, executorForHmsRefresh,
                 new ConnectorProperties(ConnectorType.HIVE));
@@ -290,7 +291,12 @@ public class HiveMetadataTest {
                         "  `col1` int(11) DEFAULT NULL\n" +
                         ")\n" +
                         "PARTITION BY (col1)\n" +
-                        "PROPERTIES (\"location\" = \"hdfs://127.0.0.1:10000/hive\");",
+                        "PROPERTIES (\"hive.table.serde.lib\" = \"org.apache.hadoop.hive.ql.io.orc.OrcSerde\",\"totalSize\" = " +
+                        "\"100\"," +
+                        "\"hive.table.column.names\" = \"col2\",\"numRows\" = \"50\",\"hive.table.column.types\" = \"INT\"," +
+                        "\"hive.table" +
+                        ".input.format\" = \"org.apache.hadoop.hive.ql.io.orc.OrcInputFormat\",\"location\" = \"hdfs://127.0.0" +
+                        ".1:10000/hive\");",
                 AstToStringBuilder.getExternalCatalogTableDdlStmt(hiveTable));
     }
 

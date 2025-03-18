@@ -88,6 +88,8 @@ public:
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
 
+    bool support_event_scheduler() const override { return false; }
+
 private:
     ObjectPool _pool;
     SortExecExprs _sort_exprs;
@@ -143,6 +145,8 @@ public:
     Status prepare(RuntimeState* state) override;
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override;
+
+    bool support_event_scheduler() const override { return false; }
 
 private:
     AggregatorFactoryPtr _hash_aggregator_factory;

@@ -714,6 +714,13 @@ public class ArrayTypeTest extends PlanTestBase {
         assertCContains(plan, "array_slice[([5: d_2, ARRAY<DECIMAL64(4,3)>, true], 1, 3); " +
                 "args: INVALID_TYPE,BIGINT,BIGINT; result: ARRAY<DECIMAL64(4,3)>;");
 
+        sql = "select array_contains([null], null), array_position([null], null)";
+        plan = getVerboseExplain(sql);
+        assertContains(plan, "  |  output columns:\n" +
+                "  |  2 <-> array_contains[([NULL], NULL); " +
+                "args: INVALID_TYPE,BOOLEAN; result: BOOLEAN; args nullable: true; result nullable: true]\n" +
+                "  |  3 <-> array_position[([NULL], NULL); " +
+                "args: INVALID_TYPE,BOOLEAN; result: INT; args nullable: true; result nullable: true]");
     }
 
     @Test
@@ -738,7 +745,29 @@ public class ArrayTypeTest extends PlanTestBase {
                 "count(distinct array_length(array_map(x -> x + 1, d_2))) from adec";
         String plan = getFragmentPlan(sql);
         assertCContains(plan, "  2:AGGREGATE (update finalize)\n" +
-                "  |  output: multi_distinct_count(array_length(array_map" +
-                "(<slot 10> -> CAST(<slot 10> AS DECIMAL64(13,3)) + 1, 5: d_2)))");
+                "  |  output: multi_distinct_count(11: array_length)\n" +
+                "  |  group by: \n" +
+                "  |  \n" +
+                "  1:Project\n" +
+                "  |  <slot 11> : array_length(array_map(<slot 10> -> CAST(<slot 10> AS DECIMAL64(13,3)) + 1, 5: d_2))\n" +
+                "  |  \n" +
+                "  0:OlapScanNode");
+    }
+
+    @Test
+    public void testLambdaFunction() throws Exception {
+        String sql = "select dense_rank() over(partition by v1 order by v2), " +
+                "array_filter(v3, x -> array_contains(v3, x)) from tarray";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, "3:Project\n" +
+                "  |  <slot 4> : 4: dense_rank()\n" +
+                "  |  <slot 6> : array_filter(3: v3, array_map(<slot 5> -> array_contains(3: v3, <slot 5>), 3: v3))");
+
+        sql =
+                "explain costs SELECT array_filter( s_1, " +
+                        "x -> array_length(array_filter(d_1, y -> y > 0)) > 0 ) AS filtered_activity_name," +
+                        " array_length(d_1) AS col_double_length FROM adec;";
+        plan = getCostExplain(sql);
+        assertNotContains(plan, "ColumnAccessPath: [/d_1/OFFSET]");
     }
 }

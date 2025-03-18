@@ -23,11 +23,11 @@
 #include "runtime/global_dict/parser.h"
 #include "storage/column_predicate_rewriter.h"
 #include "storage/lake/tablet.h"
-#include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/predicate_parser.h"
 #include "storage/predicate_tree/predicate_tree.hpp"
 #include "storage/projection_iterator.h"
 #include "storage/rowset/short_key_range_option.h"
+#include "storage/runtime_range_pruner.hpp"
 #include "util/starrocks_metrics.h"
 
 namespace starrocks::connector {
@@ -75,7 +75,7 @@ Status LakeDataSource::open(RuntimeState* state) {
     }
 
     // eval const conjuncts
-    RETURN_IF_ERROR(OlapScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status));
+    RETURN_IF_ERROR(ScanConjunctsManager::eval_const_conjuncts(_conjunct_ctxs, &_status));
     DictOptimizeParser::rewrite_descriptor(state, _conjunct_ctxs, thrift_lake_scan_node.dict_string_id_to_int_ids,
                                            &(tuple_desc->decoded_slots()));
 
@@ -92,7 +92,7 @@ Status LakeDataSource::open(RuntimeState* state) {
         enable_column_expr_predicate = thrift_lake_scan_node.enable_column_expr_predicate;
     }
 
-    OlapScanConjunctsManagerOptions opts;
+    ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &_conjunct_ctxs;
     opts.tuple_desc = tuple_desc;
     opts.obj_pool = &_obj_pool;
@@ -105,8 +105,8 @@ Status LakeDataSource::open(RuntimeState* state) {
     opts.pred_tree_params = state->fragment_ctx()->pred_tree_params();
     opts.driver_sequence = runtime_bloom_filter_eval_context.driver_sequence;
 
-    _conjuncts_manager = std::make_unique<OlapScanConjunctsManager>(std::move(opts));
-    OlapScanConjunctsManager& cm = *_conjuncts_manager;
+    _conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
+    ScanConjunctsManager& cm = *_conjuncts_manager;
 
     // Parse conjuncts via _conjuncts_manager.
     RETURN_IF_ERROR(cm.parse_conjuncts());
@@ -250,15 +250,20 @@ Status LakeDataSource::init_reader_params(const std::vector<OlapScanRange*>& key
                                           std::vector<uint32_t>& reader_columns) {
     const TLakeScanNode& thrift_lake_scan_node = _provider->_t_lake_scan_node;
     bool skip_aggregation = thrift_lake_scan_node.is_preaggregation;
-    auto parser = _obj_pool.add(new PredicateParser(_tablet_schema));
+    auto parser = _obj_pool.add(new OlapPredicateParser(_tablet_schema));
     _params.is_pipeline = true;
     _params.reader_type = READER_QUERY;
     _params.skip_aggregation = skip_aggregation;
     _params.profile = _runtime_profile;
     _params.runtime_state = _runtime_state;
-    _params.use_page_cache = !config::disable_storage_page_cache && _scan_range.fill_data_cache;
+    _params.use_page_cache =
+            !config::disable_storage_page_cache && _scan_range.fill_data_cache && !_scan_range.skip_page_cache;
     _params.lake_io_opts.fill_data_cache = _scan_range.fill_data_cache;
-    _params.runtime_range_pruner = OlapRuntimeScanRangePruner(parser, _conjuncts_manager->unarrived_runtime_filters());
+    _params.lake_io_opts.skip_disk_cache = _scan_range.skip_disk_cache;
+    _params.runtime_range_pruner = RuntimeScanRangePruner(parser, _conjuncts_manager->unarrived_runtime_filters());
+    _params.lake_io_opts.cache_file_only = _runtime_state->query_options().__isset.enable_cache_select &&
+                                           _runtime_state->query_options().enable_cache_select &&
+                                           config::lake_cache_select_in_physical_way;
     _params.splitted_scan_rows = _provider->get_splitted_scan_rows();
     _params.scan_dop = _provider->get_scan_dop();
 
@@ -361,8 +366,8 @@ Status LakeDataSource::init_tablet_reader(RuntimeState* runtime_state) {
 
         _non_pushdown_predicates_counter = ADD_COUNTER_SKIP_MERGE(_runtime_profile, "NonPushdownPredicates",
                                                                   TUnit::UNIT, TCounterMergeType::SKIP_ALL);
-        COUNTER_UPDATE(_non_pushdown_predicates_counter,
-                       static_cast<int64_t>(_not_push_down_conjuncts.size() + _non_pushdown_pred_tree.size()));
+        COUNTER_SET(_non_pushdown_predicates_counter,
+                    static_cast<int64_t>(_not_push_down_conjuncts.size() + _non_pushdown_pred_tree.size()));
         if (runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
             _runtime_profile->add_info_string(
                     "NonPushdownPredicateTree",
@@ -405,7 +410,7 @@ Status LakeDataSource::init_column_access_paths(Schema* schema) {
     _params.column_access_paths = &_column_access_paths;
 
     // update counter
-    COUNTER_UPDATE(_pushdown_access_paths_counter, leaf_size);
+    COUNTER_SET(_pushdown_access_paths_counter, leaf_size);
     return Status::OK();
 }
 
@@ -656,7 +661,7 @@ void LakeDataSource::update_counter() {
     COUNTER_UPDATE(_segments_read_count, _reader->stats().segments_read_count);
     COUNTER_UPDATE(_total_columns_data_page_count, _reader->stats().total_columns_data_page_count);
 
-    COUNTER_UPDATE(_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
+    COUNTER_SET(_pushdown_predicates_counter, (int64_t)_params.pred_tree.size());
 
     if (_runtime_state->fragment_ctx()->pred_tree_params().enable_show_in_profile) {
         _runtime_profile->add_info_string(

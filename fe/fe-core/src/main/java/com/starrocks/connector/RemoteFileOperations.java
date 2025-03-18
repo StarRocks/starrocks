@@ -14,7 +14,6 @@
 
 package com.starrocks.connector;
 
-import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.starrocks.catalog.Table;
@@ -36,7 +35,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -56,8 +54,7 @@ import static com.starrocks.connector.hive.HiveWriteUtils.fileCreatedByQuery;
 public class RemoteFileOperations {
     private static final Logger LOG = LogManager.getLogger(RemoteFileOperations.class);
     public static final String HMS_PARTITIONS_REMOTE_FILES = "HMS.PARTITIONS.LIST_FS_PARTITIONS";
-    public static final String HMS_PARTITIONS_LIST_FIES_ASYNC_GET = "HMS.PARTITIONS.LIST_FS_ASYNC.GET";
-    public static final String HMS_PARTITIONS_LIST_FILES_ASYNC_WAIT = "HMS.PARTITIONS.LIST_FS_ASYNC.WAIT";
+
     protected CachingRemoteFileIO remoteFileIO;
     private final ExecutorService pullRemoteFileExecutor;
     private final Executor updateRemoteFilesExecutor;
@@ -141,86 +138,24 @@ public class RemoteFileOperations {
         return resultRemoteFiles;
     }
 
-    public RemoteFileInfoSource getRemoteFilesAsync(Table table, List<Partition> partitions, GetRemoteFilesParams params) {
+    public RemoteFileInfoSource getRemoteFilesAsync(Table table, GetRemoteFilesParams params,
+                                                    Function<GetRemoteFilesParams, List<Partition>> fnGetPartitionValues) {
+
         RemoteFileScanContext scanContext = new RemoteFileScanContext(table);
-
-        // compute cache miss size.
-        {
-            List<RemotePathKey> remotePathKeys = new ArrayList<>();
-            for (Partition partition : partitions) {
-                RemotePathKey key = RemotePathKey.of(partition.getFullPath(), isRecursive);
-                remotePathKeys.add(key);
-            }
-
-            int cacheMissSize = partitions.size();
-            if (enableCatalogLevelCache && params.isUseCache()) {
-                cacheMissSize = cacheMissSize - remoteFileIO.getPresentRemoteFiles(remotePathKeys).size();
-            }
-            Tracers.count(Tracers.Module.EXTERNAL, HMS_PARTITIONS_REMOTE_FILES, cacheMissSize);
-        }
-
-        class MyAsyncTaskQueue extends AsyncTaskQueue<RemoteFileInfo> implements RemoteFileInfoSource {
-            public MyAsyncTaskQueue(Executor executor) {
-                super(executor);
-            }
-
-            @Override
-            public List<RemoteFileInfo> getOutputs(int maxSize) {
-                try (Timer ignored = Tracers.watchScope(Tracers.Module.EXTERNAL, HMS_PARTITIONS_LIST_FIES_ASYNC_GET)) {
-                    return super.getOutputs(maxSize);
-                }
-            }
-
-            @Override
-            public boolean hasMoreOutput() {
-                // `hasMoreOutput` will trigger tasks to generate output.
-                try (Timer ignored = Tracers.watchScope(Tracers.Module.EXTERNAL, HMS_PARTITIONS_LIST_FILES_ASYNC_WAIT)) {
-                    return super.hasMoreOutput();
-                }
-            }
-
-            @Override
-            public int computeOutputSize(RemoteFileInfo output) {
-                List<RemoteFileDesc> files = (output.getFiles());
-                int size = 1;
-                if (files != null) {
-                    size = Math.max(size, files.size());
-                }
-                return size;
-            }
-
-            @Override
-            public RemoteFileInfo getOutput() {
-                List<RemoteFileInfo> res = getOutputs(1);
-                Preconditions.checkArgument(res.size() == 1);
-                return res.get(0);
-            }
-        }
-
-        SessionVariable sv = SessionVariable.DEFAULT_SESSION_VARIABLE;
-        if (ConnectContext.get() != null) {
-            sv = ConnectContext.get().getSessionVariable();
-        }
-        MyAsyncTaskQueue asyncTaskQueue = new MyAsyncTaskQueue(pullRemoteFileExecutor);
-        asyncTaskQueue.setMaxOutputQueueSize(sv.getConnectorRemoteFileAsyncQueueSize());
-        asyncTaskQueue.setMaxRunningTaskCount(sv.getConnectorRemoteFileAsyncTaskSize());
-        List<AsyncTaskQueue.Task<RemoteFileInfo>> tasks = new ArrayList<>();
-        List attachments = params.getPartitionAttachments();
-        for (int i = 0; i < partitions.size(); i++) {
-            final Partition partition = partitions.get(i);
-            final RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive);
-            final Object attachment = (attachments != null) ? attachments.get(i) : null;
-            pathKey.setScanContext(scanContext);
-            tasks.add(() -> {
-                Map<RemotePathKey, List<RemoteFileDesc>> res = remoteFileIO.getRemoteFiles(pathKey, params.isUseCache());
-                List<RemoteFileDesc> files = res.get(pathKey);
-                RemoteFileInfo remoteFileInfo = buildRemoteFileInfo(partition, files);
-                remoteFileInfo.setAttachment(attachment);
-                return List.of(remoteFileInfo);
-            });
-        }
-        asyncTaskQueue.start(tasks);
-        return asyncTaskQueue;
+        HMSPartitionBasedRemoteInfoSource remoteInfoSource = new HMSPartitionBasedRemoteInfoSource(pullRemoteFileExecutor, params,
+                partition -> {
+                    final RemotePathKey pathKey = RemotePathKey.of(partition.getFullPath(), isRecursive);
+                    pathKey.setScanContext(scanContext);
+                    Map<RemotePathKey, List<RemoteFileDesc>> res = remoteFileIO.getRemoteFiles(pathKey, params.isUseCache());
+                    List<RemoteFileDesc> files = res.get(pathKey);
+                    RemoteFileInfo remoteFileInfo = buildRemoteFileInfo(partition, files);
+                    return remoteFileInfo;
+                }, fnGetPartitionValues);
+        SessionVariable sv = ConnectContext.getSessionVariableOrDefault();
+        remoteInfoSource.setMaxOutputQueueSize(sv.getConnectorRemoteFileAsyncQueueSize());
+        remoteInfoSource.setMaxRunningTaskCount(sv.getConnectorRemoteFileAsyncTaskSize());
+        remoteInfoSource.run();
+        return remoteInfoSource;
     }
 
     public List<RemoteFileInfo> getPresentFilesInCache(Collection<Partition> partitions) {

@@ -43,8 +43,6 @@ import com.starrocks.catalog.BrokerMgr;
 import com.starrocks.common.Config;
 import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
-import com.starrocks.common.ErrorCode;
-import com.starrocks.common.ErrorReport;
 import com.starrocks.common.Pair;
 import com.starrocks.common.util.NetUtils;
 import com.starrocks.ha.BDBHA;
@@ -63,13 +61,11 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.QueryStatisticsInfo;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.SemanticException;
-import com.starrocks.sql.ast.AdminSetConfigStmt;
 import com.starrocks.sql.ast.ModifyFrontendAddressClause;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.system.Frontend;
@@ -77,9 +73,6 @@ import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TGetQueryStatisticsRequest;
 import com.starrocks.thrift.TGetQueryStatisticsResponse;
 import com.starrocks.thrift.TNetworkAddress;
-import com.starrocks.thrift.TSetConfigRequest;
-import com.starrocks.thrift.TSetConfigResponse;
-import com.starrocks.thrift.TStatus;
 import com.starrocks.thrift.TStatusCode;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -309,7 +302,7 @@ public class NodeMgr {
                 // For compatibility. Because this is the very first time to start, so we arbitrarily choose
                 // a new name for this node
                 role = FrontendNodeType.FOLLOWER;
-                nodeName = GlobalStateMgr.genFeNodeName(selfNode.first, selfNode.second, false /* new style */);
+                nodeName = genFeNodeName(selfNode.first, selfNode.second, false /* new style */);
                 storage.writeFrontendRoleAndNodeName(role, nodeName);
                 LOG.info("very first time to start this node. role: {}, node name: {}", role.name(), nodeName);
             } else {
@@ -320,9 +313,18 @@ public class NodeMgr {
                     // But we will get a empty nodeName after upgrading.
                     // So for forward compatibility, we use the "old-style" way of naming: "ip_port",
                     // and update the ROLE file.
-                    nodeName = GlobalStateMgr.genFeNodeName(selfNode.first, selfNode.second, true/* old style */);
+                    nodeName = genFeNodeName(selfNode.first, selfNode.second, true/* old style */);
                     storage.writeFrontendRoleAndNodeName(role, nodeName);
                     LOG.info("forward compatibility. role: {}, node name: {}", role.name(), nodeName);
+                } else if (Config.bdbje_reset_election_group
+                        && !isFeNodeNameValid(nodeName, selfNode.first, selfNode.second)) {
+                    // Invalid node name, usually happened when the image dir is copied from another node.
+                    // Correct the node name
+                    String oldNodeName = nodeName;
+                    nodeName = genFeNodeName(selfNode.first, selfNode.second, false /* new style */);
+                    storage.writeFrontendRoleAndNodeName(role, nodeName);
+                    LOG.info("correct the node name {} to new node name: {}, role: {}", oldNodeName, nodeName,
+                            role.name());
                 }
             }
             Preconditions.checkNotNull(role);
@@ -534,7 +536,7 @@ public class NodeMgr {
 
                 if (Strings.isNullOrEmpty(nodeName)) {
                     // For forward compatibility, we use old-style name: "ip_port"
-                    nodeName = GlobalStateMgr.genFeNodeName(selfNode.first, selfNode.second, true /* old style */);
+                    nodeName = genFeNodeName(selfNode.first, selfNode.second, true /* old style */);
                 }
             } catch (Exception e) {
                 LOG.warn("failed to get fe node type from helper node: {}.", helperNode, e);
@@ -750,7 +752,7 @@ public class NodeMgr {
                 throw new DdlException("unknown fqdn host: " + host);
             }
 
-            String nodeName = GlobalStateMgr.genFeNodeName(host, editLogPort, false /* new name style */);
+            String nodeName = genFeNodeName(host, editLogPort, false /* new name style */);
 
             if (removedFrontends.contains(nodeName)) {
                 throw new DdlException("frontend name already exists " + nodeName + ". Try again");
@@ -1143,47 +1145,9 @@ public class NodeMgr {
         return statisticsItems;
     }
 
-    public void setConfig(AdminSetConfigStmt stmt) throws DdlException {
-        setFrontendConfig(stmt.getConfig().getMap());
-
-        List<Frontend> allFrontends = getFrontends(null);
-        int timeout = ConnectContext.get().getExecTimeout() * 1000 + Config.thrift_rpc_timeout_ms;
-        StringBuilder errMsg = new StringBuilder();
-        for (Frontend fe : allFrontends) {
-            if (fe.getHost().equals(getSelfNode().first)) {
-                continue;
-            }
-
-            TSetConfigRequest request = new TSetConfigRequest();
-            request.setKeys(Lists.newArrayList(stmt.getConfig().getKey()));
-            request.setValues(Lists.newArrayList(stmt.getConfig().getValue()));
-            try {
-                TSetConfigResponse response = ThriftRPCRequestExecutor.call(
-                        ThriftConnectionPool.frontendPool,
-                        new TNetworkAddress(fe.getHost(), fe.getRpcPort()),
-                        timeout,
-                        client -> client.setConfig(request));
-                TStatus status = response.getStatus();
-                if (status.getStatus_code() != TStatusCode.OK) {
-                    errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ");
-                    if (status.getError_msgs() != null && status.getError_msgs().size() > 0) {
-                        errMsg.append(String.join(",", status.getError_msgs()));
-                    }
-                    errMsg.append(";");
-                }
-            } catch (Exception e) {
-                LOG.warn("set remote fe: {} config failed", fe.getHost(), e);
-                errMsg.append("set config for fe[").append(fe.getHost()).append("] failed: ").append(e.getMessage());
-            }
-        }
-        if (errMsg.length() > 0) {
-            ErrorReport.reportDdlException(ErrorCode.ERROR_SET_CONFIG_FAILED, errMsg.toString());
-        }
-    }
-
-    public void setFrontendConfig(Map<String, String> configs) throws DdlException {
+    public void setFrontendConfig(Map<String, String> configs, boolean isPersisted, String userIdentity) throws DdlException {
         for (Map.Entry<String, String> entry : configs.entrySet()) {
-            ConfigBase.setMutableConfig(entry.getKey(), entry.getValue());
+            ConfigBase.setMutableConfig(entry.getKey(), entry.getValue(), isPersisted, userIdentity);
         }
     }
 
@@ -1199,6 +1163,9 @@ public class NodeMgr {
         frontends.clear();
         Frontend self = new Frontend(role, nodeName, selfNode.first, selfNode.second);
         frontends.put(self.getNodeName(), self);
+        // reset helper nodes
+        helperNodes.clear();
+        helperNodes.add(selfNode);
 
         GlobalStateMgr.getCurrentState().getEditLog().logResetFrontends(self);
     }
@@ -1206,6 +1173,9 @@ public class NodeMgr {
     public void replayResetFrontends(Frontend frontend) {
         frontends.clear();
         frontends.put(frontend.getNodeName(), frontend);
+        // reset helper nodes
+        helperNodes.clear();
+        helperNodes.add(Pair.create(frontend.getHost(), frontend.getEditLogPort()));
     }
 
     public void save(ImageWriter imageWriter) throws IOException, SRMetaBlockException {
@@ -1254,5 +1224,18 @@ public class NodeMgr {
 
     public void setImageDir(String imageDir) {
         this.imageDir = imageDir;
+    }
+
+    public static String genFeNodeName(String host, int port, boolean isOldStyle) {
+        String name = host + "_" + port;
+        if (isOldStyle) {
+            return name;
+        } else {
+            return name + "_" + System.currentTimeMillis();
+        }
+    }
+
+    public static boolean isFeNodeNameValid(String nodeName, String host, int port) {
+        return nodeName.startsWith(host + "_" + port);
     }
 }

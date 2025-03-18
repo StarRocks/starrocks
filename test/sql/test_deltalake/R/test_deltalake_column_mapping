@@ -121,6 +121,23 @@ select * from delta_test_${uuid0}.delta_oss_db.delta_lake_nested_struct_column_m
 2	{"name":{"first_name":"Alice","last_name":"A"},"sex":"female","age":30}
 3	{"name":{"first_name":"Bob","last_name":"B"},"sex":"male","age":25}
 -- !result
+select * from delta_test_${uuid0}.delta_oss_db.column_mapping_test order by c_int nulls last,c_date nulls last;
+-- result:
+1	2001-01-01	1	{"c_int":1,"c_date":"2001-01-02"}	{1:{"c_date":"2001-01-03"}}	{"c_array":[{"c_bool":1},{"c_bool":0},null,{"c_bool":null}],"c_struct_new":{"c_int":1},"c_struct":null,"c_map":null}	None	None
+1	None	1	{"c_int":null,"c_date":"2004-01-01"}	{5:{"c_date":"2004-01-02"}}	{"c_array":[{"c_bool":1},{"c_bool":0},{"c_bool":null},null],"c_struct_new":{"c_int":44},"c_struct":{"c_bool":1,"c_string":"Guangzhou"},"c_map":null}	None	None
+2	2002-01-01	1	{"c_int":2,"c_date":"2002-01-02"}	{22:{"c_date":"2002-01-05"}}	{"c_array":[{"c_bool":null},null,{"c_bool":1},{"c_bool":0},{"c_bool":null}],"c_struct_new":{"c_int":200},"c_struct":null,"c_map":null}	98.50	None
+3	2003-01-01	1	{"c_int":3,"c_date":null}	{33:{"c_date":"2003-01-02"}}	{"c_array":[null,{"c_bool":1},{"c_bool":null},{"c_bool":0},{"c_bool":null}],"c_struct_new":{"c_int":3},"c_struct":null,"c_map":null}	99.50	None
+4	None	None	{"c_int":null,"c_date":null}	{4:null}	{"c_array":null,"c_struct_new":{"c_int":null},"c_struct":{"c_bool":1,"c_string":null},"c_map":null}	98.50	None
+5	2005-01-01	1	{"c_int":5,"c_date":"2005-01-02"}	{55:{"c_date":"2005-01-03"}}	{"c_array":[],"c_struct_new":{"c_int":555},"c_struct":{"c_bool":1,"c_string":"Hangzhou"},"c_map":{1:500}}	65.50	["Gongshu","Xihu","Shangcheng"]
+None	2006-01-01	0	{"c_int":6,"c_date":"2006-01-02"}	{6:null}	{"c_array":[null],"c_struct_new":{"c_int":600},"c_struct":{"c_bool":0,"c_string":"Chongqing"},"c_map":{1:550}}	50.50	None
+None	None	None	None	None	None	None	None
+-- !result
+select `key`, name from delta_test_${uuid0}.delta_oss_db.column_mapping_test_id_par order by `key`;
+-- result:
+1	name1
+2	name2
+3	name3
+-- !result
 drop catalog delta_test_${uuid0}
 -- result:
 -- !result

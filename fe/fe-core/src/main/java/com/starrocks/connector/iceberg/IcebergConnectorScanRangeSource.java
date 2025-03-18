@@ -78,7 +78,7 @@ import static com.starrocks.catalog.IcebergTable.DATA_SEQUENCE_NUMBER;
 import static com.starrocks.catalog.IcebergTable.SPEC_ID;
 import static com.starrocks.common.profile.Tracers.Module.EXTERNAL;
 
-public class IcebergConnectorScanRangeSource implements ConnectorScanRangeSource {
+public class IcebergConnectorScanRangeSource extends ConnectorScanRangeSource {
     private static final Logger LOG = LogManager.getLogger(IcebergConnectorScanRangeSource.class);
     private final IcebergTable table;
     private final TupleDescriptor desc;
@@ -111,14 +111,14 @@ public class IcebergConnectorScanRangeSource implements ConnectorScanRangeSource
     }
 
     @Override
-    public boolean hasMoreOutput() {
+    public boolean sourceHasMoreOutput() {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.getScanFiles")) {
             return remoteFileInfoSource.hasMoreOutput();
         }
     }
 
     @Override
-    public List<TScanRangeLocations> getOutputs(int maxSize) {
+    public List<TScanRangeLocations> getSourceOutputs(int maxSize) {
         try (Timer ignored = Tracers.watchScope(EXTERNAL, "ICEBERG.getScanFiles")) {
             List<TScanRangeLocations> res = new ArrayList<>();
             while (hasMoreOutput() && res.size() < maxSize) {

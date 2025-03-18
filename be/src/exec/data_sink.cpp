@@ -60,8 +60,6 @@
 #include "exec/pipeline/sink/dictionary_cache_sink_operator.h"
 #include "exec/pipeline/sink/export_sink_operator.h"
 #include "exec/pipeline/sink/file_sink_operator.h"
-#include "exec/pipeline/sink/hive_table_sink_operator.h"
-#include "exec/pipeline/sink/iceberg_table_sink_operator.h"
 #include "exec/pipeline/sink/memory_scratch_sink_operator.h"
 #include "exec/pipeline/sink/mysql_table_sink_operator.h"
 #include "exec/pipeline/sink/table_function_table_sink_operator.h"

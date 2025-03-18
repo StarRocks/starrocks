@@ -72,6 +72,7 @@ import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AbstractBackupStmt;
 import com.starrocks.sql.ast.BackupStmt;
 import com.starrocks.sql.ast.BackupStmt.BackupType;
@@ -98,6 +99,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -340,7 +342,10 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         try {
             // Check if there is backup or restore job running on this database
             AbstractJob currentJob = dbIdToBackupOrRestoreJob.get(stmt.containsExternalCatalog() ? FAKE_DB_ID : db.getId());
-            if (currentJob != null && !currentJob.isDone()) {
+            if (currentJob != null && currentJob.getDbId() == FAKE_DB_ID && !currentJob.isDone()) {
+                ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
+                        "Can only run one backup or restore job of external catalog");
+            } else if (currentJob != null && !currentJob.isDone()) {
                 ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR,
                         "Can only run one backup or restore job of a database at same time");
             }
@@ -693,6 +698,10 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
         jobInfo.retainTables(allTbls);
     }
 
+    public AbstractJob getAbstractJob(boolean isExternalCatalog, String dbName) throws DdlException {
+        return isExternalCatalog ? dbIdToBackupOrRestoreJob.get(FAKE_DB_ID) : getAbstractJobByDbName(dbName);
+    }
+
     public AbstractJob getAbstractJobByDbName(String dbName) throws DdlException {
         Database db = globalStateMgr.getLocalMetastore().getDb(dbName);
         if (db == null) {
@@ -703,11 +712,7 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
 
     public void cancel(CancelBackupStmt stmt) throws DdlException {
         AbstractJob job = null;
-        if (!stmt.isExternalCatalog()) {
-            job = getAbstractJobByDbName(stmt.getDbName());
-        } else {
-            job = dbIdToBackupOrRestoreJob.get(FAKE_DB_ID);
-        }
+        job = getAbstractJob(stmt.isExternalCatalog(), stmt.getDbName());
         if (job == null || (job instanceof BackupJob && stmt.isRestore())
                 || (job instanceof RestoreJob && !stmt.isRestore())) {
             ErrorReport.reportDdlException(ErrorCode.ERR_COMMON_ERROR, "No "
@@ -928,5 +933,12 @@ public class BackupHandler extends FrontendDaemon implements Writable, MemoryTra
     public List<Pair<List<Object>, Long>> getSamples() {
         List<Object> jobSamples = new ArrayList<>(dbIdToBackupOrRestoreJob.values());
         return Lists.newArrayList(Pair.create(jobSamples, (long) dbIdToBackupOrRestoreJob.size()));
+    }
+
+    public Map<Long, Long> getRunningBackupRestoreCount() {
+        long count = dbIdToBackupOrRestoreJob.values().stream().filter(job -> !job.isDone()).count();
+        Map<Long, Long> result = new HashMap<>();
+        result.put(WarehouseManager.DEFAULT_WAREHOUSE_ID, count);
+        return result;
     }
 }

@@ -167,6 +167,7 @@ Status TabletReader::open(const TabletReaderParams& read_params) {
         split_morsel_queue->set_tablet_rowsets(std::move(tablet_rowsets));
         split_morsel_queue->set_key_ranges(read_params.range, read_params.end_range, read_params.start_key,
                                            read_params.end_key);
+        split_morsel_queue->set_tablet_schema(_tablet_schema);
 
         while (true) {
             auto split = split_morsel_queue->try_get().value();
@@ -393,7 +394,7 @@ Status TabletReader::init_delete_predicates(const TabletReaderParams& params, De
     if (UNLIKELY(_tablet_schema == nullptr)) {
         return Status::InternalError("tablet schema is null. forget or fail to call prepare()");
     }
-    PredicateParser pred_parser(_tablet_schema);
+    OlapPredicateParser pred_parser(_tablet_schema);
 
     for (int index = 0, size = _tablet_metadata->rowsets_size(); index < size; ++index) {
         const auto& rowset_metadata = _tablet_metadata->rowsets(index);

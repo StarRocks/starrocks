@@ -32,7 +32,6 @@ import com.starrocks.statistic.StatsConstants.ScheduleType;
 import org.apache.commons.collections.CollectionUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -154,6 +153,10 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
         return type;
     }
 
+    public void setType(AnalyzeType type) {
+        this.type = type;
+    }
+
     @Override
     public ScheduleType getScheduleType() {
         return scheduleType;
@@ -204,6 +207,10 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
         return tableId == StatsConstants.DEFAULT_ALL_ID;
     }
 
+    public boolean isDefaultJob() {
+        return isAnalyzeAllDb() && isAnalyzeAllTable() && getScheduleType() == ScheduleType.SCHEDULE;
+    }
+
     @Override
     public List<StatisticsCollectJob> instantiateJobs() {
         return StatisticsCollectJobFactory.buildStatisticsCollectJob(this);
@@ -220,9 +227,12 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
 
         boolean hasFailedCollectJob = false;
         for (StatisticsCollectJob statsJob : jobs) {
+            if (!StatisticAutoCollector.checkoutAnalyzeTime()) {
+                break;
+            }
             AnalyzeStatus analyzeStatus = new NativeAnalyzeStatus(GlobalStateMgr.getCurrentState().getNextId(),
-                    statsJob.getDb().getId(), statsJob.getTable().getId(), statsJob.getColumnNames(),
-                    statsJob.getType(), statsJob.getScheduleType(), statsJob.getProperties(), LocalDateTime.now());
+                    statsJob.getDb().getId(), statsJob.getTable().getId(), statsJob.getColumnNames(), statsJob.getAnalyzeType(),
+                    statsJob.getScheduleType(), statsJob.getProperties(), LocalDateTime.now());
             analyzeStatus.setStatus(StatsConstants.ScheduleStatus.FAILED);
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().addAnalyzeStatus(analyzeStatus);
 
@@ -242,12 +252,6 @@ public class NativeAnalyzeJob implements AnalyzeJob, Writable {
             setWorkTime(LocalDateTime.now());
             GlobalStateMgr.getCurrentState().getAnalyzeMgr().updateAnalyzeJobWithLog(this);
         }
-    }
-
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String s = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, s);
     }
 
     public static NativeAnalyzeJob read(DataInput in) throws IOException {

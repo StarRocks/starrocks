@@ -59,7 +59,8 @@ public class HiveConnectorTest {
         client = new HiveMetastoreTest.MockedHiveMetaClient();
         metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
-                metastore, executorForHmsRefresh, 100, 10, 1000, false);
+                metastore, executorForHmsRefresh, executorForHmsRefresh,
+                100, 10, 1000, false);
         hiveRemoteFileIO = new HiveRemoteFileIO(new Configuration());
         FileSystem fs = new MockedRemoteFileSystem(HDFS_HIVE_TABLE);
         hiveRemoteFileIO.setFileSystem(fs);

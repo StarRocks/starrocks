@@ -3,9 +3,15 @@ displayed_sidebar: docs
 sidebar_position: 20
 ---
 
-# List partitioning
+# List partitioning (Legacy)
 
 Since v3.1, StarRocks supports list partitioning. Data is partitioned based on a predefined value list for each partition, which can accelerate queries and facilitate management according to enumerated values.
+
+:::note
+
+Please note that from v3.4 onwards, [expression partitioning](./expression_partitioning.md) is further optimized to unify all partitioning strategies and supported more complex solutions. It is recommended in most cases, and will replace the list partitioning strategy in future releases.
+
+:::
 
 ## Introduction
 
@@ -112,5 +118,5 @@ DISTRIBUTED BY HASH(`id`);
 - List partitioning does support dynamic partitioning and creating multiple partitions at a time.
 - Currently, StarRocks's shared-data mode does not support this feature.
 - When the `ALTER TABLE <table_name> DROP PARTITION <partition_name>;` statement is used to delete a partition created by using list partitioning, data in the partition is directly removed and cannot be recovered.
-- Currently you cannot backup and restore partitions created by the list partitioning.
+- From v3.4.0, v3.3.8, v3.2.13, and v3.1.16 onwards, StarRocks supports [backing up and restoring](../../administration/management/Backup_and_restore.md) tables created with the list partitioning strategy.
 - From v3.3.5 onwards,  StarRocks supports creating [asynchronous materialized views](../../using_starrocks/async_mv/Materialized_view.md) with base tables created with the list partitioning strategy.

@@ -79,8 +79,8 @@ public class CompoundPredicate extends Predicate {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        return super.equals(obj) && ((CompoundPredicate) obj).op == op;
+    public boolean equalsWithoutChild(Object obj) {
+        return super.equalsWithoutChild(obj) && ((CompoundPredicate) obj).op == op;
     }
 
     @Override

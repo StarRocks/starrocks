@@ -36,15 +36,15 @@ package com.starrocks.planner;
 
 import com.starrocks.analysis.BrokerDesc;
 import com.starrocks.catalog.FsBroker;
-import com.starrocks.common.util.PrintableMap;
 import com.starrocks.common.Config;
+import com.starrocks.common.util.PrintableMap;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TDataSinkType;
 import com.starrocks.thrift.TExplainLevel;
-import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TExportSink;
 import com.starrocks.thrift.TFileType;
+import com.starrocks.thrift.THdfsProperties;
 import com.starrocks.thrift.TNetworkAddress;
 import org.apache.commons.lang.StringEscapeUtils;
 

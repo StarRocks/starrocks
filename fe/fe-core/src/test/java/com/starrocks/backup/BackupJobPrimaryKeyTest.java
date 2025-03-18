@@ -166,7 +166,7 @@ public class BackupJobPrimaryKeyTest {
 
     @Before
     public void setUp() {
-
+        globalStateMgr = GlobalStateMgr.getCurrentState();
         repoMgr = new MockRepositoryMgr();
         backupHandler = new MockBackupHandler(globalStateMgr);
 
@@ -180,10 +180,6 @@ public class BackupJobPrimaryKeyTest {
 
         new Expectations(globalStateMgr) {
             {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
                 globalStateMgr.getLocalMetastore().getDb(anyLong);
                 minTimes = 0;
                 result = db;
@@ -360,8 +356,7 @@ public class BackupJobPrimaryKeyTest {
             Assert.assertEquals(job.getLabel(), restoreJobInfo.name);
             Assert.assertEquals(1, restoreJobInfo.tables.size());
         } catch (IOException e) {
-            e.printStackTrace();
-            Assert.fail();
+            Assert.fail(e.getMessage());
         }
 
         Assert.assertNull(job.getBackupMeta());

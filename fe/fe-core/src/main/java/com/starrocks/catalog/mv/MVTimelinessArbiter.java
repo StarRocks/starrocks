@@ -14,6 +14,8 @@
 
 package com.starrocks.catalog.mv;
 
+import com.google.common.base.Preconditions;
+import com.google.common.base.Strings;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.catalog.BaseTableInfo;
@@ -22,22 +24,28 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvBaseTableUpdateInfo;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.OlapTable;
+import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.sql.common.PCell;
+import com.starrocks.sql.common.PartitionDiff;
+import com.starrocks.sql.common.PartitionDiffResult;
+import com.starrocks.sql.common.PartitionDiffer;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
+import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
-import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 import static com.starrocks.catalog.MvRefreshArbiter.getMvBaseTableUpdateInfo;
 import static com.starrocks.catalog.MvRefreshArbiter.needsToRefreshTable;
+import static com.starrocks.sql.optimizer.OptimizerTraceUtil.logMVPrepare;
 
 /**
  * {@link MVTimelinessArbiter} is the base class of all materialized view timeliness arbiters which is used to determine the mv's
@@ -50,6 +58,8 @@ public abstract class MVTimelinessArbiter {
 
     // the materialized view to check
     protected final MaterializedView mv;
+    // differ
+    protected PartitionDiffer differ;
     // whether is query rewrite or mv refresh
     protected final boolean isQueryRewrite;
 
@@ -77,10 +87,13 @@ public abstract class MVTimelinessArbiter {
      * @return : partitioned materialized view's all need updated partition names.
      */
     public MvUpdateInfo getMVTimelinessUpdateInfo(TableProperty.QueryRewriteConsistencyMode mode) throws AnalysisException {
-        if (mode == TableProperty.QueryRewriteConsistencyMode.LOOSE) {
-            return getMVTimelinessUpdateInfoInLoose();
-        } else {
-            return getMVTimelinessUpdateInfoInChecked();
+        switch (mode) {
+            case LOOSE:
+                return getMVTimelinessUpdateInfoInLoose();
+            case FORCE_MV:
+                return getMVTimelinessUpdateInfoInForceMVMode();
+            default:
+                return getMVTimelinessUpdateInfoInChecked();
         }
     }
 
@@ -89,12 +102,6 @@ public abstract class MVTimelinessArbiter {
      * @return mv's update info in checked mode
      */
     protected abstract MvUpdateInfo getMVTimelinessUpdateInfoInChecked() throws AnalysisException;
-
-    /**
-     * In Loose mode, do not need to check mv partition's data is consistent with base table's partition's data.
-     * Only need to check the mv partition existence.
-     */
-    protected abstract MvUpdateInfo getMVTimelinessUpdateInfoInLoose();
 
     /**
      * Determine the refresh type of the materialized view.
@@ -181,14 +188,18 @@ public abstract class MVTimelinessArbiter {
      * @param baseTableUpdateInfoMap base table update info from MvTimelinessInfo
      * @return the base table to its changed partition and cell map if it's mv, empty else
      */
-    protected void collectExtraBaseTableChangedPartitions(
-            Map<Table, MvBaseTableUpdateInfo> baseTableUpdateInfoMap,
-            Consumer<Map.Entry<Table, Map<String, PCell>>> consumer) {
+    protected void collectExtraBaseTableChangedPartitions(Map<Table, MvBaseTableUpdateInfo> baseTableUpdateInfoMap,
+                                                          Map<Table, Map<String, PCell>> basePartitionNameToRangeMap) {
         Map<Table, Map<String, PCell>> extraChangedPartitions = baseTableUpdateInfoMap.entrySet().stream()
                 .filter(e -> !e.getValue().getMvPartitionNameToCellMap().isEmpty())
                 .collect(Collectors.toMap(e -> e.getKey(), e -> e.getValue().getMvPartitionNameToCellMap()));
         for (Map.Entry<Table, Map<String, PCell>> entry : extraChangedPartitions.entrySet()) {
-            consumer.accept(entry);
+            Table baseTable = entry.getKey();
+            Preconditions.checkState(basePartitionNameToRangeMap.containsKey(baseTable));
+            Map<String, PCell> refBaseTablePartitionRangeMap = basePartitionNameToRangeMap.get(baseTable);
+            Map<String, PCell> basePartitionNameToRanges = entry.getValue();
+            basePartitionNameToRanges.entrySet().forEach(e ->
+                    refBaseTablePartitionRangeMap.put(e.getKey(), e.getValue()));
         }
     }
 
@@ -198,11 +209,129 @@ public abstract class MVTimelinessArbiter {
         if (!allOlapTables) {
             return;
         }
-        mv.getRangePartitionMap().keySet().forEach(mvPartitionName -> {
+        mv.getVisiblePartitionNames().forEach(mvPartitionName -> {
             if (!mv.getPartition(mvPartitionName).getDefaultPhysicalPartition().hasStorageData()) {
                 // add empty partitions
                 mvUpdateInfo.addMvToRefreshPartitionNames(mvPartitionName);
             }
         });
+    }
+
+    public Map<Table, Map<String, PCell>> syncBaseTablePartitions(MaterializedView mv) {
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        if (partitionInfo.isUnPartitioned()) {
+            return null;
+        }
+        Map<Table, Map<String, PCell>> basePartitionNameToRangeMap = differ.syncBaseTablePartitionInfos();
+        if (CollectionUtils.sizeIsEmpty(basePartitionNameToRangeMap)) {
+            return null;
+        }
+        return basePartitionNameToRangeMap.keySet().stream()
+                .map(baseTable -> Maps.immutableEntry(baseTable, basePartitionNameToRangeMap.get(baseTable)))
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    public PartitionDiff getChangedPartitionDiff(MaterializedView mv,
+                                                 Map<Table, Map<String, PCell>> basePartitionNameToRangeMap)  {
+        PartitionInfo partitionInfo = mv.getPartitionInfo();
+        try {
+            if (partitionInfo.isUnPartitioned()) {
+                return null;
+            }
+            PartitionDiffResult result = differ.computePartitionDiff(null,
+                    basePartitionNameToRangeMap);
+            if (result == null) {
+                logMVPrepare(mv, "Partitioned mv compute list diff failed");
+                return null;
+            }
+            return result.diff;
+        } catch (Exception e) {
+            logMVPrepare(mv, "Materialized view compute partition difference with base table failed:" + e);
+        }
+        return null;
+    }
+
+    /**
+     * In Loose mode, do not need to check mv partition's data is consistent with base table's partition's data.
+     * Only need to check the mv partition existence.
+     */
+    public MvUpdateInfo getMVTimelinessUpdateInfoInLoose() {
+        Map<Table, Map<String, PCell>> refBaseTablePartitionMap = syncBaseTablePartitions(mv);
+        if (refBaseTablePartitionMap == null) {
+            logMVPrepare(mv, "Sync base table partition infos failed");
+            return MvUpdateInfo.fullRefresh(mv);
+        }
+
+        PartitionDiff diff = getChangedPartitionDiff(mv, refBaseTablePartitionMap);
+        if (diff == null) {
+            return null;
+        }
+        Map<String, PCell> adds = diff.getAdds();
+        MvUpdateInfo mvUpdateInfo = MvUpdateInfo.partialRefresh(mv, TableProperty.QueryRewriteConsistencyMode.LOOSE);
+        if (!CollectionUtils.sizeIsEmpty(adds)) {
+            adds.keySet().stream().forEach(mvPartitionName ->
+                    mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
+        }
+        addEmptyPartitionsToRefresh(mvUpdateInfo);
+        collectBaseTableUpdatePartitionNamesInLoose(mvUpdateInfo);
+        collectMVToBaseTablePartitionNames(refBaseTablePartitionMap, diff, mvUpdateInfo);
+        return mvUpdateInfo;
+    }
+
+    /**
+     * Collect mv to base table partition names mapping to be used in {@code MvUpdate#getBaseTableToRefreshPartitionNames}
+     * for union compensate rewrite.
+     */
+    protected void collectMVToBaseTablePartitionNames(Map<Table, Map<String, PCell>> refBaseTablePartitionMap,
+                                                      PartitionDiff diff,
+                                                      MvUpdateInfo mvUpdateInfo) {
+        Map<String, PCell> mvPartitionToCells = mv.getPartitionCells(Optional.empty());
+        diff.getDeletes().keySet().forEach(mvPartitionToCells::remove);
+        mvPartitionToCells.putAll(diff.getAdds());
+        Map<String, Map<Table, Set<String>>> mvToBaseNameRef = differ
+                .generateMvRefMap(mvPartitionToCells, refBaseTablePartitionMap);
+        mvUpdateInfo.getMvPartToBasePartNames().putAll(mvToBaseNameRef);
+    }
+    
+    /**
+     * TODO: Optimize performance in loos/force_mv mode
+     * TODO: in loose mode, ignore partition that both exists in baseTable and mv
+     */
+    protected void collectBaseTableUpdatePartitionNamesInLoose(MvUpdateInfo mvUpdateInfo) {
+        Map<Table, List<Column>> refBaseTableAndColumns = mv.getRefBaseTablePartitionColumns();
+        // collect & update mv's to refresh partitions based on base table's partition changes
+        collectBaseTableUpdatePartitionNames(refBaseTableAndColumns, mvUpdateInfo);
+    }
+
+    /**
+     * In Force MV mode, do not to check mv's consistency with base table's partition's data if ttl is not expired.
+     * - if mv contains no ttl, always no need to refresh;
+     * - if mv contains ttl, no need to refresh if query's partitions is in ttl's lifecycle; and need to refresh if
+     * query's partitions is out of ttl's lifecycle.
+     */
+    public MvUpdateInfo getMVTimelinessUpdateInfoInForceMVMode() {
+        String retentionCondition = mv.getTableProperty().getPartitionRetentionCondition();
+        if (Strings.isNullOrEmpty(retentionCondition)) {
+            return MvUpdateInfo.noRefresh(mv);
+        }
+        Map<Table, Map<String, PCell>> refBaseTablePartitionMap = syncBaseTablePartitions(mv);
+        if (refBaseTablePartitionMap == null) {
+            logMVPrepare(mv, "Sync base table partition infos failed");
+            return MvUpdateInfo.fullRefresh(mv);
+        }
+
+        PartitionDiff diff = getChangedPartitionDiff(mv, refBaseTablePartitionMap);
+        if (diff == null) {
+            logMVPrepare(mv, "Materialized view compute partition difference with base table failed");
+            return null;
+        }
+        Map<String, PCell> adds = diff.getAdds();
+        MvUpdateInfo mvUpdateInfo = MvUpdateInfo.partialRefresh(mv, TableProperty.QueryRewriteConsistencyMode.FORCE_MV);
+        addEmptyPartitionsToRefresh(mvUpdateInfo);
+        if (!CollectionUtils.sizeIsEmpty(adds)) {
+            adds.keySet().stream().forEach(mvPartitionName ->
+                    mvUpdateInfo.getMvToRefreshPartitionNames().add(mvPartitionName));
+        }
+        return mvUpdateInfo;
     }
 }

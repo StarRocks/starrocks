@@ -379,6 +379,11 @@ std::shared_ptr<TabletSchema> TabletSchema::create(const TabletSchemaCSPtr& src_
         }
         cid++;
     }
+    const auto* indexes = src_tablet_schema->indexes();
+    for (const auto& index : *indexes) {
+        TabletIndexPB* index_pb = partial_tablet_schema_pb.add_table_indices();
+        index.to_schema_pb(index_pb);
+    }
     partial_tablet_schema_pb.mutable_sort_key_idxes()->Add(sort_key_idxes.begin(), sort_key_idxes.end());
     return std::make_shared<TabletSchema>(partial_tablet_schema_pb);
 }
@@ -779,6 +784,16 @@ std::string TabletColumn::debug_string() const {
 
 bool operator!=(const TabletSchema& a, const TabletSchema& b) {
     return !(a == b);
+}
+
+bool TabletSchema::has_separate_sort_key() const {
+    RETURN_IF(_sort_key_idxes.size() != _num_key_columns, true);
+    for (size_t i = 0; i < _sort_key_idxes.size(); ++i) {
+        if (_sort_key_idxes[i] != i) {
+            return true;
+        }
+    }
+    return false;
 }
 
 std::string TabletSchema::debug_string() const {

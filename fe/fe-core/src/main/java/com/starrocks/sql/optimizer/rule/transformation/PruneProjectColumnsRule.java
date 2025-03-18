@@ -67,7 +67,7 @@ public class PruneProjectColumnsRule extends TransformationRule {
             ColumnRefOperator constCol = context.getColumnRefFactory()
                     .create("auto_fill_col", Type.TINYINT, false);
             newMap.put(constCol, ConstantOperator.createTinyInt((byte) 1));
-        } else if (newMap.equals(projectOperator.getColumnRefMap()) && context.isShortCircuit()) {
+        } else if (newMap.equals(projectOperator.getColumnRefMap()) && context.getOptimizerOptions().isShortCircuit()) {
             // Change the requiredOutputColumns in context
             requiredOutputColumns.union(requiredInputColumns);
             // make sure this rule only executed once

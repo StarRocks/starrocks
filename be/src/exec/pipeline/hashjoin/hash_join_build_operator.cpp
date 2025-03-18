@@ -20,6 +20,7 @@
 #include "exec/hash_joiner.h"
 #include "exec/pipeline/hashjoin/hash_joiner_factory.h"
 #include "exec/pipeline/query_context.h"
+#include "exec/pipeline/runtime_filter_types.h"
 #include "exprs/runtime_filter_bank.h"
 #include "runtime/current_thread.h"
 #include "runtime/runtime_filter_worker.h"
@@ -53,6 +54,7 @@ Status HashJoinBuildOperator::prepare(RuntimeState* state) {
     _join_builder->ref();
 
     RETURN_IF_ERROR(_join_builder->prepare_builder(state, _unique_metrics.get()));
+    _join_builder->attach_build_observer(state, observer());
 
     return Status::OK();
 }
@@ -82,6 +84,8 @@ size_t HashJoinBuildOperator::output_amplification_factor() const {
 
 Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
     ONCE_DETECT(_set_finishing_once);
+    // notify probe side
+    auto notify = _join_builder->defer_notify_probe();
     DeferOp op([this]() { _is_finished = true; });
 
     if (state->is_cancelled()) {
@@ -150,12 +154,14 @@ Status HashJoinBuildOperator::set_finishing(RuntimeState* state) {
             auto&& bloom_filters = _partial_rf_merger->get_total_bloom_filters();
 
             {
-                size_t total_bf_bytes = std::accumulate(bloom_filters.begin(), bloom_filters.end(), 0ull,
-                                                        [](size_t total, RuntimeFilterBuildDescriptor* desc) -> size_t {
-                                                            auto rf = desc->runtime_filter();
-                                                            total += (rf == nullptr ? 0 : rf->bf_alloc_size());
-                                                            return total;
-                                                        });
+                size_t total_bf_bytes =
+                        std::accumulate(bloom_filters.begin(), bloom_filters.end(), 0ull,
+                                        [](size_t total, RuntimeFilterBuildDescriptor* desc) -> size_t {
+                                            if (desc->runtime_filter() == nullptr) {
+                                                return total;
+                                            }
+                                            return desc->runtime_filter()->get_bloom_filter()->bf_alloc_size();
+                                        });
                 COUNTER_UPDATE(_join_builder->build_metrics().partial_runtime_bloom_filter_bytes, total_bf_bytes);
             }
 

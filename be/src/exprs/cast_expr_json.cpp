@@ -130,9 +130,9 @@ public:
             _builder->add(_field_name, vpack::Value(vpack::ValueType::Object));
         }
         auto [map_start, map_size] = col.get_map_offset_size(_row);
-        auto key_col = col.keys_column();
-        auto val_col = col.values_column();
+        auto& val_col = col.values_column();
 
+        auto key_col = col.keys_column();
         if (key_col->has_null()) {
             return Status::NotSupported("key of Map should not be null");
         }
@@ -175,7 +175,7 @@ public:
         }
 
         auto [offset, size] = col.get_element_offset_size(_row);
-        auto elements = col.elements_column();
+        auto& elements = col.elements_column();
         for (int i = offset; i < offset + size; i++) {
             RETURN_IF_ERROR(cast_datum_to_json(elements, i, "", _builder));
         }

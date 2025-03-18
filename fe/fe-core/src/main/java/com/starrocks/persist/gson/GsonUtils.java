@@ -70,6 +70,27 @@ import com.starrocks.alter.OnlineOptimizeJobV2;
 import com.starrocks.alter.OptimizeJobV2;
 import com.starrocks.alter.RollupJobV2;
 import com.starrocks.alter.SchemaChangeJobV2;
+import com.starrocks.authentication.FileGroupProvider;
+import com.starrocks.authentication.GroupProvider;
+import com.starrocks.authentication.LDAPGroupProvider;
+import com.starrocks.authentication.OIDCSecurityIntegration;
+import com.starrocks.authentication.SecurityIntegration;
+import com.starrocks.authentication.UnixGroupProvider;
+import com.starrocks.authorization.CatalogPEntryObject;
+import com.starrocks.authorization.DbPEntryObject;
+import com.starrocks.authorization.FunctionPEntryObject;
+import com.starrocks.authorization.GlobalFunctionPEntryObject;
+import com.starrocks.authorization.MaterializedViewPEntryObject;
+import com.starrocks.authorization.PEntryObject;
+import com.starrocks.authorization.PipePEntryObject;
+import com.starrocks.authorization.PolicyFCEntryObject;
+import com.starrocks.authorization.ResourceGroupPEntryObject;
+import com.starrocks.authorization.ResourcePEntryObject;
+import com.starrocks.authorization.StorageVolumePEntryObject;
+import com.starrocks.authorization.TablePEntryObject;
+import com.starrocks.authorization.UserPEntryObject;
+import com.starrocks.authorization.ViewPEntryObject;
+import com.starrocks.authorization.WarehousePEntryObject;
 import com.starrocks.backup.AbstractJob;
 import com.starrocks.backup.BackupJob;
 import com.starrocks.backup.RestoreJob;
@@ -152,21 +173,6 @@ import com.starrocks.persist.ListPartitionPersistInfo;
 import com.starrocks.persist.PartitionPersistInfoV2;
 import com.starrocks.persist.RangePartitionPersistInfo;
 import com.starrocks.persist.SinglePartitionPersistInfo;
-import com.starrocks.privilege.CatalogPEntryObject;
-import com.starrocks.privilege.DbPEntryObject;
-import com.starrocks.privilege.FunctionPEntryObject;
-import com.starrocks.privilege.GlobalFunctionPEntryObject;
-import com.starrocks.privilege.MaterializedViewPEntryObject;
-import com.starrocks.privilege.PEntryObject;
-import com.starrocks.privilege.PipePEntryObject;
-import com.starrocks.privilege.PolicyFCEntryObject;
-import com.starrocks.privilege.ResourceGroupPEntryObject;
-import com.starrocks.privilege.ResourcePEntryObject;
-import com.starrocks.privilege.StorageVolumePEntryObject;
-import com.starrocks.privilege.TablePEntryObject;
-import com.starrocks.privilege.UserPEntryObject;
-import com.starrocks.privilege.ViewPEntryObject;
-import com.starrocks.privilege.WarehousePEntryObject;
 import com.starrocks.proto.EncryptionKeyPB;
 import com.starrocks.replication.ReplicationTxnCommitAttachment;
 import com.starrocks.server.SharedDataStorageVolumeMgr;
@@ -342,6 +348,16 @@ public class GsonUtils {
                     .registerSubtype(PipePEntryObject.class, "PipePEntryObject")
                     .registerSubtype(PolicyFCEntryObject.class, "PolicyPEntryObject");
 
+    private static final RuntimeTypeAdapterFactory<SecurityIntegration> SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(SecurityIntegration.class, "clazz")
+                    .registerSubtype(OIDCSecurityIntegration.class, "OIDCSecurityIntegration");
+
+    private static final RuntimeTypeAdapterFactory<GroupProvider> GROUP_PROVIDER_RUNTIME_TYPE_ADAPTER_FACTORY =
+            RuntimeTypeAdapterFactory.of(GroupProvider.class, "clazz")
+                    .registerSubtype(FileGroupProvider.class, "FileGroupProvider")
+                    .registerSubtype(UnixGroupProvider.class, "UnixGroupProvider")
+                    .registerSubtype(LDAPGroupProvider.class, "LDAPGroupProvider");
+
     private static final RuntimeTypeAdapterFactory<Warehouse> WAREHOUSE_TYPE_ADAPTER_FACTORY = RuntimeTypeAdapterFactory
             .of(Warehouse.class, "clazz")
             .registerSubtype(DefaultWarehouse.class, "DefaultWarehouse");
@@ -450,6 +466,8 @@ public class GsonUtils {
             .registerTypeAdapterFactory(TABLE_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(SNAPSHOT_INFO_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(P_ENTRY_OBJECT_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(SEC_INTEGRATION_RUNTIME_TYPE_ADAPTER_FACTORY)
+            .registerTypeAdapterFactory(GROUP_PROVIDER_RUNTIME_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(WAREHOUSE_TYPE_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(LOAD_JOB_TYPE_RUNTIME_ADAPTER_FACTORY)
             .registerTypeAdapterFactory(TXN_COMMIT_ATTACHMENT_TYPE_RUNTIME_ADAPTER_FACTORY)

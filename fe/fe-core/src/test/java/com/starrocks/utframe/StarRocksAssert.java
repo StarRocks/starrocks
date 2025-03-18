@@ -38,6 +38,7 @@ import com.google.common.base.Preconditions;
 import com.google.common.base.Strings;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.analysis.FunctionName;
 import com.starrocks.analysis.TableName;
@@ -64,6 +65,7 @@ import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.MetaNotFoundException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.load.routineload.RoutineLoadMgr;
@@ -89,6 +91,7 @@ import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AlterMaterializedViewStmt;
 import com.starrocks.sql.ast.AlterTableStmt;
+import com.starrocks.sql.ast.CancelAlterTableStmt;
 import com.starrocks.sql.ast.CreateCatalogStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateFunctionStmt;
@@ -132,7 +135,6 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.assertj.core.util.Sets;
 import org.junit.Assert;
 import org.junit.jupiter.params.provider.Arguments;
 
@@ -453,7 +455,6 @@ public class StarRocksAssert {
                     this.useDatabase(dbName);
                 }
                 String sql = mTable.getCreateTableSql();
-                System.out.println(sql);
                 CreateTableStmt createTableStmt =
                             (CreateTableStmt) UtFrameUtils.parseStmtWithNewParser(sql, ctx);
                 utCreateTableWithRetry(createTableStmt, ctx);
@@ -471,7 +472,6 @@ public class StarRocksAssert {
                 action.run();
             }
         } catch (Exception e) {
-            e.printStackTrace();
             Assert.fail("create table failed");
         } finally {
             for (Pair<String, String> t : names) {
@@ -481,7 +481,7 @@ public class StarRocksAssert {
                     }
                     dropTable(t.second);
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    // ignore exceptions
                 }
             }
         }
@@ -509,7 +509,6 @@ public class StarRocksAssert {
                 action.run();
             }
         } catch (Exception e) {
-            e.printStackTrace();
             Assert.fail("Do action failed:" + e.getMessage());
         } finally {
             if (action != null) {
@@ -517,7 +516,7 @@ public class StarRocksAssert {
                     try {
                         dropTable(table);
                     } catch (Exception e) {
-                        e.printStackTrace();
+                        // ignore exceptions
                     }
                 }
             }
@@ -556,7 +555,6 @@ public class StarRocksAssert {
                 action.run();
             }
         } catch (Exception e) {
-            e.printStackTrace();
             Assert.fail("Do action failed:" + e.getMessage());
         } finally {
             if (action != null) {
@@ -564,7 +562,7 @@ public class StarRocksAssert {
                     try {
                         dropTable(table);
                     } catch (Exception e) {
-                        e.printStackTrace();
+                        // ignore exceptions
                     }
                 }
             }
@@ -603,7 +601,6 @@ public class StarRocksAssert {
                 action.accept(createTableStmt.getTableName());
             }
         } catch (Exception e) {
-            e.printStackTrace();
             Assert.fail("Do action failed:" + e.getMessage());
         } finally {
             if (action != null) {
@@ -611,7 +608,7 @@ public class StarRocksAssert {
                     try {
                         dropTable(table);
                     } catch (Exception e) {
-                        e.printStackTrace();
+                        // ignore exceptions
                     }
                 }
             }
@@ -634,6 +631,10 @@ public class StarRocksAssert {
      */
     public StarRocksAssert useTable(String table) {
         return withMTableNames(null, List.of(table), null);
+    }
+
+    public Database getDb(String dbName) {
+        return ctx.getGlobalStateMgr().getLocalMetastore().getDb(dbName);
     }
 
     public Table getTable(String dbName, String tableName) {
@@ -830,7 +831,6 @@ public class StarRocksAssert {
             withMaterializedView(sql);
             action.accept(mvName);
         } catch (Exception e) {
-            e.printStackTrace();
             Assert.fail();
         } finally {
             // Create mv may fail.
@@ -838,7 +838,7 @@ public class StarRocksAssert {
                 try {
                     dropMaterializedView(mvName);
                 } catch (Exception e) {
-                    // e.printStackTrace();
+                    // ignore exceptions
                 }
             }
         }
@@ -865,7 +865,6 @@ public class StarRocksAssert {
                 Preconditions.checkState(stmt instanceof CreateMaterializedViewStatement);
                 CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
                 String mvName = createMaterializedViewStatement.getTableName().getTbl();
-                System.out.println(sql);
                 mvNames.add(mvName);
                 withMaterializedView(sql, true, isRefresh);
             }
@@ -879,7 +878,7 @@ public class StarRocksAssert {
                     try {
                         dropMaterializedView(mvName);
                     } catch (Exception e) {
-                        e.printStackTrace();
+                        // ignore exceptions
                     }
                 }
             }
@@ -894,18 +893,17 @@ public class StarRocksAssert {
             Preconditions.checkState(stmt instanceof CreateMaterializedViewStatement);
             CreateMaterializedViewStatement createMaterializedViewStatement = (CreateMaterializedViewStatement) stmt;
             mvName = createMaterializedViewStatement.getTableName().getTbl();
-            System.out.println(sql);
             withMaterializedView(sql);
             action.run();
         } catch (Exception e) {
-            Assert.fail(e.getMessage());
+            Assert.fail(DebugUtil.getStackTrace(e));
         } finally {
             // Create mv may fail.
             if (!Strings.isNullOrEmpty(mvName)) {
                 try {
                     dropMaterializedView(mvName);
                 } catch (Exception e) {
-                    e.printStackTrace();
+                    // ignore exceptions
                 }
             }
         }
@@ -963,6 +961,16 @@ public class StarRocksAssert {
                 refreshMvPartition(String.format("refresh materialized view %s", mvName));
             }
         }
+        return this;
+    }
+
+    public StarRocksAssert cancelMV(String sql) throws Exception {
+        StatementBase stmt = UtFrameUtils.parseStmtWithNewParser(sql, ctx);
+        if (stmt instanceof CancelAlterTableStmt) {
+            CancelAlterTableStmt cancelAlterTableStmt = (CancelAlterTableStmt) stmt;
+            GlobalStateMgr.getCurrentState().getLocalMetastore().cancelAlter(cancelAlterTableStmt);
+        }
+
         return this;
     }
 
@@ -1163,6 +1171,26 @@ public class StarRocksAssert {
             Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(alterJobV2.getDbId());
             Table table =
                         GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), alterJobV2.getTableId());
+            Preconditions.checkState(table instanceof OlapTable);
+            OlapTable olapTable = (OlapTable) table;
+            int retry = 0;
+            while (olapTable.getState() != OlapTable.OlapTableState.NORMAL && retry++ < 6000) {
+                Thread.sleep(10);
+            }
+            Assert.assertEquals(AlterJobV2.JobState.FINISHED, alterJobV2.getJobState());
+        }
+    }
+
+    public void checkSchemaChangeJob() throws Exception {
+        Map<Long, AlterJobV2> alterJobs = GlobalStateMgr.getCurrentState().
+                getSchemaChangeHandler().getAlterJobsV2();
+        for (AlterJobV2 alterJobV2 : alterJobs.values()) {
+            if (alterJobV2.getJobState().isFinalState()) {
+                continue;
+            }
+            Database database = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(alterJobV2.getDbId());
+            Table table =
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(database.getId(), alterJobV2.getTableId());
             Preconditions.checkState(table instanceof OlapTable);
             OlapTable olapTable = (OlapTable) table;
             int retry = 0;

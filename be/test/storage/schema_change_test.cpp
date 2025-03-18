@@ -824,10 +824,10 @@ TEST_F(SchemaChangeTest, overlapping_direct_schema_change) {
         auto c1 = ColumnTestHelper::build_column<int32_t>({0, 1, 2, 3});
         auto c2 = ColumnTestHelper::build_column<int32_t>({0, 1, 2, 3});
         auto c3 = ColumnTestHelper::build_column<int32_t>({0, 1, 2, 3});
-        chunk.append_column(c0, 0);
-        chunk.append_column(c1, 1);
-        chunk.append_column(c2, 2);
-        chunk.append_column(c3, 3);
+        chunk.append_column(std::move(c0), 0);
+        chunk.append_column(std::move(c1), 1);
+        chunk.append_column(std::move(c2), 2);
+        chunk.append_column(std::move(c3), 3);
 
         std::vector<uint32_t> idxs{0, 1, 2, 3};
         ASSERT_OK(delta_writer->write(chunk, idxs.data(), 0, 4));

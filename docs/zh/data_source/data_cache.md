@@ -40,21 +40,25 @@ StarRocks 以 BE 节点的内存和磁盘作为缓存的存储介质，支持全
 
 ## 缓存淘汰机制
 
-在 Data Cache 中，StarRocks 采用 [LRU](https://baike.baidu.com/item/LRU/1269842) (least recently used) 策略来缓存和淘汰数据，大致如下：
+Data Cache 支持内存和磁盘的两级缓存。您也可以根据实际需要配置全内存或者全磁盘的一级缓存。
+
+当使用内存+磁盘的两级缓存时：
 
 - 优先从内存读取数据，如果在内存中没有找到再从磁盘上读取。从磁盘上读取的数据，会尝试加载到内存中。
 - 从内存中淘汰的数据，会尝试写入磁盘；从磁盘上淘汰的数据，会被废弃。
 
+内存和磁盘分别按照自己的淘汰策略进行数据淘汰。StarRocks Data Cache当前支持 [LRU](https://baike.baidu.com/item/LRU/1269842) (least recently used) 和 SLRU（Segmented LRU）策略来缓存和淘汰数据，默认使用 SLRU 淘汰策略。
+
+当使用 SLRU 策略时，缓存空间会被分成淘汰段和保护段，两段都均采用 LRU 策略。数据第一次被访问时，进入淘汰段。处于淘汰段的数据只有再次被访问时才会进入保护段。保护段的数据如果被淘汰将再次进入淘汰段，而淘汰段的数据被淘汰时则会被移出缓存。和 LRU 相比，SLRU 能够更好的抵御突发的稀疏流量，避免保护段的数据不会被只访问过一次的元素直接淘汰。
+
 ## 开启 Data Cache
 
-自 v3.3.0 起，Data Cache 功能默认开启。
-
-默认情况下，系统会通过以下方式缓存数据：
+Data Cache 功能默认开启。默认情况下，系统会通过以下方式缓存数据：
 
 - 系统变量 `enable_scan_datacache` 和 BE 参数 `datacache_enable` 默认设置为 `true`。
-- 如未手动配置缓存路径和内存以及磁盘上限，系统会自动选择相应的路径并设置上限：
-  - 在 `storage_root_path` 目录下创建 **datacache** 目录作为磁盘缓存目录。（您可以通过 BE 参数 `datacache_disk_path` 修改。）
-  - 开启磁盘空间自动调整功能。根据缓存磁盘当前使用情况自动设置上限，保证当前缓存盘整体磁盘使用率在 70% 左右，并根据后续磁盘使用情况动态调整。（您可以通过 BE 参数 `datacache_disk_high_level`、`datacache_disk_safe_level` 以及 `datacache_disk_low_level` 调整该行为。）
+- 系统在 `storage_root_path` 目录下创建 **datacache** 目录作为磁盘缓存目录，从 v3.4.0 起，不再支持手动更改磁盘缓存路径。如需使用其他路径，可创建 Linux Symbolic Link。
+- 如未手动配置内存以及磁盘上限，系统会根据磁盘容量自动设置磁盘上限：
+  - 开启磁盘空间自动调整功能。根据缓存磁盘当前使用情况自动设置上限，保证当前缓存盘整体磁盘使用率在 80% 左右，并根据后续磁盘使用情况动态调整。（您可以通过 BE 参数 `datacache_disk_high_level`、`datacache_disk_safe_level` 以及 `datacache_disk_low_level` 调整该行为。）
   - 默认配置缓存数据的内存上限为 `0`。（您可以通过 BE 参数 `datacache_mem_size` 修改。）
 - 默认使用异步缓存方式，减少缓存填充影响数据读操作。
 - 默认启用 I/O 自适应功能，当磁盘 I/O 负载比较高时，系统会自动将一部分请求路由到远端存储，减少磁盘压力。
@@ -109,6 +113,70 @@ Data Cache 支持以同步或异步的方式进行缓存填充。
   使用异步填充方式时，系统会尝试在尽可能不影响读取性能的前提下在后台对访问到的数据进行缓存。异步方式能够减少缓存填充对首次读取性能的影响，但填充效率较低。通常单次查询不能保证将访问到的所以数据都缓存到本地，往往需要多次。
 
 自 v3.3.0 起，系统默认以异步方式进行缓存，您可以通过修改 Session 变量 [enable_datacache_async_populate_mode](../sql-reference/System_variable.md) 来修改填充方式。
+
+### 持久化
+
+Data Cache 当前默认会持久化磁盘缓存数据，BE 进程重启后，可直接复用先前磁盘缓存数据。
+
+## 查看 Data Cache 命中情况
+
+您可以在 Query Profile 里观测当前查询的 Cache 命中情况。观测下述三个指标查看 Data Cache 的命中情况：
+
+- `DataCacheReadBytes`：从内存和磁盘中读取的数据量。
+- `DataCacheWriteBytes`：从外部存储系统加载到内存和磁盘的数据量。
+- `BytesRead`：总共读取的数据量，包括从内存、磁盘以及外部存储读取的数据量。
+
+示例一：StarRocks 从外部存储系统中读取了大量的数据 (7.65 GB)，从内存和磁盘中读取的数据量 (518.73 MB) 较少，即代表 Data Cache 命中较少。
+
+```Plain
+ - Table: lineorder
+ - DataCacheReadBytes: 518.73 MB
+   - __MAX_OF_DataCacheReadBytes: 4.73 MB
+   - __MIN_OF_DataCacheReadBytes: 16.00 KB
+ - DataCacheReadCounter: 684
+   - __MAX_OF_DataCacheReadCounter: 4
+   - __MIN_OF_DataCacheReadCounter: 0
+ - DataCacheReadTimer: 737.357us
+ - DataCacheWriteBytes: 7.65 GB
+   - __MAX_OF_DataCacheWriteBytes: 64.39 MB
+   - __MIN_OF_DataCacheWriteBytes: 0.00 
+ - DataCacheWriteCounter: 7.887K (7887)
+   - __MAX_OF_DataCacheWriteCounter: 65
+   - __MIN_OF_DataCacheWriteCounter: 0
+ - DataCacheWriteTimer: 23.467ms
+   - __MAX_OF_DataCacheWriteTimer: 62.280ms
+   - __MIN_OF_DataCacheWriteTimer: 0ns
+ - BufferUnplugCount: 15
+   - __MAX_OF_BufferUnplugCount: 2
+   - __MIN_OF_BufferUnplugCount: 0
+ - BytesRead: 7.65 GB
+   - __MAX_OF_BytesRead: 64.39 MB
+   - __MIN_OF_BytesRead: 0.00
+```
+
+示例二：StarRocks 从 Data Cache 读取了 46.08 GB 数据，从外部存储系统直接读取的数据量为 0，即代表 Data Cache 完全命中。
+
+```Plain
+ Table: lineitem
+- DataCacheReadBytes: 46.08 GB
+ - __MAX_OF_DataCacheReadBytes: 194.99 MB
+ - __MIN_OF_DataCacheReadBytes: 81.25 MB
+- DataCacheReadCounter: 72.237K (72237)
+ - __MAX_OF_DataCacheReadCounter: 299
+ - __MIN_OF_DataCacheReadCounter: 118
+- DataCacheReadTimer: 856.481ms
+ - __MAX_OF_DataCacheReadTimer: 1s547ms
+ - __MIN_OF_DataCacheReadTimer: 261.824ms
+- DataCacheWriteBytes: 0.00 
+- DataCacheWriteCounter: 0
+- DataCacheWriteTimer: 0ns
+- BufferUnplugCount: 1.231K (1231)
+ - __MAX_OF_BufferUnplugCount: 81
+ - __MIN_OF_BufferUnplugCount: 35
+- BytesRead: 46.08 GB
+ - __MAX_OF_BytesRead: 194.99 MB
+ - __MIN_OF_BytesRead: 81.25 MB
+```
 
 ## Footer Cache
 
@@ -178,66 +246,6 @@ datacache_auto_adjust_enable=true
 - 当磁盘占用比例在一定时间内持续低于 BE 参数 `datacache_disk_low_level` 中规定的阈值（默认值 `60`, 即磁盘空间的 60%），且当前磁盘用于缓存数据的空间已经写满时，系统将自动进行缓存扩容，增加缓存上限。
 - 当进行缓存自动扩容或缩容时，系统将以 BE 参数 `datacache_disk_safe_level` 中规定的阈值（默认值 `70`, 即磁盘空间的 70%）为目标，尽可能得调整缓存容量。
 
-## 查看 Data Cache 命中情况
-
-您可以在 query profile 里观测当前 query 的 cache 命中情况。观测下述三个指标查看 Data Cache 的命中情况：
-
-- `DataCacheReadBytes`：从内存和磁盘中读取的数据量。
-- `DataCacheWriteBytes`：从外部存储系统加载到内存和磁盘的数据量。
-- `BytesRead`：总共读取的数据量，包括从内存、磁盘以及外部存储读取的数据量。
-
-示例一：StarRocks 从外部存储系统中读取了大量的数据 (7.65 GB)，从内存和磁盘中读取的数据量 (518.73 MB) 较少，即代表 Data Cache 命中较少。
-
-```Plain
- - Table: lineorder
- - DataCacheReadBytes: 518.73 MB
-   - __MAX_OF_DataCacheReadBytes: 4.73 MB
-   - __MIN_OF_DataCacheReadBytes: 16.00 KB
- - DataCacheReadCounter: 684
-   - __MAX_OF_DataCacheReadCounter: 4
-   - __MIN_OF_DataCacheReadCounter: 0
- - DataCacheReadTimer: 737.357us
- - DataCacheWriteBytes: 7.65 GB
-   - __MAX_OF_DataCacheWriteBytes: 64.39 MB
-   - __MIN_OF_DataCacheWriteBytes: 0.00 
- - DataCacheWriteCounter: 7.887K (7887)
-   - __MAX_OF_DataCacheWriteCounter: 65
-   - __MIN_OF_DataCacheWriteCounter: 0
- - DataCacheWriteTimer: 23.467ms
-   - __MAX_OF_DataCacheWriteTimer: 62.280ms
-   - __MIN_OF_DataCacheWriteTimer: 0ns
- - BufferUnplugCount: 15
-   - __MAX_OF_BufferUnplugCount: 2
-   - __MIN_OF_BufferUnplugCount: 0
- - BytesRead: 7.65 GB
-   - __MAX_OF_BytesRead: 64.39 MB
-   - __MIN_OF_BytesRead: 0.00
-```
-
-示例二：StarRocks 从 data cache 读取了 46.08 GB 数据，从外部存储系统直接读取的数据量为 0，即代表 data cache 完全命中。
-
-```Plain
- Table: lineitem
-- DataCacheReadBytes: 46.08 GB
- - __MAX_OF_DataCacheReadBytes: 194.99 MB
- - __MIN_OF_DataCacheReadBytes: 81.25 MB
-- DataCacheReadCounter: 72.237K (72237)
- - __MAX_OF_DataCacheReadCounter: 299
- - __MIN_OF_DataCacheReadCounter: 118
-- DataCacheReadTimer: 856.481ms
- - __MAX_OF_DataCacheReadTimer: 1s547ms
- - __MIN_OF_DataCacheReadTimer: 261.824ms
-- DataCacheWriteBytes: 0.00 
-- DataCacheWriteCounter: 0
-- DataCacheWriteTimer: 0ns
-- BufferUnplugCount: 1.231K (1231)
- - __MAX_OF_BufferUnplugCount: 81
- - __MIN_OF_BufferUnplugCount: 35
-- BytesRead: 46.08 GB
- - __MAX_OF_BytesRead: 194.99 MB
- - __MIN_OF_BytesRead: 81.25 MB
-```
-
 ## 相关参数
 
 您可以通过以下系统变量和 BE 参数配置 Data Cache。
@@ -252,8 +260,6 @@ datacache_auto_adjust_enable=true
 ### BE 参数
 
 - [datacache_enable](../administration/management/BE_configuration.md#datacache_enable)
-- [datacache_disk_path](../administration/management/BE_configuration.md#datacache_disk_path)
-- [datacache_meta_path](../administration/management/BE_configuration.md#datacache_meta_path)
 - [datacache_mem_size](../administration/management/BE_configuration.md#datacache_mem_size)
 - [datacache_disk_size](../administration/management/BE_configuration.md#datacache_disk_size)
 - [datacache_auto_adjust_enable](../administration/management/BE_configuration.md#datacache_auto_adjust_enable)
@@ -263,4 +269,5 @@ datacache_auto_adjust_enable=true
 - [datacache_disk_adjust_interval_seconds](../administration/management/BE_configuration.md#datacache_disk_adjust_interval_seconds)
 - [datacache_disk_idle_seconds_for_expansion](../administration/management/BE_configuration.md#datacache_disk_idle_seconds_for_expansion)
 - [datacache_min_disk_quota_for_adjustment](../administration/management/BE_configuration.md#datacache_min_disk_quota_for_adjustment)
-
+- [datacache_eviction_policy](../administration/management/BE_configuration.md#datacache_eviction_policy)
+- [datacache_inline_item_count_limit](../administration/management/BE_configuration.md#datacache_inline_item_count_limit)

@@ -64,6 +64,8 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
     private Deployer deployer;
     private ExecutionDAG dag;
 
+    private volatile boolean cancelled = false;
+
     public PhasedExecutionSchedule(ConnectContext context) {
         this.connectContext = context;
         this.maxScheduleConcurrency = context.getSessionVariable().getPhasedSchedulerMaxConcurrency();
@@ -200,7 +202,7 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
     }
 
     // schedule next
-    public void schedule() throws RpcException, StarRocksException {
+    public void schedule(Coordinator.ScheduleOption option) throws RpcException, StarRocksException {
         buildDeployStates();
         final int oldTaskCnt = inputScheduleTaskNums.getAndIncrement();
         if (oldTaskCnt == 0) {
@@ -210,6 +212,10 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
                 dec = inputScheduleTaskNums.getAndDecrement();
             } while (dec > 1);
         }
+    }
+
+    public void cancel() {
+        cancelled = true;
     }
 
     private void doDeploy() throws RpcException, StarRocksException {
@@ -234,13 +240,16 @@ public class PhasedExecutionSchedule implements ExecutionSchedule {
     }
 
     public void tryScheduleNextTurn(TUniqueId fragmentInstanceId) throws RpcException, StarRocksException {
+        if (cancelled) {
+            return;
+        }
         final FragmentInstance instance = dag.getInstanceByInstanceId(fragmentInstanceId);
         final PlanFragmentId fragmentId = instance.getFragmentId();
         final AtomicInteger countDowns = schedulingFragmentInstances.get(fragmentId);
         if (countDowns.decrementAndGet() != 0) {
             return;
         }
-        try (var guard = ConnectContext.ScopeGuard.setIfNotExists(connectContext)) {
+        try (var guard = connectContext.bindScope()) {
             final int oldTaskCnt = inputScheduleTaskNums.getAndIncrement();
             if (oldTaskCnt == 0) {
                 int dec = 0;

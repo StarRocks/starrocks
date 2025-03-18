@@ -107,6 +107,8 @@ struct SpilledOptions {
 
     bool enable_buffer_read = false;
     size_t max_read_buffer_bytes = UINT64_MAX;
+
+    int64_t spill_hash_join_probe_op_max_bytes = 1LL << 31;
 };
 
 // spill strategy

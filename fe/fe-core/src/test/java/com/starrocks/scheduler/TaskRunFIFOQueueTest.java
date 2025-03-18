@@ -17,6 +17,7 @@ package com.starrocks.scheduler;
 
 import com.google.common.base.Predicates;
 import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.starrocks.common.FeConstants;
 import com.starrocks.qe.ConnectContext;
@@ -67,7 +68,8 @@ public class TaskRunFIFOQueueTest {
     }
 
     private static ExecuteOption makeExecuteOption(boolean isMergeRedundant, boolean isSync, int priority) {
-        ExecuteOption executeOption = new ExecuteOption(isMergeRedundant);
+        ExecuteOption executeOption = new ExecuteOption(Constants.TaskRunPriority.LOWEST.value(), isMergeRedundant,
+                Maps.newHashMap());
         executeOption.setSync(isSync);
         executeOption.setPriority(priority);
         return executeOption;
@@ -108,7 +110,6 @@ public class TaskRunFIFOQueueTest {
         List<TaskRun> pendingTaskRuns = queue.getCopiedPendingTaskRuns();
         for (int i = 0; i < N; i++) {
             TaskRun taskRun = queue.poll(Predicates.alwaysTrue());
-            System.out.println(taskRun);
             Assert.assertTrue(taskRun.equals(pendingTaskRuns.get(i)));
             Assert.assertTrue(taskRun.equals(taskRuns.get(i)));
         }
@@ -132,7 +133,6 @@ public class TaskRunFIFOQueueTest {
         List<TaskRun> pendingTaskRuns = queue.getCopiedPendingTaskRuns();
         for (int i = 0; i < N; i++) {
             TaskRun taskRun = queue.poll(Predicates.alwaysTrue());
-            System.out.println(taskRun);
             Assert.assertTrue(taskRun.equals(pendingTaskRuns.get(i)));
             Assert.assertTrue(taskRun.equals(taskRuns.get(N - 1 - i)));
         }

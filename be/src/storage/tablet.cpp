@@ -66,6 +66,7 @@
 #include "util/defer_op.h"
 #include "util/failpoint/fail_point.h"
 #include "util/ratelimit.h"
+#include "util/starrocks_metrics.h"
 #include "util/time.h"
 
 namespace starrocks {
@@ -85,6 +86,9 @@ Tablet::Tablet(const TabletMetaSharedPtr& tablet_meta, DataDir* data_dir)
     _timestamped_version_tracker.construct_versioned_tracker(_tablet_meta->all_rs_metas());
     _max_version_schema = BaseTablet::tablet_schema();
     MEM_TRACKER_SAFE_CONSUME(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+#ifndef BE_TEST
+    StarRocksMetrics::instance()->table_metrics_mgr()->register_table(_tablet_meta->table_id());
+#endif
 }
 
 Tablet::Tablet() {
@@ -93,6 +97,9 @@ Tablet::Tablet() {
 
 Tablet::~Tablet() {
     MEM_TRACKER_SAFE_RELEASE(GlobalEnv::GetInstance()->tablet_metadata_mem_tracker(), _mem_usage());
+#ifndef BE_TEST
+    StarRocksMetrics::instance()->table_metrics_mgr()->unregister_table(_tablet_meta->table_id());
+#endif
 }
 
 Status Tablet::_init_once_action() {
@@ -628,6 +635,14 @@ Status Tablet::add_inc_rowset(const RowsetSharedPtr& rowset, int64_t version) {
 }
 
 bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
+    // There are several scenarios where _committed_rs_map might be modified:
+    //   1. Adding to _committed_rs_map when committing a transaction.
+    //   2. Removing from _committed_rs_map when publishing a transaction.
+    //   3. Clear _committed_rs_map during a schema update.
+    // Add and Delete from _committed_rs_map is thread safe but there are concurrent issue between
+    // add(delete) and clear operation.
+    // So we use schema_lock to prevent the concurrent issue.
+    std::shared_lock l(_schema_lock);
     if (_committed_rs_map.size() >= config::max_committed_without_schema_rowset) {
         VLOG(2) << "tablet: " << tablet_id()
                 << " too many committed without schema rowset : " << _committed_rs_map.size();
@@ -642,6 +657,7 @@ bool Tablet::add_committed_rowset(const RowsetSharedPtr& rowset) {
 }
 
 void Tablet::erase_committed_rowset(const RowsetSharedPtr& rowset) {
+    std::shared_lock l(_schema_lock);
     if (rowset != nullptr) {
         _committed_rs_map.erase(rowset->rowset_id());
     }
@@ -1525,46 +1541,53 @@ bool Tablet::_contains_rowset(const RowsetId rowset_id) {
 }
 
 void Tablet::build_tablet_report_info(TTabletInfo* tablet_info) {
-    std::shared_lock rdlock(_meta_lock);
-    tablet_info->__set_tablet_id(_tablet_meta->tablet_id());
-    tablet_info->__set_schema_hash(_tablet_meta->schema_hash());
-    tablet_info->__set_partition_id(_tablet_meta->partition_id());
-    tablet_info->__set_storage_medium(_data_dir->storage_medium());
-    tablet_info->__set_path_hash(_data_dir->path_hash());
-    tablet_info->__set_enable_persistent_index(_tablet_meta->get_enable_persistent_index());
-    tablet_info->__set_primary_index_cache_expire_sec(_tablet_meta->get_primary_index_cache_expire_sec());
-    tablet_info->__set_tablet_schema_version(_max_version_schema->schema_version());
-    if (_tablet_meta->get_binlog_config() != nullptr) {
-        tablet_info->__set_binlog_config_version(_tablet_meta->get_binlog_config()->version);
+    {
+        std::shared_lock rdlock(_meta_lock);
+        tablet_info->__set_tablet_id(_tablet_meta->tablet_id());
+        tablet_info->__set_schema_hash(_tablet_meta->schema_hash());
+        tablet_info->__set_partition_id(_tablet_meta->partition_id());
+        tablet_info->__set_storage_medium(_data_dir->storage_medium());
+        tablet_info->__set_path_hash(_data_dir->path_hash());
+        tablet_info->__set_enable_persistent_index(_tablet_meta->get_enable_persistent_index());
+        tablet_info->__set_primary_index_cache_expire_sec(_tablet_meta->get_primary_index_cache_expire_sec());
+        tablet_info->__set_tablet_schema_version(_max_version_schema->schema_version());
+        if (_tablet_meta->get_binlog_config() != nullptr) {
+            tablet_info->__set_binlog_config_version(_tablet_meta->get_binlog_config()->version);
+        }
+        if (_updates == nullptr) {
+            int64_t max_version = _timestamped_version_tracker.get_max_continuous_version();
+            auto max_rowset = rowset_with_max_version();
+            if (max_rowset != nullptr) {
+                if (max_rowset->version().second != max_version) {
+                    tablet_info->__set_version_miss(true);
+                }
+            } else {
+                // If the tablet is in running state, it must not be doing schema-change. so if we can not
+                // access its rowsets, it means that the tablet is bad and needs to be reported to the FE
+                // for subsequent repairs (through the cloning task)
+                if (tablet_state() == TABLET_RUNNING) {
+                    tablet_info->__set_used(false);
+                }
+                // For other states, FE knows that the tablet is in a certain change process, so here
+                // still sets the state to normal when reporting. Note that every task has an timeout,
+                // so if the task corresponding to this change hangs, when the task timeout, FE will know
+                // and perform state modification operations.
+            }
+            tablet_info->__set_version(max_version);
+            tablet_info->__set_max_readable_version(max_version);
+            // TODO: support getting minReadableVersion
+            tablet_info->__set_min_readable_version(_timestamped_version_tracker.get_min_readable_version());
+            tablet_info->__set_version_count(_tablet_meta->version_count());
+            tablet_info->__set_row_count(_tablet_meta->num_rows());
+            tablet_info->__set_data_size(_tablet_meta->tablet_footprint());
+        }
     }
+
+    // primary key specified info will protected by independent lock context
+    // in TabletUpdates which means that the lock context can be sperated from
+    // the tablet meta_lock when trying to get the extra info
     if (_updates) {
         _updates->get_tablet_info_extra(tablet_info);
-    } else {
-        int64_t max_version = _timestamped_version_tracker.get_max_continuous_version();
-        auto max_rowset = rowset_with_max_version();
-        if (max_rowset != nullptr) {
-            if (max_rowset->version().second != max_version) {
-                tablet_info->__set_version_miss(true);
-            }
-        } else {
-            // If the tablet is in running state, it must not be doing schema-change. so if we can not
-            // access its rowsets, it means that the tablet is bad and needs to be reported to the FE
-            // for subsequent repairs (through the cloning task)
-            if (tablet_state() == TABLET_RUNNING) {
-                tablet_info->__set_used(false);
-            }
-            // For other states, FE knows that the tablet is in a certain change process, so here
-            // still sets the state to normal when reporting. Note that every task has an timeout,
-            // so if the task corresponding to this change hangs, when the task timeout, FE will know
-            // and perform state modification operations.
-        }
-        tablet_info->__set_version(max_version);
-        tablet_info->__set_max_readable_version(max_version);
-        // TODO: support getting minReadableVersion
-        tablet_info->__set_min_readable_version(_timestamped_version_tracker.get_min_readable_version());
-        tablet_info->__set_version_count(_tablet_meta->version_count());
-        tablet_info->__set_row_count(_tablet_meta->num_rows());
-        tablet_info->__set_data_size(_tablet_meta->tablet_footprint());
     }
 }
 
@@ -1599,7 +1622,7 @@ Status Tablet::rowset_commit(int64_t version, const RowsetSharedPtr& rowset, uin
 
 void Tablet::on_shutdown() {
     if (_updates) {
-        _updates->_stop_and_wait_apply_done();
+        _updates->stop_and_wait_apply_done();
     }
 }
 
@@ -1818,6 +1841,7 @@ const TabletSchemaCSPtr Tablet::thread_safe_get_tablet_schema() const {
     return _max_version_schema;
 }
 
+DEFINE_FAIL_POINT(tablet_get_visible_rowset);
 // for non-pk tablet, all published rowset will be rewrite when save `tablet_meta`
 // for pk tablet, we need to get the rowset which without `tablet_schema` and rewrite
 // the rowsets in `_committed_rs_map` is committed success but not publish yet, so if we update the
@@ -1832,6 +1856,14 @@ void Tablet::_get_rewrite_meta_rs(std::vector<RowsetSharedPtr>& rewrite_meta_rs)
     if (_updates) {
         _updates->rewrite_rs_meta(true);
     }
+    FAIL_POINT_TRIGGER_EXECUTE(tablet_get_visible_rowset, {
+        if (_updates) {
+            auto rowset_map = _updates->get_rowset_map();
+            for (const auto& [_, rs] : (*rowset_map)) {
+                rewrite_meta_rs.emplace_back(rs);
+            }
+        }
+    });
 }
 
 void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
@@ -1848,7 +1880,8 @@ void Tablet::update_max_version_schema(const TabletSchemaCSPtr& tablet_schema) {
         }
         std::vector<RowsetSharedPtr> rewrite_meta_rs;
         _get_rewrite_meta_rs(rewrite_meta_rs);
-        _tablet_meta->save_tablet_schema(_max_version_schema, rewrite_meta_rs, _data_dir);
+        _tablet_meta->save_tablet_schema(_max_version_schema, rewrite_meta_rs, _data_dir,
+                                         _max_version_schema->keys_type() == KeysType::PRIMARY_KEYS);
         _committed_rs_map.clear();
     }
 }
@@ -1866,6 +1899,21 @@ void Tablet::remove_all_delta_column_group_cache() const {
 
     std::shared_lock rdlock(_meta_lock);
     return remove_all_delta_column_group_cache_unlocked();
+}
+
+// get average row size
+int64_t Tablet::get_average_row_size() {
+    if (_updates) {
+        return _updates->get_average_row_size();
+    } else {
+        int64_t total_row_size = 0;
+        int64_t total_row_count = 0;
+        for (const auto& version_rowset : _rs_version_map) {
+            total_row_size += version_rowset.second->total_row_size();
+            total_row_count += version_rowset.second->num_rows();
+        }
+        return total_row_count == 0 ? 0 : total_row_size / total_row_count;
+    }
 }
 
 void Tablet::remove_all_delta_column_group_cache_unlocked() const {

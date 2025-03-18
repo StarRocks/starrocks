@@ -298,7 +298,8 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
     }
     case TYPE_DATETIME: {
         return ::parquet::schema::PrimitiveNode::Make(
-                name, rep_type, ::parquet::LogicalType::Timestamp(true, ::parquet::LogicalType::TimeUnit::unit::MICROS),
+                name, rep_type,
+                ::parquet::LogicalType::Timestamp(false, ::parquet::LogicalType::TimeUnit::unit::MICROS),
                 ::parquet::Type::INT64, -1, file_column_id.field_id);
     }
     case TYPE_DECIMAL32: {
@@ -354,6 +355,10 @@ arrow::Result<::parquet::schema::NodePtr> ParquetBuildHelper::_make_schema_node(
         return ::parquet::schema::PrimitiveNode::Make(
                 name, rep_type, ::parquet::LogicalType::Time(false, ::parquet::LogicalType::TimeUnit::MICROS),
                 ::parquet::Type::INT64, -1, file_column_id.field_id);
+    }
+    case TYPE_JSON: {
+        return ::parquet::schema::PrimitiveNode::Make(name, rep_type, ::parquet::LogicalType::JSON(),
+                                                      ::parquet::Type::BYTE_ARRAY, -1, file_column_id.field_id);
     }
     default: {
         return arrow::Status::TypeError(fmt::format("Doesn't support to write {} type data", type_desc.debug_string()));

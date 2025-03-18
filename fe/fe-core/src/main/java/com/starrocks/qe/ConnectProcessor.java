@@ -45,6 +45,7 @@ import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
+import com.starrocks.common.StarRocksException;
 import com.starrocks.common.profile.Timer;
 import com.starrocks.common.profile.Tracers;
 import com.starrocks.common.util.AuditStatisticsUtil;
@@ -56,6 +57,7 @@ import com.starrocks.connector.exception.StarRocksConnectorException;
 import com.starrocks.metric.MetricRepo;
 import com.starrocks.metric.ResourceGroupMetricMgr;
 import com.starrocks.mysql.MysqlChannel;
+import com.starrocks.mysql.MysqlCodec;
 import com.starrocks.mysql.MysqlCommand;
 import com.starrocks.mysql.MysqlPacket;
 import com.starrocks.mysql.MysqlProto;
@@ -69,6 +71,7 @@ import com.starrocks.server.WarehouseManager;
 import com.starrocks.service.FrontendOptions;
 import com.starrocks.sql.analyzer.AstToSQLBuilder;
 import com.starrocks.sql.ast.AstTraverser;
+import com.starrocks.sql.ast.DmlStmt;
 import com.starrocks.sql.ast.ExecuteStmt;
 import com.starrocks.sql.ast.PrepareStmt;
 import com.starrocks.sql.ast.QueryStatement;
@@ -129,7 +132,7 @@ public class ConnectProcessor {
                     WarehouseManager warehouseMgr = GlobalStateMgr.getCurrentState().getWarehouseMgr();
                     String newWarehouseName = parts[1];
                     if (!warehouseMgr.warehouseExists(newWarehouseName)) {
-                        ErrorReport.reportAnalysisException(ErrorCode.ERR_BAD_WAREHOUSE_ERROR, newWarehouseName);
+                        throw new StarRocksException(ErrorCode.ERR_UNKNOWN_WAREHOUSE, newWarehouseName);
                     }
                     ctx.setCurrentWarehouse(newWarehouseName);
                 } else {
@@ -200,14 +203,6 @@ public class ConnectProcessor {
                 .setStmtId(ctx.getStmtId())
                 .setIsForwardToLeader(isForwardToLeader)
                 .setQueryId(ctx.getQueryId() == null ? "NaN" : ctx.getQueryId().toString());
-        if (statistics != null) {
-            ctx.getAuditEventBuilder().setScanBytes(statistics.scanBytes);
-            ctx.getAuditEventBuilder().setScanRows(statistics.scanRows);
-            ctx.getAuditEventBuilder().setCpuCostNs(statistics.cpuCostNs == null ? -1 : statistics.cpuCostNs);
-            ctx.getAuditEventBuilder().setMemCostBytes(statistics.memCostBytes == null ? -1 : statistics.memCostBytes);
-            ctx.getAuditEventBuilder().setSpilledBytes(statistics.spillBytes == null ? -1 : statistics.spillBytes);
-            ctx.getAuditEventBuilder().setReturnRows(statistics.returnedRows == null ? 0 : statistics.returnedRows);
-        }
 
         if (ctx.getState().isQuery()) {
             MetricRepo.COUNTER_QUERY_ALL.increase(1L);
@@ -233,9 +228,6 @@ public class ConnectProcessor {
                     MetricRepo.COUNTER_SLOW_QUERY.increase(1L);
                 }
             }
-            if (Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest()) {
-                ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
-            }
             ctx.getAuditEventBuilder().setIsQuery(true);
             if (ctx.getSessionVariable().isEnableBigQueryLog()) {
                 ctx.getAuditEventBuilder().setBigQueryLogCPUSecondThreshold(
@@ -247,6 +239,13 @@ public class ConnectProcessor {
             }
         } else {
             ctx.getAuditEventBuilder().setIsQuery(false);
+        }
+
+        // Build Digest for SELECT/INSERT/UPDATE/DELETE
+        if (ctx.getState().isQuery() || parsedStmt instanceof DmlStmt) {
+            if (Config.enable_sql_digest || ctx.getSessionVariable().isEnableSQLDigest()) {
+                ctx.getAuditEventBuilder().setDigest(computeStatementDigest(parsedStmt));
+            }
         }
 
         ctx.getAuditEventBuilder().setFeIp(FrontendOptions.getLocalHostAddress());
@@ -414,7 +413,7 @@ public class ConnectProcessor {
     // Get the column definitions of a table
     private void handleFieldList() throws IOException {
         // Already get command code.
-        String tableName = new String(MysqlProto.readNulTerminateString(packetBuf), StandardCharsets.UTF_8);
+        String tableName = new String(MysqlCodec.readNulTerminateString(packetBuf), StandardCharsets.UTF_8);
         if (Strings.isNullOrEmpty(tableName)) {
             ctx.getState().setError("Empty tableName");
             return;
@@ -919,7 +918,7 @@ public class ConnectProcessor {
         ctx.setCommand(MysqlCommand.COM_SLEEP);
     }
 
-    public void loop() {
+    protected void loopForTest() {
         while (!ctx.isKilled()) {
             try {
                 processOnce();

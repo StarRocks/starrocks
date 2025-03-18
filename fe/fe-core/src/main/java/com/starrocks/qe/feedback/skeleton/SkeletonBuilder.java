@@ -97,7 +97,7 @@ public class SkeletonBuilder extends OptExpressionVisitor<SkeletonNode, Skeleton
     public SkeletonNode visitPhysicalHashAggregate(OptExpression optExpression, SkeletonNode parent) {
         int planNodeId = optExpression.getOp().getPlanNodeId();
         PhysicalHashAggregateOperator aggOperator = (PhysicalHashAggregateOperator) optExpression.getOp();
-        if (aggOperator.getType().isAnyGlobal() || !aggOperator.isSplit()) {
+        if (aggOperator.getType().isAnyGlobal()) {
             BlockingAggNode node = new BlockingAggNode(optExpression, nodeExecStatsMap.get(planNodeId), parent);
             visitChildren(node, optExpression.getInputs());
             fillNodeId(optExpression.getOp(), node);

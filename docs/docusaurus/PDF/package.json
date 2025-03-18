@@ -1,0 +1,16 @@
+{
+  "name": "scrape-to-pdf",
+  "version": "1.0.0",
+  "description": "scrape Docusaurus docs and generate PDF",
+  "main": "docusaurus-puppeteer-pdf.js",
+  "repository": "git@github.com:DanRoscigno/scrape-to-pdf.git",
+  "author": "DanRoscigno <dan@roscigno.com>",
+  "license": "MIT",
+  "private": false,
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "pdfkit": "^0.15.1",
+    "puppeteer": "^23.7.0",
+    "scroll-to-bottomjs": "^1.1.0"
+  }
+}

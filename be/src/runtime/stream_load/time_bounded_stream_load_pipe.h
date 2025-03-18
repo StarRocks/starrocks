@@ -22,14 +22,14 @@
 
 namespace starrocks {
 
-static constexpr int32_t DEFAULT_STREAM_LOAD_PIPE_NON_BLOCKING_WAIT_MS = 50;
+static constexpr int32_t DEFAULT_STREAM_LOAD_PIPE_NON_BLOCKING_WAIT_US = 500;
 
 class TimeBoundedStreamLoadPipe : public StreamLoadPipe {
 public:
     TimeBoundedStreamLoadPipe(const std::string& name, int32_t active_window_ms,
-                              int32_t non_blocking_wait_ms = DEFAULT_STREAM_LOAD_PIPE_NON_BLOCKING_WAIT_MS,
+                              int32_t non_blocking_wait_us = DEFAULT_STREAM_LOAD_PIPE_NON_BLOCKING_WAIT_US,
                               size_t max_buffered_bytes = DEFAULT_STREAM_LOAD_PIPE_BUFFERED_BYTES)
-            : StreamLoadPipe(true, non_blocking_wait_ms, max_buffered_bytes, DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE) {
+            : StreamLoadPipe(true, non_blocking_wait_us, max_buffered_bytes, DEFAULT_STREAM_LOAD_PIPE_CHUNK_SIZE) {
         _name = name;
         _active_window_ns = active_window_ms * (int64_t)1000000;
         _start_time_ns = _get_current_ns();

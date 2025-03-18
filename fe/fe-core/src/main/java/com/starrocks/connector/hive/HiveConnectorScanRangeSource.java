@@ -60,7 +60,7 @@ import java.util.Optional;
 
 import static com.starrocks.connector.hive.HiveMetadata.useMetadataCache;
 
-public class HiveConnectorScanRangeSource implements ConnectorScanRangeSource {
+public class HiveConnectorScanRangeSource extends ConnectorScanRangeSource {
     private static final Logger LOG = LogManager.getLogger(HiveConnectorScanRangeSource.class);
 
     protected DescriptorTable descriptorTable;
@@ -384,7 +384,7 @@ public class HiveConnectorScanRangeSource implements ConnectorScanRangeSource {
     }
 
     @Override
-    public List<TScanRangeLocations> getOutputs(int maxSize) {
+    public List<TScanRangeLocations> getSourceOutputs(int maxSize) {
         List<TScanRangeLocations> res = new ArrayList<>();
         updateIterator();
         while (hasMoreOutput) {
@@ -405,7 +405,7 @@ public class HiveConnectorScanRangeSource implements ConnectorScanRangeSource {
     }
 
     @Override
-    public boolean hasMoreOutput() {
+    public boolean sourceHasMoreOutput() {
         updateIterator();
         return hasMoreOutput;
     }

@@ -94,15 +94,21 @@ struct GroupReaderParam {
 
     // used for pageIndex
     std::vector<ExprContext*> min_max_conjunct_ctxs;
+    const PredicateTree* predicate_tree = nullptr;
+
+    // partition column
+    const std::vector<HdfsScannerContext::ColumnInfo>* partition_columns = nullptr;
+    // partition column value which read from hdfs file path
+    const Columns* partition_values = nullptr;
+    // not existed column
+    const std::vector<SlotDescriptor*>* not_existed_slots = nullptr;
+    // used for global low cardinality optimization
+    ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
 };
 
-class PageIndexReader;
-
 class GroupReader {
-    friend class PageIndexReader;
-
 public:
-    GroupReader(GroupReaderParam& param, int row_group_number, const std::set<int64_t>* need_skip_rowids,
+    GroupReader(GroupReaderParam& param, int row_group_number, SkipRowsContextPtr skip_rows_ctx,
                 int64_t row_group_first_row);
     ~GroupReader();
 
@@ -112,10 +118,17 @@ public:
     Status prepare();
     const tparquet::ColumnChunk* get_chunk_metadata(SlotId slot_id);
     const ParquetField* get_column_parquet_field(SlotId slot_id);
+    ColumnReader* get_column_reader(SlotId slot_id);
+    uint64_t get_row_group_first_row() const { return _row_group_first_row; }
     const tparquet::RowGroup* get_row_group_metadata() const;
     Status get_next(ChunkPtr* chunk, size_t* row_count);
     void collect_io_ranges(std::vector<io::SharedBufferedInputStream::IORange>* ranges, int64_t* end_offset,
-                           ColumnIOType type = ColumnIOType::PAGES);
+                           ColumnIOTypeFlags types = ColumnIOType::PAGES);
+
+    SparseRange<uint64_t> get_range() const { return _range; }
+    SparseRange<uint64_t>& get_range() { return _range; }
+    const bool get_is_group_filtered() const { return _is_group_filtered; }
+    bool& get_is_group_filtered() { return _is_group_filtered; }
 
 private:
     void _set_end_offset(int64_t value) { _end_offset = value; }
@@ -151,8 +164,7 @@ private:
     // row group meta
     const tparquet::RowGroup* _row_group_metadata = nullptr;
     int64_t _row_group_first_row = 0;
-    const std::set<int64_t>* _need_skip_rowids;
-    int64_t _raw_rows_read = 0;
+    SkipRowsContextPtr _skip_rows_ctx;
 
     // column readers for column chunk in row group
     std::unordered_map<SlotId, std::unique_ptr<ColumnReader>> _column_readers;

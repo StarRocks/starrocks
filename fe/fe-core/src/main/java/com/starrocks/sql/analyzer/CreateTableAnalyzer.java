@@ -97,7 +97,7 @@ public class CreateTableAnalyzer {
             analyzeTemporaryTable(statement, context, catalogName, db, tableName);
         } else {
             if (GlobalStateMgr.getCurrentState().getMetadataMgr()
-                        .tableExists(catalogName, tableNameObject.getDb(), tableName) && !statement.isSetIfNotExists()) {
+                    .tableExists(catalogName, tableNameObject.getDb(), tableName) && !statement.isSetIfNotExists()) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_TABLE_EXISTS_ERROR, tableName);
             }
         }
@@ -492,11 +492,11 @@ public class CreateTableAnalyzer {
                 partitionColumnList.add(identifier.getValue());
             }
             if (partitionExpr instanceof FunctionCallExpr) {
-                FunctionCallExpr expr = (FunctionCallExpr) partitionExpr;
+                FunctionCallExpr expr = (FunctionCallExpr) (((Expr) partitionExpr).clone());
                 ExpressionAnalyzer.analyzeExpression(expr, new AnalyzeState(), new Scope(RelationId.anonymous(),
                                 new RelationFields(columnDefs.stream().map(col -> new Field(col.getName(),
-                                        col.getType(), tableName, null)).collect(Collectors.toList()))),
-                        new ConnectContext());
+                                        col.getType(), null, null)).collect(Collectors.toList()))),
+                        ConnectContext.buildInner());
                 String columnName = FeConstants.GENERATED_PARTITION_COLUMN_PREFIX + placeHolderSlotId++;
                 partitionColumnList.add(columnName);
                 Type type = expr.getType();
@@ -515,11 +515,12 @@ public class CreateTableAnalyzer {
                     throw new SemanticException("Generate partition column " + columnName
                             + " for multi expression partition error: " + e.getMessage(), partitionDesc.getPos());
                 }
+                // generated column expression should be saved in unanalyzed way in meta
                 ColumnDef generatedPartitionColumn = new ColumnDef(
                         columnName, typeDef, null, false, null, null, true,
-                        ColumnDef.DefaultValueDef.NOT_SET, null, expr, "");
+                        ColumnDef.DefaultValueDef.NOT_SET, null, (FunctionCallExpr) partitionExpr, "");
                 columnDefs.add(generatedPartitionColumn);
-                partitionExprs.add(expr);
+                partitionExprs.add((FunctionCallExpr) partitionExpr);
             }
         }
         for (ColumnDef columnDef : columnDefs) {
@@ -733,6 +734,16 @@ public class CreateTableAnalyzer {
 
         List<Index> indexes = new ArrayList<>();
         if (CollectionUtils.isNotEmpty(indexDefs)) {
+            List<String> vectorIndexNames = indexDefs.stream()
+                    .filter(indexDef -> indexDef.getIndexType() == IndexDef.IndexType.VECTOR)
+                    .map(IndexDef::getIndexName)
+                    .toList();
+            if (vectorIndexNames.size() > 1) {
+                throw new SemanticException(
+                        String.format("At most one vector index is allowed for a table, but %d were found: %s",
+                                vectorIndexNames.size(), vectorIndexNames));
+            }
+
             Set<String> distinct = new TreeSet<>(String.CASE_INSENSITIVE_ORDER);
             Set<List<String>> distinctCol = new HashSet<>();
 

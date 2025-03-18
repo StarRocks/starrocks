@@ -94,7 +94,7 @@ StatusOr<ChunkPtr> JsonScanner::get_next() {
     } catch (simdjson::simdjson_error& e) {
         auto err_msg = "Unrecognized json format, stop json loader.";
         LOG(WARNING) << err_msg;
-        return Status::DataQualityError(err_msg);
+        return Status::DataQualityError(format_json_parse_error_msg(err_msg));
     }
     if (!status.ok()) {
         if (status.is_end_of_file()) {
@@ -239,7 +239,7 @@ Status JsonScanner::parse_json_paths(const std::string& jsonpath, std::vector<st
     } catch (simdjson::simdjson_error& e) {
         auto err_msg =
                 strings::Substitute("Invalid json path: $0, error: $1", jsonpath, simdjson::error_message(e.error()));
-        return Status::DataQualityError(err_msg);
+        return Status::DataQualityError(format_json_parse_error_msg(err_msg));
     }
 }
 
@@ -262,7 +262,7 @@ Status JsonScanner::_create_src_chunk(ChunkPtr* chunk) {
 
         // The columns in source chunk are all in AdaptiveNullableColumn type;
         auto col = ColumnHelper::create_column(_json_types[column_pos], true, false, 0, true);
-        (*chunk)->append_column(col, slot_desc->id());
+        (*chunk)->append_column(std::move(col), slot_desc->id());
     }
 
     return Status::OK();
@@ -315,7 +315,7 @@ StatusOr<ChunkPtr> JsonScanner::_cast_chunk(const starrocks::ChunkPtr& src_chunk
         }
 
         ASSIGN_OR_RETURN(ColumnPtr col, _cast_exprs[column_pos]->evaluate_checked(nullptr, src_chunk.get()));
-        col = ColumnHelper::unfold_const_column(slot->type(), src_chunk->num_rows(), col);
+        col = ColumnHelper::unfold_const_column(slot->type(), src_chunk->num_rows(), std::move(col));
         cast_chunk->append_column(std::move(col), slot->id());
     }
 
@@ -783,7 +783,8 @@ Status JsonReader::_check_ndjson() {
             break;
         } else {
             LOG(WARNING) << "illegal json started with [" << c << "]";
-            return Status::DataQualityError(fmt::format("illegal json started with {}", c));
+            return Status::DataQualityError(
+                    format_json_parse_error_msg(fmt::format("illegal json started with {}", c)));
         }
     }
     return Status::OK();

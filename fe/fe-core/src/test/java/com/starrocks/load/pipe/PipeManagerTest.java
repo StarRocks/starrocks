@@ -26,7 +26,6 @@ import com.starrocks.fs.HdfsUtil;
 import com.starrocks.load.pipe.filelist.FileListRepo;
 import com.starrocks.load.pipe.filelist.FileListTableRepo;
 import com.starrocks.load.pipe.filelist.RepoAccessor;
-import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.persist.OperationType;
 import com.starrocks.persist.PipeOpEntry;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
@@ -35,6 +34,7 @@ import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowExecutor;
 import com.starrocks.qe.ShowResultSet;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.ExecuteOption;
 import com.starrocks.scheduler.SubmitResult;
@@ -62,6 +62,7 @@ import com.starrocks.thrift.TListPipesParams;
 import com.starrocks.thrift.TResultBatch;
 import com.starrocks.thrift.TUserIdentity;
 import com.starrocks.transaction.GlobalTransactionMgr;
+import com.starrocks.transaction.TransactionStateSnapshot;
 import com.starrocks.transaction.TransactionStatus;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
@@ -353,7 +354,7 @@ public class PipeManagerTest {
     }
 
     public static void mockRepoExecutorDML() {
-        new MockUp<RepoExecutor>() {
+        new MockUp<SimpleExecutor>() {
             @Mock
             public void executeDML(String sql) {
             }
@@ -370,7 +371,7 @@ public class PipeManagerTest {
     }
 
     private void mockRepoExecutor() {
-        new MockUp<RepoExecutor>() {
+        new MockUp<SimpleExecutor>() {
             @Mock
             public void executeDML(String sql) {
             }
@@ -1073,8 +1074,8 @@ public class PipeManagerTest {
                     FileListRepo.PipeFileState.LOADING, "insert-label");
             new MockUp<GlobalTransactionMgr>() {
                 @Mock
-                public TransactionStatus getLabelStatus(long dbId, String label) {
-                    return TransactionStatus.COMMITTED;
+                public TransactionStateSnapshot getLabelStatus(long dbId, String label) {
+                    return new TransactionStateSnapshot(TransactionStatus.COMMITTED, "");
                 }
             };
 

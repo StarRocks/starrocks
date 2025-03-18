@@ -64,7 +64,6 @@ import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
@@ -83,6 +82,7 @@ import com.starrocks.transaction.RunningTxnExceedException;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.transaction.TransactionState.TxnCoordinator;
 import com.starrocks.transaction.TransactionState.TxnSourceType;
+import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.hadoop.util.ThreadUtil;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -103,6 +103,7 @@ public class BrokerLoadJob extends BulkLoadJob {
     private ConnectContext context;
     private List<LoadLoadingTask> newLoadingTasks = Lists.newArrayList();
     private long writeDurationMs = 0;
+    private LoadStmt stmt;
 
     // only for log replay
     public BrokerLoadJob() {
@@ -115,13 +116,17 @@ public class BrokerLoadJob extends BulkLoadJob {
         this.context = context;
     }
 
-    public BrokerLoadJob(long dbId, String label, BrokerDesc brokerDesc, OriginStatement originStmt, ConnectContext context)
+    public BrokerLoadJob(long dbId, String label, BrokerDesc brokerDesc, LoadStmt stmt, ConnectContext context)
             throws MetaNotFoundException {
-        super(dbId, label, originStmt);
+        super(dbId, label, stmt != null ? stmt.getOrigStmt() : null);
         this.timeoutSecond = Config.broker_load_default_timeout_second;
         this.brokerDesc = brokerDesc;
         this.jobType = EtlJobType.BROKER;
         this.context = context;
+        this.stmt = stmt;
+        if (context != null) {
+            this.warehouseId = context.getCurrentWarehouseId();
+        }
     }
 
     @Override
@@ -300,6 +305,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                         .setLoadJobType(TLoadJobType.BROKER)
                         .setPriority(priority)
                         .setOriginStmt(originStmt)
+                        .setLoadStmt(stmt)
                         .setPartialUpdateMode(mode)
                         .setFileStatusList(attachment.getFileStatusByTable(aggKey))
                         .setFileNum(attachment.getFileNumByTable(aggKey))
@@ -350,6 +356,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                         .add("state", state)
                         .add("error_msg", "this task will be ignored when job is: " + state)
                         .build());
+                WarehouseIdleChecker.updateJobLastFinishTime(warehouseId, System.currentTimeMillis());
                 return;
             }
             boolean shouldRetry = retryTime > 0 && txnStatusChangeReason.contains("timeout")
@@ -377,6 +384,12 @@ public class BrokerLoadJob extends BulkLoadJob {
         }
     }
 
+    @Override
+    public void afterVisible(TransactionState txnState, boolean txnOperated) {
+        super.afterVisible(txnState, txnOperated);
+        WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);
+    }
+
     /**
      * This method is used to replay the cancelled state of load job
      *
@@ -397,6 +410,15 @@ public class BrokerLoadJob extends BulkLoadJob {
             retryTime--;
         } finally {
             writeUnlock();
+        }
+    }
+
+    @Override
+    protected void reset() {
+        super.reset();
+        if (context != null) {
+            context.setStartTime();
+            createTimestamp = context.getStartTime();
         }
     }
 

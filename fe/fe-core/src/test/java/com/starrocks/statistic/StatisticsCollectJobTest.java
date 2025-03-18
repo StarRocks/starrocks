@@ -49,6 +49,7 @@ import org.junit.BeforeClass;
 import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
+import org.junit.jupiter.api.Assertions;
 import org.junit.rules.ExpectedException;
 import org.junit.rules.TemporaryFolder;
 
@@ -78,7 +79,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         PlanTestNoneDBBase.beforeClass();
         GlobalStateMgr globalStateMgr = connectContext.getGlobalStateMgr();
         ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
-
+        Config.statistic_auto_collect_predicate_columns_threshold = 0;
         String dbName = "test";
         starRocksAssert.withDatabase(dbName).useDatabase(dbName);
 
@@ -210,6 +211,21 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         OlapTable structTable = (OlapTable) globalStateMgr.getLocalMetastore().getDb("stats").getTable("struct_a");
         new ArrayList<>(structTable.getPartitions()).get(0).getDefaultPhysicalPartition().updateVisibleVersion(2);
         setTableStatistics(structTable, 20000000);
+
+        starRocksAssert.withTable("CREATE TABLE `tempty` (\n" +
+                "  `v1` bigint NOT NULL COMMENT \"\",\n" +
+                "  `count` int NOT NULL\n" +
+                ") ENGINE=OLAP\n" +
+                "DUPLICATE KEY(`v1`)\n" +
+                "DISTRIBUTED BY HASH(`v1`) BUCKETS 30\n" +
+                "PROPERTIES (\n" +
+                "\"replication_num\" = \"1\",\n" +
+                "\"in_memory\" = \"false\"\n" +
+                ");");
+
+        OlapTable tempty = (OlapTable) globalStateMgr.getLocalMetastore().getDb("stats").getTable("tempty");
+        new ArrayList<>(tempty.getPartitions()).get(0).getDefaultPhysicalPartition().updateVisibleVersion(2);
+        setTableStatistics(tempty, 0L);
     }
 
     @Before
@@ -226,7 +242,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         Maps.newHashMap(),
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
-        Assert.assertEquals(7, jobs.size());
+        Assert.assertEquals(8, jobs.size());
         Assert.assertTrue(jobs.get(0) instanceof HyperStatisticsCollectJob);
         jobs = jobs.stream().sorted(Comparator.comparingLong(o -> o.getTable().getId())).collect(Collectors.toList());
         HyperStatisticsCollectJob fullStatisticsCollectJob = (HyperStatisticsCollectJob) jobs.get(0);
@@ -394,6 +410,23 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         StatsConstants.ScheduleStatus.PENDING,
                         LocalDateTime.MIN));
         Assert.assertEquals(1, jobs2.size());
+
+        BasicStatsMeta basicStatsMeta3 = new BasicStatsMeta(db.getId(), olapTable.getId(), null,
+                StatsConstants.AnalyzeType.SAMPLE,
+                LocalDateTime.of(2021, 1, 1, 1, 1, 1), Maps.newHashMap());
+        basicStatsMeta3.increaseDeltaRows(10000000L);
+        GlobalStateMgr.getCurrentState().getAnalyzeMgr().addBasicStatsMeta(basicStatsMeta3);
+
+        List<StatisticsCollectJob> job3 = StatisticsCollectJobFactory.buildStatisticsCollectJob(
+                new NativeAnalyzeJob(db.getId(), olapTable.getId(), Lists.newArrayList("v2"),
+                        Lists.newArrayList(Type.BIGINT),
+                        StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.SCHEDULE,
+                        Maps.newHashMap(),
+                        StatsConstants.ScheduleStatus.PENDING,
+                        LocalDateTime.MIN));
+        Assert.assertEquals(1, job3.size());
+        Assert.assertTrue(job3.get(0) instanceof HyperStatisticsCollectJob);
+        Assert.assertTrue(job3.get(0).toString().contains("partitionIdList=[10010]"));
     }
 
     @Test
@@ -411,11 +444,12 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 db, olapTable, Lists.newArrayList("v2"), Lists.newArrayList(Type.BIGINT),
                 StatsConstants.ScheduleType.ONCE, properties);
 
-        Config.histogram_enable_table_sample = false;
+        Config.enable_use_table_sample_collect_statistics = false;
         Function<String, String> normalize = str -> str.replaceAll(" +", " ").toLowerCase();
         String sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, Maps.newHashMap(), "v2", Type.BIGINT);
-        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics SELECT %s, 'v2', %d, " +
+        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
+                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %s, 'v2', %d, " +
                         "'test.t0_stats', histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
                         "NULL, NOW() FROM (   SELECT `v2` as column_key    FROM `test`.`t0_stats`     " +
                         "WHERE  rand() <= 0.100000 and `v2` is not null    ORDER BY `v2` LIMIT 10000000) t",
@@ -426,7 +460,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         mostCommonValues.put("2", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v2", Type.BIGINT);
-        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics SELECT %d, 'v2', %d, " +
+        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
+                "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v2', %d, " +
                 "'test" +
                 ".t0_stats'," +
                 " " +
@@ -441,7 +476,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         mostCommonValues.put("1991-01-01", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v4", Type.DATE);
-        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics SELECT %d, 'v4', %d, " +
+        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
+                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v4', %d, " +
                         "'test" +
                         ".t0_stats', " +
                 "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
@@ -458,7 +494,8 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         mostCommonValues.put("1991-01-01 00:00:00", "20");
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v5", Type.DATETIME);
-        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics SELECT %d, 'v5', %d, " +
+        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
+                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v5', %d, " +
                         "'test.t0_stats', " +
                         "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
                         "'[[\"1991-01-01 00:00:00\",\"20\"],[\"0000-01-01 00:00:00\",\"10\"]]', NOW() FROM " +
@@ -467,10 +504,11 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                         "`v5` not in (\"1991-01-01 00:00:00\",\"0000-01-01 00:00:00\") ORDER BY `v5` LIMIT 10000000) t",
                 t0StatsTableId, dbid)), normalize.apply(sql));
 
-        Config.histogram_enable_table_sample = true;
+        Config.enable_use_table_sample_collect_statistics = true;
         sql = Deencapsulation.invoke(histogramStatisticsCollectJob, "buildCollectHistogram",
                 db, olapTable, 0.1, 64L, mostCommonValues, "v5", Type.DATETIME);
-        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics SELECT %d, 'v5', %d, " +
+        Assert.assertEquals(normalize.apply(String.format("INSERT INTO histogram_statistics(" +
+                        "table_id, column_name, db_id, table_name, buckets, mcv, update_time) SELECT %d, 'v5', %d, " +
                         "'test.t0_stats', " +
                         "histogram(`column_key`, cast(64 as int), cast(0.1 as double)),  " +
                         "'[[\"1991-01-01 00:00:00\",\"20\"],[\"0000-01-01 00:00:00\",\"10\"]]', NOW() FROM " +
@@ -866,6 +904,83 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
+    public void testCreatePaimonAnalyzeJob() {
+        ExternalAnalyzeJob analyzeJob = new ExternalAnalyzeJob("paimon0", "pmn_db1",
+                "partitioned_table", null, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+        // do not have stats meta, need to collect
+        List<StatisticsCollectJob> statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(1, statsJobs.size());
+
+
+        // test collect statistics time after table update time
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+                ExternalBasicStatsMeta externalBasicStatsMeta =
+                        new ExternalBasicStatsMeta("paimon0", "pmn_db1", "partitioned_table", null,
+                                StatsConstants.AnalyzeType.FULL, LocalDateTime.now().plusHours(20), Maps.newHashMap());
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("pk", null,  LocalDateTime.now().plusHours(20)));
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("d", null,  LocalDateTime.now().plusHours(20)));
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("pt", null,  LocalDateTime.now().plusHours(20)));
+
+                metaMap.put(new AnalyzeMgr.StatsMetaKey("paimon0", "pmn_db1", "partitioned_table"), externalBasicStatsMeta);
+                return metaMap;
+            }
+        };
+        statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(0, statsJobs.size());
+
+        // test collect statistics time before table update time
+        LocalDateTime statsUpdateTime = LocalDateTime.now().minusHours(2);
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+                metaMap.put(new AnalyzeMgr.StatsMetaKey("paimon0", "pmn_db1", "partitioned_table"),
+                        new ExternalBasicStatsMeta("paimon0", "pmn_db1", "partitioned_table", null,
+                                StatsConstants.AnalyzeType.FULL,
+                                statsUpdateTime, Maps.newHashMap()));
+                return metaMap;
+            }
+        };
+        statsJobs = StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(1, statsJobs.size());
+    }
+
+    @Test
+    public void testCreatePaimonAnalyzeJobWithUnpartitioned() {
+        ExternalAnalyzeJob analyzeJob = new ExternalAnalyzeJob("paimon0", "pmn_db1",
+                "unpartitioned_table", null, null,
+                StatsConstants.AnalyzeType.FULL, StatsConstants.ScheduleType.SCHEDULE,
+                Maps.newHashMap(),
+                StatsConstants.ScheduleStatus.PENDING,
+                LocalDateTime.MIN);
+
+        new MockUp<AnalyzeMgr>() {
+            @Mock
+            public Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> getExternalBasicStatsMetaMap() {
+                ExternalBasicStatsMeta externalBasicStatsMeta =
+                        new ExternalBasicStatsMeta("paimon0", "pmn_db1", "unpartitioned_table", null,
+                                StatsConstants.AnalyzeType.FULL, LocalDateTime.now().plusHours(20), Maps.newHashMap());
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("pk", null,  LocalDateTime.now().plusHours(20)));
+                externalBasicStatsMeta.addColumnStatsMeta(new ColumnStatsMeta("d", null,  LocalDateTime.now().plusHours(20)));
+                Map<AnalyzeMgr.StatsMetaKey, ExternalBasicStatsMeta> metaMap = Maps.newHashMap();
+                metaMap.put(new AnalyzeMgr.StatsMetaKey("paimon0", "pmn_db1", "unpartitioned_table"),
+                        externalBasicStatsMeta);
+                return metaMap;
+            }
+        };
+        List<StatisticsCollectJob> statsJobs =
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob(analyzeJob);
+        Assert.assertEquals(0, statsJobs.size());
+    }
+
+    @Test
     public void testFullStatisticsBuildCollectSQLList() {
         OlapTable t0p = (OlapTable) connectContext.getGlobalStateMgr()
                 .getLocalMetastore().getDb("test").getTable("t0_stats_partition");
@@ -1190,6 +1305,53 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
     }
 
     @Test
+    public void testExternalPaimonFullStatisticsBuildCollectSQL() {
+        // test partition
+        Database database =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getDb("paimon0", "pmn_db1");
+        Table table =
+                connectContext.getGlobalStateMgr().getMetadataMgr().getTable("paimon0", "pmn_db1",
+                        "partitioned_table");
+        ExternalFullStatisticsCollectJob collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("paimon0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("pk", "d", "pt"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        List<List<String>> lists = collectJob.buildCollectSQLList(1);
+        Assert.assertEquals(30, lists.size());
+
+        //test partition is null
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("paimon0",
+                        database,
+                        table, Lists.newArrayList("pt=null"),
+                        Lists.newArrayList("pk", "d", "pt"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        lists = collectJob.buildCollectSQLList(1);
+        Assert.assertEquals(3, lists.size());
+
+        //test unpartitioned table
+        table = connectContext.getGlobalStateMgr().getMetadataMgr().getTable("paimon0", "pmn_db1",
+                "unpartitioned_table");
+        //test partition is null
+        collectJob = (ExternalFullStatisticsCollectJob)
+                StatisticsCollectJobFactory.buildExternalStatisticsCollectJob("paimon0",
+                        database,
+                        table, null,
+                        Lists.newArrayList("pk", "d"),
+                        StatsConstants.AnalyzeType.FULL,
+                        StatsConstants.ScheduleType.ONCE,
+                        Maps.newHashMap());
+        lists = collectJob.buildCollectSQLList(1);
+        Assert.assertEquals(2, lists.size());
+    }
+
+    @Test
     public void testExcludeStatistics() {
         OlapTable table = (OlapTable) connectContext.getGlobalStateMgr()
                 .getLocalMetastore().getDb("test").getTable("t0_stats_partition");
@@ -1204,7 +1366,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 StatsConstants.ScheduleStatus.PENDING, LocalDateTime.MIN);
         List<StatisticsCollectJob> allJobs = StatisticsCollectJobFactory.buildStatisticsCollectJob(job);
 
-        Assert.assertEquals(7, allJobs.size());
+        Assert.assertEquals(8, allJobs.size());
         Assert.assertTrue(allJobs.stream().anyMatch(j -> table.equals(j.getTable())));
 
         job = new NativeAnalyzeJob(database.getId(), StatsConstants.DEFAULT_ALL_ID, null, null,
@@ -1267,6 +1429,20 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
                 olapTable, olapTable.getPartition("tcount"), "count", Type.INT);
         assertContains(sql, "`stats`.`tcount` partition `tcount`");
         UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, connectContext);
+    }
+
+    @Test
+    public void testEmptyTablet() throws Exception {
+        Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb("stats");
+        OlapTable olapTable = (OlapTable) starRocksAssert.getTable("stats", "tempty");
+
+        SampleStatisticsCollectJob job = new SampleStatisticsCollectJob(
+                db, olapTable, Lists.newArrayList("v1", "count"),
+                StatsConstants.AnalyzeType.SAMPLE, StatsConstants.ScheduleType.ONCE,
+                Maps.newHashMap());
+        NativeAnalyzeStatus analyzeStatus = new NativeAnalyzeStatus();
+        job.collect(connectContext, analyzeStatus);
+        Assertions.assertEquals(100, analyzeStatus.getProgress());
     }
 
     @Test
@@ -1357,7 +1533,7 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         new Expectations(execMeta2) {
             {
                 execMeta2.getHealthy();
-                times = 0;
+                times = 1;
             }
         };
 
@@ -1530,4 +1706,61 @@ public class StatisticsCollectJobTest extends PlanTestNoneDBBase {
         }
     }
 
+    @Test
+    public void testGetCollectibleColumns1() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test.t_gen_col (" +
+                " c1 datetime NOT NULL," +
+                " c2 bigint," +
+                " c3 DATETIME NULL AS date_trunc('month', c1) " +
+                " ) " +
+                " DUPLICATE KEY(c1) " +
+                " PARTITION BY (c2, c3) " +
+                " PROPERTIES('replication_num'='1')");
+        Table table = starRocksAssert.getTable("test", "t_gen_col");
+        List<String> cols =  StatisticUtils.getCollectibleColumns(table);
+        Assert.assertTrue(cols.size() == 3);
+        Assert.assertTrue(cols.contains("c3"));
+        starRocksAssert.dropTable("test.t_gen_col");
+    }
+
+    @Test
+    public void testGetCollectibleColumns2() throws Exception {
+        starRocksAssert.withTable("CREATE TABLE test.t_gen_col (" +
+                " c1 datetime NOT NULL," +
+                " c2 bigint" +
+                " ) " +
+                " DUPLICATE KEY(c1) " +
+                " PARTITION BY c2, date_trunc('month', c1) " +
+                " PROPERTIES('replication_num'='1')");
+        Table table = starRocksAssert.getTable("test", "t_gen_col");
+        List<String> cols =  StatisticUtils.getCollectibleColumns(table);
+        Assert.assertTrue(cols.size() == 2);
+        starRocksAssert.dropTable("test.t_gen_col");
+    }
+
+    @Test
+    public void testPriorityComparison() {
+        // Test case with different health values
+        StatisticsCollectJob.Priority priority1 =
+                new StatisticsCollectJob.Priority(LocalDateTime.now(), LocalDateTime.now(), 0.5);
+        StatisticsCollectJob.Priority priority2 =
+                new StatisticsCollectJob.Priority(LocalDateTime.now(), LocalDateTime.now(), 0.6);
+        Assert.assertTrue(priority1.compareTo(priority2) < 0);
+
+        // Test case with different staleness values
+        LocalDateTime now = LocalDateTime.now();
+        StatisticsCollectJob.Priority priority3 = new StatisticsCollectJob.Priority(now, now.minusSeconds(100), 0.5);
+        StatisticsCollectJob.Priority priority4 = new StatisticsCollectJob.Priority(now, now.minusSeconds(50), 0.5);
+        Assert.assertTrue(priority3.compareTo(priority4) < 0);
+
+        // Test case with both different health and staleness values
+        StatisticsCollectJob.Priority priority5 = new StatisticsCollectJob.Priority(now, now.minusSeconds(100), 0.5);
+        StatisticsCollectJob.Priority priority6 = new StatisticsCollectJob.Priority(now, now.minusSeconds(50), 0.6);
+        Assert.assertTrue(priority5.compareTo(priority6) < 0);
+
+        // Test case with statsUpdateTime set to LocalDateTime.MIN
+        StatisticsCollectJob.Priority priority7 = new StatisticsCollectJob.Priority(now, LocalDateTime.MIN, 0.5);
+        StatisticsCollectJob.Priority priority8 = new StatisticsCollectJob.Priority(now, now.minusSeconds(10), 0.5);
+        Assert.assertTrue(priority7.compareTo(priority8) < 0);
+    }
 }

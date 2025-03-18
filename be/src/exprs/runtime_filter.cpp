@@ -18,31 +18,6 @@
 #include "util/compression/stream_compression.h"
 
 namespace starrocks {
-// TODO: remove it
-LogicalType RuntimeFilterSerializeType::from_serialize_type(RuntimeFilterSerializeType::PrimitiveType ptype) {
-    switch (ptype) {
-#define CONVERT_PTYPE(type_name)                       \
-    case RuntimeFilterSerializeType::TYPE_##type_name: \
-        return LogicalType::TYPE_##type_name;
-        APPLY_FOR_SCALAR_THRIFT_TYPE(CONVERT_PTYPE);
-#undef CONVERT_PTYPE
-    default:
-        return TYPE_UNKNOWN;
-    }
-}
-
-RuntimeFilterSerializeType::PrimitiveType RuntimeFilterSerializeType::to_serialize_type(LogicalType type) {
-    switch (type) {
-#define CONVERT_TYPE(type_name)         \
-    case LogicalType::TYPE_##type_name: \
-        return RuntimeFilterSerializeType::TYPE_##type_name;
-        APPLY_FOR_SCALAR_THRIFT_TYPE(CONVERT_TYPE);
-#undef CONVERT_TYPE
-    default:
-        return RuntimeFilterSerializeType::TYPE_NULL;
-    }
-}
-
 void SimdBlockFilter::init(size_t nums) {
     nums = std::max(MINIMUM_ELEMENT_NUM, nums);
     int log_heap_space = std::ceil(std::log2(nums));
@@ -156,7 +131,7 @@ void SimdBlockFilter::clear() {
     }
 }
 
-size_t JoinRuntimeFilter::max_serialized_size() const {
+size_t RuntimeBloomFilter::max_serialized_size() const {
     // todo(yan): noted that it's not serialize compatible with 32-bit and 64-bit.
     auto num_partitions = _hash_partition_bf.size();
     size_t size = sizeof(_has_null) + sizeof(_size) + sizeof(num_partitions) + sizeof(_join_mode);
@@ -170,7 +145,7 @@ size_t JoinRuntimeFilter::max_serialized_size() const {
     return size;
 }
 
-size_t JoinRuntimeFilter::serialize(int serialize_version, uint8_t* data) const {
+size_t RuntimeBloomFilter::serialize(int serialize_version, uint8_t* data) const {
     size_t offset = 0;
     auto num_partitions = _hash_partition_bf.size();
 #define JRF_COPY_FIELD(field)                     \
@@ -184,7 +159,6 @@ size_t JoinRuntimeFilter::serialize(int serialize_version, uint8_t* data) const 
 
     if (num_partitions == 0) {
         offset += _bf.serialize(data + offset);
-
     } else {
         for (const auto& bf : _hash_partition_bf) {
             offset += bf.serialize(data + offset);
@@ -193,7 +167,7 @@ size_t JoinRuntimeFilter::serialize(int serialize_version, uint8_t* data) const 
     return offset;
 }
 
-size_t JoinRuntimeFilter::deserialize(int serialize_version, const uint8_t* data) {
+size_t RuntimeBloomFilter::deserialize(int serialize_version, const uint8_t* data) {
     size_t offset = 0;
     size_t num_partitions = 0;
 #define JRF_COPY_FIELD(field)                     \
@@ -218,25 +192,7 @@ size_t JoinRuntimeFilter::deserialize(int serialize_version, const uint8_t* data
     return offset;
 }
 
-bool JoinRuntimeFilter::check_equal(const JoinRuntimeFilter& rf) const {
-    auto lhs_num_partitions = _hash_partition_bf.size();
-    auto rhs_num_partitions = rf._hash_partition_bf.size();
-    bool first = (_has_null == rf._has_null && _size == rf._size && lhs_num_partitions == rhs_num_partitions &&
-                  _join_mode == rf._join_mode);
-    if (!first) return false;
-    if (lhs_num_partitions == 0) {
-        if (!_bf.check_equal(rf._bf)) return false;
-    } else {
-        for (size_t i = 0; i < lhs_num_partitions; ++i) {
-            if (!_hash_partition_bf[i].check_equal(rf._hash_partition_bf[i])) {
-                return false;
-            }
-        }
-    }
-    return true;
-}
-
-void JoinRuntimeFilter::clear_bf() {
+void RuntimeBloomFilter::clear_bf() {
     if (_hash_partition_bf.empty()) {
         _bf.clear();
     } else {

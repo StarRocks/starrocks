@@ -14,13 +14,6 @@
 
 package com.starrocks.analysis;
 
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
-import java.util.stream.Collectors;
-
 import com.starrocks.catalog.AggregateType;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
@@ -45,6 +38,13 @@ import mockit.MockUp;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.junit.jupiter.api.Assertions;
+
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 public class VectorIndexTest extends PlanTestBase {
 
@@ -86,7 +86,7 @@ public class VectorIndexTest extends PlanTestBase {
                 () -> VectorIndexUtil.checkVectorIndexValid(c3, Collections.emptyMap(), KeysType.DUP_KEYS),
                 "You should set index_type at least to add a vector index.");
 
-        Column c4 = new Column("f4", Type.ARRAY_FLOAT, true);
+        Column c4 = new Column("f4", Type.ARRAY_FLOAT, false);
         Assertions.assertThrows(
                 SemanticException.class,
                 () -> VectorIndexUtil.checkVectorIndexValid(c4, new HashMap<>() {{
@@ -148,8 +148,7 @@ public class VectorIndexTest extends PlanTestBase {
                     put(VectorIndexParams.IndexParamsKey.M.name(), "10");
                     put(VectorIndexParams.IndexParamsKey.EFCONSTRUCTION.name(), "10");
                     put(VectorIndexParams.SearchParamsKey.EFSEARCH.name(), "10");
-                }}, KeysType.DUP_KEYS),
-                "Params HNSW should not define with NBITS"
+                }}, KeysType.DUP_KEYS)
         );
 
         Map<String, String> paramItemMap = new HashMap<>(){{

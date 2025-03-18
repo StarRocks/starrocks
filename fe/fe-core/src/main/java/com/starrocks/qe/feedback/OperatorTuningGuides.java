@@ -98,12 +98,20 @@ public class OperatorTuningGuides {
         return originalTimeCost;
     }
 
-    public String getTuneGuidesInfo() {
+    public String getFullTuneGuidesInfo() {
+        return getTuneGuidesInfo(true);
+    }
+
+    public String getTuneGuidesInfo(boolean isFull) {
         StringBuilder sb = new StringBuilder();
         for (Map.Entry<Integer, List<TuningGuide>> entry : tuningGuides.entrySet()) {
             sb.append("PlanNode ").append(entry.getKey()).append(":").append("\n");
             for (TuningGuide guide : entry.getValue()) {
                 sb.append(guide.getClass().getSimpleName()).append("\n");
+                if (isFull) {
+                    sb.append(guide.getDescription()).append("\n");
+                    sb.append(guide.getAdvice()).append("\n");
+                }
             }
             sb.append("\n");
         }

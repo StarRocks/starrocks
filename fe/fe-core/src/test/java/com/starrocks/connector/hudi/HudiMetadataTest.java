@@ -73,7 +73,8 @@ public class HudiMetadataTest {
         client = new HiveMetastoreTest.MockedHiveMetaClient();
         metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         cachingHiveMetastore = CachingHiveMetastore.createCatalogLevelInstance(
-                metastore, executorForHmsRefresh, 100, 10, 1000, false);
+                metastore, executorForHmsRefresh,  executorForHmsRefresh,
+                100, 10, 1000, false);
         hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration(), MetastoreType.HMS, "hive_catalog");
 
         hudiRemoteFileIO = new HudiRemoteFileIO(new Configuration());

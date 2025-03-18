@@ -84,6 +84,8 @@ public class CreateReplicaTask extends AgentTask {
     private boolean createSchemaFile = true;
     private boolean enableTabletCreationOptimization = false;
     private final TTabletSchema tabletSchema;
+    private long gtid = 0;
+    private long timeoutMs = -1;
 
     private CreateReplicaTask(Builder builder) {
         super(null, builder.getNodeId(), TTaskType.CREATE, builder.getDbId(), builder.getTableId(),
@@ -104,6 +106,8 @@ public class CreateReplicaTask extends AgentTask {
         this.baseTabletId = builder.getBaseTabletId();
         this.recoverySource = builder.getRecoverySource();
         this.inRestoreMode = builder.isInRestoreMode();
+        this.gtid = builder.getGtid();
+        this.timeoutMs = builder.getTimeoutMs();
     }
 
     public static Builder newBuilder() {
@@ -131,7 +135,14 @@ public class CreateReplicaTask extends AgentTask {
     public void countDownToZero(String errMsg) {
         if (this.latch != null) {
             latch.countDownToZero(new Status(TStatusCode.CANCELLED, errMsg));
-            LOG.debug("CreateReplicaTask download to zero. error msg: {}", errMsg);
+            LOG.debug("CreateReplicaTask count down to zero. error msg: {}", errMsg);
+        }
+    }
+
+    public void failForLeaderTransfer() {
+        if (this.latch != null) {
+            latch.countDownToZero(Status.LEADER_TRANSFERRED);
+            LOG.debug("CreateReplicaTask count down to zero because of leader transferred.");
         }
     }
 
@@ -142,6 +153,10 @@ public class CreateReplicaTask extends AgentTask {
     public void setBaseTablet(long baseTabletId, int baseSchemaHash) {
         this.baseTabletId = baseTabletId;
         this.baseSchemaHash = baseSchemaHash;
+    }
+
+    public void setTimeoutMs(long timeoutMs) {
+        this.timeoutMs = timeoutMs;
     }
 
     public TTabletType getTabletType() {
@@ -177,6 +192,8 @@ public class CreateReplicaTask extends AgentTask {
         createTabletReq.setTablet_type(tabletType);
         createTabletReq.setCreate_schema_file(createSchemaFile);
         createTabletReq.setEnable_tablet_creation_optimization(enableTabletCreationOptimization);
+        createTabletReq.setGtid(gtid);
+        createTabletReq.setTimeout_ms(timeoutMs);
         return createTabletReq;
     }
 
@@ -205,6 +222,8 @@ public class CreateReplicaTask extends AgentTask {
         private boolean createSchemaFile = true;
         private boolean enableTabletCreationOptimization = false;
         private TTabletSchema tabletSchema;
+        private long gtid = 0;
+        private long timeoutMs = -1;
 
         private Builder() {
         }
@@ -404,6 +423,24 @@ public class CreateReplicaTask extends AgentTask {
 
         public Builder setTabletSchema(TTabletSchema tabletSchema) {
             this.tabletSchema = tabletSchema;
+            return this;
+        }
+
+        public long getGtid() {
+            return gtid;
+        }
+
+        public Builder setGtid(long gtid) {
+            this.gtid = gtid;
+            return this;
+        }
+
+        public long getTimeoutMs() {
+            return timeoutMs;
+        }
+
+        public Builder setTimeoutMs(long timeoutMs) {
+            this.timeoutMs = timeoutMs;
             return this;
         }
 

@@ -17,6 +17,7 @@ package com.starrocks.connector;
 import com.starrocks.catalog.PartitionKey;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 
+import java.util.ArrayList;
 import java.util.List;
 
 public class GetRemoteFilesParams {
@@ -42,6 +43,16 @@ public class GetRemoteFilesParams {
         this.checkPartitionExistence = builder.checkPartitionExistence;
     }
 
+    public int getPartitionSize() {
+        if (partitionKeys != null) {
+            return partitionKeys.size();
+        }
+        if (partitionNames != null) {
+            return partitionNames.size();
+        }
+        return 0;
+    }
+
     public GetRemoteFilesParams copy() {
         return GetRemoteFilesParams.newBuilder()
                 .setPartitionKeys(partitionKeys)
@@ -56,8 +67,22 @@ public class GetRemoteFilesParams {
                 .build();
     }
 
+    public GetRemoteFilesParams sub(int start, int end) {
+        GetRemoteFilesParams p = copy();
+        if (p.partitionKeys != null) {
+            p.partitionKeys = p.partitionKeys.subList(start, end);
+        }
+        if (p.partitionNames != null) {
+            p.partitionNames = p.partitionNames.subList(start, end);
+        }
+        if (p.partitionAttachments != null) {
+            p.partitionAttachments = p.partitionAttachments.subList(start, end);
+        }
+        return p;
+    }
+
     @SuppressWarnings("unchecked")
-    public  <T extends GetRemoteFilesParams> T cast() {
+    public <T extends GetRemoteFilesParams> T cast() {
         return (T) this;
     }
 
@@ -165,5 +190,19 @@ public class GetRemoteFilesParams {
 
     public static Builder newBuilder() {
         return new Builder();
+    }
+
+    public List<GetRemoteFilesParams> partitionExponentially(int minSize, int maxSize) {
+        List<GetRemoteFilesParams> result = new ArrayList<>();
+        int currentSize = minSize;
+        int start = 0;
+        int partitionSize = getPartitionSize();
+        while (start < partitionSize) {
+            int end = Math.min(start + currentSize, partitionSize);
+            result.add(sub(start, end));
+            start = end;
+            currentSize = Math.min(currentSize * 2, maxSize);
+        }
+        return result;
     }
 }

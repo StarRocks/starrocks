@@ -23,13 +23,13 @@
 #include "storage/column_predicate.h"
 #include "storage/in_predicate_utils.h"
 #include "storage/rowset/bitmap_index_reader.h"
-#include "storage/rowset/bloom_filter.h"
 #include "types/logical_type.h"
+#include "util/bloom_filter.h"
 
 namespace starrocks {
 
 template <LogicalType field_type, typename ItemSet>
-class ColumnInPredicate : public ColumnPredicate {
+class ColumnInPredicate final : public ColumnPredicate {
     using ValueType = typename CppTypeTraits<field_type>::CppType;
     static_assert(std::is_same_v<ValueType, typename ItemSet::value_type>);
 
@@ -195,7 +195,7 @@ private:
 
 // Template specialization for binary column
 template <LogicalType field_type>
-class BinaryColumnInPredicate : public ColumnPredicate {
+class BinaryColumnInPredicate final : public ColumnPredicate {
 public:
     BinaryColumnInPredicate(const TypeInfoPtr& type_info, ColumnId id, std::vector<std::string> strings)
             : ColumnPredicate(type_info, id), _zero_padded_strs(std::move(strings)) {
@@ -363,12 +363,26 @@ public:
         return true;
     }
 
+    std::string debug_string() const override {
+        std::stringstream ss;
+        ss << "((columnId=" << _column_id << ")IN(";
+        int i = 0;
+        for (auto& item : _zero_padded_strs) {
+            if (i++ != 0) {
+                ss << ",";
+            }
+            ss << this->type_info()->to_string(&item);
+        }
+        ss << "))";
+        return ss.str();
+    }
+
 private:
     std::vector<std::string> _zero_padded_strs;
     ItemHashSet<Slice> _slices;
 };
 
-class DictionaryCodeInPredicate : public ColumnPredicate {
+class DictionaryCodeInPredicate final : public ColumnPredicate {
 private:
     enum LogicOp { ASSIGN, AND, OR };
 

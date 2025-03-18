@@ -113,7 +113,7 @@ static void dump_trace_info() {
         wt = write(STDERR_FILENO, buffer, res);
         // dump memory usage
         // copy trackers
-        auto& trackers = GlobalEnv::GetInstance()->mem_trackers();
+        auto trackers = GlobalEnv::GetInstance()->mem_trackers();
         for (const auto& tracker : trackers) {
             if (tracker) {
                 size_t len = tracker->debug_string(buffer, sizeof(buffer));
@@ -150,6 +150,7 @@ static void failure_handler_after_output_log() {
     static bool start_dump = false;
     if (!start_dump && config::enable_core_file_size_optimization && base::get_cur_core_file_limit() != 0) {
         ExecEnv::GetInstance()->try_release_resource_before_core_dump();
+        CacheEnv::GetInstance()->try_release_resource_before_core_dump();
         dontdump_unused_pages();
     }
     start_dump = true;

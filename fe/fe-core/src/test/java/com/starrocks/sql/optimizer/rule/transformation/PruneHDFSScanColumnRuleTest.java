@@ -45,9 +45,9 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 public class PruneHDFSScanColumnRuleTest {
-    private PruneHDFSScanColumnRule icebergRule = PruneHDFSScanColumnRule.ICEBERG_SCAN;
-    private PruneHDFSScanColumnRule hudiRule = PruneHDFSScanColumnRule.HUDI_SCAN;
-    private PruneHDFSScanColumnRule odpsRule = PruneHDFSScanColumnRule.ODPS_SCAN;
+    private PruneHDFSScanColumnRule icebergRule = new PruneHDFSScanColumnRule();
+    private PruneHDFSScanColumnRule hudiRule = new PruneHDFSScanColumnRule();
+    private PruneHDFSScanColumnRule odpsRule = new PruneHDFSScanColumnRule();
 
     ColumnRefOperator intColumnOperator = new ColumnRefOperator(1, Type.INT, "id", true);
     ColumnRefOperator strColumnOperator = new ColumnRefOperator(2, Type.STRING, "name", true);

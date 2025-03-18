@@ -49,6 +49,8 @@ public:
     bool releaseable() const override { return true; }
     void set_execute_mode(int performance_level) override;
 
+    std::string get_name() const override;
+
 private:
     // Invoked by push_chunk if current mode is TStreamingPreaggregationMode::FORCE_STREAMING
     Status _push_chunk_by_force_streaming(const ChunkPtr& chunk);
@@ -75,6 +77,7 @@ private:
     AggrAutoState _auto_state{};
     AggrAutoContext _auto_context;
     LimitedMemAggState _limited_mem_state;
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };
 
 class AggregateStreamingSinkOperatorFactory final : public OperatorFactory {
@@ -84,6 +87,8 @@ public:
               _aggregator_factory(std::move(aggregator_factory)) {}
 
     ~AggregateStreamingSinkOperatorFactory() override = default;
+
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<AggregateStreamingSinkOperator>(this, _id, _plan_node_id, driver_sequence,

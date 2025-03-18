@@ -30,6 +30,7 @@ import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QueryState;
 import com.starrocks.qe.StmtExecutor;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.InsertStmt;
 import com.starrocks.sql.ast.QueryStatement;
 import com.starrocks.sql.ast.StatementBase;
@@ -42,6 +43,9 @@ import org.apache.logging.log4j.Logger;
 
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
+
+import static com.starrocks.statistic.StatsConstants.FULL_STATISTICS_TABLE_NAME;
 
 public class HyperStatisticsCollectJob extends StatisticsCollectJob {
     private static final Logger LOG = LogManager.getLogger(HyperStatisticsCollectJob.class);
@@ -49,13 +53,20 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
     private final List<Long> partitionIdList;
 
     private final int batchRowsLimit;
-    private final List<String> sqlBuffer = Lists.newArrayList();
-    private final List<List<Expr>> rowsBuffer = Lists.newArrayList();
+    protected final List<String> sqlBuffer = Lists.newArrayList();
+    protected final List<List<Expr>> rowsBuffer = Lists.newArrayList();
 
     public HyperStatisticsCollectJob(Database db, Table table, List<Long> partitionIdList, List<String> columnNames,
                                      List<Type> columnTypes, StatsConstants.AnalyzeType type,
                                      StatsConstants.ScheduleType scheduleType, Map<String, String> properties) {
-        super(db, table, columnNames, columnTypes, type, scheduleType, properties);
+        this(db, table, partitionIdList, columnNames, columnTypes, type, scheduleType, properties, List.of(), List.of());
+    }
+
+    public HyperStatisticsCollectJob(Database db, Table table, List<Long> partitionIdList, List<String> columnNames,
+                                     List<Type> columnTypes, StatsConstants.AnalyzeType type,
+                                     StatsConstants.ScheduleType scheduleType, Map<String, String> properties,
+                                     List<StatsConstants.StatisticsType> statisticsTypes, List<List<String>> columnGroups) {
+        super(db, table, columnNames, columnTypes, type, scheduleType, properties, statisticsTypes, columnGroups);
         this.partitionIdList = partitionIdList;
         this.batchRowsLimit = (int) Math.max(1, Config.statistic_full_collect_buffer / 33 / 1024);
     }
@@ -70,13 +81,18 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
 
         int splitSize = Math.max(1, batchRowsLimit / columnNames.size());
         List<HyperQueryJob> queryJobs;
-        if (type == StatsConstants.AnalyzeType.FULL) {
-            queryJobs = HyperQueryJob.createFullQueryJobs(context, db, table, columnNames, columnTypes,
-                    partitionIdList, splitSize);
+        if (statisticsTypes.isEmpty()) {
+            if (analyzeType == StatsConstants.AnalyzeType.FULL) {
+                queryJobs = HyperQueryJob.createFullQueryJobs(context, db, table, columnNames, columnTypes,
+                            partitionIdList, splitSize);
+            } else {
+                PartitionSampler sampler = PartitionSampler.create(table, partitionIdList, properties);
+                queryJobs = HyperQueryJob.createSampleQueryJobs(context, db, table, columnNames, columnTypes,
+                        partitionIdList, splitSize, sampler);
+            }
         } else {
-            PartitionSampler sampler = PartitionSampler.create(table, partitionIdList, properties);
-            queryJobs = HyperQueryJob.createSampleQueryJobs(context, db, table, columnNames, columnTypes,
-                    partitionIdList, splitSize, sampler);
+            queryJobs = HyperQueryJob.createMultiColumnQueryJobs(context, db, table, columnGroups, analyzeType,
+                    statisticsTypes, properties);
         }
 
         long queryTotals = 0;
@@ -137,7 +153,7 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         StatementBase insertStmt = createInsertStmt();
         do {
             LOG.debug("statistics insert sql size:" + rowsBuffer.size());
-            StmtExecutor executor = new StmtExecutor(context, insertStmt);
+            StmtExecutor executor = StmtExecutor.newInternalExecutor(context, insertStmt);
 
             context.setExecutor(executor);
             context.setQueryId(UUIDUtil.genUUID());
@@ -161,20 +177,23 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
         throw new DdlException(context.getState().getErrorMessage());
     }
 
-    private StatementBase createInsertStmt() {
-        String sql = "INSERT INTO _statistics_.column_statistics values " + String.join(", ", sqlBuffer) + ";";
-        List<String> names = Lists.newArrayList("column_0", "column_1", "column_2", "column_3",
-                "column_4", "column_5", "column_6", "column_7", "column_8", "column_9",
-                "column_10", "column_11", "column_12");
-        QueryStatement qs = new QueryStatement(new ValuesRelation(rowsBuffer, names));
+    protected StatementBase createInsertStmt() {
+        List<String> targetColumnNames = StatisticUtils.buildStatsColumnDef(FULL_STATISTICS_TABLE_NAME).stream()
+                .map(ColumnDef::getName)
+                .collect(Collectors.toList());
+
+        String sql = "INSERT INTO _statistics_.column_statistics(" + String.join(", ", targetColumnNames) +
+                ") values " + String.join(", ", sqlBuffer) + ";";
+        QueryStatement qs = new QueryStatement(new ValuesRelation(rowsBuffer, targetColumnNames));
         InsertStmt insert = new InsertStmt(new TableName("_statistics_", "column_statistics"), qs);
+        insert.setTargetColumnNames(targetColumnNames);
         insert.setOrigStmt(new OriginStatement(sql, 0));
         return insert;
     }
 
     @Override
     public String toString() {
-        return "HyperStatisticsCollectJob{" + "type=" + type +
+        return "HyperStatisticsCollectJob{" + "type=" + analyzeType +
                 ", scheduleType=" + scheduleType +
                 ", db=" + db +
                 ", table=" + table +
@@ -182,5 +201,10 @@ public class HyperStatisticsCollectJob extends StatisticsCollectJob {
                 ", columnNames=" + columnNames +
                 ", properties=" + properties +
                 '}';
+    }
+
+    @Override
+    public String getName() {
+        return analyzeType == StatsConstants.AnalyzeType.FULL ? "HyperFull" : "HyperSample";
     }
 }

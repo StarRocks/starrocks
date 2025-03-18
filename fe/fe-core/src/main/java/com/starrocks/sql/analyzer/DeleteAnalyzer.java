@@ -38,6 +38,7 @@ import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
 import com.starrocks.common.Config;
+import com.starrocks.common.FeConstants;
 import com.starrocks.load.Load;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
@@ -197,7 +198,6 @@ public class DeleteAnalyzer {
         analyzeProperties(deleteStatement, session);
 
         TableName tableName = deleteStatement.getTableName();
-        tableName.normalization(session);
         MetaUtils.checkNotSupportCatalog(tableName.getCatalog(), "DELETE");
         Database db = GlobalStateMgr.getCurrentState().getMetadataMgr()
                 .getDb(tableName.getCatalog(), tableName.getDb());
@@ -229,10 +229,10 @@ public class DeleteAnalyzer {
         SelectList selectList = new SelectList();
         for (Column col : table.getBaseSchema()) {
             SelectListItem item;
-            if (col.isKey()) {
+            if (col.isKey() || col.isNameWithPrefix(FeConstants.GENERATED_PARTITION_COLUMN_PREFIX)) {
                 item = new SelectListItem(new SlotRef(tableName, col.getName()), col.getName());
             } else {
-                break;
+                continue;
             }
             selectList.addItem(item);
         }

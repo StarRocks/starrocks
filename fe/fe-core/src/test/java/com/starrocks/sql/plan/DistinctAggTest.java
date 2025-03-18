@@ -194,4 +194,23 @@ public class DistinctAggTest extends PlanTestBase {
 
         return argumentsList.stream();
     }
+
+    @Test
+    public void testDistinctWithAgg() throws Exception {
+        String sql = "select distinct v1, count(v2) from t0 group by v1;";
+        String plan = getFragmentPlan(sql);
+        assertContains(plan, " 1:AGGREGATE (update finalize)\n" +
+                "  |  output: count(2: v2)\n" +
+                "  |  group by: 1: v1");
+
+        sql = "select distinct v1 from t0 having abs(v1) = 1;";
+        plan = getFragmentPlan(sql);
+        assertContains(plan, "1:AGGREGATE (update finalize)\n" +
+                "  |  group by: 1: v1\n" +
+                "  |  \n" +
+                "  0:OlapScanNode\n" +
+                "     TABLE: t0\n" +
+                "     PREAGGREGATION: ON\n" +
+                "     PREDICATES: abs(1: v1) = 1");
+    }
 }

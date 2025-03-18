@@ -75,7 +75,8 @@ public:
     void update_state_removable_cumulatively(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                              int64_t current_row_position, int64_t partition_start,
                                              int64_t partition_end, int64_t rows_start_offset, int64_t rows_end_offset,
-                                             bool ignore_subtraction, bool ignore_addition) const override {
+                                             bool ignore_subtraction, bool ignore_addition,
+                                             [[maybe_unused]] bool has_null) const override {
         if constexpr (IsWindowFunc) {
             DCHECK(!ignore_subtraction);
             DCHECK(!ignore_addition);
@@ -241,7 +242,8 @@ public:
     void update_state_removable_cumulatively(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
                                              int64_t current_row_position, int64_t partition_start,
                                              int64_t partition_end, int64_t rows_start_offset, int64_t rows_end_offset,
-                                             bool ignore_subtraction, bool ignore_addition) const override {
+                                             bool ignore_subtraction, bool ignore_addition,
+                                             [[maybe_unused]] bool has_null) const override {
         if constexpr (IsWindowFunc) {
             DCHECK(!ignore_subtraction);
             DCHECK(!ignore_addition);

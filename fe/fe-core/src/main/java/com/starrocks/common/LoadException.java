@@ -31,4 +31,8 @@ public class LoadException extends StarRocksException {
     public LoadException(String msg, Throwable e) {
         super(msg, e);
     }
+
+    public LoadException(ErrorCode errorCode, Object... objs) {
+        super(errorCode, objs);
+    }
 }

@@ -169,7 +169,8 @@ public class LakeTable extends OlapTable {
         properties.put(PropertyAnalyzer.PROPERTIES_STORAGE_VOLUME, svm.getStorageVolumeNameOfTable(id));
 
         // persistent index type
-        if (enablePersistentIndex() && !Strings.isNullOrEmpty(getPersistentIndexTypeString())) {
+        if (keysType == KeysType.PRIMARY_KEYS && enablePersistentIndex()
+                && !Strings.isNullOrEmpty(getPersistentIndexTypeString())) {
             properties.put(PropertyAnalyzer.PROPERTIES_PERSISTENT_INDEX_TYPE, getPersistentIndexTypeString());
         }
 

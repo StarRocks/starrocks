@@ -47,11 +47,14 @@
 #include "storage/txn_manager.h"
 #include "util/brpc_stub_cache.h"
 #include "util/compression/block_compression.h"
+#include "util/failpoint/fail_point.h"
 #include "util/faststring.h"
 #include "util/starrocks_metrics.h"
 #include "util/stopwatch.hpp"
 
 namespace starrocks {
+
+DEFINE_FAIL_POINT(tablets_channel_add_chunk_wait_write_block);
 
 std::atomic<uint64_t> LocalTabletsChannel::_s_tablet_writer_count;
 
@@ -76,9 +79,12 @@ LocalTabletsChannel::LocalTabletsChannel(LoadChannel* load_channel, const Tablet
     _add_row_num = ADD_COUNTER(_profile, "AddRowNum", TUnit::UNIT);
     _add_chunk_timer = ADD_TIMER(_profile, "AddChunkRpcTime");
     _wait_flush_timer = ADD_CHILD_TIMER(_profile, "WaitFlushTime", "AddChunkRpcTime");
+    _submit_write_task_timer = ADD_CHILD_TIMER(_profile, "SubmitWriteTaskTime", "AddChunkRpcTime");
+    _submit_commit_task_timer = ADD_CHILD_TIMER(_profile, "SubmitCommitTaskTime", "AddChunkRpcTime");
     _wait_write_timer = ADD_CHILD_TIMER(_profile, "WaitWriteTime", "AddChunkRpcTime");
     _wait_replica_timer = ADD_CHILD_TIMER(_profile, "WaitReplicaTime", "AddChunkRpcTime");
     _wait_txn_persist_timer = ADD_CHILD_TIMER(_profile, "WaitTxnPersistTime", "AddChunkRpcTime");
+    _wait_drain_sender_timer = ADD_CHILD_TIMER(_profile, "WaitDrainSenderTime", "AddChunkRpcTime");
     _tablets_profile = std::make_unique<RuntimeProfile>("TabletsProfile");
 }
 
@@ -97,6 +103,9 @@ Status LocalTabletsChannel::open(const PTabletWriterOpenRequest& params, PTablet
     _schema = schema;
     _tuple_desc = _schema->tuple_desc();
     _node_id = params.node_id();
+#ifndef BE_TEST
+    _table_metrics = StarRocksMetrics::instance()->table_metrics(_schema->table_id());
+#endif
 
     _senders = std::vector<Sender>(params.num_senders());
     if (is_incremental) {
@@ -248,6 +257,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     std::unordered_map<int64_t, std::vector<int64_t>> node_id_to_abort_tablets;
     context->set_node_id_to_abort_tablets(&node_id_to_abort_tablets);
 
+    auto start_submit_write_task_ts = watch.elapsed_time();
     int64_t wait_memtable_flush_time_us = 0;
     int32_t total_row_num = 0;
     for (int i = 0; i < channel_size; ++i) {
@@ -295,6 +305,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 
         delta_writer->write(req, cb);
     }
+    auto finish_submit_write_task_ts = watch.elapsed_time();
 
     // _channel_row_idx_start_points no longer used, release it to free memory.
     context->_channel_row_idx_start_points.reset();
@@ -305,6 +316,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         close_channel = true;
         _commit_tablets(request, context);
     }
+    auto finish_submit_commit_task_ts = watch.elapsed_time();
 
     // Must reset the context pointer before waiting on the |count_down_latch|,
     // because the |count_down_latch| is decreased in the destructor of the context,
@@ -315,6 +327,12 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
     auto start_wait_writer_ts = watch.elapsed_time();
     // This will only block the bthread, will not block the pthread
     count_down_latch.wait();
+    FAIL_POINT_TRIGGER_EXECUTE(tablets_channel_add_chunk_wait_write_block, {
+        int32_t timeout_ms = config::load_fp_tablets_channel_add_chunk_block_ms;
+        if (timeout_ms > 0) {
+            bthread_usleep(timeout_ms * 1000);
+        }
+    });
     auto finish_wait_writer_ts = watch.elapsed_time();
 
     // Abort tablets which primary replica already failed
@@ -382,8 +400,9 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         if (writer->is_immutable() && immutable_tablet_ids.count(tablet_id) == 0) {
             response->add_immutable_tablet_ids(tablet_id);
             response->add_immutable_partition_ids(writer->partition_id());
-            _immutable_partition_ids.insert(writer->partition_id());
             immutable_tablet_ids.insert(tablet_id);
+
+            _insert_immutable_partition(writer->partition_id());
         }
     }
 
@@ -416,7 +435,9 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
         // unlock write lock so that incremental open can aquire read lock
         lk.unlock();
         // wait for all senders closed, may be timed out
+        auto start_wait_drain_sender_ts = watch.elapsed_time();
         drain_senders(remain * 1000, msg);
+        COUNTER_UPDATE(_wait_drain_sender_timer, watch.elapsed_time() - start_wait_drain_sender_ts);
     }
 
     int64_t last_execution_time_us = 0;
@@ -441,11 +462,18 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
             wait_memtable_flush_time_us);
     StarRocksMetrics::instance()->load_channel_add_chunks_wait_writer_duration_us.increment(wait_writer_ns / 1000);
     StarRocksMetrics::instance()->load_channel_add_chunks_wait_replica_duration_us.increment(wait_replica_ns / 1000);
+#ifndef BE_TEST
+    _table_metrics->load_rows.increment(total_row_num);
+    size_t chunk_size = chunk != nullptr ? chunk->bytes_usage() : 0;
+    _table_metrics->load_bytes.increment(chunk_size);
+#endif
 
     COUNTER_UPDATE(_add_chunk_counter, 1);
     COUNTER_UPDATE(_add_chunk_timer, watch.elapsed_time());
     COUNTER_UPDATE(_add_row_num, total_row_num);
     COUNTER_UPDATE(_wait_flush_timer, wait_memtable_flush_time_us * 1000);
+    COUNTER_UPDATE(_submit_write_task_timer, finish_submit_write_task_ts - start_submit_write_task_ts);
+    COUNTER_UPDATE(_submit_commit_task_timer, finish_submit_commit_task_ts - finish_submit_write_task_ts);
     COUNTER_UPDATE(_wait_write_timer, wait_writer_ns);
     COUNTER_UPDATE(_wait_replica_timer, wait_replica_ns);
 
@@ -456,7 +484,7 @@ void LocalTabletsChannel::add_chunk(Chunk* chunk, const PTabletWriterAddChunkReq
 }
 
 void LocalTabletsChannel::_flush_stale_memtables() {
-    if (_immutable_partition_ids.empty() && config::stale_memtable_flush_time_sec <= 0) {
+    if (_is_immutable_partition_empty() && config::stale_memtable_flush_time_sec <= 0) {
         return;
     }
     bool high_mem_usage = false;
@@ -479,7 +507,7 @@ void LocalTabletsChannel::_flush_stale_memtables() {
         bool need_flush = false;
         auto last_write_ts = writer->last_write_ts();
         if (last_write_ts > 0) {
-            if (_immutable_partition_ids.count(writer->partition_id()) > 0) {
+            if (_has_immutable_partition(writer->partition_id())) {
                 if (high_mem_usage) {
                     // immutable tablet flush stale memtable immediately when high mem usage
                     need_flush = true;
@@ -1063,12 +1091,12 @@ void LocalTabletsChannel::_update_peer_replica_profile(DeltaWriter* writer, Runt
     ADD_AND_UPDATE_TIMER(profile, "WriteTime", writer_stat.write_time_ns);
     ADD_AND_UPDATE_COUNTER(profile, "MemtableFullCount", TUnit::UNIT, writer_stat.memtable_full_count);
     ADD_AND_UPDATE_COUNTER(profile, "MemoryExceedCount", TUnit::UNIT, writer_stat.memory_exceed_count);
-    ADD_AND_UPDATE_TIMER(profile, "WriteWaitFlushTime", writer_stat.write_wait_flush_tims_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CloseTime", writer_stat.write_wait_flush_tims_ns);
+    ADD_AND_UPDATE_TIMER(profile, "WriteWaitFlushTime", writer_stat.write_wait_flush_time_ns);
+    ADD_AND_UPDATE_TIMER(profile, "CloseTime", writer_stat.close_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "CommitTime", writer_stat.commit_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "CommitWaitFlushTime", writer_stat.commit_wait_flush_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "CommitRowsetBuildTime", writer_stat.commit_rowset_build_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitFinishPkTime", writer_stat.commit_finish_pk_time_ns);
+    ADD_AND_UPDATE_TIMER(profile, "CommitPkPreloadTime", writer_stat.commit_pk_preload_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "CommitWaitReplicaTime", writer_stat.commit_wait_replica_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "CommitTxnCommitTime", writer_stat.commit_txn_commit_time_ns);
 
@@ -1076,7 +1104,7 @@ void LocalTabletsChannel::_update_peer_replica_profile(DeltaWriter* writer, Runt
     ADD_AND_UPDATE_COUNTER(profile, "MemtableFlushedCount", TUnit::UNIT, flush_stat.flush_count);
     ADD_AND_UPDATE_COUNTER(profile, "MemtableFlushingCount", TUnit::UNIT, flush_stat.cur_flush_count);
     ADD_AND_UPDATE_COUNTER(profile, "MemtableQueueCount", TUnit::UNIT, flush_stat.queueing_memtable_num);
-    ADD_AND_UPDATE_COUNTER(profile, "FlushTaskPendingTime", TUnit::UNIT, flush_stat.pending_time_ns);
+    ADD_AND_UPDATE_TIMER(profile, "FlushTaskPendingTime", flush_stat.pending_time_ns);
     auto& memtable_stat = flush_stat.memtable_stats;
     ADD_AND_UPDATE_COUNTER(profile, "MemtableInsertCount", TUnit::UNIT, memtable_stat.insert_count);
     ADD_AND_UPDATE_TIMER(profile, "MemtableInsertTime", memtable_stat.insert_time_ns);
@@ -1114,7 +1142,7 @@ void LocalTabletsChannel::_update_secondary_replica_profile(DeltaWriter* writer,
     ADD_AND_UPDATE_TIMER(profile, "AddSegmentIOTime", writer_stat.add_segment_io_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "CommitTime", writer_stat.commit_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "CommitRowsetBuildTime", writer_stat.commit_rowset_build_time_ns);
-    ADD_AND_UPDATE_TIMER(profile, "CommitFinishPkTime", writer_stat.commit_finish_pk_time_ns);
+    ADD_AND_UPDATE_TIMER(profile, "CommitPkPreloadTime", writer_stat.commit_pk_preload_time_ns);
     ADD_AND_UPDATE_TIMER(profile, "CommitTxnCommitTime", writer_stat.commit_txn_commit_time_ns);
 
     auto* segment_flush_token = writer->segment_flush_token();

@@ -34,6 +34,7 @@ public:
 
     bool has_output() const override;
     bool is_finished() const override;
+    Status prepare(RuntimeState* state) override;
 
     Status set_finished(RuntimeState* state) override;
 
@@ -58,6 +59,7 @@ public:
               _aggregator_factory(std::move(aggregator_factory)) {}
 
     ~AggregateDistinctBlockingSourceOperatorFactory() override = default;
+    bool support_event_scheduler() const override { return true; }
 
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         return std::make_shared<AggregateDistinctBlockingSourceOperator>(

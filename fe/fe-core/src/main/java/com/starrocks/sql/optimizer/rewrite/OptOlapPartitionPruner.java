@@ -15,6 +15,7 @@
 
 package com.starrocks.sql.optimizer.rewrite;
 
+import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Range;
@@ -37,9 +38,13 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Pair;
+import com.starrocks.common.util.DebugUtil;
 import com.starrocks.planner.PartitionColumnFilter;
 import com.starrocks.planner.PartitionPruner;
 import com.starrocks.planner.RangePartitionPruner;
+import com.starrocks.qe.ConnectContext;
+import com.starrocks.sql.common.ErrorType;
+import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.Utils;
 import com.starrocks.sql.optimizer.operator.ColumnFilterConverter;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -88,8 +93,15 @@ public class OptOlapPartitionPruner {
 
         // Do further partition prune if needed
         if (isNeedFurtherPrune(selectedPartitionIds, logicalOlapScanOperator, partitionInfo)) {
-            selectedPartitionIds = doFurtherPartitionPrune(table, partitionInfo, logicalOlapScanOperator.getPredicate(),
+            selectedPartitionIds = doFurtherPartitionPrune(table, logicalOlapScanOperator.getPredicate(),
                     logicalOlapScanOperator.getColumnMetaToColRefMap(), selectedPartitionIds);
+        }
+
+        try {
+            checkScanPartitionLimit(selectedPartitionIds.size());
+        } catch (StarRocksPlannerException e) {
+            LOG.warn("{} queryId: {}", e.getMessage(), DebugUtil.printId(ConnectContext.get().getQueryId()));
+            throw new StarRocksPlannerException(e.getMessage(), ErrorType.USER_ERROR);
         }
 
         final Pair<ScalarOperator, List<ScalarOperator>> prunePartitionPredicate =
@@ -126,6 +138,14 @@ public class OptOlapPartitionPruner {
         } else {
             ansPartitionIds = (selectedPartitionIds == null) ? newSelectedPartitionIds : selectedPartitionIds;
         }
+
+        try {
+            checkScanPartitionLimit(ansPartitionIds.size());
+        } catch (StarRocksPlannerException e) {
+            LOG.warn("{} queryId: {}", e.getMessage(), DebugUtil.printId(ConnectContext.get().getQueryId()));
+            throw new StarRocksPlannerException(e.getMessage(), ErrorType.USER_ERROR);
+        }
+
         final LogicalOlapScanOperator.Builder builder = new LogicalOlapScanOperator.Builder();
         builder.withOperator(newOlapScanOperator)
                 .setSelectedPartitionId(ansPartitionIds)
@@ -134,6 +154,22 @@ public class OptOlapPartitionPruner {
                 // use the new pruned partition predicates
                 .setPrunedPartitionPredicates(newOlapScanOperator.getPrunedPartitionPredicates());
         return builder.build();
+    }
+
+    private static void checkScanPartitionLimit(int selectedPartitionNum) throws StarRocksPlannerException {
+        int scanOlapPartitionNumLimit = 0;
+        try {
+            scanOlapPartitionNumLimit = ConnectContext.get().getSessionVariable().getScanOlapPartitionNumLimit();
+        } catch (Exception e) {
+            LOG.warn("fail to get variable scan_olap_partition_num_limit, set default value 0, msg: {}", e.getMessage());
+        }
+        if (scanOlapPartitionNumLimit > 0 && selectedPartitionNum > scanOlapPartitionNumLimit) {
+            String msg = "Exceeded the limit of number of olap table partitions to be scanned. " +
+                         "Number of partitions allowed: " + scanOlapPartitionNumLimit +
+                         ", number of partitions to be scanned: " + selectedPartitionNum +
+                         ". Please adjust the SQL or change the limit by set variable scan_olap_partition_num_limit.";
+            throw new StarRocksPlannerException(msg, ErrorType.USER_ERROR);
+        }
     }
 
     private static Pair<ScalarOperator, List<ScalarOperator>> prunePartitionPredicates(
@@ -237,7 +273,9 @@ public class OptOlapPartitionPruner {
             return null;
         }
 
-        scanPredicates.removeAll(prunedPartitionPredicates);
+        if (!table.getDistributionColumnNames().contains(columnName)) {
+            scanPredicates.removeAll(prunedPartitionPredicates);
+        }
 
         if (column.isAllowNull() && containsNullValue(minRange)
                 && !checkFilterNullValue(scanPredicates, logicalOlapScanOperator.getPredicate().clone())) {
@@ -332,19 +370,31 @@ public class OptOlapPartitionPruner {
     }
 
     public static List<Long> doFurtherPartitionPrune(OlapTable table,
-                                                     PartitionInfo partitionInfo,
                                                      ScalarOperator predicate,
                                                      Map<Column, ColumnRefOperator> columnRefOperatorMap,
                                                      List<Long> selectedPartitionIds) {
-        List<Column> partitionColumns = partitionInfo.getPartitionColumns(table.getIdToColumn());
+        Preconditions.checkArgument(table.getPartitionInfo() instanceof RangePartitionInfo);
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) table.getPartitionInfo();
+        List<Range<PartitionKey>> candidateRanges = selectedPartitionIds.stream()
+                .map(rangePartitionInfo::getRange)
+                .collect(Collectors.toList());
+        return doFurtherPartitionPrune(table, predicate, columnRefOperatorMap, selectedPartitionIds, candidateRanges);
+    }
+
+    /**
+     * Use input candidateRanges to prune partitions rather than all table's partitions.
+     */
+    public static List<Long> doFurtherPartitionPrune(OlapTable table,
+                                                     ScalarOperator predicate,
+                                                     Map<Column, ColumnRefOperator> columnRefOperatorMap,
+                                                     List<Long> selectedPartitionIds,
+                                                     List<Range<PartitionKey>> candidateRanges) {
+        List<Column> partitionColumns = table.getPartitionColumns();
         PartitionColPredicateExtractor extractor = new PartitionColPredicateExtractor(
                 partitionColumns,
-                (RangePartitionInfo) partitionInfo,
                 columnRefOperatorMap);
         PartitionColPredicateEvaluator evaluator = new PartitionColPredicateEvaluator(
-                partitionColumns,
-                (RangePartitionInfo) partitionInfo,
-                selectedPartitionIds);
+                partitionColumns, selectedPartitionIds, candidateRanges);
         return evaluator.prunePartitions(extractor, predicate);
     }
 
@@ -355,27 +405,45 @@ public class OptOlapPartitionPruner {
         if (candidatePartitions.isEmpty() || predicate == null) {
             return false;
         }
+        if (partitionInfo == null || !(partitionInfo instanceof RangePartitionInfo)) {
+            return false;
+        }
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+        return isNeedFurtherPrune(olapTable, candidatePartitions, predicate, rangePartitionInfo,
+                rangePartitionInfo.getIdToRange(true));
+    }
+
+    /**
+     * Use input idToRange to check whether to further prune partitions rather than all table's partitions.
+     */
+    public static boolean isNeedFurtherPrune(OlapTable olapTable,
+                                             List<Long> candidatePartitions,
+                                             ScalarOperator predicate,
+                                             RangePartitionInfo rangePartitionInfo,
+                                             Map<Long, Range<PartitionKey>> tmpIdToRange) {
+        if (candidatePartitions.isEmpty() || predicate == null) {
+            return false;
+        }
 
         // only support RANGE and EXPR_RANGE
         // EXPR_RANGE_V2 type like partition by RANGE(cast(substring(col, 3)) as int)) is unsupported
-        if (partitionInfo instanceof ExpressionRangePartitionInfo) {
-            ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) partitionInfo;
+        if (rangePartitionInfo instanceof ExpressionRangePartitionInfo) {
+            ExpressionRangePartitionInfo exprPartitionInfo = (ExpressionRangePartitionInfo) rangePartitionInfo;
             List<Expr> partitionExpr = exprPartitionInfo.getPartitionExprs(olapTable.getIdToColumn());
             if (partitionExpr.size() == 1 && partitionExpr.get(0) instanceof FunctionCallExpr) {
                 FunctionCallExpr functionCallExpr = (FunctionCallExpr) partitionExpr.get(0);
                 String functionName = functionCallExpr.getFnName().getFunction();
                 return (FunctionSet.DATE_TRUNC.equalsIgnoreCase(functionName)
                         || FunctionSet.TIME_SLICE.equalsIgnoreCase(functionName))
-                        && !exprPartitionInfo.getIdToRange(true).containsKey(candidatePartitions.get(0));
+                        && !tmpIdToRange.containsKey(candidatePartitions.get(0));
             } else if (partitionExpr.size() == 1 && partitionExpr.get(0) instanceof SlotRef) {
-                return !exprPartitionInfo.getIdToRange(true).containsKey(candidatePartitions.get(0));
+                return !tmpIdToRange.containsKey(candidatePartitions.get(0));
             }
-        } else if (partitionInfo instanceof ExpressionRangePartitionInfoV2) {
+        } else if (rangePartitionInfo instanceof ExpressionRangePartitionInfoV2) {
             return false;
-        } else if (partitionInfo instanceof RangePartitionInfo) {
-            RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+        } else if (rangePartitionInfo instanceof RangePartitionInfo) {
             return rangePartitionInfo.getPartitionColumnsSize() == 1
-                    && !rangePartitionInfo.getIdToRange(true).containsKey(candidatePartitions.get(0));
+                    && !tmpIdToRange.containsKey(candidatePartitions.get(0));
         }
         return false;
     }

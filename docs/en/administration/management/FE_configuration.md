@@ -648,15 +648,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The length of the backlog queue held by the MySQL server in the FE node.
 - Introduced in: -
 
-##### mysql_service_nio_enabled
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Specifies whether asynchronous I/O is enabled for the FE node.
-- Introduced in: -
-
 ##### mysql_service_nio_enable_keep_alive
 
 - Default: true
@@ -714,15 +705,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: -
 - Is mutable: No
 - Description: The maximum number of connections that can be established by all users to the FE node. From v3.1.12 and v3.2.7 onwards, the default value has been changed from `1024` to `4096`.
-- Introduced in: -
-
-##### max_connection_scheduler_threads_num
-
-- Default: 4096
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: The maximum number of threads that are supported by the connection scheduler.
 - Introduced in: -
 
 ### Metadata and cluster management
@@ -1758,7 +1740,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: bytes
 - Is mutable: Yes
-- Description: The size of the largest partition for the automatic collection of statistics. If a partition exceeds this value, then sampled collection is performed instead of full.
+- Description: The data size threshold for the automatic collection of statistics. If the total size exceeds this value, then sampled collection is performed instead of full.
 - Introduced in: -
 
 ##### statistic_collect_max_row_count_per_query
@@ -1815,6 +1797,60 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The maximum number of rows to collect for a histogram.
 - Introduced in: -
 
+##### connector_table_query_trigger_task_schedule_interval
+
+- Default: 30
+- Type: Int
+- Unit: Second
+- Is mutable: Yes
+- Description: The interval at which the Scheduler thread schedules the query-trigger background tasks. This item is to replace `connector_table_query_trigger_analyze_schedule_interval` introduced in v3.4.0. Here, the background tasks refer `ANALYZE` tasks in v3.4，and the collection task of low-cardinality columns' dictionary in versions later than v3.4.  
+- Introduced in: v3.4.2
+
+##### connector_table_query_trigger_analyze_small_table_rows
+
+- Default: 10000000
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The threshold for determining whether a table is a small table for query-trigger ANALYZE tasks.
+- Introduced in: v3.4.0
+
+##### connector_table_query_trigger_analyze_small_table_interval
+
+- Default: 2 * 3600
+- Type: Int
+- Unit: Second
+- Is mutable: Yes
+- Description: The interval for query-trigger ANALYZE tasks of small tables.
+- Introduced in: v3.4.0
+
+##### connector_table_query_trigger_analyze_large_table_interval
+
+- Default: 12 * 3600
+- Type: Int
+- Unit: Second
+- Is mutable: Yes
+- Description: The interval for query-trigger ANALYZE tasks of large tables.
+- Introduced in: v3.4.0
+
+##### connector_table_query_trigger_analyze_max_pending_task_num
+
+- Default: 100
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of query-trigger ANALYZE tasks that are in Pending state on the FE.
+- Introduced in: v3.4.0
+
+##### connector_table_query_trigger_analyze_max_running_task_num
+
+- Default: 2
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: Maximum number of query-trigger ANALYZE tasks that are in Running state on the FE.
+- Introduced in: v3.4.0
+
 ##### enable_local_replica_selection
 
 - Default: false
@@ -1832,6 +1868,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Is mutable: Yes
 - Description:: The maximum recursion depth allowed by the partition pruner. Increasing the recursion depth can prune more elements but also increases CPU consumption.
 - Introduced in: -
+
+##### slow_query_analyze_threshold
+
+- Default: 5
+- Type: Int
+- Unit: Seconds
+- Is mutable: Yes
+- Description:: The execution time threshold for queries to trigger the analysis of Query Feedback.
+- Introduced in: v3.4.0
 
 ### Loading and unloading
 
@@ -2775,6 +2820,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The time interval at which the FE retrieves tablet statistics from each BE.
 - Introduced in: -
 
+##### max_automatic_partition_number
+
+- Default: 4096
+- Type: Int
+- Unit: -
+- Is mutable: Yes
+- Description: The maximum number of automatically created partitions.
+- Introduced in: v3.1
+
 ##### auto_partition_max_creation_number_per_load
 
 - Default: 4096
@@ -2861,16 +2915,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: FE cloud-native metadata server RPC listen port.
 - Introduced in: -
 
-<!--
+
 ##### enable_load_volume_from_conf
 
-- Default: true
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description:
-- Introduced in: -
--->
+- Description: Whether to allow StarRocks to create the built-in storage volume by using the object storage-related properties specified in the FE configuration file. The default value is changed from `true` to `false` from v3.4.1 onwards.
+- Introduced in: v3.1.0
+
 
 ##### cloud_native_storage_type
 
@@ -3131,11 +3185,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lake_enable_ingest_slowdown
 
-- Default: false
+- Default: true
 - Type: Boolean
 - Unit: -
 - Is mutable: Yes
-- Description: Whether to enable Data Ingestion Slowdown in a shared-data cluster. When Data Ingestion Slowdown is enabled, if the Compaction Score of a partition exceeds `lake_ingest_slowdown_threshold`, loading tasks on that partition will be throttled down. This configuration only takes effect when `run_mode` is set to `shared_data`.
+- Description: Whether to enable Data Ingestion Slowdown in a shared-data cluster. When Data Ingestion Slowdown is enabled, if the Compaction Score of a partition exceeds `lake_ingest_slowdown_threshold`, loading tasks on that partition will be throttled down. This configuration only takes effect when `run_mode` is set to `shared_data`. From v3.3.6 onwards, the default value is chenged from `false` to `true`.
 - Introduced in: v3.2.0
 
 ##### lake_ingest_slowdown_threshold
@@ -3167,11 +3221,11 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 
 ##### lake_compaction_score_upper_bound
 
-- Default: 0
+- Default: 2000
 - Type: Long
 - Unit: -
 - Is mutable: Yes
-- Description: The upper limit of the Compaction Score for a partition in a shared-data cluster. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, all loading tasks on that partition will be indefinitely delayed until the Compaction Score drops below this value or the task times out.
+- Description: The upper limit of the Compaction Score for a partition in a shared-data cluster. `0` indicates no upper limit. This item only takes effect when `lake_enable_ingest_slowdown` is set to `true`. When the Compaction Score of a partition reaches or exceeds this upper limit, incoming loading tasks will be rejected. From v3.3.6 onwards, the default value is changed from `0` to `2000`.
 - Introduced in: v3.2.0
 
 ##### lake_compaction_disable_tables

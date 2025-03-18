@@ -937,10 +937,7 @@ public class ExportJob implements Writable, GsonPostProcessable {
                     + "]";
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     /**
      * for ut only

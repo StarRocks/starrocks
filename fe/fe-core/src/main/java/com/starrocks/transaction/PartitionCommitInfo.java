@@ -43,7 +43,6 @@ import com.starrocks.lake.compaction.Quantiles;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 import java.util.List;
 import javax.annotation.Nullable;
@@ -112,11 +111,7 @@ public class PartitionCommitInfo implements Writable {
         this.dictCollectedVersions = dictCollectedVersions;
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        String json = GsonUtils.GSON.toJson(this);
-        Text.writeString(out, json);
-    }
+
 
     public static PartitionCommitInfo read(DataInput in) throws IOException {
         String json = Text.readString(in);
@@ -190,10 +185,9 @@ public class PartitionCommitInfo implements Writable {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder("partitionid=");
+        StringBuilder sb = new StringBuilder("partitionId=");
         sb.append(physicalPartitionId);
         sb.append(", version=").append(version);
-        sb.append(", versionHash=").append(0);
         sb.append(", versionTime=").append(versionTime);
         sb.append(", isDoubleWrite=").append(isDoubleWrite);
         return sb.toString();

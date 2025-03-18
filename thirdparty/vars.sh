@@ -265,10 +265,10 @@ BITSHUFFLE_SOURCE=bitshuffle-0.5.1
 BITSHUFFLE_MD5SUM="b3bf6a9838927f7eb62214981c138e2f"
 
 # CROARINGBITMAP
-CROARINGBITMAP_DOWNLOAD="https://github.com/RoaringBitmap/CRoaring/archive/refs/tags/v1.1.3.tar.gz"
-CROARINGBITMAP_NAME=CRoaring-1.1.3.tar.gz
-CROARINGBITMAP_SOURCE=CRoaring-1.1.3
-CROARINGBITMAP_MD5SUM="605924d21c14c760e66466799215868f"
+CROARINGBITMAP_DOWNLOAD="https://github.com/RoaringBitmap/CRoaring/archive/refs/tags/v4.2.1.tar.gz"
+CROARINGBITMAP_NAME=CRoaring-4.2.1.tar.gz
+CROARINGBITMAP_SOURCE=CRoaring-4.2.1
+CROARINGBITMAP_MD5SUM="00667266a60709978368cf867fb3a3aa"
 
 # jemalloc
 JEMALLOC_DOWNLOAD="https://github.com/jemalloc/jemalloc/releases/download/5.3.0/jemalloc-5.3.0.tar.bz2"

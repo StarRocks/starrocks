@@ -36,6 +36,8 @@ package com.starrocks.http.rest;
 
 import com.google.common.base.Strings;
 import com.google.common.collect.Lists;
+import com.starrocks.authorization.AccessDeniedException;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
@@ -43,13 +45,10 @@ import com.starrocks.http.ActionController;
 import com.starrocks.http.BaseRequest;
 import com.starrocks.http.BaseResponse;
 import com.starrocks.http.IllegalArgException;
-import com.starrocks.privilege.AccessDeniedException;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.DecommissionBackendClause;
-import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.system.SystemInfoService;
 import io.netty.handler.codec.http.HttpMethod;
 
@@ -78,8 +77,7 @@ public class CheckDecommissionAction extends RestBaseAction {
     @Override
     public void executeWithoutPassword(BaseRequest request, BaseResponse response)
             throws DdlException, AccessDeniedException {
-        UserIdentity currentUser = ConnectContext.get().getCurrentUserIdentity();
-        Authorizer.checkSystemAction(currentUser, null, PrivilegeType.OPERATE);
+        Authorizer.checkSystemAction(ConnectContext.get(), PrivilegeType.OPERATE);
 
         String hostPorts = request.getSingleParameter(HOST_PORTS);
         if (Strings.isNullOrEmpty(hostPorts)) {

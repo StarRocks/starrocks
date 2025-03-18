@@ -20,7 +20,6 @@ import com.starrocks.common.io.Writable;
 import com.starrocks.persist.gson.GsonUtils;
 
 import java.io.DataInput;
-import java.io.DataOutput;
 import java.io.IOException;
 
 public class PipeOpEntry implements Writable {
@@ -51,10 +50,7 @@ public class PipeOpEntry implements Writable {
         return GsonUtils.GSON.fromJson(json, PipeOpEntry.class);
     }
 
-    @Override
-    public void write(DataOutput out) throws IOException {
-        Text.writeString(out, GsonUtils.GSON.toJson(this));
-    }
+
 
     public enum PipeOpType {
         PIPE_OP_CREATE(0),

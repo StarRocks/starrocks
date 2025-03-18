@@ -477,7 +477,7 @@ public:
         const Column& elements = event_column->elements();
         if (elements.is_nullable()) {
             const auto& null_column = down_cast<const NullableColumn&>(elements);
-            auto data_column = down_cast<BooleanColumn*>(null_column.data_column().get());
+            auto data_column = down_cast<const BooleanColumn*>(null_column.data_column().get());
             const auto& null_vector = null_column.null_column()->get_data();
             for (int i = 0; i < array_size; ++i) {
                 auto ele_offset = offset + i;

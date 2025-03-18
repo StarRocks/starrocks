@@ -106,6 +106,8 @@ public:
 
     ~ResultSinkOperatorFactory() override = default;
 
+    bool support_event_scheduler() const override { return true; }
+
     OperatorPtr create(int32_t degree_of_parallelism, int32_t driver_sequence) override {
         // _num_sinkers is incremented when creating a ResultSinkOperator instance here at the preparing
         // phase of FragmentExecutor, and decremented and read when closing ResultSinkOperator. The visibility

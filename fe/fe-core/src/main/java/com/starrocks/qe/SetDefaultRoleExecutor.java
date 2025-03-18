@@ -13,9 +13,9 @@
 // limitations under the License.
 package com.starrocks.qe;
 
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeException;
 import com.starrocks.common.StarRocksException;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.PrivilegeException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.SetDefaultRoleStmt;
 import com.starrocks.sql.ast.SetRoleType;

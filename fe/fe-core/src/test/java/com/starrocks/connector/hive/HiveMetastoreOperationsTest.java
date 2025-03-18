@@ -72,7 +72,8 @@ public class HiveMetastoreOperationsTest {
         metastore = new HiveMetastore(client, "hive_catalog", null);
         executor = Executors.newFixedThreadPool(5);
         cachingHiveMetastore = new CachingHiveMetastore(
-                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+                metastore, executor, executor,
+                expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration(), MetastoreType.HMS, "hive_catalog");
     }
 
@@ -221,7 +222,8 @@ public class HiveMetastoreOperationsTest {
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", null);
         ExecutorService executor = Executors.newFixedThreadPool(5);
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
-                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+                metastore, executor, executor,
+                expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         HiveMetastoreOperations hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true,
                 new Configuration(), MetastoreType.HMS, "hive_catalog");
 
@@ -250,7 +252,8 @@ public class HiveMetastoreOperationsTest {
         metastore = new HiveMetastore(new MockedTestMetaClient1(), "hive_catalog", MetastoreType.HMS);
         executor = Executors.newFixedThreadPool(5);
         cachingHiveMetastore = new CachingHiveMetastore(
-                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+                metastore, executor, executor,
+                expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true, new Configuration(), MetastoreType.HMS, "hive_catalog");
 
         hmsOps.dropDb("db1", false);
@@ -269,7 +272,8 @@ public class HiveMetastoreOperationsTest {
         HiveMetastore metastore = new HiveMetastore(client, "hive_catalog", MetastoreType.HMS);
         ExecutorService executor = Executors.newFixedThreadPool(5);
         CachingHiveMetastore cachingHiveMetastore = new CachingHiveMetastore(
-                metastore, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+                metastore, executor, executor,
+                expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         HiveMetastoreOperations hmsOps = new HiveMetastoreOperations(cachingHiveMetastore, true,
                 new Configuration(), MetastoreType.HMS, "hive_catalog");
 
@@ -294,7 +298,8 @@ public class HiveMetastoreOperationsTest {
         HiveMetaClient client2 = new MockedTestMetaClient2();
         HiveMetastore metastore2 = new HiveMetastore(client2, "hive_catalog", MetastoreType.HMS);
         CachingHiveMetastore cachingHiveMetastore2 = new CachingHiveMetastore(
-                metastore2, executor, expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
+                metastore2, executor, executor,
+                expireAfterWriteSec, refreshAfterWriteSec, 1000, false);
         HiveMetastoreOperations hmsOps2 = new HiveMetastoreOperations(cachingHiveMetastore2, true,
                 new Configuration(), MetastoreType.HMS, "hive_catalog");
 

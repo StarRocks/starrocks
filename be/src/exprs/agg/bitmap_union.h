@@ -25,6 +25,8 @@ namespace starrocks {
 class BitmapUnionAggregateFunction final
         : public AggregateFunctionBatchHelper<BitmapValue, BitmapUnionAggregateFunction> {
 public:
+    bool is_exception_safe() const override { return false; }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr state, size_t row_num) const override {
         const auto* col = down_cast<const BitmapColumn*>(columns[0]);
         this->data(state) |= *(col->get_object(row_num));

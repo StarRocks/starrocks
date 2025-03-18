@@ -89,7 +89,7 @@ Metacache::Metacache(int64_t cache_capacity) : _cache(new_lru_cache(cache_capaci
 Metacache::~Metacache() = default;
 
 void Metacache::insert(std::string_view key, CacheValue* ptr, size_t size) {
-    Cache::Handle* handle = _cache->insert(CacheKey(key), ptr, size, cache_value_deleter);
+    Cache::Handle* handle = _cache->insert(CacheKey(key), ptr, size, size, cache_value_deleter);
     _cache->release(handle);
 }
 

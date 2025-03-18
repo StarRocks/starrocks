@@ -26,13 +26,12 @@ import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.MvUpdateInfo;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.Table;
-import com.starrocks.common.Pair;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalAggregationOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
 import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
-import com.starrocks.sql.optimizer.operator.pattern.Pattern;
+import com.starrocks.sql.optimizer.operator.pattern.MultiOpPattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MaterializedViewRewriter;
@@ -83,8 +82,6 @@ public class MaterializationContext {
     // used to reduce the rewrite times for the same group and mv
     private final List<Integer> matchedGroups;
 
-    private final ScalarOperator mvPartialPartitionPredicate;
-
     // The output column refs of the MV which is ordered by user's select list.
     private final List<ColumnRefOperator> mvOutputColumnRefs;
 
@@ -102,7 +99,8 @@ public class MaterializationContext {
     private MVCompensation mvCompensation = null;
 
     // Cache partition compensates predicates for each ScanNode and isCompensate pair.
-    private Map<Pair<LogicalScanOperator, Boolean>, List<ScalarOperator>> scanOpToPartitionCompensatePredicates;
+    private Map<LogicalScanOperator, List<ScalarOperator>> scanOpToPartitionCompensatePredicates;
+    private final int level;
 
     public MaterializationContext(OptimizerContext optimizerContext,
                                   MaterializedView mv,
@@ -111,9 +109,9 @@ public class MaterializationContext {
                                   ColumnRefFactory mvColumnRefFactory,
                                   List<Table> baseTables,
                                   List<Table> intersectingTables,
-                                  ScalarOperator mvPartialPartitionPredicate,
                                   MvUpdateInfo mvUpdateInfo,
-                                  List<ColumnRefOperator> mvOutputColumnRefs) {
+                                  List<ColumnRefOperator> mvOutputColumnRefs,
+                                  int level) {
         this.optimizerContext = optimizerContext;
         this.mv = mv;
         this.mvExpression = mvExpression;
@@ -122,10 +120,10 @@ public class MaterializationContext {
         this.baseTables = baseTables;
         this.intersectingTables = intersectingTables;
         this.matchedGroups = Lists.newArrayList();
-        this.mvPartialPartitionPredicate = mvPartialPartitionPredicate;
         this.mvUpdateInfo = mvUpdateInfo;
         this.mvOutputColumnRefs = mvOutputColumnRefs;
         this.scanOpToPartitionCompensatePredicates = Maps.newHashMap();
+        this.level = level;
     }
 
     public MaterializedView getMv() {
@@ -188,10 +186,6 @@ public class MaterializationContext {
         return matchedGroups.contains(groupId);
     }
 
-    public ScalarOperator getMvPartialPartitionPredicate() {
-        return mvPartialPartitionPredicate;
-    }
-
     public long getMVUsedCount() {
         return mvUsedCount;
     }
@@ -219,6 +213,10 @@ public class MaterializationContext {
 
     public List<ColumnRefOperator> getMvOutputColumnRefs() {
         return mvOutputColumnRefs;
+    }
+
+    public int getLevel() {
+        return level;
     }
 
     /**
@@ -332,7 +330,7 @@ public class MaterializationContext {
                 return 1;
             } else if (op == OperatorType.LOGICAL_JOIN) {
                 return 2;
-            } else if (Pattern.isScanOperator(op)) {
+            } else if (MultiOpPattern.ALL_SCAN_TYPES.contains(op)) {
                 return 3;
             } else {
                 return 4;
@@ -532,7 +530,7 @@ public class MaterializationContext {
         return false;
     }
 
-    public Map<Pair<LogicalScanOperator, Boolean>, List<ScalarOperator>> getScanOpToPartitionCompensatePredicates() {
+    public Map<LogicalScanOperator, List<ScalarOperator>> getScanOpToPartitionCompensatePredicates() {
         return scanOpToPartitionCompensatePredicates;
     }
 }

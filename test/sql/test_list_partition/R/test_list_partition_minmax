@@ -1,5 +1,5 @@
 -- name: test_list_partition_minmax
-create table t1(user_id int, dt datetime) partition by dt;
+create table t1(user_id int, dt datetime) partition by (dt);
 -- result:
 -- !result
 insert into t1 values (1, '2024-10-05 01:01:01'), (2, '2024-10-06 02:02:02'), (3, '2024-10-07 03:03:03'), (4, NULL);

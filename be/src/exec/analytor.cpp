@@ -177,7 +177,8 @@ Status Analytor::prepare(RuntimeState* state, ObjectPool* pool, RuntimeProfile* 
             _need_partition_materializing = true;
         }
 
-        if (!(fn.name.function_name == "sum" || fn.name.function_name == "avg" || fn.name.function_name == "count")) {
+        if (!(fn.name.function_name == "sum" || fn.name.function_name == "avg" || fn.name.function_name == "count" ||
+              fn.name.function_name == "max" || fn.name.function_name == "min")) {
             _use_removable_cumulative_process = false;
         }
 
@@ -505,7 +506,7 @@ Status Analytor::_evaluate_const_columns(int i) {
         // Only agg fn has this context.
         return Status::OK();
     }
-    std::vector<ColumnPtr> const_columns;
+    Columns const_columns;
     const_columns.reserve(_agg_expr_ctxs[i].size());
     for (auto& j : _agg_expr_ctxs[i]) {
         ASSIGN_OR_RETURN(auto col, j->root()->evaluate_const(j));
@@ -984,7 +985,7 @@ void Analytor::_update_window_batch_removable_cumulatively() {
         _agg_functions[i]->update_state_removable_cumulatively(
                 _agg_fn_ctxs[i], _managed_fn_states[0]->mutable_data() + _agg_states_offsets[i], &agg_column,
                 _current_row_position, _partition.start, _partition.end, _rows_start_offset, _rows_end_offset, false,
-                false);
+                false, false);
     }
 }
 

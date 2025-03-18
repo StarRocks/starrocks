@@ -17,7 +17,12 @@
 
 package com.starrocks.common.util;
 
+import org.apache.commons.lang3.StringUtils;
+
 public class SqlUtils {
+
+    private static final int SQL_PREFIX_LENGTH = 128;
+
     public static String escapeUnquote(String ident) {
         return ident.replaceAll("``", "`");
     }
@@ -34,5 +39,15 @@ public class SqlUtils {
         }
         sb.append('`');
         return sb.toString();
+    }
+
+    /**
+     * Return the prefix of a sql if it's too long
+     */
+    public static String sqlPrefix(String sql) {
+        if (StringUtils.isEmpty(sql) || sql.length() < SQL_PREFIX_LENGTH) {
+            return sql;
+        }
+        return sql.substring(0, SQL_PREFIX_LENGTH) + "...";
     }
 }

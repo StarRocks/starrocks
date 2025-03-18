@@ -19,6 +19,7 @@ import com.starrocks.analysis.Expr;
 import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.IntLiteral;
 import com.starrocks.analysis.StringLiteral;
+import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Database;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
@@ -29,9 +30,13 @@ import com.starrocks.catalog.Type;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.statistic.StatisticExecutor;
+import com.starrocks.statistic.StatsConstants;
 import com.starrocks.statistic.base.ColumnClassifier;
 import com.starrocks.statistic.base.ColumnStats;
+import com.starrocks.statistic.base.DefaultColumnStats;
+import com.starrocks.statistic.base.MultiColumnStats;
 import com.starrocks.statistic.base.PartitionSampler;
+import com.starrocks.statistic.sample.TabletSampleManager;
 import com.starrocks.thrift.TStatisticData;
 import org.apache.commons.lang.StringEscapeUtils;
 import org.apache.logging.log4j.LogManager;
@@ -40,7 +45,10 @@ import org.apache.logging.log4j.Logger;
 import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
+
+import static com.starrocks.sql.optimizer.statistics.ColumnStatistic.DEFAULT_COLLECTION_SIZE;
 
 public abstract class HyperQueryJob {
     private static final Logger LOG = LogManager.getLogger(HyperQueryJob.class);
@@ -132,6 +140,8 @@ public abstract class HyperQueryJob {
             LOG.error(message, e);
             lastFailure = new RuntimeException(message, e);
             return Collections.emptyList();
+        } finally {
+            context.setStartTime();
         }
     }
 
@@ -151,6 +161,7 @@ public abstract class HyperQueryJob {
         params.add("'" + data.getMax() + "'");
         params.add("'" + data.getMin() + "'");
         params.add("now()");
+        params.add(String.valueOf(data.getCollectionSize() <= 0 ? DEFAULT_COLLECTION_SIZE : data.getCollectionSize()));
         return "(" + String.join(", ", params) + ")";
     }
 
@@ -169,6 +180,7 @@ public abstract class HyperQueryJob {
         row.add(new StringLiteral(data.getMax())); // max, 200 byte
         row.add(new StringLiteral(data.getMin())); // min, 200 byte
         row.add(nowFn()); // update time, 8 byte
+        row.add(new IntLiteral(data.getCollectionSize() <= 0 ? -1 : data.getCollectionSize(), Type.BIGINT)); // collection size 8 byte
         return row;
     }
 
@@ -272,5 +284,29 @@ public abstract class HyperQueryJob {
             }
         }
         return jobs;
+    }
+
+    public static List<HyperQueryJob> createMultiColumnQueryJobs(ConnectContext context, Database db, Table table,
+                                                                 List<List<String>> columnGroups,
+                                                                 StatsConstants.AnalyzeType analyzeType,
+                                                                 List<StatsConstants.StatisticsType> statisticsTypes,
+                                                                 Map<String, String> properties) {
+        List<ColumnStats> columnStats = columnGroups.stream()
+                .map(group -> group.stream()
+                        .map(columnName -> {
+                            Column column = table.getColumn(columnName);
+                            return new DefaultColumnStats(column.getName(), column.getType(), column.getUniqueId());
+                        })
+                        .collect(Collectors.toList())
+                )
+                .map(defaultColumnStats -> new MultiColumnStats(defaultColumnStats, statisticsTypes))
+                .collect(Collectors.toList());
+
+        if (analyzeType == StatsConstants.AnalyzeType.FULL) {
+            return List.of(new FullMultiColumnQueryJob(context, db, table, columnStats));
+        } else {
+            TabletSampleManager tabletSampleManager = TabletSampleManager.init(properties, table);
+            return List.of(new SampleMultiColumnQueryJob(context, db, table, columnStats, tabletSampleManager));
+        }
     }
 }

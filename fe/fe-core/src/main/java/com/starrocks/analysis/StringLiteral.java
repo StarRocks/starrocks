@@ -271,11 +271,6 @@ public class StringLiteral extends LiteralExpr {
     }
 
     @Override
-    public boolean equals(Object obj) {
-        return super.equals(obj);
-    }
-
-    @Override
     public void parseMysqlParam(ByteBuffer data) {
         int strLen = getParamLen(data);
         if (strLen > data.remaining()) {

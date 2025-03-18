@@ -54,6 +54,9 @@ import com.starrocks.analysis.Subquery;
 import com.starrocks.analysis.TimestampArithmeticExpr;
 import com.starrocks.analysis.UserVariableExpr;
 import com.starrocks.analysis.VariableExpr;
+import com.starrocks.authorization.ObjectType;
+import com.starrocks.authorization.PEntryObject;
+import com.starrocks.authorization.PrivilegeType;
 import com.starrocks.catalog.BrokerTable;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ConnectorView;
@@ -82,9 +85,6 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.util.ParseUtil;
 import com.starrocks.common.util.PrintableMap;
 import com.starrocks.credential.CredentialUtil;
-import com.starrocks.privilege.ObjectType;
-import com.starrocks.privilege.PEntryObject;
-import com.starrocks.privilege.PrivilegeType;
 import com.starrocks.sql.ast.AlterStorageVolumeStmt;
 import com.starrocks.sql.ast.AlterUserStmt;
 import com.starrocks.sql.ast.ArrayExpr;
@@ -101,6 +101,7 @@ import com.starrocks.sql.ast.CreateUserStmt;
 import com.starrocks.sql.ast.DataDescription;
 import com.starrocks.sql.ast.DefaultValueExpr;
 import com.starrocks.sql.ast.DeleteStmt;
+import com.starrocks.sql.ast.DescribeStmt;
 import com.starrocks.sql.ast.DictionaryGetExpr;
 import com.starrocks.sql.ast.DropMaterializedViewStmt;
 import com.starrocks.sql.ast.ExceptRelation;
@@ -146,6 +147,7 @@ import com.starrocks.sql.ast.pipe.CreatePipeStmt;
 import com.starrocks.sql.parser.NodePosition;
 import com.starrocks.storagevolume.StorageVolume;
 import org.apache.commons.collections.CollectionUtils;
+import org.apache.commons.lang.NotImplementedException;
 import org.apache.commons.lang3.StringUtils;
 
 import java.util.ArrayList;
@@ -635,7 +637,7 @@ public class AstToStringBuilder {
         }
 
         @Override
-        public String visitSubquery(SubqueryRelation node, Void context) {
+        public String visitSubqueryRelation(SubqueryRelation node, Void context) {
             StringBuilder sqlBuilder = new StringBuilder("(" + visit(node.getQueryStatement()) + ")");
 
             if (node.getAlias() != null) {
@@ -831,14 +833,18 @@ public class AstToStringBuilder {
             return sqlBuilder.toString();
         }
 
-        @Override
-        public String visitFileTableFunction(FileTableFunctionRelation node, Void context) {
+        private String outputFileTable(Map<String, String> properties) {
             StringBuilder sb = new StringBuilder();
             sb.append(FileTableFunctionRelation.IDENTIFIER);
             sb.append("(");
-            sb.append(new PrintableMap<String, String>(node.getProperties(), "=", true, false, hideCredential));
+            sb.append(new PrintableMap<String, String>(properties, "=", true, false, hideCredential));
             sb.append(")");
             return sb.toString();
+        }
+
+        @Override
+        public String visitFileTableFunction(FileTableFunctionRelation node, Void context) {
+            return outputFileTable(node.getProperties());
         }
 
         @Override
@@ -1113,7 +1119,11 @@ public class AstToStringBuilder {
             if (isImplicit) {
                 return visit(node.getChild(0));
             }
-            return "CAST(" + printWithParentheses(node.getChild(0)) + " AS " + node.getTargetTypeDef().toString() + ")";
+            if (node.getTargetTypeDef() == null) {
+                return "CAST(" + printWithParentheses(node.getChild(0)) + " AS " + node.getType().toString() + ")";
+            } else {
+                return "CAST(" + printWithParentheses(node.getChild(0)) + " AS " + node.getTargetTypeDef().toString() + ")";
+            }
         }
 
         public String visitCompoundPredicate(CompoundPredicate node, Void context) {
@@ -1304,7 +1314,7 @@ public class AstToStringBuilder {
         }
 
         @Override
-        public String visitSubquery(Subquery node, Void context) {
+        public String visitSubqueryExpr(Subquery node, Void context) {
             return "(" + visit(node.getQueryStatement()) + ")";
         }
 
@@ -1373,6 +1383,18 @@ public class AstToStringBuilder {
                 strBuilder.append(timeUnitIdent);
             }
             return strBuilder.toString();
+        }
+
+        @Override
+        public String visitDescTableStmt(DescribeStmt stmt, Void context) {
+            if (stmt.isTableFunctionTable()) {
+                StringBuilder sb = new StringBuilder();
+                sb.append("DESC ");
+                sb.append(outputFileTable(stmt.getTableFunctionProperties()));
+                return sb.toString();
+            } else {
+                return stmt.getOrigStmt().originStmt;
+            }
         }
 
         // ----------------- AST ---------------
@@ -1605,7 +1627,13 @@ public class AstToStringBuilder {
             sb.append(")");
             addTableComment(sb, view);
 
-            sb.append(" AS ").append(view.getInlineViewDef()).append(";");
+            if (view.isSecurity()) {
+                sb.append(" SECURITY INVOKER");
+            } else {
+                sb.append(" SECURITY NONE");
+            }
+
+            sb.append(" AS ").append(view.getInlineViewDefWithoutCredential()).append(";");
             createTableStmt.add(sb.toString());
             return;
         }
@@ -1907,26 +1935,39 @@ public class AstToStringBuilder {
             createTableSql.append(String.join(", ", partitionNames)).append(")");
         }
 
-        // Location
-        String location = null;
-        if (table.isHiveTable() || table.isHudiTable()) {
-            location = (table).getTableLocation();
-        } else if (table.isIcebergTable()) {
-            location = table.getTableLocation();
-        } else if (table.isDeltalakeTable()) {
-            location = table.getTableLocation();
-        } else if (table.isPaimonTable()) {
-            location = table.getTableLocation();
-        }
-
         // Comment
         if (!Strings.isNullOrEmpty(table.getComment())) {
             createTableSql.append("\nCOMMENT (\"").append(table.getComment()).append("\")");
         }
 
-        if (!Strings.isNullOrEmpty(location)) {
-            createTableSql.append("\nPROPERTIES (\"location\" = \"").append(location).append("\");");
+        // Properties
+        Map<String, String> properties = new HashMap<>();
+        try {
+            properties = new HashMap<>(table.getProperties());
+        } catch (NotImplementedException e) {
         }
+
+        // Location
+        String location = null;
+        try {
+            location = table.getTableLocation();
+            if (!Strings.isNullOrEmpty(location)) {
+                properties.put("location", location);
+            }
+        } catch (NotImplementedException e) {
+        }
+
+        if (!properties.isEmpty()) {
+            createTableSql.append("\nPROPERTIES (");
+            for (Map.Entry<String, String> kv : properties.entrySet()) {
+                createTableSql.append("\"" + kv.getKey() + "\" = \"").append(kv.getValue()).append("\",");
+            }
+            if (createTableSql.charAt(createTableSql.length() - 1) == ',') {
+                createTableSql.deleteCharAt(createTableSql.length() - 1);
+            }
+            createTableSql.append(")");
+        }
+        createTableSql.append(";");
 
         return createTableSql.toString();
     }

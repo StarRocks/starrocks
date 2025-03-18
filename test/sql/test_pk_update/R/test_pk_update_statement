@@ -1,0 +1,23 @@
+-- name: test_pk_update_columns_multiple_assignments
+CREATE TABLE tablepk (pkkey int, pkvalue int) PRIMARY KEY(pkkey);
+-- result:
+-- !result
+INSERT INTO tablepk VALUES (1, 10);
+-- result:
+-- !result
+INSERT INTO tablepk VALUES (2, 20);
+-- result:
+-- !result
+SELECT * FROM tablepk;
+-- result:
+1	10
+2	20
+-- !result
+UPDATE tablepk SET pkvalue = 100, pkvalue = 200 WHERE pkkey = 2;
+-- result:
+-- !result
+SELECT * FROM tablepk;
+-- result:
+1	10
+2	200
+-- !result

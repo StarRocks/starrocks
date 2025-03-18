@@ -45,14 +45,19 @@ import com.google.common.collect.Range;
 import com.google.common.collect.Sets;
 import com.starrocks.analysis.Analyzer;
 import com.starrocks.analysis.Expr;
+import com.starrocks.analysis.FunctionCallExpr;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.SlotDescriptor;
 import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.SlotRef;
+import com.starrocks.analysis.StringLiteral;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.ColumnId;
 import com.starrocks.catalog.DistributionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfo;
+import com.starrocks.catalog.ExpressionRangePartitionInfoV2;
+import com.starrocks.catalog.FunctionSet;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
 import com.starrocks.catalog.LocalTablet;
@@ -77,6 +82,7 @@ import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.VectorSearchOptions;
 import com.starrocks.lake.LakeTablet;
+import com.starrocks.persist.ColumnIdExpr;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.rowstore.RowStoreUtils;
 import com.starrocks.server.GlobalStateMgr;
@@ -103,7 +109,6 @@ import com.starrocks.thrift.TScanRange;
 import com.starrocks.thrift.TScanRangeLocation;
 import com.starrocks.thrift.TScanRangeLocations;
 import com.starrocks.thrift.TTableSampleOptions;
-import com.starrocks.thrift.TVectorSearchOptions;
 import com.starrocks.warehouse.Warehouse;
 import org.apache.commons.collections4.CollectionUtils;
 import org.apache.logging.log4j.LogManager;
@@ -118,6 +123,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 
@@ -128,9 +134,6 @@ public class OlapScanNode extends ScanNode {
     private final List<String> selectedPartitionNames = Lists.newArrayList();
     private List<Long> selectedPartitionVersions = Lists.newArrayList();
     private final HashSet<Long> scanBackendIds = new HashSet<>();
-    // The column names applied dict optimization
-    // used for explain
-    private final List<String> appliedDictStringColumns = new ArrayList<>();
     private final List<String> unUsedOutputStringColumns = new ArrayList<>();
     // a bucket seq may map to many tablets, and each tablet has a TScanRangeLocations.
     public ArrayListMultimap<Integer, TScanRangeLocations> bucketSeq2locations = ArrayListMultimap.create();
@@ -199,6 +202,12 @@ public class OlapScanNode extends ScanNode {
     // Set to true after it's confirmed at some point during the execution of this request that there is some living CN.
     // Set just once per query.
     private boolean alreadyFoundSomeLivingCn = false;
+
+    boolean enableTopnFilterBackPressure = false;
+    long backPressureThrottleTimeUpperBound = -1;
+    int backPressureMaxRounds = -1;
+    long backPressureThrottleTime = -1;
+    long backPressureNumRows = -1;
 
     // Constructs node to scan given data files of table 'tbl'.
     // Constructs node to scan given data files of table 'tbl'.
@@ -308,14 +317,6 @@ public class OlapScanNode extends ScanNode {
 
     public void setBucketExprs(List<Expr> bucketExprs) {
         this.bucketExprs = bucketExprs;
-    }
-
-    public void updateAppliedDictStringColumns(Set<Integer> appliedColumnIds) {
-        for (SlotDescriptor slot : desc.getSlots()) {
-            if (appliedColumnIds.contains(slot.getId().asInt())) {
-                appliedDictStringColumns.add(slot.getColumn().getName());
-            }
-        }
     }
 
     public List<SlotDescriptor> getSlots() {
@@ -542,6 +543,8 @@ public class OlapScanNode extends ScanNode {
                                       long localBeId) throws StarRocksException {
         boolean enableQueryTabletAffinity =
                 ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isEnableQueryTabletAffinity();
+        boolean skipDiskCache = ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isSkipLocalDiskCache();
+        boolean skipPageCache = ConnectContext.get() != null && ConnectContext.get().getSessionVariable().isSkipPageCache();
         int logNum = 0;
         int schemaHash = olapTable.getSchemaHashByIndexId(index.getId());
         String schemaHashStr = String.valueOf(schemaHash);
@@ -649,6 +652,8 @@ public class OlapScanNode extends ScanNode {
                 scanRangeLocations.addToLocations(scanRangeLocation);
                 internalRange.addToHosts(new TNetworkAddress(ip, port));
                 internalRange.setFill_data_cache(fillDataCache);
+                internalRange.setSkip_page_cache(skipPageCache);
+                internalRange.setSkip_disk_cache(skipDiskCache);
                 tabletIsNull = false;
 
                 // for CBO
@@ -814,19 +819,20 @@ public class OlapScanNode extends ScanNode {
             output.append(prefix).append("SORT COLUMN: ").append(sortColumn).append("\n");
         }
 
+        if (Config.enable_experimental_vector) {
+            if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
+                output.append(vectorSearchOptions.getExplainString(prefix));
+            } else {
+                output.append(prefix).append("VECTORINDEX: OFF").append("\n");
+            }
+        }
+
         if (detailLevel != TExplainLevel.VERBOSE) {
             if (isPreAggregation) {
                 output.append(prefix).append("PREAGGREGATION: ON").append("\n");
             } else {
                 output.append(prefix).append("PREAGGREGATION: OFF. Reason: ").append(reasonOfPreAggregation)
                         .append("\n");
-            }
-            if (ConnectContext.get() != null && Config.enable_experimental_vector == true) {
-                if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
-                    output.append(prefix).append("VECTORINDEX: ON").append("\n");
-                } else {
-                    output.append(prefix).append("VECTORINDEX: OFF").append("\n");
-                }
             }
             if (!conjuncts.isEmpty()) {
                 output.append(prefix).append("PREDICATES: ").append(
@@ -854,16 +860,7 @@ public class OlapScanNode extends ScanNode {
                 output.append("\n");
             }
 
-            if (!appliedDictStringColumns.isEmpty()) {
-                int maxSize = Math.min(appliedDictStringColumns.size(), 5);
-                List<String> printList = appliedDictStringColumns.subList(0, maxSize);
-                String format_template = "dict_col=%s";
-                if (dictStringIdToIntIds.size() > 5) {
-                    format_template = format_template + "...";
-                }
-                output.append(prefix).append(String.format(format_template, Joiner.on(",").join(printList)));
-                output.append("\n");
-            }
+            output.append(explainColumnDict(prefix));
         }
 
         if (detailLevel != TExplainLevel.VERBOSE) {
@@ -1016,13 +1013,19 @@ public class OlapScanNode extends ScanNode {
         }
 
         assignOrderByHints(keyColumnNames);
-
         if (olapTable.isCloudNativeTableOrMaterializedView()) {
             msg.node_type = TPlanNodeType.LAKE_SCAN_NODE;
             msg.lake_scan_node =
                     new TLakeScanNode(desc.getId().asInt(), keyColumnNames, keyColumnTypes, isPreAggregation);
             msg.lake_scan_node.setSort_key_column_names(keyColumnNames);
             msg.lake_scan_node.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
+            if (enableTopnFilterBackPressure) {
+                msg.lake_scan_node.setEnable_topn_filter_back_pressure(true);
+                msg.lake_scan_node.setBack_pressure_max_rounds(backPressureMaxRounds);
+                msg.lake_scan_node.setBack_pressure_num_rows(backPressureNumRows);
+                msg.lake_scan_node.setBack_pressure_throttle_time(backPressureThrottleTime);
+                msg.lake_scan_node.setBack_pressure_throttle_time_upper_bound(backPressureThrottleTimeUpperBound);
+            }
             if (!conjuncts.isEmpty()) {
                 msg.lake_scan_node.setSql_predicates(getExplainString(conjuncts));
             }
@@ -1061,6 +1064,13 @@ public class OlapScanNode extends ScanNode {
             msg.olap_scan_node.setSchema_id(schemaId);
             msg.olap_scan_node.setSort_key_column_names(keyColumnNames);
             msg.olap_scan_node.setRollup_name(olapTable.getIndexNameById(selectedIndexId));
+            if (enableTopnFilterBackPressure) {
+                msg.olap_scan_node.setEnable_topn_filter_back_pressure(true);
+                msg.olap_scan_node.setBack_pressure_max_rounds(backPressureMaxRounds);
+                msg.olap_scan_node.setBack_pressure_num_rows(backPressureNumRows);
+                msg.olap_scan_node.setBack_pressure_throttle_time(backPressureThrottleTime);
+                msg.olap_scan_node.setBack_pressure_throttle_time_upper_bound(backPressureThrottleTimeUpperBound);
+            }
             if (!conjuncts.isEmpty()) {
                 msg.olap_scan_node.setSql_predicates(getExplainString(conjuncts));
             }
@@ -1099,15 +1109,7 @@ public class OlapScanNode extends ScanNode {
             }
 
             if (vectorSearchOptions != null && vectorSearchOptions.isEnableUseANN()) {
-                TVectorSearchOptions tVectorSearchOptions = new TVectorSearchOptions();
-                tVectorSearchOptions.setEnable_use_ann(true);
-                tVectorSearchOptions.setVector_limit_k(vectorSearchOptions.getVectorLimitK());
-                tVectorSearchOptions.setVector_distance_column_name(vectorSearchOptions.getVectorDistanceColumnName());
-                tVectorSearchOptions.setQuery_vector(vectorSearchOptions.getQueryVector());
-                tVectorSearchOptions.setVector_range(vectorSearchOptions.getVectorRange());
-                tVectorSearchOptions.setResult_order(vectorSearchOptions.getResultOrder());
-                tVectorSearchOptions.setUse_ivfpq(vectorSearchOptions.isUseIVFPQ());
-                msg.olap_scan_node.setVector_search_options(tVectorSearchOptions);
+                msg.olap_scan_node.setVector_search_options(vectorSearchOptions.toThrift());
             }
 
             msg.olap_scan_node.setUse_pk_index(usePkIndex);
@@ -1330,20 +1332,73 @@ public class OlapScanNode extends ScanNode {
         planNode.setConjuncts(normalizer.normalizeExprs(normalizer.getConjunctsByPlanNodeId(this)));
     }
 
+    // Partition by exprs as follows can be decomposed
+    // 1. SlotRef
+    // 2. date_trunc
+    // 3. str2date(dt, '%Y-%m-%d')
+    private boolean isDecomposablePartitionExpr(Expr expr) {
+        if (expr.getClass().equals(SlotRef.class)) {
+            return true;
+        }
+        if (!expr.getClass().equals(FunctionCallExpr.class)) {
+            return false;
+        }
+        FunctionCallExpr fcall = (FunctionCallExpr) expr;
+        String fname = fcall.getFnName().getFunction();
+        if (fname.equalsIgnoreCase(FunctionSet.DATE_TRUNC)) {
+            return true;
+        } else if (fname.equalsIgnoreCase(FunctionSet.STR2DATE)) {
+            return expr.getChild(1).getClass().equals(StringLiteral.class) &&
+                    ((StringLiteral) expr.getChild(1)).getValue().startsWith("%Y-%m-%d");
+        } else {
+            return false;
+        }
+    }
+
+    private boolean isDecomposablePartitionInfo(PartitionInfo partitionInfo) {
+        // TODO (by satanson): predicates' decomposition
+        //  At present, we support predicates' decomposition on RangePartition with single-column partition key.
+        //  in the future, predicates' decomposition on RangePartition with multi-column partition key will be
+        //  supported.
+        if (!partitionInfo.isRangePartition()) {
+            return false;
+        }
+        RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
+        if (rangePartitionInfo.getPartitionColumnsSize() != 1) {
+            return false;
+        }
+        if (rangePartitionInfo.getClass().equals(RangePartitionInfo.class)) {
+            return true;
+        }
+
+        Predicate<List<ColumnIdExpr>> isDecomposable = exprs -> exprs.stream()
+                .map(ColumnIdExpr::getExpr)
+                .allMatch(this::isDecomposablePartitionExpr);
+
+        if (rangePartitionInfo.getClass().equals(ExpressionRangePartitionInfo.class)) {
+            ExpressionRangePartitionInfo exprRangePartitionInfo = (ExpressionRangePartitionInfo) rangePartitionInfo;
+            return isDecomposable.test(exprRangePartitionInfo.getPartitionColumnIdExprs());
+        }
+
+        if (rangePartitionInfo.getClass().equals(ExpressionRangePartitionInfoV2.class)) {
+            ExpressionRangePartitionInfoV2 exprRangePartitionInfo = (ExpressionRangePartitionInfoV2) rangePartitionInfo;
+            return isDecomposable.test(exprRangePartitionInfo.getPartitionColumnIdExprs());
+        }
+        return false;
+    }
+
     @Override
     public void normalizeConjuncts(FragmentNormalizer normalizer, TNormalPlanNode planNode, List<Expr> conjuncts) {
         if (!normalizer.isProcessingLeftNode()) {
+            // take column names of HashJoin RHS into cache digest computation
+            associateSlotIdsWithColumns(normalizer, planNode, Optional.empty());
             normalizeConjunctsNonLeft(normalizer, planNode);
             return;
         }
         PartitionInfo partitionInfo = olapTable.getPartitionInfo();
         List<Column> partitionColumns = partitionInfo.getPartitionColumns(olapTable.getIdToColumn());
-        // TODO (by satanson): predicates' decomposition
-        //  At present, we support predicates' decomposition on RangePartition with single-column partition key.
-        //  in the future, predicates' decomposition on RangePartition with multi-column partition key will be
-        //  supported.
-        if (partitionInfo.isRangePartition() &&
-                ((RangePartitionInfo) partitionInfo).getPartitionColumnsSize() == 1) {
+
+        if (isDecomposablePartitionInfo(partitionInfo)) {
             RangePartitionInfo rangePartitionInfo = (RangePartitionInfo) partitionInfo;
             conjuncts = decomposeRangePredicates(partitionColumns, normalizer, planNode, rangePartitionInfo, conjuncts);
         } else {
@@ -1537,5 +1592,28 @@ public class OlapScanNode extends ScanNode {
     @Override
     public boolean isRunningAsConnectorOperator() {
         return false;
+    }
+
+    @Override
+    public boolean pushDownRuntimeFilters(RuntimeFilterPushDownContext context, Expr probeExpr,
+                                          List<Expr> partitionByExprs) {
+        boolean accept = super.pushDownRuntimeFilters(context, probeExpr, partitionByExprs);
+        if (accept && context.getDescription().runtimeFilterType()
+                .equals(RuntimeFilterDescription.RuntimeFilterType.TOPN_FILTER)) {
+            boolean toManyData = this.getCardinality() != -1 && this.cardinality > 50000000;
+            int backPressureMode = Optional.ofNullable(ConnectContext.get())
+                    .map(ctx -> ctx.getSessionVariable().getTopnFilterBackPressureMode())
+                    .orElse(0);
+            if ((backPressureMode == 1 && toManyData) || backPressureMode == 2) {
+                this.enableTopnFilterBackPressure = true;
+                this.backPressureMaxRounds = ConnectContext.get().getSessionVariable().getBackPressureMaxRounds();
+                this.backPressureThrottleTimeUpperBound =
+                        ConnectContext.get().getSessionVariable().getBackPressureThrottleTimeUpperBound();
+                this.backPressureNumRows = 10 * context.getDescription().getTopN();
+                this.backPressureThrottleTime = this.backPressureThrottleTimeUpperBound /
+                        Math.max(this.backPressureMaxRounds, 1);
+            }
+        }
+        return accept;
     }
 }

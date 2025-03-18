@@ -25,6 +25,7 @@ import com.starrocks.common.jmockit.Deencapsulation;
 import com.starrocks.common.proc.ReplicationsProcNode;
 import com.starrocks.leader.LeaderImpl;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.RunMode;
 import com.starrocks.sql.analyzer.AnalyzeTestUtil;
 import com.starrocks.sql.ast.CreateTableStmt;
 import com.starrocks.system.Backend;
@@ -71,7 +72,7 @@ public class ReplicationMgrTest {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        UtFrameUtils.createMinStarRocksCluster();
+        UtFrameUtils.createMinStarRocksCluster(RunMode.SHARED_DATA);
         AnalyzeTestUtil.init();
         starRocksAssert = new StarRocksAssert(AnalyzeTestUtil.getConnectContext());
         starRocksAssert.withDatabase("test").useDatabase("test");

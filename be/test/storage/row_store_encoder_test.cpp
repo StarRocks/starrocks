@@ -44,7 +44,7 @@ static unique_ptr<Schema> create_schema(const vector<pair<LogicalType, bool>>& t
 void common_encode_decode(RowStoreEncoderPtr& row_encoder, std::unique_ptr<Schema>& schema,
                           std::unique_ptr<Schema>& schema_with_row, ChunkUniquePtr& pchunk, const int n) {
     //encode
-    auto full_row_col = std::make_unique<BinaryColumn>();
+    auto full_row_col = BinaryColumn::create();
     row_encoder->encode_chunk_to_full_row_column(*schema, *pchunk, full_row_col.get());
     ASSERT_EQ(full_row_col->size(), pchunk->num_rows());
 

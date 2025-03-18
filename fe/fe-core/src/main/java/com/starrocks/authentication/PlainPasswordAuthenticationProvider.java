@@ -18,9 +18,10 @@ package com.starrocks.authentication;
 import com.google.common.base.Strings;
 import com.starrocks.common.Config;
 import com.starrocks.mysql.MysqlPassword;
-import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.sql.ast.UserAuthOption;
 import com.starrocks.sql.ast.UserIdentity;
+import org.apache.commons.lang3.StringUtils;
 
 import java.nio.charset.StandardCharsets;
 
@@ -62,8 +63,8 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         }
 
         if (!Config.enable_password_reuse) {
-            GlobalStateMgr.getCurrentState().getAuthenticationMgr().checkPlainPassword(
-                    userIdentity.getUser(), userIdentity.getHost(), password);
+            AuthenticationHandler.authenticate(new ConnectContext(), userIdentity.getUser(), userIdentity.getHost(),
+                    password.getBytes(StandardCharsets.UTF_8), null);
         }
     }
 
@@ -111,7 +112,8 @@ public class PlainPasswordAuthenticationProvider implements AuthenticationProvid
         } else {
             // Plain remote password, scramble it first.
             byte[] scrambledRemotePass =
-                    MysqlPassword.makeScrambledPassword(new String(remotePassword, StandardCharsets.UTF_8));
+                    MysqlPassword.makeScrambledPassword((StringUtils.stripEnd(
+                            new String(remotePassword, StandardCharsets.UTF_8), "\0")));
             if (!MysqlPassword.checkScrambledPlainPass(authenticationInfo.getPassword(), scrambledRemotePass)) {
                 throw new AuthenticationException("password mismatch!");
             }

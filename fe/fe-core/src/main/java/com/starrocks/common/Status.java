@@ -45,6 +45,7 @@ import java.util.Optional;
 public class Status {
     public static final Status OK = new Status();
     public static final Status CANCELLED = new Status(TStatusCode.CANCELLED, "Cancelled");
+    public static final Status LEADER_TRANSFERRED = new Status(TStatusCode.CANCELLED, "Leader Transferred");
 
     public TStatusCode getErrorCode() {
         return errorCode;
@@ -116,6 +117,10 @@ public class Status {
 
     public boolean isGlobalDictError() {
         return this.errorCode == TStatusCode.GLOBAL_DICT_ERROR;
+    }
+
+    public boolean isGlobalDictNotMatch() {
+        return this.errorCode == TStatusCode.GLOBAL_DICT_NOT_MATCH;
     }
 
     public void setErrorMsg(String errorMsg) {

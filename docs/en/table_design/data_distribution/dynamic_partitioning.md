@@ -3,9 +3,15 @@ displayed_sidebar: docs
 sidebar_position: 30
 ---
 
-# Dynamic partitioning
+# Dynamic partitioning (Legacy)
 
 StarRocks supports dynamic partitioning, which can automatically manage the time to life (TTL) of partitions, such as partitioning new input data in tables and deleting expired partitions. This feature significantly reduces maintenance costs.
+
+:::note
+
+Please note that from v3.4 onwards, [expression partitioning](./expression_partitioning.md) is further optimized to unify all partitioning strategies and supported more complex solutions. It is recommended in most cases, and will replace the dynamic partitioning strategy in future releases.
+
+:::
 
 ## Enable dynamic partitioning
 
@@ -60,7 +66,18 @@ PROPERTIES(
 
 ## View partitions
 
-After you enable dynamic partitions for a table, the input data is continuously and automatically partitioned. You can view the current partitions by using the following statement. For example, if the current date is 2020-03-25, you can only see partitions in the time range from 2020-03-22 to 2020-03-28.
+After you enable dynamic partitions for a table, the input data is continuously and automatically partitioned. You can view the current partitions by using the following statement. For example, if the current date is 2020-03-25, you can only see partitions in the time range from 2020-03-25 to 2020-03-28.
+
+```SQL
+SHOW PARTITIONS FROM site_access;
+
+[types: [DATE]; keys: [2020-03-25]; ‥types: [DATE]; keys: [2020-03-26]; )
+[types: [DATE]; keys: [2020-03-26]; ‥types: [DATE]; keys: [2020-03-27]; )
+[types: [DATE]; keys: [2020-03-27]; ‥types: [DATE]; keys: [2020-03-28]; )
+[types: [DATE]; keys: [2020-03-28]; ‥types: [DATE]; keys: [2020-03-29]; )
+```
+
+If you want to create historical partitions when creating a table, you need to specify `dynamic_partition.history_partition_num` to define the number of historical partitions to be created. For example, if you set `dynamic_partition.history_partition_num` to `3` during table creation and the current date is 2020-03-25, you will only see partitions in the time range from 2020-03-22 to 2020-03-28.
 
 ```SQL
 SHOW PARTITIONS FROM site_access;

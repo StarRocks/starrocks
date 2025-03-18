@@ -28,22 +28,19 @@ import com.starrocks.connector.hive.MockedHiveMetadata;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.common.SyncPartitionUtils;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import mockit.Mock;
 import mockit.MockUp;
-import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
-import java.time.Instant;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -52,14 +49,13 @@ import java.util.Set;
 
 import static com.starrocks.scheduler.TaskRun.PARTITION_END;
 import static com.starrocks.scheduler.TaskRun.PARTITION_START;
-import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
 
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase {
+public class PartitionBasedMvRefreshProcessorHiveTest extends MVTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MVRefreshTestBase.beforeClass();
+        MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockHiveCatalog(connectContext);
         Config.enable_mv_refresh_query_rewrite = false;
         starRocksAssert.withTable("CREATE TABLE test.tbl1\n" +
@@ -120,21 +116,6 @@ public class PartitionBasedMvRefreshProcessorHiveTest extends MVRefreshTestBase 
                         ")\n" +
                         "AS SELECT t1.c1, t1.c2, t1_par.par_col, t1_par.par_date FROM `hive0`.`partitioned_db`.`t1` join " +
                         "`hive0`.`partitioned_db`.`t1_par` using (par_col)");
-    }
-
-    @AfterClass
-    public static void afterClass() throws Exception {
-        cleanupEphemeralMVs(starRocksAssert, startSuiteTime);
-    }
-
-    @Before
-    public void before() {
-        startCaseTime = Instant.now().getEpochSecond();
-    }
-
-    @After
-    public void after() throws Exception {
-        cleanupEphemeralMVs(starRocksAssert, startCaseTime);
     }
 
     @Test

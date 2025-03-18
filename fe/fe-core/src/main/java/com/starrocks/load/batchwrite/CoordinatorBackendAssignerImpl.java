@@ -16,8 +16,7 @@ package com.starrocks.load.batchwrite;
 
 import com.starrocks.common.Config;
 import com.starrocks.common.ThreadPoolManager;
-import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.RunMode;
+import com.starrocks.planner.LoadScanNode;
 import com.starrocks.system.ComputeNode;
 import org.apache.arrow.util.VisibleForTesting;
 import org.slf4j.Logger;
@@ -123,7 +122,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
                     checkIntervalMs = Integer.MAX_VALUE;
                     LOG.info("Disable periodical schedule because there is no load");
                 } else {
-                    checkIntervalMs = Math.max(MIN_CHECK_INTERVAL_MS, Config.batch_write_be_assigner_schedule_interval_ms);
+                    checkIntervalMs = Math.max(MIN_CHECK_INTERVAL_MS, Config.merge_commit_be_assigner_schedule_interval_ms);
                     LOG.debug("Set schedule interval to {} ms", checkIntervalMs);
                 }
                 task = taskPriorityQueue.poll(checkIntervalMs, TimeUnit.MILLISECONDS);
@@ -152,11 +151,14 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
                         task.getScheduleType(), task.getTaskId(), System.currentTimeMillis() - startTime, e);
                 throwable = e;
             } finally {
+                // numExecutedTasks is just for testing. Should update it before calling task.finish()
+                // which may notify the waiting thread. So that after the thread wakes up, it can get
+                // the correct numExecutedTasks including this one.
+                numExecutedTasks.incrementAndGet();
                 task.finish(throwable);
                 if (task.getScheduleType() == EventType.DETECT_UNAVAILABLE_NODES) {
                     numPendingTasksForDetectUnavailableNodes.decrementAndGet();
                 }
-                numExecutedTasks.incrementAndGet();
             }
         }
     }
@@ -377,7 +379,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
                     LOG.info("Remove empty warehouse {}", warehouseMeta.warehouseId);
                 } else {
                     checkNodeStatusAndReassignment(warehouseMeta);
-                    doBalanceIfNeeded(warehouseMeta, Config.batch_write_be_assigner_balance_factor_threshold);
+                    doBalanceIfNeeded(warehouseMeta, Config.merge_commit_be_assigner_balance_factor_threshold);
                     if (LOG.isDebugEnabled()) {
                         logStatistics(warehouseMeta);
                     }
@@ -682,19 +684,7 @@ public final class CoordinatorBackendAssignerImpl implements CoordinatorBackendA
 
     // Note that warehouse id may be invalid after the warehouse is dropped, and an exception can be thrown
     List<ComputeNode> getAvailableNodes(long warehouseId) throws Exception {
-        List<ComputeNode> nodes = new ArrayList<>();
-        if (RunMode.isSharedDataMode()) {
-            List<Long> computeIds = GlobalStateMgr.getCurrentState().getWarehouseMgr().getAllComputeNodeIds(warehouseId);
-            for (long nodeId : computeIds) {
-                ComputeNode node = GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getBackendOrComputeNode(nodeId);
-                if (node != null && node.isAvailable()) {
-                    nodes.add(node);
-                }
-            }
-        } else {
-            nodes.addAll(GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().getAvailableBackends());
-        }
-        return nodes;
+        return LoadScanNode.getAvailableComputeNodes(warehouseId);
     }
 
     @VisibleForTesting

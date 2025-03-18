@@ -17,6 +17,10 @@ package com.starrocks.catalog;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.ImmutableMap;
 import com.google.gson.annotations.SerializedName;
+import com.starrocks.authorization.AuthorizationMgr;
+import com.starrocks.authorization.PrivilegeBuiltinConstants;
+import com.starrocks.authorization.PrivilegeException;
+import com.starrocks.authorization.RolePrivilegeCollectionV2;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -30,10 +34,6 @@ import com.starrocks.persist.metablock.SRMetaBlockException;
 import com.starrocks.persist.metablock.SRMetaBlockID;
 import com.starrocks.persist.metablock.SRMetaBlockReader;
 import com.starrocks.persist.metablock.SRMetaBlockWriter;
-import com.starrocks.privilege.AuthorizationMgr;
-import com.starrocks.privilege.PrivilegeBuiltinConstants;
-import com.starrocks.privilege.PrivilegeException;
-import com.starrocks.privilege.RolePrivilegeCollectionV2;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.analyzer.SemanticException;
@@ -41,6 +41,7 @@ import com.starrocks.sql.ast.AlterResourceGroupStmt;
 import com.starrocks.sql.ast.CreateResourceGroupStmt;
 import com.starrocks.sql.ast.DropResourceGroupStmt;
 import com.starrocks.sql.ast.ShowResourceGroupStmt;
+import com.starrocks.sql.optimizer.cost.feature.CostPredictor;
 import com.starrocks.system.BackendResourceStat;
 import com.starrocks.thrift.TWorkGroup;
 import com.starrocks.thrift.TWorkGroupOp;
@@ -599,7 +600,9 @@ public class ResourceGroupMgr implements Writable {
             String user = getUnqualifiedUser(ctx);
             String remoteIp = ctx.getRemoteIP();
             final double planCpuCost = ctx.getAuditEventBuilder().build().planCpuCosts;
-            final double planMemCost = ctx.getAuditEventBuilder().build().planMemCosts;
+            final double planMemCost = CostPredictor.getServiceBasedCostPredictor().isAvailable() ?
+                    ctx.getAuditEventBuilder().build().predictMemBytes :
+                    ctx.getAuditEventBuilder().build().planMemCosts;
 
             // check short query first
             if (shortQueryResourceGroup != null) {

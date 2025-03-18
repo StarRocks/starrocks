@@ -55,7 +55,7 @@ public class DataCacheSelectExecutor {
         connectContext.setSessionVariable(tmpSessionVariable);
 
         InsertStmt insertStmt = statement.getInsertStmt();
-        StmtExecutor stmtExecutor = new StmtExecutor(connectContext, insertStmt);
+        StmtExecutor stmtExecutor = StmtExecutor.newInternalExecutor(connectContext, insertStmt);
         // Register new StmtExecutor into current ConnectContext's StmtExecutor, so we can handle ctrl+c command
         // If DataCacheSelect is forward to leader, connectContext's Executor is null
         if (connectContext.getExecutor() != null) {

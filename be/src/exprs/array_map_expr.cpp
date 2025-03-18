@@ -77,7 +77,7 @@ void ArrayMapExpr::close(RuntimeState* state, ExprContext* context, FunctionCont
 
 template <bool all_const_input, bool independent_lambda_expr>
 StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chunk* chunk,
-                                                       const std::vector<ColumnPtr>& input_elements,
+                                                       const Columns& input_elements,
                                                        const NullColumnPtr& result_null_column) {
     // create a new chunk to evaluate the lambda expression
     auto cur_chunk = std::make_shared<Chunk>();
@@ -170,9 +170,13 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         } else {
             if (captured_column->is_array()) {
                 auto view_column = ArrayViewColumn::from_array_column(captured_column);
-                cur_chunk->append_column(view_column->replicate(aligned_offsets->get_data()), slot_id);
+                ASSIGN_OR_RETURN(auto replicated_view_column, view_column->replicate(aligned_offsets->get_data()));
+                cur_chunk->append_column(replicated_view_column, slot_id);
+                RETURN_IF_ERROR(view_column->capacity_limit_reached());
             } else {
-                cur_chunk->append_column(captured_column->replicate(aligned_offsets->get_data()), slot_id);
+                ASSIGN_OR_RETURN(auto replicated_column, captured_column->replicate(aligned_offsets->get_data()));
+                cur_chunk->append_column(replicated_column, slot_id);
+                RETURN_IF_ERROR(replicated_column->capacity_limit_reached());
             }
         }
     }
@@ -188,8 +192,10 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
             ASSIGN_OR_RETURN(tmp_col, context->evaluate(_children[0], cur_chunk.get()));
         }
         tmp_col->check_or_die();
-        column = tmp_col->replicate(aligned_offsets->get_data());
-        column = ColumnHelper::align_return_type(column, type().children[0], column->size(), true);
+        ASSIGN_OR_RETURN(column, tmp_col->replicate(aligned_offsets->get_data()));
+        column = ColumnHelper::align_return_type(std::move(column), type().children[0], column->size(), true);
+
+        RETURN_IF_ERROR(column->capacity_limit_reached());
     } else {
         // if all input arguments are constant and lambda expr doesn't rely on other capture columns,
         // we can evaluate it based on const column
@@ -198,7 +204,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
             tmp_col->check_or_die();
             // if result is a const column, we should unpack it first and make it to be the elements column of array column
             column = ColumnHelper::unpack_and_duplicate_const_column(tmp_col->size(), tmp_col);
-            column = ColumnHelper::align_return_type(column, type().children[0], column->size(), true);
+            column = ColumnHelper::align_return_type(std::move(column), type().children[0], column->size(), true);
         } else {
             ChunkAccumulator accumulator(DEFAULT_CHUNK_SIZE);
             RETURN_IF_ERROR(accumulator.push(std::move(cur_chunk)));
@@ -214,7 +220,8 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
                 }
                 ASSIGN_OR_RETURN(auto tmp_col, context->evaluate(_children[0], tmp_chunk.get()));
                 tmp_col->check_or_die();
-                tmp_col = ColumnHelper::align_return_type(tmp_col, type().children[0], tmp_chunk->num_rows(), true);
+                tmp_col = ColumnHelper::align_return_type(std::move(tmp_col), type().children[0], tmp_chunk->num_rows(),
+                                                          true);
                 if (column == nullptr) {
                     column = tmp_col;
                 } else {
@@ -223,6 +230,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
             }
         }
     }
+
     DCHECK(column != nullptr);
     column = ColumnHelper::cast_to_nullable_column(column);
 
@@ -234,23 +242,23 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
         aligned_offsets = UInt32Column::create();
         aligned_offsets->append(0);
         aligned_offsets->append(data_column->size());
-        auto array_column =
-                std::make_shared<ArrayColumn>(data_column, ColumnHelper::as_column<UInt32Column>(aligned_offsets));
+        auto array_column = ArrayColumn::create(std::move(data_column),
+                                                ColumnHelper::as_column<UInt32Column>(std::move(aligned_offsets)));
         array_column->check_or_die();
         ColumnPtr result_column = array_column;
         if (result_null_column != nullptr) {
-            result_column = NullableColumn::create(std::move(array_column), result_null_column);
+            result_column = NullableColumn::create(std::move(array_column), std::move(result_null_column));
             result_column->check_or_die();
         }
         result_column = ConstColumn::create(result_column, chunk->num_rows());
         result_column->check_or_die();
         return result_column;
     } else {
-        auto array_column = std::make_shared<ArrayColumn>(
-                column, ColumnHelper::as_column<UInt32Column>(aligned_offsets->clone_shared()));
+        auto array_column =
+                ArrayColumn::create(std::move(column), ColumnHelper::as_column<UInt32Column>(aligned_offsets->clone()));
         array_column->check_or_die();
         if (result_null_column != nullptr) {
-            return NullableColumn::create(std::move(array_column), result_null_column);
+            return NullableColumn::create(std::move(array_column), std::move(result_null_column));
         }
         return array_column;
     }
@@ -260,7 +268,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_lambda_expr(ExprContext* context, Chu
 // The result of lambda expressions do not change the offsets of the current array and the null map.
 // NOTE the return column must be of the return type.
 StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* chunk) {
-    std::vector<ColumnPtr> input_elements;
+    Columns input_elements;
     bool is_single_nullable_child = false;
 
     NullColumnPtr result_null_column = nullptr;
@@ -270,7 +278,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         ASSIGN_OR_RETURN(auto child_col, context->evaluate(_children[i], chunk));
         // the column is a null literal.
         if (child_col->only_null()) {
-            return ColumnHelper::align_return_type(child_col, type(), chunk->num_rows(), true);
+            return ColumnHelper::align_return_type(std::move(child_col), type(), chunk->num_rows(), true);
         }
 
         bool is_const = child_col->is_constant();
@@ -308,7 +316,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         ColumnPtr column = data_column;
         if (is_const) {
             // keep it as a const array column in input_elements
-            column = ConstColumn::create(data_column, num_rows);
+            column = ConstColumn::create(std::move(data_column), num_rows);
         }
 
         // check each array's lengths in input_elements
@@ -331,7 +339,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         DCHECK(result_null_column != nullptr);
         // If there are more than one nullable children, the nullable column has been cloned when calling
         // union_null_column to merge, so only one nullable child needs to be cloned.
-        result_null_column = ColumnHelper::as_column<NullColumn>(result_null_column->clone_shared());
+        result_null_column = ColumnHelper::as_column<NullColumn>(result_null_column->clone());
     }
 
     ColumnPtr column = nullptr;
@@ -345,7 +353,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         auto aligned_offsets = UInt32Column::create(0);
         aligned_offsets->append(0);
         aligned_offsets->append(1);
-        auto array_col = std::make_shared<ArrayColumn>(column, aligned_offsets);
+        auto array_col = ArrayColumn::create(std::move(column), std::move(aligned_offsets));
         array_col->check_or_die();
         if (result_null_column) {
             result_null_column->resize(1);
@@ -360,7 +368,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
     }
 
     size_t total_elements_num =
-            down_cast<ArrayColumn*>(FunctionHelper::get_data_column_of_const(input_elements[0]).get())
+            down_cast<const ArrayColumn*>(FunctionHelper::get_data_column_of_const(input_elements[0]).get())
                     ->get_total_elements_num(result_null_column);
 
     if (total_elements_num == 0) {
@@ -368,7 +376,7 @@ StatusOr<ColumnPtr> ArrayMapExpr::evaluate_checked(ExprContext* context, Chunk* 
         column = ColumnHelper::create_column(type().children[0], true);
         auto aligned_offsets = UInt32Column::create(0);
         aligned_offsets->append_default(2);
-        auto array_col = std::make_shared<ArrayColumn>(column, aligned_offsets);
+        auto array_col = ArrayColumn::create(std::move(column), std::move(aligned_offsets));
         array_col->check_or_die();
         auto result = ConstColumn::create(std::move(array_col), chunk->num_rows() - null_rows);
         result->check_or_die();

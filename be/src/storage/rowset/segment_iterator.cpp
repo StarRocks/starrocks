@@ -45,7 +45,6 @@
 #include "storage/index/vector/vector_index_reader_factory.h"
 #include "storage/index/vector/vector_search_option.h"
 #include "storage/lake/update_manager.h"
-#include "storage/olap_runtime_range_pruner.hpp"
 #include "storage/projection_iterator.h"
 #include "storage/range.h"
 #include "storage/roaring2range.h"
@@ -60,6 +59,9 @@
 #include "storage/rowset/rowid_column_iterator.h"
 #include "storage/rowset/segment.h"
 #include "storage/rowset/short_key_range_option.h"
+#include "storage/runtime_filter_predicate.h"
+#include "storage/runtime_range_pruner.h"
+#include "storage/runtime_range_pruner.hpp"
 #include "storage/types.h"
 #include "storage/update_manager.h"
 #include "types/array_type_info.h"
@@ -144,7 +146,7 @@ private:
         Status read_columns(Chunk* chunk, const SparseRange<>& range) {
             bool may_has_del_row = chunk->delete_state() != DEL_NOT_SATISFIED;
             for (size_t i = 0; i < _column_iterators.size(); i++) {
-                const ColumnPtr& col = chunk->get_column_by_index(i);
+                ColumnPtr& col = chunk->get_column_by_index(i);
                 if (_prune_column_after_index_filter && _prune_cols.count(i)) {
                     // make sure each pruned column has the same size as the unpruneable one.
                     col->resize(range.span_size());
@@ -332,6 +334,7 @@ private:
 
     PredicateTree _non_expr_pred_tree;
     PredicateTree _expr_pred_tree;
+    RuntimeFilterPredicates _runtime_filter_preds;
 
     // _selection is used to accelerate
     Buffer<uint8_t> _selection;
@@ -376,18 +379,18 @@ private:
     tenann::PrimitiveSeqView _query_view;
     std::shared_ptr<tenann::IndexMeta> _index_meta;
 #endif
+
+    bool _always_build_rowid() const { return _use_vector_index && !_use_ivfpq; }
+
     bool _use_vector_index;
     std::string _vector_distance_column_name;
     int _vector_column_id;
     SlotId _vector_slot_id;
     std::unordered_map<rowid_t, float> _id2distance_map;
-    std::vector<rowid_t> _first_rowids;
     std::map<std::string, std::string> _query_params;
     double _vector_range;
     int _result_order;
     bool _use_ivfpq;
-    Buffer<uint8_t> _filter_selection;
-    Buffer<uint8_t> _filter_by_expr_selection;
 
     Status _init_reader_from_file(const std::string& index_path, const std::shared_ptr<TabletIndex>& tablet_index_meta,
                                   const std::map<std::string, std::string>& query_params);
@@ -412,7 +415,7 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
         _result_order = _opts.vector_search_option->result_order;
         _use_ivfpq = _opts.vector_search_option->use_ivfpq;
         _query_params = _opts.vector_search_option->query_params;
-        if (_vector_range > 0 && _use_ivfpq) {
+        if (_vector_range >= 0 && _use_ivfpq) {
             _k = _opts.vector_search_option->k * _opts.vector_search_option->pq_refine_factor *
                  _opts.vector_search_option->k_factor;
         } else {
@@ -451,7 +454,9 @@ SegmentIterator::SegmentIterator(std::shared_ptr<Segment> segment, Schema schema
     }
     if (_opts.dcg_loader != nullptr) {
         SCOPED_RAW_TIMER(&_opts.stats->get_delta_column_group_ns);
-        if (_opts.is_primary_keys) {
+        if (_opts.is_primary_keys ||
+            (_opts.read_by_generated_column_adding && _opts.tablet_schema != nullptr &&
+             _opts.tablet_schema->keys_type() == KeysType::PRIMARY_KEYS) /* for adding generated column */) {
             TabletSegmentId tsid;
             tsid.tablet_id = _opts.tablet_id;
             tsid.segment_id = _opts.rowset_id + segment_id();
@@ -483,7 +488,7 @@ Status SegmentIterator::_init() {
             VLOG(2) << "seg_iter init delvec tablet:" << _opts.tablet_id << " rowset:" << _opts.rowset_id
                     << " seg:" << segment_id() << " version req:" << _opts.version << " actual:" << _del_vec->version()
                     << " " << _del_vec->cardinality() << "/" << _segment->num_rows();
-            roaring_init_iterator(&_del_vec->roaring()->roaring, &_roaring_iter);
+            roaring_iterator_init(&_del_vec->roaring()->roaring, &_roaring_iter);
         }
     }
 
@@ -610,7 +615,7 @@ Status SegmentIterator::_get_row_ranges_by_vector_index() {
 
     {
         SCOPED_RAW_TIMER(&_opts.stats->vector_search_timer);
-        if (_vector_range > 0) {
+        if (_vector_range >= 0) {
             st = _ann_reader->range_search(_query_view, _k, &result_ids, &result_distances, &del_id_filter,
                                            static_cast<float>(_vector_range), _result_order);
         } else {
@@ -709,7 +714,7 @@ Status SegmentIterator::_try_to_update_ranges_by_runtime_filter() {
                 _opts.stats->runtime_stats_filtered += (prev_size - _scan_range.span_size());
                 return Status::OK();
             },
-            _opts.stats->raw_rows_read);
+            false, _opts.stats->raw_rows_read);
 }
 
 StatusOr<std::shared_ptr<Segment>> SegmentIterator::_get_dcg_segment(uint32_t ucid) {
@@ -775,7 +780,8 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
     iter_opts.has_preaggregation = _opts.has_preaggregation;
 
     RandomAccessFileOptions opts{.skip_fill_local_cache = !_opts.lake_io_opts.fill_data_cache,
-                                 .buffer_size = _opts.lake_io_opts.buffer_size};
+                                 .buffer_size = _opts.lake_io_opts.buffer_size,
+                                 .skip_disk_cache = _opts.lake_io_opts.skip_disk_cache};
 
     ColumnAccessPath* access_path = nullptr;
     if (_column_access_paths.find(cid) != _column_access_paths.end()) {
@@ -832,7 +838,6 @@ Status SegmentIterator::_init_column_iterator_by_cid(const ColumnId cid, const C
 template <bool check_global_dict>
 Status SegmentIterator::_init_column_iterators(const Schema& schema) {
     SCOPED_RAW_TIMER(&_opts.stats->column_iterator_init_ns);
-
     const size_t n = std::max<size_t>(1 + ChunkHelper::max_column_id(schema), _column_iterators.size());
     _column_iterators.resize(n);
     if constexpr (check_global_dict) {
@@ -857,7 +862,6 @@ Status SegmentIterator::_init_column_iterators(const Schema& schema) {
             } else {
                 check_dict_enc = has_predicate;
             }
-
             RETURN_IF_ERROR(_init_column_iterator_by_cid(cid, f->uid(), check_dict_enc));
 
             if constexpr (check_global_dict) {
@@ -926,6 +930,7 @@ void SegmentIterator::_init_column_predicates() {
                                   &non_expr_pred_root);
     _expr_pred_tree = PredicateTree::create(std::move(expr_pred_root));
     _non_expr_pred_tree = PredicateTree::create(std::move(non_expr_pred_root));
+    _runtime_filter_preds = _opts.runtime_filter_preds;
 }
 
 Status SegmentIterator::_get_row_ranges_by_keys() {
@@ -1324,12 +1329,6 @@ inline Status SegmentIterator::_read(Chunk* chunk, vector<rowid_t>* rowids, size
         chunk->check_or_die();
     }
 
-    if (_use_vector_index) {
-        for (uint32_t i = range.begin(); i < range.end(); i++) {
-            _first_rowids.push_back(i);
-        }
-    }
-
     if (rowids != nullptr) {
         rowids->reserve(rowids->size() + n);
         SparseRangeIterator<> iter = range.new_iterator();
@@ -1358,8 +1357,10 @@ Status SegmentIterator::do_get_next(Chunk* chunk) {
     DCHECK_EQ(0, chunk->num_rows());
 
     Status st;
+    std::vector<uint32_t> rowids;
+    std::vector<uint32_t>* p_rowids = _always_build_rowid() ? &rowids : nullptr;
     do {
-        st = _do_get_next(chunk, nullptr);
+        st = _do_get_next(chunk, p_rowids);
     } while (st.ok() && chunk->num_rows() == 0);
     return st;
 }
@@ -1410,6 +1411,37 @@ Status SegmentIterator::do_get_next(Chunk* chunk, vector<uint64_t>* rssid_rowids
 Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     MonotonicStopWatch sw;
     sw.start();
+
+#ifdef USE_STAROS
+    // only used for CACHE SELECT, do not form any chunk to save CPU time,
+    // just read file content in `_scan_range`
+    if (_opts.lake_io_opts.cache_file_only) {
+        // read every column in this segment at once, maybe optimize this later
+        size_t buf_size = config::starlet_fs_stream_buffer_size_bytes;
+        if (buf_size <= 0) {
+            buf_size = 1048576; // 1MB
+        }
+        for (auto& [cid, stream] : _column_files) {
+            ASSIGN_OR_RETURN(auto vec, _column_iterators[cid]->get_io_range_vec(_scan_range));
+            for (auto e : vec) {
+                // if buf_size is 1MB, offset is 123, and size is 2MB
+                // after calculation, offset will be 0, and size will be 2MB+123
+                size_t offset = (e.first / buf_size) * buf_size;
+                size_t size = e.second + (e.first % buf_size);
+                while (size > 0) {
+                    size_t cur_size = std::min(buf_size, size);
+                    RETURN_IF_ERROR(stream->touch_cache(offset, cur_size));
+                    offset += cur_size;
+                    size -= cur_size;
+                }
+            }
+        }
+
+        _opts.stats->block_load_ns += sw.elapsed_time();
+
+        return Status::EndOfFile("no more data in segment");
+    }
+#endif // USE_STAROS
 
     const uint32_t chunk_capacity = _reserve_chunk_size;
     const uint32_t return_chunk_threshold = std::max<uint32_t>(chunk_capacity - chunk_capacity / 4, 1);
@@ -1512,26 +1544,25 @@ Status SegmentIterator::_do_get_next(Chunk* result, vector<rowid_t>* rowid) {
     }
 
     if (_use_vector_index && !_use_ivfpq) {
-        std::shared_ptr<FloatColumn> distance_column = FloatColumn::create();
+        DCHECK(rowid != nullptr);
+        FloatColumn::MutablePtr distance_column = FloatColumn::create();
         vector<rowid_t> rowids;
-        for (const auto& id : _first_rowids) {
-            auto it = _id2distance_map.find(id);
-            if (it != _id2distance_map.end()) {
+        for (const auto& rid : *rowid) {
+            auto it = _id2distance_map.find(rid);
+            if (LIKELY(it != _id2distance_map.end())) {
                 rowids.emplace_back(it->first);
+            } else {
+                DCHECK(false) << "not found row id:" << rid << " in distance map";
+                return Status::InternalError(fmt::format("not found row id:{} in distance map", rid));
             }
         }
-        if (!rowids.empty()) {
-            std::sort(rowids.begin(), rowids.end());
-            for (const auto& vrid : rowids) {
-                distance_column->append(_id2distance_map[vrid]);
-            }
+        for (const auto& vrid : rowids) {
+            distance_column->append(_id2distance_map[vrid]);
         }
-        if (has_non_expr_predicate && _filter_selection.size() == distance_column->size()) {
-            distance_column->filter_range(_filter_selection, 0, distance_column->size());
-        }
-        chunk->append_vector_column(distance_column, _make_field(_vector_column_id), _vector_slot_id);
+
+        // TODO: plan vector column in FE Planner
+        chunk->append_vector_column(std::move(distance_column), _make_field(_vector_column_id), _vector_slot_id);
     }
-    _first_rowids.clear();
 
     result->swap_chunk(*chunk);
 
@@ -1623,6 +1654,15 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_non_expr_predicates(Chunk* chunk,
     }
 
     auto hit_count = SIMD::count_nonzero(&_selection[from], to - from);
+    if (_opts.enable_join_runtime_filter_pushdown && !_runtime_filter_preds.empty()) {
+        SCOPED_RAW_TIMER(&_opts.stats->rf_cond_evaluate_ns);
+        size_t input_count = hit_count;
+        RETURN_IF_ERROR(_runtime_filter_preds.evaluate(chunk, _selection.data(), from, to));
+        hit_count = SIMD::count_nonzero(&_selection[from], to - from);
+        _opts.stats->rf_cond_input_rows += input_count;
+        _opts.stats->rf_cond_output_rows += hit_count;
+    }
+
     uint16_t chunk_size = to;
     SCOPED_RAW_TIMER(&_opts.stats->vec_cond_chunk_copy_ns);
     if (hit_count == 0) {
@@ -1639,9 +1679,6 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_non_expr_predicates(Chunk* chunk,
         }
     }
     _opts.stats->rows_vec_cond_filtered += (to - chunk_size);
-    for (int i = from; i < to; i++) {
-        _filter_selection.push_back(_selection[i]);
-    }
     return chunk_size;
 }
 
@@ -1667,9 +1704,6 @@ StatusOr<uint16_t> SegmentIterator::_filter_by_expr_predicates(Chunk* chunk, vec
             }
         }
         _opts.stats->rows_vec_cond_filtered += (chunk_size - new_size);
-        for (int i = 0; i < chunk_size; i++) {
-            _filter_by_expr_selection.push_back(_selection[i]);
-        }
         chunk_size = new_size;
     }
     return chunk_size;
@@ -1753,7 +1787,8 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
             ColumnIterator* iter = nullptr;
             if (use_global_dict_code) {
                 iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid].get(),
-                                                        _column_decoders[cid].code_convert_data());
+                                                        _column_decoders[cid].code_convert_data(),
+                                                        _column_decoders[cid].dict_convert_size());
             } else {
                 iter = new DictCodeColumnIterator(cid, _column_iterators[cid].get());
             }
@@ -1853,7 +1888,6 @@ Status SegmentIterator::_build_context(ScanContext* ctx) {
 
 Status SegmentIterator::_init_context() {
     _late_materialization_ratio = config::late_materialization_ratio;
-
     RETURN_IF_ERROR(_init_global_dict_decoder());
 
     if (_predicate_columns == 0 || _opts.pred_tree.empty() ||
@@ -1894,7 +1928,8 @@ Status SegmentIterator::_init_global_dict_decoder() {
         const ColumnId cid = f->id();
         if (_can_using_global_dict(f)) {
             auto iter = new GlobalDictCodeColumnIterator(cid, _column_iterators[cid].get(),
-                                                         _column_decoders[cid].code_convert_data());
+                                                         _column_decoders[cid].code_convert_data(),
+                                                         _column_decoders[cid].dict_convert_size());
             _obj_pool.add(iter);
             _column_decoders[cid].set_iterator(iter);
         }
@@ -1907,6 +1942,10 @@ Status SegmentIterator::_rewrite_predicates() {
         ColumnPredicateRewriter rewriter(_column_iterators, _schema, _predicate_need_rewrite, _predicate_columns,
                                          _scan_range);
         RETURN_IF_ERROR(rewriter.rewrite_predicate(&_obj_pool, _opts.pred_tree));
+    }
+    if (_opts.enable_join_runtime_filter_pushdown) {
+        RETURN_IF_ERROR(RuntimeFilterPredicatesRewriter::rewrite(&_obj_pool, _opts.runtime_filter_preds,
+                                                                 _column_iterators, _schema));
     }
 
     // for each delete predicate,
@@ -2514,7 +2553,6 @@ void SegmentIterator::close() {
 // materialization easier.
 inline Schema reorder_schema(const Schema& input, const PredicateTree& pred_tree) {
     const std::vector<FieldPtr>& fields = input.fields();
-
     Schema output;
     output.reserve(fields.size());
     for (const auto& field : fields) {

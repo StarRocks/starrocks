@@ -95,6 +95,8 @@ public class JobSpec {
 
     private boolean incrementalScanRanges = false;
 
+    private boolean isSyncStreamLoad = false;
+
     public static class Factory {
         private Factory() {
         }
@@ -123,7 +125,7 @@ public class JobSpec {
                     .enableStreamPipeline(false)
                     .isBlockQuery(false)
                     .needReport(context.getSessionVariable().isEnableProfile() ||
-                            context.getSessionVariable().isEnableBigQueryProfile())
+                            context.getSessionVariable().isEnableBigQueryProfile() || queryType == TQueryType.LOAD)
                     .queryGlobals(queryGlobals)
                     .queryOptions(queryOptions)
                     .commonProperties(context)
@@ -303,6 +305,7 @@ public class JobSpec {
                     .enablePipeline(false)
                     .resourceGroup(null)
                     .warehouseId(planner.getWarehouseId())
+                    .setSyncStreamLoad()
                     .build();
         }
 
@@ -399,6 +402,10 @@ public class JobSpec {
 
     public void setLoadJobId(long loadJobId) {
         this.loadJobId = loadJobId;
+    }
+
+    public TLoadJobType getLoadJobType() {
+        return queryOptions.getLoad_job_type();
     }
 
     public boolean isSetLoadJobId() {
@@ -519,7 +526,7 @@ public class JobSpec {
                 return true;
             }
         }
-        return false;
+        return isSyncStreamLoad;
     }
 
     public static class Builder {
@@ -614,6 +621,11 @@ public class JobSpec {
 
         private Builder setPlanProtocol(String planProtocol) {
             instance.planProtocol = StringUtils.lowerCase(planProtocol);
+            return this;
+        }
+
+        private Builder setSyncStreamLoad() {
+            instance.isSyncStreamLoad = true;
             return this;
         }
 

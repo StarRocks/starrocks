@@ -35,17 +35,22 @@ import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.catalog.View;
+import com.starrocks.catalog.constraint.ForeignKeyConstraint;
+import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.common.InvalidOlapTableStateException;
 import com.starrocks.common.MaterializedViewExceptions;
+import com.starrocks.common.Pair;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.DynamicPartitionUtil;
 import com.starrocks.common.util.PropertyAnalyzer;
 import com.starrocks.common.util.TimeUtils;
+import com.starrocks.common.util.concurrent.lock.AutoCloseableLock;
 import com.starrocks.common.util.concurrent.lock.LockType;
 import com.starrocks.common.util.concurrent.lock.Locker;
 import com.starrocks.persist.AlterViewInfo;
@@ -54,7 +59,6 @@ import com.starrocks.persist.ModifyPartitionInfo;
 import com.starrocks.persist.SwapTableOperationLog;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.AddColumnClause;
 import com.starrocks.sql.ast.AddColumnsClause;
@@ -75,6 +79,7 @@ import com.starrocks.sql.ast.DropColumnClause;
 import com.starrocks.sql.ast.DropFieldClause;
 import com.starrocks.sql.ast.DropIndexClause;
 import com.starrocks.sql.ast.DropPartitionClause;
+import com.starrocks.sql.ast.DropPersistentIndexClause;
 import com.starrocks.sql.ast.DropRollupClause;
 import com.starrocks.sql.ast.ModifyColumnClause;
 import com.starrocks.sql.ast.ModifyPartitionClause;
@@ -101,8 +106,10 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 import static com.starrocks.sql.common.UnsupportedException.unsupportedException;
 
@@ -153,7 +160,10 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         this.db = db;
         this.table = table;
 
-        if (statement.hasSchemaChangeOp()) {
+        List<AlterOpType> alterOpTypes = statement.getAlterClauseList()
+                .stream().map(AlterClause::getOpType).collect(Collectors.toList());
+
+        if (alterOpTypes.contains(AlterOpType.SCHEMA_CHANGE) || alterOpTypes.contains(AlterOpType.OPTIMIZE)) {
             Locker locker = new Locker();
             locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
             try {
@@ -167,7 +177,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             }
 
             isSynchronous = false;
-        } else if (statement.hasRollupOp()) {
+        } else if (alterOpTypes.contains(AlterOpType.ADD_ROLLUP) || alterOpTypes.contains(AlterOpType.DROP_ROLLUP)) {
             Locker locker = new Locker();
             locker.lockTableWithIntensiveDbLock(db.getId(), table.getId(), LockType.WRITE);
             try {
@@ -204,6 +214,12 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
 
         this.db = db;
         this.table = table;
+
+        if (statement.getAlterClause() == null) {
+            ((View) table).setSecurity(statement.isSecurity());
+            return null;
+        }
+
         AlterViewClause alterViewClause = (AlterViewClause) statement.getAlterClause();
         visit(alterViewClause, context);
         return null;
@@ -265,6 +281,17 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
     }
 
     @Override
+    public Void visitDropPersistentIndexClause(DropPersistentIndexClause clause, ConnectContext context) {
+        SchemaChangeHandler schemaChangeHandler = GlobalStateMgr.getCurrentState().getSchemaChangeHandler();
+        try {
+            schemaChangeHandler.processLakeTableDropPersistentIndex(clause, db, (OlapTable) table);
+        } catch (StarRocksException e) {
+            throw new AlterJobException(e.getMessage(), e);
+        }
+        return null;
+    }
+
+    @Override
     public Void visitTableRenameClause(TableRenameClause clause, ConnectContext context) {
         Locker locker = new Locker();
         locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
@@ -316,11 +343,68 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                     }
                 }
 
+                // check unique constraints: if old table contains constraints, new table must contain the same constraints
+                // TODO: only check users' defined constraints to be compatible with old version
+                final List<UniqueConstraint> origUKConstraints = Optional.ofNullable(origTable.getTableProperty())
+                        .map(tableProperty -> tableProperty.getUniqueConstraints())
+                        .orElse(Lists.newArrayList());
+                final List<UniqueConstraint> newUKConstraints = Optional.ofNullable(olapNewTbl.getTableProperty())
+                        .map(tableProperty -> tableProperty.getUniqueConstraints())
+                        .orElse(Lists.newArrayList());
+                if (origUKConstraints.size() != newUKConstraints.size()) {
+                    throw new AlterJobException("Table " + newTblName + " does not contain the same unique constraints, " +
+                            "origin: " + origUKConstraints + ", new: " + newUKConstraints);
+                }
+                for (UniqueConstraint origUniqueConstraint : origUKConstraints) {
+                    final List<String> originUKNames = origUniqueConstraint.getUniqueColumnNames(origTable);
+                    final List<String> newUKNames = origUniqueConstraint.getUniqueColumnNames(olapNewTbl);
+                    if (originUKNames.size() != newUKNames.size()) {
+                        throw new AlterJobException("Table " + newTblName + " does not contain the same unique constraints" +
+                                ", origin: " + origUKConstraints + ", new: " + newUKConstraints);
+                    }
+                    for (int i = 0; i < originUKNames.size(); i++) {
+                        if (!originUKNames.get(i).equals(newUKNames.get(i))) {
+                            throw new AlterJobException("Table " + newTblName + " does not contain the same unique constraints" +
+                                    ", origin: " + origUKConstraints + ", new: " + newUKConstraints);
+                        }
+                    }
+                }
+                // check foreign constraints: if old table contains constraints, new table must contain the same constraints
+                // NOTE: only check users' defined constraints to be compatible with old version
+                final List<ForeignKeyConstraint> origFKConstraints = Optional.ofNullable(origTable.getTableProperty())
+                        .map(tableProperty -> tableProperty.getForeignKeyConstraints())
+                        .orElse(Lists.newArrayList());
+                final List<ForeignKeyConstraint> newFKConstraints = Optional.ofNullable(olapNewTbl.getTableProperty())
+                        .map(tableProperty -> tableProperty.getForeignKeyConstraints())
+                        .orElse(Lists.newArrayList());
+                if (origFKConstraints.size() != newFKConstraints.size()) {
+                    throw new AlterJobException("Table " + newTblName + " does not contain the same foreign key " +
+                            "constraints, origin: " + origFKConstraints + ", new: " + newFKConstraints);
+                }
+                for (int i = 0; i < origFKConstraints.size(); i++) {
+                    final ForeignKeyConstraint originFKConstraint = origFKConstraints.get(i);
+                    final ForeignKeyConstraint newFKConstraint = newFKConstraints.get(i);
+                    final List<Pair<String, String>> originFKCNPairs = originFKConstraint.getColumnNameRefPairs(origTable);
+                    final List<Pair<String, String>> newFKCNPairs = newFKConstraint.getColumnNameRefPairs(origTable);
+                    if (originFKCNPairs.size() != newFKCNPairs.size()) {
+                        throw new AlterJobException("Table " + newTblName + " does not contain the same foreign key " +
+                                "constraints, origin: " + origFKConstraints + ", new: " + newFKConstraints);
+                    }
+                    for (int j = 0; j < originFKCNPairs.size(); j++) {
+                        final Pair<String, String> originPair = originFKCNPairs.get(j);
+                        final Pair<String, String> newPair = newFKCNPairs.get(j);
+                        if (!originPair.first.equals(newPair.first) || !originPair.second.equals(newPair.second)) {
+                            throw new AlterJobException("Table " + newTblName + " does not contain the same foreign key " +
+                                    "constraints, origin: " + origFKConstraints + ", new: " + newFKConstraints);
+                        }
+                    }
+                }
+
                 // inactive the related MVs
-                LocalMetastore.inactiveRelatedMaterializedView(db, origTable,
-                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName));
-                LocalMetastore.inactiveRelatedMaterializedView(db, olapNewTbl,
-                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(newTblName));
+                AlterMVJobExecutor.inactiveRelatedMaterializedView(origTable,
+                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(origTblName), false);
+                AlterMVJobExecutor.inactiveRelatedMaterializedView(olapNewTbl,
+                        MaterializedViewExceptions.inactiveReasonForBaseTableSwapped(newTblName), false);
 
                 SwapTableOperationLog log = new SwapTableOperationLog(db.getId(), origTable.getId(), olapNewTbl.getId());
                 GlobalStateMgr.getCurrentState().getAlterJobMgr().swapTableInternal(log);
@@ -447,6 +531,8 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_TTL)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
+                    } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_PARTITION_RETENTION_CONDITION)) {
+                        GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_MEDIUM)) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore().alterTableProperties(db, olapTable, properties);
                     } else if (properties.containsKey(PropertyAnalyzer.PROPERTIES_STORAGE_COOLDOWN_TTL)) {
@@ -537,14 +623,12 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
 
     @Override
     public Void visitRollupRenameClause(RollupRenameClause clause, ConnectContext context) {
-        Locker locker = new Locker();
-        locker.lockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
-        try {
+        try (AutoCloseableLock ignore =
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE)) {
             ErrorReport.wrapWithRuntimeException(() ->
                     GlobalStateMgr.getCurrentState().getLocalMetastore().renameRollup(db, (OlapTable) table, clause));
-        } finally {
-            locker.unLockTablesWithIntensiveDbLock(db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE);
         }
+
         return null;
     }
 
@@ -597,8 +681,12 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
             DynamicPartitionUtil.checkAlterAllowed((OlapTable) table);
         }
 
-        ErrorReport.wrapWithRuntimeException(() ->
-                GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, table, clause));
+        try (AutoCloseableLock ignore =
+                    new AutoCloseableLock(new Locker(), db.getId(), Lists.newArrayList(table.getId()), LockType.WRITE)) {
+            ErrorReport.wrapWithRuntimeException(() ->
+                    GlobalStateMgr.getCurrentState().getLocalMetastore().dropPartition(db, table, clause));
+        }
+
         return null;
     }
 
@@ -608,7 +696,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
         // ALTER TABLE test TRUNCATE PARTITION p1;
         TableRef tableRef = new TableRef(tableName, null, clause.getPartitionNames());
         TruncateTableStmt tStmt = new TruncateTableStmt(tableRef);
-        ConnectContext ctx = new ConnectContext();
+        ConnectContext ctx = ConnectContext.buildInner();
         ctx.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
 
         ErrorReport.wrapWithRuntimeException(() ->
@@ -797,7 +885,7 @@ public class AlterJobExecutor implements AstVisitor<Void, ConnectContext> {
                 alterViewClause.getColumns(),
                 ctx.getSessionVariable().getSqlMode(), alterViewClause.getComment());
 
-        GlobalStateMgr.getCurrentState().getAlterJobMgr().alterView(alterViewInfo);
+        GlobalStateMgr.getCurrentState().getAlterJobMgr().alterView(alterViewInfo, false);
         GlobalStateMgr.getCurrentState().getEditLog().logModifyViewDef(alterViewInfo);
         return null;
     }

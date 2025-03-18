@@ -157,7 +157,6 @@ public class FunctionSet {
 
     // Vector Index functions:
     public static final String APPROX_COSINE_SIMILARITY = "approx_cosine_similarity";
-    public static final String APPROX_COSINE_SIMILARITY_NORM = "approx_cosine_similarity_norm";
     public static final String APPROX_L2_DISTANCE = "approx_l2_distance";
 
     // Geo functions:
@@ -219,6 +218,7 @@ public class FunctionSet {
     public static final String TRIM = "trim";
     public static final String UPPER = "upper";
     public static final String SUBSTRING_INDEX = "substring_index";
+    public static final String FIELD = "field";
 
     // Json functions:
     public static final String JSON_ARRAY = "json_array";
@@ -265,6 +265,7 @@ public class FunctionSet {
     public static final String MIN_BY_V2 = "min_by_v2";
     public static final String MIN = "min";
     public static final String PERCENTILE_APPROX = "percentile_approx";
+    public static final String PERCENTILE_APPROX_WEIGHTED = "percentile_approx_weighted";
     public static final String PERCENTILE_CONT = "percentile_cont";
     public static final String PERCENTILE_DISC = "percentile_disc";
     public static final String LC_PERCENTILE_DISC = "percentile_disc_lc";
@@ -358,6 +359,7 @@ public class FunctionSet {
     public static final String ARRAY_GENERATE = "array_generate";
 
     public static final String ARRAY_TO_BITMAP = "array_to_bitmap";
+    public static final String ARRAY_FLATTEN = "array_flatten";
 
     // Bit functions:
     public static final String BITAND = "bitand";
@@ -533,8 +535,8 @@ public class FunctionSet {
     public static final String SESSION_USER = "session_user";
 
     public static final String CURRENT_USER = "current_user";
-
     public static final String CURRENT_ROLE = "current_role";
+    public static final String CURRENT_GROUP = "current_group";
 
     public static final String AGG_STATE_SUFFIX = "_state";
     public static final String AGG_STATE_UNION_SUFFIX = "_union";
@@ -632,6 +634,7 @@ public class FunctionSet {
                     .add(FunctionSet.HLL_EMPTY)
                     .add(FunctionSet.EXCHANGE_BYTES)
                     .add(FunctionSet.EXCHANGE_SPEED)
+                    .add(FunctionSet.FIELD)
                     .build();
 
     public static final Set<String> DECIMAL_ROUND_FUNCTIONS =
@@ -652,7 +655,6 @@ public class FunctionSet {
     public static final Set<String> VECTOR_COMPUTE_FUNCTIONS =
             ImmutableSet.<String>builder()
                     .add(APPROX_COSINE_SIMILARITY)
-                    .add(APPROX_COSINE_SIMILARITY_NORM)
                     .add(APPROX_L2_DISTANCE)
                     .build();
 
@@ -760,6 +762,7 @@ public class FunctionSet {
             .add(SESSION_USER)
             .add(CURRENT_USER)
             .add(CURRENT_ROLE)
+            .add(CURRENT_GROUP)
             .build();
 
     public static final java.util.function.Function<Type, ArrayType> APPROX_TOP_N_RET_TYPE_BUILDER =
@@ -1274,9 +1277,9 @@ public class FunctionSet {
         // Approx top k
         registerBuiltinApproxTopKWindowFunction();
         // Dict merge
-        addBuiltin(AggregateFunction.createBuiltin(DICT_MERGE, Lists.newArrayList(Type.VARCHAR),
+        addBuiltin(AggregateFunction.createBuiltin(DICT_MERGE, Lists.newArrayList(Type.VARCHAR, Type.INT),
                 Type.VARCHAR, Type.VARCHAR, true, false, false));
-        addBuiltin(AggregateFunction.createBuiltin(DICT_MERGE, Lists.newArrayList(Type.ARRAY_VARCHAR),
+        addBuiltin(AggregateFunction.createBuiltin(DICT_MERGE, Lists.newArrayList(Type.ARRAY_VARCHAR, Type.INT),
                 Type.VARCHAR, Type.VARCHAR, true, false, false));
         // flat json meta
         addBuiltin(AggregateFunction.createBuiltin(FLAT_JSON_META, Lists.newArrayList(Type.JSON),
@@ -1544,6 +1547,14 @@ public class FunctionSet {
                 false, false, false));
         addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX,
                 Lists.newArrayList(Type.DOUBLE, Type.DOUBLE, Type.DOUBLE), Type.DOUBLE, Type.VARBINARY,
+                false, false, false));
+        // percentile_approx_weighted
+        addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX_WEIGHTED,
+                Lists.newArrayList(Type.DOUBLE, Type.BIGINT, Type.DOUBLE), Type.DOUBLE, Type.VARBINARY,
+                false, false, false));
+        // percentile_approx_weighted
+        addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_APPROX_WEIGHTED,
+                Lists.newArrayList(Type.DOUBLE, Type.BIGINT, Type.DOUBLE, Type.DOUBLE), Type.DOUBLE, Type.VARBINARY,
                 false, false, false));
 
         addBuiltin(AggregateFunction.createBuiltin(PERCENTILE_UNION,

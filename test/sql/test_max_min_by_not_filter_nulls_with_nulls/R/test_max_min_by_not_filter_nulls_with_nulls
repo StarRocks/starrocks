@@ -353,3 +353,29 @@ select  (sum(murmur_hash3_32(ifnull(c0,0))+murmur_hash3_32(ifnull(a,0))+murmur_h
 -- result:
 25406211869
 -- !result
+-- name: test_max_min_by_support_window
+CREATE TABLE exam (
+    subject_id INT,
+    subject STRING,
+    exam_result INT
+) DISTRIBUTED BY HASH(`subject_id`) PROPERTIES ("replication_num" = "1");
+-- result:
+-- !result
+insert into exam values
+    (1,'math',90),
+    (2,'english',70),
+    (3,'physics',95),
+    (4,'chemistry',85),
+    (5,'music',95),
+    (6,'biology',null);
+-- result:
+-- !result
+SELECT max_by(subject, exam_result) over(partition by subject_id) FROM exam;
+-- result:
+english
+None
+physics
+chemistry
+music
+math
+-- !result

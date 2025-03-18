@@ -53,6 +53,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -126,7 +127,8 @@ public abstract class AlterHandler extends FrontendDaemon {
         Iterator<Map.Entry<Long, AlterJobV2>> iterator = alterJobsV2.entrySet().iterator();
         while (iterator.hasNext()) {
             AlterJobV2 alterJobV2 = iterator.next().getValue();
-            if (alterJobV2.isExpire()) {
+            if (alterJobV2.isExpire() && GlobalStateMgr.getCurrentState()
+                    .getClusterSnapshotMgr().isDeletionSafeToExecute(alterJobV2.getFinishedTimeMs())) {
                 iterator.remove();
                 RemoveAlterJobV2OperationLog log =
                         new RemoveAlterJobV2OperationLog(alterJobV2.getJobId(), alterJobV2.getType());
@@ -203,5 +205,15 @@ public abstract class AlterHandler extends FrontendDaemon {
         } else {
             existingJob.replay(alterJob);
         }
+    }
+
+    public Map<Long, Long> getRunningAlterJobCount() {
+        Map<Long, Long> result = new HashMap<>();
+        for (AlterJobV2 alterJobV2 : alterJobsV2.values()) {
+            if (!alterJobV2.isDone()) {
+                result.compute(alterJobV2.getWarehouseId(), (key, value) -> value == null ? 1L : value + 1);
+            }
+        }
+        return result;
     }
 }

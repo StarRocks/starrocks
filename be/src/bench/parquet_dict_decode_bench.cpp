@@ -50,7 +50,7 @@ static void BM_DictDecoder(benchmark::State& state) {
         (void)dict_decoder.set_dict(kTestChunkSize, kDictSize, &decoder);
 
         if (debug) {
-            ColumnPtr column = ColumnHelper::create_column(TypeDescriptor{TYPE_VARCHAR}, true);
+            MutableColumnPtr column = ColumnHelper::create_column(TypeDescriptor{TYPE_VARCHAR}, true);
             (void)dict_decoder.get_dict_values(column.get());
             std::cout << column->debug_string() << "\n";
         }
@@ -66,7 +66,7 @@ static void BM_DictDecoder(benchmark::State& state) {
     std::random_device rd;
     std::mt19937 rng(rd());
     std::uniform_int_distribution<int> dist(0, 99);
-    std::vector<int32_t> dict_codes;
+    Buffer<int32_t> dict_codes;
     int count = 0;
 
     for (int i = 0; i < kTestChunkSize; i++) {
@@ -84,7 +84,7 @@ static void BM_DictDecoder(benchmark::State& state) {
                   << ".\n";
     }
 
-    ColumnPtr column = ColumnHelper::create_column(TypeDescriptor{TYPE_VARCHAR}, true);
+    MutableColumnPtr column = ColumnHelper::create_column(TypeDescriptor{TYPE_VARCHAR}, true);
     for (auto _ : state) {
         state.PauseTiming();
         column->reset_column();

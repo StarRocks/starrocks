@@ -170,7 +170,7 @@ protected:
         auto c1 = Int32Column::create();
         c0->append_numbers(v0.data(), v0.size() * sizeof(int));
         c1->append_numbers(v1.data(), v1.size() * sizeof(int));
-        Chunk chunk({c0, c1}, _schema);
+        Chunk chunk({std::move(c0), std::move(c1)}, _schema);
         chunk.set_slot_id_to_index(0, 0);
         chunk.set_slot_id_to_index(1, 1);
         return chunk;
@@ -233,6 +233,9 @@ TEST_F(LocalTabletsChannelTest, test_profile) {
     ASSERT_TRUE(profile->get_counter("OpenRpcTime")->value() > 0);
     ASSERT_EQ(1, profile->get_counter("AddChunkRpcCount")->value());
     ASSERT_TRUE(profile->get_counter("AddChunkRpcTime")->value() > 0);
+    ASSERT_TRUE(profile->get_counter("SubmitWriteTaskTime")->value() > 0);
+    ASSERT_TRUE(profile->get_counter("SubmitCommitTaskTime")->value() > 0);
+    ASSERT_EQ(0, profile->get_counter("WaitDrainSenderTime")->value());
     ASSERT_EQ(chunk.num_rows(), profile->get_counter("AddRowNum")->value());
     auto* primary_replicas_profile = profile->get_child("PrimaryReplicas");
     ASSERT_NE(nullptr, primary_replicas_profile);

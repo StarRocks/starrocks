@@ -19,7 +19,6 @@
 #include <vector>
 
 #include "common/status.h"
-#include "gen_cpp/doris_internal_service.pb.h"
 #include "gen_cpp/internal_service.pb.h"
 #include "storage/olap_define.h"
 #include "util/internal_service_recoverable_stub.h"

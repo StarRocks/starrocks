@@ -609,7 +609,7 @@ public class AnalyzeSingleTest {
     }
 
     @Test
-    public void testUnsupportedStatement() {
+    public void testTransaction() {
         analyzeSuccess("start transaction");
         analyzeSuccess("start transaction with consistent snapshot");
         analyzeSuccess("begin");

@@ -164,10 +164,6 @@ public class RestoreJobTest {
 
         new Expectations(globalStateMgr) {
             {
-                GlobalStateMgr.getCurrentState();
-                minTimes = 0;
-                result = globalStateMgr;
-
                 globalStateMgr.getEditLog();
                 minTimes = 0;
                 result = editLog;
@@ -561,7 +557,7 @@ public class RestoreJobTest {
                 minTimes = 0;
                 result = id.incrementAndGet();
 
-                GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo();
+                globalStateMgr.getNodeMgr().getClusterInfo();
                 minTimes = 0;
                 result = systemInfoService;
             }
@@ -720,7 +716,6 @@ public class RestoreJobTest {
         Assert.assertEquals(RestoreJobState.DOWNLOAD, job.getState());
     }
 
-    @Test
     public void testSignature() {
         Adler32 sig1 = new Adler32();
         sig1.update("name1".getBytes());

@@ -72,7 +72,7 @@ public class RuntimeFilterTest {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"replicated_storage\" = \"true\",\n" +
                 "\"fast_schema_evolution\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
@@ -100,7 +100,6 @@ public class RuntimeFilterTest {
                         "where d.k5 is null\n" +
                         ") tbl order by 1 desc limit 15";
         String plan = UtFrameUtils.getVerboseFragmentPlan(starRocksAssert.getCtx(), sql);
-        System.out.println(plan);
         Assert.assertTrue(plan, plan.contains("7:Project\n" +
                 "  |  output columns:\n" +
                 "  |  39 <-> [39: k13, DECIMAL128(27,9), true]\n" +

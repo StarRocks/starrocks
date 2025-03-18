@@ -25,6 +25,7 @@ OPTS=$(getopt \
   -l 'daemon' \
   -l 'helper:' \
   -l 'host_type:' \
+  -l 'cluster_snapshot' \
   -l 'debug' \
   -l 'logconsole' \
   -- "$@")
@@ -34,6 +35,7 @@ eval set -- "$OPTS"
 RUN_DAEMON=0
 HELPER=
 HOST_TYPE=
+CLUSTER_SNAPSHOT=
 ENABLE_DEBUGGER=0
 RUN_LOG_CONSOLE=${SYS_LOG_TO_CONSOLE:-0}
 # min jdk version required
@@ -43,6 +45,7 @@ while true; do
         --daemon) RUN_DAEMON=1 ; shift ;;
         --helper) HELPER=$2 ; shift 2 ;;
         --host_type) HOST_TYPE=$2 ; shift 2 ;;
+        --cluster_snapshot) CLUSTER_SNAPSHOT="-cluster_snapshot" ; shift ;;
         --debug) ENABLE_DEBUGGER=1 ; shift ;;
         --logconsole) RUN_LOG_CONSOLE=1 ; shift ;;
         --) shift ;  break ;;
@@ -228,7 +231,7 @@ echo "start time: $(date), server uptime: $(uptime)"
 
 # StarRocksFE java process will write its process id into $pidfile
 if [ ${RUN_DAEMON} -eq 1 ]; then
-    nohup $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} "$@" </dev/null &
+    nohup $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} ${CLUSTER_SNAPSHOT} "$@" </dev/null &
 else
-    exec $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} "$@" </dev/null
+    exec $LIMIT $JAVA $final_java_opt com.starrocks.StarRocksFE ${HELPER} ${HOST_TYPE} ${CLUSTER_SNAPSHOT} "$@" </dev/null
 fi

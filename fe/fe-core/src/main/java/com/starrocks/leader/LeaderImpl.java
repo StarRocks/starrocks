@@ -83,7 +83,6 @@ import com.starrocks.lake.LakeTablet;
 import com.starrocks.load.DeleteJob;
 import com.starrocks.load.OlapDeleteJob;
 import com.starrocks.load.loadv2.SparkLoadJob;
-import com.starrocks.memory.MemoryUsageTracker;
 import com.starrocks.rpc.ThriftConnectionPool;
 import com.starrocks.rpc.ThriftRPCRequestExecutor;
 import com.starrocks.server.GlobalStateMgr;
@@ -174,13 +173,6 @@ import static com.starrocks.catalog.Replica.ReplicaState.NORMAL;
 
 public class LeaderImpl {
     private static final Logger LOG = LogManager.getLogger(LeaderImpl.class);
-
-    private final ReportHandler reportHandler = new ReportHandler();
-
-    public LeaderImpl() {
-        reportHandler.start();
-        MemoryUsageTracker.registerMemoryTracker("Report", reportHandler);
-    }
 
     public TMasterResult finishTask(TFinishTaskRequest request) {
         // if current node is not master, reject the request
@@ -873,7 +865,7 @@ public class LeaderImpl {
             result.setStatus(status);
             return result;
         }
-        return reportHandler.handleReport(request);
+        return GlobalStateMgr.getCurrentState().getReportHandler().handleReport(request);
     }
 
     private void finishAlterTask(AgentTask task) {

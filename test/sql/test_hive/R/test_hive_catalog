@@ -2,7 +2,15 @@
 set enable_dynamic_prune_scan_range=false;
 -- result:
 -- !result
-create external catalog hive_sql_test_${uuid0} PROPERTIES ("type"="hive", "hive.metastore.uris"="${hive_metastore_uris}");
+create external catalog hive_sql_test_${uuid0} PROPERTIES ("type"="hive",
+    "hive.metastore.uris"="${hive_metastore_uris}",
+    "aws.s3.access_key"="${oss_ak}",
+    "aws.s3.secret_key"="${oss_sk}",
+    "aws.s3.endpoint"="${oss_endpoint}"
+);
+-- result:
+-- !result
+drop table if exists hive_sql_test_${uuid0}.hive_oss_db.not_exist_${uuid0};
 -- result:
 -- !result
 select * from hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_snappy where col_date = (select max(col_date) from hive_sql_test_${uuid0}.hive_oss_db.hive_oss_par_parquet_snappy);

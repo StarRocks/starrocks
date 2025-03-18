@@ -20,7 +20,7 @@ displayed_sidebar: docs
 
 ```sql
 ADMIN SET TABLE <table_name> PARTITION ( <partition_name> | <partition_id> ) 
-TO VERSION <version>
+VERSION TO <version>
 ```
 
 ## 参数说明
@@ -35,17 +35,17 @@ TO VERSION <version>
 1. 将非分区表 `t1` 的版本设置为 `10`。
 
     ```sql
-    ADMIN SET TABLE t1 PARTITION(t1) TO VERSION 10;
+    ADMIN SET TABLE t1 PARTITION(t1) VERSION TO 10;
     ```
 
 2. 将表 `t2` 中分区 `p1` 的版本设置为 `10`。
 
     ```sql
-    ADMIN SET TABLE t2 PARTITION(p1) TO VERSION 10;
+    ADMIN SET TABLE t2 PARTITION(p1) VERSION TO 10;
     ```
 
 3. 将 ID 为 `123456` 的分区的版本设置为 `10`。`t3` 为采用随机分桶策略的表。
 
     ```sql
-    ADMIN SET TABLE t3 PARTITION('123456') TO VERSION 10;
+    ADMIN SET TABLE t3 PARTITION('123456') VERSION TO 10;
     ```

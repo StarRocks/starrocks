@@ -846,6 +846,13 @@ int64_t TimestampValue::to_unixtime() const {
     return result;
 }
 
+int64_t TimestampValue::to_unixtime(const cctz::time_zone& ctz) const {
+    int64_t offset = TimezoneUtils::to_utc_offset(ctz);
+    int64_t result = to_unixtime();
+    result -= offset * MILLIS_PER_SEC;
+    return result;
+}
+
 bool TimestampValue::from_unixtime(int64_t second, const std::string& timezone) {
     cctz::time_zone ctz;
     if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {
@@ -885,8 +892,11 @@ bool TimestampValue::is_valid_non_strict() const {
     return is_valid();
 }
 
-std::string TimestampValue::to_string() const {
-    return timestamp::to_string(_timestamp);
+std::string TimestampValue::to_string(bool igonre_microsecond) const {
+    if (igonre_microsecond) {
+        return timestamp::to_string<false, true>(_timestamp);
+    }
+    return timestamp::to_string<false, false>(_timestamp);
 }
 
 int TimestampValue::to_string(char* s, size_t n) const {

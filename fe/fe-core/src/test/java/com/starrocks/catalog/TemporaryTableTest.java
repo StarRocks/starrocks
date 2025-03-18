@@ -15,23 +15,31 @@
 
 package com.starrocks.catalog;
 
+import com.starrocks.analysis.TableName;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.ExceptionChecker;
 import com.starrocks.common.FeConstants;
+import com.starrocks.ha.FrontendNodeType;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.server.GlobalStateMgr;
+import com.starrocks.server.LocalMetastore;
 import com.starrocks.sql.analyzer.SemanticException;
 import com.starrocks.sql.ast.ShowCreateTableStmt;
+import com.starrocks.sql.common.MetaUtils;
 import com.starrocks.utframe.StarRocksAssert;
 import com.starrocks.utframe.UtFrameUtils;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.junit.jupiter.api.MethodOrderer;
+import org.junit.jupiter.api.Order;
+import org.junit.jupiter.api.TestMethodOrder;
 
 import java.util.List;
 
+@TestMethodOrder(MethodOrderer.OrderAnnotation.class)
 public class TemporaryTableTest {
     private static ConnectContext connectContext;
     private static StarRocksAssert starRocksAssert;
@@ -58,6 +66,7 @@ public class TemporaryTableTest {
     }
 
     @Test
+    @Order(1)
     public void testCreateTemporaryTable() throws Exception {
         starRocksAssert.withTemporaryTable("create temporary table t0(" +
                 "c1 int, c2 int) engine=olap " +
@@ -103,6 +112,7 @@ public class TemporaryTableTest {
     }
 
     @Test
+    @Order(1)
     public void testCreateTemporaryTableLike() throws Exception {
         starRocksAssert.withTable("create table t (c1 int, c2 int) " +
                 "engine=olap duplicate key(`c1`) distributed by hash(`c1`) buckets 3 " +
@@ -148,6 +158,7 @@ public class TemporaryTableTest {
     }
 
     @Test
+    @Order(1)
     public void testCreateTemporaryTableAbnormal() throws Exception {
         // temporary table only support olap engine
         ExceptionChecker.expectThrowsWithMsg(AnalysisException.class, "temporary table only support olap engine", () -> {
@@ -178,6 +189,7 @@ public class TemporaryTableTest {
     }
 
     @Test
+    @Order(1)
     public void testCreateView() throws Exception {
         starRocksAssert.withTemporaryTable("create temporary table t1(c1 int,c2 int) " +
                 "engine=olap duplicate key(`c1`) distributed by hash(`c1`) " +
@@ -202,6 +214,7 @@ public class TemporaryTableTest {
     }
 
     @Test
+    @Order(1)
     public void testAlterTable() throws Exception {
         starRocksAssert.withTemporaryTable("create temporary table t1(c1 int,c2 int) " +
                 "engine=olap duplicate key(`c1`) distributed by hash(`c1`) " +
@@ -214,6 +227,7 @@ public class TemporaryTableTest {
     }
 
     @Test
+    @Order(1)
     public void testSubmitTask() throws Exception {
         starRocksAssert.withTemporaryTable("create temporary table t1(c1 int,c2 int) " +
                 "engine=olap duplicate key(`c1`) distributed by hash(`c1`) " +
@@ -235,6 +249,7 @@ public class TemporaryTableTest {
     }
 
     @Test
+    @Order(1)
     public void testNameConflict() throws Exception {
         starRocksAssert.withTable("create table t1(c1 int,c2 int) " +
                 "engine=olap duplicate key(`c1`) distributed by hash(`c1`) " +
@@ -280,6 +295,7 @@ public class TemporaryTableTest {
     }
 
     @Test
+    @Order(1)
     public void testVisibility() throws Exception {
         // 2 session, can't see each other
         ConnectContext connectContext1 = UtFrameUtils.createDefaultCtx();
@@ -304,6 +320,7 @@ public class TemporaryTableTest {
     }
 
     @Test
+    @Order(1)
     public void testAbnormalCases() throws Exception {
         ConnectContext connectContext1 = UtFrameUtils.createDefaultCtx();
         String createHiveCatalogStmt = "create external catalog hive_catalog properties (\"type\"=\"hive\", " +
@@ -325,6 +342,7 @@ public class TemporaryTableTest {
     }
 
     @Test
+    @Order(1)
     public void testDropTable() throws Exception {
         starRocksAssert.withTemporaryTable("create temporary table t1(c1 int,c2 int, c3 int) " +
                 "engine=olap duplicate key(`c1`) distributed by hash(`c1`) " +
@@ -338,6 +356,7 @@ public class TemporaryTableTest {
     }
 
     @Test
+    @Order(1)
     public void testShowData() throws Exception {
         starRocksAssert.withTemporaryTable("create temporary table t1(c1 int,c2 int, c3 int) " +
                 "engine=olap duplicate key(`c1`) distributed by hash(`c1`) " +
@@ -347,4 +366,22 @@ public class TemporaryTableTest {
 
     }
 
+    @Test
+    @Order(2)
+    public void testReplayDropTable() throws Exception {
+        starRocksAssert.withDatabase("test").useDatabase("test").withTemporaryTable(
+                "create temporary table tmp(k1 int) duplicate key(k1) " +
+                        "distributed by hash(k1) buckets 3 properties('replication_num'='1');");
+        LocalMetastore localMetastore = GlobalStateMgr.getCurrentState().getLocalMetastore();
+        Database database = starRocksAssert.getDb("test");
+        Assert.assertNotNull(database);
+        Table table = MetaUtils.getSessionAwareTable(connectContext, database, new TableName("test", "tmp"));
+        Assert.assertNotNull(table);
+        Assert.assertTrue(table.isOlapTable());
+        Assert.assertTrue(((OlapTable) table).isTemporaryTable());
+        // non-master node can replay drop temporary table successfully
+        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.FOLLOWER);
+        localMetastore.replayDropTable(database, table.getId(), false);
+        GlobalStateMgr.getCurrentState().setFrontendNodeType(FrontendNodeType.LEADER);
+    }
 }

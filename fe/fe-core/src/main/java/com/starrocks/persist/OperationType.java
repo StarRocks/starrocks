@@ -196,6 +196,13 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_REMOVE_ANALYZE_STATUS = 10017;
 
+    @IgnorableOnReplayFailed
+    public static final short OP_ADD_MULTI_COLUMN_STATS_META = 10018;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_REMOVE_MULTI_COLUMN_STATS_META = 10019;
+
+
     // workgroup 10021 ~ 10030
     @IgnorableOnReplayFailed
     public static final short OP_RESOURCE_GROUP = 10021;
@@ -294,9 +301,6 @@ public class OperationType {
     public static final short OP_DROP_ROLE_V2 = 10266;
 
     public static final short OP_AUTH_UPGRADE_V2 = 10267;
-
-    @IgnorableOnReplayFailed
-    public static final short OP_CREATE_SECURITY_INTEGRATION = 10269;
 
     // integrate with starmgr
     public static final short OP_STARMGR = 11000;
@@ -576,6 +580,10 @@ public class OperationType {
     @IgnorableOnReplayFailed
     public static final short OP_DELETE_REPLICATION_JOB = 13501;
 
+    // has delete
+    @IgnorableOnReplayFailed
+    public static final short OP_SET_HAS_DELETE = 13506;
+
     @IgnorableOnReplayFailed
     public static final short OP_DISABLE_TABLE_RECOVERY = 13510;
     @IgnorableOnReplayFailed
@@ -583,6 +591,26 @@ public class OperationType {
 
     @IgnorableOnReplayFailed
     public static final short OP_ADD_KEY = 13512;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_CLUSTER_SNAPSHOT_LOG = 13513;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_ADD_SQL_QUERY_BLACK_LIST = 13520;
+    @IgnorableOnReplayFailed
+    public static final short OP_DELETE_SQL_QUERY_BLACK_LIST = 13521;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_CREATE_GROUP_PROVIDER = 13530;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_GROUP_PROVIDER = 13531;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_CREATE_SPM_BASELINE_LOG = 13540;
+
+    @IgnorableOnReplayFailed
+    public static final short OP_DROP_SPM_BASELINE_LOG = 13541;
 
     /**
      * NOTICE: OperationType cannot use a value exceeding 20000, please follow the above sequence number
@@ -593,6 +621,11 @@ public class OperationType {
     public static final short OP_CREATE_WAREHOUSE = 20101;
     public static final short OP_DROP_WAREHOUSE = 20102;
     public static final short OP_ALTER_WAREHOUSE = 20103;
+
+    // security integration and role mapping
+    public static final short OP_CREATE_SECURITY_INTEGRATION = 20269;
+    public static final short OP_DROP_SECURITY_INTEGRATION = 20271;
+    public static final short OP_ALTER_SECURITY_INTEGRATION = 20272;
 
     public static final ImmutableSet<Short> IGNORABLE_OPERATIONS = buildIgnorableOperations();
 
@@ -613,7 +646,12 @@ public class OperationType {
             }
 
             if (opType > OperationType.OP_TYPE_EOF &&
-                    opType != OP_CREATE_WAREHOUSE && opType != OP_DROP_WAREHOUSE && opType != OP_ALTER_WAREHOUSE) {
+                    opType != OP_CREATE_WAREHOUSE &&
+                    opType != OP_DROP_WAREHOUSE &&
+                    opType != OP_ALTER_WAREHOUSE &&
+                    opType != OP_CREATE_SECURITY_INTEGRATION &&
+                    opType != OP_DROP_SECURITY_INTEGRATION &&
+                    opType != OP_ALTER_SECURITY_INTEGRATION) {
                 LOG.fatal("OperationType cannot use a value exceeding 20000, " +
                         "and an error will be reported if it exceeds : {} = {}", field.getName(), opType);
                 System.exit(-1);

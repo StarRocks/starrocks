@@ -4,6 +4,38 @@ displayed_sidebar: docs
 
 # StarRocks version 3.1
 
+## 3.1.17
+
+发布日期：2025 年 01 月 03 日
+
+### 问题修复
+
+修复了如下问题：
+
+- 跨集群数据迁移工具在迁移数据时，由于未考虑目标集群分区删除的情况，在同步数据并做 Commit 时导致 Follower FE Crash。[#54061](https://github.com/StarRocks/starrocks/pull/54061)
+- 使用跨集群数据迁移工具同步有过 DELETE 操作的表时，目标集群的 BE 可能会 Crash。[#54081](https://github.com/StarRocks/starrocks/pull/54081)
+- BDBJE 的 Handshake 存在 Bug，导致 Leader FE 和 Follower FE 链接重连的时候会被 Leader FE 拒绝，从而导致 Follwer FE 节点退出。[#50412](https://github.com/StarRocks/starrocks/pull/50412)
+- FE 中内存统计有重复统计的情况，会导致消耗大量内存。[#53055](https://github.com/StarRocks/starrocks/pull/53055)
+- 异步物化视图刷新时的任务状态在多个 FE 之间不一致，导致查询时的状态不准确。[#54236](https://github.com/StarRocks/starrocks/pull/54236)
+
+## 3.1.16
+
+发布日期：2024 年 12 月 16 日
+
+### 功能优化
+
+- 优化了表相关统计信息。[#50316](https://github.com/StarRocks/starrocks/pull/50316)
+
+### 问题修复
+
+修复了如下问题：
+
+- 由于系统对磁盘写满时的错误码判断不够细化，导致 BE 认为磁盘有错误而误删数据。[#51411](https://github.com/StarRocks/starrocks/pull/51411)
+- 通过 HTTP 1.0 提交的 Stream Load 失败。[#53010](https://github.com/StarRocks/starrocks/pull/53010) [#53008](https://github.com/StarRocks/starrocks/pull/53008)
+- Routine Load 因事务过期而导致任务取消（当前仅有数据库或表不存在任务才会被取消，事务过期时任务会被暂停）。[#50334](https://github.com/StarRocks/starrocks/pull/50334)
+- 使用 EXPORT 命令通过  Broker 方式导出数据到 `file://` 时，系统会报文件 RENAME 错误进而导致导出失败。[#52544](https://github.com/StarRocks/starrocks/pull/52544)
+- Equal-join 中，如果 JOIN 的条件是基于一个低基数列的表达式，系统会错误地下推一个 Runtime Filter 谓词，导致 BE Crash。[#50690](https://github.com/StarRocks/starrocks/pull/50690)
+
 ## 3.1.15
 
 发布日期：2024 年 9 月 4 日

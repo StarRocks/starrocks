@@ -412,7 +412,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         }
 
         WarehouseManager warehouseManager = GlobalStateMgr.getCurrentState().getWarehouseMgr();
-        ConnectContext ctx = Util.getOrCreateConnectContext();
+        ConnectContext ctx = Util.getOrCreateInnerContext();
         ctx.setCurrentWarehouse(warehouseManager.getBackgroundWarehouse().getName());
 
         Locker locker = new Locker();
@@ -457,10 +457,7 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
         long start = System.currentTimeMillis();
         for (Long dbId : GlobalStateMgr.getCurrentState().getLocalMetastore().getDbIds()) {
             Database db = GlobalStateMgr.getCurrentState().getLocalMetastore().getDb(dbId);
-            if (db == null) {
-                continue;
-            }
-            if (db.isSystemDatabase() || db.isStatisticsDatabase()) {
+            if (db == null || db.isSystemDatabase()) {
                 continue;
             }
 
@@ -468,11 +465,14 @@ public class DynamicPartitionScheduler extends FrontendDaemon {
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(dbId)) {
+                    // register dynamic partition table
                     if (DynamicPartitionUtil.isDynamicPartitionTable(table)) {
                         registerDynamicPartitionTable(db.getId(), table.getId());
                         dynamicPartitionTables.computeIfAbsent(db.getFullName(), k -> new ArrayList<>())
                                     .add(table.getName());
-                    } else if (DynamicPartitionUtil.isTTLPartitionTable(table)) {
+                    }
+                    // register ttl partition table
+                    if (DynamicPartitionUtil.isTTLPartitionTable(table)) {
                         // Table(MV) with dynamic partition enabled should not specify partition_ttl_number(MV) or
                         // partition_live_number property.
                         registerTtlPartitionTable(db.getId(), table.getId());

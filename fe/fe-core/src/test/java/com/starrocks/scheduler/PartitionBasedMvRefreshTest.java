@@ -24,34 +24,29 @@ import com.starrocks.catalog.PrimitiveType;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.common.DmlException;
+import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
 import com.starrocks.sql.plan.ConnectorPlanTestBase;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
 import org.apache.commons.lang3.StringUtils;
-import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
-import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.starrocks.sql.plan.PlanTestBase.cleanupEphemeralMVs;
-
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-public class PartitionBasedMvRefreshTest extends MVRefreshTestBase {
+public class PartitionBasedMvRefreshTest extends MVTestBase {
 
     @BeforeClass
     public static void beforeClass() throws Exception {
-        MVRefreshTestBase.beforeClass();
+        MVTestBase.beforeClass();
         ConnectorPlanTestBase.mockAllCatalogs(connectContext, temp.newFolder().toURI().toString());
         starRocksAssert
                     .withTable("CREATE TABLE `t1` (\n" +
@@ -110,21 +105,6 @@ public class PartitionBasedMvRefreshTest extends MVRefreshTestBase {
                     "    ('2020-10-12','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889),\n" +
                     "    ('2020-10-21','2020-10-24 12:12:12','k3','k4',0,0,2,3,4,5,1.1,1.12,2.889),\n" +
                     "    ('2020-10-22','2020-10-25 12:12:12','k3','k4',0,1,2,3,4,5,1.1,1.12,2.889)");
-    }
-
-    @AfterClass
-    public static void afterClass() throws Exception {
-        cleanupEphemeralMVs(starRocksAssert, startSuiteTime);
-    }
-
-    @Before
-    public void before() {
-        startCaseTime = Instant.now().getEpochSecond();
-    }
-
-    @After
-    public void after() throws Exception {
-        cleanupEphemeralMVs(starRocksAssert, startCaseTime);
     }
 
     protected void assertPlanContains(ExecPlan execPlan, String... explain) throws Exception {
