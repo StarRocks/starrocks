@@ -58,7 +58,7 @@ Status StarCacheWrapper::init(const CacheOptions& options) {
     return to_status(_cache->init(opt));
 }
 
-Status StarCacheWrapper::write_buffer(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) {
+Status StarCacheWrapper::write(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) {
     if (!options) {
         return to_status(_cache->set(key, buffer.const_raw_buf(), nullptr));
     }
@@ -92,29 +92,8 @@ Status StarCacheWrapper::write_buffer(const std::string& key, const IOBuffer& bu
     return st;
 }
 
-Status StarCacheWrapper::write_object(const std::string& key, const void* ptr, size_t size,
-                                      std::function<void()> deleter, DataCacheHandle* handle,
-                                      WriteCacheOptions* options) {
-    if (!options) {
-        return to_status(_cache->set_object(key, ptr, size, deleter, handle, nullptr));
-    }
-    starcache::WriteOptions opts;
-    opts.ttl_seconds = options->ttl_seconds;
-    opts.overwrite = options->overwrite;
-    opts.evict_probability = options->evict_probability;
-    Status st;
-    {
-        SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(nullptr);
-        st = to_status(_cache->set_object(key, ptr, size, deleter, handle, &opts));
-    }
-    if (st.ok()) {
-        options->stats.write_mem_bytes = size;
-    }
-    return st;
-}
-
-Status StarCacheWrapper::read_buffer(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
-                                     ReadCacheOptions* options) {
+Status StarCacheWrapper::read(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
+                              ReadCacheOptions* options) {
     if (!options) {
         return to_status(_cache->read(key, off, size, &buffer->raw_buf(), nullptr));
     }
@@ -126,18 +105,6 @@ Status StarCacheWrapper::read_buffer(const std::string& key, size_t off, size_t 
     if (st.ok()) {
         options->stats.read_mem_bytes = opts.stats.read_mem_bytes;
         options->stats.read_disk_bytes = opts.stats.read_disk_bytes;
-    }
-    return st;
-}
-
-Status StarCacheWrapper::read_object(const std::string& key, DataCacheHandle* handle, ReadCacheOptions* options) {
-    if (!options) {
-        return to_status(_cache->get_object(key, handle, nullptr));
-    }
-    starcache::ReadOptions opts;
-    auto st = to_status(_cache->get_object(key, handle, &opts));
-    if (st.ok()) {
-        options->stats.read_mem_bytes = opts.stats.read_mem_bytes;
     }
     return st;
 }
