@@ -50,11 +50,10 @@ Status SplitLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_t sink_drive
     if (cur_chunk->is_empty()) return Status::OK();
     size_t original_chunk_size = cur_chunk->num_rows();
     size_t cur_chunk_size = original_chunk_size;
-    size_t new_chunk_size;
     for (size_t i = _split_expr_ctxs.size() - 1; i > 0; i--) {
         Filter chunk_filter(cur_chunk->num_rows(), 1);
         auto& expr_ctx = _split_expr_ctxs[i];
-        ASSIGN_OR_RETURN(new_chunk_size,
+        ASSIGN_OR_RETURN(size_t new_chunk_size,
                          ExecNode::eval_conjuncts_into_filter({expr_ctx}, cur_chunk.get(), &chunk_filter));
         // all false for expr_ctx
         if (new_chunk_size == 0) {
@@ -86,12 +85,13 @@ Status SplitLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_t sink_drive
         auto newChunk = cur_chunk->clone_empty_with_slot(new_chunk_size);
         newChunk->append_selective(*cur_chunk, new_chunk_row_indexes.data(), 0, new_chunk_size);
 
-        std::unique_lock l(_mutex);
-        DCHECK(newChunk->num_rows());
-        _current_accumulated_row_size += newChunk->num_rows();
-        _current_memory_usage += newChunk->memory_usage();
-        _buffer[i].emplace(std::move(newChunk));
-        l.unlock();
+        {
+            std::unique_lock l(_mutex);
+            DCHECK(newChunk->num_rows());
+            _current_accumulated_row_size += newChunk->num_rows();
+            _current_memory_usage += newChunk->memory_usage();
+            _buffer[i].emplace(std::move(newChunk));
+        }
 
         // cur_chunk =  cur_chunk - newChunk
         auto temp_chunk = cur_chunk->clone_empty_with_slot(cur_chunk_size - new_chunk_size);
@@ -102,11 +102,13 @@ Status SplitLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_t sink_drive
         DCHECK_EQ(cur_chunk_size + new_chunk_size, original_chunk_size);
     }
 
-    std::unique_lock l(_mutex);
-    DCHECK(cur_chunk->num_rows());
-    _current_accumulated_row_size += cur_chunk_size;
-    _current_memory_usage += cur_chunk->memory_usage();
-    _buffer[0].emplace(std::move(cur_chunk));
+    {
+        std::unique_lock l(_mutex);
+        DCHECK(cur_chunk->num_rows());
+        _current_accumulated_row_size += cur_chunk_size;
+        _current_memory_usage += cur_chunk->memory_usage();
+        _buffer[0].emplace(std::move(cur_chunk));
+    }
     return Status::OK();
 }
 
@@ -118,8 +120,8 @@ StatusOr<ChunkPtr> SplitLocalExchanger::pull_chunk(RuntimeState* state, int32_t 
         return nullptr;
     }
     ChunkPtr chunk = _buffer[consuemr_index].front();
-    if (chunk->is_empty()) return chunk;
     _buffer[consuemr_index].pop();
+    if (chunk->is_empty()) return chunk;
     DCHECK_GE(_current_accumulated_row_size, chunk->num_rows());
     _current_accumulated_row_size -= chunk->num_rows();
     _current_memory_usage -= chunk->memory_usage();
