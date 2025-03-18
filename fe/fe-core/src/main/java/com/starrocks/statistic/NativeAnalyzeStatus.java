@@ -15,6 +15,7 @@
 
 package com.starrocks.statistic;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.catalog.Database;
@@ -71,6 +72,10 @@ public class NativeAnalyzeStatus implements AnalyzeStatus, Writable {
 
     @SerializedName("progress")
     private long progress;
+
+    @VisibleForTesting
+    protected NativeAnalyzeStatus() {
+    }
 
     public NativeAnalyzeStatus(long id, long dbId, long tableId, List<String> columns,
                                StatsConstants.AnalyzeType type,

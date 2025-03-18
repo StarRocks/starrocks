@@ -14,6 +14,7 @@
 
 package com.starrocks.statistic.sample;
 
+import com.google.common.base.Preconditions;
 import com.starrocks.catalog.Type;
 
 import java.text.MessageFormat;
@@ -82,6 +83,7 @@ public class PrimitiveTypeColumnStats extends ColumnStats {
     // sample_row * count_distinct / ( sample_row - once_count + once_count * sample_row / total_row)
     @Override
     public String getDistinctCount(double rowSampleRatio) {
+        Preconditions.checkArgument(rowSampleRatio <= 1.0, "invalid sample ratio: " + rowSampleRatio);
         String sampleRows = "SUM(t1.count)";
         String onceCount = "SUM(IF(t1.count = 1, 1, 0))";
         String countDistinct = "COUNT(1)";
