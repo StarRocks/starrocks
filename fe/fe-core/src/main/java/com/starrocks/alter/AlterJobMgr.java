@@ -224,9 +224,6 @@ public class AlterJobMgr {
             List<BaseTableInfo> baseTableInfos =
                     Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(mvQueryStatement, !isReplay));
             materializedView.setBaseTableInfos(baseTableInfos);
-            if (!noValidation) {
-                materializedView.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
-            }
             materializedView.onReload();
             materializedView.setActive();
         } else if (AlterMaterializedViewStatusClause.INACTIVE.equalsIgnoreCase(status)) {
