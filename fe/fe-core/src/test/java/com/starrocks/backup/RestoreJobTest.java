@@ -215,13 +215,10 @@ public class RestoreJobTest {
     public void testModifyInvertedIndex() {
         expectedRestoreTbl = (OlapTable) db.getTable(CatalogMocker.TEST_TBL4_ID);
 
-        OlapTable localTbl = new OlapTable(expectedRestoreTbl.getId(), expectedRestoreTbl.getName(),
-                expectedRestoreTbl.getBaseSchema(), KeysType.DUP_KEYS, expectedRestoreTbl.getPartitionInfo(),
-                expectedRestoreTbl.getDefaultDistributionInfo());
-
         job = new RestoreJob(label, "2018-01-01 01:01:01", db.getId(), db.getFullName(),
                 new BackupJobInfo(), false, 3, 100000,
                 globalStateMgr, repo.getId(), backupMeta, new MvRestoreContext());
+        job.addRestoredTable(expectedRestoreTbl);
 
         new MockUp<LocalMetastore>() {
             @Mock
@@ -231,6 +228,7 @@ public class RestoreJobTest {
         };
         job.setState(RestoreJob.RestoreJobState.DOWNLOAD);
         job.replayRun();
+        job.cancelInternal(true);
     }
 
     @Test

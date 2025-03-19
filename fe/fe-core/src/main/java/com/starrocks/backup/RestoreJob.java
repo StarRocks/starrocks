@@ -1756,6 +1756,11 @@ public class RestoreJob extends AbstractJob {
         return jobInfo.getInfo();
     }
 
+    // for UT
+    protected void addRestoredTable(OlapTable table) {
+        this.restoredTbls.add(table);
+    }
+
     @Override
     public boolean isDone() {
         if (state == RestoreJobState.FINISHED || state == RestoreJobState.CANCELLED) {
