@@ -659,4 +659,121 @@ PARALLEL_TEST(BinaryColumnTest, test_reference_memory_usage) {
     ASSERT_EQ(0, column->Column::reference_memory_usage());
 }
 
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_append_with_type_conversion) {
+    // Create all possible column type combinations
+    // for testing append operation with type conversion
+    std::array<ColumnPtr, 2> src_columns = {
+            BinaryColumn::create(),     // uint32_t
+            LargeBinaryColumn::create() // uint64_t
+    };
+
+    std::array<ColumnPtr, 2> dest_columns = {
+            BinaryColumn::create(),     // uint32_t
+            LargeBinaryColumn::create() // uint64_t
+    };
+
+    const std::string src_data = "source_data";
+    const std::string dest_data = "dest_data";
+
+    // Iterate through all possible source and destination column type combinations
+    for (size_t i = 0; i < src_columns.size(); ++i) {
+        for (size_t j = 0; j < dest_columns.size(); ++j) {
+            src_columns[i]->reset_column();
+            dest_columns[j]->reset_column();
+
+            src_columns[i]->append_datum(Slice(src_data));
+            dest_columns[j]->append_datum(Slice(dest_data));
+
+            // append operation should not throw any exception
+            ASSERT_NO_FATAL_FAILURE(dest_columns[j]->append(*src_columns[i], 0, 1));
+
+            ASSERT_EQ(2, dest_columns[j]->size());
+            ASSERT_EQ(dest_data, dest_columns[j]->get(0).get_slice().to_string());
+            ASSERT_EQ(src_data, dest_columns[j]->get(1).get_slice().to_string());
+        }
+    }
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_append_selective_with_type_conversion) {
+    // Create all possible column type combinations
+    std::array<ColumnPtr, 2> src_columns = {
+            BinaryColumn::create(),     // uint32_t
+            LargeBinaryColumn::create() // uint64_t
+    };
+
+    std::array<ColumnPtr, 2> dest_columns = {
+            BinaryColumn::create(),     // uint32_t
+            LargeBinaryColumn::create() // uint64_t
+    };
+
+    // Prepare test data
+    for (auto& col : src_columns) {
+        col->append_datum(Slice("value1"));
+        col->append_datum(Slice("value2"));
+        col->append_datum(Slice("value3"));
+    }
+
+    // Prepare selection indexes
+    uint32_t indexes[] = {0, 2}; // Select "value1" and "value3"
+
+    // Test all type combinations
+    for (size_t i = 0; i < src_columns.size(); ++i) {
+        for (size_t j = 0; j < dest_columns.size(); ++j) {
+            // Reset destination column
+            dest_columns[j]->reset_column();
+            dest_columns[j]->append_datum(Slice("dest_value"));
+
+            // Should not throw any exception
+            ASSERT_NO_FATAL_FAILURE(dest_columns[j]->append_selective(*src_columns[i], indexes, 0, 2));
+
+            // Verify results
+            ASSERT_EQ(3, dest_columns[j]->size());
+            ASSERT_EQ("dest_value", dest_columns[j]->get(0).get_slice().to_string());
+            ASSERT_EQ("value1", dest_columns[j]->get(1).get_slice().to_string());
+            ASSERT_EQ("value3", dest_columns[j]->get(2).get_slice().to_string());
+        }
+    }
+}
+
+// NOLINTNEXTLINE
+PARALLEL_TEST(BinaryColumnTest, test_append_value_multiple_times_with_type_conversion) {
+    // Create all possible column type combinations
+    std::array<ColumnPtr, 2> src_columns = {
+            BinaryColumn::create(),     // uint32_t
+            LargeBinaryColumn::create() // uint64_t
+    };
+
+    std::array<ColumnPtr, 2> dest_columns = {
+            BinaryColumn::create(),     // uint32_t
+            LargeBinaryColumn::create() // uint64_t
+    };
+
+    // Prepare test data
+    for (auto& col : src_columns) {
+        col->append_datum(Slice("source_value"));
+        col->append_datum(Slice("not_used_value"));
+    }
+
+    // Test all type combinations
+    for (size_t i = 0; i < src_columns.size(); ++i) {
+        for (size_t j = 0; j < dest_columns.size(); ++j) {
+            // Reset destination column
+            dest_columns[j]->reset_column();
+            dest_columns[j]->append_datum(Slice("dest_value"));
+
+            // Should not throw any exception
+            ASSERT_NO_FATAL_FAILURE(dest_columns[j]->append_value_multiple_times(*src_columns[i], 0, 3));
+
+            // Verify results
+            ASSERT_EQ(4, dest_columns[j]->size());
+            ASSERT_EQ("dest_value", dest_columns[j]->get(0).get_slice().to_string());
+            ASSERT_EQ("source_value", dest_columns[j]->get(1).get_slice().to_string());
+            ASSERT_EQ("source_value", dest_columns[j]->get(2).get_slice().to_string());
+            ASSERT_EQ("source_value", dest_columns[j]->get(3).get_slice().to_string());
+        }
+    }
+}
+
 } // namespace starrocks
