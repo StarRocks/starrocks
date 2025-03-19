@@ -261,11 +261,13 @@ public enum ErrorCode {
             "Access denied; you need (at least one of) the %s privilege(s) on %s%s for this operation."),
     ERR_SECURE_TRANSPORT_REQUIRED(5205, new byte[] {'H', 'Y', '0', '0', '0'},
             "Connections using insecure transport are prohibited"),
-    ERR_AUTHENTICATION_LOCK(5206, new byte[] {'2', '8', '0', '0', '0'},
+    ERR_GROUP_ACCESS_DENY(5206, new byte[] {'4', '2', '0', '0', '0'},
+            "Access denied; User %s's group[%s] is not in the group_allowed_login_list"),
+    ERR_AUTHENTICATION_LOCK(5291, new byte[] {'2', '8', '0', '0', '0'},
             "Access denied for user %s. Account is locked, please contact your administrator."),
-    ERR_AUTHENTICATION_PASSWORD_EXPIRED(5207, new byte[] {'2', '8', '0', '0', '0'},
+    ERR_AUTHENTICATION_PASSWORD_EXPIRED(5292, new byte[] {'2', '8', '0', '0', '0'},
             "Your password has expired. Please change your password," +
-                    " otherwise you will not be able to perform other operations."),
+            " otherwise you will not be able to perform other operations."),
 
     /**
      * 5300 - 5399: Lock and Transaction
