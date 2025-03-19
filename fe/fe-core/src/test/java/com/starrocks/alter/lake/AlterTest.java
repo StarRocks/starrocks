@@ -55,7 +55,7 @@ public class AlterTest {
 
     @After
     public void after() throws Exception {
-        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(DB_NAME, true);
+        GlobalStateMgr.getCurrentState().getLocalMetastore().dropDb(connectContext, DB_NAME, true);
     }
 
     private static LakeTable createTable(ConnectContext connectContext, String sql) throws Exception {

@@ -18,7 +18,6 @@ package com.starrocks.authorization;
 import com.google.gson.annotations.SerializedName;
 import com.starrocks.persist.gson.GsonPostProcessable;
 import com.starrocks.persist.gson.GsonUtils;
-import com.starrocks.server.GlobalStateMgr;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -246,14 +245,14 @@ public class PrivilegeCollectionV2 implements GsonPostProcessable {
         return false; // cannot find all or some of the object in collection
     }
 
-    public void removeInvalidObject(GlobalStateMgr globalStateMgr) {
+    public void removeInvalidObject() {
         Iterator<Map.Entry<ObjectType, List<PrivilegeEntry>>> listIter = typeToPrivilegeEntryList.entrySet().iterator();
         while (listIter.hasNext()) {
             List<PrivilegeEntry> list = listIter.next().getValue();
             Iterator<PrivilegeEntry> entryIterator = list.iterator();
             while (entryIterator.hasNext()) {
                 PrivilegeEntry entry = entryIterator.next();
-                if (entry.object != null && !entry.object.isFuzzyMatching() && !entry.object.validate(globalStateMgr)) {
+                if (entry.object != null && !entry.object.isFuzzyMatching() && !entry.object.validate()) {
                     String entryStr = GsonUtils.GSON.toJson(entry);
                     LOG.info("find invalid object, will remove the entry now: {}", entryStr);
                     entryIterator.remove();

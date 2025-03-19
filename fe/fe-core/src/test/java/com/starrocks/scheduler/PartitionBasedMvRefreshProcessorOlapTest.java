@@ -611,7 +611,8 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
                 Map<Long, TableSnapshotInfo> olapTables = Maps.newHashMap();
                 List<BaseTableInfo> baseTableInfos = materializedView.getBaseTableInfos();
                 for (BaseTableInfo baseTableInfo : baseTableInfos) {
-                    Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTableChecked(baseTableInfo);
+                    Table table = GlobalStateMgr.getCurrentState().getMetadataMgr()
+                            .getTableChecked(new ConnectContext(), baseTableInfo);
                     if (!table.isOlapTable()) {
                         continue;
                     }
@@ -1771,6 +1772,7 @@ public class PartitionBasedMvRefreshProcessorOlapTest extends MVTestBase {
         Assert.assertEquals(debugOptions.getMaxRefreshMaterializedViewRetryNum(), 3);
         Assert.assertEquals(debugOptions.isEnableNormalizePredicateAfterMVRewrite(), false);
     }
+
     @Test
     public void testMVPartitionMappingWithManyToMany() {
         starRocksAssert.withTable(new MTable("mock_tbl", "k2",

@@ -1750,7 +1750,7 @@ public class ExpressionAnalyzer {
             }
 
             Table table = GlobalStateMgr.getCurrentState().getMetadataMgr().getTable(
-                    dictionary.getCatalogName(), dictionary.getDbName(), dictionary.getQueryableObject());
+                    session, dictionary.getCatalogName(), dictionary.getDbName(), dictionary.getQueryableObject());
             if (table == null) {
                 throw new SemanticException("dict table %s is not found", table.getName());
             }

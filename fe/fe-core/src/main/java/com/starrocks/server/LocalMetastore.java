@@ -434,7 +434,7 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     @Override
-    public void dropDb(String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
+    public void dropDb(ConnectContext context, String dbName, boolean isForceDrop) throws DdlException, MetaNotFoundException {
         // 1. check if database exists
         Database db;
         if (!tryLock(false)) {
@@ -2404,6 +2404,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     @Override
+    public Database getDb(ConnectContext context, String name) {
+        return getDb(name);
+    }
+
     public Database getDb(String name) {
         if (name == null) {
             return null;
@@ -2458,8 +2462,8 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     @Override
-    public boolean tableExists(String dbName, String tblName) {
-        Database database = getDb(dbName);
+    public boolean tableExists(ConnectContext context, String dbName, String tblName) {
+        Database database = getDb(context, dbName);
         if (database == null) {
             return false;
         }
@@ -2467,6 +2471,10 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     @Override
+    public Table getTable(ConnectContext context, String dbName, String tblName) {
+        return getTable(dbName, tblName);
+    }
+
     public Table getTable(String dbName, String tblName) {
         Database database = getDb(dbName);
         if (database == null) {
@@ -2492,13 +2500,19 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
         }
     }
 
-    @Override
-    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String indexName) {
+    /**
+     * Get Table descriptor and materialized index for the materialized view index specific by `dbName`.`tblName`
+     *
+     * @param dbName  - the string represents the database name
+     * @param tblName - the string represents the table name
+     * @return a Table instance
+     */
+    public Pair<Table, MaterializedIndexMeta> getMaterializedViewIndex(String dbName, String tblName) {
         Database database = getDb(dbName);
         if (database == null) {
             return null;
         }
-        return database.getMaterializedViewIndex(indexName);
+        return database.getMaterializedViewIndex(tblName);
     }
 
     public Table getTableIncludeRecycleBin(Database db, long tableId) {
@@ -2568,12 +2582,12 @@ public class LocalMetastore implements ConnectorMetadata, MVRepairHandler, Memor
     }
 
     @Override
-    public List<String> listDbNames() {
+    public List<String> listDbNames(ConnectContext context) {
         return Lists.newArrayList(fullNameToDb.keySet());
     }
 
     @Override
-    public List<String> listTableNames(String dbName) {
+    public List<String> listTableNames(ConnectContext context, String dbName) {
         Database database = getDb(dbName);
         if (database != null) {
             return database.getTables().stream()

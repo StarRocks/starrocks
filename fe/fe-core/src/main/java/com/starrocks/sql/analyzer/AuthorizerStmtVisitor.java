@@ -1679,7 +1679,7 @@ public class AuthorizerStmtVisitor implements AstVisitor<Void, ConnectContext> {
     public Void visitShowCreateTableStatement(ShowCreateTableStmt statement, ConnectContext context) {
         try {
             BasicTable basicTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getBasicTable(
-                    statement.getTbl().getCatalog(), statement.getTbl().getDb(), statement.getTbl().getTbl());
+                    context, statement.getTbl().getCatalog(), statement.getTbl().getDb(), statement.getTbl().getTbl());
             Authorizer.checkAnyActionOnTableLikeObject(context,
                     statement.getDb(), basicTable);
         } catch (AccessDeniedException e) {
