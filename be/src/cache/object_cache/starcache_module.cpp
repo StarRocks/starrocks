@@ -14,10 +14,15 @@
 
 #include "cache/object_cache/starcache_module.h"
 
+#include "cache/object_cache/cache_types.h"
 #include "cache/status.h"
 #include "common/logging.h"
 
 namespace starrocks {
+
+StarCacheModule::StarCacheModule(std::shared_ptr<starcache::StarCache> star_cache) : _cache(std::move(star_cache)) {
+    _initialized.store(true, std::memory_order_release);
+}
 
 Status StarCacheModule::insert(const std::string& key, void* value, size_t size, size_t charge,
                                ObjectCacheDeleter deleter, ObjectCacheHandlePtr* handle,

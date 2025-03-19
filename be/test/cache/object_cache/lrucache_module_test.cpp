@@ -37,7 +37,7 @@ protected:
     }
 
     std::shared_ptr<LRUCacheModule> _cache;
-    ObjectCacheOptions _cache_opt{.capacity = 16384, .module = ObjectCacheModuleType::LRUCACHE};
+    ObjectCacheOptions _cache_opt{.capacity = 16384};
     ObjectCacheWriteOptions _write_opt;
     ObjectCacheReadOptions _read_opt;
 
