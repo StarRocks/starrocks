@@ -14,12 +14,15 @@
 
 package com.starrocks.sql.plan;
 
+import com.google.common.collect.ImmutableList;
 import com.starrocks.planner.TableFunctionNode;
 import com.starrocks.sql.analyzer.SemanticException;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 public class TableFunctionTest extends PlanTestBase {
     @Test
@@ -357,5 +360,67 @@ public class TableFunctionTest extends PlanTestBase {
                 .findFirst();
         Assert.assertTrue(optTableFuncNode.isPresent());
         Assert.assertEquals(optTableFuncNode.get().isFnResultRequired(), true);
+    }
+
+    @Test
+    public void testFunctionTestMissingColumnStatistics() throws Exception {
+        String sql = "WITH cte AS (\n" +
+                "    SELECT\n" +
+                "        1 AS id,\n" +
+                "        parse_json('{\n" +
+                "            \"cascader1\": [\"option1\", \"option2\"],\n" +
+                "            \"cascader1label\": [\"label1\", \"label2\"],\n" +
+                "            \"checkbox1\": [1, 2, 3],\n" +
+                "            \"checkbox1label\": [\"option1\", \"option2\", \"option3\"],\n" +
+                "            \"image_select1\": 2,\n" +
+                "            \"image_select1label\": \"option2\",\n" +
+                "            \"matrix_select1\": {\"1\": \"option1\", \"2\": \"option2\", \"3\": \"option3\"},\n" +
+                "            \"radio1\": 2,\n" +
+                "            \"radio1label\": \"option2\",\n" +
+                "            \"rate1\": 4,\n" +
+                "            \"select1\": 1,\n" +
+                "            \"select1label\": \"option1\"\n" +
+                "        }') AS original_data\n" +
+                "),\n" +
+                "lateral_1 AS (\n" +
+                "    SELECT\n" +
+                "        id,\n" +
+                "        jbody.`key` AS ans_k,\n" +
+                "        jbody.`value` AS ans_v\n" +
+                "    FROM\n" +
+                "        cte,\n" +
+                "        LATERAL json_each(original_data) AS jbody\n" +
+                "),\n" +
+                "lateral_2 AS (\n" +
+                "    SELECT\n" +
+                "        id,\n" +
+                "        COALESCE(ans.ans_k, 0) AS q_id,\n" +
+                "        ans.ans_v AS answers,\n" +
+                "        jbody.`key` AS sub_q_id,\n" +
+                "        jbody.`value` AS sub_q_answer\n" +
+                "    FROM\n" +
+                "        lateral_1 AS ans,\n" +
+                "        LATERAL json_each(ans.ans_v) AS jbody\n" +
+                ")\n" +
+                "SELECT\n" +
+                "    get_json_string(parse_json(l2.answers), concat('$.', l2.sub_q_id))\n" +
+                "FROM\n" +
+                "    lateral_2 l2\n" +
+                "LEFT JOIN lateral_1 l1\n" +
+                "ON l2.q_id = l1.id;";
+
+        String plan1 = getFragmentPlan(sql);
+        Assert.assertTrue(plan1, plan1.contains("  4:Project\n" +
+                "  |  <slot 18> : coalesce(11: key, '0')\n" +
+                "  |  <slot 28> : get_json_string(parse_json(CAST(12: value AS VARCHAR)), concat('$.', 15: key))\n" +
+                "  |  \n" +
+                "  3:TableValueFunction"));
+        ExecPlan plan = getExecPlan(sql);
+        List<TableFunctionNode> tableFunctionNodes = plan.getFragments().stream()
+                .flatMap(fragment -> fragment.collectNodes().stream())
+                .filter(planNode -> planNode instanceof TableFunctionNode)
+                .map(planNode -> (TableFunctionNode) planNode)
+                .collect(Collectors.toList());
+        Assert.assertTrue(tableFunctionNodes.get(0).getOuterSlots().containsAll(ImmutableList.of(11, 12)));
     }
 }
