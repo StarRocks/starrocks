@@ -270,7 +270,7 @@ public class AlterMaterializedViewTest {
         currentState.getLocalMetastore().alterMaterializedView(stmt);
         Assert.assertFalse(mv.isActive());
 
-        alterMvSql = "alter materialized view mv_test1 ACTIVE WITH NO_VALIDATION";
+        alterMvSql = "alter materialized view mv_test1 ACTIVE WITH RETAIN_VERSION_MAP";
         stmt = (AlterMaterializedViewStmt) UtFrameUtils.parseStmtWithNewParser(alterMvSql, connectContext);
         currentState.getLocalMetastore().alterMaterializedView(stmt);
         Assert.assertTrue(starRocksAssert.waitRefreshFinished(mv.getId()));

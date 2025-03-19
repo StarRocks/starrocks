@@ -442,7 +442,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
     @Override
     public Void visitAlterMaterializedViewStatusClause(AlterMaterializedViewStatusClause clause, ConnectContext context) {
         String status = clause.getStatus();
-        boolean noValidation = clause.isNoValidation();
+        boolean retainVersionMap = clause.isRetainVersionMap();
         MaterializedView materializedView = (MaterializedView) table;
         String dbName = db.getFullName();
 
@@ -454,10 +454,10 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                 }
 
                 GlobalStateMgr.getCurrentState().getAlterJobMgr().
-                        alterMaterializedViewStatus(materializedView, status, "", false, noValidation);
+                        alterMaterializedViewStatus(materializedView, status, "", false, retainVersionMap);
                 // for manual refresh type, do not refresh
                 if (materializedView.getRefreshScheme().getType() != MaterializedView.RefreshType.MANUAL) {
-                    boolean force = !noValidation;
+                    boolean force = !retainVersionMap;
                     GlobalStateMgr.getCurrentState().getLocalMetastore()
                             .refreshMaterializedView(dbName, materializedView.getName(), force, null,
                                     Constants.TaskRunPriority.NORMAL.value(), true, false);
@@ -470,7 +470,7 @@ public class AlterMVJobExecutor extends AlterJobExecutor {
                                 "user use alter materialized view set status to inactive",
                         materializedView.getName(), materializedView.getId());
                 GlobalStateMgr.getCurrentState().getAlterJobMgr().
-                        alterMaterializedViewStatus(materializedView, status, MANUAL_INACTIVE_MV_REASON, false, noValidation);
+                        alterMaterializedViewStatus(materializedView, status, MANUAL_INACTIVE_MV_REASON, false, retainVersionMap);
             } else {
                 throw new AlterJobException("Unsupported modification materialized view status:" + status);
             }

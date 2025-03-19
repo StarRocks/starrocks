@@ -200,9 +200,9 @@ public class AlterJobMgr {
     }
 
     public void alterMaterializedViewStatus(MaterializedView materializedView, String status, String reason, boolean isReplay,
-                                            boolean noValidation) {
-        LOG.info("process change materialized view {} status to {}, isReplay: {}, noValidation: {}",
-                materializedView.getName(), status, isReplay, noValidation);
+                                            boolean retainVersionMap) {
+        LOG.info("process change materialized view {} status to {}, isReplay: {}, retainVersionMap: {}",
+                materializedView.getName(), status, isReplay, retainVersionMap);
         if (AlterMaterializedViewStatusClause.ACTIVE.equalsIgnoreCase(status)) {
             ConnectContext context = ConnectContext.buildInner();
             context.setGlobalStateMgr(GlobalStateMgr.getCurrentState());
@@ -224,7 +224,7 @@ public class AlterJobMgr {
             List<BaseTableInfo> baseTableInfos =
                     Lists.newArrayList(MaterializedViewAnalyzer.getBaseTableInfos(mvQueryStatement, !isReplay));
             materializedView.setBaseTableInfos(baseTableInfos);
-            if (!noValidation) {
+            if (!retainVersionMap) {
                 materializedView.getRefreshScheme().getAsyncRefreshContext().clearVisibleVersionMap();
             }
             materializedView.onReload();
