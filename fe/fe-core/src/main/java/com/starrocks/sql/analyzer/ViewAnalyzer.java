@@ -16,7 +16,6 @@ package com.starrocks.sql.analyzer;
 
 import com.starrocks.catalog.Column;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.View;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
 import com.starrocks.qe.ConnectContext;
@@ -55,7 +54,7 @@ public class ViewAnalyzer {
             }
             List<Column> viewColumns = analyzeViewColumns(stmt.getQueryStatement().getQueryRelation(), stmt.getColWithComments());
             stmt.setColumns(viewColumns);
-            String viewSql = AstToSQLBuilder.toSQL(stmt.getQueryStatement());
+            String viewSql = AstToSQLBuilder.toSQLWithCredential(stmt.getQueryStatement());
             stmt.setInlineViewDef(viewSql);
             return null;
         }
@@ -72,11 +71,8 @@ public class ViewAnalyzer {
             if (table == null) {
                 throw new SemanticException("Table %s is not found", tableName);
             }
-            if (table.isConnectorView()) {
-                throw new SemanticException("cannot alter connector view");
-            }
 
-            if (!(table instanceof View)) {
+            if (!table.isView()) {
                 throw new SemanticException("The specified table [" + tableName + "] is not a view");
             }
 

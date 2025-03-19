@@ -54,7 +54,9 @@ public class HashJoinImplementationRule extends JoinImplementationRule {
                 joinOperator.getJoinHint(),
                 joinOperator.getLimit(),
                 joinOperator.getPredicate(),
-                joinOperator.getProjection());
+                joinOperator.getProjection(),
+                joinOperator.getSkewColumn(),
+                joinOperator.getSkewValues());
         OptExpression result = OptExpression.create(physicalHashJoin, input.getInputs());
         return Lists.newArrayList(result);
     }

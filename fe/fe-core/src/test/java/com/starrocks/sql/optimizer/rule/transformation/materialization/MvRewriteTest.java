@@ -29,15 +29,13 @@ import com.starrocks.catalog.constraint.UniqueConstraint;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
 import com.starrocks.common.FeConstants;
-import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.qe.ShowResultSet;
 import com.starrocks.schema.MSchema;
 import com.starrocks.schema.MTable;
 import com.starrocks.sql.optimizer.CachingMvPlanContextBuilder;
 import com.starrocks.sql.optimizer.OptExpression;
-import com.starrocks.sql.optimizer.Optimizer;
-import com.starrocks.sql.optimizer.base.ColumnRefFactory;
+import com.starrocks.sql.optimizer.QueryOptimizer;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
 import com.starrocks.sql.optimizer.operator.logical.LogicalOlapScanOperator;
@@ -892,7 +890,7 @@ public class MvRewriteTest extends MVTestBase {
                 "PROPERTIES (\n" +
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
         cluster.runSql("test", "insert into test_table_1 values('2022-07-01', 1, '08:00:00', 'player_id_1', 20.0)");
@@ -1853,12 +1851,10 @@ public class MvRewriteTest extends MVTestBase {
 
             MaterializedView mv = getMv("test", "mv_with_window");
 
-            new MockUp<Optimizer>() {
-
+            new MockUp<QueryOptimizer>() {
                 @Mock
-                public OptExpression optimize(ConnectContext connectContext, OptExpression logicOperatorTree,
-                                              PhysicalPropertySet requiredProperty, ColumnRefSet requiredColumns,
-                                              ColumnRefFactory columnRefFactory) {
+                public OptExpression optimize(OptExpression logicOperatorTree, PhysicalPropertySet requiredProperty,
+                                              ColumnRefSet requiredColumns) {
                     throw new RuntimeException("optimize failed");
                 }
             };
@@ -2135,7 +2131,7 @@ public class MvRewriteTest extends MVTestBase {
      */
     @Test
     public void testCandidateOrdering_ManyDimensions() throws Exception {
-        final int numDimensions = 50;
+        final int numDimensions = connectContext.getSessionVariable().getCboMaterializedViewRewriteRelatedMVsLimit();
         StringBuilder createTableBuilder = new StringBuilder("create table t_many_dimensions ( ");
         Function<Integer, String> columnNameGen = (i) -> "c" + i;
         for (int i = 0; i < numDimensions; i++) {

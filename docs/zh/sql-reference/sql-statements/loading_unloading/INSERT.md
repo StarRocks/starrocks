@@ -162,7 +162,7 @@ INSERT OVERWRITE test WITH LABEL `label1` (c1, c2) SELECT * from test3;
 
 ```Plain
 INSERT INTO insert_wiki_edit
-    SELECT * FROM TABLE(
+    SELECT * FROM FILES(
         "path" = "s3://inserttest/parquet/insert_wiki_edit_append.parquet",
         "format" = "parquet",
         "aws.s3.access_key" = "xxxxxxxxxx",

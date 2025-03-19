@@ -14,11 +14,16 @@
 
 #include "formats/parquet/scalar_column_reader.h"
 
+#include "formats/parquet/column_reader.h"
+#include "formats/parquet/parquet_block_split_bloom_filter.h"
+#include "formats/parquet/predicate_filter_evaluator.h"
 #include "formats/parquet/stored_column_reader_with_index.h"
 #include "formats/parquet/utils.h"
-#include "formats/parquet/zone_map_filter_evaluator.h"
 #include "gutil/casts.h"
 #include "io/shared_buffered_input_stream.h"
+#include "runtime/global_dict/dict_column.h"
+#include "runtime/types.h"
+#include "simd/gather.h"
 #include "simd/simd.h"
 #include "statistics_helper.h"
 
@@ -31,7 +36,7 @@ StatusOr<bool> FixedValueColumnReader::row_group_zone_map_filter(const std::vect
                                                                  const uint64_t rg_first_row,
                                                                  const uint64_t rg_num_rows) const {
     ZoneMapDetail zone_map{_fixed_value, _fixed_value, _fixed_value.is_null()};
-    return ZoneMapEvaluatorUtils::is_satisfy(predicates, zone_map, pred_relation);
+    return !PredicateFilterEvaluatorUtils::zonemap_satisfy(predicates, zone_map, pred_relation);
 }
 
 StatusOr<bool> FixedValueColumnReader::page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
@@ -44,15 +49,15 @@ StatusOr<bool> FixedValueColumnReader::page_index_zone_map_filter(const std::vec
 
     // is_satisfy = true means no filter happened, return false
     // is_satisfy = false means entire row group can be filtered, filter happened, return true
-    return !ZoneMapEvaluatorUtils::is_satisfy(predicates, zone_map, pred_relation);
+    return !PredicateFilterEvaluatorUtils::zonemap_satisfy(predicates, zone_map, pred_relation);
 }
 
 // RawColumnReader
 
 void RawColumnReader::collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
-                                              int64_t* end_offset, ColumnIOType type, bool active) {
+                                              int64_t* end_offset, ColumnIOTypeFlags types, bool active) {
     const auto& column = *get_chunk_metadata();
-    if (type == ColumnIOType::PAGES) {
+    if ((types & ColumnIOType::PAGES) != 0) {
         const tparquet::ColumnMetaData& column_metadata = column.meta_data;
         if (_offset_index_ctx != nullptr && !_offset_index_ctx->page_selected.empty()) {
             // add dict page
@@ -76,7 +81,8 @@ void RawColumnReader::collect_column_io_range(std::vector<io::SharedBufferedInpu
             ranges->emplace_back(r);
             *end_offset = std::max(*end_offset, offset + size);
         }
-    } else if (type == ColumnIOType::PAGE_INDEX) {
+    }
+    if ((types & ColumnIOType::PAGE_INDEX) != 0) {
         // only active column need column index
         if (column.__isset.column_index_offset && active) {
             auto r = io::SharedBufferedInputStream::IORange(column.column_index_offset, column.column_index_length);
@@ -105,7 +111,6 @@ void RawColumnReader::select_offset_index(const SparseRange<uint64_t>& range, co
 
     size_t range_idx = 0;
     Range<uint64_t> r = range[range_idx++];
-
     for (size_t i = 0; i < page_num; i++) {
         int64_t first_row = _offset_index_ctx->offset_index.page_locations[i].first_row_index + rg_first_row;
         int64_t end_row = first_row;
@@ -199,9 +204,10 @@ StatusOr<bool> RawColumnReader::_row_group_zone_map_filter(const std::vector<con
                                                            CompoundNodeType pred_relation,
                                                            const TypeDescriptor& col_type, const uint64_t rg_first_row,
                                                            const uint64_t rg_num_rows) const {
+    bool filtered = false;
     if (!get_chunk_metadata()->meta_data.__isset.statistics || get_column_parquet_field() == nullptr) {
-        // statistics is not existed, select all
-        return true;
+        // statistics is not existed, don't filter
+        return filtered;
     }
 
     bool has_null = true;
@@ -211,14 +217,14 @@ StatusOr<bool> RawColumnReader::_row_group_zone_map_filter(const std::vector<con
         has_null = get_chunk_metadata()->meta_data.statistics.null_count > 0;
         is_all_null = get_chunk_metadata()->meta_data.statistics.null_count == rg_num_rows;
     } else {
-        return true;
+        return filtered;
     }
 
     std::optional<ZoneMapDetail> zone_map_detail = std::nullopt;
 
     // used to hold min/max slice values
-    const ColumnPtr min_column = ColumnHelper::create_column(col_type, true);
-    const ColumnPtr max_column = ColumnHelper::create_column(col_type, true);
+    const MutableColumnPtr min_column = ColumnHelper::create_column(col_type, true);
+    const MutableColumnPtr max_column = ColumnHelper::create_column(col_type, true);
     if (is_all_null) {
         // if the entire column's value is null, the min/max value not existed
         zone_map_detail = ZoneMapDetail{Datum{}, Datum{}, true};
@@ -242,11 +248,11 @@ StatusOr<bool> RawColumnReader::_row_group_zone_map_filter(const std::vector<con
     }
 
     if (!zone_map_detail.has_value()) {
-        // ZoneMapDetail not set, means select all
-        return true;
+        // ZoneMapDetail not set, means select all, dont filter
+        return filtered;
     }
 
-    return ZoneMapEvaluatorUtils::is_satisfy(predicates, zone_map_detail.value(), pred_relation);
+    return !PredicateFilterEvaluatorUtils::zonemap_satisfy(predicates, zone_map_detail.value(), pred_relation);
 }
 
 StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<const ColumnPredicate*>& predicates,
@@ -254,7 +260,6 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
                                                             CompoundNodeType pred_relation,
                                                             const TypeDescriptor& col_type, const uint64_t rg_first_row,
                                                             const uint64_t rg_num_rows) {
-    DCHECK(row_ranges->empty());
     const tparquet::ColumnChunk* chunk_meta = get_chunk_metadata();
     if (!chunk_meta->__isset.column_index_offset || !chunk_meta->__isset.offset_index_offset ||
         !chunk_meta->__isset.meta_data) {
@@ -279,8 +284,8 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
     const size_t page_num = column_index.min_values.size();
     const std::vector<bool> null_pages = column_index.null_pages;
 
-    ColumnPtr min_column = ColumnHelper::create_column(col_type, true);
-    ColumnPtr max_column = ColumnHelper::create_column(col_type, true);
+    MutableColumnPtr min_column = ColumnHelper::create_column(col_type, true);
+    MutableColumnPtr max_column = ColumnHelper::create_column(col_type, true);
     // deal with min_values
     auto st = StatisticsHelper::decode_value_into_column(min_column, column_index.min_values, null_pages, col_type,
                                                          get_column_parquet_field(), _opts.timezone);
@@ -314,18 +319,18 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
     }
 
     // select all pages by default
-    Filter page_filter(page_num, 1);
+    Filter selected(page_num, 1);
     for (size_t i = 0; i < page_num; i++) {
-        page_filter[i] = ZoneMapEvaluatorUtils::is_satisfy(predicates, zone_map_details[i], pred_relation);
+        selected[i] = PredicateFilterEvaluatorUtils::zonemap_satisfy(predicates, zone_map_details[i], pred_relation);
     }
 
-    if (!SIMD::contain_zero(page_filter)) {
+    if (!SIMD::contain_zero(selected)) {
         // no page has been filtered
         return false;
     }
 
     for (int i = 0; i < page_num; i++) {
-        if (page_filter[i]) {
+        if (selected[i]) {
             int64_t first_row = offset_index->page_locations[i].first_row_index + rg_first_row;
             int64_t end_row = first_row;
             if (i != page_num - 1) {
@@ -339,34 +344,114 @@ StatusOr<bool> RawColumnReader::_page_index_zone_map_filter(const std::vector<co
     return true;
 }
 
+Status RawColumnReader::_init_column_bloom_filter(int offset, int length, BloomFilter& bloom_filter) const {
+    std::vector<char> bloom_filter_data;
+    tparquet::BloomFilterHeader header;
+    uint32_t header_len = SBBF_HEADER_SIZE_ESTIMATE;
+    if (length > 0) {
+        bloom_filter_data.resize(length + 1);
+        RETURN_IF_ERROR(_opts.file->read_at_fully(offset, bloom_filter_data.data(), length));
+    } else {
+        // if length is not set, read the header first;
+        bloom_filter_data.reserve(header_len);
+        RETURN_IF_ERROR(_opts.file->read_at_fully(offset, bloom_filter_data.data(), header_len));
+    }
+
+    RETURN_IF_ERROR(deserialize_thrift_msg(reinterpret_cast<const uint8*>(bloom_filter_data.data()), &header_len,
+                                           TProtocolType::COMPACT, &header));
+    if (length == 0) {
+        bloom_filter_data.resize(header_len + header.numBytes + 1);
+        RETURN_IF_ERROR(
+                _opts.file->read_at_fully(offset + header_len, bloom_filter_data.data() + header_len, header.numBytes));
+    }
+    if (get_chunk_metadata()->meta_data.__isset.statistics &&
+        get_chunk_metadata()->meta_data.statistics.__isset.null_count) {
+        if (get_chunk_metadata()->meta_data.statistics.null_count > 0) {
+            bloom_filter_data.back() = 1;
+        } else {
+            bloom_filter_data.back() = 0;
+        }
+    } else if (get_column_parquet_field()->is_nullable) {
+        bloom_filter_data.back() = 1; //set has null as default, to avoid `column is null` to filter the group.
+    } else {
+        bloom_filter_data.back() = 0;
+    }
+
+    return bloom_filter.init(bloom_filter_data.data() + header_len, header.numBytes + 1, Hasher::HashStrategy::XXHASH64,
+                             0);
+}
+
+StatusOr<bool> RawColumnReader::_row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                                        CompoundNodeType pred_relation, const TypeDescriptor& col_type,
+                                                        const uint64_t rg_first_row, const uint64_t rg_num_rows) const {
+    bool filtered = false;
+    if (get_chunk_metadata() == nullptr) {
+        return filtered;
+    }
+    auto& column_metadata = get_chunk_metadata()->meta_data;
+    bool has_bloom_filter = column_metadata.__isset.bloom_filter_offset;
+    if (!has_bloom_filter) {
+        // bloom filter is not existed, select all, dont filtered
+        return filtered = false;
+    } else if (get_column_parquet_field() == nullptr) {
+        // which scenerio will reach here? is it unexpected?
+        return filtered = false;
+    }
+
+    bool applicable = check_type_can_apply_bloom_filter(col_type, *get_column_parquet_field());
+    if (applicable) {
+        int32_t offset = column_metadata.bloom_filter_offset;
+        ParquetBlockSplitBloomFilter bloom_filter;
+        //parquet format version>= 2.10 has the bloom filter length info.
+        if (predicates.empty()) {
+            return filtered = false;
+        } else {
+            bool has_bloom_filter_pred =
+                    std::ranges::any_of(predicates, [](auto& pred) { return pred->support_original_bloom_filter(); });
+
+            if (has_bloom_filter_pred) {
+                if (column_metadata.__isset.bloom_filter_length) {
+                    RETURN_IF_ERROR(
+                            _init_column_bloom_filter(offset, column_metadata.bloom_filter_length, bloom_filter));
+                } else {
+                    RETURN_IF_ERROR(_init_column_bloom_filter(offset, 0, bloom_filter));
+                }
+            } else {
+                return filtered = false;
+            }
+        }
+
+        if (pred_relation == CompoundNodeType::AND) {
+            filtered = std::ranges::any_of(predicates, [&bloom_filter](auto& pred) {
+                //TODO: implement parquet_bloom_filter(bloom_filter, col_type, parquet_logical_type, parquet_physical_type) interface,
+                //      and change the value data type to parquet value data type.
+                return pred->support_original_bloom_filter() && !pred->original_bloom_filter(&bloom_filter);
+            });
+        } else {
+            filtered = std::ranges::all_of(predicates, [&bloom_filter](auto& pred) {
+                return pred->support_original_bloom_filter() && !pred->original_bloom_filter(&bloom_filter);
+            });
+        }
+    }
+
+    return filtered;
+}
+
 // ScalarColumnReader
 
 Status ScalarColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
     DCHECK(get_column_parquet_field()->is_nullable ? dst->is_nullable() : true);
     _need_lazy_decode =
-            _dict_filter_ctx != nullptr || (_can_lazy_decode && filter != nullptr &&
+            _dict_filter_ctx != nullptr || (_can_lazy_dict_decode && filter != nullptr &&
                                             SIMD::count_nonzero(*filter) * 1.0 / filter->size() < FILTER_RATIO);
     ColumnContentType content_type = !_need_lazy_decode ? ColumnContentType::VALUE : ColumnContentType::DICT_CODE;
+    auto need_lazy_covert = _can_lazy_convert && _converter->need_convert;
     if (_need_lazy_decode) {
-        if (_dict_code == nullptr) {
-            _dict_code = ColumnHelper::create_column(
-                    TypeDescriptor::from_logical_type(ColumnDictFilterContext::kDictCodePrimitiveType), true);
-        }
-        _ori_column = dst;
-        dst = _dict_code;
-        dst->reserve(range.span_size());
-    }
-    if (!_converter->need_convert) {
-        SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
-        return _reader->read_range(range, filter, content_type, dst.get());
+        return _read_range_impl<true, false>(range, filter, content_type, dst);
+    } else if (need_lazy_covert) {
+        return _read_range_impl<false, true>(range, filter, content_type, dst);
     } else {
-        auto column = _converter->create_src_column();
-        {
-            SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
-            RETURN_IF_ERROR(_reader->read_range(range, filter, content_type, column.get()));
-        }
-        SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
-        return _converter->convert(column, dst.get());
+        return _read_range_impl<false, false>(range, filter, content_type, dst);
     }
 }
 
@@ -395,35 +480,318 @@ bool ScalarColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decode
 }
 
 Status ScalarColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
-    if (!_need_lazy_decode) {
-        dst->swap_column(*src);
+    auto need_lazy_covert = _can_lazy_convert && _converter->need_convert;
+    if (_need_lazy_decode) {
+        return _fill_dst_column_impl<true, false>(dst, src);
+    } else if (need_lazy_covert) {
+        return _fill_dst_column_impl<false, true>(dst, src);
     } else {
-        if (_dict_filter_ctx == nullptr || _dict_filter_ctx->is_decode_needed) {
-            ColumnPtr& dict_values = dst;
-            dict_values->reserve(src->size());
+        return _fill_dst_column_impl<false, false>(dst, src);
+    }
+}
 
-            // decode dict code to dict values.
-            // note that in dict code, there could be null value.
-            const ColumnPtr& dict_codes = src;
-            auto* codes_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(dict_codes);
-            auto* codes_column =
-                    ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(codes_nullable_column->data_column());
-            RETURN_IF_ERROR(
-                    _reader->get_dict_values(codes_column->get_data(), *codes_nullable_column, dict_values.get()));
-            DCHECK_EQ(dict_codes->size(), dict_values->size());
-            if (dict_values->is_nullable()) {
-                auto* nullable_codes = down_cast<NullableColumn*>(dict_codes.get());
-                auto* nullable_values = down_cast<NullableColumn*>(dict_values.get());
-                nullable_values->null_column_data().swap(nullable_codes->null_column_data());
-                nullable_values->set_has_null(nullable_codes->has_null());
-            }
-        } else {
-            dst->append_default(src->size());
+template <bool LAZY_DICT_DECODE, bool LAZY_CONVERT>
+Status ScalarColumnReader::_read_range_impl(const Range<uint64_t>& range, const Filter* filter,
+                                            ColumnContentType content_type, ColumnPtr& dst) {
+    if constexpr (LAZY_DICT_DECODE) {
+        if (_tmp_code_column == nullptr) {
+            _tmp_code_column = ColumnHelper::create_column(
+                    TypeDescriptor::from_logical_type(ColumnDictFilterContext::kDictCodePrimitiveType), true);
         }
+        _ori_column = dst;
+        dst = _tmp_code_column;
+        dst->reserve(range.span_size());
+        SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
+        return _reader->read_range(range, filter, content_type, dst.get());
+    } else {
+        if (!_converter->need_convert) {
+            SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
+            return _reader->read_range(range, filter, content_type, dst.get());
+        } else {
+            if (_tmp_intermediate_column == nullptr) {
+                _tmp_intermediate_column = _converter->create_src_column();
+            }
+            _tmp_intermediate_column->reserve(range.span_size());
+            {
+                SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
+                RETURN_IF_ERROR(_reader->read_range(range, filter, content_type, _tmp_intermediate_column.get()));
+            }
+            if constexpr (!LAZY_CONVERT) {
+                {
+                    SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
+                    RETURN_IF_ERROR(_converter->convert(_tmp_intermediate_column, dst.get()));
+                }
+                _tmp_intermediate_column->reset_column();
+                return Status::OK();
+            } else {
+                _ori_column = dst;
+                dst = _tmp_intermediate_column;
+                return Status::OK();
+            }
+        }
+    }
+}
 
-        src->reset_column();
+Status ScalarColumnReader::_dict_decode(ColumnPtr& dst, ColumnPtr& src) {
+    Column* dict_values = ColumnHelper::get_data_column(dst.get());
+    dict_values->reserve(src->size());
+
+    // decode dict code to dict values.
+    // note that in dict code, there could be null value.
+    const ColumnPtr& dict_codes = src;
+    auto* codes_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(dict_codes);
+    auto* codes_column = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(codes_nullable_column->data_column());
+    RETURN_IF_ERROR(_reader->get_dict_values(codes_column->get_data(), *codes_nullable_column, dict_values));
+    DCHECK_EQ(dict_codes->size(), dict_values->size());
+    if (dst->is_nullable()) {
+        auto* nullable_values = down_cast<NullableColumn*>(dst.get());
+        nullable_values->swap_null_column(*codes_nullable_column);
+    }
+    src->reset_column();
+    return Status::OK();
+}
+
+template <bool LAZY_DICT_DECODE, bool LAZY_CONVERT>
+Status ScalarColumnReader::_fill_dst_column_impl(ColumnPtr& dst, ColumnPtr& src) {
+    if constexpr (LAZY_DICT_DECODE) {
+        if (_dict_filter_ctx != nullptr && !_dict_filter_ctx->is_decode_needed) {
+            dst->append_default(src->size());
+            src->reset_column();
+        } else {
+            static_assert(!LAZY_CONVERT, "LAZY_DICT_DECODE && LAZY_CONVERT == true is not supported by now");
+            RETURN_IF_ERROR(_dict_decode(dst, src));
+        }
         src = _ori_column;
+    } else {
+        if constexpr (LAZY_CONVERT) {
+            {
+                SCOPED_RAW_TIMER(&_opts.stats->column_convert_ns);
+                RETURN_IF_ERROR(_converter->convert(src, dst.get()));
+            }
+            src->reset_column();
+            src = _ori_column;
+        } else {
+            dst->swap_column(*src);
+        }
     }
     return Status::OK();
 }
+
+void ScalarColumnReader::collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
+                                                 int64_t* end_offset, ColumnIOTypeFlags types, bool active) {
+    RawColumnReader::collect_column_io_range(ranges, end_offset, types, active);
+    const auto& column = *get_chunk_metadata();
+    if ((types & ColumnIOType::BLOOM_FILTER) != 0) {
+        if (column.meta_data.__isset.bloom_filter_offset && column.meta_data.__isset.bloom_filter_length && active) {
+            if (check_type_can_apply_bloom_filter(*_col_type, *get_column_parquet_field())) {
+                auto r = io::SharedBufferedInputStream::IORange(column.meta_data.bloom_filter_offset,
+                                                                column.meta_data.bloom_filter_length);
+                ranges->emplace_back(r);
+            }
+        }
+    }
+}
+
+// LowCardColumnReader
+
+Status LowCardColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
+    DCHECK(get_column_parquet_field()->is_nullable ? dst->is_nullable() : true);
+    ColumnContentType content_type = ColumnContentType::DICT_CODE;
+
+    if (_dict_code == nullptr) {
+        _dict_code = ColumnHelper::create_column(
+                TypeDescriptor::from_logical_type(ColumnDictFilterContext::kDictCodePrimitiveType), true);
+    }
+    _ori_column = dst;
+    dst = _dict_code;
+    dst->reserve(range.span_size());
+
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
+        return _reader->read_range(range, filter, content_type, dst.get());
+    }
+}
+
+bool LowCardColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decode_needed, const SlotId slotId,
+                                                 const std::vector<std::string>& sub_field_path, const size_t& layer) {
+    if (sub_field_path.size() != layer) {
+        return false;
+    }
+
+    if (column_all_pages_dict_encoded()) {
+        if (_dict_filter_ctx == nullptr) {
+            _dict_filter_ctx = std::make_unique<ColumnDictFilterContext>();
+            _dict_filter_ctx->is_decode_needed = is_decode_needed;
+            _dict_filter_ctx->sub_field_path = sub_field_path;
+            _dict_filter_ctx->slot_id = slotId;
+        }
+        _dict_filter_ctx->conjunct_ctxs.push_back(ctx);
+        return true;
+    } else {
+        return false;
+    }
+}
+
+Status LowCardColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
+    if (!_code_convert_map.has_value()) {
+        RETURN_IF_ERROR(_check_current_dict());
+    }
+
+    dst->resize(src->size());
+
+    const ColumnPtr& dict_codes = src;
+    auto* codes_nullable_column = ColumnHelper::as_raw_column<NullableColumn>(dict_codes);
+    auto* codes_column = ColumnHelper::as_raw_column<FixedLengthColumn<int32_t>>(codes_nullable_column->data_column());
+    const NullData& null_data_ptr = codes_nullable_column->immutable_null_column_data();
+
+    auto& codes = codes_column->get_data();
+    if (codes_nullable_column->has_null()) {
+        for (size_t i = 0; i < src->size(); i++) {
+            // if null, we assign dict code 0
+            // null = 0, mask = 0xffffffff
+            // null = 1, mask = 0x00000000
+            uint32_t mask = ~(static_cast<uint32_t>(-null_data_ptr[i]));
+            codes[i] = mask & codes[i];
+        }
+    }
+
+    auto* dst_data_column = down_cast<LowCardDictColumn*>(ColumnHelper::get_data_column(dst.get()));
+    SIMDGather::gather(dst_data_column->get_data().data(), _code_convert_map->data(), codes.data(),
+                       _code_convert_map->size(), src->size());
+
+    if (dst->is_nullable()) {
+        auto* nullable_dst = down_cast<NullableColumn*>(dst.get());
+        nullable_dst->swap_null_column(*codes_nullable_column);
+    }
+
+    src->reset_column();
+    src = _ori_column;
+
+    return Status::OK();
+}
+
+Status LowCardColumnReader::_check_current_dict() {
+    std::vector<int16_t> code_convert_map;
+
+    // create dict value chunk for evaluation.
+    ColumnPtr dict_value_column = ColumnHelper::create_column(TypeDescriptor(TYPE_VARCHAR), true);
+    RETURN_IF_ERROR(_reader->get_dict_values(dict_value_column.get()));
+
+    size_t dict_size = dict_value_column->size();
+
+    code_convert_map.resize(dict_size + 2);
+    std::fill(code_convert_map.begin(), code_convert_map.end(), 0);
+    auto* local_to_global = code_convert_map.data();
+
+    auto viewer = ColumnViewer<TYPE_VARCHAR>(dict_value_column);
+
+    for (int i = 0; i < dict_size; ++i) {
+        auto slice = viewer.value(i);
+        auto res = _dict->find(slice);
+        if (res == _dict->end()) {
+            // error message format used to extract info, carefully
+            return Status::GlobalDictNotMatch(fmt::format("SlotId: {}, FileName: {} , file doesn't match global dict. ",
+                                                          _slot_id, _opts.file->filename()));
+        } else {
+            local_to_global[i] = res->second;
+        }
+    }
+
+#ifdef DEBUG
+    std::stringstream ss;
+    ss << "dict mapping: ";
+    for (int i = 0; i < dict_size; ++i) {
+        ss << code_convert_map[i] << " ";
+    }
+    LOG(INFO) << ss.str();
+#endif
+
+    _code_convert_map = std::move(code_convert_map);
+
+    return Status::OK();
+}
+
+void LowCardColumnReader::collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
+                                                  int64_t* end_offset, ColumnIOTypeFlags types, bool active) {
+    RawColumnReader::collect_column_io_range(ranges, end_offset, types, active);
+    const auto& column = *get_chunk_metadata();
+    if ((types & ColumnIOType::BLOOM_FILTER) != 0) {
+        if (column.meta_data.__isset.bloom_filter_offset && column.meta_data.__isset.bloom_filter_length && active) {
+            if (check_type_can_apply_bloom_filter(TypeDescriptor(TYPE_VARCHAR), *get_column_parquet_field())) {
+                auto r = io::SharedBufferedInputStream::IORange(column.meta_data.bloom_filter_offset,
+                                                                column.meta_data.bloom_filter_length);
+                ranges->emplace_back(r);
+            }
+        }
+    }
+}
+
+// LowRowsColumnReader
+
+Status LowRowsColumnReader::read_range(const Range<uint64_t>& range, const Filter* filter, ColumnPtr& dst) {
+    DCHECK(get_column_parquet_field()->is_nullable ? dst->is_nullable() : true);
+    ColumnContentType content_type = ColumnContentType::VALUE;
+
+    if (_tmp_column == nullptr) {
+        _tmp_column = ColumnHelper::create_column(TYPE_VARCHAR_DESC, true);
+    }
+    _ori_column = dst;
+    dst = _tmp_column;
+    dst->reserve(range.span_size());
+
+    {
+        SCOPED_RAW_TIMER(&_opts.stats->column_read_ns);
+        return _reader->read_range(range, filter, content_type, dst.get());
+    }
+}
+
+Status LowRowsColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
+    dst->resize(src->size());
+
+    const ColumnPtr& readed_column = src;
+    auto* nullable_string_column = ColumnHelper::as_raw_column<NullableColumn>(readed_column);
+    auto* binary_column = ColumnHelper::as_raw_column<BinaryColumn>(nullable_string_column->data_column());
+    auto* dst_data_column = down_cast<LowCardDictColumn*>(ColumnHelper::get_data_column(dst.get()));
+    for (size_t i = 0; i < src->size(); i++) {
+        if (src->is_null(i)) {
+            dst_data_column->get_data()[i] = 1;
+            continue;
+        }
+        const auto& slice = binary_column->get_slice(i);
+        auto res = _dict->find(slice);
+        if (res == _dict->end()) {
+            // error message format used to extract info, carefully
+            return Status::GlobalDictNotMatch(fmt::format("SlotId: {}, FileName: {} , file doesn't match global dict. ",
+                                                          _slot_id, _opts.file->filename()));
+        } else {
+            dst_data_column->get_data()[i] = res->second;
+        }
+    }
+
+    if (dst->is_nullable()) {
+        auto* nullable_dst = down_cast<NullableColumn*>(dst.get());
+        nullable_dst->swap_null_column(*nullable_string_column);
+    }
+
+    src->reset_column();
+    src = _ori_column;
+
+    return Status::OK();
+}
+
+void LowRowsColumnReader::collect_column_io_range(std::vector<io::SharedBufferedInputStream::IORange>* ranges,
+                                                  int64_t* end_offset, ColumnIOTypeFlags types, bool active) {
+    RawColumnReader::collect_column_io_range(ranges, end_offset, types, active);
+    const auto& column = *get_chunk_metadata();
+    if ((types & ColumnIOType::BLOOM_FILTER) != 0) {
+        if (column.meta_data.__isset.bloom_filter_offset && column.meta_data.__isset.bloom_filter_length && active) {
+            if (check_type_can_apply_bloom_filter(TypeDescriptor(TYPE_VARCHAR), *get_column_parquet_field())) {
+                auto r = io::SharedBufferedInputStream::IORange(column.meta_data.bloom_filter_offset,
+                                                                column.meta_data.bloom_filter_length);
+                ranges->emplace_back(r);
+            }
+        }
+    }
+}
+
 } // namespace starrocks::parquet

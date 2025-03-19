@@ -20,7 +20,6 @@ import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.OlapTable;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.Table;
-import com.starrocks.catalog.Tablet;
 import com.starrocks.catalog.TabletInvertedIndex;
 import com.starrocks.common.AnalysisException;
 import com.starrocks.common.Config;
@@ -28,20 +27,16 @@ import com.starrocks.common.util.concurrent.MarkedCountDownLatch;
 import com.starrocks.lake.LakeTable;
 import com.starrocks.lake.LakeTablet;
 import com.starrocks.lake.Utils;
-import com.starrocks.proto.TxnInfoPB;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.rpc.RpcException;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.RunMode;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.AlterTableStmt;
 import com.starrocks.sql.ast.CreateDbStmt;
 import com.starrocks.sql.ast.CreateTableStmt;
-import com.starrocks.system.ComputeNode;
 import com.starrocks.task.AgentBatchTask;
+import com.starrocks.utframe.MockedWarehouseManager;
 import com.starrocks.utframe.UtFrameUtils;
-import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.Warehouse;
 import mockit.Mock;
 import mockit.MockUp;
 import org.junit.After;
@@ -54,7 +49,6 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
-import javax.validation.constraints.NotNull;
 
 public class LakeTableSchemaChangeJobTest {
     private static final int NUM_BUCKETS = 4;
@@ -136,6 +130,14 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testPendingJobNoAliveBackend() {
+        MockedWarehouseManager mockedWarehouseManager = new MockedWarehouseManager();
+        new MockUp<GlobalStateMgr>() {
+            @Mock
+            public WarehouseManager getWarehouseMgr() {
+                return mockedWarehouseManager;
+            }
+        };
+
         new MockUp<Utils>() {
             @Mock
             public Long chooseNodeId(LakeTablet tablet) {
@@ -149,24 +151,7 @@ public class LakeTableSchemaChangeJobTest {
             }
         };
 
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                            WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public ComputeNode getComputeNodeAssignedToTablet(Long warehouseId, LakeTablet tablet) {
-                return null;
-            }
-
-            @Mock
-            public ComputeNode getComputeNodeAssignedToTablet(String warehouseName, LakeTablet tablet) {
-                return null;
-            }
-        };
-
+        mockedWarehouseManager.setComputeNodesAssignedToTablet(null);
         Exception exception = Assert.assertThrows(AlterCancelException.class, () -> {
             schemaChangeJob.runPendingJob();
         });
@@ -437,17 +422,7 @@ public class LakeTableSchemaChangeJobTest {
     }
 
     @Test
-    public void testPublishVersion() throws AlterCancelException {
-        new MockUp<Utils>() {
-            @Mock
-            public void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
-                                       long newVersion, long warehouseId)
-                        throws
-                        RpcException {
-                throw new RpcException("publish version failed", "127.0.0.1");
-            }
-        };
-
+    public void testPublishVersion() throws AlterCancelException, InterruptedException {
         new MockUp<LakeTableSchemaChangeJob>() {
             @Mock
             public void sendAgentTask(AgentBatchTask batchTask) {
@@ -497,21 +472,18 @@ public class LakeTableSchemaChangeJobTest {
         // Add table back to database
         db.registerTableUnlocked(table);
 
-        // We've mocked ColumnTypeConverter.publishVersion to throw RpcException, should this runFinishedRewritingJob will fail but
-        // should not throw any exception.
-        schemaChangeJob.runFinishedRewritingJob();
-        Assert.assertEquals(AlterJobV2.JobState.FINISHED_REWRITING, schemaChangeJob.getJobState());
-
         // Make publish version success
-        new MockUp<Utils>() {
+        new MockUp<AlterJobV2>() {
             @Mock
-            public void publishVersion(@NotNull List<Tablet> tablets, TxnInfoPB txnInfo, long baseVersion,
-                                       long newVersion, long warehouseId) {
-                // nothing to do
+            public boolean publishVersion() {
+                return true;
             }
         };
 
-        schemaChangeJob.runFinishedRewritingJob();
+        while (schemaChangeJob.getJobState() != AlterJobV2.JobState.FINISHED) {
+            schemaChangeJob.runFinishedRewritingJob();
+            Thread.sleep(100);
+        }
         Assert.assertEquals(AlterJobV2.JobState.FINISHED, schemaChangeJob.getJobState());
         Assert.assertTrue(schemaChangeJob.getFinishedTimeMs() > System.currentTimeMillis() - 10_000L);
 
@@ -574,13 +546,7 @@ public class LakeTableSchemaChangeJobTest {
 
     @Test
     public void testShow() {
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouseAllowNull(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                            WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-        };
+        UtFrameUtils.mockInitWarehouseEnv();
 
         SchemaChangeHandler schemaChangeHandler = new SchemaChangeHandler();
 
@@ -590,13 +556,6 @@ public class LakeTableSchemaChangeJobTest {
 
         schemaChangeHandler.addAlterJobV2(alterJobV2);
         System.out.println(schemaChangeHandler.getAlterJobInfosByDb(db));
-
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouseAllowNull(long warehouseId) {
-                return null;
-            }
-        };
 
         SchemaChangeHandler schemaChangeHandler2 = new SchemaChangeHandler();
         alterJobV2 = new LakeTableSchemaChangeJob(12345L, db.getId(), table.getId(), table.getName(), 10);

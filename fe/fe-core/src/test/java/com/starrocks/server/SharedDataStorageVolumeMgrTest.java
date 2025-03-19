@@ -101,6 +101,7 @@ public class SharedDataStorageVolumeMgrTest {
         Config.aws_s3_region = "region";
         Config.aws_s3_endpoint = "endpoint";
         Config.aws_s3_path = "default-bucket/1";
+        Config.enable_load_volume_from_conf = true;
 
         new MockUp<GlobalStateMgr>() {
             @Mock
@@ -169,6 +170,7 @@ public class SharedDataStorageVolumeMgrTest {
         Config.aws_s3_region = "";
         Config.aws_s3_endpoint = "";
         Config.aws_s3_path = "";
+        Config.enable_load_volume_from_conf = false;
     }
 
     @Test

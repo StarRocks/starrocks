@@ -17,7 +17,6 @@
 
 package com.starrocks.planner;
 
-import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -51,11 +50,8 @@ import com.starrocks.common.Config;
 import com.starrocks.common.StarRocksException;
 import com.starrocks.common.Status;
 import com.starrocks.common.jmockit.Deencapsulation;
-import com.starrocks.lake.LakeTablet;
 import com.starrocks.server.GlobalStateMgr;
-import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.PartitionValue;
-import com.starrocks.system.ComputeNode;
 import com.starrocks.system.SystemInfoService;
 import com.starrocks.thrift.TDataSink;
 import com.starrocks.thrift.TExplainLevel;
@@ -68,12 +64,9 @@ import com.starrocks.thrift.TTabletLocation;
 import com.starrocks.thrift.TTabletType;
 import com.starrocks.thrift.TUniqueId;
 import com.starrocks.thrift.TWriteQuorumType;
-import com.starrocks.warehouse.DefaultWarehouse;
-import com.starrocks.warehouse.Warehouse;
+import com.starrocks.utframe.UtFrameUtils;
 import mockit.Expectations;
 import mockit.Injectable;
-import mockit.Mock;
-import mockit.MockUp;
 import mockit.Mocked;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -119,28 +112,7 @@ public class OlapTableSinkTest {
 
     @Before
     public void before() {
-        new MockUp<WarehouseManager>() {
-            @Mock
-            public Warehouse getWarehouse(long warehouseId) {
-                return new DefaultWarehouse(WarehouseManager.DEFAULT_WAREHOUSE_ID,
-                        WarehouseManager.DEFAULT_WAREHOUSE_NAME);
-            }
-
-            @Mock
-            public ComputeNode getComputeNode(LakeTablet tablet) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-
-            @Mock
-            public ComputeNode getComputeNode(Long warehouseId, LakeTablet tablet) {
-                return new ComputeNode(1L, "127.0.0.1", 9030);
-            }
-
-            @Mock
-            public ImmutableMap<Long, ComputeNode> getComputeNodesFromWarehouse(long warehouseId) {
-                return ImmutableMap.of(1L, new ComputeNode(1L, "127.0.0.1", 9030));
-            }
-        };
+        UtFrameUtils.mockInitWarehouseEnv();
     }
 
     @Test
@@ -540,5 +512,45 @@ public class OlapTableSinkTest {
         LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
 
         Config.max_load_initial_open_partition_number = 32;
+    }
+
+    @Test
+    public void testSchemaChangeOpenPartition() throws StarRocksException {
+        TupleDescriptor tuple = getTuple();
+        SinglePartitionInfo partInfo = new SinglePartitionInfo();
+        partInfo.setReplicationNum(2, (short) 3);
+        MaterializedIndex index = new MaterializedIndex(2, MaterializedIndex.IndexState.NORMAL);
+        RandomDistributionInfo distInfo = new RandomDistributionInfo(3);
+        Partition partition = new Partition(2, 22, "p1", index, distInfo);
+
+        PhysicalPartition physicalPartition = new PhysicalPartition(3, "", 2, index);
+        partition.addSubPartition(physicalPartition);
+
+        physicalPartition = new PhysicalPartition(4, "", 2, index);
+        physicalPartition.setImmutable(true);
+        partition.addSubPartition(physicalPartition);
+
+        new Expectations() {
+            {
+                dstTable.getId();
+                result = 1;
+                dstTable.getPartitionInfo();
+                result = partInfo;
+                dstTable.getPartitions();
+                result = Lists.newArrayList(partition);
+                dstTable.getPartition(2L);
+                result = partition;
+                dstTable.getState();
+                result = OlapTable.OlapTableState.SCHEMA_CHANGE;
+            }
+        };
+
+        OlapTableSink sink = new OlapTableSink(dstTable, tuple, Lists.newArrayList(2L),
+                TWriteQuorumType.MAJORITY, false, false, true);
+        sink.setAutomaticBucketSize(1);
+        sink.init(new TUniqueId(1, 2), 3, 4, 1000);
+        sink.complete();
+        LOG.info("sink is {}", sink.toThrift());
+        LOG.info("{}", sink.getExplainString("", TExplainLevel.NORMAL));
     }
 }

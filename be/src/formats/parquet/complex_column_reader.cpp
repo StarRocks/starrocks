@@ -17,8 +17,9 @@
 #include "column/array_column.h"
 #include "column/map_column.h"
 #include "column/struct_column.h"
+#include "exprs/literal.h"
+#include "formats/parquet/predicate_filter_evaluator.h"
 #include "formats/parquet/schema.h"
-#include "formats/parquet/zone_map_filter_evaluator.h"
 #include "gutil/casts.h"
 #include "gutil/strings/substitute.h"
 #include "storage/column_expr_predicate.h"
@@ -102,6 +103,30 @@ Status ListColumnReader::read_range(const Range<uint64_t>& range, const Filter* 
         nullable_column->set_has_null(has_null);
     }
 
+    return Status::OK();
+}
+
+Status ListColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
+    ArrayColumn* array_column_src = nullptr;
+    ArrayColumn* array_column_dst = nullptr;
+    if (src->is_nullable()) {
+        NullableColumn* nullable_column_src = down_cast<NullableColumn*>(src.get());
+        DCHECK(nullable_column_src->mutable_data_column()->is_array());
+        array_column_src = down_cast<ArrayColumn*>(nullable_column_src->mutable_data_column());
+        NullableColumn* nullable_column_dst = down_cast<NullableColumn*>(dst.get());
+        DCHECK(nullable_column_dst->mutable_data_column()->is_array());
+        array_column_dst = down_cast<ArrayColumn*>(nullable_column_dst->mutable_data_column());
+        nullable_column_dst->swap_null_column(*nullable_column_src);
+    } else {
+        DCHECK(src->is_array());
+        DCHECK(dst->is_array());
+        DCHECK(!get_column_parquet_field()->is_nullable);
+        array_column_src = down_cast<ArrayColumn*>(src.get());
+        array_column_dst = down_cast<ArrayColumn*>(dst.get());
+    }
+    array_column_dst->offsets_column()->swap_column(*(array_column_src->offsets_column()));
+    RETURN_IF_ERROR(
+            _element_reader->fill_dst_column(array_column_dst->elements_column(), array_column_src->elements_column()));
     return Status::OK();
 }
 
@@ -249,7 +274,7 @@ bool StructColumnReader::try_to_use_dict_filter(ExprContext* ctx, bool is_decode
     return _child_readers[sub_field]->try_to_use_dict_filter(ctx, is_decode_needed, slotId, sub_field_path, layer + 1);
 }
 
-Status StructColumnReader::filter_dict_column(const ColumnPtr& column, Filter* filter,
+Status StructColumnReader::filter_dict_column(ColumnPtr& column, Filter* filter,
                                               const std::vector<std::string>& sub_field_path, const size_t& layer) {
     const std::string& sub_field = sub_field_path[layer];
     StructColumn* struct_column = nullptr;
@@ -273,14 +298,10 @@ Status StructColumnReader::fill_dst_column(ColumnPtr& dst, ColumnPtr& src) {
         NullableColumn* nullable_column_src = down_cast<NullableColumn*>(src.get());
         DCHECK(nullable_column_src->mutable_data_column()->is_struct());
         struct_column_src = down_cast<StructColumn*>(nullable_column_src->mutable_data_column());
-        NullColumn* null_column_src = nullable_column_src->mutable_null_column();
         NullableColumn* nullable_column_dst = down_cast<NullableColumn*>(dst.get());
         DCHECK(nullable_column_dst->mutable_data_column()->is_struct());
         struct_column_dst = down_cast<StructColumn*>(nullable_column_dst->mutable_data_column());
-        NullColumn* null_column_dst = nullable_column_dst->mutable_null_column();
-        null_column_dst->swap_column(*null_column_src);
-        nullable_column_src->update_has_null();
-        nullable_column_dst->update_has_null();
+        nullable_column_dst->swap_null_column(*nullable_column_src);
     } else {
         DCHECK(src->is_struct());
         DCHECK(dst->is_struct());
@@ -312,37 +333,37 @@ StatusOr<bool> StructColumnReader::row_group_zone_map_filter(const std::vector<c
                                                              const uint64_t rg_num_rows) const {
     ObjectPool pool;
 
-    auto is_satisfied = [&](const ColumnPredicate* predicate) -> bool {
+    auto is_filtered = [&](const ColumnPredicate* predicate) -> bool {
         std::vector<std::string> subfield{};
         auto res = _try_to_rewrite_subfield_expr(&pool, predicate, &subfield);
         // rewrite failed, always return true, select all
-        RETURN_IF(!res.ok(), true);
+        RETURN_IF(!res.ok(), false);
 
         ColumnPredicate* rewritten_subfield_predicate = res.value();
         pool.add(rewritten_subfield_predicate);
 
         const ColumnReader* column_reader = get_child_column_reader(subfield);
 
-        RETURN_IF(column_reader == nullptr, true);
+        RETURN_IF(column_reader == nullptr, false);
         // make sure ColumnReader is scalar column
-        RETURN_IF(column_reader->get_column_parquet_field()->type != ColumnType::SCALAR, true);
+        RETURN_IF(column_reader->get_column_parquet_field()->type != ColumnType::SCALAR, false);
 
         auto ret = column_reader->row_group_zone_map_filter({rewritten_subfield_predicate}, pred_relation, rg_first_row,
                                                             rg_num_rows);
         // row_group_zone_map_filter failed, always return true, select all
-        RETURN_IF(!ret.ok(), true);
+        RETURN_IF(!ret.ok(), false);
 
         return ret.value();
     };
 
     std::vector<const ColumnPredicate*> rewritten_predicates;
     RETURN_IF_ERROR(_rewrite_column_expr_predicate(&pool, predicates, rewritten_predicates));
-
-    if (pred_relation == CompoundNodeType::AND) {
-        return std::ranges::all_of(rewritten_predicates, [&](const auto* pred) { return is_satisfied(pred); });
+    if (rewritten_predicates.empty()) {
+        return false;
+    } else if (pred_relation == CompoundNodeType::AND) {
+        return std::ranges::any_of(rewritten_predicates, [&](const auto* pred) { return is_filtered(pred); });
     } else {
-        return rewritten_predicates.empty() ||
-               std::ranges::any_of(rewritten_predicates, [&](const auto* pred) { return is_satisfied(pred); });
+        return std::ranges::all_of(rewritten_predicates, [&](const auto* pred) { return is_filtered(pred); });
     }
 }
 
@@ -391,9 +412,9 @@ StatusOr<bool> StructColumnReader::page_index_zone_map_filter(const std::vector<
         }
 
         if (pred_relation == CompoundNodeType::AND) {
-            ZoneMapEvaluatorUtils::merge_row_ranges<CompoundNodeType::AND>(result_sparse_range, tmp_row_ranges);
+            PredicateFilterEvaluatorUtils::merge_row_ranges<CompoundNodeType::AND>(result_sparse_range, tmp_row_ranges);
         } else {
-            ZoneMapEvaluatorUtils::merge_row_ranges<CompoundNodeType::OR>(result_sparse_range, tmp_row_ranges);
+            PredicateFilterEvaluatorUtils::merge_row_ranges<CompoundNodeType::OR>(result_sparse_range, tmp_row_ranges);
         }
     }
 
@@ -402,6 +423,54 @@ StatusOr<bool> StructColumnReader::page_index_zone_map_filter(const std::vector<
     }
     *row_ranges = std::move(result_sparse_range.value());
     return row_ranges->span_size() < rg_num_rows;
+}
+
+StatusOr<bool> StructColumnReader::row_group_bloom_filter(const std::vector<const ColumnPredicate*>& predicates,
+                                                          CompoundNodeType pred_relation, const uint64_t rg_first_row,
+                                                          const uint64_t rg_num_rows) const {
+    ObjectPool pool;
+
+    auto is_filtered = [&](const ColumnPredicate* predicate) -> bool {
+        std::vector<std::string> subfield{};
+        auto res = _try_to_rewrite_subfield_expr(&pool, predicate, &subfield);
+        // rewrite failed, always return true, select all
+        RETURN_IF(!res.ok(), false);
+
+        ColumnPredicate* rewritten_subfield_predicate = res.value();
+        pool.add(rewritten_subfield_predicate);
+        const auto root =
+                down_cast<ColumnExprPredicate*>(rewritten_subfield_predicate)->get_expr_ctxs().front()->root();
+        if (root->op() != TExprOpcode::EQ) {
+            return false;
+        }
+        if (!root->get_child(1)->is_literal()) {
+            return false;
+        }
+        auto val = down_cast<const VectorizedLiteral*>(root->get_child(1))->value();
+        if (!val || !val->is_constant()) {
+            return false;
+        }
+        auto val_str = down_cast<const ConstColumn*>(val.get())->data_column()->debug_item(0);
+        auto t = get_type_info(root->get_child(1)->type().type);
+        ColumnPredicate* pred = nullptr;
+        pred = new_column_eq_predicate(t, rewritten_subfield_predicate->column_id(), val_str);
+        DCHECK(pred != nullptr);
+        pool.add(pred);
+
+        const ColumnReader* column_reader = get_child_column_reader(subfield);
+        RETURN_IF(column_reader == nullptr, false);
+        // make sure ColumnReader is scalar column
+        RETURN_IF(column_reader->get_column_parquet_field()->type != ColumnType::SCALAR, false);
+        auto ret = column_reader->row_group_bloom_filter({pred}, pred_relation, rg_first_row, rg_num_rows);
+        return ret.value_or(false);
+    };
+    if (predicates.empty()) {
+        return false;
+    } else if (pred_relation == CompoundNodeType::AND) {
+        return std::ranges::any_of(predicates, [&](const auto* pred) { return is_filtered(pred); });
+    } else {
+        return std::ranges::all_of(predicates, [&](const auto* pred) { return is_filtered(pred); });
+    }
 }
 
 ColumnReader* StructColumnReader::get_child_column_reader(const std::string& subfield) const {
@@ -460,7 +529,9 @@ StatusOr<ColumnPredicate*> StructColumnReader::_try_to_rewrite_subfield_expr(
     Expr* right_expr = expr_children[1];
 
     // check exprs are monotonic
-    if (!root_expr->is_monotonic() || !subfield_expr->is_monotonic() || !right_expr->is_monotonic()) {
+    if (root_expr->op() != TExprOpcode::type::EQ && !root_expr->is_monotonic()) {
+        return Status::InternalError("Predicate's expr is not monotonic");
+    } else if (!subfield_expr->is_monotonic() || !right_expr->is_monotonic()) {
         return Status::InternalError("Predicate's expr is not monotonic");
     }
 
@@ -470,6 +541,7 @@ StatusOr<ColumnPredicate*> StructColumnReader::_try_to_rewrite_subfield_expr(
         // must only exist one subfield
         return Status::InternalError("Should have only one subfield path");
     }
+
     subfield_output->insert(subfield_output->end(), subfields[0].begin(), subfields[0].end());
 
     // check subfield expr has only one child, and it's a SlotRef

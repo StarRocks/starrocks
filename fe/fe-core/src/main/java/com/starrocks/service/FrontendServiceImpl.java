@@ -47,6 +47,8 @@ import com.starrocks.analysis.SlotId;
 import com.starrocks.analysis.TableName;
 import com.starrocks.analysis.TupleDescriptor;
 import com.starrocks.analysis.TupleId;
+import com.starrocks.authentication.AuthenticationException;
+import com.starrocks.authentication.AuthenticationHandler;
 import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authorization.AccessDeniedException;
 import com.starrocks.authorization.PrivilegeBuiltinConstants;
@@ -83,9 +85,9 @@ import com.starrocks.catalog.system.sys.SysFeMemoryUsage;
 import com.starrocks.catalog.system.sys.SysObjectDependencies;
 import com.starrocks.cluster.ClusterNamespace;
 import com.starrocks.common.AnalysisException;
-import com.starrocks.common.AuthenticationException;
 import com.starrocks.common.CaseSensibility;
 import com.starrocks.common.Config;
+import com.starrocks.common.ConfigBase;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.DuplicatedRequestException;
 import com.starrocks.common.IdGenerator;
@@ -134,8 +136,6 @@ import com.starrocks.load.streamload.StreamLoadKvParams;
 import com.starrocks.load.streamload.StreamLoadMgr;
 import com.starrocks.load.streamload.StreamLoadTask;
 import com.starrocks.metric.MetricRepo;
-import com.starrocks.metric.TableMetricsEntity;
-import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.AutoIncrementInfo;
 import com.starrocks.planner.OlapTableSink;
 import com.starrocks.planner.StreamLoadPlanner;
@@ -224,6 +224,8 @@ import com.starrocks.thrift.TGetGrantsToRolesOrUserRequest;
 import com.starrocks.thrift.TGetGrantsToRolesOrUserResponse;
 import com.starrocks.thrift.TGetKeysRequest;
 import com.starrocks.thrift.TGetKeysResponse;
+import com.starrocks.thrift.TGetKeywordsRequest;
+import com.starrocks.thrift.TGetKeywordsResponse;
 import com.starrocks.thrift.TGetLoadTxnStatusRequest;
 import com.starrocks.thrift.TGetLoadTxnStatusResult;
 import com.starrocks.thrift.TGetLoadsParams;
@@ -364,6 +366,7 @@ import org.apache.thrift.TException;
 import org.jetbrains.annotations.NotNull;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -434,7 +437,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         List<String> dbs = new ArrayList<>();
         for (String fullName : dbNames) {
             try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser, null, catalogName, fullName);
+                ConnectContext context = new ConnectContext();
+                context.setCurrentUserIdentity(currentUser);
+                context.setCurrentRoleIds(currentUser);
+                Authorizer.checkAnyActionOnOrInDb(context, catalogName, fullName);
             } catch (AccessDeniedException e) {
                 continue;
             }
@@ -498,8 +504,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 }
 
                 try {
-                    Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                            null, params.db, tbl);
+                    ConnectContext context = new ConnectContext();
+                    context.setCurrentUserIdentity(currentUser);
+                    context.setCurrentRoleIds(currentUser);
+                    Authorizer.checkAnyActionOnTableLikeObject(context, params.db, tbl);
                 } catch (AccessDeniedException e) {
                     continue;
                 }
@@ -548,8 +556,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 OUTER:
                 for (Table table : tables) {
                     try {
-                        Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                                null, params.db, table);
+                        ConnectContext context = new ConnectContext();
+                        context.setCurrentUserIdentity(currentUser);
+                        context.setCurrentRoleIds(currentUser);
+                        Authorizer.checkAnyActionOnTableLikeObject(context, params.db, table);
                     } catch (AccessDeniedException e) {
                         continue;
                     }
@@ -581,8 +591,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                                         .getTable(db.getFullName(), tableName.getTbl());
                                 if (tbl != null) {
                                     try {
-                                        Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                                                null, db.getFullName(), tbl);
+                                        ConnectContext context = new ConnectContext();
+                                        context.setCurrentUserIdentity(currentUser);
+                                        context.setCurrentRoleIds(currentUser);
+                                        Authorizer.checkAnyActionOnTableLikeObject(context, db.getFullName(), tbl);
                                     } catch (AccessDeniedException e) {
                                         continue OUTER;
                                     }
@@ -737,7 +749,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         TColumnStatsUsageRes result = ColumnStatsUsageSystemTable.query(request);
         result.getItems().removeIf(item -> {
             try {
-                Authorizer.checkTableAction(currentUser, null, item.getTable_database(), item.getTable_name(),
+                ConnectContext context = new ConnectContext();
+                context.setCurrentUserIdentity(currentUser);
+                context.setCurrentRoleIds(currentUser);
+                Authorizer.checkTableAction(context, item.getTable_database(), item.getTable_name(),
                         PrivilegeType.SELECT);
                 return false;
             } catch (AccessDeniedException e) {
@@ -754,7 +769,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         UserIdentity currentUser = UserIdentity.fromThrift(request.getAuth_info().getCurrent_user_ident());
         res.getItems().removeIf(item -> {
             try {
-                Authorizer.checkTableAction(currentUser, null, item.getDatabase_name(), item.getTable_name(),
+                ConnectContext context = new ConnectContext();
+                context.setCurrentUserIdentity(currentUser);
+                context.setCurrentRoleIds(currentUser);
+                Authorizer.checkTableAction(context, item.getDatabase_name(), item.getTable_name(),
                         PrivilegeType.SELECT);
                 return false;
             } catch (AccessDeniedException e) {
@@ -797,8 +815,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         }
 
         try {
-            Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                    null, dbName, mv);
+            ConnectContext context = new ConnectContext();
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
+            Authorizer.checkAnyActionOnTableLikeObject(context, dbName, mv);
         } catch (AccessDeniedException e) {
             return;
         }
@@ -996,8 +1016,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     return result;
                 }
                 try {
-                    Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                            null, params.db, table);
+                    ConnectContext context = new ConnectContext();
+                    context.setCurrentUserIdentity(currentUser);
+                    context.setCurrentRoleIds(currentUser);
+                    Authorizer.checkAnyActionOnTableLikeObject(context, params.db, table);
                 } catch (AccessDeniedException e) {
                     return result;
                 }
@@ -1017,7 +1039,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         boolean reachLimit;
         for (String fullName : dbNames) {
             try {
-                Authorizer.checkAnyActionOnOrInDb(currentUser, null,
+                ConnectContext context = new ConnectContext();
+                context.setCurrentUserIdentity(currentUser);
+                context.setCurrentRoleIds(currentUser);
+                Authorizer.checkAnyActionOnOrInDb(context,
                         InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, fullName);
             } catch (AccessDeniedException e) {
                 continue;
@@ -1034,8 +1059,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                         }
 
                         try {
-                            Authorizer.checkAnyActionOnTableLikeObject(currentUser,
-                                    null, fullName, table);
+                            ConnectContext context = new ConnectContext();
+                            context.setCurrentUserIdentity(currentUser);
+                            context.setCurrentRoleIds(currentUser);
+                            Authorizer.checkAnyActionOnTableLikeObject(context, fullName, table);
                         } catch (AccessDeniedException e) {
                             continue;
                         }
@@ -1218,15 +1245,14 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     private void checkPasswordAndLoadPriv(String user, String passwd, String db, String tbl,
                                           String clientIp) throws AuthenticationException {
-        GlobalStateMgr globalStateMgr = GlobalStateMgr.getCurrentState();
-        UserIdentity currentUser =
-                globalStateMgr.getAuthenticationMgr().checkPlainPassword(user, clientIp, passwd);
-        if (currentUser == null) {
-            throw new AuthenticationException("Access denied for " + user + "@" + clientIp);
-        }
+        UserIdentity currentUser = AuthenticationHandler.authenticate(new ConnectContext(), user, clientIp,
+                passwd.getBytes(StandardCharsets.UTF_8), null);
         // check INSERT action on table
         try {
-            Authorizer.checkTableAction(currentUser, null, db, tbl, PrivilegeType.INSERT);
+            ConnectContext context = new ConnectContext();
+            context.setCurrentUserIdentity(currentUser);
+            context.setCurrentRoleIds(currentUser);
+            Authorizer.checkTableAction(context, db, tbl, PrivilegeType.INSERT);
         } catch (AccessDeniedException e) {
             throw new AuthenticationException(
                     "Access denied; you need (at least one of) the INSERT privilege(s) for this operation");
@@ -1437,7 +1463,6 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (null == tbl) {
             return;
         }
-        TableMetricsEntity entity = TableMetricsRegistry.getInstance().getMetricsEntity(tbl.getId());
         StreamLoadTask streamLoadtask = GlobalStateMgr.getCurrentState().getStreamLoadMgr().
                 getSyncSteamLoadTaskByTxnId(request.getTxnId());
 
@@ -1446,15 +1471,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 if (!(attachment instanceof RLTaskTxnCommitAttachment)) {
                     break;
                 }
-                RLTaskTxnCommitAttachment routineAttachment = (RLTaskTxnCommitAttachment) attachment;
-                entity.counterRoutineLoadFinishedTotal.increase(1L);
-                entity.counterRoutineLoadBytesTotal.increase(routineAttachment.getReceivedBytes());
-                entity.counterRoutineLoadRowsTotal.increase(routineAttachment.getLoadedRows());
-                entity.counterRoutineLoadErrorRowsTotal.increase(routineAttachment.getFilteredRows());
-                entity.counterRoutineLoadUnselectedRowsTotal.increase(routineAttachment.getUnselectedRows());
 
                 if (streamLoadtask != null) {
-                    streamLoadtask.setLoadState(routineAttachment, "");
+                    streamLoadtask.setLoadState(attachment, "");
                 }
 
                 break;
@@ -1462,13 +1481,9 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                 if (!(attachment instanceof ManualLoadTxnCommitAttachment)) {
                     break;
                 }
-                ManualLoadTxnCommitAttachment streamAttachment = (ManualLoadTxnCommitAttachment) attachment;
-                entity.counterStreamLoadFinishedTotal.increase(1L);
-                entity.counterStreamLoadBytesTotal.increase(streamAttachment.getReceivedBytes());
-                entity.counterStreamLoadRowsTotal.increase(streamAttachment.getLoadedRows());
 
                 if (streamLoadtask != null) {
-                    streamLoadtask.setLoadState(streamAttachment, "");
+                    streamLoadtask.setLoadState(attachment, "");
                 }
 
                 break;
@@ -1901,7 +1916,10 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         try {
             String dbName = authParams.getDb_name();
             for (String tableName : authParams.getTable_names()) {
-                Authorizer.checkTableAction(userIdentity, null, dbName, tableName, PrivilegeType.INSERT);
+                ConnectContext context = new ConnectContext();
+                context.setCurrentUserIdentity(userIdentity);
+                context.setCurrentRoleIds(userIdentity);
+                Authorizer.checkTableAction(context, dbName, tableName, PrivilegeType.INSERT);
             }
             return new TStatus(TStatusCode.OK);
         } catch (Exception e) {
@@ -1949,8 +1967,8 @@ public class FrontendServiceImpl implements FrontendService.Iface {
                     }
                 }
             }
-
-            GlobalStateMgr.getCurrentState().getNodeMgr().setFrontendConfig(configs);
+            ConfigBase.setFrontendConfig(configs, request.isIs_persistent(),
+                    request.getUser_identity());
             return new TSetConfigResponse(new TStatus(TStatusCode.OK));
         } catch (DdlException e) {
             TStatus status = new TStatus(TStatusCode.INTERNAL_ERROR);
@@ -2994,7 +3012,7 @@ public class FrontendServiceImpl implements FrontendService.Iface {
         if (options.isSetTemporary_table_only() && options.temporary_table_only) {
             TemporaryTableMgr temporaryTableMgr = GlobalStateMgr.getCurrentState().getTemporaryTableMgr();
             Set<UUID> sessions = ExecuteEnv.getInstance().getScheduler().listAllSessionsId();
-            sessions.retainAll(temporaryTableMgr.listSessions());
+            sessions.retainAll(temporaryTableMgr.listSessions().keySet());
             List<TSessionInfo> sessionInfos = new ArrayList<>();
             for (UUID session : sessions) {
                 TSessionInfo sessionInfo = new TSessionInfo();
@@ -3214,11 +3232,16 @@ public class FrontendServiceImpl implements FrontendService.Iface {
 
     @Override
     public TClusterSnapshotsResponse getClusterSnapshotsInfo(TClusterSnapshotsRequest params) {
-        return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllInfo();
+        return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotsInfo();
     }
 
     @Override
     public TClusterSnapshotJobsResponse getClusterSnapshotJobsInfo(TClusterSnapshotJobsRequest params) {
-        return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllJobsInfo();
+        return GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().getAllSnapshotJobsInfo();
+    }
+
+    @Override
+    public TGetKeywordsResponse getKeywords(TGetKeywordsRequest request) throws TException {
+        return InformationSchemaDataSource.generateKeywordsResponse(request);
     }
 }

@@ -1,4 +1,7 @@
--- name: test_mv_with_multi_partition_columns_iceberg1
+-- name: test_mv_with_multi_partition_columns_iceberg1 @slow
+set new_planner_optimize_timeout=10000;
+-- result:
+-- !result
 create database db_${uuid0};
 -- result:
 -- !result
@@ -12,6 +15,9 @@ properties
     "iceberg.catalog.type" = "hive",
     "hive.metastore.uris" = "${iceberg_catalog_hive_metastore_uris}"
 );
+-- result:
+-- !result
+set materialized_view_rewrite_mode='force';
 -- result:
 -- !result
 CREATE MATERIALIZED VIEW test_date

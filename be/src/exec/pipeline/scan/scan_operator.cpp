@@ -90,6 +90,19 @@ Status ScanOperator::prepare(RuntimeState* state) {
     _prepare_chunk_source_timer = ADD_TIMER(_unique_metrics, "PrepareChunkSourceTime");
     _submit_io_task_timer = ADD_TIMER(_unique_metrics, "SubmitTaskTime");
 
+    if (_scan_node->is_enable_topn_filter_back_pressure()) {
+        if (auto* runtime_filters = runtime_bloom_filters(); runtime_filters != nullptr) {
+            auto has_topn_filters =
+                    std::any_of(runtime_filters->descriptors().begin(), runtime_filters->descriptors().end(),
+                                [](const auto& e) { return e.second->is_topn_filter(); });
+            if (has_topn_filters) {
+                _topn_filter_back_pressure = std::make_unique<TopnRfBackPressure>(
+                        0.1, _scan_node->get_back_pressure_throttle_time_upper_bound(),
+                        _scan_node->get_back_pressure_max_rounds(), _scan_node->get_back_pressure_throttle_time(),
+                        _scan_node->get_back_pressure_num_rows());
+            }
+        }
+    }
     RETURN_IF_ERROR(do_prepare(state));
     return Status::OK();
 }
@@ -137,6 +150,10 @@ bool ScanOperator::has_output() const {
     // if storage layer returns an error, we should make sure `pull_chunk` has a chance to get it
     if (!_get_scan_status().ok()) {
         return true;
+    }
+
+    if (!_morsel_queue->empty() && _topn_filter_back_pressure && _topn_filter_back_pressure->should_throttle()) {
+        return false;
     }
 
     // Try to buffer enough chunks for exec thread, to reduce scheduling overhead.
@@ -275,6 +292,7 @@ StatusOr<ChunkPtr> ScanOperator::pull_chunk(RuntimeState* state) {
         begin_pull_chunk(res);
         // for query cache mechanism, we should emit EOS chunk when we receive the last chunk.
         auto [owner_id, is_eos] = _should_emit_eos(res);
+        evaluate_topn_runtime_filters(res.get());
         eval_runtime_bloom_filters(res.get());
         res->owner_info().set_owner_id(owner_id, is_eos);
     }

@@ -54,7 +54,7 @@ public class SampleInfo {
         this.lowWeightTablets = null;
     }
 
-    public SampleInfo(String dbName, String tableName, double tabletSampleRatio,
+    public SampleInfo(double tabletSampleRatio,
                       long sampleRowCount, long totalRowCount,
                       List<TabletStats> highWeightTablets,
                       List<TabletStats> mediumHighWeightTablets,
@@ -72,6 +72,10 @@ public class SampleInfo {
 
     public long getTotalRowCount() {
         return totalRowCount;
+    }
+
+    public double getRowSampleRatio() {
+        return rowSampleRatio;
     }
 
     public List<TabletStats> getHighWeightTablets() {
@@ -99,10 +103,10 @@ public class SampleInfo {
     }
 
     public int getMaxSampleTabletNum() {
-        int max = highWeightTablets.size();
-        max = Math.max(max, mediumHighWeightTablets.size());
-        max = Math.max(max, mediumLowWeightTablets.size());
-        max = Math.max(max, lowWeightTablets.size());
+        int max = getHighWeightTablets().size();
+        max = Math.max(max, getMediumHighWeightTablets().size());
+        max = Math.max(max, getMediumHighWeightTablets().size());
+        max = Math.max(max, getLowWeightTablets().size());
         return max;
     }
 
@@ -138,8 +142,6 @@ public class SampleInfo {
         }
         return joiner.toString();
     }
-
-
 
     public String generatePrimitiveTypeColumnTask(long tableId, long dbId, String tableName, String dbName,
                                                   List<ColumnStats> primitiveTypeStats,

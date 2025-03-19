@@ -50,6 +50,7 @@
 #include "runtime/stream_load/stream_load_executor.h"
 #include "runtime/stream_load/stream_load_pipe.h"
 #include "runtime/stream_load/transaction_mgr.h"
+#include "testutil/sync_point.h"
 #include "util/byte_buffer.h"
 #include "util/debug_util.h"
 #include "util/defer_op.h"
@@ -90,6 +91,7 @@ TransactionManagerAction::TransactionManagerAction(ExecEnv* exec_env) : _exec_en
 TransactionManagerAction::~TransactionManagerAction() = default;
 
 static void _send_reply(HttpRequest* req, const std::string& str) {
+    TEST_SYNC_POINT_CALLBACK("TransactionStreamLoad::send_reply", req);
     if (config::enable_stream_load_verbose_log) {
         LOG(INFO) << "transaction streaming load response: " << str;
     }
@@ -132,6 +134,39 @@ void TransactionManagerAction::handle(HttpRequest* req) {
     _send_reply(req, resp);
 }
 
+// Handle the resource acquired by the http request
+class ResourceHandler {
+public:
+    // ctx has been referenced and locked outside
+    ResourceHandler(StreamLoadContext* ctx) : _ctx(ctx) {
+        DCHECK(_ctx != nullptr);
+        DCHECK(!_ctx->lock.try_lock());
+    }
+
+    ~ResourceHandler() { release(); }
+
+    StreamLoadContext* ctx() { return _ctx; }
+
+    void release() {
+        if (_released) {
+            return;
+        }
+        _released = true;
+        _ctx->lock.unlock();
+        if (config::enable_stream_load_verbose_log) {
+            LOG(INFO) << "release resource, " << _ctx->brief();
+        }
+        if (_ctx->unref()) {
+            delete _ctx;
+        }
+        _ctx = nullptr;
+    }
+
+private:
+    StreamLoadContext* _ctx;
+    bool _released{false};
+};
+
 TransactionStreamLoadAction::TransactionStreamLoadAction(ExecEnv* exec_env) : _exec_env(exec_env) {}
 
 TransactionStreamLoadAction::~TransactionStreamLoadAction() = default;
@@ -144,15 +179,30 @@ void TransactionStreamLoadAction::_send_error_reply(HttpRequest* req, const Stat
     HttpChannel::send_reply(req, str);
 }
 
+void TransactionStreamLoadAction::_finish_and_reply(HttpRequest* req, const std::string& reply) {
+    ResourceHandler* handler = static_cast<ResourceHandler*>(req->handler_ctx());
+    if (handler != nullptr) {
+        // release StreamLoadContext lock before sending reply to the client,
+        // otherwise client may meet TXN_IN_PROCESSING error. The reason is that
+        // the client can send another load request quickly after receiving the
+        // reply, but the lock has not been released, so the new request can not
+        // acquire the lock, and meet the TXN_IN_PROCESSING error.
+        handler->release();
+    }
+    _send_reply(req, reply);
+}
+
 void TransactionStreamLoadAction::handle(HttpRequest* req) {
     if (config::enable_stream_load_verbose_log) {
         LOG(INFO) << "transaction streaming load request, handle: " << req->debug_string();
     }
 
-    StreamLoadContext* ctx = static_cast<StreamLoadContext*>(req->handler_ctx());
-    if (ctx == nullptr) {
+    ResourceHandler* handler = static_cast<ResourceHandler*>(req->handler_ctx());
+    if (handler == nullptr) {
         return;
     }
+    StreamLoadContext* ctx = handler->ctx();
+    DCHECK(ctx != nullptr);
     ctx->last_active_ts = MonotonicNanos();
 
     if (!ctx->status.ok()) {
@@ -172,7 +222,7 @@ void TransactionStreamLoadAction::handle(HttpRequest* req) {
     }
 
     auto resp = _exec_env->transaction_mgr()->_build_reply(TXN_LOAD, ctx);
-    _send_reply(req, resp);
+    _finish_and_reply(req, resp);
 }
 
 int TransactionStreamLoadAction::on_header(HttpRequest* req) {
@@ -217,13 +267,14 @@ int TransactionStreamLoadAction::on_header(HttpRequest* req) {
         return -1;
     }
 
-    if (!ctx->lock.try_lock()) {
-        _send_error_reply(req, Status::TransactionInProcessing("Transaction in processing, please retry later"));
+    Status lock_st = ctx->try_lock();
+    if (!lock_st.ok()) {
+        _send_error_reply(req, lock_st);
         return -1;
     }
     // referenced by the http request
     ctx->ref();
-    req->set_handler_ctx(ctx);
+    req->set_handler_ctx(new ResourceHandler(ctx));
     ctx->last_active_ts = MonotonicNanos();
     ctx->received_data_cost_nanos = 0;
     ctx->receive_bytes = 0;
@@ -237,7 +288,7 @@ int TransactionStreamLoadAction::on_header(HttpRequest* req) {
             (void)_exec_env->transaction_mgr()->_rollback_transaction(ctx);
         }
         auto resp = _exec_env->transaction_mgr()->_build_reply(TXN_LOAD, ctx);
-        _send_reply(req, resp);
+        _finish_and_reply(req, resp);
         return -1;
     }
     return 0;
@@ -494,10 +545,12 @@ Status TransactionStreamLoadAction::_exec_plan_fragment(HttpRequest* http_req, S
 }
 
 void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
-    StreamLoadContext* ctx = static_cast<StreamLoadContext*>(req->handler_ctx());
-    if (ctx == nullptr) {
+    ResourceHandler* handler = static_cast<ResourceHandler*>(req->handler_ctx());
+    if (handler == nullptr) {
         return;
     }
+    StreamLoadContext* ctx = handler->ctx();
+    DCHECK(ctx != nullptr);
 
     SCOPED_THREAD_LOCAL_MEM_TRACKER_SETTER(ctx->instance_mem_tracker.get());
 
@@ -570,18 +623,11 @@ void TransactionStreamLoadAction::on_chunk_data(HttpRequest* req) {
 }
 
 void TransactionStreamLoadAction::free_handler_ctx(void* param) {
-    StreamLoadContext* ctx = static_cast<StreamLoadContext*>(param);
-    if (ctx == nullptr) {
+    ResourceHandler* handler = static_cast<ResourceHandler*>(param);
+    if (handler == nullptr) {
         return;
     }
-    DCHECK(!ctx->lock.try_lock());
-    ctx->lock.unlock();
-    if (config::enable_stream_load_verbose_log) {
-        LOG(INFO) << "free handler context, " << ctx->brief();
-    }
-    if (ctx->unref()) {
-        delete ctx;
-    }
+    delete handler;
 }
 
 } // namespace starrocks

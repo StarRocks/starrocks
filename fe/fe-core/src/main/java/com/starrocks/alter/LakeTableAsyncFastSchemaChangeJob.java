@@ -88,8 +88,10 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
                                                        Set<Long> tablets) {
         String tag = String.format("%d_%d", partition.getId(), index.getId());
         TabletMetadataUpdateAgentTask task = null;
+        boolean needUpdateSchema = false;
         for (IndexSchemaInfo info : schemaInfos) {
             if (info.indexId == index.getId()) {
+                needUpdateSchema = true;
                 // `Set.add()` returns true means this set did not already contain the specified element
                 boolean createSchemaFile = partitionsWithSchemaFile.add(tag);
                 task = TabletMetadataUpdateAgentTaskFactory.createTabletSchemaUpdateTask(nodeId,
@@ -97,6 +99,14 @@ public class LakeTableAsyncFastSchemaChangeJob extends LakeTableAlterMetaJobBase
                 break;
             }
         }
+
+        // if the index is not in schemaInfos, it means the schema of index are not needed to be modified,
+        // but we still need to update the tablet meta to improve the meta version
+        if (!needUpdateSchema) {
+            task = TabletMetadataUpdateAgentTaskFactory.createTabletSchemaUpdateTask(nodeId,
+                    new ArrayList<>(tablets), null, false);
+        }
+
         return task;
     }
 

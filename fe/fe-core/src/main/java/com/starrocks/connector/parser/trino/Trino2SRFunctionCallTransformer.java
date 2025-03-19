@@ -218,10 +218,6 @@ public class Trino2SRFunctionCallTransformer {
         registerFunctionTransformer("to_char", 2, "jodatime_format",
                 List.of(Expr.class, Expr.class));
 
-        // parse_datetime -> str_to_jodatime
-        registerFunctionTransformer("parse_datetime", 2, "str_to_jodatime",
-                List.of(Expr.class, Expr.class));
-
         // to_date -> to_tera_date
         registerFunctionTransformer("to_date", 2, "to_tera_date",
                 List.of(Expr.class, Expr.class));
@@ -233,6 +229,34 @@ public class Trino2SRFunctionCallTransformer {
         // last_day_of_month(x)  -> last_day(x,'month')
         registerFunctionTransformer("last_day_of_month", 1, new FunctionCallExpr("last_day",
                 List.of(new PlaceholderExpr(1, Expr.class), new StringLiteral("month"))));
+
+        // year_of_week(x) -> floor(divide(yearweek('x', 1),100))
+        registerFunctionTransformer("year_of_week", 1,
+                new FunctionCallExpr("floor", List.of(
+                        new FunctionCallExpr("divide", List.of(
+                                new FunctionCallExpr("yearweek", List.of(
+                                        new PlaceholderExpr(1, Expr.class),
+                                        new IntLiteral(1))
+                                ),
+                                new IntLiteral(100))
+                        )
+                )));
+
+        // yow(x) -> floor(divide(yearweek('x', 1),100))
+        registerFunctionTransformer("yow", 1,
+                new FunctionCallExpr("floor", List.of(
+                        new FunctionCallExpr("divide", List.of(
+                                new FunctionCallExpr("yearweek", List.of(
+                                        new PlaceholderExpr(1, Expr.class),
+                                        new IntLiteral(1))
+                                ),
+                                new IntLiteral(100))
+                        )
+                )));
+
+        // from_iso8601_timestamp -> timestamp
+        registerFunctionTransformer("from_iso8601_timestamp", 1, "timestamp",
+                List.of(Expr.class));
     }
 
     private static void registerStringFunctionTransformer() {

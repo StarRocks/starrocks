@@ -133,6 +133,15 @@ public class StatisticsCollectionTriggerTest extends PlanTestBase {
             Map<Long, Optional<Long>> tableStats =
                     storage.getTableStatistics(table.getId(), List.of(targetPartition));
             Assert.assertEquals(Map.of(targetId, Optional.of(1000L)), tableStats);
+
+            List<String> insertOverwriteSQLs = FullStatisticsCollectJob.buildOverwritePartitionSQL(
+                    table.getId(), sourceId, targetId);
+
+            Assert.assertTrue(insertOverwriteSQLs.get(0).contains(String.format("SELECT    table_id, %d, column_name",
+                    targetId)));
+            Assert.assertTrue(insertOverwriteSQLs.get(0).contains(String.format("`partition_id`=%d", sourceId)));
+            Assert.assertTrue(insertOverwriteSQLs.get(1).contains(String.format("DELETE FROM column_statistics\n" +
+                    "WHERE `table_id`=%d AND `partition_id`=%d", table.getId(), sourceId)));
         }
 
         // case: overwrite a lot of data, need to re-collect statistics

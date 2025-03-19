@@ -34,6 +34,7 @@ import com.starrocks.catalog.AggregateFunction;
 import com.starrocks.catalog.ArrayType;
 import com.starrocks.catalog.Function;
 import com.starrocks.catalog.FunctionSet;
+import com.starrocks.catalog.ScalarFunction;
 import com.starrocks.catalog.StructField;
 import com.starrocks.catalog.StructType;
 import com.starrocks.catalog.TableFunction;
@@ -54,6 +55,7 @@ import com.starrocks.sql.optimizer.rewrite.ScalarOperatorEvaluator;
 import com.starrocks.sql.optimizer.transformer.ExpressionMapping;
 import com.starrocks.sql.optimizer.transformer.SqlToScalarOperatorTranslator;
 import com.starrocks.sql.parser.NodePosition;
+import com.starrocks.sql.spm.SPMFunctions;
 
 import java.math.BigInteger;
 import java.util.ArrayList;
@@ -342,6 +344,7 @@ public class FunctionAnalyzer {
                 || fnName.getFunction().equals(FunctionSet.MAX)
                 || fnName.getFunction().equals(FunctionSet.NDV)
                 || fnName.getFunction().equals(FunctionSet.APPROX_COUNT_DISTINCT)
+                || fnName.getFunction().equals(FunctionSet.DS_THETA_COUNT_DISTINCT)
                 || fnName.getFunction().equals(FunctionSet.DS_HLL_COUNT_DISTINCT))
                 && !arg.getType().canApplyToNumeric()) {
             throw new SemanticException(Type.NOT_SUPPORT_AGG_ERROR_MSG);
@@ -426,7 +429,8 @@ public class FunctionAnalyzer {
         }
 
         if (fnName.getFunction().equals(FunctionSet.PERCENTILE_APPROX)) {
-            if (functionCallExpr.getChildren().size() != 2 && functionCallExpr.getChildren().size() != 3) {
+            List<Expr> children = functionCallExpr.getChildren();
+            if (children.size() != 2 && children.size() != 3) {
                 throw new SemanticException("percentile_approx(expr, DOUBLE [, B]) requires two or three parameters",
                         functionCallExpr.getPos());
             }
@@ -437,11 +441,36 @@ public class FunctionAnalyzer {
             if (!functionCallExpr.getChild(1).getType().isNumericType()) {
                 throw new SemanticException("percentile_approx requires the second parameter's type is numeric type");
             }
-
-            if (functionCallExpr.getChildren().size() == 3) {
+            if (children.size() == 3) {
                 if (!functionCallExpr.getChild(2).getType().isNumericType()) {
                     throw new SemanticException(
                             "percentile_approx requires the third parameter's type is numeric type");
+                }
+            }
+        }
+
+        if (fnName.getFunction().equals(FunctionSet.PERCENTILE_APPROX_WEIGHTED)) {
+            List<Expr> children = functionCallExpr.getChildren();
+            if (children.size() != 3 && children.size() != 4) {
+                throw new SemanticException("percentile_approx(expr, DOUBLE [, B]) requires two or three parameters",
+                        functionCallExpr.getPos());
+            }
+            if (!functionCallExpr.getChild(0).getType().isNumericType()) {
+                throw new SemanticException(
+                        "percentile_approx requires the first parameter's type is numeric type");
+            }
+            // 1th column cannot be constant
+            if (!functionCallExpr.getChild(1).getType().isNumericType()) {
+                throw new SemanticException("percentile_approx requires the second parameter's type is bigint type column");
+            }
+            if (!functionCallExpr.getChild(2).getType().isNumericType()) {
+                throw new SemanticException(
+                        "percentile_approx requires the third parameter's type is numeric type");
+            }
+            if (children.size() == 4) {
+                if (!functionCallExpr.getChild(3).getType().isNumericType()) {
+                    throw new SemanticException(
+                            "percentile_approx requires the fourth parameter's type is numeric type");
                 }
             }
         }
@@ -535,7 +564,7 @@ public class FunctionAnalyzer {
             // check the second parameter: tgt_type
             if (argSize == 3) {
                 if (!(functionCallExpr.getChild(2) instanceof StringLiteral)) {
-                    throw new SemanticException(fnName + " 's second parameter's data type is wrong ");
+                    throw new SemanticException(fnName + " 's third parameter's data type is wrong ");
                 }
                 String tgtType = ((LiteralExpr) functionCallExpr.getChild(2)).getStringValue();
                 if (!SUPPORTED_TGT_TYPES.contains(tgtType)) {
@@ -676,6 +705,10 @@ public class FunctionAnalyzer {
             return fn;
         }
 
+        fn = SPMFunctions.getSPMFunction(node.getFnName().getFunction());
+        if (fn != null) {
+            return fn;
+        }
         // get fn from builtin functions
         fn = getAnalyzedBuiltInFunction(session, fnName, params, argumentTypes, node.getPos());
         if (fn != null) {
@@ -805,6 +838,52 @@ public class FunctionAnalyzer {
                                 Function.CompareMode.IS_NONSTRICT_SUPERTYPE_OF);
                         break;
                 }
+            }
+        } else if (FunctionSet.FIELD.equalsIgnoreCase(fnName)) {
+            Type targetType = argumentTypes[0];
+            Type returnType = Type.INT;
+            if (targetType.isNull()) {
+                targetType = Type.INT;
+            } else {      
+                for (int i = 1; i < argumentTypes.length; i++) {
+                    if (argumentTypes[i].isNull()) {
+                        //do nothing
+                    } else if ((targetType.isNumericType() && argumentTypes[i].isNumericType()) ||
+                                (targetType.isStringType() && argumentTypes[i].isStringType())) {
+                        targetType = Type.getAssignmentCompatibleType(targetType, argumentTypes[i], false);
+                        if (targetType.isInvalid()) {
+                            throw new SemanticException("Parameter's type is invalid");
+                        }
+                    } else {
+                        targetType = Type.DOUBLE;
+                    }
+                }
+            }
+            Type[] argsTypes = new Type[1];
+            argsTypes[0] = targetType;
+            fn = Expr.getBuiltinFunction(fnName, argsTypes, true, returnType, Function.CompareMode.IS_IDENTICAL);
+            // correct decimal's precision and scale
+            if (targetType.isDecimalV3()) {
+                List<Type> argTypes = Arrays.asList(targetType);
+                ScalarFunction newFn = new ScalarFunction(fn.getFunctionName(), argTypes, returnType,
+                        fn.getLocation(), ((ScalarFunction) fn).getSymbolName(),
+                        ((ScalarFunction) fn).getPrepareFnSymbol(),
+                        ((ScalarFunction) fn).getCloseFnSymbol());
+                newFn.setFunctionId(fn.getFunctionId());
+                newFn.setChecksum(fn.getChecksum());
+                newFn.setBinaryType(fn.getBinaryType());
+                newFn.setHasVarArgs(fn.hasVarArgs());
+                newFn.setId(fn.getId());
+                newFn.setUserVisible(fn.isUserVisible());
+                fn = newFn;
+            }
+        } else if (FunctionSet.ARRAY_CONTAINS.equalsIgnoreCase(fnName) || FunctionSet.ARRAY_POSITION.equalsIgnoreCase(fnName)) {
+            Preconditions.checkState(argumentTypes.length == 2);
+            if (argumentTypes[1].isNull() &&
+                    argumentTypes[0].isArrayType() && ((ArrayType) argumentTypes[0]).getItemType().isNull()) {
+                argumentTypes[0] = Type.ARRAY_BOOLEAN;
+                argumentTypes[1] = Type.BOOLEAN;
+                fn = Expr.getBuiltinFunction(fnName, argumentTypes, Function.CompareMode.IS_IDENTICAL);
             }
         }
         // add new argument types

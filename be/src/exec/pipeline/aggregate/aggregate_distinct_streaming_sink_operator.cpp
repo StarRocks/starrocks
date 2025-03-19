@@ -18,6 +18,7 @@
 
 #include "runtime/current_thread.h"
 #include "simd/simd.h"
+
 namespace starrocks::pipeline {
 
 Status AggregateDistinctStreamingSinkOperator::prepare(RuntimeState* state) {
@@ -25,6 +26,11 @@ Status AggregateDistinctStreamingSinkOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(_aggregator->prepare(state, state->obj_pool(), _unique_metrics.get()));
     if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::LIMITED_MEM) {
         _limited_mem_state.limited_memory_size = config::streaming_agg_limited_memory_size;
+    }
+    // If limit is small, streaming distinct forces pre-aggregation. After the limit is reached the operator will quickly finish.
+    // The limit in streaming agg is controlled by session variable: cbo_push_down_distinct_limit
+    if (_aggregator->limit() != -1) {
+        _aggregator->streaming_preaggregation_mode() = TStreamingPreaggregationMode::FORCE_PREAGGREGATION;
     }
     _aggregator->attach_sink_observer(state, this->_observer);
     return _aggregator->open(state);
@@ -38,8 +44,13 @@ void AggregateDistinctStreamingSinkOperator::close(RuntimeState* state) {
 }
 
 Status AggregateDistinctStreamingSinkOperator::set_finishing(RuntimeState* state) {
+    if (_is_finished) return Status::OK();
+    ONCE_DETECT(_set_finishing_once);
     auto notify = _aggregator->defer_notify_source();
-    _is_finished = true;
+    auto defer = DeferOp([this]() {
+        _aggregator->sink_complete();
+        _is_finished = true;
+    });
 
     // skip processing if cancelled
     if (state->is_cancelled()) {
@@ -50,7 +61,6 @@ Status AggregateDistinctStreamingSinkOperator::set_finishing(RuntimeState* state
         _aggregator->set_ht_eos();
     }
 
-    _aggregator->sink_complete();
     return Status::OK();
 }
 
@@ -70,7 +80,14 @@ Status AggregateDistinctStreamingSinkOperator::push_chunk(RuntimeState* state, c
 
     _aggregator->update_num_input_rows(chunk_size);
     COUNTER_SET(_aggregator->input_row_count(), _aggregator->num_input_rows());
-
+    bool limit_with_no_agg = _aggregator->limit() != -1;
+    if (limit_with_no_agg) {
+        auto size = _aggregator->hash_set_variant().size();
+        if (size >= _aggregator->limit()) {
+            (void)set_finishing(state);
+            return Status::OK();
+        }
+    }
     RETURN_IF_ERROR(_aggregator->evaluate_groupby_exprs(chunk.get()));
 
     if (_aggregator->streaming_preaggregation_mode() == TStreamingPreaggregationMode::FORCE_STREAMING) {
@@ -155,6 +172,7 @@ Status AggregateDistinctStreamingSinkOperator::_push_chunk_by_auto(const ChunkPt
 Status AggregateDistinctStreamingSinkOperator::reset_state(RuntimeState* state,
                                                            const std::vector<ChunkPtr>& refill_chunks) {
     _is_finished = false;
+    ONCE_RESET(_set_finishing_once);
     return _aggregator->reset_state(state, refill_chunks, this);
 }
 } // namespace starrocks::pipeline

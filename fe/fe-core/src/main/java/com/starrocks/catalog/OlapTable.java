@@ -353,6 +353,20 @@ public class OlapTable extends Table {
         this.tableProperty = null;
     }
 
+    public static List<Index> getIndexesBySchema(List<Index> indexes, List<Column> schema) {
+        List<Index> hitIndexes = Lists.newArrayList();
+        Set<ColumnId> columnIdsSetForSchema =
+                            schema.stream().map(col -> col.getColumnId()).collect(Collectors.toSet());
+
+        for (Index index : indexes) {
+            Set<ColumnId> columnIdsSetForIndex = index.getColumns().stream().collect(Collectors.toSet());
+            if (columnIdsSetForSchema.containsAll​(columnIdsSetForIndex)) {
+                hitIndexes.add(index);
+            }
+        }
+        return hitIndexes;
+    }
+
     @Override
     public synchronized Optional<String> mayGetDatabaseName() {
         return Optional.ofNullable(dbName);
@@ -434,18 +448,8 @@ public class OlapTable extends Table {
         olapTable.dbName = this.dbName;
     }
 
-    public void addDoubleWritePartition(String sourcePartitionName, String tempPartitionName) {
-        Partition temp = tempPartitions.getPartition(tempPartitionName);
-        if (temp != null) {
-            Partition p = getPartition(sourcePartitionName);
-            if (p != null) {
-                doubleWritePartitions.put(p.getId(), temp.getId());
-            } else {
-                LOG.warn("partition {} does not exist", sourcePartitionName);
-            }
-        } else {
-            LOG.warn("partition {} does not exist", tempPartitionName);
-        }
+    public void addDoubleWritePartition(long sourcePartitionId, long tempPartitionId) {
+        doubleWritePartitions.put(sourcePartitionId, tempPartitionId);
     }
 
     public void clearDoubleWritePartition() {

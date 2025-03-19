@@ -47,8 +47,14 @@ public class VectorIndexUtil {
             throw new SemanticException("The vector index does not support shared data mode");
         }
         if (!Config.enable_experimental_vector) {
-            throw new SemanticException("The vector index is disabled, enable it by setting FE config `enable_experimental_vector` to true");
+            throw new SemanticException(
+                    "The vector index is disabled, enable it by setting FE config `enable_experimental_vector` to true");
         }
+
+        if (column.isAllowNull()) {
+            throw new SemanticException("The vector index can only build on non-nullable column");
+        }
+
         // Only support create vector index on DUPLICATE/PRIMARY table or key columns of UNIQUE/AGGREGATE table.
         if (keysType != KeysType.DUP_KEYS && keysType != KeysType.PRIMARY_KEYS) {
             throw new SemanticException("The vector index can only build on DUPLICATE or PRIMARY table");
@@ -67,8 +73,10 @@ public class VectorIndexUtil {
         // check param keys which must not be null
         Map<String, IndexParamItem> mustNotNullParams = IndexParams.getInstance().getMustNotNullParams(IndexType.VECTOR);
 
-        Map<String, IndexParamItem> indexIndexParams = IndexParams.getInstance().getKeySetByIndexTypeAndParamType(IndexType.VECTOR, IndexParamType.INDEX);
-        Map<String, IndexParamItem> searchIndexParams = IndexParams.getInstance().getKeySetByIndexTypeAndParamType(IndexType.VECTOR, IndexParamType.SEARCH);
+        Map<String, IndexParamItem> indexIndexParams =
+                IndexParams.getInstance().getKeySetByIndexTypeAndParamType(IndexType.VECTOR, IndexParamType.INDEX);
+        Map<String, IndexParamItem> searchIndexParams =
+                IndexParams.getInstance().getKeySetByIndexTypeAndParamType(IndexType.VECTOR, IndexParamType.SEARCH);
 
         Map<VectorIndexType, Set<String>> indexParamsGroupByType =
                 Arrays.stream(IndexParamsKey.values()).filter(belong -> belong.getBelongVectorIndexType() != null)
@@ -76,7 +84,8 @@ public class VectorIndexUtil {
                                 Collectors.mapping(Enum::name, Collectors.toSet())));
 
         Map<VectorIndexType, Set<String>> searchParamsGroupByType =
-                Arrays.stream(VectorIndexParams.SearchParamsKey.values()).filter(belong -> belong.getBelongVectorIndexType() != null)
+                Arrays.stream(VectorIndexParams.SearchParamsKey.values())
+                        .filter(belong -> belong.getBelongVectorIndexType() != null)
                         .collect(Collectors.groupingBy(SearchParamsKey::getBelongVectorIndexType,
                                 Collectors.mapping(Enum::name, Collectors.toSet())));
 
@@ -119,7 +128,6 @@ public class VectorIndexUtil {
         configSearchParams.removeAll(Optional.ofNullable(searchParamsGroupByType.get(vectorIndexType))
                 .orElse(Collections.emptySet()));
 
-
         if (!configIndexParams.isEmpty()) {
             throw new SemanticException(String.format("Index params %s should not define with %s", configIndexParams,
                     vectorIndexType));
@@ -130,10 +138,33 @@ public class VectorIndexUtil {
                     vectorIndexType));
         }
 
+        if (vectorIndexType == VectorIndexType.IVFPQ) {
+            String m = properties.get(IndexParamsKey.M_IVFPQ.name().toUpperCase());
+            if (m == null) {
+                throw new SemanticException("`M_IVFPQ` is required for IVFPQ index");
+            }
+            // m is a valid integer which is guaranteed by checkParams.
+            int mValue = Integer.parseInt(m);
+
+            String dim = properties.get(CommonIndexParamKey.DIM.name().toUpperCase());
+            int dimValue = Integer.parseInt(dim);
+            if (dimValue % mValue != 0) {
+                throw new SemanticException("`DIM` should be a multiple of `M_IVFPQ` for IVFPQ index");
+            }
+        }
+
         // add default properties
+        Set<String> indexParams = indexParamsGroupByType.get(vectorIndexType);
+        paramsNeedDefault.keySet().removeIf(key -> !indexParams.contains(key));
         if (!paramsNeedDefault.isEmpty()) {
             addDefaultProperties(properties, paramsNeedDefault);
         }
+
+        // Lower all the keys and values of properties.
+        Map<String, String> lowerProperties = properties.entrySet().stream()
+                .collect(Collectors.toMap(entry -> entry.getKey().toLowerCase(), entry -> entry.getValue().toLowerCase()));
+        properties.clear();
+        properties.putAll(lowerProperties);
     }
 
     private static void addDefaultProperties(Map<String, String> properties, Map<String, IndexParamItem> paramsNeedDefault) {

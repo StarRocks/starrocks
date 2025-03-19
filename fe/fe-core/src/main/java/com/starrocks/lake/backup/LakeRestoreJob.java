@@ -131,7 +131,7 @@ public class LakeRestoreJob extends RestoreJob {
                 MaterializedIndex index = part.getDefaultPhysicalPartition().getIndex(idChain.getIdxId());
                 tablet = (LakeTablet) index.getTablet(idChain.getTabletId());
                 Long computeNodeId = GlobalStateMgr.getCurrentState().getWarehouseMgr()
-                        .getComputeNodeId(WarehouseManager.DEFAULT_WAREHOUSE_NAME, tablet);
+                        .getComputeNodeId(WarehouseManager.DEFAULT_WAREHOUSE_ID, tablet);
 
                 LakeTableSnapshotInfo info = new LakeTableSnapshotInfo(db.getId(), idChain.getTblId(),
                         idChain.getPartId(), idChain.getIdxId(), idChain.getTabletId(),

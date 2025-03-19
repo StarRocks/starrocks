@@ -62,7 +62,7 @@ public class QueryDumpInfo implements DumpInfo {
     private final List<String> exceptionList = new ArrayList<>();
     private int beNum;
     private int cachedAvgNumOfHardwareCores = -1;
-    private Map<Long, Integer> numOfHardwareCoresPerBe = Maps.newHashMap();
+    private final Map<Long, Integer> numOfHardwareCoresPerBe = Maps.newHashMap();
 
     private SessionVariable sessionVariable;
     private final ConnectContext connectContext;

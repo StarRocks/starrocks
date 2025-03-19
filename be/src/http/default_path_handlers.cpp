@@ -91,9 +91,28 @@ void config_handler(const WebPageHandler::ArgumentMap& args, std::stringstream* 
     (*output) << "</pre>";
 }
 
-void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::ArgumentMap& args, std::stringstream* output) {
+void print_mem_str(std::stringstream* output, const MemTracker::SimpleItem& item) {
+    std::string level_str = ItoaKMGT(item.level);
+    std::string limit_str = item.limit == -1 ? "none" : ItoaKMGT(item.limit);
+    string current_consumption_str = ItoaKMGT(item.cur_consumption);
+    string peak_consumption_str = ItoaKMGT(item.peak_consumption);
+    std::string parent_label;
+    if (item.parent != nullptr) {
+        parent_label = item.parent->label;
+    }
+    (*output) << strings::Substitute("<tr><td>$0</td><td>$1</td><td>$2</td><td>$3</td><td>$4</td><td>$5</td></tr>\n",
+                                     item.level, item.label, parent_label, limit_str, current_consumption_str,
+                                     peak_consumption_str);
+    for (const auto* child : item.childs) {
+        print_mem_str(output, *child);
+    }
+}
+
+void MemTrackerWebPageHandler::handle(MemTracker* mem_tracker, const WebPageHandler::ArgumentMap& args,
+                                      std::stringstream* output) {
     (*output) << "<h1>Memory Usage Detail</h1>\n";
     (*output) << "<table data-toggle='table' "
+                 "       data-page-size='25' "
                  "       data-pagination='true' "
                  "       data-search='true' "
                  "       class='table table-striped'>\n";
@@ -111,7 +130,6 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
     (*output) << "<tbody>\n";
 
     size_t upper_level;
-    size_t cur_level;
     auto iter = args.find("upper_level");
     if (iter != args.end()) {
         upper_level = std::stol(iter->second);
@@ -122,89 +140,40 @@ void mem_tracker_handler(MemTracker* mem_tracker, const WebPageHandler::Argument
     MemTracker* start_mem_tracker;
     iter = args.find("type");
     if (iter != args.end()) {
-        if (iter->second == "compaction") {
-            start_mem_tracker = GlobalEnv::GetInstance()->compaction_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "load") {
-            start_mem_tracker = GlobalEnv::GetInstance()->load_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "metadata") {
-            start_mem_tracker = GlobalEnv::GetInstance()->metadata_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "query_pool") {
-            start_mem_tracker = GlobalEnv::GetInstance()->query_pool_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "schema_change") {
-            start_mem_tracker = GlobalEnv::GetInstance()->schema_change_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "clone") {
-            start_mem_tracker = GlobalEnv::GetInstance()->clone_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "page_cache") {
-            start_mem_tracker = GlobalEnv::GetInstance()->page_cache_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "update") {
-            start_mem_tracker = GlobalEnv::GetInstance()->update_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "chunk_allocator") {
-            start_mem_tracker = GlobalEnv::GetInstance()->chunk_allocator_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "passthrough") {
-            start_mem_tracker = GlobalEnv::GetInstance()->passthrough_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "consistency") {
-            start_mem_tracker = GlobalEnv::GetInstance()->consistency_mem_tracker();
-            cur_level = 2;
-        } else if (iter->second == "datacache") {
-            start_mem_tracker = GlobalEnv::GetInstance()->datacache_mem_tracker();
-            cur_level = 2;
+        auto item = GlobalEnv::GetInstance()->get_mem_tracker_by_type(MemTracker::label_to_type(iter->second));
+        if (item != nullptr) {
+            start_mem_tracker = item.get();
         } else {
             start_mem_tracker = mem_tracker;
-            cur_level = 1;
         }
     } else {
         start_mem_tracker = mem_tracker;
-        cur_level = 1;
     }
+
+    ObjectPool obj_pool;
 
     std::vector<MemTracker::SimpleItem> items;
 
-    // Metadata memory statistics use the old memory framework,
-    // not in RootMemTrackerTree, so it needs to be added here
-    MemTracker* meta_mem_tracker = GlobalEnv::GetInstance()->metadata_mem_tracker();
-    MemTracker::SimpleItem meta_item{"metadata",
-                                     "process",
-                                     2,
-                                     meta_mem_tracker->limit(),
-                                     meta_mem_tracker->consumption(),
-                                     meta_mem_tracker->peak_consumption()};
-
-    // Update memory statistics use the old memory framework,
-    // not in RootMemTrackerTree, so it needs to be added here
-    MemTracker* update_mem_tracker = GlobalEnv::GetInstance()->update_mem_tracker();
-    MemTracker::SimpleItem update_item{"update",
-                                       "process",
-                                       2,
-                                       update_mem_tracker->limit(),
-                                       update_mem_tracker->consumption(),
-                                       update_mem_tracker->peak_consumption()};
-
     if (start_mem_tracker != nullptr) {
-        start_mem_tracker->list_mem_usage(&items, cur_level, upper_level);
+        MemTracker::SimpleItem* root = start_mem_tracker->get_snapshot(&obj_pool, upper_level);
         if (start_mem_tracker == GlobalEnv::GetInstance()->process_mem_tracker()) {
-            items.emplace_back(meta_item);
-            items.emplace_back(update_item);
+            // Metadata memory statistics use the old memory framework,
+            // not in RootMemTrackerTree, so it needs to be added here
+            MemTracker* meta_mem_tracker = GlobalEnv::GetInstance()->metadata_mem_tracker();
+            auto* meta_item = meta_mem_tracker->get_snapshot(&obj_pool, upper_level);
+            meta_item->parent = root;
+
+            // Update memory statistics use the old memory framework,
+            // not in RootMemTrackerTree, so it needs to be added here
+            MemTracker* update_mem_tracker = GlobalEnv::GetInstance()->update_mem_tracker();
+            auto* update_item = update_mem_tracker->get_snapshot(&obj_pool, upper_level);
+            update_item->parent = root;
+
+            root->childs.emplace_back(meta_item);
+            root->childs.emplace_back(update_item);
         }
 
-        for (const auto& item : items) {
-            std::string level_str = ItoaKMGT(item.level);
-            std::string limit_str = item.limit == -1 ? "none" : ItoaKMGT(item.limit);
-            string current_consumption_str = ItoaKMGT(item.cur_consumption);
-            string peak_consumption_str = ItoaKMGT(item.peak_consumption);
-            (*output) << strings::Substitute(
-                    "<tr><td>$0</td><td>$1</td><td>$2</td><td>$3</td><td>$4</td><td>$5</td></tr>\n", item.level,
-                    item.label, item.parent_label, limit_str, current_consumption_str, peak_consumption_str);
-        }
+        print_mem_str(output, *root);
     }
 
     (*output) << "</tbody></table>\n";
@@ -256,8 +225,8 @@ void add_default_path_handlers(WebPageHandler* web_page_handler, MemTracker* pro
     web_page_handler->register_page(
             "/mem_tracker", "MemTracker",
             [process_mem_tracker](auto&& PH1, auto&& PH2) {
-                return mem_tracker_handler(process_mem_tracker, std::forward<decltype(PH1)>(PH1),
-                                           std::forward<decltype(PH2)>(PH2));
+                return MemTrackerWebPageHandler::handle(process_mem_tracker, std::forward<decltype(PH1)>(PH1),
+                                                        std::forward<decltype(PH2)>(PH2));
             },
             true);
 }

@@ -152,4 +152,12 @@ public class GlobalConstraintManager {
         }
         return globalTableFKConstraintMap.get(table);
     }
+
+    public void updateConstraint(Table table, Set<TableWithFKConstraint> relatedConstrains) {
+        if (CollectionUtils.isEmpty(relatedConstrains)) {
+            globalTableFKConstraintMap.remove(table);
+        } else {
+            globalTableFKConstraintMap.put(table, relatedConstrains);
+        }
+    }
 }

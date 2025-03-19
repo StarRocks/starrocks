@@ -143,7 +143,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
         starRocksAssert.withTable("CREATE TABLE `low_card_t2` (\n" +
@@ -160,7 +160,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 ");");
 
@@ -302,6 +302,15 @@ public class LowCardinalityTest2 extends PlanTestBase {
                 "  |  \n" +
                 "  2:Project\n" +
                 "  |  <slot 4> : 4: dept_name"));
+    }
+
+    @Test
+    public void testDecodeNodeRewriteLength() throws Exception {
+        String sql = "select length(dept_name), char_length(dept_name) from dept group by dept_name,state";
+        String plan = getFragmentPlan(sql);
+        Assert.assertTrue(plan, plan.contains("  2:Project\n" +
+                "  |  <slot 4> : DictDecode(6: dept_name, [length(<place-holder>)])\n" +
+                "  |  <slot 5> : DictDecode(6: dept_name, [char_length(<place-holder>)])"));
     }
 
     @Test
@@ -1684,7 +1693,7 @@ public class LowCardinalityTest2 extends PlanTestBase {
 
     @Test
     public void testMetaScan2() throws Exception {
-        String sql = "select max(t1c), min(t1d), dict_merge(t1a) from test_all_type [_META_]";
+        String sql = "select max(t1c), min(t1d), dict_merge(t1a, 255) from test_all_type [_META_]";
         String plan = getFragmentPlan(sql);
 
         Assert.assertTrue(plan, plan.contains("  0:MetaScan\n" +
@@ -1696,15 +1705,16 @@ public class LowCardinalityTest2 extends PlanTestBase {
         String thrift = getThriftPlan(sql);
         Assert.assertTrue(thrift.contains("TFunctionName(function_name:dict_merge), " +
                 "binary_type:BUILTIN, arg_types:[TTypeDesc(types:[TTypeNode(type:ARRAY), " +
-                "TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))])]"));
+                "TTypeNode(type:SCALAR, scalar_type:TScalarType(type:VARCHAR, len:-1))]), " +
+                "TTypeDesc(types:[TTypeNode(type:SCALAR, scalar_type:TScalarType(type:INT))])]"));
     }
 
     @Test
     public void testMetaScan3() throws Exception {
-        String sql = "select max(t1c), min(t1d), dict_merge(t1a) from test_all_type [_META_]";
+        String sql = "select max(t1c), min(t1d), dict_merge(t1a, 255) from test_all_type [_META_]";
         String plan = getFragmentPlan(sql);
         assertContains(plan, "1:AGGREGATE (update serialize)\n" +
-                "  |  output: max(max_t1c), min(min_t1d), dict_merge(dict_merge_t1a)\n" +
+                "  |  output: max(max_t1c), min(min_t1d), dict_merge(dict_merge_t1a, 255)\n" +
                 "  |  group by: \n" +
                 "  |  \n" +
                 "  0:MetaScan\n" +

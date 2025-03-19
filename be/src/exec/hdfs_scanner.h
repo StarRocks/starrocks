@@ -48,6 +48,25 @@ struct SkipRowsContext {
 };
 using SkipRowsContextPtr = std::shared_ptr<SkipRowsContext>;
 
+struct OptimizationCounter {
+    int bloom_filter_tried_counter = 0;
+    int bloom_filter_success_counter = 0;
+    int statistics_tried_counter = 0;
+    int statistics_success_counter = 0;
+    int page_index_tried_counter = 0;
+    int page_index_filter_group_counter = 0;
+    int page_index_success_counter = 0;
+    OptimizationCounter& operator+=(const OptimizationCounter& counter) {
+        bloom_filter_tried_counter += counter.bloom_filter_tried_counter;
+        bloom_filter_success_counter += counter.bloom_filter_success_counter;
+        statistics_tried_counter += counter.statistics_tried_counter;
+        statistics_success_counter += counter.statistics_success_counter;
+        page_index_tried_counter += counter.page_index_tried_counter;
+        page_index_filter_group_counter += counter.page_index_filter_group_counter;
+        page_index_success_counter += counter.page_index_success_counter;
+        return *this;
+    }
+};
 struct HdfsScanStats {
     int64_t raw_rows_read = 0;
     int64_t rows_read = 0;
@@ -113,6 +132,9 @@ struct HdfsScanStats {
     int64_t deletion_vector_build_ns = 0;
     int64_t deletion_vector_build_count = 0;
     int64_t build_rowid_filter_ns = 0;
+
+    // reader filter info
+    OptimizationCounter _optimzation_counter{};
 };
 
 class HdfsParquetProfile;
@@ -242,8 +264,12 @@ struct HdfsScannerParams {
     bool can_use_any_column = false;
     bool can_use_min_max_count_opt = false;
     bool orc_use_column_names = false;
+    bool parquet_page_index_enable = false;
+    bool parquet_bloom_filter_enable = false;
 
     int64_t connector_max_split_size = 0;
+
+    ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
 };
 
 struct HdfsScannerContext {
@@ -276,12 +302,12 @@ struct HdfsScannerContext {
     std::vector<ColumnInfo> partition_columns;
 
     // partition column value which read from hdfs file path
-    std::vector<ColumnPtr> partition_values;
+    Columns partition_values;
 
     // extended column
     std::vector<ColumnInfo> extended_columns;
 
-    std::vector<ColumnPtr> extended_values;
+    Columns extended_values;
 
     // scan range
     const THdfsScanRange* scan_range = nullptr;
@@ -313,6 +339,10 @@ struct HdfsScannerContext {
     bool return_count_column = false;
 
     bool use_file_metacache = false;
+
+    bool parquet_page_index_enable = false;
+
+    bool parquet_bloom_filter_enable = false;
 
     std::string timezone;
 
@@ -348,7 +378,7 @@ struct HdfsScannerContext {
 
     void append_or_update_extended_column_to_chunk(ChunkPtr* chunk, size_t row_count);
     void append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count, const std::vector<ColumnInfo>& columns,
-                                          const std::vector<ColumnPtr>& values);
+                                          const Columns& values);
 
     // if we can skip this file by evaluating conjuncts of non-existed columns with default value.
     StatusOr<bool> should_skip_by_evaluating_not_existed_slots();
@@ -365,6 +395,8 @@ struct HdfsScannerContext {
     std::unique_ptr<ScanConjunctsManager> conjuncts_manager = nullptr;
     std::vector<std::unique_ptr<ColumnPredicate>> predicate_free_pool;
     PredicateTree predicate_tree;
+
+    ColumnIdToGlobalDictMap* global_dictmaps = &EMPTY_GLOBAL_DICTMAPS;
 };
 
 struct OpenFileOptions {

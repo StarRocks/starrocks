@@ -98,12 +98,14 @@ public class TransactionStateBatch implements Writable {
     // a proxy method
     public void afterVisible(TransactionStatus transactionStatus, boolean txnOperated) {
         for (TransactionState transactionState : transactionStates) {
-            // after status changed
-            TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
-                    .getCallbackFactory().getCallback(transactionState.getCallbackId());
-            if (callback != null) {
-                if (Objects.requireNonNull(transactionStatus) == TransactionStatus.VISIBLE) {
-                    callback.afterVisible(transactionState, txnOperated);
+            for (Long callbackId : transactionState.getCallbackId()) {
+                // after status changed
+                TxnStateChangeCallback callback = GlobalStateMgr.getCurrentState().getGlobalTransactionMgr()
+                        .getCallbackFactory().getCallback(callbackId);
+                if (callback != null) {
+                    if (Objects.requireNonNull(transactionStatus) == TransactionStatus.VISIBLE) {
+                        callback.afterVisible(transactionState, txnOperated);
+                    }
                 }
             }
         }
@@ -158,6 +160,11 @@ public class TransactionStateBatch implements Writable {
         }
     }
 
+    public void replaySetTransactionStatus() {
+        for (TransactionState transactionState : transactionStates) {
+            transactionState.replaySetTransactionStatus();
+        }
+    }
 
 
     public static TransactionStateBatch read(DataInput in) throws IOException {

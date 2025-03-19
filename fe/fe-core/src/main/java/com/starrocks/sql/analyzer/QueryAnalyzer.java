@@ -240,7 +240,7 @@ public class QueryAnalyzer {
         }
 
         @Override
-        public Void visitSubquery(SubqueryRelation subquery, Scope scope) {
+        public Void visitSubqueryRelation(SubqueryRelation subquery, Scope scope) {
             QueryRelation queryRelation = subquery.getQueryStatement().getQueryRelation();
             if (queryRelation instanceof SelectRelation) {
                 SelectRelation childSelectRelation = (SelectRelation) queryRelation;
@@ -628,9 +628,9 @@ public class QueryAnalyzer {
                 for (Column column : fullSchema) {
                     // TODO: avoid analyze visible or not each time, cache it in schema
                     if (needPruneScanColumns && !column.isKey() &&
-                            !bucketColumns.contains(column.getName()) &&
-                            !partitionColumns.contains(column.getName()) &&
-                            !pruneScanColumns.contains(column.getName().toLowerCase())) {
+                            bucketColumns.stream().noneMatch(column.getName()::equalsIgnoreCase) &&
+                            partitionColumns.stream().noneMatch(column.getName()::equalsIgnoreCase) &&
+                            pruneScanColumns.stream().noneMatch(column.getName()::equalsIgnoreCase)) {
                         // reduce unnecessary columns init, but must init key columns/bucket columns/partition columns
                         continue;
                     }
@@ -927,7 +927,7 @@ public class QueryAnalyzer {
         }
 
         @Override
-        public Scope visitSubquery(SubqueryRelation subquery, Scope context) {
+        public Scope visitSubqueryRelation(SubqueryRelation subquery, Scope context) {
             if (subquery.getResolveTableName() != null && subquery.getResolveTableName().getTbl() == null) {
                 ErrorReport.reportSemanticException(ErrorCode.ERR_DERIVED_MUST_HAVE_ALIAS);
             }

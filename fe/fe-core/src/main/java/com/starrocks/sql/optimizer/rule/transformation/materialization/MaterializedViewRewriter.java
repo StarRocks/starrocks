@@ -220,7 +220,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         final Set<ScalarOperator> queryJoinOnPredicates = Sets.newHashSet(Utils.extractConjuncts(normQueryJoinOnPredicate));
         final Set<ScalarOperator> diffPredicates = Sets.newHashSet(Utils.extractConjuncts(normMVJoinOnPredicate));
         if (!checkJoinOnPredicateFromOnPredicates(queryJoinOnPredicates, diffPredicates)) {
-            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
                     "join predicate is different {}(query) != (mv){}, " +
                             "diff: {}", queryJoinOnPredicate, mvJoinOnPredicate,
                     Joiner.on(",").join(diffPredicates));
@@ -235,7 +235,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         List<ScalarOperator> queryPredicates =
                 Utils.extractConjuncts(mvRewriteContext.getQueryPredicateSplit().getRangePredicates());
         if (!checkJoinOnPredicateFromPredicates(queryPredicates, diffPredicates)) {
-            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
                     "join predicate is different after compensate {}(query) != (mv){}, " +
                             "diff: {}", queryJoinOnPredicate, mvJoinOnPredicate,
                     Joiner.on(",").join(diffPredicates));
@@ -318,7 +318,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 // it means both joins' type and onPredicate are equal
                 // for outer join, we should check some extra conditions
                 if (!checkJoinMatch(queryJoinType, queryExpr, mvExpr)) {
-                    OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                    OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
                             "join match check failed, joinType: {}", queryJoinType);
                     return false;
                 }
@@ -367,7 +367,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
             return true;
         }
         if (!isAllPredicateEquivalent(mvPredicates, queryPredicates)) {
-            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
                     "join child predicate not matched, queryPredicates: {}, " +
                             "mvPredicates: {}, index: {}", queryPredicates, mvPredicates, index);
             return false;
@@ -552,7 +552,8 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         if (candidate == null) {
             return null;
         }
-        candidate = new MVColumnPruner().pruneColumns(candidate);
+        final ColumnRefSet requiredOutputColumns = optimizerContext.getTaskContext().getRequiredColumns();
+        candidate = new MVColumnPruner().pruneColumns(candidate, requiredOutputColumns);
         candidate = new MVPartitionPruner(optimizerContext, mvRewriteContext).prunePartition(candidate);
         return candidate;
     }
@@ -566,7 +567,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         // short circuit for tables without foreign-key/primary-key
         if (mvTables.stream().allMatch(table -> !table.hasForeignKeyConstraints())
                      && !materializationContext.getMv().hasForeignKeyConstraints()) {
-            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
                     "query table size: {}, mv table size: {}, " +
                             "can not try view delta rewrite because no FK constraints", queryTables.size(),
                     mvTables.size());
@@ -626,7 +627,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
             if (!compensateViewDelta(mvTableScanDescs, mvExtraTableScanDescs,
                     compensationJoinColumns, compensationRelations, expectedExtraQueryToMVRelationIds,
                     materializationContext)) {
-                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
                         "Rewrite ViewDelta failed: cannot compensate query by using PK/FK constraints");
                 continue;
             }
@@ -833,7 +834,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         boolean isSupported = isSupportedPredicate(queryOnPredicate, materializationContext.getQueryRefFactory(),
                 leftColumns, tableToJoinColumns, joinColumnPairs);
         if (!isSupported) {
-            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+            OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
                     "join predicate is not supported {}", queryOnPredicate);
             return false;
         }
@@ -1270,7 +1271,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         final List<ColumnRefOperator>  originalOutputColumns = MvUtils.getMvScanOutputColumnRefs(mv, mvScanOperator);
         // build mv scan opt expression with or without compensate
         final OptExpression mvScanOptExpression = mvCompensation.isTransparentRewrite() ?
-                getMvTransparentPlan(materializationContext, mvCompensation, originalOutputColumns) :
+                getMvTransparentPlan(materializationContext, mvCompensation, originalOutputColumns, true) :
                 getMVScanPlanWithoutCompensate(rewriteContext, columnRewriter, mvColumnRefToScalarOp);
         return mvScanOptExpression;
     }
@@ -1660,6 +1661,30 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                 });
     }
 
+    private boolean isPullPredicateRewrite(List<ScalarOperator> queryPredicates,
+                                           Set<ColumnRefOperator> mvPredicateUsedColRefs,
+                                           MVUnionRewriteMode unionRewriteMode) {
+        if (unionRewriteMode.isPullPredicateRewrite()) {
+            return true;
+        }
+        // if mv predicates are empty, try to union rewrite.
+        if (CollectionUtils.isEmpty(mvPredicateUsedColRefs)) {
+            return true;
+        }
+        // if query predicates and mv predicates have the same column, try to union rewrite.
+        if (queryPredicates.stream()
+                .anyMatch(pred -> pred.getColumnRefs().stream().anyMatch(col -> mvPredicateUsedColRefs.contains(col)))) {
+            return true;
+        }
+        // TODO: if query predicates are not contained in mv predicates, there maybe a chance to union rewrite
+        //  but the performance may not be good.
+        // eg:
+        //   query: select dt, k2 from tblA where date_trunc('day', dt) >= '2023-11-01'
+        //   mv : select dt, k2 from tblA where k2 > 10;
+        // whether to rewrite query by mv should be considered carefully later.
+        return false;
+    }
+
     private PredicateSplit getUnionRewriteQueryCompensation(RewriteContext rewriteContext,
                                                             ColumnRewriter columnRewriter) {
         final PredicateSplit mvCompensationToQuery = getCompensationPredicates(columnRewriter,
@@ -1674,23 +1699,38 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         SessionVariable sessionVariable = optimizerContext.getSessionVariable();
         MVUnionRewriteMode unionRewriteMode =
                 MVUnionRewriteMode.getInstance(sessionVariable.getMaterializedViewUnionRewriteMode());
-        if (!unionRewriteMode.isPullPredicateRewrite()) {
-            return null;
-        }
 
-        logMVRewrite(mvRewriteContext, "Try to pull up query's predicates to make possible for union rewrite, " +
-                "unionRewriteMode:{}", unionRewriteMode);
         // try to pull up query's predicates to make possible for rewrite from mv to query.
         PredicateSplit mvPredicateSplit = rewriteContext.getMvPredicateSplit();
         PredicateSplit queryPredicateSplit = rewriteContext.getQueryPredicateSplit();
-        Set<ColumnRefOperator> mvPredicateUsedColRefs = Utils.compoundAnd(mvPredicateSplit.getPredicates())
-                .getColumnRefs().stream()
-                .map(colRef -> (ColumnRefOperator) columnRewriter.rewriteViewToQuery(colRef))
+
+        // filter redundant predicates since they are not used for rewrite.
+        Set<ColumnRefOperator> mvPredicateUsedColRefs = mvPredicateSplit.getPredicates()
+                .stream()
+                .filter(pred -> pred != null && !pred.isRedundant())
+                .map(pred -> pred.getColumnRefs()
+                        .stream()
+                        .map(colRef -> (ColumnRefOperator) columnRewriter.rewriteViewToQuery(colRef))
+                        .collect(Collectors.toSet()))
+                .flatMap(Set::stream)
                 .collect(Collectors.toSet());
 
         List<ScalarOperator> queryPredicates = Lists.newArrayList();
-        queryPredicates.addAll(Utils.extractConjuncts(queryPredicateSplit.getRangePredicates()));
-        queryPredicates.addAll(Utils.extractConjuncts(queryPredicateSplit.getResidualPredicates()));
+        Utils.extractConjuncts(queryPredicateSplit.getRangePredicates())
+                .stream()
+                .filter(pred -> pred != null && !pred.isRedundant())
+                .forEach(queryPredicates::add);
+        Utils.extractConjuncts(queryPredicateSplit.getResidualPredicates())
+                .stream()
+                .filter(pred -> pred != null && !pred.isRedundant())
+                .forEach(queryPredicates::add);
+        
+        // if query and mv contains the same column, we can rewrite query by mv.
+        if (!isPullPredicateRewrite(queryPredicates, mvPredicateUsedColRefs, unionRewriteMode)) {
+            return null;
+        }
+        logMVRewrite(mvRewriteContext, "Try to pull up query's predicates to make possible for union rewrite, " +
+                "unionRewriteMode:{}", unionRewriteMode);
 
         Set<ScalarOperator> queryOnPredicates = MvUtils.getJoinOnPredicates(rewriteContext.getQueryExpression());
         ColumnRefSet queryOnPredicateUsedColRefs = Optional.ofNullable(Utils.compoundAnd(queryOnPredicates))
@@ -1756,8 +1796,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         if (materializationContext.getMv().getRefreshScheme().isSync()) {
             return null;
         }
-        JoinPredicatePushdown.JoinPredicatePushDownContext params = optimizerContext.getJoinPushDownParams();
-        if (!params.enableJoinPredicatePushDown) {
+        if (!optimizerContext.isEnableJoinPredicatePushDown()) {
             return null;
         }
         List<LogicalScanOperator> scanOperators = MvUtils.getScanOperator(rewriteContext.getMvExpression());
@@ -2494,14 +2533,14 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
         for (Map.Entry<ColumnRefOperator, ScalarOperator> entry : swappedQueryColumnMap.entrySet()) {
             ScalarOperator rewritten = equationRewriter.replaceExprWithTarget(entry.getValue());
             if (rewritten == null) {
-                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
                         "Rewrite projection failed: cannot rewrite expr {}",
                         entry.getValue().toString());
                 return null;
             }
             if (!isAllExprReplaced(rewritten, new ColumnRefSet(rewriteContext.getQueryColumnSet()))) {
                 // it means there is some column that can not be rewritten by outputs of mv
-                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
                         "Rewrite projection failed: cannot totally rewrite expr {}",
                         entry.getValue().toString());
                 return null;
@@ -2529,7 +2568,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                     rewrittenFailedPredicates.add(expr);
                     continue;
                 } else {
-                    OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                    OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
                             "Rewrite scalar operator failed: {} cannot be rewritten", expr);
                     return Lists.newArrayList();
                 }
@@ -2540,7 +2579,7 @@ public class MaterializedViewRewriter implements IMaterializedViewRewriter {
                     continue;
                 } else {
                     // it means there is some column that can not be rewritten by outputs of mv
-                    OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext.getMVName(),
+                    OptimizerTraceUtil.logMVRewriteFailReason(mvRewriteContext,
                             "Rewrite scalar operator failed: {} cannot be all replaced", expr);
                     return Lists.newArrayList();
                 }

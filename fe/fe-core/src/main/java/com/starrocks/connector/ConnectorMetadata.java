@@ -333,7 +333,8 @@ public interface ConnectorMetadata {
     default void createView(CreateViewStmt stmt) throws DdlException {
     }
 
-    default void alterView(AlterViewStmt stmt) throws DdlException, StarRocksException {
+    default void alterView(AlterViewStmt stmt) throws StarRocksException {
+        throw new StarRocksConnectorException("This connector doesn't support alter view");
     }
 
     default CloudConfiguration getCloudConfiguration() {
@@ -343,6 +344,9 @@ public interface ConnectorMetadata {
     default Set<DeleteFile> getDeleteFiles(IcebergTable icebergTable, Long snapshotId,
                                            ScalarOperator predicate, FileContent fileContent) {
         throw new StarRocksConnectorException("This connector doesn't support getting delete files");
+    }
+
+    default void shutdown() {
     }
 }
 

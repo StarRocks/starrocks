@@ -101,7 +101,7 @@ public class Daemon extends Thread {
             }
 
             try {
-                Thread.sleep(intervalMs);
+                Thread.sleep(getInterval());
             } catch (InterruptedException e) {
                 LOG.error("InterruptedException: ", e);
             }

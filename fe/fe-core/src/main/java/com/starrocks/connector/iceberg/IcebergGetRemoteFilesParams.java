@@ -16,10 +16,8 @@ package com.starrocks.connector.iceberg;
 
 import com.starrocks.connector.GetRemoteFilesParams;
 
-import java.util.List;
-
 public class IcebergGetRemoteFilesParams extends GetRemoteFilesParams {
-    private List<IcebergMORParams> tableFullMORParams;
+    private IcebergTableMORParams tableFullMORParams;
     private IcebergMORParams morParams;
 
     private IcebergGetRemoteFilesParams(Builder builder) {
@@ -28,7 +26,7 @@ public class IcebergGetRemoteFilesParams extends GetRemoteFilesParams {
         this.morParams = builder.morParams;
     }
 
-    public List<IcebergMORParams> getTableFullMORParams() {
+    public IcebergTableMORParams getTableFullMORParams() {
         return tableFullMORParams;
     }
 
@@ -37,7 +35,7 @@ public class IcebergGetRemoteFilesParams extends GetRemoteFilesParams {
     }
 
     public static class Builder extends GetRemoteFilesParams.Builder {
-        private List<IcebergMORParams> tableFullMORParams;
+        private IcebergTableMORParams tableFullMORParams;
         private IcebergMORParams morParams;
 
         public IcebergGetRemoteFilesParams.Builder setParams(IcebergMORParams morParams) {
@@ -45,7 +43,7 @@ public class IcebergGetRemoteFilesParams extends GetRemoteFilesParams {
             return this;
         }
 
-        public IcebergGetRemoteFilesParams.Builder setAllParams(List<IcebergMORParams> tableFullMORParams) {
+        public IcebergGetRemoteFilesParams.Builder setAllParams(IcebergTableMORParams tableFullMORParams) {
             this.tableFullMORParams = tableFullMORParams;
             return this;
         }

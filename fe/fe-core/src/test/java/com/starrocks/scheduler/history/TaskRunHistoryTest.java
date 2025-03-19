@@ -17,8 +17,8 @@ package com.starrocks.scheduler.history;
 import com.google.common.base.Preconditions;
 import com.google.common.collect.Lists;
 import com.starrocks.common.Config;
-import com.starrocks.load.pipe.filelist.RepoExecutor;
 import com.starrocks.persist.gson.GsonUtils;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.scheduler.Constants;
 import com.starrocks.scheduler.persist.TaskRunStatus;
 import com.starrocks.statistic.StatisticsMetaManager;
@@ -63,15 +63,15 @@ public class TaskRunHistoryTest {
                 "\"source\":\"CTAS\",\"errorCode\":0,\"finishTime\":0,\"processStartTime\":0,\"state\":\"PENDING\"," +
                 "\"progress\":0,\"mvExtraMessage\":{\"forceRefresh\":false,\"mvPartitionsToRefresh\":[]," +
                 "\"refBasePartitionsToRefreshMap\":{},\"basePartitionsToRefreshMap\":{},\"processStartTime\":0," +
-                "\"executeOption\":{\"priority\":0,\"isMergeRedundant\":true,\"isManual\":false,\"isSync\":false," +
-                "\"isReplay\":false},\"planBuilderMessage\":{}}}", json);
+                "\"executeOption\":{\"priority\":0,\"taskRunProperties\":{},\"isMergeRedundant\":false,\"isManual\":false," +
+                "\"isSync\":false,\"isReplay\":false},\"planBuilderMessage\":{}}}", json);
 
         TaskRunStatus b = TaskRunStatus.fromJson(json);
         assertEquals(status.toJSON(), b.toJSON());
     }
 
     @Test
-    public void testCRUD(@Mocked RepoExecutor repo) {
+    public void testCRUD(@Mocked SimpleExecutor repo) {
         TaskRunStatus status = new TaskRunStatus();
         status.setQueryId("aaa");
         status.setTaskName("t1");
@@ -153,7 +153,7 @@ public class TaskRunHistoryTest {
     }
 
     @Test
-    public void testKeeper(@Mocked RepoExecutor repo) {
+    public void testKeeper(@Mocked SimpleExecutor repo) {
         TableKeeper keeper = TaskRunHistoryTable.createKeeper();
         assertEquals(StatsConstants.STATISTICS_DB_NAME, keeper.getDatabaseName());
         assertEquals(TaskRunHistoryTable.TABLE_NAME, keeper.getTableName());
@@ -196,7 +196,7 @@ public class TaskRunHistoryTest {
     }
 
     @Test
-    public void testHistoryVacuum(@Mocked RepoExecutor repo) {
+    public void testHistoryVacuum(@Mocked SimpleExecutor repo) {
         new MockUp<TableKeeper>() {
             @Mock
             public boolean isReady() {
@@ -337,7 +337,7 @@ public class TaskRunHistoryTest {
     }
 
     @Test
-    public void testLookByTaskNamesOrder(@Mocked RepoExecutor repo) {
+    public void testLookByTaskNamesOrder(@Mocked SimpleExecutor repo) {
         new MockUp<TableKeeper>() {
             @Mock
             public boolean isReady() {
@@ -353,7 +353,7 @@ public class TaskRunHistoryTest {
         }
         // shuffle the taskRuns' order
         Collections.shuffle(taskRuns);
-        new MockUp<RepoExecutor>() {
+        new MockUp<SimpleExecutor>() {
             @Mock
             public List<TResultBatch> executeDQL(String sql) {
                 TaskRunStatus.TaskRunStatusJSONRecord record = new TaskRunStatus.TaskRunStatusJSONRecord();
@@ -378,7 +378,7 @@ public class TaskRunHistoryTest {
     }
 
     @Test
-    public void testLookOrder(@Mocked RepoExecutor repo) {
+    public void testLookOrder(@Mocked SimpleExecutor repo) {
         new MockUp<TableKeeper>() {
             @Mock
             public boolean isReady() {
@@ -396,7 +396,7 @@ public class TaskRunHistoryTest {
         // shuffle the taskRuns' order
         Collections.shuffle(taskRuns);
 
-        new MockUp<RepoExecutor>() {
+        new MockUp<SimpleExecutor>() {
             @Mock
             public List<TResultBatch> executeDQL(String sql) {
                 TaskRunStatus.TaskRunStatusJSONRecord record = new TaskRunStatus.TaskRunStatusJSONRecord();

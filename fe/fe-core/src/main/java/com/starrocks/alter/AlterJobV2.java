@@ -66,6 +66,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 /*
  * Version 2 of AlterJob, for replacing the old version of AlterJob.
@@ -119,6 +122,8 @@ public abstract class AlterJobV2 implements Writable {
     protected long warehouseId = WarehouseManager.DEFAULT_WAREHOUSE_ID;
 
     protected Span span;
+
+    protected Future<Boolean> publishVersionFuture = null;
 
     public AlterJobV2(long jobId, JobType jobType, long dbId, long tableId, String tableName, long timeoutMs) {
         this.jobId = jobId;
@@ -223,8 +228,10 @@ public abstract class AlterJobV2 implements Writable {
      */
     public synchronized void run() {
         if (isTimeout()) {
-            cancelHook(cancelImpl("Timeout"));
-            return;
+            if (cancelInternal("Timeout")) {
+                // If this job can't be cancelled, we should execute it.
+                return;
+            }
         }
 
         // create connectcontext
@@ -255,15 +262,19 @@ public abstract class AlterJobV2 implements Writable {
                 } // else: handle the new state
             }
         } catch (AlterCancelException e) {
-            cancelHook(cancelImpl(e.getMessage()));
+            cancelInternal(e.getMessage());
         }
+    }
+
+    protected boolean cancelInternal(String errMsg) {
+        boolean cancelled = cancelImpl(errMsg);
+        cancelHook(cancelled);
+        return cancelled;
     }
 
     public boolean cancel(String errMsg) {
         synchronized (this) {
-            boolean cancelled = cancelImpl(errMsg);
-            cancelHook(cancelled);
-            return cancelled;
+            return cancelInternal(errMsg);
         }
     }
 
@@ -326,6 +337,30 @@ public abstract class AlterJobV2 implements Writable {
     protected abstract void getInfo(List<List<Comparable>> infos);
 
     public abstract void replay(AlterJobV2 replayedJob);
+
+    protected boolean lakePublishVersion() {
+        return true;
+    }
+
+    protected boolean publishVersion() {
+        if (publishVersionFuture == null) {
+            Callable<Boolean> task = () -> {
+                return lakePublishVersion();
+            };
+            publishVersionFuture = GlobalStateMgr.getCurrentState().getLakeAlterPublishExecutor().submit(task);
+            return false;
+        } else {
+            if (publishVersionFuture.isDone()) {
+                try {
+                    return publishVersionFuture.get();
+                } catch (InterruptedException | ExecutionException e) {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+    }
 
     private void finishHook() {
         WarehouseIdleChecker.updateJobLastFinishTime(warehouseId);

@@ -117,7 +117,7 @@ jobs:
           echo "::error::Branch PR does not contain the backport option!"
           exit 1
 
-  backport-check:
+  backport-check-subtask:
     needs: title-check
     runs-on: ubuntu-latest
     if: >
@@ -127,78 +127,37 @@ jobs:
        startsWith(github.event.pull_request.title, '[UT]')) &&
       !contains(github.event.pull_request.title, 'cherry-pick') &&
       !contains(github.event.pull_request.title, 'backport')
+    strategy:
+      fail-fast: false
+      matrix:
+        version: [ '3.4', '3.3', '3.2', '3.1', '3.0' ]
     steps:
-      - name: add branch-3.4 label
-        if: contains(toJson(github.event.pull_request.body), '[x] 3.4')
+      - name: add ${{ matrix.version }} label
+        if: contains(toJson(github.event.pull_request.body), format('[x] {0}', matrix.version))
         uses: actions-ecosystem/action-add-labels@v1
         with:
-          labels: '3.4'
+          labels: ${{ matrix.version }}
 
-      - name: add branch-3.3 label
-        if: contains(toJson(github.event.pull_request.body), '[x] 3.3')
-        uses: actions-ecosystem/action-add-labels@v1
-        with:
-          labels: '3.3'
-
-      - name: add branch-3.2 label
-        if: contains(toJson(github.event.pull_request.body), '[x] 3.2')
-        uses: actions-ecosystem/action-add-labels@v1
-        with:
-          labels: '3.2'
-
-      - name: add branch-3.1 label
-        if: contains(toJson(github.event.pull_request.body), '[x] 3.1')
-        uses: actions-ecosystem/action-add-labels@v1
-        with:
-          labels: '3.1'
-
-      - name: add branch-3.0 label
-        if: contains(toJson(github.event.pull_request.body), '[x] 3.0')
-        uses: actions-ecosystem/action-add-labels@v1
-        with:
-          labels: '3.0'
-
-      - name: remove branch-3.4 label
-        if: contains(toJson(github.event.pull_request.body), '[ ] 3.4') && contains(github.event.pull_request.labels.*.name, '3.4')
+      - name: remove ${{ matrix.version }} label
+        if: contains(toJson(github.event.pull_request.body), format('[ ] {0}', matrix.version)) && contains(github.event.pull_request.labels.*.name, matrix.version)
         uses: actions-ecosystem/action-remove-labels@v1
         with:
-          labels: '3.4'
-
-      - name: remove branch-3.3 label
-        if: contains(toJson(github.event.pull_request.body), '[ ] 3.3') && contains(github.event.pull_request.labels.*.name, '3.3')
-        uses: actions-ecosystem/action-remove-labels@v1
-        with:
-          labels: '3.3'
-
-      - name: remove branch-3.2 label
-        if: contains(toJson(github.event.pull_request.body), '[ ] 3.2') && contains(github.event.pull_request.labels.*.name, '3.2')
-        uses: actions-ecosystem/action-remove-labels@v1
-        with:
-          labels: '3.2'
-
-      - name: remove branch-3.1 label
-        if: contains(toJson(github.event.pull_request.body), '[ ] 3.1') && contains(github.event.pull_request.labels.*.name, '3.1')
-        uses: actions-ecosystem/action-remove-labels@v1
-        with:
-          labels: '3.1'
-
-      - name: remove branch-3.0 label
-        if: contains(toJson(github.event.pull_request.body), '[ ] 3.0') && contains(github.event.pull_request.labels.*.name, '3.0')
-        uses: actions-ecosystem/action-remove-labels@v1
-        with:
-          labels: '3.0'
+          labels: ${{ matrix.version }}
 
       - name: check-done
-        if: >
-          (startsWith(github.event.pull_request.title, '[BugFix]') ||
-           startsWith(github.event.pull_request.title, '[Enhancement]') ||
-           startsWith(github.event.pull_request.title, '[Doc]') ||
-           startsWith(github.event.pull_request.title, '[UT]')) &&
-          !contains(github.event.pull_request.title, 'cherry-pick') &&
-          !contains(github.event.pull_request.title, 'backport') &&
-          contains(toJson(github.event.pull_request.body), '[ ] I have checked the version labels')
+        if: contains(toJson(github.event.pull_request.body), '[ ] I have checked the version labels')
         run: |
           echo "::error::You must mark this checkbox - I have checked the version labels which the pr will be auto-backported to the target branch"
+          exit 1
+
+  backport-check:
+    runs-on: ubuntu-latest
+    needs: backport-check-subtask
+    if: always() && needs.backport-check-subtask.result != 'skipped'
+    steps:
+      - name: Check subtask status
+        if: needs.backport-check-subtask.result == 'failure'
+        run: |
           exit 1
 
   behavior-check:

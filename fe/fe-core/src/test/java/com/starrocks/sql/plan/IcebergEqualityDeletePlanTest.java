@@ -148,7 +148,7 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
                 "     avgRowSize=3.0");
 
         // check iceberg scan node
-        List<IcebergMORParams> tableFullMORParams = Lists.newArrayList(
+        List<IcebergMORParams> morParamsList = Lists.newArrayList(
                 IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE,
                 IcebergMORParams.DATA_FILE_WITH_EQ_DELETE,
                 IcebergMORParams.of(IcebergMORParams.ScanTaskType.EQ_DELETE, Lists.newArrayList(1))
@@ -158,14 +158,14 @@ public class IcebergEqualityDeletePlanTest extends TableTestBase {
         Assert.assertTrue(scanNode instanceof IcebergScanNode);
         IcebergScanNode icebergScanNode = (IcebergScanNode) scanNode;
         Assert.assertEquals(IcebergMORParams.DATA_FILE_WITHOUT_EQ_DELETE, icebergScanNode.getMORParams());
-        Assert.assertEquals(tableFullMORParams, icebergScanNode.getTableFullMORParams());
+        Assert.assertEquals(morParamsList, icebergScanNode.getTableFullMORParams().getMorParamsList());
         Assert.assertTrue(icebergScanNode.getExtendedColumnSlotIds().isEmpty());
 
         scanNode = pair.second.getFragments().get(2).collectScanNodes().get(new PlanNodeId(3));
         Assert.assertTrue(scanNode instanceof IcebergScanNode);
         icebergScanNode = (IcebergScanNode) scanNode;
         Assert.assertEquals(IcebergMORParams.DATA_FILE_WITH_EQ_DELETE, icebergScanNode.getMORParams());
-        Assert.assertEquals(tableFullMORParams, icebergScanNode.getTableFullMORParams());
+        Assert.assertEquals(morParamsList, icebergScanNode.getTableFullMORParams().getMorParamsList());
         Assert.assertFalse(icebergScanNode.getExtendedColumnSlotIds().isEmpty());
 
         // check iceberg equality scan node

@@ -126,7 +126,7 @@ public:
     Status lazy_seek_to(uint64_t rowInStripe);
     void lazy_filter_on_cvb(Filter* filter);
     StatusOr<ChunkPtr> get_lazy_chunk();
-    StatusOr<ColumnPtr> get_row_delete_filter(const SkipRowsContextPtr& skip_rows_ctx);
+    StatusOr<MutableColumnPtr> get_row_delete_filter(const SkipRowsContextPtr& skip_rows_ctx);
     size_t get_row_delete_number(const SkipRowsContextPtr& skip_rows_ctx);
 
     bool is_implicit_castable(TypeDescriptor& starrocks_type, const TypeDescriptor& orc_type);
@@ -152,7 +152,7 @@ private:
     Status _add_conjunct(const Expr* conjunct,
                          const std::unordered_map<SlotId, size_t>& slot_id_to_pos_in_src_slot_descriptors,
                          std::unique_ptr<orc::SearchArgumentBuilder>& builder);
-    bool _add_runtime_filter(const uint64_t column_id, const SlotDescriptor* slot_desc, const JoinRuntimeFilter* rf,
+    bool _add_runtime_filter(const uint64_t column_id, const SlotDescriptor* slot_desc, const RuntimeFilter* rf,
                              std::unique_ptr<orc::SearchArgumentBuilder>& builder);
 
     void _try_implicit_cast(TypeDescriptor* from, const TypeDescriptor& to);

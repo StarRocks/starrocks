@@ -185,10 +185,9 @@ public class PartitionCommitInfo implements Writable {
 
     @Override
     public String toString() {
-        StringBuilder sb = new StringBuilder("partitionid=");
+        StringBuilder sb = new StringBuilder("partitionId=");
         sb.append(physicalPartitionId);
         sb.append(", version=").append(version);
-        sb.append(", versionHash=").append(0);
         sb.append(", versionTime=").append(versionTime);
         sb.append(", isDoubleWrite=").append(isDoubleWrite);
         return sb.toString();

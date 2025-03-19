@@ -648,15 +648,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The length of the backlog queue held by the MySQL server in the FE node.
 - Introduced in: -
 
-##### mysql_service_nio_enabled
-
-- Default: true
-- Type: Boolean
-- Unit: -
-- Is mutable: No
-- Description: Specifies whether asynchronous I/O is enabled for the FE node.
-- Introduced in: -
-
 ##### mysql_service_nio_enable_keep_alive
 
 - Default: true
@@ -714,15 +705,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: -
 - Is mutable: No
 - Description: The maximum number of connections that can be established by all users to the FE node. From v3.1.12 and v3.2.7 onwards, the default value has been changed from `1024` to `4096`.
-- Introduced in: -
-
-##### max_connection_scheduler_threads_num
-
-- Default: 4096
-- Type: Int
-- Unit: -
-- Is mutable: No
-- Description: The maximum number of threads that are supported by the connection scheduler.
 - Introduced in: -
 
 ### Metadata and cluster management
@@ -1758,7 +1740,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Type: Long
 - Unit: bytes
 - Is mutable: Yes
-- Description: The size of the largest partition for the automatic collection of statistics. If a partition exceeds this value, then sampled collection is performed instead of full.
+- Description: The data size threshold for the automatic collection of statistics. If the total size exceeds this value, then sampled collection is performed instead of full.
 - Introduced in: -
 
 ##### statistic_collect_max_row_count_per_query
@@ -1815,6 +1797,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: The maximum number of rows to collect for a histogram.
 - Introduced in: -
 
+##### connector_table_query_trigger_task_schedule_interval
+
+- Default: 30
+- Type: Int
+- Unit: Second
+- Is mutable: Yes
+- Description: The interval at which the Scheduler thread schedules the query-trigger background tasks. This item is to replace `connector_table_query_trigger_analyze_schedule_interval` introduced in v3.4.0. Here, the background tasks refer `ANALYZE` tasks in v3.4，and the collection task of low-cardinality columns' dictionary in versions later than v3.4.  
+- Introduced in: v3.4.2
+
 ##### connector_table_query_trigger_analyze_small_table_rows
 
 - Default: 10000000
@@ -1849,15 +1840,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Unit: -
 - Is mutable: Yes
 - Description: Maximum number of query-trigger ANALYZE tasks that are in Pending state on the FE.
-- Introduced in: v3.4.0
-
-##### connector_table_query_trigger_analyze_schedule_interval
-
-- Default: 30
-- Type: Int
-- Unit: Second
-- Is mutable: Yes
-- Description: The interval at which the Scheduler thread schedules to query-trigger ANALYZE tasks.
 - Introduced in: v3.4.0
 
 ##### connector_table_query_trigger_analyze_max_running_task_num
@@ -2933,16 +2915,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - Description: FE cloud-native metadata server RPC listen port.
 - Introduced in: -
 
-<!--
+
 ##### enable_load_volume_from_conf
 
-- Default: true
+- Default: false
 - Type: Boolean
 - Unit: -
 - Is mutable: No
-- Description:
-- Introduced in: -
--->
+- Description: Whether to allow StarRocks to create the built-in storage volume by using the object storage-related properties specified in the FE configuration file. The default value is changed from `true` to `false` from v3.4.1 onwards.
+- Introduced in: v3.1.0
+
 
 ##### cloud_native_storage_type
 

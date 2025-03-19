@@ -180,6 +180,8 @@ public class StatisticsCollectionTrigger {
             future = GlobalStateMgr.getCurrentState().getAnalyzeMgr().getAnalyzeTaskThreadPool()
                     .submit(() -> {
                         isRunning.set(true);
+                        // reset the start time after pending, so [end-start] can represent execution period
+                        analyzeStatus.setStartTime(LocalDateTime.now());
                         StatisticExecutor statisticExecutor = new StatisticExecutor();
                         ConnectContext statsConnectCtx = StatisticUtils.buildConnectContext();
                         // set session id for temporary table
@@ -192,7 +194,7 @@ public class StatisticsCollectionTrigger {
                                 StatisticsCollectJobFactory.buildStatisticsCollectJob(db, table,
                                         new ArrayList<>(partitionIds), null, null,
                                         analyzeType, StatsConstants.ScheduleType.ONCE,
-                                        analyzeStatus.getProperties()), analyzeStatus, false);
+                                        analyzeStatus.getProperties(), List.of(), List.of()), analyzeStatus, false);
                     });
         } catch (Throwable e) {
             LOG.error("failed to submit statistic collect job", e);

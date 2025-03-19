@@ -35,7 +35,9 @@
 namespace starrocks::lake {
 
 Status SegmentPKEncodeResult::_load() {
-    pk_column->reset_column();
+    // reset pk_column to empty
+    auto clone_pk_column = pk_column->clone_empty();
+    pk_column = std::move(clone_pk_column);
     ChunkUniquePtr chunk_shared_ptr;
     TRY_CATCH_BAD_ALLOC(chunk_shared_ptr = ChunkHelper::new_chunk(_pkey_schema, 4096));
     auto chunk = chunk_shared_ptr.get();
@@ -167,7 +169,7 @@ Status RowsetUpdateState::load_segment(uint32_t segment_id, const RowsetUpdateSt
         RETURN_IF_ERROR(_do_load_upserts(segment_id, params));
     }
 
-    if (!params.op_write.has_txn_meta() || params.op_write.txn_meta().has_merge_condition()) {
+    if (!params.op_write.has_txn_meta()) {
         return Status::OK();
     }
     if (has_partial_update_state(params)) {
@@ -318,7 +320,7 @@ Status RowsetUpdateState::_prepare_auto_increment_partial_update_states(uint32_t
     std::vector<uint32_t> column_id{auto_increment_column_id};
     auto auto_inc_column_schema = ChunkHelper::convert_schema(params.tablet_schema, column_id);
     auto column = ChunkHelper::column_from_field(*auto_inc_column_schema.field(0).get());
-    std::vector<std::unique_ptr<Column>> read_column;
+    MutableColumns read_column;
 
     std::shared_ptr<TabletSchema> modified_columns_schema = nullptr;
     if (has_partial_update_state(params)) {
@@ -430,7 +432,7 @@ Status RowsetUpdateState::_prepare_partial_update_states(uint32_t segment_id, co
     }
     auto read_column_schema = ChunkHelper::convert_schema(params.tablet_schema, read_column_ids);
     // column list that need to read from source segment
-    std::vector<std::unique_ptr<Column>> read_columns;
+    MutableColumns read_columns;
     read_columns.resize(read_column_ids.size());
     _partial_update_states[segment_id].write_columns.resize(read_columns.size());
     _partial_update_states[segment_id].src_rss_rowids.resize(_upserts[segment_id]->pk_column->size());
@@ -487,7 +489,7 @@ Status RowsetUpdateState::rewrite_segment(uint32_t segment_id, int64_t txn_id, c
     std::shared_ptr<TabletSchema> tablet_schema = std::make_shared<TabletSchema>(params.metadata->schema());
     // get rowset schema
     if (!params.op_write.has_txn_meta() || params.op_write.rewrite_segments_size() == 0 ||
-        rowset_meta.num_rows() == 0 || params.op_write.txn_meta().has_merge_condition()) {
+        rowset_meta.num_rows() == 0) {
         return Status::OK();
     }
     RETURN_ERROR_IF_FALSE(params.op_write.rewrite_segments_size() == rowset_meta.segments_size());
@@ -579,8 +581,7 @@ Status RowsetUpdateState::_resolve_conflict(uint32_t segment_id, const RowsetUpd
     _base_versions[segment_id] = base_version;
     TRACE_COUNTER_SCOPE_LATENCY_US("resolve_conflict_latency_us");
     // skip resolve conflict when not partial update happen.
-    if (!params.op_write.has_txn_meta() || params.op_write.rowset().segments_size() == 0 ||
-        params.op_write.txn_meta().has_merge_condition()) {
+    if (!params.op_write.has_txn_meta() || params.op_write.rowset().segments_size() == 0) {
         return Status::OK();
     }
 
@@ -635,7 +636,7 @@ Status RowsetUpdateState::_resolve_conflict_partial_update(const RowsetUpdateSta
     }
     if (!conflict_idxes.empty()) {
         total_conflicts += conflict_idxes.size();
-        std::vector<std::unique_ptr<Column>> read_columns;
+        MutableColumns read_columns;
         read_columns.resize(_partial_update_states[segment_id].write_columns.size());
         for (uint32_t i = 0; i < read_columns.size(); ++i) {
             read_columns[i] = _partial_update_states[segment_id].write_columns[i]->clone_empty();
@@ -649,7 +650,7 @@ Status RowsetUpdateState::_resolve_conflict_partial_update(const RowsetUpdateSta
                 params, read_column_ids, num_default > 0, rowids_by_rssid, &read_columns, &_column_to_expr_value));
 
         for (size_t col_idx = 0; col_idx < read_column_ids.size(); col_idx++) {
-            std::unique_ptr<Column> new_write_column =
+            MutableColumnPtr new_write_column =
                     _partial_update_states[segment_id].write_columns[col_idx]->clone_empty();
             TRY_CATCH_BAD_ALLOC(new_write_column->append_selective(*read_columns[col_idx], read_idxes.data(), 0,
                                                                    read_idxes.size()));
@@ -721,14 +722,14 @@ Status RowsetUpdateState::_resolve_conflict_auto_increment(const RowsetUpdateSta
             }
         }
         std::vector<uint32_t> column_id{auto_increment_column_id};
-        std::vector<std::unique_ptr<Column>> auto_increment_read_column;
+        MutableColumns auto_increment_read_column;
         auto_increment_read_column.resize(1);
         auto_increment_read_column[0] = _auto_increment_partial_update_states[segment_id].write_column->clone_empty();
         RETURN_IF_ERROR(params.tablet->update_mgr()->get_column_values(
                 params, column_id, new_rows > 0, rowids_by_rssid, &auto_increment_read_column, &_column_to_expr_value,
                 &_auto_increment_partial_update_states[segment_id]));
 
-        std::unique_ptr<Column> new_write_column =
+        MutableColumnPtr new_write_column =
                 _auto_increment_partial_update_states[segment_id].write_column->clone_empty();
         TRY_CATCH_BAD_ALLOC(
                 new_write_column->append_selective(*auto_increment_read_column[0], idxes.data(), 0, idxes.size()));
@@ -785,7 +786,7 @@ Status RowsetUpdateState::load_delete(uint32_t del_id, const RowsetUpdateStatePa
         pk_columns.push_back((uint32_t)i);
     }
     Schema pkey_schema = ChunkHelper::convert_schema(params.tablet_schema, pk_columns);
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
 
     auto root_path = params.tablet->metadata_root_location();
@@ -819,7 +820,7 @@ void RowsetUpdateState::release_delete(uint32_t del_id) {
     _deletes[del_id].reset();
 }
 
-const std::unique_ptr<Column>& RowsetUpdateState::auto_increment_deletes(uint32_t segment_id) const {
+const MutableColumnPtr& RowsetUpdateState::auto_increment_deletes(uint32_t segment_id) const {
     return _auto_increment_delete_pks[segment_id];
 }
 

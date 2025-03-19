@@ -22,14 +22,11 @@ import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedView;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
-import com.starrocks.qe.StmtExecutor;
 import com.starrocks.scheduler.persist.MVTaskRunExtraMessage;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.RefreshMaterializedViewStatement;
-import com.starrocks.sql.ast.StatementBase;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MVTestBase;
-import com.starrocks.sql.parser.SqlParser;
 import com.starrocks.sql.plan.ExecPlan;
 import com.starrocks.sql.plan.PlanTestBase;
 import com.starrocks.thrift.TExplainLevel;
@@ -207,21 +204,6 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
         ExecPlan execPlan = getExecPlan(taskRun);
         Assert.assertTrue(execPlan != null);
         return execPlan;
-    }
-
-    private String toPartitionVal(String val) {
-        return val == null ? "NULL" : String.format("'%s'", val);
-    }
-
-    private void addListPartition(String tbl, String pName, String pVal1, String pVal2) {
-        String addPartitionSql = String.format("ALTER TABLE %s ADD PARTITION %s VALUES IN ((%s, %s))", tbl, pName,
-                    toPartitionVal(pVal1), toPartitionVal(pVal2));
-        StatementBase stmt = SqlParser.parseSingleStatement(addPartitionSql, connectContext.getSessionVariable().getSqlMode());
-        try {
-            new StmtExecutor(connectContext, stmt).execute();
-        } catch (Exception e) {
-            Assert.fail("add partition failed:" + e);
-        }
     }
 
     @Test
@@ -1327,25 +1309,6 @@ public class PCTRefreshListPartitionOlapTest extends MVTestBase {
                         }
                     });
         });
-    }
-
-    private void addListPartition(String tbl, String pName, String pVal1, String pVal2, boolean isInsertValues) {
-        String addPartitionSql = String.format("ALTER TABLE %s ADD PARTITION IF NOT EXISTS %s VALUES IN ((%s, %s))",
-                tbl, pName, toPartitionVal(pVal1), toPartitionVal(pVal2));
-        StatementBase stmt = SqlParser.parseSingleStatement(addPartitionSql, connectContext.getSessionVariable().getSqlMode());
-        try {
-            // add a new partition
-            new StmtExecutor(connectContext, stmt).execute();
-
-            // insert values
-            if (isInsertValues) {
-                String insertSql = String.format("insert into %s partition(%s) values(1, 1, '%s', '%s');",
-                        tbl, pName, pVal1, pVal2);
-                executeInsertSql(insertSql);
-            }
-        } catch (Exception e) {
-            Assert.fail("add partition failed:" + e);
-        }
     }
 
     private void withTablePartitions(String tableName) {

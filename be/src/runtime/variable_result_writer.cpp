@@ -90,7 +90,7 @@ StatusOr<TFetchDataResultPtr> VariableResultWriter::_process_chunk(Chunk* chunk)
         return Status::MemoryAllocFailed("memory allocate failed");
     }
 
-    auto* variable = down_cast<BinaryColumn*>(ColumnHelper::get_data_column(result_columns[0].get()));
+    auto* variable = down_cast<const BinaryColumn*>(ColumnHelper::get_data_column(result_columns[0].get()));
     std::vector<TVariableData> var_list;
 
     int num_rows = chunk->num_rows();

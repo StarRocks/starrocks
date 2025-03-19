@@ -172,8 +172,7 @@ void LakePersistentIndex::set_difference(KeyIndexSet* key_indexes, const KeyInde
 
 bool LakePersistentIndex::is_memtable_full() const {
     const auto memtable_mem_size = _memtable->memory_usage();
-    // We have two memtable in index, so memtable memory limit means half of `l0_max_mem_usage`.
-    const bool mem_size_exceed = memtable_mem_size >= config::l0_max_mem_usage / 2;
+    const bool mem_size_exceed = memtable_mem_size >= config::l0_max_mem_usage;
     // When update memory is urgent, using a lower limit (`l0_min_mem_usage`).
     const bool mem_tracker_exceed =
             _tablet_mgr->update_mgr()->mem_tracker()->limit_exceeded_by_ratio(config::memory_urgent_level) &&
@@ -560,7 +559,7 @@ Status LakePersistentIndex::commit(MetaFileBuilder* builder) {
 Status LakePersistentIndex::load_dels(const RowsetPtr& rowset, const Schema& pkey_schema, int64_t rowset_version) {
     TRACE_COUNTER_SCOPE_LATENCY_US("rebuild_index_del_cost_us");
     // Build pk column struct from schema
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     RETURN_IF_ERROR(PrimaryKeyEncoder::create_column(pkey_schema, &pk_column));
     // Iterate all del files and insert into index.
     for (int del_idx = 0; del_idx < rowset->metadata().del_files_size(); ++del_idx) {
@@ -690,7 +689,7 @@ Status LakePersistentIndex::load_from_lake_tablet(TabletManager* tablet_mgr, con
     const uint64_t rebuild_rss_rowid_point = sstables.empty() ? 0 : sstables.rbegin()->max_rss_rowid();
     const uint32_t rebuild_rss_id = rebuild_rss_rowid_point >> 32;
     OlapReaderStatistics stats;
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     if (pk_columns.size() > 1) {
         // more than one key column
         if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {

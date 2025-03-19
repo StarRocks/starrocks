@@ -344,8 +344,7 @@ void FragmentContext::destroy_pass_through_chunk_buffer() {
 Status FragmentContext::set_pipeline_timer(PipelineTimer* timer) {
     _pipeline_timer = timer;
     _timeout_task = new CheckFragmentTimeout(this);
-    timespec tm = butil::microseconds_to_timespec(butil::gettimeofday_us());
-    tm.tv_sec += runtime_state()->query_ctx()->get_query_expire_seconds();
+    timespec tm = butil::seconds_from_now(runtime_state()->query_ctx()->get_query_expire_seconds());
     RETURN_IF_ERROR(_pipeline_timer->schedule(_timeout_task, tm));
     return Status::OK();
 }
@@ -470,6 +469,7 @@ Status FragmentContext::submit_all_timer() {
     for (auto [delta_ns, task] : _rf_timeout_tasks) {
         timespec abstime = tm;
         abstime.tv_nsec += delta_ns;
+        butil::timespec_normalize(&abstime);
         RETURN_IF_ERROR(_pipeline_timer->schedule(task, abstime));
     }
     return Status::OK();

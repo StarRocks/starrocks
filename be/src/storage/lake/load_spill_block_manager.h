@@ -20,6 +20,9 @@
 #include "util/threadpool.h"
 
 namespace starrocks {
+
+class ThreadPoolToken;
+
 namespace lake {
 
 class LoadSpillBlockMergeExecutor {
@@ -30,6 +33,8 @@ public:
 
     ThreadPool* get_thread_pool() { return _merge_pool.get(); }
     Status refresh_max_thread_num();
+
+    std::unique_ptr<ThreadPoolToken> create_token();
 
 private:
     // ThreadPool for merge.
@@ -70,6 +75,8 @@ public:
     // Initializes the LoadSpillBlockManager.
     Status init();
 
+    bool is_initialized() const { return _initialized; }
+
     // acquire Block from BlockManager
     StatusOr<spill::BlockPtr> acquire_block(size_t block_size);
     // return Block to BlockManager
@@ -88,6 +95,7 @@ private:
     std::unique_ptr<spill::DirManager> _remote_dir_manager;    // Manager for remote directories.
     std::unique_ptr<spill::BlockManager> _block_manager;       // Manager for blocks.
     std::unique_ptr<LoadSpillBlockContainer> _block_container; // Container for blocks.
+    bool _initialized = false;                                 // Whether the manager is initialized.
 };
 
 } // namespace lake

@@ -17,14 +17,14 @@ package com.starrocks.statistic.base;
 import com.starrocks.catalog.Type;
 import com.starrocks.statistic.sample.SampleInfo;
 
-public class ComplexTypeColumnStats extends ColumnStats {
+public class ComplexTypeColumnStats extends BaseColumnStats {
 
     public ComplexTypeColumnStats(String columnName, Type columnType) {
         super(columnName, columnType);
     }
 
     @Override
-    public String getFullDateSize() {
+    public String getFullDataSize() {
         return "COUNT(*) * " + columnType.getTypeSize();
     }
 

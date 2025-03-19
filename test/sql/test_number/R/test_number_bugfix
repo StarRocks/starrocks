@@ -126,7 +126,7 @@ CREATE TABLE `test_decimal_type6` (
              DISTRIBUTED BY HASH(`dec_1_2`) BUCKETS 10
              PROPERTIES (
              "replication_num" = "1",
-             "enable_persistent_index" = "false"
+             "enable_persistent_index" = "true"
              );
 -- result:
 -- !result

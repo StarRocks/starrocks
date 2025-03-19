@@ -29,6 +29,7 @@ void ParquetUTBase::create_conjunct_ctxs(ObjectPool* pool, RuntimeState* runtime
                                          std::vector<ExprContext*>* conjunct_ctxs) {
     ASSERT_OK(Expr::create_expr_trees(pool, *tExprs, conjunct_ctxs, nullptr));
     ASSERT_OK(Expr::prepare(*conjunct_ctxs, runtime_state));
+    DictOptimizeParser::disable_open_rewrite(conjunct_ctxs);
     ASSERT_OK(Expr::open(*conjunct_ctxs, runtime_state));
 }
 
@@ -251,23 +252,65 @@ void ParquetUTBase::create_in_predicate_date_conjunct_ctxs(TExprOpcode::type opc
     tExprs->emplace_back(t_expr);
 }
 
-void ParquetUTBase::setup_conjuncts_manager(std::vector<ExprContext*>& conjuncts, TupleDescriptor* tuple_desc,
-                                            RuntimeState* runtime_state, HdfsScannerContext* params) {
+void ParquetUTBase::setup_conjuncts_manager(std::vector<ExprContext*>& conjuncts, const RuntimeFilterProbeCollector* rf,
+                                            TupleDescriptor* tuple_desc, RuntimeState* runtime_state,
+                                            HdfsScannerContext* params) {
     ScanConjunctsManagerOptions opts;
     opts.conjunct_ctxs_ptr = &conjuncts;
     opts.tuple_desc = tuple_desc;
     opts.obj_pool = runtime_state->obj_pool();
-    opts.runtime_filters = runtime_state->obj_pool()->add(new RuntimeFilterProbeCollector());
+    opts.runtime_filters = rf;
     opts.runtime_state = runtime_state;
     opts.enable_column_expr_predicate = true;
     opts.is_olap_scan = false;
     opts.pred_tree_params = {true, true};
     params->conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
     ASSERT_TRUE(params->conjuncts_manager->parse_conjuncts().ok());
-    ConnectorPredicateParser predicate_parser{&params->slot_descs};
+    ConnectorPredicateParser predicate_parser{&tuple_desc->decoded_slots()};
     auto st = params->conjuncts_manager->get_predicate_tree(&predicate_parser, params->predicate_free_pool);
     ASSERT_TRUE(st.ok());
     params->predicate_tree = st.value();
+}
+
+void ParquetUTBase::create_dictmapping_string_conjunct(TExprOpcode::type opcode, starrocks::SlotId slot_id,
+                                                       const std::string& value, std::vector<TExpr>* tExprs) {
+    std::vector<TExprNode> nodes;
+
+    TExprNode node0;
+    node0.node_type = TExprNodeType::DICT_EXPR;
+    node0.num_children = 2;
+    node0.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    node0.__set_has_nullable_child(true);
+    node0.__set_is_nullable(true);
+    nodes.emplace_back(node0);
+
+    TExprNode node1 = ExprsTestHelper::create_slot_expr_node_t<TYPE_INT>(0, slot_id, true);
+    nodes.emplace_back(node1);
+
+    TExprNode pre_node = ExprsTestHelper::create_binary_pred_node(TPrimitiveType::VARCHAR, opcode);
+    if (opcode == TExprOpcode::LT || opcode == TExprOpcode::LE || opcode == TExprOpcode::GE ||
+        opcode == TExprOpcode::GT) {
+        pre_node.__set_is_monotonic(true);
+    }
+    nodes.emplace_back(pre_node);
+
+    TExprNode place_holder;
+    place_holder.node_type = TExprNodeType::PLACEHOLDER_EXPR;
+    place_holder.type = gen_type_desc(TPrimitiveType::VARCHAR);
+    place_holder.num_children = 0;
+    place_holder.__set_is_nullable(true);
+    TPlaceHolder holder;
+    holder.__set_slot_id(slot_id);
+    holder.__set_nullable(true);
+    place_holder.__set_vslot_ref(holder);
+    nodes.emplace_back(place_holder);
+
+    TExprNode varchar_literal = ExprsTestHelper::create_literal<TYPE_VARCHAR, std::string>(value, false);
+    nodes.emplace_back(varchar_literal);
+
+    TExpr t_expr;
+    t_expr.nodes = nodes;
+    tExprs->emplace_back(t_expr);
 }
 
 } // namespace starrocks::parquet

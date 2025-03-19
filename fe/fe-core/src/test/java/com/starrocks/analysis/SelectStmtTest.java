@@ -65,6 +65,7 @@ public class SelectStmtTest {
         UtFrameUtils.createMinStarRocksCluster();
         Config.show_execution_groups = false;
         FeConstants.showFragmentCost = false;
+        FeConstants.setLengthForVarchar =false;
         String createTblStmtStr = "create table db1.tbl1(k1 varchar(32), k2 varchar(32), k3 varchar(32), k4 int) "
                 + "AGGREGATE KEY(k1, k2,k3,k4) distributed by hash(k1) buckets 3 properties('replication_num' = '1');";
         String createBaseAllStmtStr = "create table db1.baseall(k1 int) distributed by hash(k1) "
@@ -98,7 +99,7 @@ public class SelectStmtTest {
                 "\"replication_num\" = \"1\",\n" +
                 "\"in_memory\" = \"false\",\n" +
                 "\"storage_format\" = \"DEFAULT\",\n" +
-                "\"enable_persistent_index\" = \"false\",\n" +
+                "\"enable_persistent_index\" = \"true\",\n" +
                 "\"replicated_storage\" = \"true\",\n" +
                 "\"compression\" = \"LZ4\"\n" +
                 "); ";

@@ -31,11 +31,13 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
     @BeforeAll
     public static void beforeAll() {
         FeConstants.unitTestView = false;
+        connectContext.getSessionVariable().setEnableMaterializedViewRewrite(false);
     }
 
     @AfterAll
     public static void afterAll() {
         FeConstants.unitTestView = true;
+        connectContext.getSessionVariable().setEnableMaterializedViewRewrite(true);
     }
 
     private String check(int mode, String sql, int aggNum) throws Exception {
@@ -81,11 +83,11 @@ public class TPCDSPushAggTest extends TPCDS1TTestBase {
         connectContext.getSessionVariable().setCboPushDownAggregateMode(1);
         String sql = getTPCDS("Q58");
         String plan = getCostExplain(sql);
-        assertContains(plan, "|----5:EXCHANGE\n" +
+        assertContains(plan, "  |----5:EXCHANGE\n" +
                 "  |       distribution type: BROADCAST\n" +
                 "  |       cardinality: 73049\n" +
                 "  |       probe runtime filters:\n" +
-                "  |       - filter_id = 3, probe_expr = (48: d_date)");
+                "  |       - filter_id = 3, probe_expr = (191: d_date)");
     }
 
     //    @ParameterizedTest(name = "{0}")

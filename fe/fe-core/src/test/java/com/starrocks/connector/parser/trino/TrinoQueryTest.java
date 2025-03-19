@@ -108,6 +108,12 @@ public class TrinoQueryTest extends TrinoTestBase {
     }
 
     @Test
+    public void testAtTimezone() {
+        String sql = "select now() AT TIME ZONE 'Asia/Hong_Kong';";
+        analyzeSuccess(sql);
+    }
+
+    @Test
     public void testCastExpression() throws Exception {
         String sql = "select cast(tb as varchar(10)) from tall";
         assertPlanContains(sql, "CAST(2: tb AS VARCHAR(10))");
@@ -899,7 +905,8 @@ public class TrinoQueryTest extends TrinoTestBase {
         String sql = "explain (TYPE logical) select v1, v2 from t0,t1";
         Assert.assertTrue(getExplain(sql), StringUtils.containsIgnoreCase(getExplain(sql),
                 "SCAN [t1] => [8:auto_fill_col]\n" +
-                        "                    Estimates: {row: 1, cpu: 9.00, memory: 0.00, network: 0.00, cost: 4.50}\n" +
+                        "                    Estimates: {row: 1, cpu: 9.00, memory: 0.00, network: 0.00, cost: 4" +
+                        ".50}\n" +
                         "                    partitionRatio: 0/1, tabletRatio: 0/0\n" +
                         "                    8:auto_fill_col := 1"));
 

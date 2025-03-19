@@ -222,6 +222,19 @@ statement
     | revokePrivilegeStatement
     | showGrantsStatement
 
+    // Security Integration Statement
+    | createSecurityIntegrationStatement
+    | alterSecurityIntegrationStatement
+    | dropSecurityIntegrationStatement
+    | showSecurityIntegrationStatement
+    | showCreateSecurityIntegrationStatement
+
+    // Group Provider Statement
+    | createGroupProviderStatement
+    | dropGroupProviderStatement
+    | showGroupProvidersStatement
+    | showCreateGroupProviderStatement
+
     // Backup Restore Statement
     | backupStatement
     | cancelBackupStatement
@@ -327,6 +340,11 @@ statement
 
     // Translate Statement
     | translateStatement
+
+    // SQL Plan Management Statement
+    | createBaselinePlanStatement
+    | dropBaselinePlanStatement
+    | showBaselinePlanStatement
 
     // Unsupported Statement
     | unsupportedStatement
@@ -616,6 +634,8 @@ createViewStatement
 alterViewStatement
     : ALTER VIEW qualifiedName ('(' columnNameWithComment (',' columnNameWithComment)* ')')? AS queryStatement
     | ALTER VIEW qualifiedName SET SECURITY (NONE | INVOKER)
+    | ALTER VIEW qualifiedName SET properties
+    | ALTER VIEW qualifiedName (ADD | MODIFY) DIALECT (STARROCKS)?  queryStatement
     ;
 
 dropViewStatement
@@ -698,7 +718,7 @@ cancelRefreshMaterializedViewStatement
 // ------------------------------------------- Admin Statement ---------------------------------------------------------
 
 adminSetConfigStatement
-    : ADMIN SET FRONTEND CONFIG '(' property ')'
+    : ADMIN SET FRONTEND CONFIG '(' property ')' (WITH PERSISTENT)?
     ;
 adminSetReplicaStatusStatement
     : ADMIN SET REPLICA STATUS properties
@@ -1310,10 +1330,11 @@ analyzeColumnClause
     | qualifiedName  (',' qualifiedName)*                       #regularColumns
     | ALL COLUMNS                                               #allColumns
     | PREDICATE COLUMNS                                         #predicateColumns
+    | MULTI_COLUMNS '(' qualifiedName  (',' qualifiedName)* ')' #multiColumnSet
     ;
 
 dropStatsStatement
-    : DROP STATS qualifiedName
+    : DROP (MULTI_COLUMNS)? STATS qualifiedName
     ;
 
 histogramStatement:
@@ -1363,6 +1384,20 @@ killAnalyzeStatement
 analyzeProfileStatement
     : ANALYZE PROFILE FROM string
     | ANALYZE PROFILE FROM string ',' INTEGER_VALUE (',' INTEGER_VALUE)*
+    ;
+
+
+// ----------------------------------------- SQL Plan Manager Statement -------------------------------------------------
+createBaselinePlanStatement
+    : CREATE GLOBAL? BASELINE (ON queryRelation)? USING queryRelation properties?
+    ;
+
+dropBaselinePlanStatement
+    : DROP BASELINE INTEGER_VALUE
+    ;
+
+showBaselinePlanStatement
+    : SHOW BASELINE
     ;
 
 // ------------------------------------------- Work Group Statement ----------------------------------------------------
@@ -1772,6 +1807,46 @@ privObjectTypePlural
     | STORAGE VOLUMES | TABLES | USERS | VIEWS | WAREHOUSES | PIPES
     ;
 
+// ------------------------------------------- Security Integration Statement ----------------------------------------------------
+
+createSecurityIntegrationStatement
+    : CREATE SECURITY INTEGRATION identifier properties
+    ;
+
+alterSecurityIntegrationStatement
+    : ALTER SECURITY INTEGRATION identifier SET propertyList
+    ;
+
+dropSecurityIntegrationStatement
+    : DROP SECURITY INTEGRATION identifier
+    ;
+
+showSecurityIntegrationStatement
+    : SHOW SECURITY INTEGRATIONS
+    ;
+
+showCreateSecurityIntegrationStatement
+    : SHOW CREATE SECURITY INTEGRATION identifier
+    ;
+
+// ------------------------------------------- Group Provider Statement ------------------------------------------
+
+createGroupProviderStatement
+    : CREATE GROUP PROVIDER identifier properties
+    ;
+
+dropGroupProviderStatement
+    : DROP GROUP PROVIDER identifier
+    ;
+
+showGroupProvidersStatement
+    : SHOW GROUP PROVIDERS
+    ;
+
+showCreateGroupProviderStatement
+    : SHOW CREATE GROUP PROVIDER identifier
+    ;
+
 // ---------------------------------------- Backup Restore Statement ---------------------------------------------------
 
 backupStatement
@@ -2160,9 +2235,15 @@ sortItem
     : expression ordering = (ASC | DESC)? (NULLS nullOrdering=(FIRST | LAST))?
     ;
 
+limitConstExpr
+    : INTEGER_VALUE
+    | PARAMETER
+    | userVariable
+    ;
+
 limitElement
-    : LIMIT limit =(INTEGER_VALUE|PARAMETER) (OFFSET offset=(INTEGER_VALUE|PARAMETER))?
-    | LIMIT offset =(INTEGER_VALUE|PARAMETER) ',' limit=(INTEGER_VALUE|PARAMETER)
+    : LIMIT limit=limitConstExpr (OFFSET offset=limitConstExpr)?
+    | LIMIT offset=limitConstExpr ',' limit=limitConstExpr
     ;
 
 querySpecification
@@ -2513,6 +2594,7 @@ informationFunctionExpression
     | name = USER '(' ')'
     | name = CURRENT_USER ('(' ')')?
     | name = CURRENT_ROLE ('(' ')')?
+    | name = CURRENT_GROUP ('(' ')')?
     ;
 
 specialDateTimeExpression
@@ -2949,11 +3031,11 @@ nonReserved
     : ACCESS | ACTIVE | ADVISOR | AFTER | AGGREGATE | APPLY | ASYNC | AUTHORS | AVG | ADMIN | ANTI | AUTHENTICATION | AUTO_INCREMENT | AUTOMATED
     | ARRAY_AGG | ARRAY_AGG_DISTINCT
     | BACKEND | BACKENDS | BACKUP | BEGIN | BITMAP_UNION | BLACKLIST | BLACKHOLE | BINARY | BODY | BOOLEAN | BRANCH | BROKER | BUCKETS
-    | BUILTIN | BASE | BEFORE
+    | BUILTIN | BASE | BEFORE | BASELINE
     | CACHE | CAST | CANCEL | CATALOG | CATALOGS | CEIL | CHAIN | CHARSET | CLEAN | CLEAR | CLUSTER | CLUSTERS | CURRENT | COLLATION | COLUMNS
     | CUME_DIST | CUMULATIVE | COMMENT | COMMIT | COMMITTED | COMPUTE | CONNECTION | CONSISTENT | COSTS | COUNT
     | CONFIG | COMPACT
-    | DATA | DATE | DATACACHE | DATETIME | DAY | DAYS | DECOMMISSION | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
+    | DATA | DATE | DATACACHE | DATETIME | DAY | DAYS | DECOMMISSION | DIALECT | DISABLE | DISK | DISTRIBUTION | DUPLICATE | DYNAMIC | DISTRIBUTED | DICTIONARY | DICTIONARY_GET | DEALLOCATE
     | ENABLE | END | ENGINE | ENGINES | ERRORS | EVENTS | EXECUTE | EXTERNAL | EXTRACT | EVERY | ENCLOSE | ESCAPE | EXPORT
     | FAILPOINT | FAILPOINTS | FIELDS | FILE | FILTER | FIRST | FLOOR | FOLLOWING | FORMAT | FN | FRONTEND | FRONTENDS | FOLLOWER | FREE
     | FUNCTIONS
@@ -2963,16 +3045,16 @@ nonReserved
     | INTERVAL | ISOLATION
     | JOB
     | LABEL | LAST | LESS | LEVEL | LIST | LOCAL | LOCATION | LOGS | LOGICAL | LOW_PRIORITY | LOCK | LOCATIONS
-    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS
+    | MANUAL | MAP | MAPPING | MAPPINGS | MASKING | MATCH | MAPPINGS | MATERIALIZED | MAX | META | MIN | MINUTE | MINUTES | MODE | MODIFY | MONTH | MERGE | MINUS | MULTI_COLUMNS
     | NAME | NAMES | NEGATIVE | NO | NODE | NODES | NONE | NULLS | NUMBER | NUMERIC
     | OBSERVER | OF | OFFSET | ONLY | OPTIMIZER | OPEN | OPERATE | OPTION | OVERWRITE | OFF
     | PARTITIONS | PASSWORD | PATH | PAUSE | PENDING | PERCENTILE_UNION | PIVOT | PLAN | PLUGIN | PLUGINS | POLICY | POLICIES
-    | PERCENT_RANK | PREDICATE | PRECEDING | PRIORITY | PROC | PROCESSLIST | PROFILE | PROFILELIST | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
+    | PERCENT_RANK | PREDICATE | PRECEDING | PRIORITY | PROC | PROCESSLIST | PROFILE | PROFILELIST | PROVIDER | PROVIDERS | PRIVILEGES | PROBABILITY | PROPERTIES | PROPERTY | PIPE | PIPES
     | QUARTER | QUERY | QUERIES | QUEUE | QUOTA | QUALIFY
     | REASON | REMOVE | REWRITE | RANDOM | RANK | RECOVER | REFRESH | REPAIR | REPEATABLE | REPLACE_IF_NOT_NULL | REPLICA | REPOSITORY
     | REPOSITORIES
     | RESOURCE | RESOURCES | RESTORE | RESUME | RETAIN | RETENTION | RETURNS | RETRY | REVERT | ROLE | ROLES | ROLLUP | ROLLBACK | ROUTINE | ROW | RUNNING | RULE | RULES
-    | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SQLBLACKLIST | START
+    | SAMPLE | SCHEDULE | SCHEDULER | SECOND | SECURITY | SEPARATOR | SERIALIZABLE |SEMI | SESSION | SETS | SIGNED | SNAPSHOT | SNAPSHOTS | SQLBLACKLIST | START | STARROCKS
     | STREAM | SUM | STATUS | STOP | SKIP_HEADER | SWAP
     | STORAGE| STRING | STRUCT | STATS | SUBMIT | SUSPEND | SYNC | SYSTEM_TIME
     | TABLES | TABLET | TABLETS | TAG | TASK | TEMPORARY | TIMESTAMP | TIMESTAMPADD | TIMESTAMPDIFF | THAN | TIME | TIMES | TRANSACTION | TRACE | TRANSLATE

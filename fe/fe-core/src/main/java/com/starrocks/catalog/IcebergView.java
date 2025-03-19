@@ -23,6 +23,7 @@ public class IcebergView extends ConnectorView {
     private final String defaultCatalogName;
     private final String defaultDbName;
     private final String location;
+    public static final String STARROCKS_DIALECT = "starrocks";
 
     public IcebergView(long id, String catalogName, String dbName, String name, List<Column> schema,
                        String definition, String defaultCatalogName, String defaultDbName, String location) {

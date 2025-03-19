@@ -24,7 +24,6 @@ import org.apache.iceberg.FileScanTask;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -47,11 +46,11 @@ public class IcebergRemoteSourceTrigger {
     private final boolean needToCheckEqualityIds;
 
     // for incremental scan range
-    public IcebergRemoteSourceTrigger(RemoteFileInfoSource remoteFileInfoSource, List<IcebergMORParams> morParams) {
+    public IcebergRemoteSourceTrigger(RemoteFileInfoSource remoteFileInfoSource, IcebergTableMORParams tableFullMORParams) {
         this.delegate = remoteFileInfoSource;
-        Preconditions.checkArgument(morParams.size() >= 3);
-        this.needToCheckEqualityIds = morParams.size() != 3;
-        for (IcebergMORParams params : morParams) {
+        Preconditions.checkArgument(tableFullMORParams.size() >= 3);
+        this.needToCheckEqualityIds = tableFullMORParams.size() != 3;
+        for (IcebergMORParams params : tableFullMORParams.getMorParamsList()) {
             IcebergMORParams.ScanTaskType type = params.getScanTaskType();
             if (type == DATA_FILE_WITHOUT_EQ_DELETE) {
                 dataFileWithoutEqDeleteQueue = Optional.of(new ArrayDeque<>());

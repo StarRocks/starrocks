@@ -302,4 +302,11 @@ public class JDBCMetadata implements ConnectorMetadata {
     public void refreshCache(Map<String, String> properties) {
         createMetaAsyncCacheInstances(properties);
     }
+
+    @Override
+    public void shutdown() {
+        if (dataSource != null) {
+            dataSource.close();
+        }
+    }
 }

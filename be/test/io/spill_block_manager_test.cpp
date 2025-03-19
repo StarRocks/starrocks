@@ -88,8 +88,8 @@ public:
         auto fs = FileSystem::Default();
         ASSERT_OK(fs->create_dir_recursive(local_path));
         ASSERT_OK(fs->create_dir_recursive(remote_path));
-        auto local_dir = create_spill_dir(local_path, 100);
-        auto remote_dir = create_spill_dir(remote_path, INT64_MAX);
+        local_dir = create_spill_dir(local_path, 100);
+        remote_dir = create_spill_dir(remote_path, INT64_MAX);
         local_dir_mgr = create_spill_dir_manager({local_dir});
         remote_dir_mgr = create_spill_dir_manager({remote_dir});
     }
@@ -100,11 +100,14 @@ protected:
     TUniqueId dummy_query_id;
     std::string local_path;
     std::string remote_path;
+    spill::DirPtr local_dir;
+    spill::DirPtr remote_dir;
     std::unique_ptr<spill::DirManager> local_dir_mgr;
     std::unique_ptr<spill::DirManager> remote_dir_mgr;
     RuntimeState dummy_state;
     RuntimeProfile dummy_profile{"dummy"};
 };
+
 TEST_F(SpillBlockManagerTest, dir_choose_strategy) {
     using DirInfo = std::pair<std::string, size_t>;
     std::vector<DirInfo> dir_info_list = {{"dir1", 100}, {"dir2", 120}};
@@ -338,6 +341,54 @@ TEST_F(SpillBlockManagerTest, dir_allocate_test) {
         ASSERT_TRUE(res.ok());
     }
     ASSERT_EQ(local_dir_mgr->_dirs[0]->get_current_size(), 0);
+}
+
+TEST_F(SpillBlockManagerTest, block_capacity_test) {
+    auto test_func = [&](std::shared_ptr<spill::BlockManager>& block_mgr, spill::DirPtr dir) {
+        ASSERT_OK(block_mgr->open());
+        {
+            spill::AcquireBlockOptions opts{.query_id = dummy_query_id,
+                                            .fragment_instance_id = dummy_query_id,
+                                            .plan_node_id = 1,
+                                            .name = "node1",
+                                            .block_size = 10};
+            auto res = block_mgr->acquire_block(opts);
+            ASSERT_TRUE(res.ok());
+            ASSERT_EQ(dir->get_current_size(), 10);
+            auto block = res.value();
+
+            ASSERT_TRUE(block->preallocate(5));
+            // there are 10 bytes left unused, preallocate will not actually apply for space at this time
+            ASSERT_EQ(dir->get_current_size(), 10);
+            ASSERT_EQ(block->size(), 0);
+            char tmp[5];
+            ASSERT_OK(block->append({Slice(tmp, 5)}));
+            ASSERT_EQ(block->size(), 5);
+
+            // there are 5 bytes left unused, preallocate will not actually apply for space at this time
+            ASSERT_TRUE(block->preallocate(5));
+            ASSERT_EQ(dir->get_current_size(), 10);
+            ASSERT_OK(block->append({Slice(tmp, 5)}));
+            ASSERT_EQ(block->size(), 10);
+            ASSERT_EQ(dir->get_current_size(), 10);
+
+            // there is no remaining space, preallocate needs to actually apply for space
+            ASSERT_TRUE(block->preallocate(20));
+            ASSERT_EQ(block->size(), 10);
+            ASSERT_EQ(dir->get_current_size(), 30);
+        }
+
+        block_mgr.reset();
+        // after block_mgr is destroyed, all space should be released
+        ASSERT_EQ(dir->get_current_size(), 0);
+    };
+    std::shared_ptr<spill::BlockManager> log_block_mgr =
+            std::make_shared<spill::LogBlockManager>(dummy_query_id, local_dir_mgr.get());
+    test_func(log_block_mgr, local_dir);
+
+    std::shared_ptr<spill::BlockManager> file_block_mgr =
+            std::make_shared<spill::FileBlockManager>(dummy_query_id, remote_dir_mgr.get());
+    test_func(file_block_mgr, remote_dir);
 }
 
 } // namespace starrocks::vectorized

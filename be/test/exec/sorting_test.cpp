@@ -40,7 +40,7 @@ namespace starrocks {
 static ColumnPtr build_sorted_column(const TypeDescriptor& type_desc, int32_t start, int32_t count, int32_t step) {
     DCHECK_EQ(TYPE_INT, type_desc.type);
 
-    ColumnPtr column = ColumnHelper::create_column(type_desc, false);
+    MutableColumnPtr column = ColumnHelper::create_column(type_desc, false);
     for (int i = 0; i < count; i++) {
         column->append_datum(Datum(start + step * i));
     }
@@ -59,7 +59,7 @@ static Columns build_random_sorted_columns(const TypeDescriptor& type_desc, int3
     int32_t cnt = 0;
     Columns columns;
     for (int seg_idx = 0; seg_idx < segment_num; seg_idx++) {
-        ColumnPtr column = ColumnHelper::create_column(type_desc, false);
+        MutableColumnPtr column = ColumnHelper::create_column(type_desc, false);
         int32_t row_count;
         if (seg_idx == segment_num - 1) {
             row_count = total_row_count - (segment_num - 1) * avg_row_count;
@@ -71,7 +71,7 @@ static Columns build_random_sorted_columns(const TypeDescriptor& type_desc, int3
             column->append_datum(Datum(val));
             val += u32(e);
         }
-        columns.emplace_back(column);
+        columns.emplace_back(std::move(column));
 
         cnt += row_count;
     }
@@ -358,7 +358,7 @@ TEST(SortingTest, merge_sorted_stream) {
                 Columns columns;
                 for (int col_idx = 0; col_idx < num_columns; col_idx++) {
                     auto column = build_sorted_column(type_desc, col_idx * 10 * chunk_probe_index[run], 10, col_idx);
-                    columns.push_back(column);
+                    columns.emplace_back(std::move(column));
                 }
                 *output = std::make_unique<Chunk>(columns, map);
             }

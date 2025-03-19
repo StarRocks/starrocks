@@ -47,15 +47,18 @@ import com.starrocks.common.FeConstants;
 import com.starrocks.common.util.DateUtils;
 import com.starrocks.common.util.UUIDUtil;
 import com.starrocks.connector.ConnectorPartitionTraits;
-import com.starrocks.load.pipe.filelist.RepoExecutor;
+import com.starrocks.http.HttpConnectContext;
 import com.starrocks.qe.ConnectContext;
+import com.starrocks.qe.SimpleExecutor;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.WarehouseManager;
+import com.starrocks.service.arrow.flight.sql.ArrowFlightSqlConnectContext;
 import com.starrocks.sql.ast.ColumnDef;
 import com.starrocks.sql.ast.UserIdentity;
 import com.starrocks.sql.common.ErrorType;
 import com.starrocks.sql.common.StarRocksPlannerException;
 import com.starrocks.sql.optimizer.statistics.StatisticsEstimateCoefficient;
+import com.starrocks.thrift.TResultSinkType;
 import com.starrocks.transaction.InsertOverwriteJobStats;
 import com.starrocks.transaction.TransactionState;
 import com.starrocks.warehouse.Warehouse;
@@ -89,7 +92,24 @@ public class StatisticUtils {
             .add("information_schema").build();
 
     public static ConnectContext buildConnectContext() {
-        ConnectContext context = ConnectContext.buildInner();
+        return buildConnectContext(TResultSinkType.MYSQL_PROTOCAL);
+    }
+
+    public static ConnectContext buildConnectContext(TResultSinkType connectType) {
+        ConnectContext context;
+        switch (connectType) {
+            case MYSQL_PROTOCAL:
+                context = ConnectContext.buildInner();
+                break;
+            case HTTP_PROTOCAL:
+                context = new HttpConnectContext();
+                break;
+            case ARROW_FLIGHT_PROTOCAL:
+                context = new ArrowFlightSqlConnectContext();
+                break;
+            default:
+                throw new IllegalStateException("Unexpected value: " + connectType);
+        }
         // Note: statistics query does not register query id to QeProcessorImpl::coordinatorMap,
         // but QeProcessorImpl::reportExecStatus will check query id,
         // So we must disable report query status from BE to FE
@@ -222,9 +242,43 @@ public class StatisticUtils {
         return updatedPartitions;
     }
 
+    // Don't use PartitionVisibleTime for data update checks as it's ineffective for ShareData architecture
+    @Deprecated
     public static LocalDateTime getPartitionLastUpdateTime(Partition partition) {
         long time = partition.getDefaultPhysicalPartition().getVisibleVersionTime();
         return LocalDateTime.ofInstant(Instant.ofEpochMilli(time), Clock.systemDefaultZone().getZone());
+    }
+
+    /**
+     * In V2: use relative changed row count to decide if a partition is healthy
+     * In V1: use VISIBLE_VERSION, which doesn't work for shared-data
+     */
+    public static boolean isPartitionStatsHealthy(Table table, Partition partition, BasicStatsMeta stats) {
+        long statsRowCount = 0;
+        if (Config.statistic_partition_healthy_v2) {
+            Map<Long, Optional<Long>> tableStatistics = GlobalStateMgr.getCurrentState().getStatisticStorage()
+                    .getTableStatistics(table.getId(), Lists.newArrayList(partition));
+            statsRowCount = tableStatistics.getOrDefault(partition.getId(), Optional.empty()).orElse(0L);
+        }
+
+        return isPartitionStatsHealthy(partition, stats, statsRowCount);
+    }
+
+    public static boolean isPartitionStatsHealthy(Partition partition, BasicStatsMeta stats, long statsRowCount) {
+        if (stats == null) {
+            return false;
+        }
+        if (!partition.hasData()) {
+            return true;
+        }
+        if (Config.statistic_partition_healthy_v2) {
+            long currentRowCount = partition.getRowCount();
+            double relativeError = 1.0 * Math.abs(statsRowCount - currentRowCount) /
+                    (double) (currentRowCount > 0 ? currentRowCount : 1);
+            return relativeError <= 1 - Config.statistic_partition_health__v2_threshold;
+        } else {
+            return stats.isUpdatedAfterLoad(getPartitionLastUpdateTime(partition));
+        }
     }
 
     public static boolean isEmptyTable(Table table) {
@@ -319,6 +373,16 @@ public class StatisticUtils {
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
                     new ColumnDef("mcv", new TypeDef(mostCommonValueType), false, null, null,
                             true, ColumnDef.DefaultValueDef.NOT_SET, ""),
+                    new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
+            );
+        } else if (tableName.equals(StatsConstants.MULTI_COLUMN_STATISTICS_TABLE_NAME)) {
+            return ImmutableList.of(
+                    new ColumnDef("table_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("column_ids", new TypeDef(ScalarType.createVarcharType(65530))),
+                    new ColumnDef("db_id", new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
+                    new ColumnDef("table_name", new TypeDef(tableNameType)),
+                    new ColumnDef("column_names", new TypeDef(columnNameType)),
+                    new ColumnDef("ndv",  new TypeDef(ScalarType.createType(PrimitiveType.BIGINT))),
                     new ColumnDef("update_time", new TypeDef(ScalarType.createType(PrimitiveType.DATETIME)))
             );
         } else {
@@ -496,7 +560,7 @@ public class StatisticUtils {
             String sql = String.format("ALTER TABLE %s.%s SET ('replication_num'='%d')",
                     StatsConstants.STATISTICS_DB_NAME, tableName, expectedReplicationNum);
             if (StringUtils.isNotEmpty(sql)) {
-                RepoExecutor.getInstance().executeDDL(sql);
+                SimpleExecutor.getRepoExecutor().executeDDL(sql);
             }
             LOG.info("changed replication_number of table {} from {} to {}",
                     tableName, replica, expectedReplicationNum);

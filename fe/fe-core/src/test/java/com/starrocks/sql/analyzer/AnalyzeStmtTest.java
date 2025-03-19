@@ -30,6 +30,7 @@ import com.starrocks.scheduler.history.TableKeeper;
 import com.starrocks.server.CatalogMgr;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.ast.AnalyzeHistogramDesc;
+import com.starrocks.sql.ast.AnalyzeMultiColumnDesc;
 import com.starrocks.sql.ast.AnalyzeStmt;
 import com.starrocks.sql.ast.DropHistogramStmt;
 import com.starrocks.sql.ast.DropStatsStmt;
@@ -107,6 +108,16 @@ public class AnalyzeStmtTest {
                 ");";
         starRocksAssert.withTable(createStructTableSql);
 
+        String upperColumnTableSql = "CREATE TABLE upper_tbl(\n" +
+                "Ka1 int, \n" +
+                "Kb2 varchar(32), \n" +
+                "Kc3 int, \n" +
+                "Kd4 int" +
+                ") DISTRIBUTED BY HASH(`Ka1`) BUCKETS 1\n" +
+                "PROPERTIES (\n" +
+                "    \"replication_num\" = \"1\"\n" +
+                ");";
+        starRocksAssert.withTable(upperColumnTableSql);
     }
 
     @Test
@@ -370,6 +381,16 @@ public class AnalyzeStmtTest {
     }
 
     @Test
+    public void testDropTableOnMultiColumnStats() {
+        String sql = "drop multi_columns stats t0";
+        DropStatsStmt dropStatsStmt = (DropStatsStmt) analyzeSuccess(sql);
+        Assert.assertEquals("t0", dropStatsStmt.getTableName().getTbl());
+        Assert.assertTrue(dropStatsStmt.isMultiColumn());
+        Assert.assertEquals("DELETE FROM multi_column_statistics WHERE TABLE_ID = 10004",
+                StatisticSQLBuilder.buildDropMultipleStatisticsSQL(10004L));
+    }
+
+    @Test
     public void testKillAnalyze() {
         String sql = "kill analyze 1";
         KillAnalyzeStmt killAnalyzeStmt = (KillAnalyzeStmt) analyzeSuccess(sql);
@@ -457,7 +478,7 @@ public class AnalyzeStmtTest {
         String tblName = "insert";
         String sql = "select cast(" + 1 + " as Int), " +
                 "cast(" + 2 + " as bigint), " +
-                "dict_merge(" + StatisticUtils.quoting(column) + ") as _dict_merge_" + column +
+                "dict_merge(" + StatisticUtils.quoting(column) + ", 255) as _dict_merge_" + column +
                 " from " + StatisticUtils.quoting(catalogName, dbName, tblName) + " [_META_]";
         QueryStatement stmt = (QueryStatement) UtFrameUtils.parseStmtWithNewParserNotIncludeAnalyzer(sql, getConnectContext());
         Assert.assertEquals("select.insert",
@@ -498,5 +519,39 @@ public class AnalyzeStmtTest {
         analyzeSuccess("analyze sample table db.tbl properties(\"medium_high_weight_sample_ratio\" = \"0.6\")");
         analyzeSuccess("analyze sample table db.tbl properties(\"medium_low_weight_sample_ratio\" = \"0.6\")");
         analyzeSuccess("analyze sample table db.tbl properties(\"low_weight_sample_ratio\" = \"0.6\")");
+    }
+
+    @Test
+    public void testUpperColumn() {
+        try {
+            AnalyzeTestUtil.connectContext.getSessionVariable().setEnableAnalyzePhasePruneColumns(true);
+            analyzeSuccess("select Ka1 from db.upper_tbl");
+        } finally {
+            AnalyzeTestUtil.connectContext.getSessionVariable().setEnableAnalyzePhasePruneColumns(false);
+        }
+    }
+
+    @Test
+    public void testAnalyzeMultiColumnStats() {
+        analyzeFail("analyze table db.tbl multi_columns");
+        analyzeFail("analyze table db.tbl multi_columns (kk1)",
+                "must greater than 1 column on multi-column combined analyze statement");
+        analyzeFail("analyze table db.tbl multi_columns (kk1, kk2) partition(`tbl`)",
+                "not support specify partition names on multi-column analyze statement");
+        analyzeFail("analyze table db.tbl multi_columns (k1, k2, k3, k4, k5, k6, k7, k8, k9, k10, k11)",
+                "column size 11 exceeded max size of 10 on multi-column combined analyze statement");
+        analyzeFail("analyze table hive0.tpch.customer multi_columns (C_NAME, C_PHONE)",
+                "Don't support analyze multi-columns combined statistics on external table");
+        analyzeFail("analyze table hive0.tpch.customer multi_columns (C_NAME, C_PHONE) with async mode",
+                "not support async analyze on multi-column analyze statement");
+
+        analyzeSuccess("analyze full table db.tbl multi_columns (kk1, kk2)");
+        analyzeSuccess("analyze sample table db.tbl multi_columns (kk1, kk2)");
+
+        AnalyzeStmt stmt = (AnalyzeStmt) analyzeSuccess("analyze table db.tbl multi_columns (kk1, kk2)");
+        Assert.assertFalse(stmt.isAsync());
+        Assert.assertTrue(stmt.isSample());
+        Assert.assertTrue(stmt.getAnalyzeTypeDesc() instanceof AnalyzeMultiColumnDesc);
+        Assert.assertTrue(stmt.getAnalyzeTypeDesc().getStatsTypes().contains(StatsConstants.StatisticsType.MCDISTINCT));
     }
 }

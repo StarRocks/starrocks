@@ -112,6 +112,7 @@ public class DeltaLakeTable extends Table {
         }
     }
 
+    @Override
     public List<Column> getPartitionColumns() {
         return partColumnNames.stream()
                 .map(name -> nameToColumn.get(name))

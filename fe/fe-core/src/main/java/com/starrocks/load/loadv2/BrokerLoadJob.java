@@ -64,7 +64,6 @@ import com.starrocks.metric.TableMetricsEntity;
 import com.starrocks.metric.TableMetricsRegistry;
 import com.starrocks.persist.AlterLoadJobOperationLog;
 import com.starrocks.qe.ConnectContext;
-import com.starrocks.qe.OriginStatement;
 import com.starrocks.qe.QeProcessorImpl;
 import com.starrocks.qe.scheduler.Coordinator;
 import com.starrocks.server.GlobalStateMgr;
@@ -104,6 +103,7 @@ public class BrokerLoadJob extends BulkLoadJob {
     private ConnectContext context;
     private List<LoadLoadingTask> newLoadingTasks = Lists.newArrayList();
     private long writeDurationMs = 0;
+    private LoadStmt stmt;
 
     // only for log replay
     public BrokerLoadJob() {
@@ -116,13 +116,14 @@ public class BrokerLoadJob extends BulkLoadJob {
         this.context = context;
     }
 
-    public BrokerLoadJob(long dbId, String label, BrokerDesc brokerDesc, OriginStatement originStmt, ConnectContext context)
+    public BrokerLoadJob(long dbId, String label, BrokerDesc brokerDesc, LoadStmt stmt, ConnectContext context)
             throws MetaNotFoundException {
-        super(dbId, label, originStmt);
+        super(dbId, label, stmt != null ? stmt.getOrigStmt() : null);
         this.timeoutSecond = Config.broker_load_default_timeout_second;
         this.brokerDesc = brokerDesc;
         this.jobType = EtlJobType.BROKER;
         this.context = context;
+        this.stmt = stmt;
         if (context != null) {
             this.warehouseId = context.getCurrentWarehouseId();
         }
@@ -304,6 +305,7 @@ public class BrokerLoadJob extends BulkLoadJob {
                         .setLoadJobType(TLoadJobType.BROKER)
                         .setPriority(priority)
                         .setOriginStmt(originStmt)
+                        .setLoadStmt(stmt)
                         .setPartialUpdateMode(mode)
                         .setFileStatusList(attachment.getFileStatusByTable(aggKey))
                         .setFileNum(attachment.getFileNumByTable(aggKey))
@@ -408,6 +410,15 @@ public class BrokerLoadJob extends BulkLoadJob {
             retryTime--;
         } finally {
             writeUnlock();
+        }
+    }
+
+    @Override
+    protected void reset() {
+        super.reset();
+        if (context != null) {
+            context.setStartTime();
+            createTimestamp = context.getStartTime();
         }
     }
 

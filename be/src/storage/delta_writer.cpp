@@ -16,6 +16,7 @@
 
 #include <utility>
 
+#include "common/tracer.h"
 #include "io/io_profiler.h"
 #include "runtime/current_thread.h"
 #include "runtime/descriptors.h"
@@ -572,7 +573,8 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
             if ((_mem_table != nullptr && _mem_table->get_result_chunk() != nullptr) || eos) {
                 auto replicate_token = _replicate_token.get();
                 return _flush_token->submit(
-                        std::move(_mem_table), eos, [replicate_token, this](std::unique_ptr<SegmentPB> seg, bool eos) {
+                        std::move(_mem_table), eos,
+                        [replicate_token, this](SegmentPBPtr seg, bool eos, int64_t flush_data_size) {
                             if (seg) {
                                 _tablet->add_in_writing_data_size(_opt.txn_id, seg->data_size());
                             }
@@ -597,7 +599,7 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
         } else {
             if (_mem_table != nullptr && _mem_table->get_result_chunk() != nullptr) {
                 return _flush_token->submit(
-                        std::move(_mem_table), eos, [this](std::unique_ptr<SegmentPB> seg, bool eos) {
+                        std::move(_mem_table), eos, [this](SegmentPBPtr seg, bool eos, int64_t flush_data_size) {
                             if (seg) {
                                 _tablet->add_in_writing_data_size(_opt.txn_id, seg->data_size());
                             }
@@ -616,7 +618,7 @@ Status DeltaWriter::flush_memtable_async(bool eos) {
         }
     } else if (_replica_state == Peer) {
         if (_mem_table != nullptr && _mem_table->get_result_chunk() != nullptr) {
-            return _flush_token->submit(std::move(_mem_table), eos, [this](std::unique_ptr<SegmentPB> seg, bool eos) {
+            return _flush_token->submit(std::move(_mem_table), eos, [this](SegmentPBPtr seg, bool eos, int64_t f) {
                 if (seg) {
                     _tablet->add_in_writing_data_size(_opt.txn_id, seg->data_size());
                 }
@@ -871,14 +873,14 @@ Status DeltaWriter::_fill_auto_increment_id(const Chunk& chunk) {
         pk_columns.push_back((uint32_t)i);
     }
     Schema pkey_schema = ChunkHelper::convert_schema(_tablet_schema, pk_columns);
-    std::unique_ptr<Column> pk_column;
+    MutableColumnPtr pk_column;
     if (!PrimaryKeyEncoder::create_column(pkey_schema, &pk_column).ok()) {
         CHECK(false) << "create column for primary key encoder failed";
     }
     auto col = pk_column->clone();
 
     PrimaryKeyEncoder::encode(pkey_schema, chunk, 0, chunk.num_rows(), col.get());
-    std::unique_ptr<Column> upserts = std::move(col);
+    MutableColumnPtr upserts = std::move(col);
 
     std::vector<uint64_t> rss_rowids;
     rss_rowids.resize(upserts->size());
@@ -907,7 +909,7 @@ Status DeltaWriter::_fill_auto_increment_id(const Chunk& chunk) {
         const TabletColumn& tablet_column = _tablet_schema->column(i);
         if (tablet_column.is_auto_increment()) {
             auto& column = chunk.get_column_by_index(i);
-            RETURN_IF_ERROR((std::dynamic_pointer_cast<Int64Column>(column))->fill_range(ids, filter));
+            RETURN_IF_ERROR((Int64Column::dynamic_pointer_cast(column))->fill_range(ids, filter));
             break;
         }
     }

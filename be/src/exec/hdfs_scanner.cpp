@@ -14,7 +14,7 @@
 
 #include "exec/hdfs_scanner.h"
 
-#include "block_cache/block_cache_hit_rate_counter.hpp"
+#include "cache/block_cache/block_cache_hit_rate_counter.hpp"
 #include "column/column_helper.h"
 #include "connector/deletion_vector/deletion_vector.h"
 #include "exec/exec_node.h"
@@ -23,6 +23,7 @@
 #include "io/compressed_input_stream.h"
 #include "io/shared_buffered_input_stream.h"
 #include "pipeline/fragment_context.h"
+#include "runtime/global_dict/parser.h"
 #include "storage/predicate_parser.h"
 #include "storage/runtime_range_pruner.hpp"
 #include "util/compression/compression_utils.h"
@@ -97,7 +98,7 @@ Status HdfsScanner::init(RuntimeState* runtime_state, const HdfsScannerParams& s
 
 Status HdfsScanner::_build_scanner_context() {
     HdfsScannerContext& ctx = _scanner_ctx;
-    std::vector<ColumnPtr>& partition_values = ctx.partition_values;
+    Columns& partition_values = ctx.partition_values;
 
     // evaluate partition values.
     for (size_t i = 0; i < _scanner_params.partition_slots.size(); i++) {
@@ -109,7 +110,7 @@ Status HdfsScanner::_build_scanner_context() {
     }
 
     // evaluate extended column values
-    std::vector<ColumnPtr>& extended_values = ctx.extended_values;
+    Columns& extended_values = ctx.extended_values;
     for (size_t i = 0; i < _scanner_params.extended_col_slots.size(); i++) {
         int extended_col_idx = _scanner_params.index_in_extended_columns[i];
         ASSIGN_OR_RETURN(auto extended_value_column,
@@ -172,25 +173,28 @@ Status HdfsScanner::_build_scanner_context() {
     ctx.split_context = _scanner_params.split_context;
     ctx.enable_split_tasks = _scanner_params.enable_split_tasks;
     ctx.connector_max_split_size = _scanner_params.connector_max_split_size;
+    ctx.global_dictmaps = _scanner_params.global_dictmaps;
+    ctx.parquet_bloom_filter_enable = _scanner_params.parquet_bloom_filter_enable;
+    ctx.parquet_page_index_enable = _scanner_params.parquet_page_index_enable;
 
-    if (config::parquet_advance_zonemap_filter) {
-        ScanConjunctsManagerOptions opts;
-        opts.conjunct_ctxs_ptr = &_scanner_params.all_conjunct_ctxs;
-        opts.tuple_desc = _scanner_params.tuple_desc;
-        opts.obj_pool = _runtime_state->obj_pool();
-        opts.runtime_filters = _scanner_params.runtime_filter_collector;
-        opts.runtime_state = _runtime_state;
-        opts.enable_column_expr_predicate = true;
-        opts.is_olap_scan = false;
-        opts.pred_tree_params = _runtime_state->fragment_ctx()->pred_tree_params();
-        ctx.conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
-        RETURN_IF_ERROR(ctx.conjuncts_manager->parse_conjuncts());
-        auto* predicate_parser = opts.obj_pool->add(new ConnectorPredicateParser(&ctx.slot_descs));
-        ASSIGN_OR_RETURN(ctx.predicate_tree,
-                         ctx.conjuncts_manager->get_predicate_tree(predicate_parser, ctx.predicate_free_pool));
-        ctx.rf_scan_range_pruner = opts.obj_pool->add(
-                new RuntimeScanRangePruner(predicate_parser, ctx.conjuncts_manager->unarrived_runtime_filters()));
-    }
+    ScanConjunctsManagerOptions opts;
+    opts.conjunct_ctxs_ptr = &_scanner_params.all_conjunct_ctxs;
+    opts.tuple_desc = _scanner_params.tuple_desc;
+    opts.obj_pool = _runtime_state->obj_pool();
+    opts.runtime_filters = _scanner_params.runtime_filter_collector;
+    opts.runtime_state = _runtime_state;
+    opts.enable_column_expr_predicate = true;
+    opts.is_olap_scan = false;
+    opts.pred_tree_params = _runtime_state->fragment_ctx()->pred_tree_params();
+    ctx.conjuncts_manager = std::make_unique<ScanConjunctsManager>(std::move(opts));
+    RETURN_IF_ERROR(ctx.conjuncts_manager->parse_conjuncts());
+    auto* predicate_parser =
+            opts.obj_pool->add(new ConnectorPredicateParser(&_scanner_params.tuple_desc->decoded_slots()));
+    ASSIGN_OR_RETURN(ctx.predicate_tree,
+                     ctx.conjuncts_manager->get_predicate_tree(predicate_parser, ctx.predicate_free_pool));
+    ctx.rf_scan_range_pruner = opts.obj_pool->add(
+            new RuntimeScanRangePruner(predicate_parser, ctx.conjuncts_manager->unarrived_runtime_filters()));
+
     return Status::OK();
 }
 
@@ -623,7 +627,7 @@ void HdfsScannerContext::append_or_update_extended_column_to_chunk(ChunkPtr* chu
 
 void HdfsScannerContext::append_or_update_column_to_chunk(ChunkPtr* chunk, size_t row_count,
                                                           const std::vector<ColumnInfo>& columns,
-                                                          const std::vector<ColumnPtr>& values) {
+                                                          const Columns& values) {
     if (columns.size() == 0) return;
 
     ChunkPtr& ck = (*chunk);

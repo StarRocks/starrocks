@@ -26,6 +26,7 @@ import com.starrocks.connector.metadata.MetadataTable;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.sql.StatementPlanner;
+import com.starrocks.sql.analyzer.Analyzer;
 import com.starrocks.sql.analyzer.Authorizer;
 import com.starrocks.sql.ast.AstTraverser;
 import com.starrocks.sql.ast.DeleteStmt;
@@ -37,7 +38,8 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptExpressionVisitor;
 import com.starrocks.sql.optimizer.Optimizer;
-import com.starrocks.sql.optimizer.OptimizerConfig;
+import com.starrocks.sql.optimizer.OptimizerFactory;
+import com.starrocks.sql.optimizer.OptimizerOptions;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -75,8 +77,7 @@ public class ColumnPrivilege {
 
             if (table instanceof SystemTable && ((SystemTable) table).requireOperatePrivilege()) {
                 try {
-                    Authorizer.checkSystemAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
-                            PrivilegeType.OPERATE);
+                    Authorizer.checkSystemAction(context, PrivilegeType.OPERATE);
                 } catch (AccessDeniedException e) {
                     AccessDeniedException.reportAccessDenied(
                             InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME,
@@ -110,13 +111,14 @@ public class ColumnPrivilege {
             TransformerContext transformerContext = new TransformerContext(columnRefFactory, context, mvTransformerContext);
             logicalPlan = new RelationTransformer(transformerContext).transformWithSelectLimit(stmt.getQueryRelation());
 
-            OptimizerConfig optimizerConfig = new OptimizerConfig(OptimizerConfig.OptimizerAlgorithm.RULE_BASED);
-            optimizerConfig.disableRule(RuleType.GP_SINGLE_TABLE_MV_REWRITE);
-            optimizerConfig.disableRule(RuleType.GP_MULTI_TABLE_MV_REWRITE);
-            optimizerConfig.disableRule(RuleType.GP_PRUNE_EMPTY_OPERATOR);
-            Optimizer optimizer = new Optimizer(optimizerConfig);
-            optimizedPlan = optimizer.optimize(context, logicalPlan.getRoot(),
-                    new PhysicalPropertySet(), new ColumnRefSet(logicalPlan.getOutputColumn()), columnRefFactory);
+            OptimizerOptions optimizerOptions = new OptimizerOptions(OptimizerOptions.OptimizerStrategy.RULE_BASED);
+            optimizerOptions.disableRule(RuleType.GP_SINGLE_TABLE_MV_REWRITE);
+            optimizerOptions.disableRule(RuleType.GP_MULTI_TABLE_MV_REWRITE);
+            optimizerOptions.disableRule(RuleType.GP_PRUNE_EMPTY_OPERATOR);
+            Optimizer optimizer =
+                    OptimizerFactory.create(OptimizerFactory.initContext(context, columnRefFactory, optimizerOptions));
+            optimizedPlan = optimizer.optimize(logicalPlan.getRoot(),
+                    new PhysicalPropertySet(), new ColumnRefSet(logicalPlan.getOutputColumn()));
 
             optimizedPlan.getOp().accept(new ScanColumnCollector(tableObjectToTableName, scanColumns), optimizedPlan, null);
         }
@@ -130,7 +132,7 @@ public class ColumnPrivilege {
                 Set<String> columns = scanColumns.getOrDefault(tableName, new HashSet<>());
                 for (String column : columns) {
                     try {
-                        Authorizer.checkColumnAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        Authorizer.checkColumnAction(context,
                                 tableName, column, PrivilegeType.SELECT);
                     } catch (AccessDeniedException e) {
                         AccessDeniedException.reportAccessDenied(
@@ -146,7 +148,7 @@ public class ColumnPrivilege {
                     try {
                         // for privilege checking, treat connector view as table
                         if (table.isConnectorView()) {
-                            Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            Authorizer.checkTableAction(context,
                                     tableName, PrivilegeType.SELECT);
                         } else {
                             View view = (View) table;
@@ -154,14 +156,21 @@ public class ColumnPrivilege {
                                 List<TableName> allTables = view.getTableRefs();
                                 for (TableName t : allTables) {
                                     BasicTable basicTable = GlobalStateMgr.getCurrentState().getMetadataMgr().getBasicTable(
-                                            InternalCatalog.DEFAULT_INTERNAL_CATALOG_NAME, t.getDb(), t.getTbl());
-
-                                    Authorizer.checkAnyActionOnTableLikeObject(context.getCurrentUserIdentity(),
-                                            null, t.getDb(), basicTable);
+                                            t.getCatalog(), t.getDb(), t.getTbl());
+                                    if (basicTable.isOlapView()) {
+                                        View subView = (View) basicTable;
+                                        QueryStatement queryStatement = subView.getQueryStatement();
+                                        Analyzer.analyze(queryStatement, context);
+                                        Authorizer.check(queryStatement, context);
+                                    } else if (basicTable.isMaterializedView()) {
+                                        Authorizer.checkMaterializedViewAction(context, t, PrivilegeType.SELECT);
+                                    } else {
+                                        Authorizer.checkTableAction(context, t, PrivilegeType.SELECT);
+                                    }
                                 }
                             }
 
-                            Authorizer.checkViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                            Authorizer.checkViewAction(context,
                                     tableName, PrivilegeType.SELECT);
                         }
                     } catch (AccessDeniedException e) {
@@ -172,7 +181,7 @@ public class ColumnPrivilege {
                     }
                 } else if (table.isMaterializedView()) {
                     try {
-                        Authorizer.checkMaterializedViewAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        Authorizer.checkMaterializedViewAction(context,
                                 tableName, PrivilegeType.SELECT);
                     } catch (AccessDeniedException e) {
                         AccessDeniedException.reportAccessDenied(
@@ -182,7 +191,7 @@ public class ColumnPrivilege {
                     }
                 } else {
                     try {
-                        Authorizer.checkTableAction(context.getCurrentUserIdentity(), context.getCurrentRoleIds(),
+                        Authorizer.checkTableAction(context,
                                 tableName.getCatalog(), tableName.getDb(), table.getName(), PrivilegeType.SELECT);
                     } catch (AccessDeniedException e) {
                         AccessDeniedException.reportAccessDenied(

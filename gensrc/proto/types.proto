@@ -134,6 +134,7 @@ enum IndexType {
      optional string src_snapshot_path = 7;
      optional int64 snapshot_version = 8;
      optional bool incremental_snapshot = 9;
+     optional int64 data_version = 10;
  }
 
 // Used to store additional information about a txn when it is finished/visible

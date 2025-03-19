@@ -39,6 +39,7 @@ import com.google.common.collect.Lists;
 import com.google.gson.JsonParseException;
 import com.starrocks.alter.AlterJobV2;
 import com.starrocks.alter.BatchAlterJobPersistInfo;
+import com.starrocks.authentication.AuthenticationMgr;
 import com.starrocks.authentication.UserAuthenticationInfo;
 import com.starrocks.authentication.UserProperty;
 import com.starrocks.authentication.UserPropertyInfo;
@@ -66,6 +67,7 @@ import com.starrocks.ha.LeaderInfo;
 import com.starrocks.journal.JournalEntity;
 import com.starrocks.journal.JournalInconsistentException;
 import com.starrocks.journal.JournalTask;
+import com.starrocks.journal.LeaderTransferException;
 import com.starrocks.journal.SerializeException;
 import com.starrocks.journal.bdbje.Timestamp;
 import com.starrocks.load.DeleteMgr;
@@ -81,6 +83,7 @@ import com.starrocks.metric.MetricRepo;
 import com.starrocks.persist.gson.GsonUtils;
 import com.starrocks.plugin.PluginInfo;
 import com.starrocks.proto.EncryptionKeyPB;
+import com.starrocks.qe.ConnectContext;
 import com.starrocks.replication.ReplicationJob;
 import com.starrocks.scheduler.Task;
 import com.starrocks.scheduler.mv.MVEpoch;
@@ -94,6 +97,7 @@ import com.starrocks.server.GlobalStateMgr;
 import com.starrocks.server.LocalMetastore;
 import com.starrocks.server.WarehouseManager;
 import com.starrocks.sql.ast.UserIdentity;
+import com.starrocks.sql.spm.BaselinePlan;
 import com.starrocks.staros.StarMgrJournal;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.AnalyzeJob;
@@ -104,6 +108,7 @@ import com.starrocks.statistic.ExternalAnalyzeStatus;
 import com.starrocks.statistic.ExternalBasicStatsMeta;
 import com.starrocks.statistic.ExternalHistogramStatsMeta;
 import com.starrocks.statistic.HistogramStatsMeta;
+import com.starrocks.statistic.MultiColumnStatsMeta;
 import com.starrocks.statistic.NativeAnalyzeJob;
 import com.starrocks.statistic.NativeAnalyzeStatus;
 import com.starrocks.storagevolume.StorageVolume;
@@ -785,6 +790,11 @@ public class EditLog {
                     }
                     break;
                 }
+                case OperationType.OP_ALTER_ROUTINE_LOAD_JOB: {
+                    AlterRoutineLoadJobOperationLog log = (AlterRoutineLoadJobOperationLog) journal.data();
+                    globalStateMgr.getRoutineLoadMgr().replayAlterRoutineLoadJob(log);
+                    break;
+                }
                 case OperationType.OP_ALTER_LOAD_JOB: {
                     AlterLoadJobOperationLog log = (AlterLoadJobOperationLog) journal.data();
                     globalStateMgr.getLoadMgr().replayAlterLoadJob(log);
@@ -873,6 +883,16 @@ public class EditLog {
                 case OperationType.OP_REMOVE_HISTOGRAM_STATS_META: {
                     HistogramStatsMeta histogramStatsMeta = (HistogramStatsMeta) journal.data();
                     globalStateMgr.getAnalyzeMgr().replayRemoveHistogramStatsMeta(histogramStatsMeta);
+                    break;
+                }
+                case OperationType.OP_ADD_MULTI_COLUMN_STATS_META: {
+                    MultiColumnStatsMeta multiColumnStatsMeta = (MultiColumnStatsMeta) journal.data();
+                    globalStateMgr.getAnalyzeMgr().replayAddMultiColumnStatsMeta(multiColumnStatsMeta);
+                    break;
+                }
+                case OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META: {
+                    MultiColumnStatsMeta multiColumnStatsMeta = (MultiColumnStatsMeta) journal.data();
+                    globalStateMgr.getAnalyzeMgr().replayRemoveMultiColumnStatsMeta(multiColumnStatsMeta);
                     break;
                 }
                 case OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META: {
@@ -1123,6 +1143,45 @@ public class EditLog {
                     GlobalStateMgr.getCurrentState().getSqlBlackList().delete(deleteBlackListsRequest.ids);
                     break;
                 }
+                case OperationType.OP_CREATE_SECURITY_INTEGRATION: {
+                    SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.data();
+                    AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+                    authenticationMgr.replayCreateSecurityIntegration(info.name, info.propertyMap);
+                    break;
+                }
+                case OperationType.OP_ALTER_SECURITY_INTEGRATION: {
+                    SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.data();
+                    AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+                    authenticationMgr.replayAlterSecurityIntegration(info.name, info.propertyMap);
+                    break;
+                }
+                case OperationType.OP_DROP_SECURITY_INTEGRATION: {
+                    SecurityIntegrationPersistInfo info = (SecurityIntegrationPersistInfo) journal.data();
+                    AuthenticationMgr authenticationMgr = GlobalStateMgr.getCurrentState().getAuthenticationMgr();
+                    authenticationMgr.replayDropSecurityIntegration(info.name);
+                    break;
+                }
+                case OperationType.OP_CREATE_GROUP_PROVIDER: {
+                    GroupProviderLog groupProviderLog = (GroupProviderLog) journal.data();
+                    GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayCreateGroupProvider(
+                            groupProviderLog.getName(), groupProviderLog.getPropertyMap());
+                    break;
+                }
+                case OperationType.OP_DROP_GROUP_PROVIDER: {
+                    GroupProviderLog groupProviderLog = (GroupProviderLog) journal.data();
+                    GlobalStateMgr.getCurrentState().getAuthenticationMgr().replayDropGroupProvider(groupProviderLog.getName());
+                    break;
+                }
+                case OperationType.OP_CREATE_SPM_BASELINE_LOG: {
+                    BaselinePlan bp = (BaselinePlan) journal.data();
+                    globalStateMgr.getSqlPlanStorage().replayBaselinePlan(bp, true);
+                    break;
+                }
+                case OperationType.OP_DROP_SPM_BASELINE_LOG: {
+                    BaselinePlan bp = (BaselinePlan) journal.data();
+                    globalStateMgr.getSqlPlanStorage().replayBaselinePlan(bp, false);
+                    break;
+                }
                 default: {
                     if (Config.metadata_ignore_unknown_operation_type) {
                         LOG.warn("UNKNOWN Operation Type {}", opCode);
@@ -1152,6 +1211,13 @@ public class EditLog {
      */
     private JournalTask submitLog(short op, Writable writable, long maxWaitIntervalMs) {
         long startTimeNano = System.nanoTime();
+        if (GlobalStateMgr.getCurrentState().isLeaderTransferred()) {
+            if (ConnectContext.get() != null) {
+                ConnectContext.get().setIsLeaderTransferred(true);
+            }
+            throw new LeaderTransferException();
+        }
+
         // do not check whether global state mgr is leader when writing star mgr journal,
         // because starmgr state change happens before global state mgr state change,
         // it will write log before global state mgr becomes leader
@@ -1212,13 +1278,19 @@ public class EditLog {
                 result = task.get();
                 break;
             } catch (InterruptedException | ExecutionException e) {
+                if (e.getCause() != null && e.getCause() instanceof LeaderTransferException) {
+                    if (ConnectContext.get() != null) {
+                        ConnectContext.get().setIsLeaderTransferred(true);
+                    }
+                    throw (LeaderTransferException) (e.getCause());
+                }
                 LOG.warn("failed to wait, wait and retry {} times..: {}", cnt, e);
                 cnt++;
             }
         }
 
         // for now if journal writer fails, it will exit directly, so this property should always be true.
-        assert (result);
+        Preconditions.checkState(result);
         if (MetricRepo.hasInit) {
             MetricRepo.HISTO_EDIT_LOG_WRITE_LATENCY.update((System.nanoTime() - startTimeNano) / 1000000);
         }
@@ -1747,6 +1819,14 @@ public class EditLog {
         logEdit(OperationType.OP_REMOVE_HISTOGRAM_STATS_META, meta);
     }
 
+    public void logAddMultiColumnStatsMeta(MultiColumnStatsMeta meta) {
+        logEdit(OperationType.OP_ADD_MULTI_COLUMN_STATS_META, meta);
+    }
+
+    public void logRemoveMultiColumnStatsMeta(MultiColumnStatsMeta meta) {
+        logEdit(OperationType.OP_REMOVE_MULTI_COLUMN_STATS_META, meta);
+    }
+
     public void logAddExternalBasicStatsMeta(ExternalBasicStatsMeta meta) {
         logEdit(OperationType.OP_ADD_EXTERNAL_BASIC_STATS_META, meta);
     }
@@ -1880,6 +1960,21 @@ public class EditLog {
         logEdit(OperationType.OP_DROP_ROLE_V2, info);
     }
 
+    public void logCreateSecurityIntegration(String name, Map<String, String> propertyMap) {
+        SecurityIntegrationPersistInfo info = new SecurityIntegrationPersistInfo(name, propertyMap);
+        logEdit(OperationType.OP_CREATE_SECURITY_INTEGRATION, info);
+    }
+
+    public void logAlterSecurityIntegration(String name, Map<String, String> alterProps) {
+        SecurityIntegrationPersistInfo info = new SecurityIntegrationPersistInfo(name, alterProps);
+        logEdit(OperationType.OP_ALTER_SECURITY_INTEGRATION, info);
+    }
+
+    public void logDropSecurityIntegration(String name) {
+        SecurityIntegrationPersistInfo info = new SecurityIntegrationPersistInfo(name, null);
+        logEdit(OperationType.OP_DROP_SECURITY_INTEGRATION, info);
+    }
+
     public void logModifyBinlogConfig(ModifyTablePropertyOperationLog log) {
         logEdit(OperationType.OP_MODIFY_BINLOG_CONFIG, log);
     }
@@ -1981,5 +2076,13 @@ public class EditLog {
 
     public void logClusterSnapshotLog(ClusterSnapshotLog info) {
         logEdit(OperationType.OP_CLUSTER_SNAPSHOT_LOG, info);
+    }
+
+    public void logCreateSPMBaseline(BaselinePlan info) {
+        logEdit(OperationType.OP_CREATE_SPM_BASELINE_LOG, info);
+    }
+
+    public void logDropSPMBaseline(BaselinePlan info) {
+        logEdit(OperationType.OP_DROP_SPM_BASELINE_LOG, info);
     }
 }

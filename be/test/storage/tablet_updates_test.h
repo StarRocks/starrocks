@@ -59,7 +59,7 @@ enum PartialUpdateCloneCase {
 };
 
 template <class T>
-static void append_datum_func(std::shared_ptr<Column> col, T val) {
+static void append_datum_func(ColumnPtr& col, T val) {
     if (val == -1) {
         col->append_nulls(1);
     } else {
@@ -792,12 +792,14 @@ public:
     void test_load_from_pb(bool enable_persistent_index);
     void test_remove_expired_versions(bool enable_persistent_index);
     void test_apply(bool enable_persistent_index, bool has_merge_condition);
+    void test_apply_breakpoint_check(bool enable_persistent_index);
     void test_condition_update_apply(bool enable_persistent_index);
     void test_concurrent_write_read_and_gc(bool enable_persistent_index);
     void test_compaction_score_not_enough(bool enable_persistent_index);
     void test_compaction_score_enough_duplicate(bool enable_persistent_index);
     void test_compaction_score_enough_normal(bool enable_persistent_index);
-    void test_horizontal_compaction(bool enable_persistent_index, bool show_status = false);
+    void test_horizontal_compaction(bool enable_persistent_index, bool show_status = false,
+                                    bool random_compaction = false);
     void test_vertical_compaction(bool enable_persistent_index);
     void test_horizontal_compaction_with_rows_mapper(bool enable_persistent_index);
     void test_vertical_compaction_with_rows_mapper(bool enable_persistent_index);

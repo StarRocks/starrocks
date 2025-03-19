@@ -31,6 +31,14 @@ public final class PRangeCell extends PCell implements Comparable<PRangeCell> {
         this.range = partitionKeyRange;
     }
 
+    public static PRangeCell of(PartitionKey partitionKey) {
+        return new PRangeCell(Range.singleton(partitionKey));
+    }
+
+    public static PRangeCell of(Range<PartitionKey> partitionKeyRange) {
+        return new PRangeCell(partitionKeyRange);
+    }
+
     public Range<PartitionKey> getRange() {
         return range;
     }

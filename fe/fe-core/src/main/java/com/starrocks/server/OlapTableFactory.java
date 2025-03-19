@@ -338,11 +338,16 @@ public class OlapTableFactory implements AbstractTableFactory {
                     PropertyAnalyzer.analyzeBooleanProp(properties, PropertyAnalyzer.PROPERTIES_INMEMORY, false);
             table.setIsInMemory(isInMemory);
 
-            Pair<Boolean, Boolean> analyzeRet = PropertyAnalyzer.analyzeEnablePersistentIndex(properties,
-                    table.getKeysType() == KeysType.PRIMARY_KEYS);
-            boolean enablePersistentIndex = analyzeRet.first;
-            boolean enablePersistentIndexByUser = analyzeRet.second;
-            if (enablePersistentIndex && table.isCloudNativeTable()) {
+            boolean enablePersistentIndex = PropertyAnalyzer.analyzeEnablePersistentIndex(properties);
+            if (table.getKeysType() == KeysType.PRIMARY_KEYS) {
+                if (!enablePersistentIndex) {
+                    // disable memory index
+                    throw new DdlException("In-Memory index is not supported, please create table with persistent index");
+                } else {
+                    table.setEnablePersistentIndex(enablePersistentIndex);
+                }
+            }
+            if (table.isCloudNativeTable() && table.getKeysType() == KeysType.PRIMARY_KEYS) {
                 TPersistentIndexType persistentIndexType;
                 try {
                     persistentIndexType = PropertyAnalyzer.analyzePersistentIndexType(properties);
@@ -358,19 +363,11 @@ public class OlapTableFactory implements AbstractTableFactory {
                                         isSetStoragePath()).collect(Collectors.toSet());
                 if (cnUnSetStoragePath.size() != 0 && persistentIndexType == TPersistentIndexType.LOCAL) {
                     // Check CN storage path when using local persistent index
-                    if (enablePersistentIndexByUser) {
-                        throw new DdlException("Cannot create cloud native table with local persistent index" +
-                                "when ComputeNode without storage_path, nodeId:" + cnUnSetStoragePath);
-                    } else {
-                        // if user has not requested persistent index, switch it to false
-                        enablePersistentIndex = false;
-                    }
+                    throw new DdlException("Cannot create cloud native table with local persistent index" +
+                            "when ComputeNode without storage_path, nodeId:" + cnUnSetStoragePath);
                 }
-                if (enablePersistentIndex) {
-                    table.setPersistentIndexType(persistentIndexType);
-                }
+                table.setPersistentIndexType(persistentIndexType);
             }
-            table.setEnablePersistentIndex(enablePersistentIndex);
 
             try {
                 table.setPrimaryIndexCacheExpireSec(PropertyAnalyzer.analyzePrimaryIndexCacheExpireSecProp(properties,

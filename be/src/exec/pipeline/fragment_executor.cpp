@@ -108,10 +108,7 @@ Status FragmentExecutor::_prepare_query_ctx(ExecEnv* exec_env, const UnifiedExec
         }
     }
 
-    _query_ctx = exec_env->query_context_mgr()->get_or_register(query_id);
-    if (_query_ctx == nullptr) {
-        return Status::Cancelled("Query has been cancelled");
-    }
+    ASSIGN_OR_RETURN(_query_ctx, exec_env->query_context_mgr()->get_or_register(query_id));
     _query_ctx->set_exec_env(exec_env);
     if (params.__isset.instances_number) {
         _query_ctx->set_total_fragments(params.instances_number);
@@ -766,7 +763,8 @@ Status FragmentExecutor::_prepare_pipeline_driver(ExecEnv* exec_env, const Unifi
             TRACE_SCHEDULE_LOG << src->get_name() << " " << src->support_event_scheduler();
             TRACE_SCHEDULE_LOG << sink->get_name() << " " << sink->support_event_scheduler();
         });
-
+        // TODO: using observer implement wait dependencs event
+        all_support_event_scheduler = all_support_event_scheduler && !runtime_state->enable_wait_dependent_event();
         if (all_support_event_scheduler) {
             _fragment_ctx->init_event_scheduler();
             RETURN_IF_ERROR(_fragment_ctx->set_pipeline_timer(exec_env->pipeline_timer()));

@@ -64,6 +64,8 @@ HdfsScannerContext* PageIndexTest::_create_scan_context() {
     ctx->lazy_column_coalesce_counter = lazy_column_coalesce_counter;
     ctx->timezone = "Asia/Shanghai";
     ctx->stats = &g_hdfs_scan_stats;
+    ctx->parquet_page_index_enable = true;
+    ctx->parquet_bloom_filter_enable = true;
     return ctx;
 }
 
@@ -338,8 +340,7 @@ TEST_F(PageIndexTest, TestRandomReadWith2PageSize) {
 }
 
 TEST_F(PageIndexTest, TestCollectIORangeWithPageIndex) {
-    auto test = [&](bool enable_advanced_zone_map) {
-        config::parquet_advance_zonemap_filter = enable_advanced_zone_map;
+    auto test = [&]() {
         auto chunk = std::make_shared<Chunk>();
         chunk->append_column(
                 ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
@@ -378,7 +379,7 @@ TEST_F(PageIndexTest, TestCollectIORangeWithPageIndex) {
         for (auto* expr : ctx->conjunct_ctxs_by_slot[0]) {
             all_conjuncts.push_back(expr);
         }
-        ParquetUTBase::setup_conjuncts_manager(all_conjuncts, tuple_desc, _runtime_state, ctx);
+        ParquetUTBase::setup_conjuncts_manager(all_conjuncts, nullptr, tuple_desc, _runtime_state, ctx);
 
         auto file_reader = std::make_shared<FileReader>(config::vector_chunk_size, file.get(),
                                                         std::filesystem::file_size(small_page_file));
@@ -419,15 +420,11 @@ TEST_F(PageIndexTest, TestCollectIORangeWithPageIndex) {
         EXPECT_EQ(total_row_nums, 1999);
     };
 
-    bool origin_value = config::parquet_advance_zonemap_filter;
-    test(true);
-    test(false);
-    config::parquet_advance_zonemap_filter = origin_value;
+    test();
 }
 
 TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
-    auto test = [&](bool enable_advanced_zone_map) {
-        config::parquet_advance_zonemap_filter = enable_advanced_zone_map;
+    auto test = [&]() {
         auto chunk = std::make_shared<Chunk>();
         chunk->append_column(
                 ColumnHelper::create_column(TypeDescriptor::from_logical_type(LogicalType::TYPE_INT), true),
@@ -486,7 +483,7 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
         for (auto* expr : ctx->conjunct_ctxs_by_slot[1]) {
             all_conjuncts.push_back(expr);
         }
-        ParquetUTBase::setup_conjuncts_manager(all_conjuncts, tuple_desc, _runtime_state, ctx);
+        ParquetUTBase::setup_conjuncts_manager(all_conjuncts, nullptr, tuple_desc, _runtime_state, ctx);
 
         auto shared_buffer = std::make_shared<io::SharedBufferedInputStream>(
                 file->stream(), small_page_file, std::filesystem::file_size(small_page_file));
@@ -533,10 +530,7 @@ TEST_F(PageIndexTest, TestTwoColumnIntersectPageIndex) {
         EXPECT_EQ(total_row_nums, 10000);
     };
 
-    bool origin_value = config::parquet_advance_zonemap_filter;
-    test(true);
-    test(false);
-    config::parquet_advance_zonemap_filter = origin_value;
+    test();
 }
 
 TEST_F(PageIndexTest, TestPageIndexNoPageFiltered) {
@@ -600,6 +594,7 @@ TEST_F(PageIndexTest, TestPageIndexNoPageFiltered) {
     // and offset index for lazy column
     // and two group collect together. (2 + 2 + 1) * 2 = 10
     EXPECT_EQ(ranges.size(), 10);
+    std::cout << "range ref sum:" << shared_buffer->current_range_ref_sum() << std::endl;
 
     ranges.clear();
     end_offset = 0;
@@ -607,6 +602,10 @@ TEST_F(PageIndexTest, TestPageIndexNoPageFiltered) {
     file_reader->_row_group_readers[0]->collect_io_ranges(&ranges, &end_offset);
     // only collect io of 1 chunk / column.
     // three columns, 1 * 3 = 3
+
+    for (auto r : ranges) {
+        std::cout << r.offset << " " << r.size << ' ' << r.is_active << std::endl;
+    }
     EXPECT_EQ(ranges.size(), 3);
 
     EXPECT_EQ(shared_buffer->current_range_ref_sum(), 13);

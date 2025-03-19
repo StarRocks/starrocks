@@ -38,19 +38,17 @@ import com.starrocks.sql.optimizer.operator.logical.LogicalScanOperator;
 import com.starrocks.sql.optimizer.operator.pattern.Pattern;
 import com.starrocks.sql.optimizer.operator.scalar.ColumnRefOperator;
 import com.starrocks.sql.optimizer.operator.scalar.ScalarOperator;
+import com.starrocks.sql.optimizer.rewrite.OptConstFoldRewriter;
 import com.starrocks.sql.optimizer.rule.RuleType;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvPartitionCompensator;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.OptExpressionDuplicator;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensation;
-import com.starrocks.sql.optimizer.rule.transformation.materialization.compensation.MVCompensationBuilder;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -103,8 +101,9 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
                                       OptExpression input,
                                       MvId mvId) {
         OptExpression mvTransparentPlan = doGetMvTransparentPlan(connectContext, context, mvId, olapScanOperator, input);
-        Preconditions.checkState(mvTransparentPlan != null,
-                "Build mv transparent plan failed: %s", mvId);
+        if (mvTransparentPlan == null) {
+            throw new RuntimeException("Build mv transparent plan failed: " + mvId);
+        }
         // merge projection
         Map<ColumnRefOperator, ScalarOperator> originalProjectionMap =
                 olapScanOperator.getProjection() == null ? null : olapScanOperator.getProjection().getColumnRefMap();
@@ -141,10 +140,19 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         Table table = GlobalStateMgr.getCurrentState().getLocalMetastore().getTable(db.getId(), mvId.getId());
         Preconditions.checkState(table instanceof MaterializedView);
         MaterializedView mv = (MaterializedView) table;
-        MvPlanContext mvPlanContext = MvUtils.getMVPlanContext(connectContext, mv, true);
-        Preconditions.checkState(mvPlanContext != null, "MV plan context not found: %s", mv.getName());
-
+        final MvPlanContext mvPlanContext = MvUtils.getMVPlanContext(connectContext, mv, true, false);
+        if (mvPlanContext == null) {
+            throw new RuntimeException("Cannot get mv plan context: " + mv.getName());
+        }
         OptExpression mvPlan = mvPlanContext.getLogicalPlan();
+        if (mvPlan == null) {
+            throw new RuntimeException("Cannot get mv plan: " + mv.getName());
+        }
+        // do const fold if mv contains non-deterministic functions
+        if (mvPlanContext.isContainsNDFunctions()) {
+            mvPlan = OptConstFoldRewriter.rewrite(mvPlan);
+        }
+
         Set<Table> queryTables = MvUtils.getAllTables(mvPlan).stream().collect(Collectors.toSet());
 
         // mv's to refresh partition info
@@ -157,14 +165,15 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         logMVRewrite(context, this, "MV to refresh partition info: {}", mvUpdateInfo);
 
         MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
-                mv, mvPlanContext, mvUpdateInfo, queryTables);
+                mv, mvPlanContext, mvUpdateInfo, queryTables, 0);
 
         Map<Column, ColumnRefOperator> columnToColumnRefMap = olapScanOperator.getColumnMetaToColRefMap();
-        List<Column> mvColumns = mv.getBaseSchemaWithoutGeneratedColumn();
+        // use ordered output columns to ensure the order of output columns if the mv contains order-by clause.
+        List<Column> mvColumns = mv.getOrderedOutputColumns();
         List<ColumnRefOperator> expectOutputColumns = mvColumns.stream()
                 .map(c -> columnToColumnRefMap.get(c))
                 .collect(Collectors.toList());
-        OptExpression result = getMvTransparentPlan(mvContext, input, expectOutputColumns);
+        OptExpression result = MvPartitionCompensator.getMvTransparentPlan(mvContext, input, expectOutputColumns);
         if (result != null) {
             logMVRewrite(mvContext, "Success to generate transparent plan");
             return result;
@@ -204,7 +213,7 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
         mvUpdateInfo.addMvToRefreshPartitionNames(mv.getPartitionNames());
 
         MaterializationContext mvContext = MvRewritePreprocessor.buildMaterializationContext(context,
-                mv, mvPlanContext, mvUpdateInfo, queryTables);
+                mv, mvPlanContext, mvUpdateInfo, queryTables, 0);
         logMVRewrite(mvContext, "Get mv transparent plan failed, and redirect to mv's defined query");
         Map<Column, ColumnRefOperator> columnToColumnRefMap = olapScanOperator.getColumnMetaToColRefMap();
         List<Column> mvColumns = mv.getBaseSchemaWithoutGeneratedColumn();
@@ -215,50 +224,14 @@ public class MaterializedViewTransparentRewriteRule extends TransformationRule {
     }
 
     /**
-     * Get transparent plan if possible.
-     * What's the transparent plan?
-     * see {@link MvPartitionCompensator#getMvTransparentPlan(MaterializationContext, MVCompensation, List)
-     */
-    private OptExpression getMvTransparentPlan(MaterializationContext mvContext,
-                                               OptExpression input,
-                                               List<ColumnRefOperator> expectOutputColumns) {
-        // NOTE: MV's mvSelectPartitionIds is not trusted in transparent since it is targeted for the whole partitions(refresh
-        //  and no refreshed).
-        // 1. Decide ref base table partition ids to refresh in optimizer.
-        // 2. consider partition prunes for the input olap scan operator
-        MvUpdateInfo mvUpdateInfo = mvContext.getMvUpdateInfo();
-        if (mvUpdateInfo == null || !mvUpdateInfo.isValidRewrite()) {
-            logMVRewrite(mvContext, "Failed to get mv to refresh partition info: {}", mvContext.getMv().getName());
-            return null;
-        }
-        MVCompensationBuilder mvCompensationBuilder = new MVCompensationBuilder(mvContext, mvUpdateInfo);
-        MVCompensation mvCompensation = mvCompensationBuilder.buildMvCompensation(Optional.empty());
-        if (mvCompensation == null) {
-            logMVRewrite(mvContext, "Failed to get mv compensation info: {}", mvContext.getMv().getName());
-            return null;
-        }
-        logMVRewrite(mvContext, "Get mv compensation info: {}", mvCompensation);
-        if (mvCompensation.isNoCompensate()) {
-            return input;
-        }
-        if (mvCompensation.isUncompensable()) {
-            logMVRewrite(mvContext, "Return directly because mv compensation info cannot compensate: {}",
-                    mvCompensation);
-            return null;
-        }
-        OptExpression transparentPlan = MvPartitionCompensator.getMvTransparentPlan(mvContext, mvCompensation,
-                expectOutputColumns);
-        return transparentPlan;
-    }
-
-    /**
      * If transparent plan is not available, get defined query plan and reset its selected partitions for further partition prune.
      */
     private OptExpression getMvDefinedQueryPlan(OptExpression mvPlan,
                                                 MaterializationContext mvContext,
                                                 List<ColumnRefOperator> originalOutputColumns) {
         OptExpressionDuplicator duplicator = new OptExpressionDuplicator(mvContext);
-        OptExpression newMvQueryPlan = duplicator.duplicate(mvPlan, true, true);
+        OptExpression newMvQueryPlan = duplicator.duplicate(mvPlan, mvContext.getMvColumnRefFactory(),
+                true, true);
 
         List<ColumnRefOperator> orgMvQueryOutputColumnRefs = mvContext.getMvOutputColumnRefs();
         List<ColumnRefOperator> newQueryOutputColumns = duplicator.getMappedColumns(orgMvQueryOutputColumnRefs);

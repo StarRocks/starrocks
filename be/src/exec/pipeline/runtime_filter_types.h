@@ -24,6 +24,7 @@
 #include "exprs/predicate.h"
 #include "exprs/runtime_filter_bank.h"
 #include "gen_cpp/Types_types.h"
+#include "gutil/casts.h"
 #include "util/defer_op.h"
 
 namespace starrocks::pipeline {
@@ -34,7 +35,7 @@ using RuntimeInFilter = starrocks::ExprContext;
 using RuntimeBloomFilter = starrocks::RuntimeFilterBuildDescriptor;
 using RuntimeBloomFilterProbeDescriptor = starrocks::RuntimeFilterProbeDescriptor;
 using RuntimeBloomFilterProbeDescriptorPtr = RuntimeBloomFilterProbeDescriptor*;
-using RuntimeBloomFilterRunningContext = starrocks::JoinRuntimeFilter::RunningContext;
+using RuntimeBloomFilterRunningContext = RuntimeFilter::RunningContext;
 using RuntimeInFilterPtr = RuntimeInFilter*;
 using RuntimeBloomFilterPtr = RuntimeBloomFilter*;
 using RuntimeInFilters = std::vector<RuntimeInFilterPtr>;
@@ -49,8 +50,8 @@ struct RuntimeBloomFilterBuildParam;
 using OptRuntimeBloomFilterBuildParams = std::vector<std::optional<RuntimeBloomFilterBuildParam>>;
 // Parameters used to build runtime bloom-filters.
 struct RuntimeBloomFilterBuildParam {
-    RuntimeBloomFilterBuildParam(bool multi_partitioned, bool eq_null, bool is_empty, std::vector<ColumnPtr> columns,
-                                 MutableJoinRuntimeFilterPtr runtime_filter)
+    RuntimeBloomFilterBuildParam(bool multi_partitioned, bool eq_null, bool is_empty, Columns columns,
+                                 MutableRuntimeFilterPtr runtime_filter)
             : multi_partitioned(multi_partitioned),
               eq_null(eq_null),
               is_empty(is_empty),
@@ -59,8 +60,8 @@ struct RuntimeBloomFilterBuildParam {
     bool multi_partitioned;
     bool eq_null;
     bool is_empty;
-    std::vector<ColumnPtr> columns;
-    MutableJoinRuntimeFilterPtr runtime_filter;
+    Columns columns;
+    MutableRuntimeFilterPtr runtime_filter;
 };
 
 // RuntimeFilterCollector contains runtime in-filters and bloom-filters, it is stored in RuntimeFilerHub
@@ -402,16 +403,17 @@ public:
             // skip if ht.size() > limit, and it's only for local.
             if (!desc->has_remote_targets() && row_count > _local_rf_limit) continue;
             LogicalType build_type = desc->build_expr_type();
-            JoinRuntimeFilter* filter = RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type);
-            if (filter == nullptr) continue;
-
+            auto rf = RuntimeFilterHelper::create_join_runtime_filter(_pool, build_type, desc->join_mode());
+            if (rf == nullptr) continue;
+            // set BF paramaters
+            auto* bf = rf->get_bloom_filter();
             if (desc->has_remote_targets() && row_count > _global_rf_limit) {
-                filter->clear_bf();
+                bf->clear_bf();
             } else {
-                filter->init(row_count);
+                bf->init(row_count);
             }
-            filter->set_join_mode(desc->join_mode());
-            desc->set_runtime_filter(filter);
+
+            desc->set_runtime_filter(rf);
         }
 
         const auto& num_bloom_filters = _bloom_filter_descriptors.size();
@@ -479,15 +481,17 @@ public:
             // skip if ht.size() > limit, and it's only for local.
             if (!desc->has_remote_targets() && row_count > _local_rf_limit) continue;
             LogicalType build_type = desc->build_expr_type();
-            JoinRuntimeFilter* filter = RuntimeFilterHelper::create_runtime_bloom_filter(_pool, build_type);
-            if (filter == nullptr) continue;
+            auto rf = RuntimeFilterHelper::create_join_runtime_filter(_pool, build_type, desc->join_mode());
+            if (rf == nullptr) continue;
+            // set BF paramaters
+            auto bf = rf->get_bloom_filter();
             if (desc->has_remote_targets() && row_count > _global_rf_limit) {
-                filter->clear_bf();
+                bf->clear_bf();
             } else {
-                filter->init(row_count);
+                bf->init(row_count);
             }
-            filter->set_join_mode(desc->join_mode());
-            desc->set_runtime_filter(filter);
+
+            desc->set_runtime_filter(rf);
         }
 
         const auto& num_bloom_filters = _bloom_filter_descriptors.size();

@@ -47,7 +47,7 @@ using std::chrono::milliseconds;
 using std::chrono::steady_clock;
 using std::chrono::duration_cast;
 
-class ConnectorScanOperatorMemShareArbitrator;
+struct ConnectorScanOperatorMemShareArbitrator;
 
 // The context for all fragment of one query in one BE
 class QueryContext : public std::enable_shared_from_this<QueryContext> {
@@ -80,7 +80,7 @@ public:
     // now time point pass by deadline point.
     bool is_delivery_expired() const {
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
-        return now > _delivery_deadline || _is_cancelled;
+        return now > _delivery_deadline || _cancelled_by_fe;
     }
     bool is_query_expired() const {
         auto now = duration_cast<milliseconds>(steady_clock::now().time_since_epoch()).count();
@@ -89,7 +89,14 @@ public:
 
     bool is_cancelled() const { return _is_cancelled; }
 
-    bool is_dead() const { return _num_active_fragments == 0 && (_num_fragments == _total_fragments || _is_cancelled); }
+    Status get_cancelled_status() const {
+        auto* status = _cancelled_status.load();
+        return status == nullptr ? Status::Cancelled("Query has been cancelled") : *status;
+    }
+
+    bool is_dead() const {
+        return _num_active_fragments == 0 && (_num_fragments == _total_fragments || _cancelled_by_fe);
+    }
     // add expired seconds to deadline
     void extend_delivery_lifetime() {
         _delivery_deadline =
@@ -146,7 +153,7 @@ public:
 
     FragmentContextManager* fragment_mgr();
 
-    void cancel(const Status& status);
+    void cancel(const Status& status, bool cancelled_by_fe);
 
     void set_is_runtime_filter_coordinator(bool flag) { _is_runtime_filter_coordinator = flag; }
 
@@ -311,6 +318,9 @@ private:
     std::shared_ptr<starrocks::debug::QueryTrace> _query_trace;
     std::atomic_bool _is_prepared = false;
     std::atomic_bool _is_cancelled = false;
+    std::atomic_bool _cancelled_by_fe = false;
+    std::atomic<Status*> _cancelled_status = nullptr;
+    Status _s_status;
 
     std::once_flag _init_query_once;
     int64_t _query_begin_time = 0;
@@ -376,7 +386,7 @@ public:
     QueryContextManager(size_t log2_num_slots);
     ~QueryContextManager();
     Status init();
-    QueryContext* get_or_register(const TUniqueId& query_id);
+    StatusOr<QueryContext*> get_or_register(const TUniqueId& query_id);
     QueryContextPtr get(const TUniqueId& query_id, bool need_prepared = false);
     size_t size();
     bool remove(const TUniqueId& query_id);
@@ -393,6 +403,7 @@ public:
 
     void collect_query_statistics(const PCollectQueryStatisticsRequest* request,
                                   PCollectQueryStatisticsResult* response);
+    void for_each_active_ctx(const std::function<void(QueryContextPtr)>& func);
 
 private:
     static void _clean_func(QueryContextManager* manager);

@@ -89,15 +89,8 @@ public:
     Status convert(const ColumnPtr& src, Column* dst) override;
 
 private:
-    // When Hive stores a timestamp value into Parquet format, it converts local time
-    // into UTC time, and when it reads data out, it should be converted to the time
-    // according to session variable "time_zone".
-    [[nodiscard]] Timestamp _utc_to_local(Timestamp timestamp) const {
-        return timestamp::add<TimeUnit::SECOND>(timestamp, _offset);
-    }
-
-private:
     int _offset = 0;
+    cctz::time_zone _ctz;
 };
 
 class Int64ToDateTimeConverter final : public ColumnConverter {
@@ -110,6 +103,7 @@ public:
 
 private:
     bool _is_adjusted_to_utc = false;
+    int _offset = 0;
     cctz::time_zone _ctz;
     int64_t _second_mask = 0;
     int64_t _scale_to_nano_factor = 0;
@@ -628,15 +622,12 @@ Status parquet::Int32ToDateTimeConverter::convert(const ColumnPtr& src, Column* 
 }
 
 Status Int96ToDateTimeConverter::init(const std::string& timezone) {
-    cctz::time_zone ctz;
-    if (!TimezoneUtils::find_cctz_time_zone(timezone, ctz)) {
+    if (!TimezoneUtils::find_cctz_time_zone(timezone, _ctz)) {
         return Status::InternalError(strings::Substitute("can not find cctz time zone $0", timezone));
     }
-
     const auto tp = std::chrono::system_clock::now();
-    const cctz::time_zone::absolute_lookup al = ctz.lookup(tp);
+    const cctz::time_zone::absolute_lookup al = _ctz.lookup(tp);
     _offset = al.offset;
-
     return Status::OK();
 }
 
@@ -656,12 +647,27 @@ Status Int96ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     auto& dst_null_data = dst_nullable_column->null_column()->get_data();
 
     size_t size = src_column->size();
-    for (size_t i = 0; i < size; i++) {
-        dst_null_data[i] = src_null_data[i];
-        if (!src_null_data[i]) {
-            Timestamp timestamp = (static_cast<uint64_t>(src_data[i].hi) << TIMESTAMP_BITS) | (src_data[i].lo / 1000);
-            dst_data[i].set_timestamp(_utc_to_local(timestamp));
+
+    auto fill_dst_fn = [&]<bool FAST_TZ>() {
+        for (size_t i = 0; i < size; i++) {
+            dst_null_data[i] = src_null_data[i];
+            if (!src_null_data[i]) {
+                Timestamp timestamp =
+                        (static_cast<uint64_t>(src_data[i].hi) << TIMESTAMP_BITS) | (src_data[i].lo / 1000);
+                int offset = _offset;
+                if constexpr (!FAST_TZ) {
+                    offset = timestamp::get_timezone_offset_by_timestamp(timestamp, _ctz);
+                }
+                dst_data[i].set_timestamp(timestamp::add<TimeUnit::SECOND>(timestamp, offset));
+            }
         }
+    };
+    // use fixed offset to adjust to local timezone(potentially could get wrong result but faster)
+    // or when it's UTC timezone.
+    if (config::parquet_fast_timezone_conversion || _offset == 0) {
+        fill_dst_fn.operator()<true>();
+    } else {
+        fill_dst_fn.operator()<false>();
     }
     dst_nullable_column->set_has_null(src_nullable_column->has_null());
     return Status::OK();
@@ -718,6 +724,9 @@ Status Int64ToDateTimeConverter::init(const std::string& timezone, const tparque
         if (!TimezoneUtils::find_cctz_time_zone(timezone, _ctz)) {
             return Status::InternalError(strings::Substitute("can not find cctz time zone $0", timezone));
         }
+        const auto tp = std::chrono::system_clock::now();
+        const cctz::time_zone::absolute_lookup al = _ctz.lookup(tp);
+        _offset = al.offset;
     }
 
     return Status::OK();
@@ -739,16 +748,38 @@ Status Int64ToDateTimeConverter::convert(const ColumnPtr& src, Column* dst) {
     auto& dst_null_data = dst_nullable_column->null_column()->get_data();
 
     size_t size = src_column->size();
-    for (size_t i = 0; i < size; i++) {
-        dst_null_data[i] = src_null_data[i];
-        if (!src_null_data[i]) {
-            int64_t seconds = src_data[i] / _second_mask;
-            int64_t nanoseconds = (src_data[i] % _second_mask) * _scale_to_nano_factor;
-            TimestampValue ep;
-            ep.from_unixtime(seconds, nanoseconds / 1000, _ctz);
-            dst_data[i].set_timestamp(ep.timestamp());
+    auto fill_dst_fn = [&]<bool UTC_TO_TZ, bool FAST_TZ>() {
+        for (size_t i = 0; i < size; i++) {
+            dst_null_data[i] = src_null_data[i];
+            if (!src_null_data[i]) {
+                int64_t seconds = src_data[i] / _second_mask;
+                int64_t nanoseconds = (src_data[i] % _second_mask) * _scale_to_nano_factor;
+
+                if constexpr (UTC_TO_TZ) {
+                    int offset = _offset;
+                    if constexpr (!FAST_TZ) {
+                        offset = timestamp::get_timezone_offset_by_epoch_seconds(seconds, _ctz);
+                    }
+                    seconds += offset;
+                }
+
+                dst_data[i].set_timestamp(timestamp::of_epoch_second(seconds, nanoseconds));
+            }
         }
+    };
+
+    if (_is_adjusted_to_utc) {
+        // use fixed offset to adjust to local timezone(potentially could get wrong result but faster)
+        // or when it's UTC timezone.
+        if (config::parquet_fast_timezone_conversion || _offset == 0) {
+            fill_dst_fn.operator()<true, true>();
+        } else {
+            fill_dst_fn.operator()<true, false>();
+        }
+    } else {
+        fill_dst_fn.operator()<false, true>();
     }
+
     dst_nullable_column->set_has_null(src_nullable_column->has_null());
     return Status::OK();
 }

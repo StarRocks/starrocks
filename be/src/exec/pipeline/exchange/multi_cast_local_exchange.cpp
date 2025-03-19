@@ -95,14 +95,16 @@ Status InMemoryMultiCastLocalExchanger::push_chunk(const ChunkPtr& chunk, int32_
     return Status::OK();
 }
 
-Status InMemoryMultiCastLocalExchanger::init_metrics(RuntimeProfile* profile) {
-    _peak_memory_usage_counter = profile->AddHighWaterMarkCounter(
-            "ExchangerPeakMemoryUsage", TUnit::BYTES,
-            RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
-    _peak_buffer_row_size_counter = profile->AddHighWaterMarkCounter(
-            "ExchangerPeakBufferRowSize", TUnit::UNIT,
-            RuntimeProfile::Counter::create_strategy(TUnit::UNIT, TCounterMergeType::SKIP_FIRST_MERGE));
-
+Status InMemoryMultiCastLocalExchanger::init_metrics(RuntimeProfile* profile, bool is_first_sink_driver) {
+    profile->add_info_string("IsSpill", "false");
+    if (is_first_sink_driver) {
+        _peak_memory_usage_counter = profile->AddHighWaterMarkCounter(
+                "ExchangerPeakMemoryUsage", TUnit::BYTES,
+                RuntimeProfile::Counter::create_strategy(TUnit::BYTES, TCounterMergeType::SKIP_FIRST_MERGE));
+        _peak_buffer_row_size_counter = profile->AddHighWaterMarkCounter(
+                "ExchangerPeakBufferRowSize", TUnit::UNIT,
+                RuntimeProfile::Counter::create_strategy(TUnit::UNIT, TCounterMergeType::SKIP_FIRST_MERGE));
+    }
     return Status::OK();
 }
 

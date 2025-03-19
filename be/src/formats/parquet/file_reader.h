@@ -20,7 +20,7 @@
 #include <string>
 #include <vector>
 
-#include "block_cache/block_cache.h"
+#include "cache/block_cache/block_cache.h"
 #include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "common/statusor.h"
@@ -51,6 +51,7 @@ namespace parquet {
 struct ParquetField;
 } // namespace parquet
 struct TypeDescriptor;
+class ObjectCache;
 
 } // namespace starrocks
 
@@ -100,23 +101,10 @@ private:
     bool _filter_group(const GroupReaderPtr& group_reader);
     StatusOr<bool> _update_rf_and_filter_group(const GroupReaderPtr& group_reader);
 
-    bool _filter_group_with_min_max_conjuncts(const GroupReaderPtr& group_reader);
-
-    bool _filter_group_with_bloom_filter_min_max_conjuncts(const GroupReaderPtr& group_reader);
-
-    bool _filter_group_with_more_filter(const GroupReaderPtr& group_reader);
-
     // get row group to read
     // if scan range conatain the first byte in the row group, will be read
     // TODO: later modify the larger block should be read
     bool _select_row_group(const tparquet::RowGroup& row_group);
-
-    // make min/max chunk from stats of row group meta
-    // exist=true: group meta contain statistics info
-    Status _read_min_max_chunk(const GroupReaderPtr& group_reader, const std::vector<SlotDescriptor*>& slots,
-                               ChunkPtr* min_chunk, ChunkPtr* max_chunk) const;
-    Status _read_has_nulls(const GroupReaderPtr& group_reader, const std::vector<SlotDescriptor*>& slots,
-                           std::vector<bool>* has_nulls);
 
     // only scan partition column + not exist column
     Status _exec_no_materialized_column_scan(ChunkPtr* chunk);
@@ -125,6 +113,8 @@ private:
     int32_t _get_partition_column_idx(const std::string& col_name) const;
 
     Status _build_split_tasks();
+
+    Status _collect_row_group_io(std::shared_ptr<GroupReader>& group_reader);
 
     RandomAccessFile* _file = nullptr;
     uint64_t _file_size = 0;
@@ -138,7 +128,7 @@ private:
     size_t _scan_row_count = 0;
     bool _no_materialized_column_scan = false;
 
-    BlockCache* _cache = nullptr;
+    ObjectCache* _cache = nullptr;
     FileMetaDataPtr _file_metadata = nullptr;
 
     // not exist column conjuncts eval false, file can be skipped

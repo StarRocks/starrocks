@@ -1,0 +1,25 @@
+-- name: test_files_view
+
+create database db_${uuid0};
+use db_${uuid0};
+
+shell: ossutil64 mkdir oss://${oss_bucket}/test_files/parquet_format/${uuid0} >/dev/null || echo "exit 0" >/dev/null
+shell: ossutil64 cp --force ./sql/test_files/parquet_format/basic_type.parquet oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ | grep -Pv "(average|elapsed)"
+
+
+select * from files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+create view files_view as select * from files(
+    "path" = "oss://${oss_bucket}/test_files/parquet_format/${uuid0}/*",
+    "format" = "parquet",
+    "aws.s3.access_key" = "${oss_ak}",
+    "aws.s3.secret_key" = "${oss_sk}",
+    "aws.s3.endpoint" = "${oss_endpoint}");
+select * from files_view;
+show create view files_view;
+
+shell: ossutil64 rm -rf oss://${oss_bucket}/test_files/parquet_format/${uuid0}/ > /dev/null

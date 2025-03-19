@@ -303,6 +303,22 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
 
 更多信息，参考 [返回](#返回)。
 
+#### list_recursively
+
+StarRocks 还支持 `list_recursively`，用于递归列出文件和目录。只有当 `list_files_only` 设置为 `true` 时，`list_recursively` 才会生效，默认值为 `false`。
+
+```SQL
+"list_files_only" = "true",
+"list_recursively" = "true"
+```
+
+当 `list_files_only` 和 `list_recursively` 都设置为 `true` 时，StarRocks 将执行以下操作：
+
+- 如果指定的 `path` 是文件（无论是具体指定还是用通配符表示），StarRocks 将显示该文件的信息。
+- 如果指定的 `path` 是目录（无论是具体指定还是用通配符表示，也无论是否以 `/` 作为后缀），StarRocks 将显示该目录下的所有文件和子目录。
+
+更多信息，参考 [返回](#返回)。
+
 ### 返回
 
 #### SELECT FROM FILES()
@@ -426,6 +442,67 @@ StarRocks 当前仅支持通过简单认证访问 HDFS 集群，通过 IAM User 
   4 rows in set (0.03 sec)
   ```
 
+- 在查询文件时将 `list_files_only` 和 `list_recursively` 设置为 `true`，系统将递归列出文件和目录。
+
+  假设路径 `s3://bucket/list/` 包含以下文件和子目录：
+
+  ```Plain
+  s3://bucket/list/
+  ├── basic1.csv
+  ├── basic2.csv
+  ├── orc0
+  │   └── orc1
+  │       └── basic_type.orc
+  ├── orc1
+  │   └── basic_type.orc
+  └── parquet
+      └── basic_type.parquet
+  ```
+
+  以递归方式列出文件和目录：
+
+  ```Plain
+  SELECT * FROM FILES(
+      "path"="s3://bucket/list/",
+      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "list_files_only" = "true", 
+      "list_recursively" = "true"
+  );
+  +---------------------------------------------+------+--------+---------------------+
+  | PATH                                        | SIZE | IS_DIR | MODIFICATION_TIME   |
+  +---------------------------------------------+------+--------+---------------------+
+  | s3://bucket/list                            |    0 |      1 | 2024-12-24 22:15:59 |
+  | s3://bucket/list/basic1.csv                 |   52 |      0 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/basic2.csv                 |   34 |      0 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/orc0                       |    0 |      1 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/orc0/orc1                  |    0 |      1 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/orc0/orc1/basic_type.orc   | 1027 |      0 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/orc1                       |    0 |      1 | 2024-12-24 22:16:00 |
+  | s3://bucket/list/orc1/basic_type.orc        | 1027 |      0 | 2024-12-24 22:16:00 |
+  | s3://bucket/list/parquet                    |    0 |      1 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/parquet/basic_type.parquet | 2281 |      0 | 2024-12-24 11:35:53 |
+  +---------------------------------------------+------+--------+---------------------+
+  10 rows in set (0.04 sec)
+  ```
+
+  以非递归方式列出该路径下与 `orc*` 匹配的文件和目录：
+
+  ```Plain
+  SELECT * FROM FILES(
+      "path"="s3://bucket/list/orc*", 
+      "list_files_only" = "true", 
+      "list_recursively" = "false"
+  );
+  +--------------------------------------+------+--------+---------------------+
+  | PATH                                 | SIZE | IS_DIR | MODIFICATION_TIME   |
+  +--------------------------------------+------+--------+---------------------+
+  | s3://bucket/list/orc0/orc1           |    0 |      1 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/orc1/basic_type.orc | 1027 |      0 | 2024-12-24 22:16:00 |
+  +--------------------------------------+------+--------+---------------------+
+  2 rows in set (0.03 sec)
+  ```
+
 #### DESC FILES()
 
 当与 DESC 语句一同使用时，FILES() 函数会返回远端存储文件的 Schema 信息。
@@ -522,7 +599,7 @@ unload_data_param ::=
 
 | **参数**          | **必填** | **说明**                                                          |
 | ---------------- | ------------ | ------------------------------------------------------------ |
-| compression      | 是          | 导出数据时要使用的压缩方法。有效值：<ul><li>`uncompressed`：不使用任何压缩算法。</li><li>`gzip`：使用 gzip 压缩算法。</li><li>`snappy`：使用 SNAPPY 压缩算法。</li><li>`zstd`：使用 Zstd 压缩算法。</li><li>`lz4`：使用 LZ4 压缩算法。</li></ul>                  |
+| compression      | 是          | 导出数据时要使用的压缩方法。有效值：<ul><li>`uncompressed`：不使用任何压缩算法。</li><li>`gzip`：使用 gzip 压缩算法。</li><li>`snappy`：使用 SNAPPY 压缩算法。</li><li>`zstd`：使用 Zstd 压缩算法。</li><li>`lz4`：使用 LZ4 压缩算法。</li></ul>**说明**<br />导出至 CSV 文件不支持数据压缩，需指定为 `uncompressed`。                |
 | partition_by     | 否           | 用于将数据文件分区到不同存储路径的列，可以指定多个列。FILES() 提取指定列的 Key/Value 信息，并将数据文件存储在以对应 Key/Value 区分的子路径下。详细使用方法请见以下示例七。 |
 | single           | 否           | 是否将数据导出到单个文件中。有效值：<ul><li>`true`：数据存储在单个数据文件中。</li><li>`false`（默认）：如果数据量超过 512 MB，，则数据会存储在多个文件中。</li></ul>                  |
 | target_max_file_size | 否           | 分批导出时，单个文件的大致上限。单位：Byte。默认值：1073741824（1 GB）。当要导出的数据大小超过该值时，数据将被分成多个文件，每个文件的大小不会大幅超过该值。自 v3.2.7 起引入。|

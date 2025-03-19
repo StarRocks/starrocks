@@ -83,14 +83,8 @@ public class MultiInPredicate extends Predicate {
         return strBuilder.toString();
     }
 
-    public boolean equals(Object obj) {
-        if (this == obj) {
-            return true;
-        }
-        if (obj == null || getClass() != obj.getClass()) {
-            return false;
-        }
-        if (super.equals(obj)) {
+    public boolean equalsWithoutChild(Object obj) {
+        if (super.equalsWithoutChild(obj)) {
             MultiInPredicate expr = (MultiInPredicate) obj;
             return isNotIn == expr.isNotIn && numberOfColumns == expr.numberOfColumns;
         }

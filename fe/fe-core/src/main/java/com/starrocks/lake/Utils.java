@@ -43,7 +43,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.Future;
 import javax.validation.constraints.NotNull;
 
@@ -54,9 +53,10 @@ public class Utils {
     }
 
     public static Long chooseNodeId(ShardInfo shardInfo) {
-        Set<Long> ids = GlobalStateMgr.getCurrentState().getStarOSAgent().getAllNodeIdsByShard(shardInfo, true);
-        if (!ids.isEmpty()) {
-            return ids.iterator().next();
+        try {
+            return GlobalStateMgr.getCurrentState().getStarOSAgent().getPrimaryComputeNodeIdByShard(shardInfo);
+        } catch (StarRocksException e) {
+            // do nothing
         }
         try {
             return GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo()

@@ -1,26 +1,28 @@
 -- name: test_security_view
 
 create table t1(c1 bigint, c2 bigint);
-create table t2(c3 bigint, c4 bigint);
 
-create view v1 as select * from t1, t2;
-create view v2 security invoker as select * from t1, t2;
+create view v1 as select * from t1;
+create view v2 security invoker as select * from t1;
+create view v3 security invoker as select * from v2;
 
 create user if not exists u1;
 grant impersonate on user root to u1;
 grant select on view v1 to user u1;
 grant select on view v2 to user u1;
+grant select on view v3 to user u1;
 
 create user if not exists u2;
 grant impersonate on user root to u2;
 grant select on table t1 to user u2;
-grant select on table t2 to user u2;
 grant select on view v1 to user u2;
 grant select on view v2 to user u2;
+grant select on view v3 to user u1;
 
 execute as u1 with no revert;
 select * from v1;
 select * from v2;
+select * from v3;
 execute as root with no revert;
 
 execute as u2 with no revert;

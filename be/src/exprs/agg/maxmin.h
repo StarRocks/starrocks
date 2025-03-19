@@ -40,17 +40,25 @@ struct MaxAggregateData<LT, AggregateComplexLTGuard<LT>> {
 // TODO(murphy) refactor the guard with AggDataTypeTraits
 template <LogicalType LT>
 struct MaxAggregateData<LT, StringLTGuard<LT>> {
-    int32_t size = -1;
-    raw::RawVector<uint8_t> buffer;
+    void assign(const Slice& slice) {
+        size_t buffer_length = std::max<size_t>(PADDED_SIZE, slice.size);
+        _buffer.resize(buffer_length);
+        memcpy(_buffer.data(), slice.data, slice.size);
+        _size = slice.size;
+    }
 
-    bool has_value() const { return buffer.size() > 0; }
+    bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {buffer.data(), buffer.size()}; }
+    Slice slice() const { return {_buffer.data(), (size_t)_size}; }
 
     void reset() {
-        buffer.clear();
-        size = -1;
+        _buffer.clear();
+        _size = -1;
     }
+
+private:
+    int32_t _size = -1;
+    raw::RawVector<uint8_t> _buffer;
 };
 
 template <LogicalType LT, typename = guard::Guard>
@@ -66,17 +74,25 @@ struct MinAggregateData<LT, AggregateComplexLTGuard<LT>> {
 
 template <LogicalType LT>
 struct MinAggregateData<LT, StringLTGuard<LT>> {
-    int32_t size = -1;
-    raw::RawVector<uint8_t> buffer;
+    void assign(const Slice& slice) {
+        size_t buffer_length = std::max<size_t>(PADDED_SIZE, slice.size);
+        _buffer.resize(buffer_length);
+        memcpy(_buffer.data(), slice.data, slice.size);
+        _size = slice.size;
+    }
 
-    bool has_value() const { return size > -1; }
+    bool has_value() const { return _size > -1; }
 
-    Slice slice() const { return {buffer.data(), buffer.size()}; }
+    Slice slice() const { return {_buffer.data(), (size_t)_size}; }
 
     void reset() {
-        buffer.clear();
-        size = -1;
+        _buffer.clear();
+        _size = -1;
     }
+
+private:
+    int32_t _size = -1;
+    raw::RawVector<uint8_t> _buffer;
 };
 
 template <LogicalType LT, typename State, typename = guard::Guard>
@@ -114,10 +130,9 @@ struct MaxElement<LT, State, StringLTGuard<LT>> {
         return !state.has_value() || state.slice().compare(right) <= 0;
     }
     void operator()(State& state, const Slice& right) const {
-        if (!state.has_value() || state.slice().compare(right) < 0) {
-            state.buffer.resize(right.size);
-            memcpy(state.buffer.data(), right.data, right.size);
-            state.size = right.size;
+        if (!state.has_value() || memcompare_padded(state.slice().get_data(), state.slice().get_size(),
+                                                    right.get_data(), right.get_size()) < 0) {
+            state.assign(right);
         }
     }
 
@@ -135,10 +150,9 @@ struct MinElement<LT, State, StringLTGuard<LT>> {
         return !state.has_value() || state.slice().compare(right) >= 0;
     }
     void operator()(State& state, const Slice& right) const {
-        if (!state.has_value() || state.slice().compare(right) > 0) {
-            state.buffer.resize(right.size);
-            memcpy(state.buffer.data(), right.data, right.size);
-            state.size = right.size;
+        if (!state.has_value() || memcompare_padded(state.slice().get_data(), state.slice().get_size(),
+                                                    right.get_data(), right.get_size()) > 0) {
+            state.assign(right);
         }
     }
 
@@ -256,7 +270,8 @@ public:
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state,
                 size_t row_num) const override {
         DCHECK((*columns[0]).is_binary());
-        Slice value = columns[0]->get(row_num).get_slice();
+        auto* binary_column = down_cast<const BinaryColumn*>(columns[0]);
+        auto value = binary_column->get_slice(row_num);
         OP()(this->data(state), value);
     }
 
@@ -268,9 +283,48 @@ public:
         }
     }
 
+    void update_state_removable_cumulatively(FunctionContext* ctx, AggDataPtr __restrict state, const Column** columns,
+                                             int64_t current_row_position, int64_t partition_start,
+                                             int64_t partition_end, int64_t rows_start_offset, int64_t rows_end_offset,
+                                             bool ignore_subtraction, bool ignore_addition,
+                                             [[maybe_unused]] bool has_null) const override {
+        [[maybe_unused]] const auto& column = down_cast<const BinaryColumn&>(*columns[0]);
+
+        const int64_t previous_frame_first_position = current_row_position - 1 + rows_start_offset;
+        int64_t current_frame_last_position = current_row_position + rows_end_offset;
+        if (!ignore_subtraction && previous_frame_first_position >= partition_start &&
+            previous_frame_first_position < partition_end) {
+            if (OP::equals(this->data(state), column.get_data()[previous_frame_first_position])) {
+                current_frame_last_position = std::min(current_frame_last_position, partition_end - 1);
+                this->data(state).reset();
+                int64_t frame_start = previous_frame_first_position + 1;
+                int64_t frame_end = current_frame_last_position + 1;
+                if (has_null) {
+                    const auto null_column = down_cast<const NullColumn*>(columns[1]);
+                    const uint8_t* f_data = null_column->raw_data();
+                    for (size_t i = frame_start; i < frame_end; ++i) {
+                        if (f_data[i] == 0) {
+                            update(ctx, columns, state, i);
+                        }
+                    }
+                } else {
+                    update_batch_single_state_with_frame(ctx, state, columns, partition_start, partition_end,
+                                                         frame_start, frame_end);
+                }
+                return;
+            }
+        }
+
+        if (!ignore_addition && current_frame_last_position >= partition_start &&
+            current_frame_last_position < partition_end) {
+            update(ctx, columns, state, current_frame_last_position);
+        }
+    }
+
     void merge(FunctionContext* ctx, const Column* column, AggDataPtr __restrict state, size_t row_num) const override {
         DCHECK(column->is_binary());
-        Slice value = column->get(row_num).get_slice();
+        auto* binary_column = down_cast<const BinaryColumn*>(column);
+        auto value = binary_column->get_slice(row_num);
         OP()(this->data(state), value);
     }
 

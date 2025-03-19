@@ -35,6 +35,7 @@ MultilaneOperator::MultilaneOperator(pipeline::OperatorFactory* factory, int32_t
 Status MultilaneOperator::prepare(RuntimeState* state) {
     RETURN_IF_ERROR(pipeline::Operator::prepare(state));
     for (auto& lane : _lanes) {
+        lane.processor->set_observer(observer());
         RETURN_IF_ERROR(lane.processor->prepare(state));
     }
     return Status::OK();

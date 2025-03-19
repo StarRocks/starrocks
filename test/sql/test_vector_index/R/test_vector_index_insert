@@ -1,0 +1,170 @@
+-- name: test_vector_index_insert @sequential
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "true");
+-- result:
+-- !result
+CREATE TABLE t1 (
+    id bigint(20) NOT NULL,
+    v1 ARRAY<FLOAT> NOT NULL,
+    v2 ARRAY<FLOAT> NULL,
+    INDEX index_vector (v1) USING VECTOR (
+        "index_type" = "hnsw", 
+        "dim"="5", 
+        "metric_type" = "cosine_similarity", 
+        "is_vector_normed" = "true", 
+        "M" = "16", 
+        "efconstruction" = "40")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 64
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT into t1 values 
+    (1, null, null);
+-- result:
+[REGEX].*Insert has filtered data.*
+-- !result
+INSERT into t1 values 
+    (1, [null, null, null, null, null], [1,2,3,4,5]);
+-- result:
+[REGEX].*The input vector is not normalized but `metric_type` is cosine_similarity and `is_vector_normed` is true.*
+-- !result
+INSERT into t1 values 
+    (1, [1,2,3,4], [1,2,3,4]);
+-- result:
+[REGEX].*The dimensions of the vector written are inconsistent, index dim is 5 but data dim is 4.*
+-- !result
+INSERT into t1 values 
+    (1, [], []);
+-- result:
+[REGEX].*The dimensions of the vector written are inconsistent, index dim is 5 but data dim is 0.*
+-- !result
+INSERT INTO t1 values
+    (1, [1,2,3,4,5], [1,2,3,4,5]),
+    (2, [4,5,6,7,8], [4,5,6,7,8]);
+-- result:
+[REGEX].*The input vector is not normalized but `metric_type` is cosine_similarity and `is_vector_normed` is true.*
+-- !result
+INSERT INTO t1 values
+    (1, [0.13483997249264842, 0.26967994498529685, 0.40451991747794525, 0.5393598899705937, 0.674199862463242], 
+        [0.13483997249264842, 0.26967994498529685, 0.40451991747794525, 0.5393598899705937, 0.674199862463242]),
+    (2, [0.29019050004400465, 0.36273812505500586, 0.435285750066007, 0.5078333750770082, 0.5803810000880093],
+        [0.29019050004400465, 0.36273812505500586, 0.435285750066007, 0.5078333750770082, 0.5803810000880093]),
+    (3, [0.3368607684266076, 0.42107596053325946, 0.5052911526399114, null, 0.6737215368532152],
+        [0.3368607684266076, 0.42107596053325946, 0.5052911526399114, null, 0.6737215368532152]),
+    (4, [0.3368607684266076, 0.42107596053325946, 0.5052911526399114, null, 0.6737215368532152],
+        null);
+-- result:
+-- !result
+INSERT INTO t1 values
+    (1, [1,2,3,4,5], [1,2,3,4,5]),
+    (2, [4,5,6,7,8], [4,5,6,7,8]),
+    (3, null, null);
+-- result:
+[REGEX].*The input vector is not normalized but `metric_type` is cosine_similarity and `is_vector_normed` is true.*
+-- !result
+INSERT INTO t1 values
+    (1, [0.13483997249264842, 0.26967994498529685, 0.40451991747794525, 0.5393598899705937, 0.674199862463242], 
+        [0.13483997249264842, 0.26967994498529685, 0.40451991747794525, 0.5393598899705937, 0.674199862463242]),
+    (4, null, null),
+    (2, [0.29019050004400465, 0.36273812505500586, 0.435285750066007, 0.5078333750770082, 0.5803810000880093],
+        [0.29019050004400465, 0.36273812505500586, 0.435285750066007, 0.5078333750770082, 0.5803810000880093]),
+    (3, [0.3368607684266076, 0.42107596053325946, 0.5052911526399114, null, 0.6737215368532152],
+        [0.3368607684266076, 0.42107596053325946, 0.5052911526399114, null, 0.6737215368532152]),
+    (3, null, null),
+    (5, null, null),
+    (6, null, null),
+    (7, null, null),
+    (8, null, null),
+    (9, null, null),
+    (10, null, null);
+-- result:
+[REGEX].*Insert has filtered data.*
+-- !result
+select * from t1 order by id;
+-- result:
+1	[0.13483997,0.26967993,0.40451992,0.53935987,0.6741999]	[0.13483997,0.26967993,0.40451992,0.53935987,0.6741999]
+2	[0.2901905,0.36273813,0.43528575,0.50783336,0.580381]	[0.2901905,0.36273813,0.43528575,0.50783336,0.580381]
+3	[0.33686078,0.42107597,0.50529116,null,0.67372155]	[0.33686078,0.42107597,0.50529116,null,0.67372155]
+4	[0.33686078,0.42107597,0.50529116,null,0.67372155]	None
+-- !result
+CREATE TABLE t2 (
+    id bigint(20) NOT NULL,
+    v1 ARRAY<FLOAT> NOT NULL,
+    v2 ARRAY<FLOAT> NULL,
+    INDEX index_vector (v1) USING VECTOR (
+        "index_type" = "hnsw", 
+        "dim"="5", 
+        "metric_type" = "cosine_similarity", 
+        "is_vector_normed" = "false", 
+        "M" = "16", 
+        "efconstruction" = "40")
+) ENGINE=OLAP
+DUPLICATE KEY(id)
+DISTRIBUTED BY HASH(id) BUCKETS 64
+PROPERTIES (
+    "replication_num" = "1"
+);
+-- result:
+-- !result
+INSERT INTO t2 values
+    (1, [1,2,3,4,5], [1,2,3,4,5]),
+    (2, [4,5,6,7,8], [4,5,6,7,8]),
+    (3, [4,5,6,null,8], [4,5,6,null,8]),
+    (4, [null, null, null, null], [null, null, null, null]),
+    (5, [4,5,6,7,8], null);
+-- result:
+[REGEX].*The dimensions of the vector written are inconsistent, index dim is 5 but data dim is 4.*
+-- !result
+INSERT INTO t2 values
+    (1, [1,2,3,4,5], [1,2,3,4,5]),
+    (2, [4,5,6,7], [4,5,6,7,8]),
+    (3, [4,5,6,null,8], [4,5,6,null,8]),
+    (4, [null, null, null, null], [null, null, null, null]),
+    (5, [4,5,6,7,8], null);
+-- result:
+[REGEX].*The dimensions of the vector written are inconsistent, index dim is 5 but data dim is 4.*
+-- !result
+select * from t2 order by id;
+-- result:
+-- !result
+insert into t1 select * from t2;
+-- result:
+-- !result
+insert into t1 select * from t1;
+-- result:
+-- !result
+select * from t1 order by id, v1, v2;
+-- result:
+1	[0.13483997,0.26967993,0.40451992,0.53935987,0.6741999]	[0.13483997,0.26967993,0.40451992,0.53935987,0.6741999]
+1	[0.13483997,0.26967993,0.40451992,0.53935987,0.6741999]	[0.13483997,0.26967993,0.40451992,0.53935987,0.6741999]
+2	[0.2901905,0.36273813,0.43528575,0.50783336,0.580381]	[0.2901905,0.36273813,0.43528575,0.50783336,0.580381]
+2	[0.2901905,0.36273813,0.43528575,0.50783336,0.580381]	[0.2901905,0.36273813,0.43528575,0.50783336,0.580381]
+3	[0.33686078,0.42107597,0.50529116,null,0.67372155]	[0.33686078,0.42107597,0.50529116,null,0.67372155]
+3	[0.33686078,0.42107597,0.50529116,null,0.67372155]	[0.33686078,0.42107597,0.50529116,null,0.67372155]
+4	[0.33686078,0.42107597,0.50529116,null,0.67372155]	None
+4	[0.33686078,0.42107597,0.50529116,null,0.67372155]	None
+-- !result
+insert into t2 select * from t1;
+-- result:
+-- !result
+insert into t2 select id, v2, v1 from t2;
+-- result:
+[REGEX].*Insert has filtered data.*
+-- !result
+select * from t2 order by id, v1, v2;
+-- result:
+1	[0.13483997,0.26967993,0.40451992,0.53935987,0.6741999]	[0.13483997,0.26967993,0.40451992,0.53935987,0.6741999]
+1	[0.13483997,0.26967993,0.40451992,0.53935987,0.6741999]	[0.13483997,0.26967993,0.40451992,0.53935987,0.6741999]
+2	[0.2901905,0.36273813,0.43528575,0.50783336,0.580381]	[0.2901905,0.36273813,0.43528575,0.50783336,0.580381]
+2	[0.2901905,0.36273813,0.43528575,0.50783336,0.580381]	[0.2901905,0.36273813,0.43528575,0.50783336,0.580381]
+3	[0.33686078,0.42107597,0.50529116,null,0.67372155]	[0.33686078,0.42107597,0.50529116,null,0.67372155]
+3	[0.33686078,0.42107597,0.50529116,null,0.67372155]	[0.33686078,0.42107597,0.50529116,null,0.67372155]
+4	[0.33686078,0.42107597,0.50529116,null,0.67372155]	None
+4	[0.33686078,0.42107597,0.50529116,null,0.67372155]	None
+-- !result
+ADMIN SET FRONTEND CONFIG("enable_experimental_vector" = "false");
+-- result:
+-- !result

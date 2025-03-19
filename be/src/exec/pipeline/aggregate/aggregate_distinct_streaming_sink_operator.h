@@ -72,6 +72,7 @@ private:
     // Whether prev operator has no output
     bool _is_finished = false;
     LimitedMemAggState _limited_mem_state;
+    DECLARE_ONCE_DETECTOR(_set_finishing_once);
 };
 
 class AggregateDistinctStreamingSinkOperatorFactory final : public OperatorFactory {

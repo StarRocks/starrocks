@@ -15,6 +15,7 @@
 #include "exec/topn_node.h"
 
 #include <memory>
+#include <type_traits>
 
 #include "exec/chunks_sorter.h"
 #include "exec/chunks_sorter_full_sort.h"
@@ -230,7 +231,8 @@ Status TopNNode::_consume_chunks(RuntimeState* state, ExecNode* child) {
         } else {
             _chunks_sorter = std::make_unique<ChunksSorterTopn>(
                     state, &(_sort_exec_exprs.lhs_ordering_expr_ctxs()), &_is_asc_order, &_is_null_first, _sort_keys,
-                    _offset, _limit, TTopNType::ROW_NUMBER, ChunksSorterTopn::tunning_buffered_chunks(_limit));
+                    _offset, _limit, TTopNType::ROW_NUMBER, ChunksSorterTopn::kDefaultMaxBufferRows,
+                    ChunksSorterTopn::kDefaultMaxBufferBytes, ChunksSorterTopn::max_buffered_chunks(_limit));
         }
 
     } else {
@@ -306,13 +308,15 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
         context->interpolate_spill_process(id(), spill_channel_factory, degree_of_parallelism);
     }
 
+    bool has_outer_join_child = _tnode.sort_node.__isset.has_outer_join_child && _tnode.sort_node.has_outer_join_child;
+
     // create context factory
     bool enable_pre_agg = _tnode.sort_node.__isset.pre_agg_exprs && (!_tnode.sort_node.pre_agg_exprs.empty());
     auto context_factory = std::make_shared<ContextFactory>(
             runtime_state(), _tnode.sort_node.topn_type, need_merge, _sort_exec_exprs.lhs_ordering_expr_ctxs(),
             _is_asc_order, _is_null_first, _tnode.sort_node.partition_exprs, enable_pre_agg,
             _tnode.sort_node.pre_agg_exprs, _tnode.sort_node.pre_agg_output_slot_id, _offset, partition_limit,
-            _sort_keys, _order_by_types, _build_runtime_filters);
+            _sort_keys, _order_by_types, has_outer_join_child, _build_runtime_filters);
 
     // Create a shared RefCountedRuntimeFilterCollector
     auto&& rc_rf_probe_collector = std::make_shared<RcRfProbeCollector>(2, std::move(this->runtime_filter_collector()));
@@ -341,14 +345,14 @@ std::vector<std::shared_ptr<pipeline::OperatorFactory>> TopNNode::_decompose_to_
     SourceOperatorFactoryPtr source_operator;
 
     source_operator = std::make_shared<SourceFactory>(context->next_operator_id(), id(), context_factory);
-    if (!is_partition_topn && enable_parallel_merge) {
+    if constexpr (std::is_same_v<LocalParallelMergeSortSourceOperatorFactory, SourceFactory>) {
         down_cast<LocalParallelMergeSortSourceOperatorFactory*>(source_operator.get())
                 ->set_tuple_desc(_materialized_tuple_desc);
         down_cast<LocalParallelMergeSortSourceOperatorFactory*>(source_operator.get())->set_is_gathered(need_merge);
-    }
-    if (enable_parallel_merge && _tnode.sort_node.__isset.parallel_merge_late_materialize_mode) {
-        down_cast<LocalParallelMergeSortSourceOperatorFactory*>(source_operator.get())
-                ->set_materialized_mode(_tnode.sort_node.parallel_merge_late_materialize_mode);
+        if (_tnode.sort_node.__isset.parallel_merge_late_materialize_mode) {
+            down_cast<LocalParallelMergeSortSourceOperatorFactory*>(source_operator.get())
+                    ->set_materialized_mode(_tnode.sort_node.parallel_merge_late_materialize_mode);
+        }
     }
 
     ops_sink_with_sort.emplace_back(std::move(sink_operator));

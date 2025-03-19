@@ -179,6 +179,13 @@ public:
 
     static void release(StreamLoadContext* context);
 
+    // ========================== transaction stream load ==========================
+    // try to get the lock when receiving http requests.
+    // Return Status::OK if success, otherwise return the fail reason
+    Status try_lock();
+    bool tsl_reach_timeout();
+    bool tsl_reach_idle_timeout(int32_t check_interval);
+
 public:
     // 1) Before the stream load receiving thread exits, Fragment may have been destructed.
     // At this time, mem_tracker may have been destructed,
@@ -246,8 +253,8 @@ public:
     int64_t total_received_data_cost_nanos = 0;
     int64_t received_data_cost_nanos = 0;
     int64_t write_data_cost_nanos = 0;
-    int64_t begin_txn_ts = 0;
-    int64_t last_active_ts = 0;
+    std::atomic<int64_t> begin_txn_ts = 0;
+    std::atomic<int64_t> last_active_ts = 0;
 
     std::string error_url;
     std::string rejected_record_path;
@@ -262,6 +269,9 @@ public:
     std::vector<TTabletFailInfo> fail_infos;
 
     std::mutex lock;
+    // Whether the transaction stream load is detected as timeout. This flag is used to tell
+    // the new request that the transaction is timeout and will be aborted
+    std::atomic<bool> timeout_detected{false};
 
     std::shared_ptr<MessageBodySink> body_sink;
     bool need_rollback = false;

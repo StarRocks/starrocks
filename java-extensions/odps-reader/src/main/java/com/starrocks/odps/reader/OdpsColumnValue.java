@@ -98,8 +98,8 @@ public class OdpsColumnValue implements ColumnValue {
         MapTypeInfo mapTypeInfo = (MapTypeInfo) dataType;
         Map data = (Map) fieldData;
         data.forEach((key, value) -> {
-            keys.add(new OdpsColumnValue(key, mapTypeInfo.getKeyTypeInfo(), timezone));
-            values.add(new OdpsColumnValue(value, mapTypeInfo.getValueTypeInfo(), timezone));
+            keys.add(key == null ? null : new OdpsColumnValue(key, mapTypeInfo.getKeyTypeInfo(), timezone));
+            values.add(value == null ? null : new OdpsColumnValue(value, mapTypeInfo.getValueTypeInfo(), timezone));
         });
     }
 

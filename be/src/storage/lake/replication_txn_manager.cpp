@@ -70,32 +70,33 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
             LOG(INFO) << "Tablet " << request.tablet_id << " already made remote snapshot"
                       << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
                       << ", src_tablet_id: " << request.src_tablet_id
-                      << ", visible_version: " << request.visible_version
+                      << ", visible_version: " << request.visible_version << ", data_version: " << request.data_version
                       << ", snapshot_version: " << request.src_visible_version;
             return Status::OK();
         }
     }
 
     std::vector<Version> missed_versions;
-    for (auto v = request.visible_version + 1; v <= request.src_visible_version; ++v) {
+    for (auto v = request.data_version + 1; v <= request.src_visible_version; ++v) {
         missed_versions.emplace_back(v, v);
     }
     if (UNLIKELY(missed_versions.empty())) {
         LOG(WARNING) << "Remote snapshot tablet skipped, no missing version"
                      << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
                      << ", src_tablet_id: " << request.src_tablet_id << ", visible_version: " << request.visible_version
+                     << ", data_version: " << request.data_version
                      << ", snapshot_version: " << request.src_visible_version;
         return Status::Corruption("No missing version");
     }
 
     LOG(INFO) << "Start make remote snapshot, txn_id: " << request.transaction_id
               << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
-              << ", visible_version: " << request.visible_version
+              << ", visible_version: " << request.visible_version << ", data_version: " << request.data_version
               << ", snapshot_version: " << request.src_visible_version << ", missed_versions: ["
-              << (request.visible_version + 1) << " ... " << request.src_visible_version << "]";
+              << (request.data_version + 1) << " ... " << request.src_visible_version << "]";
 
     Status status;
-    if (request.visible_version <= 1) { // Make full snapshot
+    if (request.data_version <= 1) { // Make full snapshot
         src_snapshot_info->incremental_snapshot = false;
         status = make_remote_snapshot(request, nullptr, nullptr, &src_snapshot_info->backend,
                                       &src_snapshot_info->snapshot_path);
@@ -107,7 +108,7 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
             LOG(INFO) << "Failed to make incremental snapshot: " << status << ". switch to fully snapshot"
                       << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
                       << ", src_tablet_id: " << request.src_tablet_id
-                      << ", visible_version: " << request.visible_version
+                      << ", visible_version: " << request.visible_version << ", data_version: " << request.data_version
                       << ", snapshot_version: " << request.src_visible_version;
             src_snapshot_info->incremental_snapshot = false;
             status = make_remote_snapshot(request, nullptr, nullptr, &src_snapshot_info->backend,
@@ -118,7 +119,7 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
     if (!status.ok()) {
         LOG(WARNING) << "Failed to make remote snapshot: " << status << ", txn_id: " << request.transaction_id
                      << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
-                     << ", visible_version: " << request.visible_version
+                     << ", visible_version: " << request.visible_version << ", data_version: " << request.data_version
                      << ", snapshot_version: " << request.src_visible_version;
         return status;
     }
@@ -131,7 +132,7 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
               << src_snapshot_info->backend.be_port << ":" << src_snapshot_info->snapshot_path
               << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
               << ", src_tablet_id: " << request.src_tablet_id << ", visible_version: " << request.visible_version
-              << ", snapshot_version: " << request.src_visible_version
+              << ", data_version: " << request.data_version << ", snapshot_version: " << request.src_visible_version
               << ", incremental_snapshot: " << src_snapshot_info->incremental_snapshot;
 
     auto txn_log = std::make_shared<TxnLog>();
@@ -143,6 +144,7 @@ Status ReplicationTxnManager::remote_snapshot(const TRemoteSnapshotRequest& requ
     txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_SNAPSHOTED);
     txn_meta->set_tablet_id(request.tablet_id);
     txn_meta->set_visible_version(request.visible_version);
+    txn_meta->set_data_version(request.data_version);
     txn_meta->set_src_backend_host(src_snapshot_info->backend.host);
     txn_meta->set_src_backend_port(src_snapshot_info->backend.be_port);
     txn_meta->set_src_snapshot_path(src_snapshot_info->snapshot_path);
@@ -171,7 +173,7 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
             LOG(INFO) << "Tablet " << request.tablet_id << " already replicated remote snapshot"
                       << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
                       << ", src_tablet_id: " << request.src_tablet_id
-                      << ", visible_version: " << request.visible_version
+                      << ", visible_version: " << request.visible_version << ", data_version: " << request.data_version
                       << ", snapshot_version: " << request.src_visible_version;
             return Status::OK();
         }
@@ -188,6 +190,7 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
                          << status << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
                          << ", src_tablet_id: " << request.src_tablet_id
                          << ", visible_version: " << request.visible_version
+                         << ", data_version: " << request.data_version
                          << ", snapshot_version: " << request.src_visible_version;
             continue;
         }
@@ -198,6 +201,7 @@ Status ReplicationTxnManager::replicate_snapshot(const TReplicateSnapshotRequest
                   << ", keys_type: " << KeysType_Name(tablet_metadata->schema().keys_type())
                   << ", txn_id: " << request.transaction_id << ", tablet_id: " << request.tablet_id
                   << ", src_tablet_id: " << request.src_tablet_id << ", visible_version: " << request.visible_version
+                  << ", data_version: " << request.data_version
                   << ", snapshot_version: " << request.src_visible_version;
 
         return status;
@@ -344,6 +348,7 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
             LOG(WARNING) << "Transaction is aborted, txn_id: " << request.transaction_id
                          << ", tablet_id: " << request.tablet_id << ", src_tablet_id: " << request.src_tablet_id
                          << ", visible_version: " << request.visible_version
+                         << ", data_version: " << request.data_version
                          << ", snapshot_version: " << request.src_visible_version;
             return Status::InternalError("Transaction is aborted");
         }
@@ -387,6 +392,7 @@ Status ReplicationTxnManager::replicate_remote_snapshot(const TReplicateSnapshot
     txn_meta->set_txn_state(ReplicationTxnStatePB::TXN_REPLICATED);
     txn_meta->set_tablet_id(request.tablet_id);
     txn_meta->set_visible_version(request.visible_version);
+    txn_meta->set_data_version(request.data_version);
     txn_meta->set_src_backend_host(src_snapshot_info.backend.host);
     txn_meta->set_src_backend_port(src_snapshot_info.backend.be_port);
     txn_meta->set_src_snapshot_path(src_snapshot_info.snapshot_path);

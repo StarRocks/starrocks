@@ -275,6 +275,14 @@ public:
 
     void cancel(const Status& status);
 
+    template <class Caller>
+    void for_each_fragment(Caller&& caller) {
+        std::lock_guard guard(_lock);
+        for (auto& [_, fragment] : _fragment_contexts) {
+            caller(fragment);
+        }
+    }
+
 private:
     std::mutex _lock;
     std::unordered_map<TUniqueId, FragmentContextPtr> _fragment_contexts;

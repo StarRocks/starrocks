@@ -22,6 +22,7 @@
 #include <vector>
 
 #include "column/column.h"
+#include "column/vectorized_fwd.h"
 #include "common/status.h"
 #include "exec/hdfs_scanner.h"
 #include "formats/parquet/column_reader.h"
@@ -82,12 +83,14 @@ public:
     LevelDecoder& def_level_decoder() { return _def_level_decoder; }
     LevelDecoder& rep_level_decoder() { return _rep_level_decoder; }
 
-    Status decode_values(size_t n, const uint16_t* is_nulls, ColumnContentType content_type, Column* dst) {
+    Status decode_values(size_t n, const uint16_t* is_nulls, ColumnContentType content_type, Column* dst,
+                         const FilterData* filter = nullptr) {
         SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
         if (_current_row_group_no_null || _current_page_no_null) {
-            return _cur_decoder->next_batch(n, content_type, dst);
+            return _cur_decoder->next_batch(n, content_type, dst, filter);
         }
         size_t idx = 0;
+        size_t off = 0;
         while (idx < n) {
             bool is_null = is_nulls[idx++];
             size_t run = 1;
@@ -98,15 +101,17 @@ public:
             if (is_null) {
                 dst->append_nulls(run);
             } else {
-                RETURN_IF_ERROR(_cur_decoder->next_batch(run, content_type, dst));
+                const FilterData* forward_filter = filter ? filter + off : filter;
+                RETURN_IF_ERROR(_cur_decoder->next_batch(run, content_type, dst, forward_filter));
             }
+            off += run;
         }
         return Status::OK();
     }
 
-    Status decode_values(size_t n, ColumnContentType content_type, Column* dst) {
+    Status decode_values(size_t n, ColumnContentType content_type, Column* dst, const FilterData* filter = nullptr) {
         SCOPED_RAW_TIMER(&_opts.stats->value_decode_ns);
-        return _cur_decoder->next_batch(n, content_type, dst);
+        return _cur_decoder->next_batch(n, content_type, dst, filter);
     }
 
     const tparquet::ColumnMetaData& metadata() const { return _chunk_metadata->meta_data; }

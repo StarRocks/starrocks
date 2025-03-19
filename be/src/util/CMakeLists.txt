@@ -25,6 +25,8 @@ set(UTIL_FILES
   await.cpp
   bfd_parser.cpp
   base85.cpp
+  bloom_filter.cpp
+  block_split_bloom_filter.cpp
   compression/block_compression.cpp
   compression/compression_context_pool_singletons.cpp
   compression/stream_compression.cpp
@@ -61,6 +63,7 @@ set(UTIL_FILES
   thrift_client.cpp
   thrift_server.cpp
   stack_util.cpp
+  table_metrics.cpp
   system_metrics.cpp
   url_parser.cpp
   url_coding.cpp

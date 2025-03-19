@@ -610,4 +610,3 @@ helm delete starrocks
 [Helm](https://helm.sh/) 是 Kubernetes 的包管理器。[Helm Chart](https://helm.sh/docs/topics/charts/) 是一个 Helm 包，包含在 Kubernetes 集群上运行应用程序所需的所有资源定义。
 
 [`starrocks-kubernetes-operator` 和 `kube-starrocks` Helm Chart](https://github.com/StarRocks/starrocks-kubernetes-operator)。
-```

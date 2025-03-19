@@ -42,6 +42,7 @@
 #include "storage/chunk_helper.h"
 #include "storage/range.h"
 #include "storage/rowset/bitshuffle_page.h"
+#include "types/logical_type.h"
 #include "util/slice.h" // for Slice
 #include "util/unaligned_access.h"
 
@@ -245,8 +246,10 @@ Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange<>& range, Colum
     size_t nread = _vec_code_buf->size();
     using cast_type = CppTypeTraits<TYPE_INT>::CppType;
     const auto* codewords = reinterpret_cast<const cast_type*>(_vec_code_buf->raw_data());
-    std::vector<Slice> slices;
-    raw::stl_vector_resize_uninitialized(&slices, nread);
+
+    static_assert(sizeof(Slice) == sizeof(int128_t));
+    auto slices_data = std::make_unique_for_overwrite<uint8_t[]>(nread * sizeof(Slice));
+    Slice* slices = reinterpret_cast<Slice*>(slices_data.get());
 
     if constexpr (Type == TYPE_CHAR) {
         for (int i = 0; i < nread; ++i) {
@@ -256,10 +259,24 @@ Status BinaryDictPageDecoder<Type>::next_batch(const SparseRange<>& range, Colum
             slices[i] = element;
         }
     } else {
-        _dict_decoder->batch_string_at_index(slices.data(), codewords, nread);
+        _dict_decoder->batch_string_at_index(slices, codewords, nread);
     }
 
-    bool ok = dst->append_strings_overflow(slices, _max_value_legth);
+    class SliceContainerAdaptor {
+    public:
+        using value_type = Slice;
+        SliceContainerAdaptor(Slice* slices, size_t size) : _slices(slices), _size(size) {}
+
+        Slice* data() const { return _slices; }
+        size_t size() const { return _size; }
+
+    private:
+        Slice* _slices;
+        size_t _size;
+    };
+
+    SliceContainerAdaptor adaptor(slices, nread);
+    bool ok = dst->append_strings_overflow(adaptor, _max_value_legth);
     DCHECK(ok) << "append_strings_overflow failed";
     RETURN_IF(!ok, Status::InternalError("BinaryDictPageDecoder::next_batch failed"));
     return Status::OK();

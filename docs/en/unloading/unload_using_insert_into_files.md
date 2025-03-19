@@ -55,7 +55,7 @@ For more about the remote storage systems and credential methods supported by FI
 
 INSERT INTO FILES supports unloading data into a single file or multiple files. You can further partition these data files by specifying separate storage paths for them.
 
-When unloading data using INSERT INTO FILES, you must manually set the compression algorithm using the property `compression`. For more information on the data compression algorithm supported by StarRocks, see [Data compression](../table_design/data_compression.md).
+When unloading data using INSERT INTO FILES, you must manually set the compression algorithm using the property `compression`. For more information on the data compression algorithm supported by FILES, see [unload_data_param](../sql-reference/sql-functions/table-functions/files.md#unload_data_param).
 
 ### Unload data into multiple files
 

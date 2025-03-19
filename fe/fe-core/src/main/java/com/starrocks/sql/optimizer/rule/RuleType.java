@@ -210,6 +210,8 @@ public enum RuleType {
     TF_PREDICATE_PROPAGATE,
 
     TF_VECTOR_REWRITE_RULE,
+    TF_HOIST_HEAVY_COST_UPON_TOPN,
+    TF_OR_TO_UNION_ALL_JOIN,
 
     // The following are implementation rules:
     IMPLEMENTATION_RULES,
@@ -284,6 +286,7 @@ public enum RuleType {
     GP_FINE_GRAINED_RANGE_PREDICATE,
     GP_ELIMINATE_OP_WITH_CONSTANT,
     GP_VECTOR_REWRITE,
+
 
     NUM_RULES;
 

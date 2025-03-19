@@ -29,7 +29,7 @@ class RssidFileInfoContainer;
 
 struct PartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
-    std::vector<std::unique_ptr<Column>> write_columns;
+    MutableColumns write_columns;
     void reset() {
         src_rss_rowids.clear();
         write_columns.clear();
@@ -48,7 +48,7 @@ struct PartialUpdateState {
 struct AutoIncrementPartialUpdateState {
     std::vector<uint64_t> src_rss_rowids;
     // Container used to store the values of auto increment columns
-    std::unique_ptr<Column> write_column;
+    MutableColumnPtr write_column;
     // Schema of modified columns
     std::shared_ptr<TabletSchema> schema;
     // auto increment column id in partial segment file
@@ -99,7 +99,7 @@ public:
     size_t memory_usage() const { return _memory_usage; }
 
     // For large segment, we need to load segment file piece by piece.
-    ColumnUniquePtr pk_column;
+    MutableColumnPtr pk_column;
 
 private:
     Status _load();
@@ -128,8 +128,6 @@ using SegmentPKEncodeResultPtr = std::unique_ptr<SegmentPKEncodeResult>;
 
 class RowsetUpdateState {
 public:
-    using ColumnUniquePtr = std::unique_ptr<Column>;
-
     RowsetUpdateState();
     ~RowsetUpdateState();
 
@@ -171,7 +169,7 @@ public:
     void release_delete(uint32_t del_id);
 
     const SegmentPKEncodeResultPtr& upserts(uint32_t segment_id) const { return _upserts[segment_id]; }
-    const ColumnUniquePtr& deletes(uint32_t segment_id) const { return _deletes[segment_id]; }
+    const MutableColumnPtr& deletes(uint32_t segment_id) const { return _deletes[segment_id]; }
 
     std::size_t memory_usage() const { return _memory_usage; }
 
@@ -183,7 +181,7 @@ public:
                                    std::map<uint32_t, std::vector<uint32_t>>* rowids_by_rssid,
                                    std::vector<uint32_t>* idxes);
 
-    const ColumnUniquePtr& auto_increment_deletes(uint32_t segment_id) const;
+    const MutableColumnPtr& auto_increment_deletes(uint32_t segment_id) const;
 
     static StatusOr<bool> file_exist(const std::string& full_path);
 
@@ -213,7 +211,7 @@ private:
     // one for each segment file
     std::vector<SegmentPKEncodeResultPtr> _upserts;
     // one for each delete file
-    std::vector<ColumnUniquePtr> _deletes;
+    std::vector<MutableColumnPtr> _deletes;
     size_t _memory_usage = 0;
     int64_t _tablet_id = 0;
     // Because we can load partial segments when preload, so need vector to track their version.
@@ -225,7 +223,7 @@ private:
 
     std::vector<AutoIncrementPartialUpdateState> _auto_increment_partial_update_states;
 
-    std::vector<ColumnUniquePtr> _auto_increment_delete_pks;
+    std::vector<MutableColumnPtr> _auto_increment_delete_pks;
 
     // `_rowset_meta_ptr` contains full life cycle rowset meta in `_rowset_ptr`.
     RowsetMetadataUniquePtr _rowset_meta_ptr;

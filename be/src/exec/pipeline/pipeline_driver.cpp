@@ -164,6 +164,9 @@ Status PipelineDriver::prepare(RuntimeState* runtime_state) {
             _global_rf_wait_timeout_ns = std::max(_global_rf_wait_timeout_ns, op->global_rf_wait_timeout_ns());
         }
     }
+    if (!_global_rf_descriptors.empty() && runtime_state->enable_event_scheduler()) {
+        _fragment_ctx->add_timer_observer(observer(), _global_rf_wait_timeout_ns);
+    }
 
     if (!all_local_rf_set.empty()) {
         _runtime_profile->add_info_string("LocalRfWaitingSet", strings::Substitute("$0", all_local_rf_set.size()));
@@ -575,6 +578,7 @@ void PipelineDriver::cancel_operators(RuntimeState* runtime_state) {
         WARN_IF_ERROR(_mark_operator_cancelled(op, runtime_state),
                       fmt::format("cancel pipeline driver error [driver={}]", to_readable_string()));
     }
+    _is_operator_cancelled = true;
 }
 
 void PipelineDriver::_close_operators(RuntimeState* runtime_state) {
@@ -665,8 +669,7 @@ void PipelineDriver::_try_to_release_buffer(RuntimeState* state, OperatorPtr& op
     }
 }
 
-void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state, int64_t schedule_count,
-                              int64_t execution_time) {
+void PipelineDriver::finalize(RuntimeState* runtime_state, DriverState state) {
     stop_timers();
     int64_t time_spent = 0;
     // The driver may be destructed after finalizing, so use a temporal driver to record
@@ -735,11 +738,10 @@ void PipelineDriver::_update_global_rf_timer() {
     if (!_runtime_state->enable_event_scheduler()) {
         return;
     }
-    auto timer = std::make_unique<RFScanWaitTimeout>(_fragment_ctx);
+    auto timer = std::make_unique<RFScanWaitTimeout>(_fragment_ctx, true);
     timer->add_observer(_runtime_state, &_observer);
     _global_rf_timer = std::move(timer);
-    timespec abstime = butil::microseconds_to_timespec(butil::gettimeofday_us());
-    abstime.tv_nsec += _global_rf_wait_timeout_ns;
+    timespec abstime = butil::nanoseconds_from_now(_global_rf_wait_timeout_ns);
     WARN_IF_ERROR(_fragment_ctx->pipeline_timer()->schedule(_global_rf_timer.get(), abstime), "schedule:");
 }
 
@@ -752,8 +754,8 @@ std::string PipelineDriver::to_readable_string() const {
     ss << "query_id=" << (this->_query_ctx == nullptr ? "None" : print_id(this->query_ctx()->query_id()))
        << " fragment_id="
        << (this->_fragment_ctx == nullptr ? "None" : print_id(this->fragment_ctx()->fragment_instance_id()))
-       << " driver=" << _driver_name << ", status=" << ds_to_string(this->driver_state()) << block_reasons
-       << ", operator-chain: [";
+       << " driver=" << _driver_name << " addr=" << this << ", status=" << ds_to_string(this->driver_state())
+       << block_reasons << ", operator-chain: [";
     for (size_t i = 0; i < _operators.size(); ++i) {
         if (i == 0) {
             ss << _operators[i]->get_name();

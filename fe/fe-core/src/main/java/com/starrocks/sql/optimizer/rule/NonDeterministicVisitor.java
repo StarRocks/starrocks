@@ -69,11 +69,8 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
 
     private boolean checkAggCall(Map<ColumnRefOperator, CallOperator> aggregations) {
         for (Map.Entry<ColumnRefOperator, CallOperator> entry : aggregations.entrySet()) {
-            CallOperator aggCall = entry.getValue();
-            for (ScalarOperator arg : aggCall.getArguments()) {
-                if (hasNonDeterministicFunc(arg)) {
-                    return true;
-                }
+            if (entry.getValue().getChildren().stream().anyMatch(this::hasNonDeterministicFunc)) {
+                return true;
             }
         }
         return false;
@@ -118,9 +115,6 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
 
     private Boolean visitChildren(OptExpression optExpression) {
         for (OptExpression child : optExpression.getInputs()) {
-            if (checkCommon(child)) {
-                return true;
-            }
             if (child.getOp().accept(this, child, null)) {
                 return true;
             }
@@ -140,6 +134,9 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
 
     @Override
     public Boolean visitLogicalJoin(OptExpression optExpression, Void context) {
+        if (checkCommon(optExpression)) {
+            return true;
+        }
         LogicalJoinOperator joinOperator = (LogicalJoinOperator) optExpression.getOp();
         if (joinOperator.getOnPredicate() != null &&
                 hasNonDeterministicFunc(joinOperator.getOnPredicate())) {
@@ -150,6 +147,9 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
 
     @Override
     public Boolean visitLogicalAggregate(OptExpression optExpression, Void context) {
+        if (checkCommon(optExpression)) {
+            return true;
+        }
         LogicalAggregationOperator aggregationOperator = (LogicalAggregationOperator) optExpression.getOp();
         if (checkAggCall(aggregationOperator.getAggregations())) {
             return true;
@@ -168,6 +168,9 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
 
     @Override
     public Boolean visitLogicalProject(OptExpression optExpression, Void context) {
+        if (checkCommon(optExpression)) {
+            return true;
+        }
         Map<ColumnRefOperator, ScalarOperator> map = ((LogicalProjectOperator) optExpression.getOp())
                 .getColumnRefMap();
         for (ScalarOperator scalarOperator : map.values()) {
@@ -180,6 +183,9 @@ public class NonDeterministicVisitor extends OptExpressionVisitor<Boolean, Void>
 
     @Override
     public Boolean visitLogicalFilter(OptExpression optExpression, Void context) {
+        if (checkCommon(optExpression)) {
+            return true;
+        }
         LogicalFilterOperator filter = (LogicalFilterOperator) optExpression.getOp();
         if (filter.getPredicate() != null && hasNonDeterministicFunc(filter.getPredicate()))  {
             return true;

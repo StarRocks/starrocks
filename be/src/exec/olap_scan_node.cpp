@@ -109,6 +109,15 @@ Status OlapScanNode::init(const TPlanNode& tnode, RuntimeState* state) {
         }
     }
 
+    if (tnode.olap_scan_node.__isset.enable_topn_filter_back_pressure &&
+        tnode.olap_scan_node.enable_topn_filter_back_pressure) {
+        _enable_topn_filter_back_pressure = true;
+        _back_pressure_max_rounds = tnode.olap_scan_node.back_pressure_max_rounds;
+        _back_pressure_num_rows = tnode.olap_scan_node.back_pressure_num_rows;
+        _back_pressure_throttle_time = tnode.olap_scan_node.back_pressure_throttle_time;
+        _back_pressure_throttle_time_upper_bound = tnode.olap_scan_node.back_pressure_throttle_time_upper_bound;
+    }
+
     _estimate_scan_and_output_row_bytes();
 
     return Status::OK();

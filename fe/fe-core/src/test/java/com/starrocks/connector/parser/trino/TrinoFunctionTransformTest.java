@@ -194,6 +194,9 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
         sql = "select parse_datetime('2023-05','yyyy-MM')";
         assertPlanContains(sql, "str_to_jodatime('2023-05', 'yyyy-MM')");
 
+        sql = "select parse_datetime('2023-08-02T14:37:02', 'yyyy-MM-dd''T''HH:mm:ss''Z''')";
+        assertPlanContains(sql, "str_to_jodatime('2023-08-02T14:37:02', 'yyyy-MM-ddTHH:mm:ss')");
+
         sql = "select last_day_of_month(timestamp '2023-07-01 00:00:00');";
         assertPlanContains(sql, "last_day('2023-07-01 00:00:00', 'month')");
 
@@ -211,6 +214,18 @@ public class TrinoFunctionTransformTest extends TrinoTestBase {
 
         sql = "select to_timestamp('2022-02-02', 'yyyy-mm-dd')";
         assertPlanContains(sql, " to_tera_timestamp('2022-02-02', 'yyyy-mm-dd')");
+
+        sql = "select year_of_week('2022-02-02')";
+        assertPlanContains(sql, "<slot 2> : 2022");
+
+        sql = "select yow('2022-02-02')";
+        assertPlanContains(sql, "<slot 2> : 2022");
+
+        sql = "select from_iso8601_timestamp('2025-02-02 14:37:02')";
+        assertPlanContains(sql, "'2025-02-02 14:37:02'");
+
+        sql = "select from_iso8601_timestamp('2025-02-02')";
+        assertPlanContains(sql, "'2025-02-02 00:00:00'");
     }
 
     @Test

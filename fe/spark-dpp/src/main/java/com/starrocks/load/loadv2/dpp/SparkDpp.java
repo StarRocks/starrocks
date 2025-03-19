@@ -50,7 +50,6 @@ import org.apache.spark.sql.RowFactory;
 import org.apache.spark.sql.SparkSession;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.encoders.ExpressionEncoder;
-import org.apache.spark.sql.catalyst.encoders.RowEncoder;
 import org.apache.spark.sql.execution.datasources.parquet.ParquetWriteSupport;
 import org.apache.spark.sql.functions;
 import org.apache.spark.sql.types.DataTypes;
@@ -222,7 +221,7 @@ public final class SparkDpp implements java.io.Serializable {
         // TODO(wb) should deal largint as BigInteger instead of string when using biginteger as key,
         // data type may affect sorting logic
         StructType dstSchema = DppUtils.createDstTableSchema(indexMeta.columns, false, true);
-        ExpressionEncoder encoder = RowEncoder.apply(dstSchema);
+        ExpressionEncoder encoder = ExpressionEncoder.apply(dstSchema);
         ExpressionEncoderHelper encoderHelper = new ExpressionEncoderHelper(encoder);
 
         resultRDD.repartitionAndSortWithinPartitions(new BucketPartitioner(bucketKeyMap), new BucketComparator())

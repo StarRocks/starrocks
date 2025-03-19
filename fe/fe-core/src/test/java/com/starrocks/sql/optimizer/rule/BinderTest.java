@@ -22,6 +22,7 @@ import com.starrocks.sql.optimizer.GroupExpression;
 import com.starrocks.sql.optimizer.Memo;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.operator.OperatorType;
 import com.starrocks.sql.optimizer.operator.logical.LogicalJoinOperator;
@@ -37,21 +38,21 @@ public class BinderTest {
 
     private Binder buildBinder(Pattern pattern, OptExpression expr) {
         Memo memo = new Memo();
-        OptimizerContext optimizerContext = new OptimizerContext(memo, new ColumnRefFactory());
+        OptimizerContext optimizerContext = OptimizerFactory.mockContext(new ColumnRefFactory());
         Stopwatch stopwatch = Stopwatch.createStarted();
         return new Binder(optimizerContext, pattern, memo.init(expr), stopwatch);
     }
 
     private Binder buildBinder(Pattern pattern, GroupExpression qe) {
         Memo memo = new Memo();
-        OptimizerContext optimizerContext = new OptimizerContext(memo, new ColumnRefFactory());
+        OptimizerContext optimizerContext = OptimizerFactory.mockContext(new ColumnRefFactory());
         Stopwatch stopwatch = Stopwatch.createStarted();
         return new Binder(optimizerContext, pattern, qe, stopwatch);
     }
 
     private OptExpression bindNext(Pattern pattern, OptExpression expr) {
         Memo memo = new Memo();
-        OptimizerContext optimizerContext = new OptimizerContext(memo, new ColumnRefFactory());
+        OptimizerContext optimizerContext = OptimizerFactory.mockContext(new ColumnRefFactory());
         Stopwatch stopwatch = Stopwatch.createStarted();
         Binder binder = new Binder(optimizerContext, pattern, memo.init(expr), stopwatch);
         return binder.next();

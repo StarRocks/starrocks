@@ -41,6 +41,8 @@ class JavaUDAFAggregateFunction : public AggregateFunction {
 public:
     using State = JavaUDAFState;
 
+    bool is_exception_safe() const override { return false; }
+
     void update(FunctionContext* ctx, const Column** columns, AggDataPtr __restrict state, size_t row_num) const final {
         CHECK(false) << "unreadable path";
     }
@@ -446,8 +448,8 @@ public:
         LogicalType type = udf_ctxs->finalize->method_desc[0].type;
         // For nullable inputs, our UDAF does not produce nullable results
         if (!to->is_nullable()) {
-            ColumnPtr wrapper(const_cast<Column*>(to), [](auto p) {});
-            auto output = NullableColumn::create(wrapper, NullColumn::create());
+            MutableColumnPtr wrapper = const_cast<Column*>(to)->as_mutable_ptr();
+            MutableColumnPtr output = NullableColumn::create(std::move(wrapper), NullColumn::create());
             helper.get_result_from_boxed_array(ctx, type, output.get(), res, batch_size);
         } else {
             helper.get_result_from_boxed_array(ctx, type, to, res, batch_size);

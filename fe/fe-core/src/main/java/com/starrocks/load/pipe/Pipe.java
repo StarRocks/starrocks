@@ -174,7 +174,9 @@ public class Pipe implements GsonPostProcessable {
                     }
                 }
             }
-            this.properties.put(key, value);
+            if (this.properties != properties) {
+                this.properties.put(key, value);
+            }
         }
     }
 
@@ -450,7 +452,7 @@ public class Pipe implements GsonPostProcessable {
                 recordTaskError(taskDesc, "create task failed");
                 return;
             }
-            SubmitResult result = taskManager.executeTaskAsync(task, new ExecuteOption(task.getSource().isMergeable()));
+            SubmitResult result = taskManager.executeTaskAsync(task, new ExecuteOption(task));
             taskDesc.onRunning();
             taskDesc.setFuture(result.getFuture());
             if (result.getStatus() != SubmitResult.SubmitStatus.SUBMITTED) {

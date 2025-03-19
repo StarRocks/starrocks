@@ -420,6 +420,11 @@ void PInternalServiceImplBase<T>::tablet_writer_cancel(google::protobuf::RpcCont
                                                        google::protobuf::Closure* done) {}
 
 template <typename T>
+void PInternalServiceImplBase<T>::load_diagnose(google::protobuf::RpcController* controller,
+                                                const PLoadDiagnoseRequest* request, PLoadDiagnoseResult* response,
+                                                google::protobuf::Closure* done) {}
+
+template <typename T>
 Status PInternalServiceImplBase<T>::_exec_plan_fragment(brpc::Controller* cntl,
                                                         const PExecPlanFragmentRequest* request) {
     auto ser_request = cntl->request_attachment().to_string();
@@ -550,7 +555,7 @@ void PInternalServiceImplBase<T>::_cancel_plan_fragment(google::protobuf::RpcCon
         }
         if (cancel_query_ctx) {
             // cancel query_id
-            query_ctx->cancel(Status::Cancelled(reason_string));
+            query_ctx->cancel(Status::Cancelled(reason_string), true);
         } else {
             // cancel fragment
             auto&& fragment_ctx = query_ctx->fragment_mgr()->get(tid);

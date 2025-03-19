@@ -23,8 +23,6 @@ class ArrayFunctions {
 public:
     DEFINE_VECTORIZED_FN(array_length);
 
-    DEFINE_VECTORIZED_FN(array_ndims);
-
     DEFINE_VECTORIZED_FN(array_append);
 
     DEFINE_VECTORIZED_FN(array_remove);
@@ -196,6 +194,8 @@ public:
     DEFINE_VECTORIZED_FN(array_intersect_any_type);
 
     DEFINE_VECTORIZED_FN(array_sortby_multi);
+
+    DEFINE_VECTORIZED_FN(array_flatten);
 };
 
 } // namespace starrocks

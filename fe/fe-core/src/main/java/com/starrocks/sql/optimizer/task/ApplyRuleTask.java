@@ -73,7 +73,6 @@ public class ApplyRuleTask extends OptimizerTask {
         final Stopwatch ruleStopWatch = optimizerContext.getStopwatch(rule.type());
         final Binder binder = new Binder(optimizerContext, pattern, groupExpression, ruleStopWatch);
         final List<OptExpression> newExpressions = Lists.newArrayList();
-        final List<OptExpression> extractExpressions = Lists.newArrayList();
         OptExpression extractExpr = binder.next();
         while (extractExpr != null) {
             // Check if the rule has exhausted or not to avoid optimization time exceeding the limit.:
@@ -88,7 +87,6 @@ public class ApplyRuleTask extends OptimizerTask {
                 extractExpr = binder.next();
                 continue;
             }
-            extractExpressions.add(extractExpr);
             List<OptExpression> targetExpressions;
             OptimizerTraceUtil.logApplyRuleBefore(context.getOptimizerContext(), rule, extractExpr);
             try (Timer ignore = Tracers.watchScope(Tracers.Module.OPTIMIZER, rule.getClass().getSimpleName())) {

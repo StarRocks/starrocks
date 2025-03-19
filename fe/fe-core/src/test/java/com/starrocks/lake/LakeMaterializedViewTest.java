@@ -29,6 +29,7 @@ import com.starrocks.catalog.Database;
 import com.starrocks.catalog.DistributionInfo;
 import com.starrocks.catalog.HashDistributionInfo;
 import com.starrocks.catalog.KeysType;
+import com.starrocks.catalog.ListPartitionInfo;
 import com.starrocks.catalog.MaterializedIndex;
 import com.starrocks.catalog.MaterializedIndex.IndexExtState;
 import com.starrocks.catalog.MaterializedView;
@@ -37,7 +38,9 @@ import com.starrocks.catalog.MaterializedView.RefreshType;
 import com.starrocks.catalog.Partition;
 import com.starrocks.catalog.PartitionInfo;
 import com.starrocks.catalog.PartitionKey;
+import com.starrocks.catalog.PartitionType;
 import com.starrocks.catalog.RangePartitionInfo;
+import com.starrocks.catalog.RecyclePartitionInfo;
 import com.starrocks.catalog.SinglePartitionInfo;
 import com.starrocks.catalog.TableProperty;
 import com.starrocks.catalog.Tablet;
@@ -458,5 +461,38 @@ public class LakeMaterializedViewTest {
         // Test
         Assert.assertFalse(mv.isEnableFillDataCache(partition1));
         Assert.assertTrue(mv.isEnableFillDataCache(partition2));
+    }
+
+    @Test
+    public void testBuildRecyclePartitionInfo() {
+        long dbId = 1L;
+        long mvId = 2L;
+        long partitionId = 3L;
+        Partition partition = new Partition(partitionId, null, null);
+
+        // range partition
+        PartitionInfo rangePartitionInfo = new RangePartitionInfo(Lists.newArrayList());
+        rangePartitionInfo.setIsInMemory(partitionId, true);
+        LakeMaterializedView mv1 =
+                new LakeMaterializedView(mvId, dbId, "mv1", null, null, rangePartitionInfo, null, null);
+
+        RecyclePartitionInfo recyclePartitionInfo = mv1.buildRecyclePartitionInfo(dbId, partition);
+        Assert.assertTrue(recyclePartitionInfo instanceof RecycleLakeRangePartitionInfo);
+
+        // un-partitioned
+        PartitionInfo singlePartitionInfo = new PartitionInfo(PartitionType.UNPARTITIONED);
+        singlePartitionInfo.setIsInMemory(partitionId, true);
+        LakeMaterializedView mv2 =
+                new LakeMaterializedView(mvId, dbId, "mv1", null, null, singlePartitionInfo, null, null);
+        recyclePartitionInfo = mv2.buildRecyclePartitionInfo(dbId, partition);
+        Assert.assertTrue(recyclePartitionInfo instanceof RecycleLakeUnPartitionInfo);
+
+        // list partition
+        PartitionInfo listPartitionInfo = new ListPartitionInfo(PartitionType.LIST, Lists.newArrayList());
+        listPartitionInfo.setIsInMemory(partitionId, true);
+        LakeMaterializedView mv3 =
+                new LakeMaterializedView(mvId, dbId, "mv1", null, null, listPartitionInfo, null, null);
+        recyclePartitionInfo = mv3.buildRecyclePartitionInfo(dbId, partition);
+        Assert.assertTrue(recyclePartitionInfo instanceof RecycleLakeListPartitionInfo);
     }
 }

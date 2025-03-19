@@ -28,8 +28,6 @@ public:
 
     void try_schedule(const DriverRawPtr driver);
 
-    bool on_cancel(DriverRawPtr driver);
-
     void attach_queue(DriverQueue* queue) {
         if (_driver_queue == nullptr) {
             _driver_queue = queue;

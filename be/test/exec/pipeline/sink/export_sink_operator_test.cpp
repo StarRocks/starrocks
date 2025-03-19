@@ -19,6 +19,7 @@
 
 #include "gen_cpp/RuntimeProfile_types.h"
 #include "gtest/gtest.h"
+#include "testutil/assert.h"
 #include "util/await.h"
 
 namespace starrocks::pipeline {
@@ -36,7 +37,7 @@ TEST(ExportSinkOperatorTest, test_set_finishing) {
     ExecEnv* _exec_env = ExecEnv::GetInstance();
     RuntimeState _runtime_state(_exec_env);
 
-    _query_ctx = _exec_env->query_context_mgr()->get_or_register(query_id);
+    ASSIGN_OR_ASSERT_FAIL(_query_ctx, _exec_env->query_context_mgr()->get_or_register(query_id));
     _query_ctx->set_query_id(query_id);
     _query_ctx->set_total_fragments(1);
     _query_ctx->set_delivery_expire_seconds(60);

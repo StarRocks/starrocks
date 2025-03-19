@@ -14,6 +14,7 @@
 
 package com.starrocks.connector.hive;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
@@ -32,6 +33,9 @@ import com.starrocks.server.MetadataMgr;
 import com.starrocks.sql.optimizer.rule.transformation.materialization.MvUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.apache.paimon.catalog.CachingCatalog;
+import org.apache.paimon.catalog.Catalog;
+import org.apache.paimon.catalog.Identifier;
 
 import java.util.List;
 import java.util.Map;
@@ -41,6 +45,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 public class ConnectorTableMetadataProcessor extends FrontendDaemon {
@@ -48,23 +53,27 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
 
     private final Set<BaseTableInfo> registeredTableInfos = Sets.newConcurrentHashSet();
 
-    private final Map<String, CacheUpdateProcessor> cacheUpdateProcessors = new ConcurrentHashMap<>();
+    private final Map<CatalogNameType, CacheUpdateProcessor> cacheUpdateProcessors =
+            new ConcurrentHashMap<>();
 
     private final ExecutorService refreshRemoteFileExecutor;
     private final Map<String, IcebergCatalog> cachingIcebergCatalogs = new ConcurrentHashMap<>();
+    private final Map<String, Catalog> paimonCatalogs = new ConcurrentHashMap<>();
 
     public void registerTableInfo(BaseTableInfo tableInfo) {
         registeredTableInfos.add(tableInfo);
     }
 
-    public void registerCacheUpdateProcessor(String catalogName, CacheUpdateProcessor cache) {
-        LOG.info("register to update {} metadata cache in the ConnectorTableMetadataProcessor", catalogName);
-        cacheUpdateProcessors.put(catalogName, cache);
+    public void registerCacheUpdateProcessor(CatalogNameType catalogNameType, CacheUpdateProcessor cache) {
+        LOG.info("register to update {}:{} metadata cache in the ConnectorTableMetadataProcessor",
+                catalogNameType.getCatalogName(), catalogNameType.getCatalogType());
+        cacheUpdateProcessors.put(catalogNameType, cache);
     }
 
-    public void unRegisterCacheUpdateProcessor(String catalogName) {
-        LOG.info("unregister to update {} metadata cache in the ConnectorTableMetadataProcessor", catalogName);
-        cacheUpdateProcessors.remove(catalogName);
+    public void unRegisterCacheUpdateProcessor(CatalogNameType catalogNameType) {
+        LOG.info("unregister to update {}:{} metadata cache in the ConnectorTableMetadataProcessor",
+                catalogNameType.getCatalogName(), catalogNameType.getCatalogType());
+        cacheUpdateProcessors.remove(catalogNameType);
     }
 
     public void registerCachingIcebergCatalog(String catalogName, IcebergCatalog icebergCatalog) {
@@ -75,6 +84,16 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
     public void unRegisterCachingIcebergCatalog(String catalogName) {
         LOG.info("unregister to caching iceberg catalog on {} in the ConnectorTableMetadataProcessor", catalogName);
         cachingIcebergCatalogs.remove(catalogName);
+    }
+
+    public void registerPaimonCatalog(String catalogName, Catalog paimonCatalog) {
+        LOG.info("register to caching paimon catalog on {} in the ConnectorTableMetadataProcessor", catalogName);
+        paimonCatalogs.put(catalogName, paimonCatalog);
+    }
+
+    public void unRegisterPaimonCatalog(String catalogName) {
+        LOG.info("unregister to caching paimon catalog on {} in the ConnectorTableMetadataProcessor", catalogName);
+        paimonCatalogs.remove(catalogName);
     }
 
     public ConnectorTableMetadataProcessor() {
@@ -94,14 +113,17 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
         if (Config.enable_background_refresh_connector_metadata) {
             refreshCatalogTable();
             refreshIcebergCachingCatalog();
+            refreshPaimonCatalog();
         }
     }
 
     private void refreshCatalogTable() {
         MetadataMgr metadataMgr = GlobalStateMgr.getCurrentState().getMetadataMgr();
-        List<String> catalogNames = Lists.newArrayList(cacheUpdateProcessors.keySet());
-        for (String catalogName : catalogNames) {
-            CacheUpdateProcessor updateProcessor = cacheUpdateProcessors.get(catalogName);
+        List<CatalogNameType> catalogNameTypes = Lists.newArrayList(cacheUpdateProcessors.keySet());
+        for (CatalogNameType catalogNameType : catalogNameTypes) {
+            String catalogName = catalogNameType.getCatalogName();
+            LOG.info("Starting to refresh tables from {}:{} metadata cache", catalogName, catalogNameType.getCatalogType());
+            CacheUpdateProcessor updateProcessor = cacheUpdateProcessors.get(catalogNameType);
             if (updateProcessor == null) {
                 LOG.error("Failed to get cacheUpdateProcessor by catalog {}.", catalogName);
                 continue;
@@ -145,6 +167,48 @@ public class ConnectorTableMetadataProcessor extends FrontendDaemon {
             LOG.info("Start to refresh iceberg caching catalog {}", catalogName);
             icebergCatalog.refreshCatalog();
             LOG.info("Finish to refresh iceberg caching catalog {}", catalogName);
+        }
+    }
+
+    @VisibleForTesting
+    public void refreshPaimonCatalog() {
+        List<String> catalogNames = Lists.newArrayList(paimonCatalogs.keySet());
+        for (String catalogName : catalogNames) {
+            Catalog paimonCatalog = paimonCatalogs.get(catalogName);
+            if (paimonCatalog == null) {
+                LOG.error("Failed to get paimonCatalog by catalog {}.", catalogName);
+                continue;
+            }
+            LOG.info("Start to refresh paimon catalog {}", catalogName);
+            for (String dbName : paimonCatalog.listDatabases()) {
+                try {
+                    for (String tblName : paimonCatalog.listTables(dbName)) {
+                        List<Future<?>> futures = Lists.newArrayList();
+                        futures.add(refreshRemoteFileExecutor.submit(() ->
+                                paimonCatalog.invalidateTable(new Identifier(dbName, tblName))
+                        ));
+                        futures.add(refreshRemoteFileExecutor.submit(() ->
+                                paimonCatalog.getTable(new Identifier(dbName, tblName))
+                        ));
+                        if (paimonCatalog instanceof CachingCatalog) {
+                            futures.add(refreshRemoteFileExecutor.submit(() -> {
+                                        try {
+                                            ((CachingCatalog) paimonCatalog).refreshPartitions(new Identifier(dbName, tblName));
+                                        } catch (Catalog.TableNotExistException e) {
+                                            throw new RuntimeException(e);
+                                        }
+                                    }
+                            ));
+                        }
+                        for (Future<?> future : futures) {
+                            future.get();
+                        }
+                    }
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+            LOG.info("Finish to refresh paimon catalog {}", catalogName);
         }
     }
 

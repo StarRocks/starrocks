@@ -48,6 +48,7 @@
 #include "storage/rowset/segment.h"
 #include "storage/tablet_schema_map.h"
 #include "testutil/sync_point.h"
+#include "util/failpoint/fail_point.h"
 #include "util/raw_container.h"
 #include "util/trace.h"
 
@@ -211,6 +212,28 @@ StatusOr<Tablet> TabletManager::get_tablet(int64_t tablet_id) {
         tablet.set_version_hint(metadata->version());
     }
     return tablet;
+}
+
+int64_t TabletManager::get_average_row_size_from_latest_metadata(int64_t tablet_id) {
+    auto metadata = get_latest_cached_tablet_metadata(tablet_id);
+    if (metadata == nullptr) {
+        return 0;
+    }
+    // calc avg row size by rowsets
+    int64_t total_size = 0;
+    int64_t total_rows = 0;
+    // Pick 10 rowsets is enough
+    int rowset_count = 0;
+    for (const auto& rowset : metadata->rowsets()) {
+        if (rowset_count++ >= 10) {
+            break;
+        }
+        // `data_size()` is compressed, so multiply by 3 to get uncompressed size
+        total_size += rowset.data_size() * 3;
+        total_rows += rowset.num_rows();
+    }
+    TEST_SYNC_POINT_CALLBACK("TabletManager::get_average_row_size_from_latest_metadata", &total_size);
+    return total_rows == 0 ? 0 : total_size / total_rows;
 }
 
 Status TabletManager::put_tablet_metadata(const TabletMetadataPtr& metadata, const std::string& metadata_location) {
@@ -458,7 +481,11 @@ Status TabletManager::put_txn_vlog(const TxnLogPtr& log, int64_t version) {
     return put_txn_log(log, txn_vlog_location(log->tablet_id(), version));
 }
 
+DEFINE_FAIL_POINT(put_combined_txn_log_success);
+DEFINE_FAIL_POINT(put_combined_txn_log_fail);
 Status TabletManager::put_combined_txn_log(const starrocks::CombinedTxnLogPB& logs) {
+    FAIL_POINT_TRIGGER_RETURN(put_combined_txn_log_success, Status::OK());
+    FAIL_POINT_TRIGGER_RETURN(put_combined_txn_log_fail, Status::InternalError("write combined_txn_log_fail"));
     if (UNLIKELY(logs.txn_logs_size() == 0)) {
         return Status::InvalidArgument("empty CombinedTxnLogPB");
     }

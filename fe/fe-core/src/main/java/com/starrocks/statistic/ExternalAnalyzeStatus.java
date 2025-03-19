@@ -152,6 +152,11 @@ public class ExternalAnalyzeStatus implements AnalyzeStatus, Writable {
     }
 
     @Override
+    public void setStartTime(LocalDateTime startTime) {
+        this.startTime = startTime;
+    }
+
+    @Override
     public void setEndTime(LocalDateTime endTime) {
         this.endTime = endTime;
     }
@@ -211,8 +216,6 @@ public class ExternalAnalyzeStatus implements AnalyzeStatus, Writable {
         rows.add(Lists.newArrayList(catalogName + "." + dbName + "." + tableName, op, msgType, msgText));
         return new ShowResultSet(META_DATA, rows);
     }
-
-
 
     public static ExternalAnalyzeStatus read(DataInput in) throws IOException {
         String s = Text.readString(in);

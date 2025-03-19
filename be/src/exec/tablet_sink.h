@@ -42,6 +42,7 @@ class AddBatchCounter;
 class NodeChannel;
 class IndexChannel;
 class TabletSinkSender;
+class TableMetrics;
 
 // Write data to Olap Table.
 // When OlapTableSink::open() called, there will be a consumer thread running in the background.
@@ -99,6 +100,8 @@ public:
     Status reset_epoch(RuntimeState* state);
 
     TabletSinkProfile* ts_profile() const { return _ts_profile; }
+
+    const PLoadChannelProfileConfig& load_channel_profile_config() const { return _load_channel_profile_config; }
 
 private:
     void _prepare_profile(RuntimeState* state);

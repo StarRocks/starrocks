@@ -47,6 +47,7 @@ import com.starrocks.alter.SystemHandler;
 import com.starrocks.analysis.LiteralExpr;
 import com.starrocks.analysis.TableName;
 import com.starrocks.authentication.AuthenticationMgr;
+import com.starrocks.authentication.JwkMgr;
 import com.starrocks.authorization.AccessControlProvider;
 import com.starrocks.authorization.AuthorizationMgr;
 import com.starrocks.authorization.DefaultAuthorizationProvider;
@@ -140,10 +141,11 @@ import com.starrocks.lake.StarMgrMetaSyncer;
 import com.starrocks.lake.StarOSAgent;
 import com.starrocks.lake.compaction.CompactionControlScheduler;
 import com.starrocks.lake.compaction.CompactionMgr;
-import com.starrocks.lake.snapshot.ClusterSnapshotCheckpointScheduler;
 import com.starrocks.lake.snapshot.ClusterSnapshotMgr;
 import com.starrocks.lake.vacuum.AutovacuumDaemon;
 import com.starrocks.leader.CheckpointController;
+import com.starrocks.leader.ReportHandler;
+import com.starrocks.leader.TabletCollector;
 import com.starrocks.leader.TaskRunStateSynchronizer;
 import com.starrocks.listener.GlobalLoadJobListenerBus;
 import com.starrocks.load.DeleteMgr;
@@ -216,6 +218,7 @@ import com.starrocks.sql.optimizer.statistics.CachedStatisticStorage;
 import com.starrocks.sql.optimizer.statistics.StatisticStorage;
 import com.starrocks.sql.parser.AstBuilder;
 import com.starrocks.sql.parser.SqlParser;
+import com.starrocks.sql.spm.SQLPlanStorage;
 import com.starrocks.staros.StarMgrServer;
 import com.starrocks.statistic.AnalyzeMgr;
 import com.starrocks.statistic.StatisticAutoCollector;
@@ -239,7 +242,6 @@ import com.starrocks.thrift.TStatusCode;
 import com.starrocks.transaction.GlobalTransactionMgr;
 import com.starrocks.transaction.GtidGenerator;
 import com.starrocks.transaction.PublishVersionDaemon;
-import com.starrocks.transaction.UpdateDbUsedDataQuotaDaemon;
 import com.starrocks.warehouse.WarehouseIdleChecker;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -264,6 +266,7 @@ import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
@@ -302,6 +305,7 @@ public class GlobalStateMgr {
      * Alter Job Manager
      */
     private final AlterJobMgr alterJobMgr;
+    private final ThreadPoolExecutor lakeAlterPublishExecutor;
 
     private final PortConnectivityChecker portConnectivityChecker;
 
@@ -317,7 +321,7 @@ public class GlobalStateMgr {
     private final BackupHandler backupHandler;
     private final PublishVersionDaemon publishVersionDaemon;
     private final DeleteMgr deleteMgr;
-    private final UpdateDbUsedDataQuotaDaemon updateDbUsedDataQuotaDaemon;
+    private final DatabaseQuotaRefresher updateDbUsedDataQuotaDaemon;
 
     private FrontendDaemon labelCleaner; // To clean old LabelInfo, ExportJobInfos
     private FrontendDaemon txnTimeoutChecker; // To abort timeout txns
@@ -364,8 +368,6 @@ public class GlobalStateMgr {
     private CheckpointController checkpointController;
     private CheckpointWorker checkpointWorker;
     private boolean checkpointWorkerStarted = false;
-
-    private ClusterSnapshotCheckpointScheduler clusterSnapshotCheckpointScheduler = null;
 
     private HAProtocol haProtocol = null;
 
@@ -524,6 +526,11 @@ public class GlobalStateMgr {
     private final ClusterSnapshotMgr clusterSnapshotMgr;
 
     private final SqlBlackList sqlBlackList;
+    private final ReportHandler reportHandler;
+    private final TabletCollector tabletCollector;
+    private final SQLPlanStorage sqlPlanStorage;
+
+    private JwkMgr jwkMgr;
 
     public NodeMgr getNodeMgr() {
         return nodeMgr;
@@ -648,6 +655,8 @@ public class GlobalStateMgr {
                 new SchemaChangeHandler(),
                 new MaterializedViewHandler(),
                 new SystemHandler());
+        this.lakeAlterPublishExecutor = ThreadPoolManager.newDaemonCacheThreadPool(
+                Config.lake_publish_version_max_threads, "alter-publish", false);
 
         this.load = new Load();
         this.streamLoadMgr = new StreamLoadMgr();
@@ -661,11 +670,12 @@ public class GlobalStateMgr {
         this.backupHandler = new BackupHandler(this);
         this.publishVersionDaemon = new PublishVersionDaemon();
         this.deleteMgr = new DeleteMgr();
-        this.updateDbUsedDataQuotaDaemon = new UpdateDbUsedDataQuotaDaemon();
+        this.updateDbUsedDataQuotaDaemon = new DatabaseQuotaRefresher();
         this.statisticsMetaManager = new StatisticsMetaManager();
         this.statisticAutoCollector = new StatisticAutoCollector();
         this.safeModeChecker = new SafeModeChecker();
         this.statisticStorage = new CachedStatisticStorage();
+        this.sqlPlanStorage = SQLPlanStorage.create(true);
 
         this.replayedJournalId = new AtomicLong(0L);
         this.synchronizedTimeMs = 0;
@@ -830,10 +840,20 @@ public class GlobalStateMgr {
                         "query-deploy", true);
 
         this.warehouseIdleChecker = new WarehouseIdleChecker();
+
+        this.reportHandler = new ReportHandler();
+        this.tabletCollector = new TabletCollector();
+
+        this.jwkMgr = new JwkMgr();
     }
 
     public static void destroyCheckpoint() {
         if (CHECKPOINT != null) {
+            try {
+                CHECKPOINT.shutdown();
+            } catch (Exception e) {
+                LOG.warn("exception when destroy checkpoint", e);
+            }
             CHECKPOINT = null;
         }
     }
@@ -940,6 +960,10 @@ public class GlobalStateMgr {
     // Only used in UT
     public void setStatisticStorage(StatisticStorage statisticStorage) {
         this.statisticStorage = statisticStorage;
+    }
+
+    public SQLPlanStorage getSqlPlanStorage() {
+        return sqlPlanStorage;
     }
 
     public StarOSAgent getStarOSAgent() {
@@ -1173,12 +1197,6 @@ public class GlobalStateMgr {
             // 6. start task cleaner thread
             createTaskCleaner();
             createTableKeeper();
-
-            // 7. init starosAgent
-            if (RunMode.isSharedDataMode() && !starOSAgent.init(null)) {
-                LOG.error("init starOSAgent failed");
-                System.exit(-1);
-            }
         } catch (Exception e) {
             try {
                 if (isFirstTimeStart) {
@@ -1328,12 +1346,6 @@ public class GlobalStateMgr {
         createBuiltinStorageVolume();
         resourceGroupMgr.createBuiltinResourceGroupsIfNotExist();
         keyMgr.initDefaultMasterKey();
-
-        // if leader change and the last cluster snapshot job has not been finished/error
-        // make the state as error, becase the job can not be continued in new leader.
-        if (clusterSnapshotMgr != null) {
-            clusterSnapshotMgr.resetLastUnFinishedAutomatedSnapshotJob();
-        }
     }
 
     public void setFrontendNodeType(FrontendNodeType newType) {
@@ -1355,10 +1367,6 @@ public class GlobalStateMgr {
         // start checkpoint thread
         checkpointController = new CheckpointController("global_state_checkpoint_controller", journal, "");
         checkpointController.start();
-
-        clusterSnapshotCheckpointScheduler = new ClusterSnapshotCheckpointScheduler(checkpointController,
-                                                  StarMgrServer.getCurrentState().getCheckpointController());
-        clusterSnapshotCheckpointScheduler.start();
 
         keyRotationDaemon.start();
 
@@ -1419,6 +1427,10 @@ public class GlobalStateMgr {
         taskRunStateSynchronizer.start();
 
         if (RunMode.isSharedDataMode()) {
+            // Need to rebuild active lake compaction transactions before lake scheduler starting to run
+            // Lake compactionMgr is started on all FE nodes and scheduler only starts to run when the FE is leader
+            compactionMgr.buildActiveCompactionTransactionMap();
+
             starMgrMetaSyncer.start();
             autovacuumDaemon.start();
         }
@@ -1436,7 +1448,11 @@ public class GlobalStateMgr {
         }
         temporaryTableCleaner.start();
 
-        connectorTableTriggerAnalyzeMgr.start();
+        if (RunMode.isSharedDataMode()) {
+            clusterSnapshotMgr.start();
+        }
+        reportHandler.start();
+        tabletCollector.start();
     }
 
     // start threads that should run on all FE
@@ -1484,6 +1500,8 @@ public class GlobalStateMgr {
 
         // The memory tracker should be placed at the end
         memoryUsageTracker.start();
+
+        connectorTableTriggerAnalyzeMgr.start();
 
         PredicateColumnsMgr.getInstance().startDaemon();
     }
@@ -1796,6 +1814,7 @@ public class GlobalStateMgr {
                 pipeManager.getRepo().save(imageWriter);
                 warehouseMgr.save(imageWriter);
                 sqlBlackList.save(imageWriter);
+                clusterSnapshotMgr.save(imageWriter);
             } catch (SRMetaBlockException e) {
                 LOG.error("Save meta block failed ", e);
                 throw new IOException("Save meta block failed ", e);
@@ -2151,6 +2170,10 @@ public class GlobalStateMgr {
         return journal;
     }
 
+    public JournalWriter getJournalWriter() {
+        return journalWriter;
+    }
+
     // Get the next available, lock-free because nextId is atomic.
     public long getNextId() {
         return idGenerator.getNextId();
@@ -2162,6 +2185,10 @@ public class GlobalStateMgr {
 
     public AlterJobMgr getAlterJobMgr() {
         return alterJobMgr;
+    }
+
+    public ThreadPoolExecutor getLakeAlterPublishExecutor() {
+        return lakeAlterPublishExecutor;
     }
 
     public SchemaChangeHandler getSchemaChangeHandler() {
@@ -2278,6 +2305,18 @@ public class GlobalStateMgr {
 
     public boolean isLeader() {
         return feType == FrontendNodeType.LEADER;
+    }
+
+    public void markLeaderTransferred() {
+        // Set isReady to false, so that the leader info will be got from HA protocol, see NodeMgr.getLeaderIpAndRpcPort
+        isReady.set(false);
+        feType = FrontendNodeType.FOLLOWER;
+        journalWriter.setLeaderTransferred();
+    }
+
+    public boolean isLeaderTransferred() {
+        return journalWriter != null
+                && journalWriter.isLeaderTransferred();
     }
 
     public void setSynchronizedTime(long time) {
@@ -2493,7 +2532,7 @@ public class GlobalStateMgr {
 
     private boolean supportRefreshTableType(Table table) {
         return table.isHiveTable() || table.isHudiTable() || table.isHiveView() || table.isIcebergTable()
-                || table.isJDBCTable() || table.isDeltalakeTable();
+                || table.isJDBCTable() || table.isDeltalakeTable() || table.isPaimonTable();
     }
 
     public void refreshExternalTable(TableName tableName, List<String> partitions) {
@@ -2707,5 +2746,22 @@ public class GlobalStateMgr {
 
     public WarehouseIdleChecker getWarehouseIdleChecker() {
         return warehouseIdleChecker;
+    }
+
+    public void shutdown() {
+        // in a single thread.
+        connectorMgr.shutdown();
+    }
+
+    public ReportHandler getReportHandler() {
+        return reportHandler;
+    }
+
+    public JwkMgr getJwkMgr() {
+        return jwkMgr;
+    }
+
+    public void setJwkMgr(JwkMgr jwkMgr) {
+        this.jwkMgr = jwkMgr;
     }
 }

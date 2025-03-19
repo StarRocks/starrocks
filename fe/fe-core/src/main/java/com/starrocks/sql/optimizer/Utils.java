@@ -617,6 +617,10 @@ public class Utils {
         return 31 - Integer.numberOfLeadingZeros(n);
     }
 
+    public static long log2(long n) {
+        return 63 - Long.numberOfLeadingZeros(n);
+    }
+
     /**
      * Check the input expression is not nullable or not.
      * @param nullOutputColumnOps the nullable column reference operators.

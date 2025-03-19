@@ -44,6 +44,7 @@
 #include "storage/tablet_index.h"
 #include "types/logical_type.h"
 #include "util/runtime_profile.h"
+#include "util/table_metrics.h"
 
 namespace starrocks::pipeline {
 
@@ -82,6 +83,7 @@ Status OlapChunkSource::prepare(RuntimeState* state) {
     if (_use_vector_index) {
         _use_ivfpq = vector_search_options.use_ivfpq;
         _vector_distance_column_name = vector_search_options.vector_distance_column_name;
+        _vector_slot_id = vector_search_options.vector_slot_id;
         _params.vector_search_option = std::make_shared<VectorSearchOption>();
     }
     const TupleDescriptor* tuple_desc = state->desc_tbl().get_tuple_descriptor(thrift_olap_scan_node.tuple_id);
@@ -191,6 +193,9 @@ void OlapChunkSource::_init_counter(RuntimeState* state) {
     _block_seek_counter = ADD_CHILD_COUNTER(_runtime_profile, "BlockSeekCount", TUnit::UNIT, segment_read_name);
     _pred_filter_timer = ADD_CHILD_TIMER(_runtime_profile, "PredFilter", segment_read_name);
     _pred_filter_counter = ADD_CHILD_COUNTER(_runtime_profile, "PredFilterRows", TUnit::UNIT, segment_read_name);
+    _rf_pred_filter_timer = ADD_TIMER(_runtime_profile, "RuntimeFilterEvalTime");
+    _rf_pred_input_rows = ADD_COUNTER(_runtime_profile, "RuntimeFilterInputRows", TUnit::UNIT);
+    _rf_pred_output_rows = ADD_COUNTER(_runtime_profile, "RuntimeFilterOutputRows", TUnit::UNIT);
     _del_vec_filter_counter = ADD_CHILD_COUNTER(_runtime_profile, "DelVecFilterRows", TUnit::UNIT, segment_read_name);
     _chunk_copy_timer = ADD_CHILD_TIMER(_runtime_profile, "ChunkCopy", segment_read_name);
     _decompress_timer = ADD_CHILD_TIMER(_runtime_profile, "DecompressT", segment_read_name);
@@ -264,16 +269,23 @@ Status OlapChunkSource::_init_reader_params(const std::vector<std::unique_ptr<Ol
     if (thrift_olap_scan_node.__isset.sorted_by_keys_per_tablet) {
         _params.sorted_by_keys_per_tablet = thrift_olap_scan_node.sorted_by_keys_per_tablet;
     }
+
     _params.runtime_range_pruner =
             RuntimeScanRangePruner(parser, _scan_ctx->conjuncts_manager().unarrived_runtime_filters());
     _morsel->init_tablet_reader_params(&_params);
 
     ASSIGN_OR_RETURN(auto pred_tree, _scan_ctx->conjuncts_manager().get_predicate_tree(parser, _predicate_free_pool));
+    _params.enable_join_runtime_filter_pushdown = _runtime_state->enable_join_runtime_filter_pushdown();
+    if (_params.enable_join_runtime_filter_pushdown) {
+        ASSIGN_OR_RETURN(_params.runtime_filter_preds,
+                         _scan_ctx->conjuncts_manager().get_runtime_filter_predicates(&_obj_pool, parser));
+    }
     _decide_chunk_size(!pred_tree.empty());
     PredicateAndNode pushdown_pred_root;
     PredicateAndNode non_pushdown_pred_root;
     pred_tree.root().partition_copy([parser](const auto& node) { return parser->can_pushdown(node); },
                                     &pushdown_pred_root, &non_pushdown_pred_root);
+
     _params.pred_tree = PredicateTree::create(std::move(pushdown_pred_root));
     _non_pushdown_pred_tree = PredicateTree::create(std::move(non_pushdown_pred_root));
 
@@ -320,12 +332,10 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
     for (auto slot : *_slots) {
         DCHECK(slot->is_materialized());
         int32_t index;
-        if (_use_vector_index && !_use_ivfpq) {
-            index = _tablet_schema->field_index(slot->col_name(), _vector_distance_column_name);
-            if (slot->col_name() == _vector_distance_column_name) {
-                _params.vector_search_option->vector_column_id = index;
-                _params.vector_search_option->vector_slot_id = slot->id();
-            }
+        if (_use_vector_index && !_use_ivfpq && slot->id() == _vector_slot_id) {
+            index = _tablet_schema->num_columns();
+            _params.vector_search_option->vector_column_id = index;
+            _params.vector_search_option->vector_slot_id = slot->id();
         } else {
             index = _tablet_schema->field_index(slot->col_name());
         }
@@ -352,12 +362,7 @@ Status OlapChunkSource::_init_scanner_columns(std::vector<uint32_t>& scanner_col
 
 Status OlapChunkSource::_init_unused_output_columns(const std::vector<std::string>& unused_output_columns) {
     for (const auto& col_name : unused_output_columns) {
-        int32_t index;
-        if (_use_vector_index && !_use_ivfpq) {
-            index = _tablet_schema->field_index(col_name, _vector_distance_column_name);
-        } else {
-            index = _tablet_schema->field_index(col_name);
-        }
+        int32_t index = _tablet_schema->field_index(col_name);
         if (index < 0) {
             std::stringstream ss;
             ss << "invalid field name: " << col_name;
@@ -469,6 +474,8 @@ Status OlapChunkSource::_init_olap_reader(RuntimeState* runtime_state) {
     std::vector<uint32_t> reader_columns;
 
     RETURN_IF_ERROR(_get_tablet(_scan_range));
+    _table_metrics =
+            StarRocksMetrics::instance()->table_metrics_mgr()->get_table_metrics(_tablet->tablet_meta()->table_id());
 
     auto scope = IOProfiler::scope(IOProfiler::TAG_QUERY, _scan_range->tablet_id);
 
@@ -562,8 +569,8 @@ Status OlapChunkSource::_init_global_dicts(TabletReaderParams* params) {
         if (iter != global_dict_map.end()) {
             auto& dict_map = iter->second.first;
             int32_t index;
-            if (_use_vector_index && !_use_ivfpq) {
-                index = _tablet_schema->field_index(slot->col_name(), _vector_distance_column_name);
+            if (_use_vector_index && !_use_ivfpq && slot->id() == _vector_slot_id) {
+                index = _tablet_schema->num_columns();
             } else {
                 index = _tablet_schema->field_index(slot->col_name());
             }
@@ -669,6 +676,10 @@ void OlapChunkSource::_update_counter() {
     cond_evaluate_ns += _reader->stats().expr_cond_evaluate_ns;
     // In order to avoid exposing too detailed metrics, we still record these infos on `_pred_filter_timer`
     // When we support metric classification, we can disassemble it again.
+    COUNTER_UPDATE(_rf_pred_filter_timer, _reader->stats().rf_cond_evaluate_ns);
+    COUNTER_UPDATE(_rf_pred_input_rows, _reader->stats().rf_cond_input_rows);
+    COUNTER_UPDATE(_rf_pred_output_rows, _reader->stats().rf_cond_output_rows);
+
     COUNTER_UPDATE(_pred_filter_timer, cond_evaluate_ns);
     COUNTER_UPDATE(_pred_filter_counter, _reader->stats().rows_vec_cond_filtered);
     COUNTER_UPDATE(_del_vec_filter_counter, _reader->stats().rows_del_vec_filtered);
@@ -707,6 +718,8 @@ void OlapChunkSource::_update_counter() {
 
     StarRocksMetrics::instance()->query_scan_bytes.increment(_scan_bytes);
     StarRocksMetrics::instance()->query_scan_rows.increment(_scan_rows_num);
+    _table_metrics->scan_read_bytes.increment(_scan_bytes);
+    _table_metrics->scan_read_rows.increment(_scan_rows_num);
 
     if (_reader->stats().decode_dict_ns > 0) {
         RuntimeProfile::Counter* c = ADD_CHILD_TIMER(_runtime_profile, "DictDecode", IO_TASK_EXEC_TIMER_NAME);

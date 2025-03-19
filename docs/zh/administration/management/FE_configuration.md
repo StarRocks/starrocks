@@ -649,15 +649,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：MySQL 服务器支持的 Backlog 队列长度。
 - 引入版本：-
 
-##### mysql_service_nio_enabled
-
-- 默认值：true
-- 类型：Boolean
-- 单位：-
-- 是否动态：否
-- 描述：是否开启 MySQL 服务器的异步 I/O 选项。
-- 引入版本：-
-
 ##### mysql_service_io_threads_num
 
 - 默认值：4
@@ -706,15 +697,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：-
 - 是否动态：否
 - 描述：FE 支持的最大连接数，包括所有用户发起的连接。默认值由 v3.1.12、v3.2.7 起由 `1024` 变为 `4096`。
-- 引入版本：-
-
-##### max_connection_scheduler_threads_num
-
-- 默认值：4096
-- 类型：Int
-- 单位：-
-- 是否动态：否
-- 描述：连接调度器支持的最大线程数。
 - 引入版本：-
 
 ### 元数据与集群管理
@@ -1750,7 +1732,7 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 类型：Long
 - 单位：bytes
 - 是否动态：是
-- 描述：自动统计信息采集的最大分区大小。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。
+- 描述：自动统计信息采集的单次任务最大数据量。如果超过该值，则放弃全量采集，转为对该表进行抽样采集。
 - 引入版本：-
 
 ##### statistic_collect_max_row_count_per_query
@@ -1807,6 +1789,15 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：直方图最大采样行数。
 - 引入版本：-
 
+##### connector_table_query_trigger_task_schedule_interval
+
+- 默认值：30
+- 类型：Int
+- 单位：秒
+- 是否动态：是
+- 描述：Schedule 线程调度查询触发的后台任务的周期。该项用于取代 v3.4.0 中引入的 `connector_table_query_trigger_analyze_schedule_interval`。此处后台任务是指 v3.4 中的 `ANALYZE` 任务，以及 v3.4 之后版本中引入的低基数列字典的收集任务。
+- 引入版本：v3.4.2
+
 ##### connector_table_query_trigger_analyze_small_table_rows
 
 - 默认值：10000000
@@ -1841,15 +1832,6 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 单位：-
 - 是否动态：是
 - 描述：FE 中处于 Pending 状态的查询触发 ANALYZE 任务的最大数量。
-- 引入版本：v3.4.0
-
-##### connector_table_query_trigger_analyze_schedule_interval
-
-- 默认值：30
-- 类型：Int
-- 单位：秒
-- 是否动态：是
-- 描述：Schedule 线程调度查询触发 ANALYZE 任务的周期。
 - 引入版本：v3.4.0
 
 ##### connector_table_query_trigger_analyze_max_running_task_num
@@ -2926,16 +2908,16 @@ ADMIN SET FRONTEND CONFIG ("key" = "value");
 - 描述：云原生元数据服务监听端口。
 - 引入版本：-
 
-<!--
+
 ##### enable_load_volume_from_conf
 
-- 默认值：true
+- 默认值：false
 - 类型：Boolean
 - 单位：-
 - 是否动态：否
-- 描述：
-- 引入版本：-
--->
+- 描述：是否允许 StarRocks 使用 FE 配置文件中指定的存储相关属性创建默认存储卷。自 v3.4.1 起，默认值由 `true` 变为 `false`。
+- 引入版本：v3.1.0
+
 
 ##### cloud_native_storage_type
 

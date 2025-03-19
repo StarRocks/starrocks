@@ -59,6 +59,7 @@ import com.starrocks.catalog.RangePartitionInfo;
 import com.starrocks.catalog.ScalarType;
 import com.starrocks.catalog.Table;
 import com.starrocks.catalog.Type;
+import com.starrocks.common.Config;
 import com.starrocks.common.DdlException;
 import com.starrocks.common.ErrorCode;
 import com.starrocks.common.ErrorReport;
@@ -95,6 +96,8 @@ import com.starrocks.sql.ast.ViewRelation;
 import com.starrocks.sql.common.PListCell;
 import com.starrocks.sql.optimizer.OptExpression;
 import com.starrocks.sql.optimizer.Optimizer;
+import com.starrocks.sql.optimizer.OptimizerContext;
+import com.starrocks.sql.optimizer.OptimizerFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefFactory;
 import com.starrocks.sql.optimizer.base.ColumnRefSet;
 import com.starrocks.sql.optimizer.base.PhysicalPropertySet;
@@ -311,7 +314,8 @@ public class MaterializedViewAnalyzer {
             String originalViewDef = statement.getOrigStmt().originStmt;
             Preconditions.checkArgument(originalViewDef != null,
                     "MV's original view definition is null");
-            statement.setOriginalViewDefineSql(originalViewDef.substring(statement.getQueryStartIndex()));
+            statement.setOriginalViewDefineSql(originalViewDef.substring(statement.getQueryStartIndex(),
+                    statement.getQueryStopIndex()));
 
             // collect table from query statement
 
@@ -380,6 +384,8 @@ public class MaterializedViewAnalyzer {
                 checkMVPartitionInfoType(statement, aliasTableMap);
                 // deduce generate partition infos for list partition expressions
                 checkMVGeneratedPartitionColumns(statement, changedPartitionByExprs, aliasTableMap);
+                // check list partition expr is valid
+                checkMVListPartitionExpr(statement, aliasTableMap);
             }
             // check and analyze distribution
             checkDistribution(statement, aliasTableMap);
@@ -456,14 +462,13 @@ public class MaterializedViewAnalyzer {
                 // Build logical plan for view query
                 OptExprBuilder optExprBuilder = logicalPlan.getRootBuilder();
                 logicalPlan = new LogicalPlan(optExprBuilder, outputColumns, logicalPlan.getCorrelation());
-                Optimizer optimizer = new Optimizer();
+                OptimizerContext optimizerContext = OptimizerFactory.initContext(ctx, columnRefFactory);
+                Optimizer optimizer = OptimizerFactory.create(optimizerContext);
                 PhysicalPropertySet requiredPropertySet = PhysicalPropertySet.EMPTY;
                 OptExpression optimizedPlan = optimizer.optimize(
-                        ctx,
                         logicalPlan.getRoot(),
                         requiredPropertySet,
-                        new ColumnRefSet(logicalPlan.getOutputColumn()),
-                        columnRefFactory);
+                        new ColumnRefSet(logicalPlan.getOutputColumn()));
                 optimizedPlan.deriveMVProperty();
 
                 // TODO: refine rules for mv plan
@@ -1028,14 +1033,72 @@ public class MaterializedViewAnalyzer {
                 // - otherwise use range partition as before.
                 // To be compatible with old implementations, if the partition column is not a string type,
                 // still use range partition.
-                // TODO: remove this compatibility code in the future, use list partition directly later.
-                if (partitionExprType.isStringType() &&
-                        mvPartitionByExprs.stream().allMatch(t -> t instanceof SlotRef) &&
-                        !(partitionRefTableExpr instanceof FunctionCallExpr)) {
+                // NOTE: If enable_mv_list_partition_for_external_table is true, create list partition mv
+                // for all external tables. Otherwise, use original range partition instead.
+                if (Config.enable_mv_list_partition_for_external_table) {
                     statement.setPartitionType(PartitionType.LIST);
                 } else {
-                    statement.setPartitionType(PartitionType.RANGE);
-                    checkRangePartitionColumnLimit(mvPartitionByExprs);
+                    if (partitionExprType.isStringType() &&
+                            mvPartitionByExprs.stream().allMatch(t -> t instanceof SlotRef) &&
+                            !(partitionRefTableExpr instanceof FunctionCallExpr)) {
+                        statement.setPartitionType(PartitionType.LIST);
+                    } else {
+                        statement.setPartitionType(PartitionType.RANGE);
+                        checkRangePartitionColumnLimit(mvPartitionByExprs);
+                    }
+                }
+            }
+        }
+
+        /**
+         * List partitioned mv can only support 1:1 mapping with ref base table's partition column which means
+         * mv's partition expression must exactly be the same with ref base table's partition expression,
+         */
+        private void checkMVListPartitionExpr(CreateMaterializedViewStatement statement,
+                                              Map<TableName, Table> tableNameTableMap) {
+            if (statement.getPartitionType() != PartitionType.LIST) {
+                return;
+            }
+            // refPartitionByExprs means mv's specific partition column expr of ref base table's partition column
+            List<Expr> refPartitionByExprs = statement.getPartitionRefTableExpr();
+            Map<Integer, Column> generatedColsMap = statement.getGeneratedPartitionCols();
+            for (int i = 0; i < refPartitionByExprs.size(); i++) {
+                // if ref base table & mv's partition expression is the same, mv's partition expression will be a
+                // generated column, so skip it.
+                if (generatedColsMap.containsKey(i)) {
+                    continue;
+                }
+                Expr mvPartitionByExpr = refPartitionByExprs.get(i);
+                SlotRef slotRef = getSlotRef(mvPartitionByExpr);
+                Table refBaseTable = tableNameTableMap.get(slotRef.getTblNameWithoutAnalyzed());
+                if (refBaseTable == null) {
+                    LOG.warn("Materialized view partition expression %s could only ref to base table",
+                            slotRef.toSql());
+                    continue;
+                }
+                if (refBaseTable.isNativeTableOrMaterializedView()) {
+                    if (!(mvPartitionByExpr instanceof SlotRef)) {
+                        throw new SemanticException("List materialized view's partition expression can only " +
+                                "refer ref-base-table's partition expression without transforms but contains: %s",
+                                mvPartitionByExpr.toSql());
+                    }
+                    OlapTable olapTable = (OlapTable) refBaseTable;
+                    PartitionInfo refPartitionInfo = olapTable.getPartitionInfo();
+                    if (!refPartitionInfo.isListPartition()) {
+                        throw new SemanticException("List Materialized view's ref olap table " +
+                                "must be list partitioned", refPartitionByExprs.get(i).getPos());
+                    }
+                    List<Column> refPartitionCols = refBaseTable.getPartitionColumns();
+                    Optional<Column> refPartitionColOpt = refPartitionCols.stream()
+                            .filter(col -> col.getName().equals(slotRef.getColumnName()))
+                            .findFirst();
+                    if (refPartitionColOpt.isEmpty()) {
+                        throw new SemanticException("Materialized view partition column in partition exp " +
+                                "must be base table partition column", mvPartitionByExpr.getPos());
+                    }
+                } else if (refBaseTable.isIcebergTable()) {
+                    // mv based iceberg table's partition expression can be function call and will be checked in
+                    // #checkPartitionColumnWithBaseIcebergTable.
                 }
             }
         }

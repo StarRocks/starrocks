@@ -608,6 +608,8 @@ struct TRoutineLoadJobInfo {
     17: optional string error_log_urls
     18: optional string tracking_sql
     19: optional string other_msg
+    20: optional string latest_source_position
+    21: optional string offset_lag
 }
 
 struct TGetRoutineLoadJobsResult {
@@ -1388,6 +1390,8 @@ struct TAbortRemoteTxnResponse {
 struct TSetConfigRequest {
     1: optional list<string> keys
     2: optional list<string> values
+    3: optional bool is_persistent
+    4: optional string user_identity
 }
 
 struct TSetConfigResponse {
@@ -1463,6 +1467,8 @@ struct TGetTablesConfigResponse {
 
 struct TGetPartitionsMetaRequest {
     1: optional TAuthInfo auth_info
+    // get partitions where table id >= start_table_id_offset
+    2: optional i64 start_table_id_offset;
 }
 
 struct TPartitionMetaInfo {
@@ -1498,6 +1504,8 @@ struct TPartitionMetaInfo {
 
 struct TGetPartitionsMetaResponse {
     1: optional list<TPartitionMetaInfo> partitions_meta_infos
+    // max table id in partitions_meta_infos + 1, if set to 0, it means reaches end
+    2: optional i64 next_table_id_offset;
 }
 
 struct TGetTablesInfoRequest {
@@ -1714,6 +1722,23 @@ struct TObjectDependencyReq {
 
 struct TObjectDependencyRes {
     1: optional list<TObjectDependencyItem> items
+}
+
+struct TKeywordInfo {
+    1: optional string keyword;
+    2: optional bool reserved;
+}
+
+struct TGetKeywordsRequest {
+    1: optional TAuthInfo auth_info
+    // get keywords where table id >= start_table_id_offset
+    2: optional i64 start_table_id_offset;
+}
+
+struct TGetKeywordsResponse {
+    1: optional list<TKeywordInfo> keywords;
+    // max table id in keywords + 1, if set to 0, it means reaches end
+    2: optional i64 next_table_id_offset;
 }
 
 struct TFeLocksItem {
@@ -1972,12 +1997,11 @@ struct TClusterSnapshotsItem {
     1: optional string snapshot_name;
     2: optional string snapshot_type;
     3: optional i64 created_time;
-    4: optional i64 finished_time;
-    5: optional i64 fe_jouranl_id;
-    6: optional i64 starmgr_jouranl_id;
-    7: optional string properties;
-    8: optional string storage_volume;
-    9: optional string storage_path;
+    4: optional i64 fe_jouranl_id;
+    5: optional i64 starmgr_jouranl_id;
+    6: optional string properties;
+    7: optional string storage_volume;
+    8: optional string storage_path;
 }
 
 struct TClusterSnapshotsRequest {
@@ -2134,5 +2158,7 @@ service FrontendService {
 
     TClusterSnapshotsResponse getClusterSnapshotsInfo(1: TClusterSnapshotsRequest request)
     TClusterSnapshotJobsResponse getClusterSnapshotJobsInfo(1: TClusterSnapshotJobsRequest request)
+
+    TGetKeywordsResponse getKeywords(1: TGetKeywordsRequest request)
 }
 

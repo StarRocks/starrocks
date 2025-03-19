@@ -160,7 +160,7 @@ Status ChunksSorterHeapSort::get_next(ChunkPtr* chunk, bool* eos) {
     return Status::OK();
 }
 
-std::vector<JoinRuntimeFilter*>* ChunksSorterHeapSort::runtime_filters(ObjectPool* pool) {
+std::vector<RuntimeFilter*>* ChunksSorterHeapSort::runtime_filters(ObjectPool* pool) {
     if (_sort_heap == nullptr || _sort_heap->size() < _number_of_rows_to_sort()) {
         return nullptr;
     }
@@ -178,9 +178,9 @@ std::vector<JoinRuntimeFilter*>* ChunksSorterHeapSort::runtime_filters(ObjectPoo
     bool null_first = _sort_desc.descs[0].is_null_first();
 
     if (_runtime_filter.empty()) {
-        auto rf = type_dispatch_predicate<JoinRuntimeFilter*>(
-                (*_sort_exprs)[0]->root()->type().type, false, detail::SortRuntimeFilterBuilder(), pool,
-                top_cursor_column, cursor_rid, asc, null_first, is_close_interval);
+        auto rf = type_dispatch_predicate<RuntimeFilter*>((*_sort_exprs)[0]->root()->type().type, false,
+                                                          detail::SortRuntimeFilterBuilder(), pool, top_cursor_column,
+                                                          cursor_rid, asc, null_first, is_close_interval);
         if (rf == nullptr) {
             return nullptr;
         } else {
@@ -217,12 +217,12 @@ void ChunksSorterHeapSort::_do_filter_data_for_type(detail::ChunkHolder* chunk_h
         }
     } else if (top_cursor_column->is_nullable()) {
         bool top_is_null = top_cursor_column->is_null(cursor_rid);
-        const auto& need_filter_data =
-                ColumnHelper::cast_to_raw<TYPE>(down_cast<NullableColumn*>(top_cursor_column.get())->data_column())
-                        ->get_data()[cursor_rid];
+        const auto& need_filter_data = ColumnHelper::cast_to_raw<TYPE>(
+                                               down_cast<const NullableColumn*>(top_cursor_column.get())->data_column())
+                                               ->get_data()[cursor_rid];
 
-        const auto& order_by_null_column = down_cast<NullableColumn*>(input_column.get())->null_column();
-        const auto& order_by_data_column = down_cast<NullableColumn*>(input_column.get())->data_column();
+        const auto& order_by_null_column = down_cast<const NullableColumn*>(input_column.get())->null_column();
+        const auto& order_by_data_column = down_cast<const NullableColumn*>(input_column.get())->data_column();
 
         const auto* null_data = order_by_null_column->get_data().data();
         const auto* order_by_data = ColumnHelper::cast_to_raw<TYPE>(order_by_data_column)->get_data().data();

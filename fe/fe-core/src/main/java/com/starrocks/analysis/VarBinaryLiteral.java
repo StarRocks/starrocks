@@ -182,7 +182,7 @@ public class VarBinaryLiteral extends LiteralExpr {
         return literal;
     }
     @Override
-    public boolean equals(Object obj) {
+    public boolean equalsWithoutChild(Object obj) {
         if (!(obj instanceof VarBinaryLiteral)) {
             return false;
         }

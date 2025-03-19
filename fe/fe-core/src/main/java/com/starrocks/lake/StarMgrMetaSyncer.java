@@ -79,9 +79,7 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             locker.lockDatabase(db.getId(), LockType.READ);
             try {
                 for (Table table : GlobalStateMgr.getCurrentState().getLocalMetastore().getTablesIncludeRecycleBin(db)) {
-                    if (table.isCloudNativeTableOrMaterializedView() &&
-                            GlobalStateMgr.getCurrentState().getClusterSnapshotMgr()
-                                                            .checkValidDeletionForTableFromAlterJob(table.getId())) {
+                    if (table.isCloudNativeTableOrMaterializedView()) {
                         GlobalStateMgr.getCurrentState().getLocalMetastore()
                                 .getAllPartitionsIncludeRecycleBin((OlapTable) table)
                                 .stream()
@@ -192,10 +190,26 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
                 .collect(Collectors.toList());
         LOG.debug("diff.size is {}, diff: {}", diffList.size(), diffList);
 
+        Map<Long, Long> groupIdToTableId = new HashMap<>();
+        for (ShardGroupInfo shardInfo : shardGroupsInfo) {
+            String tableIdString = shardInfo.getLabels().get("tableId");
+            if (tableIdString != null) {
+                groupIdToTableId.put(shardInfo.getGroupId(), Long.parseLong(tableIdString));
+            }
+        }
+
         // 1.4.collect redundant shard groups and delete
         long nowMs = System.currentTimeMillis();
         List<Long> emptyShardGroup = new ArrayList<>();
         for (long groupId : diffList) {
+            Long tableId = groupIdToTableId.get(groupId);
+            if (tableId != null &&
+                    !GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isTableSafeToDeleteTablet(tableId.longValue())) {
+                LOG.debug("table with id: {} can not be delete shard for now, because of automated cluster snapshot",
+                          tableId.longValue());
+                continue;
+            }
+
             if (Config.shard_group_clean_threshold_sec * 1000L + Long.parseLong(groupToCreateTimeMap.get(groupId)) < nowMs) {
                 cleanOneGroup(groupId, starOSAgent, emptyShardGroup);
             }
@@ -309,6 +323,10 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
             List<Table> tables = GlobalStateMgr.getCurrentState().getLocalMetastore().getTables(db.getId());
             for (Table table : tables) {
                 if (!table.isCloudNativeTableOrMaterializedView()) {
+                    continue;
+                }
+                if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isTableSafeToDeleteTablet(table.getId())) {
+                    LOG.debug("table: {} can not be synced meta for now, because of automated cluster snapshot", table.getName());
                     continue;
                 }
                 try {
@@ -456,6 +474,10 @@ public class StarMgrMetaSyncer extends FrontendDaemon {
         }
         if (!table.isCloudNativeTableOrMaterializedView()) {
             throw new DdlException("only support cloud table or cloud mv.");
+        }
+        if (!GlobalStateMgr.getCurrentState().getClusterSnapshotMgr().isTableSafeToDeleteTablet(table.getId())) {
+            throw new DdlException("table: " + table.getName() +
+                                   " can not be synced meta for now, because of automated cluster snapshot");
         }
 
         syncTableMetaAndColocationInfoInternal(db, (OlapTable) table, forceDeleteData);

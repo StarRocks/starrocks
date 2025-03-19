@@ -42,6 +42,7 @@ import com.starrocks.planner.ResultSink;
 import com.starrocks.planner.ScanNode;
 import com.starrocks.planner.SelectNode;
 import com.starrocks.planner.SortNode;
+import com.starrocks.planner.SplitCastDataSink;
 import com.starrocks.qe.ConnectContext;
 import com.starrocks.qe.SessionVariable;
 import com.starrocks.sql.optimizer.ExpressionContext;
@@ -223,7 +224,7 @@ public class ProfilingExecPlan {
 
     private static ProfilingElement visitSink(DataSink sink) {
         ProfilingElement element;
-        if (sink instanceof MultiCastDataSink || sink instanceof ResultSink) {
+        if (sink instanceof MultiCastDataSink || sink instanceof ResultSink || sink instanceof SplitCastDataSink) {
             element = new ProfilingElement(-1, sink.getClass());
         } else {
             element = new ProfilingElement(sink.getExchNodeId() == null ? -1 : sink.getExchNodeId().asInt(),
@@ -233,6 +234,15 @@ public class ProfilingExecPlan {
         DataPartition outputPartition = null;
         if (sink instanceof MultiCastDataSink) {
             List<DataStreamSink> sinks = ((MultiCastDataSink) sink).getDataStreamSinks();
+            List<Integer> ids = Lists.newArrayList();
+            if (CollectionUtils.isNotEmpty(sinks)) {
+                sinks.forEach(s -> ids.add(s.getExchNodeId().asInt()));
+                outputPartition = sinks.get(0).getOutputPartition();
+            }
+            element.addMultiSinkIds(ids);
+        } else if (sink instanceof SplitCastDataSink) {
+            SplitCastDataSink splitSink = (SplitCastDataSink) sink;
+            List<DataStreamSink> sinks = splitSink.getDataStreamSinks();
             List<Integer> ids = Lists.newArrayList();
             if (CollectionUtils.isNotEmpty(sinks)) {
                 sinks.forEach(s -> ids.add(s.getExchNodeId().asInt()));

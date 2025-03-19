@@ -51,6 +51,7 @@ public class ExecPlan {
     private final Map<ColumnRefOperator, Expr> colRefToExpr = new HashMap<>();
     private final ArrayList<PlanFragment> fragments = new ArrayList<>();
     private final Map<Integer, PlanFragment> cteProduceFragments = Maps.newHashMap();
+    private final Map<Integer, PlanFragment> splitProduceFragments = Maps.newHashMap();
     private int planCount = 0;
 
     private final OptExpression physicalPlan;
@@ -67,6 +68,8 @@ public class ExecPlan {
 
     private List<Integer> collectExecStatsIds;
 
+    private final boolean isShortCircuit;
+
     @VisibleForTesting
     public ExecPlan() {
         connectContext = new ConnectContext();
@@ -74,14 +77,16 @@ public class ExecPlan {
         colNames = new ArrayList<>();
         physicalPlan = null;
         outputColumns = new ArrayList<>();
+        isShortCircuit = false;
     }
 
     public ExecPlan(ConnectContext connectContext, List<String> colNames,
-                    OptExpression physicalPlan, List<ColumnRefOperator> outputColumns) {
+                    OptExpression physicalPlan, List<ColumnRefOperator> outputColumns, boolean isShortCircuit) {
         this.connectContext = connectContext;
         this.colNames = colNames;
         this.physicalPlan = physicalPlan;
         this.outputColumns = outputColumns;
+        this.isShortCircuit = isShortCircuit;
     }
 
     // for broker load plan
@@ -91,6 +96,7 @@ public class ExecPlan {
         this.physicalPlan = null;
         this.outputColumns = new ArrayList<>();
         this.fragments.addAll(fragments);
+        this.isShortCircuit = false;
     }
 
     public ConnectContext getConnectContext() {
@@ -143,6 +149,10 @@ public class ExecPlan {
 
     public Map<Integer, PlanFragment> getCteProduceFragments() {
         return cteProduceFragments;
+    }
+    
+    public Map<Integer, PlanFragment> getSplitProduceFragments() {
+        return splitProduceFragments;
     }
 
     public OptExpression getPhysicalPlan() {
@@ -270,5 +280,9 @@ public class ExecPlan {
 
     public void setCollectExecStatsIds(List<Integer> collectExecStatsIds) {
         this.collectExecStatsIds = collectExecStatsIds;
+    }
+
+    public boolean isShortCircuit() {
+        return isShortCircuit;
     }
 }

@@ -840,7 +840,7 @@ set(STARROCKS_LINK_LIBS
     TestUtil
     Tools
     Geo
-    BlockCache
+    Cache
     ${WL_END_GROUP}
 )
 
@@ -912,7 +912,6 @@ set(STARROCKS_DEPENDENCIES
     arrow_flight_sql
     gRPC::grpc
     gRPC::grpc++
-    jemalloc # required by arrow
     parquet
     orc
     cctz
@@ -942,6 +941,13 @@ set(STARROCKS_DEPENDENCIES
     fiu
     ${WL_END_GROUP}
 )
+
+if (NOT BUILD_FORMAT_LIB)
+    set(STARROCKS_DEPENDENCIES
+            ${STARROCKS_DEPENDENCIES}
+            jemalloc # required by arrow
+    )
+endif()
 
 if (${WITH_STARCACHE} STREQUAL "ON")
     set(STARROCKS_DEPENDENCIES
@@ -1010,7 +1016,7 @@ endif()
 
 set(STARROCKS_LINK_LIBS ${STARROCKS_LINK_LIBS}
     ${WL_LINK_STATIC} -lbfd
-    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap=__cxa_throw
+    ${WL_LINK_DYNAMIC} -lresolv -liberty -lc -lm -ldl -rdynamic -pthread -Wl,-wrap,__cxa_throw -Wl,-wrap,__floattidf
 )
 
 # link gcov if WITH_GCOV is on
@@ -1120,7 +1126,7 @@ add_subdirectory(${SRC_DIR}/service)
 add_subdirectory(${SRC_DIR}/testutil)
 add_subdirectory(${SRC_DIR}/types)
 add_subdirectory(${SRC_DIR}/udf)
-add_subdirectory(${SRC_DIR}/block_cache)
+add_subdirectory(${SRC_DIR}/cache)
 
 add_subdirectory(${SRC_DIR}/tools)
 add_subdirectory(${SRC_DIR}/util)

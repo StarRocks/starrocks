@@ -95,7 +95,8 @@ private:
 
     static StatusOr<std::unique_ptr<orc::Type>> _make_schema_node(const TypeDescriptor& type_desc);
 
-    static void _populate_orc_notnull(orc::ColumnVectorBatch& orc_column, uint8_t* null_column, size_t column_size);
+    static void _populate_orc_notnull(orc::ColumnVectorBatch& orc_column, const uint8_t* null_column,
+                                      size_t column_size);
 
     StatusOr<std::unique_ptr<orc::ColumnVectorBatch>> _convert(Chunk* chunk);
 

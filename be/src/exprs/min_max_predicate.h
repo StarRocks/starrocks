@@ -50,7 +50,7 @@ public:
         const ColumnPtr col = ptr->get_column_by_slot_id(_slot_id);
         size_t size = col->size();
 
-        std::shared_ptr<BooleanColumn> result(new BooleanColumn(size, 1));
+        BooleanColumn::MutablePtr result = BooleanColumn::create(size, 1);
         uint8_t* res = result->get_data().data();
 
         if (col->only_null()) {
@@ -134,20 +134,20 @@ private:
 
 class MinMaxPredicateBuilder {
 public:
-    MinMaxPredicateBuilder(ObjectPool* pool, SlotId slot_id, const JoinRuntimeFilter* filter)
+    MinMaxPredicateBuilder(ObjectPool* pool, SlotId slot_id, const RuntimeFilter* filter)
             : _pool(pool), _slot_id(slot_id), _filter(filter) {}
 
     template <LogicalType ltype>
     Expr* operator()() {
-        auto* bloom_filter = (RuntimeBloomFilter<ltype>*)(_filter);
-        return _pool->add(new MinMaxPredicate<ltype>(_slot_id, bloom_filter->min_value(_pool),
-                                                     bloom_filter->max_value(_pool), bloom_filter->has_null()));
+        auto* minmax = down_cast<const MinMaxRuntimeFilter<ltype>*>(_filter->get_min_max_filter());
+        return _pool->add(new MinMaxPredicate<ltype>(_slot_id, minmax->min_value(_pool), minmax->max_value(_pool),
+                                                     _filter->has_null()));
     }
 
 private:
     ObjectPool* _pool;
     SlotId _slot_id;
-    const JoinRuntimeFilter* _filter;
+    const RuntimeFilter* _filter;
 };
 
 } // namespace starrocks

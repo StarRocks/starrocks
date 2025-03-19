@@ -98,7 +98,7 @@ TEST_F(AlterTabletMetaTest, test_alter_enable_persistent_index) {
     auto c1 = Int32Column::create();
     c0->append_numbers(k0.data(), k0.size() * sizeof(int));
     c1->append_numbers(v0.data(), v0.size() * sizeof(int));
-    Chunk chunk0({c0, c1}, _schema);
+    Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
     auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
     ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
     std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
@@ -506,7 +506,7 @@ TEST_F(AlterTabletMetaTest, test_alter_persistent_index_type) {
         auto c1 = Int32Column::create();
         c0->append_numbers(k0.data(), k0.size() * sizeof(int));
         c1->append_numbers(v0.data(), v0.size() * sizeof(int));
-        Chunk chunk0({c0, c1}, _schema);
+        Chunk chunk0({std::move(c0), std::move(c1)}, _schema);
         auto rowset_txn_meta = std::make_unique<RowsetTxnMetaPB>();
         ASSIGN_OR_ABORT(auto tablet, _tablet_mgr->get_tablet(_tablet_metadata->id()));
         std::shared_ptr<const TabletSchema> const_schema = _tablet_schema;
@@ -563,6 +563,38 @@ TEST_F(AlterTabletMetaTest, test_alter_persistent_index_type) {
     ASSERT_TRUE(tablet_meta4->persistent_index_type() == PersistentIndexTypePB::LOCAL);
     ASSERT_TRUE(tablet_meta4->sstable_meta().sstables_size() == 0);
     ASSERT_TRUE(tablet_meta4->orphan_files_size() > 0);
+}
+
+TEST_F(AlterTabletMetaTest, test_skip_load_pindex) {
+    std::shared_ptr<TabletMetadata> tablet_metadata = generate_simple_tablet_metadata(PRIMARY_KEYS);
+    ASSERT_OK(_tablet_mgr->put_tablet_metadata(*tablet_metadata));
+    // write empty rowset
+    {
+        TxnLogPB log;
+        auto op_write_meta = log.mutable_op_write();
+        auto rs_meta = op_write_meta->mutable_rowset();
+        rs_meta->set_id(next_id());
+        rs_meta->set_num_rows(0);
+
+        auto tablet_id = tablet_metadata->id();
+        auto version = tablet_metadata->version() + 1;
+        std::unique_ptr<TxnLogApplier> log_applier =
+                new_txn_log_applier(Tablet(_tablet_mgr.get(), tablet_id), tablet_metadata, version, false);
+        ASSERT_OK(log_applier->apply(log));
+        ASSERT_TRUE(_tablet_mgr->update_mgr()->TEST_primary_index_refcnt(tablet_metadata->id(), 0));
+    }
+
+    {
+        TxnLogPB log;
+        auto op_compaction_meta = log.mutable_op_compaction();
+        auto tablet_id = tablet_metadata->id();
+        auto version = tablet_metadata->version() + 1;
+        op_compaction_meta->set_compact_version(version);
+        std::unique_ptr<TxnLogApplier> log_applier =
+                new_txn_log_applier(Tablet(_tablet_mgr.get(), tablet_id), tablet_metadata, version, false);
+        ASSERT_OK(log_applier->apply(log));
+        ASSERT_TRUE(_tablet_mgr->update_mgr()->TEST_primary_index_refcnt(tablet_metadata->id(), 0));
+    }
 }
 
 } // namespace starrocks::lake

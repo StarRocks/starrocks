@@ -43,7 +43,7 @@
 
 #include "agent/agent_common.h"
 #include "agent/agent_server.h"
-#include "block_cache/block_cache.h"
+#include "cache/block_cache/block_cache.h"
 #include "common/configbase.h"
 #include "common/status.h"
 #include "exec/workgroup/scan_executor.h"
@@ -54,6 +54,7 @@
 #include "http/http_status.h"
 #include "runtime/batch_write/batch_write_mgr.h"
 #include "runtime/batch_write/txn_state_cache.h"
+#include "runtime/load_channel_mgr.h"
 #include "storage/compaction_manager.h"
 #include "storage/lake/compaction_scheduler.h"
 #include "storage/lake/load_spill_block_manager.h"
@@ -129,8 +130,7 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
                 }
                 space.size = disk_size;
             }
-            Status st = BlockCache::instance()->adjust_disk_spaces(spaces);
-            return st;
+            return BlockCache::instance()->update_disk_spaces(spaces);
         });
         _config_callback.emplace("max_compaction_concurrency", [&]() -> Status {
             if (!config::enable_event_based_compaction_framework) {
@@ -306,6 +306,15 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
             auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CREATE);
             return thread_pool->update_max_threads(config::create_tablet_worker_count);
         });
+        _config_callback.emplace("check_consistency_worker_count", [&]() -> Status {
+            auto thread_pool = ExecEnv::GetInstance()->agent_server()->get_thread_pool(TTaskType::CHECK_CONSISTENCY);
+            return thread_pool->update_max_threads(std::max(1, config::check_consistency_worker_count));
+        });
+        _config_callback.emplace("load_channel_rpc_thread_pool_num", [&]() -> Status {
+            LOG(INFO) << "set load_channel_rpc_thread_pool_num:" << config::load_channel_rpc_thread_pool_num;
+            return ExecEnv::GetInstance()->load_channel_mgr()->async_rpc_pool()->update_max_threads(
+                    config::load_channel_rpc_thread_pool_num);
+        });
         _config_callback.emplace("number_tablet_writer_threads", [&]() -> Status {
             LOG(INFO) << "set number_tablet_writer_threads:" << config::number_tablet_writer_threads;
             bthreads::ThreadPoolExecutor* executor = static_cast<bthreads::ThreadPoolExecutor*>(
@@ -368,6 +377,18 @@ Status UpdateConfigAction::update_config(const std::string& name, const std::str
         UPDATE_STARLET_CONFIG(s3_use_list_objects_v1, fslib_s3client_use_list_objects_v1);
         UPDATE_STARLET_CONFIG(starlet_delete_files_max_key_in_batch, delete_files_max_key_in_batch);
 #undef UPDATE_STARLET_CONFIG
+
+#ifndef BUILD_FORMAT_LIB
+        _config_callback.emplace("starlet_filesystem_instance_cache_capacity", [&]() -> Status {
+            LOG(INFO) << "set starlet_filesystem_instance_cache_capacity:"
+                      << config::starlet_filesystem_instance_cache_capacity;
+            if (g_worker) {
+                g_worker->set_fs_cache_capacity(config::starlet_filesystem_instance_cache_capacity);
+            }
+            return Status::OK();
+        });
+#endif
+
 #endif // USE_STAROS
     });
 

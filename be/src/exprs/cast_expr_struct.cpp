@@ -44,7 +44,7 @@ StatusOr<ColumnPtr> CastJsonToStruct::evaluate_checked(ExprContext* context, Chu
     }
 
     ColumnViewer<TYPE_JSON> src(column);
-    NullColumn::Ptr null_column = NullColumn::create();
+    NullColumn::MutablePtr null_column = NullColumn::create();
 
     // 1. Cast Json to json columns.
     size_t field_size = _type.children.size();
@@ -102,7 +102,7 @@ StatusOr<ColumnPtr> CastJsonToStruct::evaluate_checked(ExprContext* context, Chu
         }
     }
     // 2. Cast json column to specified column
-    Columns casted_fields;
+    MutableColumns casted_fields;
     for (size_t i = 0; i < field_size; i++) {
         ColumnPtr elements = json_columns[i].build_nullable_column();
         if (_field_casts[i] != nullptr) {
@@ -110,22 +110,22 @@ StatusOr<ColumnPtr> CastJsonToStruct::evaluate_checked(ExprContext* context, Chu
             field_chunk.append_column(elements, 0);
             ASSIGN_OR_RETURN(auto casted_field, _field_casts[i]->evaluate_checked(context, &field_chunk));
             casted_field = NullableColumn::wrap_if_necessary(casted_field);
-            casted_fields.emplace_back(std::move(casted_field));
+            casted_fields.emplace_back(std::move(casted_field)->as_mutable_ptr());
         } else {
-            casted_fields.emplace_back(NullableColumn::wrap_if_necessary(elements->clone_shared()));
+            casted_fields.emplace_back(NullableColumn::wrap_if_necessary(elements->clone())->as_mutable_ptr());
         }
         DCHECK(casted_fields[i]->is_nullable());
     }
 
-    ColumnPtr res = StructColumn::create(std::move(casted_fields), _type.field_names);
+    MutableColumnPtr res = StructColumn::create(std::move(casted_fields), _type.field_names);
     RETURN_IF_ERROR(res->unfold_const_children(_type));
     if (column->is_nullable()) {
-        res = NullableColumn::create(res, null_column);
+        res = NullableColumn::create(std::move(res), std::move(null_column));
     }
 
     // Wrap constant column if source column is constant.
     if (column->is_constant()) {
-        res = ConstColumn::create(res, column->size());
+        res = ConstColumn::create(std::move(res), column->size());
     }
     return res;
 }

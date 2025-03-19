@@ -304,6 +304,22 @@ Please note that you do not need to specify `data_format` when `list_files_only`
 
 For more information, see [Return](#return).
 
+#### list_recursively
+
+StarRocks further supports `list_recursively` to list the files and directories recursively. `list_recursively` only takes effect when `list_files_only` is set to `true`. The default value is `false`.
+
+```SQL
+"list_files_only" = "true",
+"list_recursively" = "true"
+```
+
+When both `list_files_only` and `list_recursively` are set to `true`, StarRocks will do the follows:
+
+- If the specified `path` is a file (whether it is specified specifically or represented by wildcards), StarRocks will show the information of the file.
+- If the specified `path` is a directory (whether it is specified specifically or represented by wildcards, and whether or not it is suffixed by `/`), StarRocks will show all the files and sub-directories under this directory.
+
+For more information, see [Return](#return).
+
 ### Return
 
 #### SELECT FROM FILES()
@@ -427,6 +443,68 @@ When used with SELECT, FILES() returns the data in the file as a table.
   4 rows in set (0.03 sec)
   ```
 
+- When you query files with `list_files_only` and `list_recursively` set to `true`, the system will list the files and directories recursively.
+
+  Suppose the path `s3://bucket/list/` contains the following files and sub-directories:
+
+  ```Plain
+  s3://bucket/list/
+  ├── basic1.csv
+  ├── basic2.csv
+  ├── orc0
+  │   └── orc1
+  │       └── basic_type.orc
+  ├── orc1
+  │   └── basic_type.orc
+  └── parquet
+      └── basic_type.parquet
+  ```
+
+  List the files and directories recursively:
+
+  ```Plain
+  SELECT * FROM FILES(
+      "path"="s3://bucket/list/",
+      "aws.s3.access_key" = "AAAAAAAAAAAAAAAAAAAA",
+      "aws.s3.secret_key" = "BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+      "list_files_only" = "true", 
+      "list_recursively" = "true"
+  );
+  +---------------------------------------------+------+--------+---------------------+
+  | PATH                                        | SIZE | IS_DIR | MODIFICATION_TIME   |
+  +---------------------------------------------+------+--------+---------------------+
+  | s3://bucket/list                            |    0 |      1 | 2024-12-24 22:15:59 |
+  | s3://bucket/list/basic1.csv                 |   52 |      0 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/basic2.csv                 |   34 |      0 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/orc0                       |    0 |      1 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/orc0/orc1                  |    0 |      1 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/orc0/orc1/basic_type.orc   | 1027 |      0 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/orc1                       |    0 |      1 | 2024-12-24 22:16:00 |
+  | s3://bucket/list/orc1/basic_type.orc        | 1027 |      0 | 2024-12-24 22:16:00 |
+  | s3://bucket/list/parquet                    |    0 |      1 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/parquet/basic_type.parquet | 2281 |      0 | 2024-12-24 11:35:53 |
+  +---------------------------------------------+------+--------+---------------------+
+  10 rows in set (0.04 sec)
+  ```
+
+  Lists files and directories matching `orc*` in this path in a non-recursive way:
+
+  ```Plain
+  SELECT * FROM FILES(
+      "path"="s3://bucket/list/orc*", 
+      "list_files_only" = "true", 
+      "list_recursively" = "false"
+  );
+  +--------------------------------------+------+--------+---------------------+
+  | PATH                                 | SIZE | IS_DIR | MODIFICATION_TIME   |
+  +--------------------------------------+------+--------+---------------------+
+  | s3://bucket/list/orc0/orc1           |    0 |      1 | 2024-12-24 11:35:53 |
+  | s3://bucket/list/orc1/basic_type.orc | 1027 |      0 | 2024-12-24 22:16:00 |
+  +--------------------------------------+------+--------+---------------------+
+  2 rows in set (0.03 sec)
+  ```
+
+
 #### DESC FILES()
 
 When used with DESC, FILES() returns the schema of the file.
@@ -522,7 +600,7 @@ unload_data_param ::=
 
 | **Key**          | **Required** | **Description**                                              |
 | ---------------- | ------------ | ------------------------------------------------------------ |
-| compression      | Yes          | The compression method to use when unloading data. Valid values:<ul><li>`uncompressed`: No compression algorithm is used.</li><li>`gzip`: Use the gzip compression algorithm.</li><li>`snappy`: Use the SNAPPY compression algorithm.</li><li>`zstd`: Use the Zstd compression algorithm.</li><li>`lz4`: Use the LZ4 compression algorithm.</li></ul>                  |
+| compression      | Yes          | The compression method to use when unloading data. Valid values:<ul><li>`uncompressed`: No compression algorithm is used.</li><li>`gzip`: Use the gzip compression algorithm.</li><li>`snappy`: Use the SNAPPY compression algorithm.</li><li>`zstd`: Use the Zstd compression algorithm.</li><li>`lz4`: Use the LZ4 compression algorithm.</li></ul>**NOTE**<br />Unloading into CSV files does not support data compression. You must set this item as `uncompressed`.                  |
 | partition_by     | No           | The list of columns that are used to partition data files into different storage paths. Multiple columns are separated by commas (,). FILES() extracts the key/value information of the specified columns and stores the data files under the storage paths featured with the extracted key/value pair. For further instructions, see Example 7. |
 | single           | No           | Whether to unload the data into a single file. Valid values:<ul><li>`true`: The data is stored in a single data file.</li><li>`false` (Default): The data is stored in multiple files if the amount of data unloaded exceeds 512 MB.</li></ul>                  |
 | target_max_file_size | No           | The best-effort maximum size of each file in the batch to be unloaded. Unit: Bytes. Default value: 1073741824 (1 GB). When the size of data to be unloaded exceeds this value, the data will be divided into multiple files, and the size of each file will not significantly exceed this value. Introduced in v3.2.7. |

@@ -4,6 +4,30 @@ displayed_sidebar: docs
 
 # StarRocks version 3.2
 
+## 3.2.15
+
+发布日期：2025 年 2 月 14 日
+
+### 新增特性
+
+- 窗口函数支持 `max_by` 和 `min_by`。[#54961](https://github.com/StarRocks/starrocks/pull/54961)
+
+### 功能优化
+
+- 新增 StarClient 超时参数。[#54496](https://github.com/StarRocks/starrocks/pull/54496)
+  - star_client_read_timeout_seconds
+  - star_client_list_timeout_seconds
+  - star_client_write_timeout_seconds
+- List 分区表在执行 DELETE 语句时支持分区裁剪。[#55400](https://github.com/StarRocks/starrocks/pull/55400)
+
+### 问题修复
+
+修复了如下问题：
+
+- Stream Load 调度到 Alive 状态为 false 的节点时，导入失败。[#55371](https://github.com/StarRocks/starrocks/pull/55371)
+- Stream Load 部分列写入主键表报错。[#53403](https://github.com/StarRocks/starrocks/pull/55430)
+- BE 节点重启后 bRPC 持续报错。[#40229](https://github.com/StarRocks/starrocks/pull/40229)
+
 ## 3.2.14
 
 发布日期：2025 年 1 月 8 日
@@ -35,7 +59,7 @@ displayed_sidebar: docs
 修复了如下问题：
 
 - 执行 SHOW ROUTINE LOAD 后 `loadRowsRate` 字段返回为 `0`。[#52151](https://github.com/StarRocks/starrocks/pull/52151)
-- 函数 `F``iles()` 读取文件时读取未被查询的列。 [#52210](https://github.com/StarRocks/starrocks/pull/52210)
+- 函数 `Files()` 读取文件时读取未被查询的列。 [#52210](https://github.com/StarRocks/starrocks/pull/52210)
 - Prometheus 不能解析含有特殊符号名称的物化视图相关指标（当前物化视图统计指标支持 Tag）。[#52782](https://github.com/StarRocks/starrocks/pull/52782)
 - 函数 `array_map` 导致 BE Crash。[#52909](https://github.com/StarRocks/starrocks/pull/52909)
 - Metadata Cache 导致 BE Crash 问题。[#52968](https://github.com/StarRocks/starrocks/pull/52968)
@@ -118,7 +142,7 @@ displayed_sidebar: docs
 - 在旧版本中为主键表关闭索引压缩功能后，升级至 v3.1.13 或 v3.2.9，访问索引的 `page_off` 信息时数组越界导致 Crash。[#48230](https://github.com/StarRocks/starrocks/pull/48230)
 - 并发执行 ADD/DROP COLUMN 操作导致 BE Crash。[#49355](https://github.com/StarRocks/starrocks/pull/49355)
 - 在 aarch64 架构下查询 ORC 格式文件中的 TINYINT 类型负数显示为 None。[#49517](https://github.com/StarRocks/starrocks/pull/49517)
-- 当写盘失败时，主键表持久化主键索引的 `l``0` 可能会因为无法捕捉错误导致数据丢失。[#48045](https://github.com/StarRocks/starrocks/pull/48045)
+- 当写盘失败时，主键表持久化主键索引的 `l0` 可能会因为无法捕捉错误导致数据丢失。[#48045](https://github.com/StarRocks/starrocks/pull/48045)
 - 主键表部分列更新在大量数据更新的场景下写入失败。[#49054](https://github.com/StarRocks/starrocks/pull/49054)
 -  v3.3.0 存算分离集群降级到 v3.2.9 后，Fast Schema Evolution 导致 BE Crash。[#42737](https://github.com/StarRocks/starrocks/pull/42737)
 - `partition_linve_nubmer` 不生效。[#49213](https://github.com/StarRocks/starrocks/pull/49213)
