@@ -20,6 +20,7 @@ import com.starrocks.catalog.system.SystemId;
 import com.starrocks.catalog.system.SystemTable;
 import com.starrocks.thrift.TSchemaTableType;
 
+import static com.starrocks.catalog.system.SystemTable.MAX_FIELD_VARCHAR_LENGTH;
 import static com.starrocks.catalog.system.SystemTable.builder;
 
 public class StatisticsSystemTable {
@@ -48,6 +49,7 @@ public class StatisticsSystemTable {
                         .column("INDEX_TYPE", ScalarType.createVarchar(16))
                         .column("COMMENT", ScalarType.createVarchar(16))
                         .column("INDEX_COMMENT", ScalarType.createVarchar(1024))
+                        .column("EXPRESSION", ScalarType.createVarcharType(MAX_FIELD_VARCHAR_LENGTH))
                         .build(), TSchemaTableType.SCH_STATISTICS);
     }
 }

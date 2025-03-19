@@ -123,6 +123,9 @@ public:
                                                  const TClusterSnapshotJobsRequest& req,
                                                  TClusterSnapshotJobsResponse* res);
 
+    static Status get_applicable_roles(const SchemaScannerState& state, const TGetApplicableRolesRequest& request,
+                                       TGetApplicableRolesResponse* response);
+
     static Status get_keywords(const SchemaScannerState& state, const TGetKeywordsRequest& request,
                                TGetKeywordsResponse* response);
 

@@ -37,6 +37,7 @@ SchemaScanner::ColumnDesc SchemaStatisticsScanner::_s_cols_statistics[] = {
         {"INDEX_TYPE", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
         {"COMMENT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), true},
         {"INDEX_COMMENT", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
+        {"EXPRESSION", TypeDescriptor::create_varchar_type(sizeof(StringValue)), sizeof(StringValue), false},
 };
 
 SchemaStatisticsScanner::SchemaStatisticsScanner()
