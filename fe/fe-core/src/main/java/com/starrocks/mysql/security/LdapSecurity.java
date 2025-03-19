@@ -32,6 +32,16 @@ import javax.naming.directory.SearchResult;
 public class LdapSecurity {
     private static final Logger LOG = LogManager.getLogger(LdapSecurity.class);
 
+    static {
+        if ("ldaps".equals(Config.authentication_ldap_simple_server_protocol) &&
+                Config.authentication_ldaps_trust_store_path != null) {
+            System.setProperty("custom.ldap.truststore.type", "JKS");
+            System.setProperty("custom.ldap.truststore.loc", Config.authentication_ldaps_trust_store_path);
+            System.setProperty("custom.ldap.truststore.password", Config.authentication_ldaps_trust_store_password);
+            System.setProperty("custom.ldap.ssl.protocol", "TLS");
+        }
+    }
+
     //bind to ldap server to check password
     public static boolean checkPassword(String dn, String password) {
         if (Strings.isNullOrEmpty(password)) {
@@ -39,7 +49,8 @@ public class LdapSecurity {
             return false;
         }
 
-        String url = "ldap://" + NetUtils.getHostPortInAccessibleFormat(Config.authentication_ldap_simple_server_host,
+        String url = Config.authentication_ldap_simple_server_protocol + "://"
+                + NetUtils.getHostPortInAccessibleFormat(Config.authentication_ldap_simple_server_host,
                 Config.authentication_ldap_simple_server_port);
         Hashtable<String, String> env = new Hashtable<>();
         env.put(Context.SECURITY_AUTHENTICATION, "simple");
@@ -47,6 +58,10 @@ public class LdapSecurity {
         env.put(Context.SECURITY_PRINCIPAL, dn);
         env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
         env.put(Context.PROVIDER_URL, url);
+        if ("ldaps".equals(Config.authentication_ldap_simple_server_protocol) &&
+                Config.authentication_ldaps_trust_store_path != null) {
+            env.put("java.naming.ldap.factory.socket", CustomLdapSslSocketFactory.class.getName());
+        }
 
         DirContext ctx = null;
         try {
@@ -76,7 +91,8 @@ public class LdapSecurity {
             return false;
         }
 
-        String url = "ldap://" + NetUtils.getHostPortInAccessibleFormat(Config.authentication_ldap_simple_server_host,
+        String url = Config.authentication_ldap_simple_server_protocol + "://"
+                + NetUtils.getHostPortInAccessibleFormat(Config.authentication_ldap_simple_server_host,
                 Config.authentication_ldap_simple_server_port);
         Hashtable<String, String> env = new Hashtable<>();
         //dn contains '=', so we should use ' or " to wrap the value in config file
@@ -88,6 +104,10 @@ public class LdapSecurity {
         env.put(Context.SECURITY_PRINCIPAL, rootDN);
         env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
         env.put(Context.PROVIDER_URL, url);
+        if ("ldaps".equals(Config.authentication_ldap_simple_server_protocol) &&
+                Config.authentication_ldaps_trust_store_path != null) {
+            env.put("java.naming.ldap.factory.socket", CustomLdapSslSocketFactory.class.getName());
+        }
 
         DirContext ctx = null;
         try {
