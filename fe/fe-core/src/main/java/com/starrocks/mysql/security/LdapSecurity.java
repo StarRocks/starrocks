@@ -31,9 +31,10 @@ import javax.naming.directory.SearchResult;
 
 public class LdapSecurity {
     private static final Logger LOG = LogManager.getLogger(LdapSecurity.class);
+    private static final String LDAPS_PROTOCOL = "ldaps";
 
     static {
-        if ("ldaps".equals(Config.authentication_ldap_simple_server_protocol) &&
+        if (LDAPS_PROTOCOL.equals(Config.authentication_ldap_simple_server_protocol) &&
                 Config.authentication_ldaps_trust_store_path != null) {
             System.setProperty("custom.ldap.truststore.type", "JKS");
             System.setProperty("custom.ldap.truststore.loc", Config.authentication_ldaps_trust_store_path);
@@ -58,7 +59,7 @@ public class LdapSecurity {
         env.put(Context.SECURITY_PRINCIPAL, dn);
         env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
         env.put(Context.PROVIDER_URL, url);
-        if ("ldaps".equals(Config.authentication_ldap_simple_server_protocol) &&
+        if (LDAPS_PROTOCOL.equals(Config.authentication_ldap_simple_server_protocol) &&
                 Config.authentication_ldaps_trust_store_path != null) {
             env.put("java.naming.ldap.factory.socket", CustomLdapSslSocketFactory.class.getName());
         }
@@ -104,7 +105,7 @@ public class LdapSecurity {
         env.put(Context.SECURITY_PRINCIPAL, rootDN);
         env.put(Context.INITIAL_CONTEXT_FACTORY, "com.sun.jndi.ldap.LdapCtxFactory");
         env.put(Context.PROVIDER_URL, url);
-        if ("ldaps".equals(Config.authentication_ldap_simple_server_protocol) &&
+        if (LDAPS_PROTOCOL.equals(Config.authentication_ldap_simple_server_protocol) &&
                 Config.authentication_ldaps_trust_store_path != null) {
             env.put("java.naming.ldap.factory.socket", CustomLdapSslSocketFactory.class.getName());
         }
