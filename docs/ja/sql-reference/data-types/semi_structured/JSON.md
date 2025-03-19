@@ -76,7 +76,7 @@ StarRocks は JSON 型データのクエリと処理をサポートし、JSON �
 
 この例では、テーブル `tj` を使用して説明します。
 
-```Plain Text
+```SQL
 mysql> select * from tj;
 +------+----------------------+
 | id   |          j           |
@@ -90,7 +90,7 @@ mysql> select * from tj;
 
 例 1: 条件 `id=1` を満たす JSON 型カラムのデータをフィルタリングします。
 
-```Plain Text
+```SQL
 mysql> select * from tj where id = 1;
 +------+---------------------+
 | id   |           j         |
@@ -103,7 +103,7 @@ mysql> select * from tj where id = 1;
 
 > 以下の例では、`j->'a'` は JSON 型データを返します。最初の例と比較して、データに対して暗黙の変換を行います。または、CAST 関数を使用して JSON 型データを INT に構築して比較します。
 
-```Plain Text
+```SQL
 mysql> select * from tj where j->'a' = 1;
 +------+---------------------+
 | id   | j                   |
@@ -121,7 +121,7 @@ mysql> select * from tj where cast(j->'a' as INT) = 1;
 
 例 3: JSON 型カラムに基づいてテーブル内のデータをフィルタリングします（CAST 関数を使用して JSON 型カラムを BOOLEAN 型として構築できます）。
 
-```Plain Text
+```SQL
 mysql> select * from tj where cast(j->'b' as boolean);
 +------+---------------------+
 |  id  |          j          |
@@ -133,7 +133,7 @@ mysql> select * from tj where cast(j->'b' as boolean);
 
 例 4: 条件を満たす JSON 型カラムのデータをフィルタリングし、数値演算を行います。
 
-```Plain Text
+```SQL
 mysql> select cast(j->'a' as int) from tj where cast(j->'b' as boolean);
 +-----------------------+
 |  CAST(j->'a' AS INT)  |
@@ -152,7 +152,7 @@ mysql> select sum(cast(j->'a' as int)) from tj where cast(j->'b' as boolean);
 
 例 5: JSON 型カラムに基づいてソートします。
 
-```Plain Text
+```SQL
 mysql> select * from tj
        where j->'a' <= 3
        order by cast(j->'a' as int);

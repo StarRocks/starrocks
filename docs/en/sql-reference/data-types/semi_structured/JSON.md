@@ -76,7 +76,7 @@ StarRocks supports querying and processing JSON-type data and supports using JSO
 
 This example uses the table `tj` for illustration.
 
-```Plain Text
+```SQL
 mysql> select * from tj;
 +------+----------------------+
 | id   |          j           |
@@ -90,7 +90,7 @@ mysql> select * from tj;
 
 Example 1: Filter data in the JSON-type column that meets the condition `id=1`.
 
-```Plain Text
+```SQL
 mysql> select * from tj where id = 1;
 +------+---------------------+
 | id   |           j         |
@@ -103,7 +103,7 @@ Example 2: Filter data in the table based on the JSON-type column.
 
 > In the following example, `j->'a'` returns JSON-type data. You can compare it with the first example, which performs implicit conversion on the data; or use the CAST function to construct JSON-type data as INT for comparison.
 
-```Plain Text
+```SQL
 mysql> select * from tj where j->'a' = 1;
 +------+---------------------+
 | id   | j                   |
@@ -121,7 +121,7 @@ mysql> select * from tj where cast(j->'a' as INT) = 1;
 
 Example 3: Filter data in the table based on the JSON-type column (you can use the CAST function to construct the JSON-type column as BOOLEAN type).
 
-```Plain Text
+```SQL
 mysql> select * from tj where cast(j->'b' as boolean);
 +------+---------------------+
 |  id  |          j          |
@@ -133,7 +133,7 @@ mysql> select * from tj where cast(j->'b' as boolean);
 
 Example 4: Filter data in the JSON-type column that meets the condition and perform numerical operations.
 
-```Plain Text
+```SQL
 mysql> select cast(j->'a' as int) from tj where cast(j->'b' as boolean);
 +-----------------------+
 |  CAST(j->'a' AS INT)  |
@@ -152,7 +152,7 @@ mysql> select sum(cast(j->'a' as int)) from tj where cast(j->'b' as boolean);
 
 Example 5: Sort based on the JSON-type column.
 
-```Plain Text
+```SQL
 mysql> select * from tj
        where j->'a' <= 3
        order by cast(j->'a' as int);
