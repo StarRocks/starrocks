@@ -122,9 +122,6 @@ public class HDFSBackendSelectorTest {
                 hiveTable.getTableLocation();
                 result = "hdfs://dfs00/dataset/";
 
-                ConnectContext.get();
-                result = context;
-
                 context.getSessionVariable();
                 result = sessionVariable;
             }
@@ -192,9 +189,6 @@ public class HDFSBackendSelectorTest {
                 hiveTable.getTableLocation();
                 result = "hdfs://dfs00/dataset/";
 
-                ConnectContext.get();
-                result = context;
-
                 context.getSessionVariable();
                 result = sessionVariable;
             }
@@ -242,9 +236,6 @@ public class HDFSBackendSelectorTest {
         SessionVariable sessionVariable = new SessionVariable();
         new Expectations() {
             {
-                ConnectContext.get();
-                result = context;
-
                 context.getSessionVariable();
                 result = sessionVariable;
             }
@@ -353,9 +344,6 @@ public class HDFSBackendSelectorTest {
                 hiveTable.getTableLocation();
                 result = "hdfs://dfs00/dataset/";
 
-                ConnectContext.get();
-                result = context;
-
                 context.getSessionVariable();
                 result = sessionVariable;
             }
@@ -454,8 +442,12 @@ public class HDFSBackendSelectorTest {
             List<TScanRangeParams> scanRangeParams = scanNodes.get(scanNodeId);
             Assert.assertTrue(scanRangeParams.size() >= 1);
 
-            TScanRangeParams first = scanRangeParams.get(0);
-            Assert.assertTrue(first.scan_range.hdfs_scan_range.isSetCandidate_node());
+            for (TScanRangeParams p : scanRangeParams) {
+                if (!p.isEmpty()) {
+                    Assert.assertTrue(p.scan_range.hdfs_scan_range.isSetCandidate_node());
+                    scanRanges += 1;
+                }
+            }
         }
         Assert.assertEquals(scanRanges, scanRangeNumber);
     }

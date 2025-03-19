@@ -16,13 +16,12 @@
 
 #include <fmt/format.h>
 
-#include <cstddef>
 #include <utility>
 
-#include "cache/block_cache/io_buffer.h"
 #include "common/config.h"
 #include "gutil/strings/fastmem.h"
 #include "gutil/strings/split.h"
+#include "service/backend_options.h"
 #include "util/hash_util.hpp"
 #include "util/runtime_profile.h"
 #include "util/stack_util.h"
@@ -140,20 +139,20 @@ Status CacheInputStream::_read_from_cache(const int64_t offset, const int64_t si
             read_size = size;
         }
     }
-    
+
     bool try_peer_cache = false;
     int64_t read_peer_cache_ns = 0;
     if (res.ok() || res.is_resource_busy()) {
         _already_populated_blocks.emplace(block_id);
     } else if (res.is_not_found() && _can_try_peer_cache()) {
-		{
-			SCOPED_RAW_TIMER(&read_peer_cache_ns);
-			res = _read_peer_cache(block_offset, block_size, &block.buffer, &options);
-			try_peer_cache = true;
-		}
+        {
+            SCOPED_RAW_TIMER(&read_peer_cache_ns);
+            res = _read_peer_cache(block_offset, block_size, &block.buffer, &options);
+            try_peer_cache = true;
+        }
         read_size = block_size;
 
-		if (res.ok() && _enable_populate_cache) {
+        if (res.ok() && _enable_populate_cache) {
             WriteCacheOptions options;
             options.async = _enable_async_populate_mode;
             options.evict_probability = _datacache_evict_probability;
@@ -162,7 +161,7 @@ Status CacheInputStream::_read_from_cache(const int64_t offset, const int64_t si
             options.frequency = _frequency;
             options.allow_zero_copy = true;
             _write_cache(block_offset, block.buffer, &options);
-		}
+        }
     }
 
     if (res.ok()) {
@@ -206,7 +205,6 @@ Status CacheInputStream::_read_from_cache(const int64_t offset, const int64_t si
 }
 
 Status CacheInputStream::_read_peer_cache(off_t offset, size_t size, IOBuffer* iobuf, ReadCacheOptions* options) {
-    LOG(INFO) << "try read cache from peer node [" << _peer_host << ", " << _peer_port << "]";
     options->remote_host = _peer_host;
     options->remote_port = _peer_port;
     return _cache->read_buffer_from_remote_cache(_cache_key, offset, size, iobuf, options);
@@ -485,7 +483,7 @@ void CacheInputStream::_write_cache(int64_t offset, const IOBuffer& iobuf, Write
     }
 
     SCOPED_RAW_TIMER(&_stats.write_cache_ns);
-    Status r = _cache->write_buffer(_cache_key, offset, iobuf, options);
+    Status r = _cache->write(_cache_key, offset, iobuf, options);
     if (r.ok() || r.is_already_exist()) {
         _already_populated_blocks.emplace(offset / _block_size);
     }
@@ -536,7 +534,6 @@ int64_t CacheInputStream::_calculate_remote_latency_per_block(int64_t io_bytes, 
 }
 
 void CacheInputStream::set_peer_cache_node(const std::string& peer_node) {
-    VLOG_CACHE << "[Gavin] set peer cache node, peer_node: "<< peer_node;
     if (peer_node.empty()) {
         return;
     }

@@ -605,8 +605,8 @@ Status ExecEnv::init(const std::vector<StorePath>& store_paths, bool as_cn) {
     if (datacache_rpc_threads <= 0) {
         datacache_rpc_threads = CpuInfo::num_cores();
     }
-    _datacache_rpc_pool = new PriorityThreadPool("datacache_rpc", datacache_rpc_threads,
-            std::numeric_limits<uint32_t>::max());
+    _datacache_rpc_pool =
+            new PriorityThreadPool("datacache_rpc", datacache_rpc_threads, std::numeric_limits<uint32_t>::max());
 
     // The _load_rpc_pool now handles routine load RPC and table function RPC.
     RETURN_IF_ERROR(ThreadPoolBuilder("load_rpc") // thread pool for load rpc

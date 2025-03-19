@@ -162,7 +162,6 @@ public class SystemHandler extends AlterHandler {
         @Override
         public Void visitAddBackendClause(AddBackendClause clause, Void context) {
             ErrorReport.wrapWithRuntimeException(() -> {
-                LOG.info("[Gavin] visit add backend clause.");
                 GlobalStateMgr.getCurrentState().getNodeMgr().getClusterInfo().addBackends(clause);
             });
             return null;

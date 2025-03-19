@@ -333,6 +333,11 @@ void IcebergDeleteBuilder::update_delete_file_io_counter(
         COUNTER_UPDATE(datacache_read_timer, stats.read_cache_ns);
         COUNTER_UPDATE(datacache_skip_read_counter, stats.skip_read_cache_count);
         COUNTER_UPDATE(datacache_skip_read_bytes, stats.skip_read_cache_bytes);
+        COUNTER_UPDATE(datacache_read_peer_bytes, stats.read_peer_cache_bytes);
+        COUNTER_UPDATE(datacache_read_peer_counter, stats.read_peer_cache_count);
+        COUNTER_UPDATE(datacache_read_peer_timer, stats.read_peer_cache_ns);
+        COUNTER_UPDATE(datacache_skip_read_peer_counter, stats.skip_read_peer_cache_count);
+        COUNTER_UPDATE(datacache_skip_read_peer_bytes, stats.skip_read_peer_cache_bytes);
         COUNTER_UPDATE(datacache_write_counter, stats.write_cache_count);
         COUNTER_UPDATE(datacache_write_bytes, stats.write_cache_bytes);
         COUNTER_UPDATE(datacache_write_timer, stats.write_cache_ns);

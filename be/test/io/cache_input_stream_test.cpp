@@ -502,7 +502,7 @@ TEST_F(CacheInputStreamTest, test_try_peer_cache) {
             new io::SharedBufferedInputStream(stream, file_name, data_size));
     io::CacheInputStream cache_stream(sb_stream, file_name, data_size, 1000000);
     cache_stream.set_enable_populate_cache(true);
-    cache_stream.set_
+    cache_stream.set_peer_cache_node("127.0.0.1:0");
     auto& stats = cache_stream.stats();
 
     // first read from backend

@@ -1905,10 +1905,6 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowBackendsStatement(ShowBackendsStmt statement, ConnectContext context) {
-            String warehouse = context.getCurrentWarehouseName();
-            List<Long> idToBackend = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr().getHistoricalBackendIds(warehouse);
-            LOG.info("[Gavin] historical backend nodes of warehouse({}) is: {}", warehouse, idToBackend.toString());
-
             List<List<String>> backendInfos = BackendsProcDir.getClusterBackendInfos();
             return new ShowResultSet(statement.getMetaData(), backendInfos);
         }
@@ -2512,11 +2508,6 @@ public class ShowExecutor {
 
         @Override
         public ShowResultSet visitShowComputeNodes(ShowComputeNodesStmt statement, ConnectContext context) {
-            String warehouse = context.getCurrentWarehouseName();
-            List<Long> computeNodeIds = GlobalStateMgr.getCurrentState().getHistoricalNodeMgr()
-                    .getHistoricalComputeNodeIds(warehouse);
-            LOG.info("[Gavin] historical compute nodes of warehouse({}) is: {}", warehouse, computeNodeIds.toString());
-
             List<List<String>> computeNodesInfos = ComputeNodeProcDir.getClusterComputeNodesInfos();
             return new ShowResultSet(statement.getMetaData(), computeNodesInfos);
         }

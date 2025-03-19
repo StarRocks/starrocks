@@ -28,12 +28,12 @@ public:
     virtual Status init(const CacheOptions& options) = 0;
 
     // Write data to remote cache
-    virtual Status write_buffer(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) = 0;
+    virtual Status write(const std::string& key, const IOBuffer& buffer, WriteCacheOptions* options) = 0;
 
     // Read data from remote cache, it returns the data size if successful; otherwise the error status
     // will be returned.
-    virtual Status read_buffer(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
-                               ReadCacheOptions* options) = 0;
+    virtual Status read(const std::string& key, size_t off, size_t size, IOBuffer* buffer,
+                        ReadCacheOptions* options) = 0;
 
     // Remove data from cache.
     virtual Status remove(const std::string& key) = 0;

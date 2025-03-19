@@ -885,13 +885,11 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     public static final String BACK_PRESSURE_MAX_ROUNDS = "back_pressure_back_rounds";
     public static final String BACK_PRESSURE_THROTTLE_TIME_UPPER_BOUND = "back_pressure_throttle_time_upper_bound";
 
-<<<<<<< HEAD
     public static final String LOWER_UPPER_SUPPORT_UTF8 = "lower_upper_support_utf8";
-=======
+
     public static final String ENABLE_DATACACHE_SHARING = "enable_datacache_sharing";
     public static final String DATACACHE_SHARING_WORK_PERIOD = "datacache_sharing_work_period";
     public static final String HISTORICAL_NODES_MIN_UPDATE_INTERVAL = "historical_nodes_min_update_interval";
->>>>>>> 7cfd3d8891 ([Feature] Support the datacache sharing ability.)
 
     public static final List<String> DEPRECATED_VARIABLES = ImmutableList.<String>builder()
             .add(CODEGEN_LEVEL)
@@ -1775,7 +1773,7 @@ public class SessionVariable implements Serializable, Writable, Cloneable {
     private int datacacheSharingWorkPeriod = 600;
 
     @VarAttr(name = HISTORICAL_NODES_MIN_UPDATE_INTERVAL)
-    private int historicalNodesMinUpdateInterval = 60;
+    private int historicalNodesMinUpdateInterval = 600;
 
     public int getCboPruneJsonSubfieldDepth() {
         return cboPruneJsonSubfieldDepth;
