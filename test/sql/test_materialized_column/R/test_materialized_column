@@ -49,7 +49,7 @@ SHOW CREATE TABLE t;
 t	CREATE TABLE `t` (
   `id` bigint(20) NOT NULL COMMENT "",
   `array_data` array<int(11)> NOT NULL COMMENT "",
-  `mc` double NULL AS array_avg(`array_data`) COMMENT ""
+  `mc` double NULL AS array_avg(array_data) COMMENT ""
 ) ENGINE=OLAP 
 PRIMARY KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
@@ -438,7 +438,7 @@ t	CREATE TABLE `t` (
   `name` bigint(20) NOT NULL COMMENT "",
   `job` int(11) NOT NULL COMMENT "",
   `newcol` int(11) NULL DEFAULT "0" COMMENT "",
-  `mc` int(11) NULL AS `job` COMMENT ""
+  `mc` int(11) NULL AS job COMMENT ""
 ) ENGINE=OLAP 
 PRIMARY KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
@@ -507,8 +507,8 @@ SHOW CREATE TABLE t;
 -- result:
 t	CREATE TABLE `t` (
   `id` bigint(20) NOT NULL COMMENT "",
-  `newcol1` bigint(20) NULL AS `id` * 10 COMMENT "",
-  `newcol2` bigint(20) NULL AS `id` * 100 COMMENT ""
+  `newcol1` bigint(20) NULL AS id * 10 COMMENT "",
+  `newcol2` bigint(20) NULL AS id * 100 COMMENT ""
 ) ENGINE=OLAP 
 UNIQUE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
@@ -538,8 +538,8 @@ t	CREATE TABLE `t` (
   `id` bigint(20) NOT NULL COMMENT "",
   `newcol3` bigint(20) NULL DEFAULT "0" COMMENT "",
   `newcol4` bigint(20) NULL DEFAULT "0" COMMENT "",
-  `newcol1` bigint(20) NULL AS `id` * 10 COMMENT "",
-  `newcol2` bigint(20) NULL AS `id` * 100 COMMENT ""
+  `newcol1` bigint(20) NULL AS id * 10 COMMENT "",
+  `newcol2` bigint(20) NULL AS id * 100 COMMENT ""
 ) ENGINE=OLAP 
 UNIQUE KEY(`id`)
 DISTRIBUTED BY HASH(`id`) BUCKETS 7 
@@ -992,7 +992,7 @@ t0	CREATE TABLE `t0` (
   `v2` bigint(20) NOT NULL COMMENT "",
   `v3` bigint(20) NOT NULL COMMENT "",
   `testcol5` bigint(20) NULL COMMENT "",
-  `testcol6` bigint(20) NULL AS `v1` * 10 COMMENT ""
+  `testcol6` bigint(20) NULL AS v1 * 10 COMMENT ""
 ) ENGINE=OLAP 
 DUPLICATE KEY(`v1`)
 DISTRIBUTED BY HASH(`v1`) BUCKETS 1 
